@@ -23,8 +23,6 @@ pub struct KaniSession {
     /// The location we found 'cbmc_json_parser.py'
     pub cbmc_json_parser_py: PathBuf,
 
-    /// The location we found the specific Rust toolchain we require
-    pub rust_toolchain: PathBuf,
     /// The location we found our pre-built libraries
     pub kani_rlib: Option<PathBuf>,
 
@@ -52,7 +50,6 @@ impl KaniSession {
             kani_lib_c: install.kani_lib_c()?,
             kani_c_stubs: install.kani_c_stubs()?,
             cbmc_json_parser_py: install.cbmc_json_parser_py()?,
-            rust_toolchain: install.rust_toolchain()?,
             kani_rlib: install.kani_rlib()?,
             temporaries: RefCell::new(vec![]),
         })
@@ -199,21 +196,6 @@ impl InstallType {
 
     pub fn cbmc_json_parser_py(&self) -> Result<PathBuf> {
         self.base_path_with("scripts/cbmc_json_parser.py")
-    }
-
-    pub fn rust_toolchain(&self) -> Result<PathBuf> {
-        // rustup sets some environment variables during build, but this is not clearly documented.
-        // https://github.com/rust-lang/rustup/blob/master/src/toolchain.rs (search for RUSTUP_HOME)
-        // We're using RUSTUP_TOOLCHAIN here, which is going to be set by our `rust-toolchain.toml` file.
-        // This is a compile-time constant, not a dynamic lookup at runtime, so this is reliable.
-        let toolchain = env!("RUSTUP_TOOLCHAIN");
-        // We use the home crate to do a *runtime* determination of where rustup toolchains live
-        let path = home::rustup_home()?.join("toolchains").join(toolchain);
-        if path.as_path().exists() {
-            Ok(path)
-        } else {
-            bail!("Unable to find rust toolchain {}. Looked for {}", toolchain, path.display());
-        }
     }
 
     pub fn kani_rlib(&self) -> Result<Option<PathBuf>> {

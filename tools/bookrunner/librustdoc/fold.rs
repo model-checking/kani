@@ -4,13 +4,6 @@
 // See GitHub history for details.
 use crate::clean::*;
 
-crate fn strip_item(mut item: Item) -> Item {
-    if !matches!(*item.kind, StrippedItem(..)) {
-        item.kind = box StrippedItem(item.kind);
-    }
-    item
-}
-
 crate trait DocFolder: Sized {
     fn fold_item(&mut self, item: Item) -> Option<Item> {
         Some(self.fold_item_recur(item))
@@ -107,17 +100,5 @@ crate trait DocFolder: Sized {
             span: m.span,
             items: m.items.into_iter().filter_map(|i| self.fold_item(i)).collect(),
         }
-    }
-
-    fn fold_crate(&mut self, mut c: Crate) -> Crate {
-        c.module = self.fold_item(c.module).unwrap();
-
-        let external_traits = { std::mem::take(&mut *c.external_traits.borrow_mut()) };
-        for (k, mut v) in external_traits {
-            v.trait_.items = v.trait_.items.into_iter().filter_map(|i| self.fold_item(i)).collect();
-            c.external_traits.borrow_mut().insert(k, v);
-        }
-
-        c
     }
 }

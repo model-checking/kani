@@ -41,17 +41,20 @@ crate enum ItemType {
     StructField = 12,
     Variant = 13,
     Macro = 14,
+    #[allow(dead_code)]
     Primitive = 15,
     AssocType = 16,
     Constant = 17,
     AssocConst = 18,
     Union = 19,
     ForeignType = 20,
+    #[allow(dead_code)]
     Keyword = 21,
     OpaqueTy = 22,
     ProcAttribute = 23,
     ProcDerive = 24,
     TraitAlias = 25,
+    #[allow(dead_code)]
     Generic = 26,
 }
 
@@ -113,7 +116,7 @@ impl From<DefKind> for ItemType {
             DefKind::Fn => Self::Function,
             DefKind::Mod => Self::Module,
             DefKind::Const => Self::Constant,
-            DefKind::Static => Self::Static,
+            DefKind::Static(..) => Self::Static,
             DefKind::Struct => Self::Struct,
             DefKind::Union => Self::Union,
             DefKind::Trait => Self::Trait,

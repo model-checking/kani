@@ -333,12 +333,32 @@ pub fn make_test(
             // Any errors in parsing should also appear when the doctest is compiled for real, so just
             // send all the errors that librustc_ast emits directly into a `Sink` instead of stderr.
             let sm = Lrc::new(SourceMap::new(FilePathMapping::empty()));
-            supports_color =
-                EmitterWriter::stderr(ColorConfig::Auto, None, false, false, Some(80), false)
-                    .supports_color();
 
-            let emitter =
-                EmitterWriter::new(box io::sink(), None, false, false, false, None, false);
+            let fallback_bundle =
+                rustc_errors::fallback_fluent_bundle(rustc_errors::DEFAULT_LOCALE_RESOURCES, false);
+            supports_color = EmitterWriter::stderr(
+                ColorConfig::Auto,
+                None,
+                None,
+                fallback_bundle.clone(),
+                false,
+                false,
+                Some(80),
+                false,
+            )
+            .supports_color();
+
+            let emitter = EmitterWriter::new(
+                box io::sink(),
+                None,
+                None,
+                fallback_bundle,
+                false,
+                false,
+                false,
+                None,
+                false,
+            );
 
             // FIXME(misdreavus): pass `-Z treat-err-as-bug` to the doctest parser
             let handler = Handler::with_emitter(false, None, box emitter);
@@ -880,7 +900,7 @@ impl<'a, 'hir, 'tcx> HirCollector<'a, 'hir, 'tcx> {
         nested: F,
     ) {
         let ast_attrs = self.tcx.hir().attrs(hir_id);
-        let mut attrs = Attributes::from_ast(ast_attrs, None);
+        let attrs = Attributes::from_ast(ast_attrs, None);
 
         if let Some(ref cfg) = ast_attrs.cfg(self.tcx, &FxHashSet::default()) {
             if !cfg.matches(&self.sess.parse_sess, Some(self.sess.features_untracked())) {
@@ -893,7 +913,9 @@ impl<'a, 'hir, 'tcx> HirCollector<'a, 'hir, 'tcx> {
             self.collector.names.push(name);
         }
 
-        attrs.unindent_doc_comments();
+        // Bookrunner doesn't care about the spaces in the documentation
+        // attrs.unindent_doc_comments();
+
         // The collapse-docs pass won't combine sugared/raw doc attributes, or included files with
         // anything else, this will combine them for us.
         if let Some(doc) = attrs.collapsed_doc_value() {
@@ -989,6 +1011,3 @@ impl<'a, 'hir, 'tcx> intravisit::Visitor<'hir> for HirCollector<'a, 'hir, 'tcx> 
         });
     }
 }
-
-#[cfg(test)]
-mod tests;

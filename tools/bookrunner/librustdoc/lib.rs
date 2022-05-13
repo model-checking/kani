@@ -67,8 +67,6 @@ extern crate rustc_trait_selection;
 extern crate rustc_typeck;
 extern crate test;
 
-use crate::clean::utils::DOC_RUST_LANG_ORG_CHANNEL;
-
 /// A macro to create a FxHashMap.
 ///
 /// Example:
@@ -90,16 +88,13 @@ macro_rules! map {
 mod clean;
 mod config;
 mod core;
-mod docfs;
 pub mod doctest;
-mod error;
 mod externalfiles;
 mod fold;
 mod formats;
 // used by the error-index generator, so it needs to be public
 pub mod html;
 crate mod lint;
-mod markdown;
 mod passes;
 mod scrape_examples;
 mod visit;

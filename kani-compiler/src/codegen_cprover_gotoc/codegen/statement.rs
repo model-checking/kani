@@ -603,6 +603,7 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_statement(&mut self, stmt: &Statement<'tcx>) -> Stmt {
         let _trace_span = info_span!("CodegenStatement", statement = ?stmt).entered();
         debug!("handling statement {:?}", stmt);
+        let location = self.codegen_span(&stmt.source_info.span);
         match &stmt.kind {
             StatementKind::Assign(box (l, r)) => {
                 let lty = self.place_ty(l);
@@ -617,15 +618,32 @@ impl<'tcx> GotocCtx<'tcx> {
                     // where the reference is implicit.
                     unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place(l))
                         .goto_expr
-                        .assign(self.codegen_rvalue(r).address_of(), Location::none())
+                        .assign(self.codegen_rvalue(r).address_of(), location)
                 } else if rty.is_bool() {
                     unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place(l))
                         .goto_expr
-                        .assign(self.codegen_rvalue(r).cast_to(Type::c_bool()), Location::none())
+                        .assign(self.codegen_rvalue(r).cast_to(Type::c_bool()), location)
                 } else {
                     unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place(l))
                         .goto_expr
-                        .assign(self.codegen_rvalue(r), Location::none())
+                        .assign(self.codegen_rvalue(r), location)
+                }
+            }
+            StatementKind::Deinit(place) => {
+                // From rustc doc: "This writes `uninit` bytes to the entire place."
+                // Thus, we assign nondet() value to the entire place.
+                let dst_mir_ty = self.place_ty(place);
+                let dst_type = self.codegen_ty(dst_mir_ty);
+                let layout = self.layout_of(dst_mir_ty);
+                if layout.is_zst() || dst_type.sizeof_in_bits(&self.symbol_table) == 0 {
+                    // We ignore assignment for all zero size types
+                    // Ignore generators too for now:
+                    // https://github.com/model-checking/kani/issues/416
+                    Stmt::skip(location)
+                } else {
+                    unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place(place))
+                        .goto_expr
+                        .assign(dst_type.nondet(), location)
                 }
             }
             StatementKind::SetDiscriminant { place, variant_index } => {
@@ -638,16 +656,16 @@ impl<'tcx> GotocCtx<'tcx> {
                             .codegen_unimplemented(
                                 "ty::Generator",
                                 Type::code(vec![], Type::empty()),
-                                Location::none(),
+                                location.clone(),
                                 "https://github.com/model-checking/kani/issues/416",
                             )
-                            .as_stmt(Location::none());
+                            .as_stmt(location);
                     }
                     _ => unreachable!(),
                 };
                 let layout = self.layout_of(pt);
                 match &layout.variants {
-                    Variants::Single { .. } => Stmt::skip(Location::none()),
+                    Variants::Single { .. } => Stmt::skip(location),
                     Variants::Multiple { tag, tag_encoding, .. } => match tag_encoding {
                         TagEncoding::Direct => {
                             let discr = def.discriminant_for_variant(self.tcx, *variant_index);
@@ -671,7 +689,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             )
                             .goto_expr
                             .member("case", &self.symbol_table)
-                            .assign(discr, Location::none())
+                            .assign(discr, location)
                         }
                         TagEncoding::Niche { dataful_variant, niche_variants, niche_start } => {
                             if dataful_variant != variant_index {
@@ -686,27 +704,28 @@ impl<'tcx> GotocCtx<'tcx> {
                                 let niche_value =
                                     variant_index.as_u32() - niche_variants.start().as_u32();
                                 let niche_value = (niche_value as u128).wrapping_add(*niche_start);
-                                let value = if niche_value == 0 && tag.value == Primitive::Pointer {
-                                    discr_ty.null()
-                                } else {
-                                    Expr::int_constant(niche_value, discr_ty.clone())
-                                };
+                                let value =
+                                    if niche_value == 0 && tag.primitive() == Primitive::Pointer {
+                                        discr_ty.null()
+                                    } else {
+                                        Expr::int_constant(niche_value, discr_ty.clone())
+                                    };
                                 let place = unwrap_or_return_codegen_unimplemented_stmt!(
                                     self,
                                     self.codegen_place(place)
                                 )
                                 .goto_expr;
                                 self.codegen_get_niche(place, offset, discr_ty)
-                                    .assign(value, Location::none())
+                                    .assign(value, location)
                             } else {
-                                Stmt::skip(Location::none())
+                                Stmt::skip(location)
                             }
                         }
                     },
                 }
             }
-            StatementKind::StorageLive(_) => Stmt::skip(Location::none()), // TODO: fix me
-            StatementKind::StorageDead(_) => Stmt::skip(Location::none()), // TODO: fix me
+            StatementKind::StorageLive(_) => Stmt::skip(location), // TODO: fix me
+            StatementKind::StorageDead(_) => Stmt::skip(location), // TODO: fix me
             StatementKind::CopyNonOverlapping(box mir::CopyNonOverlapping {
                 ref src,
                 ref dst,
@@ -719,7 +738,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let sz = Expr::int_constant(sz, Type::size_t());
                 let n = sz.mul(count);
                 let dst = dst.cast_to(Type::void_pointer());
-                let e = BuiltinFn::Memcpy.call(vec![dst, src, n.clone()], Location::none());
+                let e = BuiltinFn::Memcpy.call(vec![dst, src, n.clone()], location.clone());
 
                 // The C implementation of memcpy does not allow an invalid pointer for
                 // the src/dst, but the LLVM implementation specifies that a copy with
@@ -727,18 +746,13 @@ impl<'tcx> GotocCtx<'tcx> {
                 // the empty string; CBMC will fail on passing a reference to empty
                 // string unless we codegen this zero check.
                 // https://llvm.org/docs/LangRef.html#llvm-memcpy-intrinsic
-                Stmt::if_then_else(
-                    n.is_zero().not(),
-                    e.as_stmt(Location::none()),
-                    None,
-                    Location::none(),
-                )
+                Stmt::if_then_else(n.is_zero().not(), e.as_stmt(location.clone()), None, location)
             }
             StatementKind::FakeRead(_)
             | StatementKind::Retag(_, _)
             | StatementKind::AscribeUserType(_, _)
             | StatementKind::Nop
-            | StatementKind::Coverage { .. } => Stmt::skip(Location::none()),
+            | StatementKind::Coverage { .. } => Stmt::skip(location),
         }
         .with_location(self.codegen_span(&stmt.source_info.span))
     }

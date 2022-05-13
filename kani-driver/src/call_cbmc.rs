@@ -107,7 +107,6 @@ impl KaniSession {
             args.push("--pointer-check".into());
         }
         if self.args.checks.overflow_on() {
-            args.push("--conversion-check".into());
             args.push("--div-by-zero-check".into());
             args.push("--float-overflow-check".into());
             args.push("--nan-check".into());
@@ -116,7 +115,15 @@ impl KaniSession {
             // --unsigned-overflow-check
             // --signed-overflow-check
             // So these options are deliberately skipped to avoid erroneously re-checking operations.
+
+            // TODO: Implement conversion checks as an optional check.
+            // They are a well defined operation in rust, but they may yield unexpected results to
+            // many users. https://github.com/model-checking/kani/issues/840
+            // We might want to create a transformation pass instead of enabling CBMC since Kani
+            // compiler sometimes rely on the bitwise conversion of signed <-> unsigned.
+            // args.push("--conversion-check".into());
         }
+
         if self.args.checks.unwinding_on() {
             args.push("--unwinding-assertions".into());
         }
