@@ -1,6 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use super::super::codegen::TypeExt;
+use crate::codegen_cprover_gotoc::codegen::typ::{is_pointer, pointee_type};
 use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{Expr, ExprValue, Location, Stmt, SymbolTable, Type};
@@ -78,10 +79,15 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Generates an expression `((dst as usize) % align_of(T) == 0`
-    /// to determine if `dst` is aligned.
-    pub fn is_aligned(&mut self, typ: Ty<'tcx>, dst: Expr) -> Expr {
-        let layout = self.layout_of(typ);
+    /// to determine if a pointer `dst` with pointee type `T` is aligned.
+    pub fn is_ptr_aligned(&mut self, typ: Ty<'tcx>, dst: Expr) -> Expr {
+        // Ensure `typ` is a pointer, then extract the pointee type
+        assert!(is_pointer(typ));
+        let pointee_type = pointee_type(typ).unwrap();
+        // Obtain the alignment for the pointee type `T`
+        let layout = self.layout_of(pointee_type);
         let align = Expr::int_constant(layout.align.abi.bytes(), Type::size_t());
+        // Cast the pointer to `usize` and return the alignment expression
         let cast_dst = dst.cast_to(Type::size_t());
         let zero = Type::size_t().zero();
         cast_dst.rem(align).eq(zero)
