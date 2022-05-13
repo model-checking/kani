@@ -96,8 +96,6 @@ impl KaniSession {
     pub fn kani_rustc_flags(&self) -> Vec<OsString> {
         let mut flags = vec![OsString::from("--goto-c")];
 
-        flags.push("--sysroot".into());
-        flags.push((&self.rust_toolchain).into());
         if let Some(rlib) = &self.kani_rlib {
             flags.push("--kani-lib".into());
             flags.push(rlib.into());

@@ -2,8 +2,6 @@
 //
 // Modifications Copyright Kani Contributors
 // See GitHub history for details.
-use crate::clean::auto_trait::AutoTraitFinder;
-use crate::clean::blanket_impl::BlanketImplFinder;
 use crate::clean::{
     inline, Clean, Generic, GenericArg, GenericArgs, ImportSource, Item, ItemKind, Lifetime, Path,
     PathSegment, Primitive, PrimitiveType, Type, TypeBinding, Visibility,
@@ -12,22 +10,13 @@ use crate::core::DocContext;
 use crate::formats::item_type::ItemType;
 
 use rustc_ast as ast;
-use rustc_ast::tokenstream::TokenTree;
-use rustc_data_structures::thin_vec::ThinVec;
 use rustc_hir as hir;
 use rustc_hir::def::{DefKind, Res};
 use rustc_hir::def_id::DefId;
-use rustc_middle::mir::interpret::ConstValue;
 use rustc_middle::ty::subst::{GenericArgKind, SubstsRef};
-use rustc_middle::ty::{self, DefIdTree, TyCtxt};
-use rustc_session::parse::ParseSess;
-use rustc_span::source_map::FilePathMapping;
+use rustc_middle::ty::{self, TyCtxt};
 use rustc_span::symbol::{kw, sym, Symbol};
-use std::fmt::Write as _;
 use std::mem;
-
-#[cfg(test)]
-mod tests;
 
 fn external_generic_args(
     cx: &mut DocContext<'_>,
@@ -94,15 +83,6 @@ pub(super) fn external_path(
     }
 }
 
-/// Remove the generic arguments from a path.
-crate fn strip_path_generics(mut path: Path) -> Path {
-    for ps in path.segments.iter_mut() {
-        ps.args = GenericArgs::AngleBracketed { args: vec![], bindings: ThinVec::new() }
-    }
-
-    path
-}
-
 crate fn qpath_to_string(p: &hir::QPath<'_>) -> String {
     let segments = match *p {
         hir::QPath::Resolved(_, path) => &path.segments,
@@ -133,7 +113,7 @@ crate fn build_deref_target_impls(cx: &mut DocContext<'_>, items: &[Item], ret: 
 
         if let Some(prim) = target.primitive_type() {
             let _prof_timer = cx.tcx.sess.prof.generic_activity("build_primitive_inherent_impls");
-            for &did in prim.impls(tcx).iter().filter(|did| !did.is_local()) {
+            for did in prim.impls(tcx).filter(|did| !did.is_local()) {
                 inline::build_impl(cx, None, did, None, ret);
             }
         } else if let Type::Path { path } = target {
@@ -208,86 +188,6 @@ crate fn print_const(cx: &DocContext<'_>, n: &ty::Const<'_>) -> String {
     }
 }
 
-crate fn print_evaluated_const(tcx: TyCtxt<'_>, def_id: DefId) -> Option<String> {
-    tcx.const_eval_poly(def_id).ok().and_then(|val| {
-        let ty = tcx.type_of(def_id);
-        match (val, ty.kind()) {
-            (_, &ty::Ref(..)) => None,
-            (ConstValue::Scalar(_), &ty::Adt(_, _)) => None,
-            (ConstValue::Scalar(_), _) => {
-                let const_ = ty::Const::from_value(tcx, val, ty);
-                Some(print_const_with_custom_print_scalar(tcx, &const_))
-            }
-            _ => None,
-        }
-    })
-}
-
-fn format_integer_with_underscore_sep(num: &str) -> String {
-    let num_chars: Vec<_> = num.chars().collect();
-    let mut num_start_index = if num_chars.get(0) == Some(&'-') { 1 } else { 0 };
-    let chunk_size = match num[num_start_index..].as_bytes() {
-        [b'0', b'b' | b'x', ..] => {
-            num_start_index += 2;
-            4
-        }
-        [b'0', b'o', ..] => {
-            num_start_index += 2;
-            let remaining_chars = num_chars.len() - num_start_index;
-            if remaining_chars <= 6 {
-                // don't add underscores to Unix permissions like 0755 or 100755
-                return num.to_string();
-            }
-            3
-        }
-        _ => 3,
-    };
-
-    num_chars[..num_start_index]
-        .iter()
-        .chain(num_chars[num_start_index..].rchunks(chunk_size).rev().intersperse(&['_']).flatten())
-        .collect()
-}
-
-fn print_const_with_custom_print_scalar(tcx: TyCtxt<'_>, ct: &ty::Const<'_>) -> String {
-    // Use a slightly different format for integer types which always shows the actual value.
-    // For all other types, fallback to the original `pretty_print_const`.
-    match (ct.val(), ct.ty().kind()) {
-        (ty::ConstKind::Value(ConstValue::Scalar(int)), ty::Uint(ui)) => {
-            format!("{}{}", format_integer_with_underscore_sep(&int.to_string()), ui.name_str())
-        }
-        (ty::ConstKind::Value(ConstValue::Scalar(int)), ty::Int(i)) => {
-            let ty = tcx.lift(ct.ty()).unwrap();
-            let size = tcx.layout_of(ty::ParamEnv::empty().and(ty)).unwrap().size;
-            let data = int.assert_bits(size);
-            let sign_extended_data = size.sign_extend(data) as i128;
-
-            format!(
-                "{}{}",
-                format_integer_with_underscore_sep(&sign_extended_data.to_string()),
-                i.name_str()
-            )
-        }
-        _ => ct.to_string(),
-    }
-}
-
-crate fn is_literal_expr(tcx: TyCtxt<'_>, hir_id: hir::HirId) -> bool {
-    if let hir::Node::Expr(expr) = tcx.hir().get(hir_id) {
-        if let hir::ExprKind::Lit(_) = &expr.kind {
-            return true;
-        }
-
-        if let hir::ExprKind::Unary(hir::UnOp::Neg, expr) = &expr.kind {
-            if let hir::ExprKind::Lit(_) = &expr.kind {
-                return true;
-            }
-        }
-    }
-
-    false
-}
-
 crate fn print_const_expr(tcx: TyCtxt<'_>, body: hir::BodyId) -> String {
     let hir = tcx.hir();
     let value = &hir.body(body).value;
@@ -316,23 +216,6 @@ crate fn resolve_type(cx: &mut DocContext<'_>, path: Path) -> Type {
     }
 }
 
-crate fn get_auto_trait_and_blanket_impls(
-    cx: &mut DocContext<'_>,
-    item_def_id: DefId,
-) -> impl Iterator<Item = Item> {
-    let auto_impls = cx
-        .sess()
-        .prof
-        .generic_activity("get_auto_trait_impls")
-        .run(|| AutoTraitFinder::new(cx).get_auto_trait_impls(item_def_id));
-    let blanket_impls = cx
-        .sess()
-        .prof
-        .generic_activity("get_blanket_impls")
-        .run(|| BlanketImplFinder { cx }.get_blanket_impls(item_def_id));
-    auto_impls.into_iter().chain(blanket_impls)
-}
-
 /// If `res` has a documentation page associated, store it in the cache.
 ///
 /// This is later used by [`href()`] to determine the HTML link for the item.
@@ -346,7 +229,7 @@ crate fn register_res(cx: &mut DocContext<'_>, res: Res) -> DefId {
         // These should be added to the cache using `record_extern_fqn`.
         Res::Def(
             kind @ (AssocTy | AssocFn | AssocConst | Variant | Fn | TyAlias | Enum | Trait | Struct
-            | Union | Mod | ForeignTy | Const | Static | Macro(..) | TraitAlias),
+            | Union | Mod | ForeignTy | Const | Static(..) | Macro(..) | TraitAlias),
             i,
         ) => (i, kind.into()),
         // This is part of a trait definition; document the trait.
@@ -395,25 +278,6 @@ where
     r
 }
 
-/// Find the nearest parent module of a [`DefId`].
-crate fn find_nearest_parent_module(tcx: TyCtxt<'_>, def_id: DefId) -> Option<DefId> {
-    if def_id.is_top_level_module() {
-        // The crate root has no parent. Use it as the root instead.
-        Some(def_id)
-    } else {
-        let mut current = def_id;
-        // The immediate parent might not always be a module.
-        // Find the first parent which is.
-        while let Some(parent) = tcx.parent(current) {
-            if tcx.def_kind(parent) == DefKind::Mod {
-                return Some(parent);
-            }
-            current = parent;
-        }
-        None
-    }
-}
-
 /// Checks for the existence of `hidden` in the attribute below if `flag` is `sym::hidden`:
 ///
 /// ```
@@ -430,103 +294,12 @@ crate fn has_doc_flag(attrs: ty::Attributes<'_>, flag: Symbol) -> bool {
     })
 }
 
-/// A link to `doc.rust-lang.org` that includes the channel name. Use this instead of manual links
-/// so that the channel is consistent.
-///
-/// Set by `bootstrap::Builder::doc_rust_lang_org_channel` in order to keep tests passing on beta/stable.
-crate const DOC_RUST_LANG_ORG_CHANNEL: &str = env!("DOC_RUST_LANG_ORG_CHANNEL");
-
-/// Render a sequence of macro arms in a format suitable for displaying to the user
-/// as part of an item declaration.
-pub(super) fn render_macro_arms<'a>(
-    tcx: TyCtxt<'_>,
-    matchers: impl Iterator<Item = &'a TokenTree>,
-    arm_delim: &str,
-) -> String {
-    let mut out = String::new();
-    for matcher in matchers {
-        writeln!(out, "    {} => {{ ... }}{}", render_macro_matcher(tcx, matcher), arm_delim)
-            .unwrap();
-    }
-    out
-}
-
-/// Render a macro matcher in a format suitable for displaying to the user
-/// as part of an item declaration.
-pub(super) fn render_macro_matcher(tcx: TyCtxt<'_>, matcher: &TokenTree) -> String {
-    if let Some(snippet) = snippet_equal_to_token(tcx, matcher) {
-        snippet
-    } else {
-        rustc_ast_pretty::pprust::tt_to_string(matcher)
-    }
-}
-
-/// Find the source snippet for this token's Span, reparse it, and return the
-/// snippet if the reparsed TokenTree matches the argument TokenTree.
-fn snippet_equal_to_token(tcx: TyCtxt<'_>, matcher: &TokenTree) -> Option<String> {
-    // Find what rustc thinks is the source snippet.
-    // This may not actually be anything meaningful if this matcher was itself
-    // generated by a macro.
-    let source_map = tcx.sess.source_map();
-    let span = matcher.span();
-    let snippet = source_map.span_to_snippet(span).ok()?;
-
-    // Create a Parser.
-    let sess = ParseSess::new(FilePathMapping::empty());
-    let file_name = source_map.span_to_filename(span);
-    let mut parser =
-        match rustc_parse::maybe_new_parser_from_source_str(&sess, file_name, snippet.clone()) {
-            Ok(parser) => parser,
-            Err(_diagnostics) => {
-                return None;
-            }
-        };
-
-    // Reparse a single token tree.
-    let mut reparsed_trees = match parser.parse_all_token_trees() {
-        Ok(reparsed_trees) => reparsed_trees,
-        Err(diagnostic) => {
-            diagnostic.cancel();
-            return None;
-        }
-    };
-    if reparsed_trees.len() != 1 {
-        return None;
-    }
-    let reparsed_tree = reparsed_trees.pop().unwrap();
-
-    // Compare against the original tree.
-    if reparsed_tree.eq_unspanned(matcher) { Some(snippet) } else { None }
-}
-
 pub(super) fn display_macro_source(
-    cx: &mut DocContext<'_>,
-    name: Symbol,
-    def: &ast::MacroDef,
-    def_id: DefId,
-    vis: Visibility,
+    _cx: &mut DocContext<'_>,
+    _name: Symbol,
+    _def: &ast::MacroDef,
+    _def_id: DefId,
+    _vis: Visibility,
 ) -> String {
-    let tts: Vec<_> = def.body.inner_tokens().into_trees().collect();
-    // Extract the spans of all matchers. They represent the "interface" of the macro.
-    let matchers = tts.chunks(4).map(|arm| &arm[0]);
-
-    if def.macro_rules {
-        format!("macro_rules! {} {{\n{}}}", name, render_macro_arms(cx.tcx, matchers, ";"))
-    } else {
-        if matchers.len() <= 1 {
-            format!(
-                "{}macro {}{} {{\n    ...\n}}",
-                vis.to_src_with_space(cx.tcx, def_id),
-                name,
-                matchers.map(|matcher| render_macro_matcher(cx.tcx, matcher)).collect::<String>(),
-            )
-        } else {
-            format!(
-                "{}macro {} {{\n{}}}",
-                vis.to_src_with_space(cx.tcx, def_id),
-                name,
-                render_macro_arms(cx.tcx, matchers, ","),
-            )
-        }
-    }
+    unimplemented!("no rendering supported")
 }

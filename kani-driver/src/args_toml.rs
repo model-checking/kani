@@ -13,7 +13,12 @@ use toml::Value;
 ///
 /// The arguments passed via command line have precedence over the ones from the Cargo.toml.
 pub fn join_args(input_args: Vec<OsString>) -> Result<Vec<OsString>> {
-    let file = std::fs::read_to_string(cargo_locate_project()?)?;
+    let toml_path = cargo_locate_project();
+    if toml_path.is_err() {
+        // We're not inside a Cargo project. Don't error... yet.
+        return Ok(input_args);
+    }
+    let file = std::fs::read_to_string(toml_path?)?;
     let (kani_args, cbmc_args) = toml_to_args(&file)?;
     merge_args(input_args, kani_args, cbmc_args)
 }

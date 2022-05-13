@@ -4,8 +4,6 @@
 // See GitHub history for details.
 //! This module contains the "cleaned" pieces of the AST, and the functions
 //! that clean them.
-mod auto_trait;
-mod blanket_impl;
 crate mod cfg;
 crate mod inline;
 mod simplify;
@@ -19,9 +17,7 @@ use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_hir as hir;
 use rustc_hir::def::{CtorKind, DefKind, Res};
 use rustc_hir::def_id::{DefId, CRATE_DEF_INDEX, LOCAL_CRATE};
-use rustc_infer::infer::region_constraints::{Constraint, RegionConstraintData};
 use rustc_middle::middle::resolve_lifetime as rl;
-use rustc_middle::ty::fold::TypeFolder;
 use rustc_middle::ty::subst::{InternalSubsts, Subst};
 use rustc_middle::ty::{self, AdtKind, DefIdTree, Lift, Ty, TyCtxt};
 use rustc_middle::{bug, span_bug};
@@ -33,20 +29,18 @@ use rustc_typeck::check::intrinsic::intrinsic_operation_unsafety;
 use rustc_typeck::hir_ty_to_ty;
 
 use std::assert_matches::assert_matches;
-use std::collections::hash_map::Entry;
 use std::collections::BTreeMap;
 use std::default::Default;
-use std::hash::Hash;
 use std::{mem, vec};
 
-use crate::core::{self, DocContext, ImplTraitParam};
+use crate::core::{DocContext, ImplTraitParam};
 use crate::formats::item_type::ItemType;
 use crate::visit_ast::Module as DocModule;
 
 use utils::*;
 
 crate use self::types::*;
-crate use self::utils::{get_auto_trait_and_blanket_impls, register_res};
+crate use self::utils::register_res;
 
 crate trait Clean<T> {
     fn clean(&self, cx: &mut DocContext<'_>) -> T;
@@ -254,11 +248,7 @@ impl Clean<WherePredicate> for hir::WherePredicate<'_> {
                         // Higher-ranked lifetimes can't have bounds.
                         assert_matches!(
                             param,
-                            hir::GenericParam {
-                                kind: hir::GenericParamKind::Lifetime { .. },
-                                bounds: [],
-                                ..
-                            }
+                            hir::GenericParam { kind: hir::GenericParamKind::Lifetime { .. }, .. }
                         );
                         Lifetime(param.name.ident().name)
                     })
@@ -420,7 +410,7 @@ impl Clean<GenericParamDef> for ty::GenericParamDef {
                     // `self_def_id` set, we override it here.
                     // See https://github.com/rust-lang/rust/issues/85454
                     if let QPath { ref mut self_def_id, .. } = default {
-                        *self_def_id = cx.tcx.parent(self.def_id);
+                        *self_def_id = Some(cx.tcx.parent(self.def_id));
                     }
 
                     Some(default)
@@ -458,27 +448,19 @@ impl Clean<GenericParamDef> for hir::GenericParam<'_> {
     fn clean(&self, cx: &mut DocContext<'_>) -> GenericParamDef {
         let (name, kind) = match self.kind {
             hir::GenericParamKind::Lifetime { .. } => {
-                let outlives = self
-                    .bounds
-                    .iter()
-                    .map(|bound| match bound {
-                        hir::GenericBound::Outlives(lt) => lt.clean(cx),
-                        _ => panic!(),
-                    })
-                    .collect();
-                (self.name.ident().name, GenericParamDefKind::Lifetime { outlives })
+                (self.name, GenericParamDefKind::Lifetime { outlives: vec![] })
             }
-            hir::GenericParamKind::Type { ref default, synthetic } => (
-                self.name.ident().name,
+            hir::GenericParamKind::Type { ref default, synthetic, .. } => (
+                self.name,
                 GenericParamDefKind::Type {
                     did: cx.tcx.hir().local_def_id(self.hir_id).to_def_id(),
-                    bounds: self.bounds.iter().filter_map(|x| x.clean(cx)).collect(),
+                    bounds: vec![],
                     default: default.map(|t| t.clean(cx)).map(Box::new),
                     synthetic,
                 },
             ),
             hir::GenericParamKind::Const { ref ty, default } => (
-                self.name.ident().name,
+                self.name,
                 GenericParamDefKind::Const {
                     did: cx.tcx.hir().local_def_id(self.hir_id).to_def_id(),
                     ty: Box::new(ty.clean(cx)),
@@ -490,7 +472,7 @@ impl Clean<GenericParamDef> for hir::GenericParam<'_> {
             ),
         };
 
-        GenericParamDef { name, kind }
+        GenericParamDef { name: name.ident().name, kind }
     }
 }
 
@@ -543,7 +525,7 @@ impl Clean<Generics> for hir::Generics<'_> {
 
         let mut generics = Generics {
             params,
-            where_predicates: self.where_clause.predicates.iter().map(|x| x.clean(cx)).collect(),
+            where_predicates: self.predicates.iter().map(|x| x.clean(cx)).collect(),
         };
 
         // Some duplicates are generated for ?Sized bounds between type params and where
@@ -1672,9 +1654,7 @@ fn clean_field(def_id: DefId, name: Symbol, ty: Type, cx: &mut DocContext<'_>) -
 }
 
 fn is_field_vis_inherited(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
-    let parent = tcx
-        .parent(def_id)
-        .expect("is_field_vis_inherited can only be called on struct or variant fields");
+    let parent = tcx.parent(def_id);
     match tcx.def_kind(parent) {
         DefKind::Struct | DefKind::Union => false,
         DefKind::Variant => true,
@@ -1978,7 +1958,6 @@ fn clean_extern_crate(
         def_id: crate_def_id.into(),
         visibility: ty_vis.clean(cx),
         kind: box ExternCrateItem { src: orig_name },
-        cfg: attrs.cfg(cx.tcx, &cx.cache.hidden_cfg),
     }]
 }
 
