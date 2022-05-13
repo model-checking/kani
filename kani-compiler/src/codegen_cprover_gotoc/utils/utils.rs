@@ -78,9 +78,9 @@ impl<'tcx> GotocCtx<'tcx> {
         Expr::statement_expression(body, t).with_location(loc)
     }
 
-    /// Generates an expression `((dst as usize) % align_of(T) == 0`
-    /// to determine if a pointer `dst` with pointee type `T` is aligned.
-    pub fn is_ptr_aligned(&mut self, typ: Ty<'tcx>, dst: Expr) -> Expr {
+    /// Generates an expression `(ptr as usize) % align_of(T) == 0`
+    /// to determine if a pointer `ptr` with pointee type `T` is aligned.
+    pub fn is_ptr_aligned(&mut self, typ: Ty<'tcx>, ptr: Expr) -> Expr {
         // Ensure `typ` is a pointer, then extract the pointee type
         assert!(is_pointer(typ));
         let pointee_type = pointee_type(typ).unwrap();
@@ -88,9 +88,9 @@ impl<'tcx> GotocCtx<'tcx> {
         let layout = self.layout_of(pointee_type);
         let align = Expr::int_constant(layout.align.abi.bytes(), Type::size_t());
         // Cast the pointer to `usize` and return the alignment expression
-        let cast_dst = dst.cast_to(Type::size_t());
+        let cast_ptr = ptr.cast_to(Type::size_t());
         let zero = Type::size_t().zero();
-        cast_dst.rem(align).eq(zero)
+        cast_ptr.rem(align).eq(zero)
     }
 
     pub fn unsupported_msg(item: &str, url: Option<&str>) -> String {
