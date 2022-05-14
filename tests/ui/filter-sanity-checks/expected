@@ -1,3 +1,0 @@
-sanity_check.1\
-Status: FAILURE\
-Description: "Reached assignment statement with unequal types Pointer { typ: StructTag("tag-Unit") } StructTag("tag-Unit")"

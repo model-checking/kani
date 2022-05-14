@@ -1115,14 +1115,23 @@ impl<'tcx> GotocCtx<'tcx> {
                             // encoding, on the other hand, would have been maintaining a field
                             // storing the discriminant, which is a few bytes larger.
                             //
-                            // dataful_variant is pretty much the only variant which contains the valid data
+                            // dataful_variant is the only variant which contains non-ZST data.
+                            tracing::trace!(?name, "niche");
+                            tracing::trace!(?variants, "niche");
+                            tracing::trace!(?dataful_variant, "niche");
+                            tracing::trace!(?tag_encoding, "niche");
+                            tracing::trace!(?subst, "niche");
                             let variant = &adtdef.variants()[*dataful_variant];
-                            ctx.codegen_variant_struct_fields(
-                                variant,
-                                subst,
-                                &variants[*dataful_variant],
-                                0,
-                            )
+                            if cfg!(old_impl) {
+                                ctx.codegen_variant_struct_fields(
+                                    variant,
+                                    subst,
+                                    &variants[*dataful_variant],
+                                    0,
+                                )
+                            } else {
+                                ctx.codegen_enum_niche_cases(name, adtdef, subst, variants)
+                            }
                         }
                     }
                 }
@@ -1237,6 +1246,37 @@ impl<'tcx> GotocCtx<'tcx> {
                 })
                 .collect()
         })
+    }
+
+    /// Enumerations with multiple variants and niche encoding have a specific format that can be
+    /// used to optimize its layout and reduce memory consumption.
+    /// These enumerations have one and only one variant with non-ZST fields.
+    /// All other variants either don't have any field or all fields types are ZST.
+    /// Because of that, we can represent these enums as simple structures where each
+    /// field represent one variant. This allows them to be deconstructed correctly.
+    /// As an optimization, we ignore the ones that don't have any field, since they
+    /// are only manipulated via discriminant operations.
+    fn codegen_enum_niche_cases(
+        &mut self,
+        name: InternedString,
+        def: &'tcx AdtDef,
+        subst: &'tcx InternalSubsts<'tcx>,
+        layouts: &IndexVec<VariantIdx, Layout>,
+    ) -> Vec<DatatypeComponent> {
+        // TODO Should we have a pretty name here?
+        def.variants()
+            .iter_enumerated()
+            .filter_map(|(i, case)| {
+                if case.fields.is_empty() {
+                    None
+                } else {
+                    Some(Type::datatype_component(
+                        &case.name.to_string(),
+                        self.codegen_enum_case_struct(name, case, subst, &layouts[i], 0),
+                    ))
+                }
+            })
+            .collect()
     }
 
     fn codegen_enum_case_struct(
