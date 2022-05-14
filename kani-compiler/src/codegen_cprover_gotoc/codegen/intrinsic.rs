@@ -1,6 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! this module handles intrinsics
+use super::typ::pointee_type;
 use super::PropertyClass;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Type};
@@ -142,6 +143,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let sig = instance.ty(self.tcx, ty::ParamEnv::reveal_all()).fn_sig(self.tcx);
         let sig = self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig);
         let ret_ty = self.monomorphize(sig.output());
+        let farg_types = sig.inputs();
         let cbmc_ret_ty = self.codegen_ty(ret_ty);
 
         /// https://doc.rust-lang.org/core/intrinsics/fn.copy.html
@@ -681,14 +683,14 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             "volatile_store" => {
                 assert!(self.place_ty(p).is_unit());
-                self.codegen_volatile_store(instance, fargs, loc)
+                self.codegen_volatile_store(fargs, farg_types, loc)
             }
             "wrapping_add" => codegen_wrapping_op!(plus),
             "wrapping_mul" => codegen_wrapping_op!(mul),
             "wrapping_sub" => codegen_wrapping_op!(sub),
             "write_bytes" => {
                 assert!(self.place_ty(p).is_unit());
-                self.codegen_write_bytes(instance, fargs, loc)
+                self.codegen_write_bytes(fargs, farg_types, loc)
             }
             // Unimplemented
             _ => codegen_unimplemented_intrinsic!(
@@ -1233,14 +1235,14 @@ impl<'tcx> GotocCtx<'tcx> {
     ///  * `dst` must be properly aligned (done by `align_check` below)
     fn codegen_volatile_store(
         &mut self,
-        instance: Instance<'tcx>,
         mut fargs: Vec<Expr>,
+        farg_types: &[Ty<'tcx>],
         loc: Location,
     ) -> Stmt {
         let dst = fargs.remove(0);
         let src = fargs.remove(0);
-        let typ = instance.substs.type_at(0);
-        let align = self.is_aligned(typ, dst.clone());
+        let dst_typ = farg_types[0];
+        let align = self.is_ptr_aligned(dst_typ, dst.clone());
         let align_check = self.codegen_assert(
             align,
             PropertyClass::DefaultAssertion,
@@ -1261,8 +1263,8 @@ impl<'tcx> GotocCtx<'tcx> {
     /// for the `memset` call) would not overflow
     fn codegen_write_bytes(
         &mut self,
-        instance: Instance<'tcx>,
         mut fargs: Vec<Expr>,
+        farg_types: &[Ty<'tcx>],
         loc: Location,
     ) -> Stmt {
         let dst = fargs.remove(0).cast_to(Type::void_pointer());
@@ -1270,8 +1272,8 @@ impl<'tcx> GotocCtx<'tcx> {
         let count = fargs.remove(0);
 
         // Check that `dst` is properly aligned
-        let ty = self.monomorphize(instance.substs.type_at(0));
-        let align = self.is_aligned(ty, dst.clone());
+        let dst_typ = farg_types[0];
+        let align = self.is_ptr_aligned(dst_typ, dst.clone());
         let align_check = self.codegen_assert(
             align,
             PropertyClass::DefaultAssertion,
@@ -1280,8 +1282,13 @@ impl<'tcx> GotocCtx<'tcx> {
         );
 
         // Check that computing `count` in bytes would not overflow
-        let (count_bytes, overflow_check) =
-            self.count_in_bytes(count, ty, Type::size_t(), "write_bytes", loc);
+        let (count_bytes, overflow_check) = self.count_in_bytes(
+            count,
+            pointee_type(dst_typ).unwrap(),
+            Type::size_t(),
+            "write_bytes",
+            loc,
+        );
 
         let memset_call = BuiltinFn::Memset.call(vec![dst, val, count_bytes], loc);
         Stmt::block(vec![align_check, overflow_check, memset_call.as_stmt(loc)], loc)
