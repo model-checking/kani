@@ -20,10 +20,10 @@ use tracing::{debug, warn};
 
 impl<'tcx> GotocCtx<'tcx> {
     fn codegen_comparison(&mut self, op: &BinOp, e1: &Operand<'tcx>, e2: &Operand<'tcx>) -> Expr {
-        let left = self.codegen_operand(e1);
-        let right = self.codegen_operand(e2);
+        let left_op = self.codegen_operand(e1);
+        let right_op = self.codegen_operand(e2);
         let is_float = self.operand_ty(e1).is_floating_point();
-        comparison_expr(op, left, right, is_float)
+        comparison_expr(op, left_op, right_op, is_float)
     }
 
     /// This function codegen comparison for fat pointers.
@@ -36,12 +36,13 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_comparison_fat_ptr(
         &mut self,
         op: &BinOp,
-        left: &Operand<'tcx>,
-        right: &Operand<'tcx>,
+        left_op: &Operand<'tcx>,
+        right_op: &Operand<'tcx>,
+        loc: Location,
     ) -> Expr {
-        debug!(?op, ?left, ?right, "codegen_comparison_fat_ptr");
-        let left_typ = self.operand_ty(left);
-        let right_typ = self.operand_ty(left);
+        debug!(?op, ?left_op, ?right_op, "codegen_comparison_fat_ptr");
+        let left_typ = self.operand_ty(left_op);
+        let right_typ = self.operand_ty(left_op);
         assert_eq!(left_typ, right_typ, "Cannot compare pointers of different type");
         assert!(self.is_ref_of_unsized(left_typ));
 
@@ -52,19 +53,19 @@ impl<'tcx> GotocCtx<'tcx> {
                 self.codegen_assert_false(
                     PropertyClass::KaniCheck,
                     format!("Reached unstable vtable comparison '{:?}'", op).as_str(),
-                    Location::None,
+                    loc,
                 ),
                 // Assume false to block any further exploration of this path.
-                Stmt::assume(Expr::bool_false(), Location::None),
-                ret_type.nondet().as_stmt(Location::None).with_location(Location::None),
+                Stmt::assume(Expr::bool_false(), loc),
+                ret_type.nondet().as_stmt(loc).with_location(loc),
             ];
 
-            Expr::statement_expression(body, ret_type).with_location(Location::None)
+            Expr::statement_expression(body, ret_type).with_location(loc)
         } else {
             // Compare data pointer.
-            let left_ptr = self.codegen_operand(left);
+            let left_ptr = self.codegen_operand(left_op);
             let left_data = left_ptr.clone().member("data", &self.symbol_table);
-            let right_ptr = self.codegen_operand(right);
+            let right_ptr = self.codegen_operand(right_op);
             let right_data = right_ptr.clone().member("data", &self.symbol_table);
             let data_cmp = comparison_expr(op, left_data.clone(), right_data.clone(), false);
 
@@ -74,6 +75,7 @@ impl<'tcx> GotocCtx<'tcx> {
             let metadata_cmp = comparison_expr(op, left_len, right_len, false);
 
             // Join the results.
+            // https://github.com/rust-lang/rust/pull/29781
             match op {
                 // Only equal if both parts are equal.
                 BinOp::Eq => data_cmp.and(metadata_cmp),
@@ -348,6 +350,7 @@ impl<'tcx> GotocCtx<'tcx> {
         op: &BinOp,
         e1: &Operand<'tcx>,
         e2: &Operand<'tcx>,
+        loc: Location,
     ) -> Expr {
         match op {
             BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Shl | BinOp::Shr => {
@@ -358,7 +361,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             BinOp::Eq | BinOp::Lt | BinOp::Le | BinOp::Ne | BinOp::Ge | BinOp::Gt => {
                 if self.is_ref_of_unsized(self.operand_ty(e1)) {
-                    self.codegen_comparison_fat_ptr(op, e1, e2)
+                    self.codegen_comparison_fat_ptr(op, e1, e2, loc)
                 } else {
                     self.codegen_comparison(op, e1, e2)
                 }
@@ -414,7 +417,7 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    pub fn codegen_rvalue(&mut self, rv: &Rvalue<'tcx>) -> Expr {
+    pub fn codegen_rvalue(&mut self, rv: &Rvalue<'tcx>, loc: Location) -> Expr {
         let res_ty = self.rvalue_ty(rv);
         match rv {
             Rvalue::Use(p) => self.codegen_operand(p),
@@ -429,7 +432,9 @@ impl<'tcx> GotocCtx<'tcx> {
                 let t = self.monomorphize(*t);
                 self.codegen_pointer_cast(k, e, t)
             }
-            Rvalue::BinaryOp(op, box (ref e1, ref e2)) => self.codegen_rvalue_binary_op(op, e1, e2),
+            Rvalue::BinaryOp(op, box (ref e1, ref e2)) => {
+                self.codegen_rvalue_binary_op(op, e1, e2, loc)
+            }
             Rvalue::CheckedBinaryOp(op, box (ref e1, ref e2)) => {
                 self.codegen_rvalue_checked_binary_op(op, e1, e2, res_ty)
             }
