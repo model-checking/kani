@@ -30,7 +30,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Fat pointer comparison must compare the raw data pointer as well as its metadata portion.
     ///
     /// Since vtable pointer comparison is not well defined and it has many nuances, we decided to
-    /// fail the user code performs such comparison.
+    /// fail if the user code performs such comparison.
     ///
     /// See https://github.com/model-checking/kani/issues/327 for more details.
     fn codegen_comparison_fat_ptr(
@@ -43,7 +43,7 @@ impl<'tcx> GotocCtx<'tcx> {
         debug!(?op, ?left_op, ?right_op, "codegen_comparison_fat_ptr");
         let left_typ = self.operand_ty(left_op);
         let right_typ = self.operand_ty(left_op);
-        assert_eq!(left_typ, right_typ, "Cannot compare pointers of different type");
+        assert_eq!(left_typ, right_typ, "Cannot compare pointers of different types");
         assert!(self.is_ref_of_unsized(left_typ));
 
         if self.is_vtable_fat_pointer(left_typ) {
