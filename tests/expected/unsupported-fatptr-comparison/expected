@@ -1,25 +1,17 @@
-Checking harness check_slice_ptr...
-Status: FAILURE\
-Description: "Fat pointer comparison 'Lt' is not currently supported by Kani. Please post your example at https://github.com/model-checking/kani/issues/327"
+Checking harness check_lt...
+Failed Checks: Reached unstable vtable comparison 'Lt'
 
-Status: UNDETERMINED\
-Description: "Fat pointer comparison 'Le' is not currently supported by Kani. Please post your example at https://github.com/model-checking/kani/issues/327"
+Checking harness check_le...
+Failed Checks: Reached unstable vtable comparison 'Le'
 
-Status: UNDETERMINED\
-Description: "Fat pointer comparison 'Gt' is not currently supported by Kani. Please post your example at https://github.com/model-checking/kani/issues/327"
+Checking harness check_gt...
+Failed Checks: Reached unstable vtable comparison 'Gt'
 
-Status: UNDETERMINED\
-Description: "Fat pointer comparison 'Ge' is not currently supported by Kani. Please post your example at https://github.com/model-checking/kani/issues/327"
+Checking harness check_ge...
+Failed Checks: Reached unstable vtable comparison 'Ge'
 
-Status: UNDETERMINED\
-Description: "Fat pointer comparison 'Ne' is not currently supported by Kani. Please post your example at https://github.com/model-checking/kani/issues/327"
+Checking harness check_ne...
+Failed Checks: Reached unstable vtable comparison 'Ne'
 
-Status: UNDETERMINED\
-Description: "Fat pointer comparison 'Eq' is not currently supported by Kani. Please post your example at https://github.com/model-checking/kani/issues/327"
-
-Failed Checks: Fat pointer comparison 'Lt' is not currently supported by Kani. Please post your example at https://github.com/model-checking/kani/issues/327
-
-
-Checking harness check_dyn_ptr...
-
-Failed Checks: Fat pointer comparison 'Lt' is not currently supported by Kani. Please post your example at https://github.com/model-checking/kani/issues/327
+Checking harness check_eq...
+Failed Checks: Reached unstable vtable comparison 'Eq'

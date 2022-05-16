@@ -146,39 +146,6 @@ impl<'tcx> GotocCtx<'tcx> {
         let farg_types = sig.inputs();
         let cbmc_ret_ty = self.codegen_ty(ret_ty);
 
-        /// https://doc.rust-lang.org/core/intrinsics/fn.copy.html
-        /// https://doc.rust-lang.org/core/intrinsics/fn.copy_nonoverlapping.html
-        /// An intrinsic that translates directly into either memmove (for copy) or memcpy (copy_nonoverlapping)
-        macro_rules! _codegen_intrinsic_copy {
-            ($f:ident) => {{
-                let src = fargs.remove(0).cast_to(Type::void_pointer());
-                let dst = fargs.remove(0).cast_to(Type::void_pointer());
-                let count = fargs.remove(0);
-                let sz = {
-                    match self.fn_sig_of_instance(instance).unwrap().skip_binder().inputs()[0]
-                        .kind()
-                    {
-                        ty::RawPtr(t) => {
-                            let layout = self.layout_of(t.ty);
-                            Expr::int_constant(layout.size.bytes(), Type::size_t())
-                        }
-                        _ => unreachable!(),
-                    }
-                };
-                let n = sz.mul(count);
-                let call_memcopy = BuiltinFn::$f.call(vec![dst.clone(), src, n.clone()], loc);
-
-                // The C implementation of memcpy does not allow an invalid pointer for
-                // the src/dst, but the LLVM implementation specifies that a copy with
-                // length zero is a no-op. This comes up specifically when handling
-                // the empty string; CBMC will fail on passing a reference to empty
-                // string unless we codegen this zero check.
-                // https://llvm.org/docs/LangRef.html#llvm-memcpy-intrinsic
-                let copy_if_nontrivial = n.is_zero().ternary(dst, call_memcopy);
-                self.codegen_expr_to_place(p, copy_if_nontrivial)
-            }};
-        }
-
         // Codegens a simple intrinsic: ie. one which maps directly to a matching goto construct
         // We need to use this macro form because of a known limitation in rust
         // `codegen_simple_intrinsic!(self.get_sqrt(), Type::float())` gives the error message:
@@ -500,8 +467,10 @@ impl<'tcx> GotocCtx<'tcx> {
             "ceilf64" => codegen_unimplemented_intrinsic!(
                 "https://github.com/model-checking/kani/issues/1025"
             ),
-            "copy" => unstable_codegen!(_codegen_intrinsic_copy!(Memmove)),
-            "copy_nonoverlapping" => unstable_codegen!(_codegen_intrinsic_copy!(Memcpy)),
+            "copy" => self.codegen_copy_intrinsic(intrinsic, fargs, farg_types, p, loc),
+            "copy_nonoverlapping" => unreachable!(
+                "Expected `core::intrinsics::unreachable` to be handled by `StatementKind::CopyNonOverlapping`"
+            ),
             "copysignf32" => unstable_codegen!(codegen_simple_intrinsic!(Copysignf)),
             "copysignf64" => unstable_codegen!(codegen_simple_intrinsic!(Copysign)),
             "cosf32" => codegen_simple_intrinsic!(Cosf),
@@ -926,6 +895,65 @@ impl<'tcx> GotocCtx<'tcx> {
         emit_concurrency_warning!(intrinsic, loc);
         let skip_stmt = Stmt::skip(loc.clone());
         Stmt::atomic_block(vec![skip_stmt], loc)
+    }
+
+    /// An intrinsic that translates directly into `memmove`
+    /// https://doc.rust-lang.org/core/intrinsics/fn.copy.html
+    ///
+    /// Undefined behavior if any of these conditions are violated:
+    ///  * Both `src`/`dst` must be properly aligned (done by alignment checks)
+    ///  * Both `src`/`dst` must be valid for reads/writes of `count *
+    ///      size_of::<T>()` bytes (done by calls to `memmove`)
+    /// In addition, we check that computing `count` in bytes (i.e., the third
+    /// argument for the `memmove` call) would not overflow.
+    fn codegen_copy_intrinsic(
+        &mut self,
+        intrinsic: &str,
+        mut fargs: Vec<Expr>,
+        farg_types: &[Ty<'tcx>],
+        p: &Place<'tcx>,
+        loc: Location,
+    ) -> Stmt {
+        // The two first arguments are pointers. It's safe to cast them to void
+        // pointers or directly unwrap the `pointee_type` result as seen later.
+        let src = fargs.remove(0).cast_to(Type::void_pointer());
+        let dst = fargs.remove(0).cast_to(Type::void_pointer());
+
+        // Generate alignment checks for both pointers
+        let src_align = self.is_ptr_aligned(farg_types[0], src.clone());
+        let src_align_check = self.codegen_assert(
+            src_align,
+            PropertyClass::DefaultAssertion,
+            "`src` is properly aligned",
+            loc,
+        );
+        let dst_align = self.is_ptr_aligned(farg_types[1], dst.clone());
+        let dst_align_check = self.codegen_assert(
+            dst_align,
+            PropertyClass::DefaultAssertion,
+            "`dst` is properly aligned",
+            loc,
+        );
+
+        // Compute the number of bytes to be copied
+        let count = fargs.remove(0);
+        let pointee_type = pointee_type(farg_types[0]).unwrap();
+        let (count_bytes, overflow_check) =
+            self.count_in_bytes(count, pointee_type, Type::size_t(), intrinsic, loc);
+
+        // Build the call to `memmove`
+        let call_memmove =
+            BuiltinFn::Memmove.call(vec![dst.clone(), src, count_bytes.clone()], loc);
+
+        // The C implementation of `memmove` does not allow an invalid pointer for
+        // `src` nor `dst`, but the LLVM implementation specifies that a copy with
+        // length zero is a no-op. This comes up specifically when handling
+        // the empty string; CBMC will fail on passing a reference to empty
+        // string unless we codegen this zero check.
+        // https://llvm.org/docs/LangRef.html#llvm-memmove-intrinsic
+        let copy_if_nontrivial = count_bytes.is_zero().ternary(dst, call_memmove);
+        let copy_expr = self.codegen_expr_to_place(p, copy_if_nontrivial);
+        Stmt::block(vec![src_align_check, dst_align_check, overflow_check, copy_expr], loc)
     }
 
     /// Computes the offset from a pointer
