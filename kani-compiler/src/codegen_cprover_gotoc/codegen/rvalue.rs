@@ -1,6 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use super::typ::{is_pointer, pointee_type, TypeExt};
+use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::codegen_cprover_gotoc::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use crate::unwrap_or_return_codegen_unimplemented;
@@ -19,44 +20,79 @@ use tracing::{debug, warn};
 
 impl<'tcx> GotocCtx<'tcx> {
     fn codegen_comparison(&mut self, op: &BinOp, e1: &Operand<'tcx>, e2: &Operand<'tcx>) -> Expr {
-        match op {
-            BinOp::Eq => {
-                if self.operand_ty(e1).is_floating_point() {
-                    self.codegen_operand(e1).feq(self.codegen_operand(e2))
-                } else {
-                    self.codegen_operand(e1).eq(self.codegen_operand(e2))
-                }
-            }
-            BinOp::Lt => self.codegen_operand(e1).lt(self.codegen_operand(e2)),
-            BinOp::Le => self.codegen_operand(e1).le(self.codegen_operand(e2)),
-            BinOp::Ne => {
-                if self.operand_ty(e1).is_floating_point() {
-                    self.codegen_operand(e1).fneq(self.codegen_operand(e2))
-                } else {
-                    self.codegen_operand(e1).neq(self.codegen_operand(e2))
-                }
-            }
-            BinOp::Ge => self.codegen_operand(e1).ge(self.codegen_operand(e2)),
-            BinOp::Gt => self.codegen_operand(e1).gt(self.codegen_operand(e2)),
-            _ => unreachable!(),
-        }
+        let left_op = self.codegen_operand(e1);
+        let right_op = self.codegen_operand(e2);
+        let is_float = self.operand_ty(e1).is_floating_point();
+        comparison_expr(op, left_op, right_op, is_float)
     }
 
     /// This function codegen comparison for fat pointers.
-    /// We currently don't support this. See issue #327 for more information.
+    /// Fat pointer comparison must compare the raw data pointer as well as its metadata portion.
+    ///
+    /// Since vtable pointer comparison is not well defined and it has many nuances, we decided to
+    /// fail if the user code performs such comparison.
+    ///
+    /// See https://github.com/model-checking/kani/issues/327 for more details.
     fn codegen_comparison_fat_ptr(
         &mut self,
         op: &BinOp,
-        left: &Operand<'tcx>,
-        right: &Operand<'tcx>,
+        left_op: &Operand<'tcx>,
+        right_op: &Operand<'tcx>,
+        loc: Location,
     ) -> Expr {
-        debug!(?op, ?left, ?right, "codegen_comparison_fat_ptr");
-        self.codegen_unimplemented(
-            &format!("Fat pointer comparison '{:?}'", op),
-            Type::Bool,
-            Location::None,
-            "https://github.com/model-checking/kani/issues/327",
-        )
+        debug!(?op, ?left_op, ?right_op, "codegen_comparison_fat_ptr");
+        let left_typ = self.operand_ty(left_op);
+        let right_typ = self.operand_ty(left_op);
+        assert_eq!(left_typ, right_typ, "Cannot compare pointers of different types");
+        assert!(self.is_ref_of_unsized(left_typ));
+
+        if self.is_vtable_fat_pointer(left_typ) {
+            // Codegen an assertion failure since vtable comparison is not stable.
+            let ret_type = Type::Bool;
+            let body = vec![
+                self.codegen_assert_false(
+                    PropertyClass::KaniCheck,
+                    format!("Reached unstable vtable comparison '{:?}'", op).as_str(),
+                    loc,
+                ),
+                // Assume false to block any further exploration of this path.
+                Stmt::assume(Expr::bool_false(), loc),
+                ret_type.nondet().as_stmt(loc).with_location(loc),
+            ];
+
+            Expr::statement_expression(body, ret_type).with_location(loc)
+        } else {
+            // Compare data pointer.
+            let left_ptr = self.codegen_operand(left_op);
+            let left_data = left_ptr.clone().member("data", &self.symbol_table);
+            let right_ptr = self.codegen_operand(right_op);
+            let right_data = right_ptr.clone().member("data", &self.symbol_table);
+            let data_cmp = comparison_expr(op, left_data.clone(), right_data.clone(), false);
+
+            // Compare the slice metadata (this logic could be adapted to compare vtable if needed).
+            let left_len = left_ptr.member("len", &self.symbol_table);
+            let right_len = right_ptr.member("len", &self.symbol_table);
+            let metadata_cmp = comparison_expr(op, left_len, right_len, false);
+
+            // Join the results.
+            // https://github.com/rust-lang/rust/pull/29781
+            match op {
+                // Only equal if both parts are equal.
+                BinOp::Eq => data_cmp.and(metadata_cmp),
+                // It is different if any is different.
+                BinOp::Ne => data_cmp.or(metadata_cmp),
+                // If data is different, only compare data.
+                // If data is equal, apply operator to metadata.
+                BinOp::Lt | BinOp::Le | BinOp::Ge | BinOp::Gt => {
+                    let data_eq =
+                        comparison_expr(&BinOp::Eq, left_data.clone(), right_data.clone(), false);
+                    let data_strict_comp =
+                        comparison_expr(&get_strict_operator(op), left_data, right_data, false);
+                    data_strict_comp.or(data_eq.and(metadata_cmp))
+                }
+                _ => unreachable!("Unexpected operator {:?}", op),
+            }
+        }
     }
 
     fn codegen_unchecked_scalar_binop(
@@ -314,6 +350,7 @@ impl<'tcx> GotocCtx<'tcx> {
         op: &BinOp,
         e1: &Operand<'tcx>,
         e2: &Operand<'tcx>,
+        loc: Location,
     ) -> Expr {
         match op {
             BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Shl | BinOp::Shr => {
@@ -324,7 +361,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             BinOp::Eq | BinOp::Lt | BinOp::Le | BinOp::Ne | BinOp::Ge | BinOp::Gt => {
                 if self.is_ref_of_unsized(self.operand_ty(e1)) {
-                    self.codegen_comparison_fat_ptr(op, e1, e2)
+                    self.codegen_comparison_fat_ptr(op, e1, e2, loc)
                 } else {
                     self.codegen_comparison(op, e1, e2)
                 }
@@ -380,7 +417,7 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    pub fn codegen_rvalue(&mut self, rv: &Rvalue<'tcx>) -> Expr {
+    pub fn codegen_rvalue(&mut self, rv: &Rvalue<'tcx>, loc: Location) -> Expr {
         let res_ty = self.rvalue_ty(rv);
         match rv {
             Rvalue::Use(p) => self.codegen_operand(p),
@@ -395,7 +432,9 @@ impl<'tcx> GotocCtx<'tcx> {
                 let t = self.monomorphize(*t);
                 self.codegen_pointer_cast(k, e, t)
             }
-            Rvalue::BinaryOp(op, box (ref e1, ref e2)) => self.codegen_rvalue_binary_op(op, e1, e2),
+            Rvalue::BinaryOp(op, box (ref e1, ref e2)) => {
+                self.codegen_rvalue_binary_op(op, e1, e2, loc)
+            }
             Rvalue::CheckedBinaryOp(op, box (ref e1, ref e2)) => {
                 self.codegen_rvalue_checked_binary_op(op, e1, e2, res_ty)
             }
@@ -1276,5 +1315,38 @@ fn wrapping_sub(expr: &Expr, constant: u64) -> Expr {
         let unsigned = expr.typ().to_unsigned().unwrap();
         let constant = Expr::int_constant(constant, unsigned.clone());
         expr.clone().cast_to(unsigned).sub(constant)
+    }
+}
+
+fn comparison_expr(op: &BinOp, left: Expr, right: Expr, is_float: bool) -> Expr {
+    match op {
+        BinOp::Eq => {
+            if is_float {
+                left.feq(right)
+            } else {
+                left.eq(right)
+            }
+        }
+        BinOp::Lt => left.lt(right),
+        BinOp::Le => left.le(right),
+        BinOp::Ne => {
+            if is_float {
+                left.fneq(right)
+            } else {
+                left.neq(right)
+            }
+        }
+        BinOp::Ge => left.ge(right),
+        BinOp::Gt => left.gt(right),
+        _ => unreachable!(),
+    }
+}
+
+/// Remove the equality from an operator. Translates `<=` to `<` and `>=` to `>`
+fn get_strict_operator(op: &BinOp) -> BinOp {
+    match op {
+        BinOp::Le => BinOp::Lt,
+        BinOp::Ge => BinOp::Gt,
+        _ => *op,
     }
 }

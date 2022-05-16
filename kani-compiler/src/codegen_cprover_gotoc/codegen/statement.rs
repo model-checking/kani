@@ -618,15 +618,15 @@ impl<'tcx> GotocCtx<'tcx> {
                     // where the reference is implicit.
                     unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place(l))
                         .goto_expr
-                        .assign(self.codegen_rvalue(r).address_of(), location)
+                        .assign(self.codegen_rvalue(r, location).address_of(), location)
                 } else if rty.is_bool() {
                     unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place(l))
                         .goto_expr
-                        .assign(self.codegen_rvalue(r).cast_to(Type::c_bool()), location)
+                        .assign(self.codegen_rvalue(r, location).cast_to(Type::c_bool()), location)
                 } else {
                     unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place(l))
                         .goto_expr
-                        .assign(self.codegen_rvalue(r), location)
+                        .assign(self.codegen_rvalue(r, location), location)
                 }
             }
             StatementKind::Deinit(place) => {
