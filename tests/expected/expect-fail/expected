@@ -1,2 +1,2 @@
-SUCCESS\
-Description: "EXPECTED FAIL: x is not 5!, Failed as expected."
+SUCCESS, FAILED AS EXPECTED\
+Description: "EXPECTED FAIL: x is not 5!"

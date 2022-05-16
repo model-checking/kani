@@ -299,18 +299,15 @@ def modify_undefined_function_checks(properties):
 def modify_expect_fail_checks(properties):
     """
     Invert status for Checks with the property_class "expect_fail" from FAILURE TO SUCCESS and vice versa.
-    Modify further depending on unwind/undefined function check statuses.
     """
-    expected_fail_string = "Failed as expected."
-    unexpected_success_string = "Unexpectedly passed."
+    expected_fail_string = "FAILED AS EXPECTED"
+    unexpected_success_string = "UNEXPECTEDLY PASSED"
     for property in properties:
         if extract_property_class(property) == GlobalMessages.EXPECT_FAIL:
             if property["status"] == GlobalMessages.STATUS_SUCCESS:
-                property["status"] = GlobalMessages.STATUS_FAILURE
-                property["description"] += ', ' + unexpected_success_string
+                property["status"] = GlobalMessages.STATUS_FAILURE + ', ' + unexpected_success_string
             elif property["status"] == GlobalMessages.STATUS_FAILURE:
-                property["status"] = GlobalMessages.STATUS_SUCCESS
-                property["description"] += ', ' + expected_fail_string
+                property["status"] = GlobalMessages.STATUS_SUCCESS + ', ' + expected_fail_string
 
     return
 
@@ -352,7 +349,6 @@ def postprocess_results(properties, extra_ptr_check):
         properties, GlobalMessages.UNSUPPORTED_CONSTRUCT_DESC)
     has_failed_unwinding_asserts = has_check_failure_message(properties, GlobalMessages.UNWINDING_ASSERT_DESC)
     has_reachable_undefined_functions = modify_undefined_function_checks(properties)
-    has_failed_sanity_check = has_check_failure_property_class(properties, GlobalMessages.SANITY_CHECK)
     properties, reach_checks = filter_reach_checks(properties)
     properties = filter_sanity_checks(properties)
     annotate_properties_with_reach_results(properties, reach_checks)
@@ -363,7 +359,7 @@ def postprocess_results(properties, extra_ptr_check):
 
     for property in properties:
         property["description"] = get_readable_description(property)
-        if has_reachable_unsupported_constructs or has_failed_unwinding_asserts or has_reachable_undefined_functions or has_failed_sanity_check:
+        if has_reachable_unsupported_constructs or has_failed_unwinding_asserts or has_reachable_undefined_functions:
             # Change SUCCESS to UNDETERMINED for all properties
             if property["status"] == "SUCCESS":
                 property["status"] = "UNDETERMINED"
@@ -802,7 +798,7 @@ def construct_property_message(properties):
         except KeyError as e:
             print("Key not present in json property", e)
 
-        if status == "SUCCESS":
+        if "SUCCESS" in status:
             message = colored_text(Fore.GREEN, f"{status}")
         elif status == "UNDETERMINED":
             message = colored_text(Fore.YELLOW, f"{status}")
