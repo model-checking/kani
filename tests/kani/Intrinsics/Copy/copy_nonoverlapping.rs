@@ -5,18 +5,8 @@
 use std::mem;
 use std::ptr;
 
-fn test_copy() {
-    // TODO: make an overlapping set of locations, and check that it does the right thing for the overlapping region too.
-    // https://github.com/model-checking/kani/issues/12
-    let mut expected_val = 42;
-    let src: *mut i32 = &mut expected_val as *mut i32;
-    let mut old_val = 99;
-    let dst: *mut i32 = &mut old_val;
-    unsafe {
-        ptr::copy(src, dst, 1);
-        assert!(*dst == expected_val);
-    }
-}
+// Note: Calls to `copy_nonoverlapping` are handled by `codegen_statement`
+// and not `codegen_intrinsic`: https://github.com/model-checking/kani/issues/1198
 
 /// https://doc.rust-lang.org/std/ptr/fn.copy_nonoverlapping.html
 /// Moves all the elements of `src` into `dst`, leaving `src` empty.
@@ -89,7 +79,6 @@ fn test_swap() {
 
 #[kani::proof]
 fn main() {
-    test_copy();
     test_swap();
     test_append();
 }
