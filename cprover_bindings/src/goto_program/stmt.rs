@@ -4,7 +4,6 @@ use self::StmtBody::*;
 use super::{BuiltinFn, Expr, Location};
 use crate::{InternString, InternedString};
 use std::fmt::Debug;
-use tracing::debug;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 /// Datatypes
