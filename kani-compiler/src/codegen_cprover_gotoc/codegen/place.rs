@@ -169,10 +169,12 @@ impl<'tcx> ProjectedPlace<'tcx> {
         if let Some((expr_ty, ty_from_mir)) =
             Self::check_expr_typ_mismatch(&goto_expr, &mir_typ_or_variant, ctx)
         {
-            warn!(
+            let msg = format!(
                 "Unexpected type mismatch in projection:\n{:?}\nExpr type\n{:?}\nType from MIR\n{:?}",
                 goto_expr, expr_ty, ty_from_mir
             );
+            warn!("{}", msg);
+            debug_assert!(false, "{}", msg);
             return Err(UnimplementedData::new(
                 "Projection mismatch",
                 "https://github.com/model-checking/kani/issues/277",
