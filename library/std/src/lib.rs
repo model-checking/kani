@@ -63,20 +63,24 @@ macro_rules! assert {
 #[macro_export]
 macro_rules! assert_eq {
     ($left:expr, $right:expr $(,)?) => ({
-        assert!($left == $right);
+        // Add parentheses around the operands to avoid a "comparison operators
+        // cannot be chained" error, but exclude the parentheses in the message
+        kani::assert(($left) == ($right), concat!("assertion failed: ", stringify!($left == $right)));
     });
     ($left:expr, $right:expr, $($arg:tt)+) => ({
-        assert!($left == $right, $($arg)+);
+        assert!(($left) == ($right), $($arg)+);
     });
 }
 
 #[macro_export]
 macro_rules! assert_ne {
     ($left:expr, $right:expr $(,)?) => ({
-        assert!($left != $right);
+        // Add parentheses around the operands to avoid a "comparison operators
+        // cannot be chained" error, but exclude the parentheses in the message
+        kani::assert(($left) != ($right), concat!("assertion failed: ", stringify!($left != $right)));
     });
     ($left:expr, $right:expr, $($arg:tt)+) => ({
-        assert!($left != $right, $($arg)+);
+        assert!(($left) != ($right), $($arg)+);
     });
 }
 
