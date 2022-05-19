@@ -287,10 +287,9 @@ where
 ///
 /// This function exists because it runs on `hir::Attributes` whereas the other is a
 /// `clean::Attributes` method.
-crate fn has_doc_flag(attrs: ty::Attributes<'_>, flag: Symbol) -> bool {
-    attrs.iter().any(|attr| {
-        attr.has_name(sym::doc)
-            && attr.meta_item_list().map_or(false, |l| rustc_attr::list_contains_name(&l, flag))
+crate fn has_doc_flag(tcx: TyCtxt<'_>, did: DefId, flag: Symbol) -> bool {
+    tcx.get_attrs(did, sym::doc).any(|attr| {
+        attr.meta_item_list().map_or(false, |l| rustc_attr::list_contains_name(&l, flag))
     })
 }
 
