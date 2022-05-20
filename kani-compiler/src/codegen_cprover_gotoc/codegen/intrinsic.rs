@@ -468,7 +468,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 "https://github.com/model-checking/kani/issues/1025"
             ),
             "copy" => {
-                self.codegen_copy_intrinsic(intrinsic, false, fargs, farg_types, Some(p), loc)
+                self.codegen_copy(intrinsic, false, fargs, farg_types, Some(p), loc)
             }
             "copy_nonoverlapping" => unreachable!(
                 "Expected `core::intrinsics::unreachable` to be handled by `StatementKind::CopyNonOverlapping`"
@@ -899,22 +899,25 @@ impl<'tcx> GotocCtx<'tcx> {
         Stmt::atomic_block(vec![skip_stmt], loc)
     }
 
-    /// An intrinsic that translates directly into `memmove` (for `copy`)
-    /// or `memcpy` (for `copy_nonoverlapping`)
+    /// Copies `count * size_of::<T>()` bytes from `src` to `dst`.
     /// https://doc.rust-lang.org/core/intrinsics/fn.copy.html
     /// https://doc.rust-lang.org/core/intrinsics/fn.copy_nonoverlapping.html
+    ///
+    /// Note that this function handles code generation for:
+    ///  1. The `copy` intrinsic.
+    ///  2. The `CopyNonOverlapping` statement.
     ///
     /// Undefined behavior if any of these conditions are violated:
     ///  * Both `src`/`dst` must be properly aligned (done by alignment checks)
     ///  * Both `src`/`dst` must be valid for reads/writes of `count *
     ///      size_of::<T>()` bytes (done by calls to `memmove`)
-    ///  * (Exclusive to `copy_nonoverlapping`) The region of memory beginning
+    ///  * (Exclusive to nonoverlapping copy) The region of memory beginning
     ///      at `src` with a size of `count * size_of::<T>()` bytes must *not*
     ///      overlap with the region of memory beginning at `dst` with the same
     ///      size.
     /// In addition, we check that computing `count` in bytes (i.e., the third
     /// argument of the copy built-in call) would not overflow.
-    pub fn codegen_copy_intrinsic(
+    pub fn codegen_copy(
         &mut self,
         intrinsic: &str,
         is_non_overlapping: bool,

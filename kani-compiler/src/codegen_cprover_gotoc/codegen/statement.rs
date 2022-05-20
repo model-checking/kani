@@ -731,10 +731,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 ref dst,
                 ref count,
             }) => {
-                // It's surprising that calls to the intrinsic
-                // `copy_nonoverlapping` are not handled in `codegen_intrinsic`.
-                // We pack the operands and their types, and then call
-                // `codegen_copy_intrinsic` as if it was an intrinsic.
+                // Pack the operands and their types, then call `codegen_copy`
                 let fargs = vec![
                     self.codegen_operand(src),
                     self.codegen_operand(dst),
@@ -742,7 +739,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 ];
                 let farg_types =
                     &[self.operand_ty(src), self.operand_ty(dst), self.operand_ty(count)];
-                self.codegen_copy_intrinsic(
+                self.codegen_copy(
                     "copy_nonoverlapping",
                     true,
                     fargs,
