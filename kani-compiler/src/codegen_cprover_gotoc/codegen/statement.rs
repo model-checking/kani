@@ -739,14 +739,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 ];
                 let farg_types =
                     &[self.operand_ty(src), self.operand_ty(dst), self.operand_ty(count)];
-                self.codegen_copy(
-                    "copy_nonoverlapping",
-                    true,
-                    fargs,
-                    farg_types,
-                    None,
-                    location,
-                )
+                self.codegen_copy("copy_nonoverlapping", true, fargs, farg_types, None, location)
             }
             StatementKind::FakeRead(_)
             | StatementKind::Retag(_, _)

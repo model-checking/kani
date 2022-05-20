@@ -467,9 +467,7 @@ impl<'tcx> GotocCtx<'tcx> {
             "ceilf64" => codegen_unimplemented_intrinsic!(
                 "https://github.com/model-checking/kani/issues/1025"
             ),
-            "copy" => {
-                self.codegen_copy(intrinsic, false, fargs, farg_types, Some(p), loc)
-            }
+            "copy" => self.codegen_copy(intrinsic, false, fargs, farg_types, Some(p), loc),
             "copy_nonoverlapping" => unreachable!(
                 "Expected `core::intrinsics::unreachable` to be handled by `StatementKind::CopyNonOverlapping`"
             ),
@@ -900,12 +898,12 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Copies `count * size_of::<T>()` bytes from `src` to `dst`.
-    /// https://doc.rust-lang.org/core/intrinsics/fn.copy.html
-    /// https://doc.rust-lang.org/core/intrinsics/fn.copy_nonoverlapping.html
     ///
     /// Note that this function handles code generation for:
     ///  1. The `copy` intrinsic.
+    ///     https://doc.rust-lang.org/core/intrinsics/fn.copy.html
     ///  2. The `CopyNonOverlapping` statement.
+    ///     https://doc.rust-lang.org/core/intrinsics/fn.copy_nonoverlapping.html
     ///
     /// Undefined behavior if any of these conditions are violated:
     ///  * Both `src`/`dst` must be properly aligned (done by alignment checks)
