@@ -1084,7 +1084,17 @@ impl<'tcx> GotocCtx<'tcx> {
                 Variants::Multiple { tag_encoding, variants, .. } => {
                     match tag_encoding {
                         TagEncoding::Direct => {
-                            // direct encoding of tags
+                            // For direct encoding of tags, we generate a type with two fields:
+                            // ```
+                            // struct tag-<> { // enum type
+                            //    case: <discriminant  type>,
+                            //    cases: tag-<>-union,
+                            // }
+                            // ```
+                            // The `case` field type determined by the enum representation
+                            // (`#[repr]`) and it represents which variant is being used.
+                            // The `cases` field is a union of all variant types where the name
+                            // of each union field is the name of the corresponding discriminant.
                             let discr_t = ctx.codegen_enum_discr_typ(ty);
                             let int = ctx.codegen_ty(discr_t);
                             let discr_offset = ctx.layout_of(discr_t).size.bits_usize();
