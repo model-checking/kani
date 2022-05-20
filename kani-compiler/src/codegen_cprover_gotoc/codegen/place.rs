@@ -169,10 +169,12 @@ impl<'tcx> ProjectedPlace<'tcx> {
         if let Some((expr_ty, ty_from_mir)) =
             Self::check_expr_typ_mismatch(&goto_expr, &mir_typ_or_variant, ctx)
         {
-            warn!(
+            let msg = format!(
                 "Unexpected type mismatch in projection:\n{:?}\nExpr type\n{:?}\nType from MIR\n{:?}",
                 goto_expr, expr_ty, ty_from_mir
             );
+            warn!("{}", msg);
+            debug_assert!(false, "{}", msg);
             return Err(UnimplementedData::new(
                 "Projection mismatch",
                 "https://github.com/model-checking/kani/issues/277",
@@ -499,18 +501,18 @@ impl<'tcx> GotocCtx<'tcx> {
                 match t.kind() {
                     ty::Adt(def, _) => {
                         let variant = def.variants().get(idx).unwrap();
+                        let case_name = variant.name.to_string();
                         let typ = TypeOrVariant::Variant(variant);
                         let expr = match &self.layout_of(t).variants {
                             Variants::Single { .. } => before.goto_expr,
                             Variants::Multiple { tag_encoding, .. } => match tag_encoding {
-                                TagEncoding::Direct => {
-                                    let case_name = variant.name.to_string();
-                                    before
-                                        .goto_expr
-                                        .member("cases", &self.symbol_table)
-                                        .member(&case_name, &self.symbol_table)
+                                TagEncoding::Direct => before
+                                    .goto_expr
+                                    .member("cases", &self.symbol_table)
+                                    .member(&case_name, &self.symbol_table),
+                                TagEncoding::Niche { .. } => {
+                                    before.goto_expr.member(&case_name, &self.symbol_table)
                                 }
-                                TagEncoding::Niche { .. } => before.goto_expr,
                             },
                         };
                         ProjectedPlace::try_new(
