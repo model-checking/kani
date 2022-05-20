@@ -1016,8 +1016,8 @@ impl<'tcx> GotocCtx<'tcx> {
         Stmt::block(vec![overflow_check, offset_expr], loc)
     }
 
-    /// ptr_offset_from_unsigned returns the offset between two pointers where the order is known.
-    /// The logic is similar to ptr_offset_from but the return value is a usize.
+    /// `ptr_offset_from_unsigned` returns the offset between two pointers where the order is known.
+    /// The logic is similar to `ptr_offset_from` but the return value is a `usize`.
     /// See https://github.com/rust-lang/rust/issues/95892 for more details
     fn codegen_ptr_offset_from_unsigned(
         &mut self,
@@ -1049,7 +1049,7 @@ impl<'tcx> GotocCtx<'tcx> {
         Stmt::block(vec![non_negative_check, overflow_check, offset_expr], loc)
     }
 
-    /// Both ptr_offset_from and ptr_offset_from_unsigned returns the offset between two pointers.
+    /// Both `ptr_offset_from` and `ptr_offset_from_unsigned` return the offset between two pointers.
     /// This function implements the common logic between them.
     fn codegen_ptr_offset_from_expr(
         &mut self,
