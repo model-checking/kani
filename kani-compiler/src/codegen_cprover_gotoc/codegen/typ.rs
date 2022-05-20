@@ -1120,7 +1120,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             // memory consumption.
                             //
                             // These enumerations have one and only one variant with non-ZST
-                            // fields which is refered to by the `dataful_variant` index. Their
+                            // fields which is referred to by the `dataful_variant` index. Their
                             // final size and alignment is equal to the one from the
                             // `dataful_variant`. All other variants either don't have any field
                             // or all fields types are ZST.
