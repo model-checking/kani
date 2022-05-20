@@ -731,22 +731,15 @@ impl<'tcx> GotocCtx<'tcx> {
                 ref dst,
                 ref count,
             }) => {
-                let src = self.codegen_operand(src).cast_to(Type::void_pointer());
-                let dst = self.codegen_operand(dst);
-                let count = self.codegen_operand(count);
-                let sz = dst.typ().base_type().unwrap().sizeof(&self.symbol_table);
-                let sz = Expr::int_constant(sz, Type::size_t());
-                let n = sz.mul(count);
-                let dst = dst.cast_to(Type::void_pointer());
-                let e = BuiltinFn::Memcpy.call(vec![dst, src, n.clone()], location.clone());
-
-                // The C implementation of memcpy does not allow an invalid pointer for
-                // the src/dst, but the LLVM implementation specifies that a copy with
-                // length zero is a no-op. This comes up specifically when handling
-                // the empty string; CBMC will fail on passing a reference to empty
-                // string unless we codegen this zero check.
-                // https://llvm.org/docs/LangRef.html#llvm-memcpy-intrinsic
-                Stmt::if_then_else(n.is_zero().not(), e.as_stmt(location.clone()), None, location)
+                // Pack the operands and their types, then call `codegen_copy`
+                let fargs = vec![
+                    self.codegen_operand(src),
+                    self.codegen_operand(dst),
+                    self.codegen_operand(count),
+                ];
+                let farg_types =
+                    &[self.operand_ty(src), self.operand_ty(dst), self.operand_ty(count)];
+                self.codegen_copy("copy_nonoverlapping", true, fargs, farg_types, None, location)
             }
             StatementKind::FakeRead(_)
             | StatementKind::Retag(_, _)
