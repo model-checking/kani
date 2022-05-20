@@ -43,30 +43,30 @@ impl MyEnum {
     }
 }
 
+/// Ensure we are testing a case of niche optimization.
 #[kani::proof]
 fn check_is_niche() {
-    // Ensure we are testing a case of niche optimization.
     assert_eq!(std::mem::size_of::<MyEnum>(), 1);
     assert_eq!(std::mem::size_of::<bool>(), 1);
 }
 
+/// Check the behavior for the variant without any field.
 #[kani::proof]
 fn check_niche_no_fields() {
-    // Check the behavior for the dataful variant.
     let x = MyEnum::create_no_field();
     assert!(matches!(x, MyEnum::NoFields));
 }
 
+/// Check the behavior for the dataful variant.
 #[kani::proof]
 fn check_niche_data_ful() {
-    // Check the behavior for the dataful variant.
     let x = MyEnum::create_data_ful(true);
     assert!(matches!(x, MyEnum::DataFul(true)));
 }
 
+/// Check the behavior for the variant with multiple unit fields.
 #[kani::proof]
 fn check_niche_unit_fields() {
-    // Check the behavior for the variant with one unit field.
     let x = MyEnum::create_unit();
     assert_eq!(x, MyEnum::UnitFields((), ()));
     if let MyEnum::UnitFields(ref v, ..) = &x {
@@ -74,9 +74,9 @@ fn check_niche_unit_fields() {
     }
 }
 
+/// Check the behavior for the variant with one ZST field.
 #[kani::proof]
 fn check_niche_zst_field() {
-    // Check the behavior for the variant with one unit field.
     let x = MyEnum::create_zst_field();
     assert_eq!(x, MyEnum::ZSTField(ZeroSized {}));
     if let MyEnum::ZSTField(ref field) = &x {
@@ -84,9 +84,9 @@ fn check_niche_zst_field() {
     }
 }
 
+/// Check the behavior for the variant representing a struct with one ZST field.
 #[kani::proof]
 fn check_niche_zst_struct() {
-    // Check the behavior for the variant with one unit field.
     let x = MyEnum::create_zst_struct();
     assert!(matches!(x, MyEnum::ZSTStruct { .. }));
     if let MyEnum::ZSTStruct { ref field, ref unit } = &x {
