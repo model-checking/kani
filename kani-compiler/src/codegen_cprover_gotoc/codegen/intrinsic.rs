@@ -936,14 +936,14 @@ impl<'tcx> GotocCtx<'tcx> {
         let src_align_check = self.codegen_assert(
             src_align,
             PropertyClass::DefaultAssertion,
-            "`src` is properly aligned",
+            "`src` must be properly aligned",
             loc,
         );
         let dst_align = self.is_ptr_aligned(farg_types[1], dst.clone());
         let dst_align_check = self.codegen_assert(
             dst_align,
             PropertyClass::DefaultAssertion,
-            "`dst` is properly aligned",
+            "`dst` must be properly aligned",
             loc,
         );
 
@@ -1291,7 +1291,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let align_check = self.codegen_assert(
             align,
             PropertyClass::DefaultAssertion,
-            "`dst` is properly aligned",
+            "`dst` must be properly aligned",
             loc,
         );
         let expr = dst.dereference().assign(src, loc);
@@ -1316,13 +1316,13 @@ impl<'tcx> GotocCtx<'tcx> {
         let val = fargs.remove(0).cast_to(Type::c_int());
         let count = fargs.remove(0);
 
-        // Check that `dst` is properly aligned
+        // Check that `dst` must be properly aligned
         let dst_typ = farg_types[0];
         let align = self.is_ptr_aligned(dst_typ, dst.clone());
         let align_check = self.codegen_assert(
             align,
             PropertyClass::DefaultAssertion,
-            "`dst` is properly aligned",
+            "`dst` must be properly aligned",
             loc,
         );
 
