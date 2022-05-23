@@ -6,7 +6,7 @@ With Kani, all the corner cases are covered from the start, and the new concern 
 
 Consider this first program (which can be found under [`first-steps-v1`](https://github.com/model-checking/kani/tree/main/docs/src/tutorial/first-steps-v1/)):
 
-```rust,noplaypen
+```rust
 {{#include tutorial/first-steps-v1/src/main.rs:code}}
 ```
 
@@ -17,7 +17,7 @@ And if this function was more complicated—for example, if some of the branches
 
 We can try to property test a function like this, but if we're naive about it (and consider all possible `u32` inputs), then it's unlikely we'll ever find the bug.
 
-```rust,noplaypen
+```rust
 {{#include tutorial/first-steps-v1/src/main.rs:proptest}}
 ```
 
@@ -31,7 +31,7 @@ There's only 1 in 4 billion inputs that fail, so it's vanishingly unlikely the p
 
 With Kani, however, we can use `kani::any()` to represent all possible `u32` values:
 
-```rust,noplaypen
+```rust
 {{#include tutorial/first-steps-v1/src/main.rs:kani}}
 ```
 
@@ -83,7 +83,7 @@ Try a few other types of errors.
 
 For example, instead of panicking we could try explicitly dereferencing a null pointer:
 
-```rust,noplaypen
+```rust
 unsafe { return *(0 as *const u32) };
 ```
 
@@ -146,7 +146,7 @@ It seems a bit odd that we can take billions of inputs when our function only ha
 Let's encode this fact about our function by asserting some reasonable bound on our input, after we've fixed our bug (code available under
 [`first-steps-v2`](https://github.com/model-checking/kani/tree/main/docs/src/tutorial/first-steps-v2/)):
 
-```rust,noplaypen
+```rust
 {{#include tutorial/first-steps-v2/src/main.rs:code}}
 ```
 
@@ -172,7 +172,7 @@ This is the purpose of _proof harnesses_.
 Much like property testing (which would also fail in this assertion), we need to set up our preconditions, call the function in question, then assert our postconditions.
 Here's a revised example of the proof harness, one that now succeeds:
 
-```rust,noplaypen
+```rust
 {{#include tutorial/first-steps-v2/src/main.rs:kani}}
 ```
 
