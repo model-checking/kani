@@ -467,7 +467,7 @@ impl<'tcx> GotocCtx<'tcx> {
             "ceilf64" => codegen_unimplemented_intrinsic!(
                 "https://github.com/model-checking/kani/issues/1025"
             ),
-            "copy" => self.codegen_copy_intrinsic(intrinsic, fargs, farg_types, p, loc),
+            "copy" => self.codegen_copy(intrinsic, false, fargs, farg_types, Some(p), loc),
             "copy_nonoverlapping" => unreachable!(
                 "Expected `core::intrinsics::unreachable` to be handled by `StatementKind::CopyNonOverlapping`"
             ),
@@ -897,21 +897,31 @@ impl<'tcx> GotocCtx<'tcx> {
         Stmt::atomic_block(vec![skip_stmt], loc)
     }
 
-    /// An intrinsic that translates directly into `memmove`
-    /// https://doc.rust-lang.org/core/intrinsics/fn.copy.html
+    /// Copies `count * size_of::<T>()` bytes from `src` to `dst`.
+    ///
+    /// Note that this function handles code generation for:
+    ///  1. The `copy` intrinsic.
+    ///     https://doc.rust-lang.org/core/intrinsics/fn.copy.html
+    ///  2. The `CopyNonOverlapping` statement.
+    ///     https://doc.rust-lang.org/core/intrinsics/fn.copy_nonoverlapping.html
     ///
     /// Undefined behavior if any of these conditions are violated:
     ///  * Both `src`/`dst` must be properly aligned (done by alignment checks)
     ///  * Both `src`/`dst` must be valid for reads/writes of `count *
     ///      size_of::<T>()` bytes (done by calls to `memmove`)
+    ///  * (Exclusive to nonoverlapping copy) The region of memory beginning
+    ///      at `src` with a size of `count * size_of::<T>()` bytes must *not*
+    ///      overlap with the region of memory beginning at `dst` with the same
+    ///      size.
     /// In addition, we check that computing `count` in bytes (i.e., the third
-    /// argument for the `memmove` call) would not overflow.
-    fn codegen_copy_intrinsic(
+    /// argument of the copy built-in call) would not overflow.
+    pub fn codegen_copy(
         &mut self,
         intrinsic: &str,
+        is_non_overlapping: bool,
         mut fargs: Vec<Expr>,
         farg_types: &[Ty<'tcx>],
-        p: &Place<'tcx>,
+        p: Option<&Place<'tcx>>,
         loc: Location,
     ) -> Stmt {
         // The two first arguments are pointers. It's safe to cast them to void
@@ -924,14 +934,14 @@ impl<'tcx> GotocCtx<'tcx> {
         let src_align_check = self.codegen_assert(
             src_align,
             PropertyClass::DefaultAssertion,
-            "`src` is properly aligned",
+            "`src` must be properly aligned",
             loc,
         );
         let dst_align = self.is_ptr_aligned(farg_types[1], dst.clone());
         let dst_align_check = self.codegen_assert(
             dst_align,
             PropertyClass::DefaultAssertion,
-            "`dst` is properly aligned",
+            "`dst` must be properly aligned",
             loc,
         );
 
@@ -941,18 +951,23 @@ impl<'tcx> GotocCtx<'tcx> {
         let (count_bytes, overflow_check) =
             self.count_in_bytes(count, pointee_type, Type::size_t(), intrinsic, loc);
 
-        // Build the call to `memmove`
-        let call_memmove =
-            BuiltinFn::Memmove.call(vec![dst.clone(), src, count_bytes.clone()], loc);
+        // Build the call to the copy built-in (`memmove` or `memcpy`)
+        let copy_builtin = if is_non_overlapping { BuiltinFn::Memcpy } else { BuiltinFn::Memmove };
+        let copy_call = copy_builtin.call(vec![dst.clone(), src, count_bytes.clone()], loc);
 
-        // The C implementation of `memmove` does not allow an invalid pointer for
-        // `src` nor `dst`, but the LLVM implementation specifies that a copy with
-        // length zero is a no-op. This comes up specifically when handling
-        // the empty string; CBMC will fail on passing a reference to empty
-        // string unless we codegen this zero check.
+        // The C implementations of `memmove` and `memcpy` do not allow an
+        // invalid pointer for `src` nor `dst`, but the LLVM implementations
+        // specify that a zero-length copy is a no-op:
         // https://llvm.org/docs/LangRef.html#llvm-memmove-intrinsic
-        let copy_if_nontrivial = count_bytes.is_zero().ternary(dst, call_memmove);
-        let copy_expr = self.codegen_expr_to_place(p, copy_if_nontrivial);
+        // https://llvm.org/docs/LangRef.html#llvm-memcpy-intrinsic
+        // This comes up specifically when handling the empty string; CBMC will
+        // fail on passing a reference to it unless we codegen this zero check.
+        let copy_if_nontrivial = count_bytes.is_zero().ternary(dst, copy_call);
+        let copy_expr = if p.is_some() {
+            self.codegen_expr_to_place(p.unwrap(), copy_if_nontrivial)
+        } else {
+            copy_if_nontrivial.as_stmt(loc)
+        };
         Stmt::block(vec![src_align_check, dst_align_check, overflow_check, copy_expr], loc)
     }
 
@@ -1274,7 +1289,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let align_check = self.codegen_assert(
             align,
             PropertyClass::DefaultAssertion,
-            "`dst` is properly aligned",
+            "`dst` must be properly aligned",
             loc,
         );
         let expr = dst.dereference().assign(src, loc);
@@ -1299,13 +1314,13 @@ impl<'tcx> GotocCtx<'tcx> {
         let val = fargs.remove(0).cast_to(Type::c_int());
         let count = fargs.remove(0);
 
-        // Check that `dst` is properly aligned
+        // Check that `dst` must be properly aligned
         let dst_typ = farg_types[0];
         let align = self.is_ptr_aligned(dst_typ, dst.clone());
         let align_check = self.codegen_assert(
             align,
             PropertyClass::DefaultAssertion,
-            "`dst` is properly aligned",
+            "`dst` must be properly aligned",
             loc,
         );
 
