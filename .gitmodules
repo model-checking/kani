@@ -10,3 +10,6 @@
 [submodule "firecracker"]
 	path = firecracker
 	url = https://github.com/firecracker-microvm/firecracker.git
+[submodule "tests/perf/s2n-quic"]
+	path = tests/perf/s2n-quic
+	url = https://github.com/zhassan-aws/s2n-quic

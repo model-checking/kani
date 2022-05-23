@@ -387,16 +387,23 @@ fn collect_tests_from_dir(
     // output directory corresponding to each to avoid race conditions during
     // the testing phase. We immediately return after adding the tests to avoid
     // treating `*.rs` files as tests.
-    if config.mode == Mode::CargoKani && dir.join("Cargo.toml").exists() {
+    if config.mode == Mode::CargoKani {
+        let has_cargo_toml = dir.join("Cargo.toml").exists();
         for file in fs::read_dir(dir)? {
-            let file_path = file?.path();
-            if file_path.to_str().unwrap().ends_with(".expected")
-                || "expected" == file_path.file_name().unwrap()
+            let file = file?;
+            let file_path = file.path();
+            if has_cargo_toml
+                && (file_path.to_str().unwrap().ends_with(".expected")
+                    || "expected" == file_path.file_name().unwrap())
             {
                 fs::create_dir_all(&build_dir.join(file_path.file_stem().unwrap())).unwrap();
                 let paths =
                     TestPaths { file: file_path, relative_dir: relative_dir_path.to_path_buf() };
                 tests.extend(make_test(config, &paths, inputs));
+            } else if file_path.is_dir() {
+                let relative_file_path = relative_dir_path.join(file.file_name());
+                debug!("found directory: {:?}", file_path.display());
+                collect_tests_from_dir(config, &file_path, &relative_file_path, inputs, tests)?;
             }
         }
         return Ok(());

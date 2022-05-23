@@ -8,6 +8,17 @@ fi
 set -o pipefail
 set -o nounset
 
+ARG=
+# Check for optional arguments
+if (( "$#" > 0 )); then
+  ARG=$1
+  if [ "$ARG" != "all" ]; then
+    echo "Unexpected argument: $ARG"
+    echo "Usage: $0 [all]"
+    exit 1
+  fi
+fi
+
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 export PATH=$SCRIPT_DIR:$PATH
 EXTRA_X_PY_BUILD_ARGS="${EXTRA_X_PY_BUILD_ARGS:-}"
@@ -48,6 +59,10 @@ TESTS=(
     "kani-fixme kani-fixme"
     "ui expected"
 )
+
+if [ "$ARG" = "all" ]; then
+  TESTS+=("perf cargo-kani")
+fi
 
 # Extract testing suite information and run compiletest
 for testp in "${TESTS[@]}"; do

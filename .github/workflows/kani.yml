@@ -24,7 +24,12 @@ jobs:
           cargo build --workspace
 
       - name: Execute Kani regression
+        if: ${{ github.event_name == 'pull_request' }}
         run: ./scripts/kani-regression.sh
+
+      - name: Execute all Kani regressions
+        if: ${{ github.event_name == 'push' }}
+        run: ./scripts/kani-regression.sh all
 
   bookrunner:
     runs-on: ubuntu-20.04
