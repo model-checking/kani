@@ -1080,6 +1080,14 @@ impl Expr {
     pub fn r_ok(self, e: Expr) -> Expr {
         self.binop(ROk, e)
     }
+
+    // Expressions defined on top of other expressions
+
+    /// `min(self, e)`
+    pub fn min(self, e: Expr) -> Expr {
+        let cmp = self.clone().lt(e.clone());
+        cmp.ternary(self, e)
+    }
 }
 
 /// Constructors for self operations
