@@ -1,5 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+//! Checks that the ptr_offset_from_unsigned intrinsic returns the expected results.
 
 #![feature(core_intrinsics)]
 use std::intrinsics::ptr_offset_from_unsigned;

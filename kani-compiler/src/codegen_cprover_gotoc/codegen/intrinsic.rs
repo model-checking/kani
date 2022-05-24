@@ -1011,7 +1011,6 @@ impl<'tcx> GotocCtx<'tcx> {
             loc,
         );
 
-        // Re-compute the offset with standard substraction (no casts this time)
         let offset_expr = self.codegen_expr_to_place(p, offset_expr);
         Stmt::block(vec![overflow_check, offset_expr], loc)
     }
@@ -1030,7 +1029,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // Check that computing `offset` in bytes would not overflow an `isize`
         // These checks may allow a wrapping-around behavior in CBMC:
         // https://github.com/model-checking/kani/issues/1150
-        let overflow_check = self.codegen_assert(
+        let overflow_check = self.codegen_assert_assume(
             offset_overflow.overflowed.not(),
             PropertyClass::ArithmeticOverflow,
             "attempt to compute offset in bytes which would overflow an `isize`",
@@ -1040,13 +1039,12 @@ impl<'tcx> GotocCtx<'tcx> {
         let non_negative_check = self.codegen_assert_assume(
             offset_overflow.result.is_non_negative(),
             PropertyClass::KaniCheck,
-            "safety condition violated: computing unsigned offset with negative distance",
+            "attempt to compute unsigned offset with negative distance",
             loc,
         );
 
-        // Re-compute the offset with standard substraction (no casts this time)
         let offset_expr = self.codegen_expr_to_place(p, offset_expr.cast_to(Type::size_t()));
-        Stmt::block(vec![non_negative_check, overflow_check, offset_expr], loc)
+        Stmt::block(vec![overflow_check, non_negative_check, offset_expr], loc)
     }
 
     /// Both `ptr_offset_from` and `ptr_offset_from_unsigned` return the offset between two pointers.
