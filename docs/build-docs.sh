@@ -8,9 +8,10 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 cd $SCRIPT_DIR
 
 # Download mdbook release (vs spending time building it via cargo install)
-FILE="mdbook-v0.4.12-x86_64-unknown-linux-gnu.tar.gz"
-URL="https://github.com/rust-lang/mdBook/releases/download/v0.4.12/$FILE"
-EXPECTED_HASH="2a0953c50d8156e84f193f15a506ef0adbac66f1942b794de5210ca9ca73dd33"
+MDBOOK_VERSION=v0.4.18
+FILE="mdbook-${MDBOOK_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+URL="https://github.com/rust-lang/mdBook/releases/download/${MDBOOK_VERSION}/$FILE"
+EXPECTED_HASH="d276b0e594d5980de6a7917ce74c348f28d3cb8b353ca4eaae344ae8a4c40bea"
 if [ ! -x mdbook ]; then
     curl -sSL -o "$FILE" "$URL"
     echo "$EXPECTED_HASH $FILE" | sha256sum -c -

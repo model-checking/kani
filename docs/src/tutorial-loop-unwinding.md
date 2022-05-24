@@ -2,14 +2,14 @@
 
 Consider code like this (available [here](https://github.com/model-checking/kani/blob/main/docs/src/tutorial/loops-unwinding/src/lib.rs)):
 
-```rust,noplaypen
+```rust
 {{#include tutorial/loops-unwinding/src/lib.rs:code}}
 ```
 
 This code has an off-by-one error that only occurs on the last iteration of the loop (when called with an input that will trigger it).
 We can try to find this bug with a proof harness like this:
 
-```rust,noplaypen
+```rust
 {{#include tutorial/loops-unwinding/src/lib.rs:kani}}
 ```
 
@@ -84,7 +84,7 @@ Kani is now sure we've unwound the loop enough to verify our proof harness, and 
 Kani allows three options to specify the unwind value for a particular harness:
 
 1. The unwind annotation `#[kani::unwind(<num>)]`. This sets the unwind value for the harness with the annotation. Example -
-``` rust,noplaypen
+``` rust
 #[kani::proof]
 #[kani::unwind(3)]
 fn proof_harness() {

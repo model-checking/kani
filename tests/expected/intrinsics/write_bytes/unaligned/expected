@@ -1,2 +1,2 @@
 FAILURE\
-`dst` is properly aligned
+`dst` must be properly aligned
