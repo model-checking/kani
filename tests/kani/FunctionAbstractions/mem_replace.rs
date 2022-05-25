@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! Tests the `std::mem::swap` function using various function types.
+//! Tests the `std::mem::replace` function using various function types.
 
 use std::mem;
 
@@ -21,7 +21,9 @@ fn test<T: kani::Invariant + std::cmp::PartialEq + Clone>() {
     let mut var1 = kani::any::<T>();
     let var2 = kani::any::<T>();
     let old_var1 = var1.clone();
+    let old_var2 = var2.clone();
     assert_eq!(mem::replace(&mut var1, var2), old_var1);
+    assert_eq!(var1, old_var2);
 }
 
 #[kani::proof]
