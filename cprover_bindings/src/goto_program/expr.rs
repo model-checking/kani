@@ -285,17 +285,6 @@ impl Expr {
 
     /// Returns whether an expression causes side effects or not
     pub fn is_side_effect(&self) -> bool {
-        /// Returns whether any of the expressions on a vector
-        /// causes side effects or not
-        fn are_side_effect(exprs: &Vec<Expr>) -> bool {
-            for expr in exprs {
-                if expr.is_side_effect() {
-                    return true;
-                }
-            }
-            false
-        }
-
         match &*self.value {
             // These expressions always cause side effects
             Assign { .. }
@@ -306,7 +295,7 @@ impl Expr {
             // These expressions do not cause side effects, but the expressions
             // they contain may do. All we need to do are recursive calls.
             AddressOf(e) => e.is_side_effect(),
-            Array { elems } => are_side_effect(elems),
+            Array { elems } => elems.iter().any(|e| e.is_side_effect()),
             ArrayOf { elem } => elem.is_side_effect(),
             BinOp { op: _, lhs, rhs } => lhs.is_side_effect() || rhs.is_side_effect(),
             ByteExtract { e, offset: _ } => e.is_side_effect(),
@@ -314,11 +303,11 @@ impl Expr {
             If { c, t, e } => c.is_side_effect() || t.is_side_effect() || e.is_side_effect(),
             Index { array, index } => array.is_side_effect() || index.is_side_effect(),
             Member { lhs, field: _ } => lhs.is_side_effect(),
-            Struct { values } => are_side_effect(values),
+            Struct { values } => values.iter().any(|e| e.is_side_effect()),
             Typecast(e) => e.is_side_effect(),
             Union { value, field: _ } => value.is_side_effect(),
             UnOp { op: _, e } => e.is_side_effect(),
-            Vector { elems } => are_side_effect(elems),
+            Vector { elems } => elems.iter().any(|e| e.is_side_effect()),
             // The rest of expressions (constants) do not cause side effects
             _ => false,
         }
