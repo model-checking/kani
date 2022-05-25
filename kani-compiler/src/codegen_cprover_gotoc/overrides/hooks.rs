@@ -12,8 +12,7 @@ use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::codegen_cprover_gotoc::utils;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
-use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Symbol, Type};
-use cbmc::NO_PRETTY_NAME;
+use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Type};
 use kani_queries::UserInput;
 use rustc_middle::mir::{BasicBlock, Place};
 use rustc_middle::ty::print::with_no_trimmed_paths;
@@ -253,69 +252,6 @@ impl<'tcx> GotocHook<'tcx> for Panic {
     }
 }
 
-struct MemSwap;
-
-impl<'tcx> GotocHook<'tcx> for MemSwap {
-    fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-        // We need to keep the old std / core functions here because we don't compile std yet.
-        let name = with_no_trimmed_paths!(tcx.def_path_str(instance.def_id()));
-        name == "core::mem::swap"
-            || name == "std::mem::swap"
-            || name == "core::ptr::swap"
-            || name == "std::ptr::swap"
-    }
-
-    fn handle(
-        &self,
-        tcx: &mut GotocCtx<'tcx>,
-        instance: Instance<'tcx>,
-        mut fargs: Vec<Expr>,
-        _assign_to: Option<Place<'tcx>>,
-        target: Option<BasicBlock>,
-        span: Option<Span>,
-    ) -> Stmt {
-        let ty = tcx.monomorphize(instance.substs.type_at(0));
-        let loc = tcx.codegen_span_option(span);
-        let target = target.unwrap();
-        let x = fargs.remove(0);
-        let y = fargs.remove(0);
-
-        let func_name = format!("gen-swap<{}>", tcx.ty_mangled_name(ty));
-        tcx.ensure(&func_name, |tcx, _| {
-            let ty = tcx.codegen_ty(ty);
-            let x_param = tcx.gen_function_local_variable(1, &func_name, ty.clone().to_pointer());
-            let y_param = tcx.gen_function_local_variable(2, &func_name, ty.clone().to_pointer());
-            let var = tcx.gen_function_local_variable(3, &func_name, ty);
-            let mut block = Vec::new();
-            let xe = x_param.to_expr();
-            block.push(Stmt::decl(var.to_expr(), Some(xe.clone().dereference()), Location::none()));
-            let ye = y_param.to_expr();
-            let var = var.to_expr();
-            block.push(xe.dereference().assign(ye.clone().dereference(), loc.clone()));
-            block.push(ye.dereference().assign(var, loc.clone()));
-
-            Symbol::function(
-                &func_name,
-                Type::code(
-                    vec![x_param.to_function_parameter(), y_param.to_function_parameter()],
-                    Type::empty(),
-                ),
-                Some(Stmt::block(block, loc.clone())),
-                NO_PRETTY_NAME,
-                Location::none(),
-            )
-        });
-
-        Stmt::block(
-            vec![
-                tcx.find_function(&func_name).unwrap().call(vec![x, y]).as_stmt(loc.clone()),
-                Stmt::goto(tcx.current_fn().find_label(&target), loc.clone()),
-            ],
-            loc,
-        )
-    }
-}
-
 struct PtrRead;
 
 impl<'tcx> GotocHook<'tcx> for PtrRead {
@@ -475,7 +411,6 @@ pub fn fn_hooks<'tcx>() -> GotocHooks<'tcx> {
             Rc::new(Assume),
             Rc::new(Assert),
             Rc::new(ExpectFail),
-            Rc::new(MemSwap),
             Rc::new(Nondet),
             Rc::new(PtrRead),
             Rc::new(PtrWrite),
