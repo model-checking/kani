@@ -79,7 +79,10 @@ impl KaniSession {
         file: &Path,
         harness_metadata: &HarnessMetadata,
     ) -> Result<Vec<OsString>> {
-        let mut args = self.cbmc_check_flags();
+        let mut args = Vec::new();
+        if self.args.checks.unwinding_on() {
+            args.push("--unwinding-assertions".into());
+        }
 
         if let Some(object_bits) = self.args.cbmc_object_bits() {
             args.push("--object-bits".into());
@@ -122,10 +125,6 @@ impl KaniSession {
             // We might want to create a transformation pass instead of enabling CBMC since Kani
             // compiler sometimes rely on the bitwise conversion of signed <-> unsigned.
             // args.push("--conversion-check".into());
-        }
-
-        if self.args.checks.unwinding_on() {
-            args.push("--unwinding-assertions".into());
         }
 
         if self.args.extra_pointer_checks {

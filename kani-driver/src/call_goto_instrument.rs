@@ -23,6 +23,11 @@ impl KaniSession {
             self.just_drop_unused_functions(output)?;
         }
 
+        self.add_checks(output)?;
+        // CBMC's slicer errors out if the program is empty:
+        // https://github.com/diffblue/cbmc/issues/6882
+        // so for now, ignore the exit status from the command
+        let _ = self.slice(output);
         self.rewrite_back_edges(output)?;
 
         if self.args.gen_c {
@@ -95,6 +100,26 @@ impl KaniSession {
     fn just_drop_unused_functions(&self, file: &Path) -> Result<()> {
         let args: Vec<OsString> = vec![
             "--drop-unused-functions".into(),
+            file.to_owned().into_os_string(), // input
+            file.to_owned().into_os_string(), // output
+        ];
+
+        self.call_goto_instrument(args)
+    }
+
+    /// Instrument automatic CBMC checks (e.g. bounds and pointer checks)
+    fn add_checks(&self, file: &Path) -> Result<()> {
+        let mut args = self.cbmc_check_flags();
+        args.push(file.to_owned().into_os_string()); // input
+        args.push(file.to_owned().into_os_string()); // output
+
+        self.call_goto_instrument(args)
+    }
+
+    /// Apply CBMC's slicer to prune code that doesn't impact any of the checks
+    fn slice(&self, file: &Path) -> Result<()> {
+        let args: Vec<OsString> = vec![
+            "--reachability-slice".into(),
             file.to_owned().into_os_string(), // input
             file.to_owned().into_os_string(), // output
         ];
