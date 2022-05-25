@@ -683,7 +683,7 @@ def construct_terse_property_message(properties):
     number_tests_failed = 0
     output_message = ""
     failed_tests = []
-    index = 0
+    index = -1
     verification_status = GlobalMessages.FAILED
 
     # Parse each property instance in properties
@@ -752,7 +752,7 @@ def construct_property_message(properties):
     number_tests_undetermined = 0
     output_message = ""
     failed_tests = []
-    index = 0
+    index = -1
     verification_status = GlobalMessages.FAILED
 
     output_message = "RESULTS:\n"
