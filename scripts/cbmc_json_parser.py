@@ -683,11 +683,10 @@ def construct_terse_property_message(properties):
     number_tests_failed = 0
     output_message = ""
     failed_tests = []
-    index = -1
     verification_status = GlobalMessages.FAILED
 
     # Parse each property instance in properties
-    for index, property_instance in enumerate(properties):
+    for property_instance in properties:
         status = property_instance["status"]
         if status == "FAILURE":
             number_tests_failed += 1
@@ -696,7 +695,7 @@ def construct_terse_property_message(properties):
             pass
 
     # Ex - OUTPUT: ** 1 of 54 failed
-    output_message += f"VERIFICATION RESULT: \n ** {number_tests_failed} of {index+1} failed\n"
+    output_message += f"VERIFICATION RESULT: \n ** {number_tests_failed} of {len(properties)} failed\n"
 
     # The Verification is successful and the program is verified
     if number_tests_failed == 0:
@@ -752,7 +751,6 @@ def construct_property_message(properties):
     number_tests_undetermined = 0
     output_message = ""
     failed_tests = []
-    index = -1
     verification_status = GlobalMessages.FAILED
 
     output_message = "RESULTS:\n"
@@ -791,7 +789,7 @@ def construct_property_message(properties):
 
         output_message += "\n"
 
-    output_message += f"\nSUMMARY: \n ** {number_tests_failed} of {index+1} failed"
+    output_message += f"\nSUMMARY: \n ** {number_tests_failed} of {len(properties)} failed"
     other_status = []
     if number_tests_undetermined > 0:
         other_status.append(f"{number_tests_undetermined} undetermined")
