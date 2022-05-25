@@ -137,3 +137,11 @@ macro_rules! println {
 macro_rules! eprintln {
     ($($x:tt)*) => { evaluate_print_args!($($x)*); };
 }
+
+#[macro_export]
+macro_rules! unreachable {
+    ($($arg:tt)*) => ({
+        panic!(concat!("internal error: entered unreachable code: ",
+        stringify!($($arg)*)));
+    });
+}
