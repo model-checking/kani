@@ -80,7 +80,7 @@ error: test failed: expected check success, got failure
 When working on a test that's expected to fail, there are two options to
 indicate an expected failure. The first one is to add a comment
 
-```rust,noplaypen
+```rust
 // kani-<stage>-fail
 ```
 at the top of the test file, where `<stage>` is the stage where the test is
@@ -100,13 +100,13 @@ predicate.
 Many tests will require passing command-line options to Kani. These options can
 be specified in single Rust files by adding a comment at the top of the file:
 
-```rust,noplaypen
+```rust
 // kani-flags: <options>
 ```
 
 For example, to use an unwinding value of 4 in a test, we can write:
 
-```rust,noplaypen
+```rust
 // kani-flags: --default-unwind 4
 ```
 

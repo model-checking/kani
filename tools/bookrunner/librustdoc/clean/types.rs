@@ -197,7 +197,7 @@ impl Item {
         kind: ItemKind,
         cx: &mut DocContext<'_>,
     ) -> Item {
-        let ast_attrs = cx.tcx.get_attrs(def_id);
+        let ast_attrs = cx.tcx.get_attrs_unchecked(def_id);
 
         Self::from_def_id_and_attrs_and_parts(def_id, name, kind, box ast_attrs.clean(cx), cx)
     }

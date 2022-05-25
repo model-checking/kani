@@ -243,9 +243,8 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// Handle all attributes i.e. `#[kani::x]` (which kani_macros translates to `#[kanitool::x]` for us to handle here)
     fn handle_kanitool_attributes(&mut self) {
-        let all_attributes = self.tcx.get_attrs(self.current_fn().instance().def_id());
+        let all_attributes = self.tcx.get_attrs_unchecked(self.current_fn().instance().def_id());
         let (proof_attributes, other_attributes) = partition_kanitool_attributes(all_attributes);
-
         if proof_attributes.is_empty() && !other_attributes.is_empty() {
             self.tcx.sess.span_err(
                 other_attributes[0].1.span,

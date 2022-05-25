@@ -83,6 +83,21 @@ impl<'tcx> GotocCtx<'tcx> {
         Stmt::assert(cond, property_name, message, loc)
     }
 
+    pub fn codegen_assert_assume(
+        &self,
+        cond: Expr,
+        property_class: PropertyClass,
+        message: &str,
+        loc: Location,
+    ) -> Stmt {
+        assert!(cond.typ().is_bool());
+        let property_name = property_class.as_str();
+        Stmt::block(
+            vec![Stmt::assert(cond.clone(), property_name, message, loc), Stmt::assume(cond, loc)],
+            loc,
+        )
+    }
+
     pub fn codegen_assert_false(
         &self,
         property_class: PropertyClass,
