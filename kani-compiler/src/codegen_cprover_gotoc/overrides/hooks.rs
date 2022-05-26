@@ -16,7 +16,6 @@ use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Symbol, Type};
 use cbmc::NO_PRETTY_NAME;
 use kani_queries::UserInput;
 use rustc_middle::mir::{BasicBlock, Place};
-use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{Instance, TyCtxt};
 use rustc_span::Span;
@@ -254,50 +253,6 @@ impl<'tcx> GotocHook<'tcx> for Panic {
     }
 }
 
-struct MemReplace;
-
-impl<'tcx> GotocHook<'tcx> for MemReplace {
-    fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-        let name = with_no_trimmed_paths!(tcx.def_path_str(instance.def_id()));
-        name == "core::mem::replace" || name == "std::mem::replace"
-    }
-
-    fn handle(
-        &self,
-        tcx: &mut GotocCtx<'tcx>,
-        _instance: Instance<'tcx>,
-        mut fargs: Vec<Expr>,
-        assign_to: Option<Place<'tcx>>,
-        target: Option<BasicBlock>,
-        span: Option<Span>,
-    ) -> Stmt {
-        let loc = tcx.codegen_span_option(span);
-        let p = assign_to.unwrap();
-        let target = target.unwrap();
-        // Skip an assignment to a destination that has a zero-sized type
-        // (For a ZST, Rust optimizes away the source and fargs.len() == 1)
-        let place_type = tcx.place_ty(&p);
-        let place_layout = tcx.layout_of(place_type);
-        let place_is_zst = place_layout.is_zst();
-        if place_is_zst {
-            Stmt::block(vec![Stmt::goto(tcx.current_fn().find_label(&target), loc.clone())], loc)
-        } else {
-            let dest = fargs.remove(0);
-            let src = fargs.remove(0);
-            Stmt::block(
-                vec![
-                    unwrap_or_return_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&p))
-                        .goto_expr
-                        .assign(dest.clone().dereference().with_location(loc.clone()), loc.clone()),
-                    dest.dereference().assign(src, loc.clone()),
-                    Stmt::goto(tcx.current_fn().find_label(&target), loc.clone()),
-                ],
-                loc,
-            )
-        }
-    }
-}
-
 struct MemSwap;
 
 impl<'tcx> GotocHook<'tcx> for MemSwap {
@@ -520,7 +475,6 @@ pub fn fn_hooks<'tcx>() -> GotocHooks<'tcx> {
             Rc::new(Assume),
             Rc::new(Assert),
             Rc::new(ExpectFail),
-            Rc::new(MemReplace),
             Rc::new(MemSwap),
             Rc::new(Nondet),
             Rc::new(PtrRead),
