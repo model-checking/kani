@@ -383,7 +383,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         match intrinsic {
             "add_with_overflow" => codegen_op_with_overflow!(add_overflow),
-            "arith_offset" => self.codegen_offset(instance, fargs, p, loc),
+            "arith_offset" => self.codegen_offset(intrinsic, instance, fargs, p, loc),
             "assert_inhabited" => self.codegen_assert_intrinsic(instance, intrinsic, span),
             "assert_uninit_valid" => self.codegen_assert_intrinsic(instance, intrinsic, span),
             "assert_zero_valid" => self.codegen_assert_intrinsic(instance, intrinsic, span),
@@ -552,7 +552,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 "https://github.com/model-checking/kani/issues/1025"
             ),
             "needs_drop" => codegen_intrinsic_const!(),
-            "offset" => self.codegen_offset(instance, fargs, p, loc),
+            "offset" => self.codegen_offset(intrinsic, instance, fargs, p, loc),
             "powf32" => unstable_codegen!(codegen_simple_intrinsic!(Powf)),
             "powf64" => unstable_codegen!(codegen_simple_intrinsic!(Pow)),
             "powif32" => unstable_codegen!(codegen_simple_intrinsic!(Powif)),
@@ -986,6 +986,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// https://doc.rust-lang.org/std/intrinsics/fn.offset.html
     fn codegen_offset(
         &mut self,
+        intrinsic: &str,
         instance: Instance<'tcx>,
         mut fargs: Vec<Expr>,
         p: &Place<'tcx>,
@@ -997,7 +998,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // Check that computing `offset` in bytes would not overflow
         let ty = self.monomorphize(instance.substs.type_at(0));
         let (offset_bytes, bytes_overflow_check) =
-            self.count_in_bytes(offset.clone(), ty, Type::ssize_t(), "offset", loc);
+            self.count_in_bytes(offset.clone(), ty, Type::ssize_t(), intrinsic, loc);
 
         // Check that the computation would not overflow an `isize`
         // These checks may allow a wrapping-around behavior in CBMC:
