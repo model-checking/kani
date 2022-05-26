@@ -1150,6 +1150,8 @@ impl Type {
     pub fn zero(&self) -> Expr {
         if self.is_integer() {
             Expr::int_constant(0, self.clone())
+        } else if self.is_bool() {
+            Expr::bool_false()
         } else if self.is_c_bool() {
             Expr::c_false()
         } else if self.is_float() {
@@ -1159,7 +1161,60 @@ impl Type {
         } else if self.is_pointer() {
             Expr::pointer_constant(0, self.clone())
         } else {
-            unreachable!("Can't convert {:?} to a one value", self);
+            unreachable!("Can't convert {:?} to a zero value", self);
+        }
+    }
+
+    pub fn zero_initilizer(&self, st: &SymbolTable) -> Expr {
+        let concrete = self.unwrap_typedef();
+        match concrete {
+            Array { typ, size } => typ.zero_initilizer(st).array_constant(*size),
+            CBitField { typ, width } => todo!(),
+            FlexibleArray { typ } => todo!(),
+            InfiniteArray { typ } => todo!(),
+            Struct { tag, components } => Expr::struct_expr_from_padded_values(
+                self.clone(),
+                components.iter().map(|c| c.typ().zero_initilizer(st)).collect(),
+                st,
+            ),
+            StructTag(tag) => st.lookup(*tag).unwrap().typ.zero_initilizer(st),
+            TypeDef { name, typ } => unreachable!("Should have been normalized away"),
+            Union { tag, components } => {
+                if components.is_empty() {
+                    todo!()
+                }
+                let largest = components.iter().max_by_key(|c| c.sizeof_in_bits(st)).unwrap();
+                Expr::union_expr(
+                    self.clone(),
+                    largest.name(),
+                    largest.typ().zero_initilizer(st),
+                    st,
+                )
+            }
+            UnionTag(tag) => st.lookup(*tag).unwrap().typ.zero_initilizer(st),
+            VariadicCode { parameters, return_type } => todo!(),
+            Vector { typ, size } => {
+                let zero = typ.zero_initilizer(st);
+                let size = (*size).try_into().unwrap();
+                let elems = vec![zero; size];
+                Expr::vector_expr(self.clone(), elems)
+            }
+
+            Bool
+            | CInteger(_)
+            | Double
+            | Float
+            | Pointer { .. }
+            | Signedbv { .. }
+            | Unsignedbv { .. } => self.zero(),
+
+            Code { .. }
+            | Constructor
+            | Empty
+            | IncompleteStruct { .. }
+            | IncompleteUnion { .. } => {
+                panic!("Type {:?} cannot be zero initilized")
+            }
         }
     }
 }
