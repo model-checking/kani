@@ -383,7 +383,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         match intrinsic {
             "add_with_overflow" => codegen_op_with_overflow!(add_overflow),
-            "arith_offset" => unstable_codegen!(codegen_wrapping_op!(plus)),
+            "arith_offset" => self.codegen_offset(instance, fargs, p, loc),
             "assert_inhabited" => self.codegen_assert_intrinsic(instance, intrinsic, span),
             "assert_uninit_valid" => self.codegen_assert_intrinsic(instance, intrinsic, span),
             "assert_zero_valid" => self.codegen_assert_intrinsic(instance, intrinsic, span),
