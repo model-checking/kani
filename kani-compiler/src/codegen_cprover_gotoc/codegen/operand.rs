@@ -327,6 +327,7 @@ impl<'tcx> GotocCtx<'tcx> {
             let target_ty = init.typ().clone(); // N
             let param = tcx.gen_function_parameter(1, &func_name, target_ty);
             let var = tcx.gen_function_local_variable(2, &func_name, cgt.clone()).to_expr();
+            let init = tcx.codegen_default_initializer(&var);
             let body = vec![
                 Stmt::decl(var.clone(), None, Location::none()),
                 tcx.codegen_discriminant_field(var.clone(), ty)
@@ -614,8 +615,9 @@ impl<'tcx> GotocCtx<'tcx> {
             let target_ty = init.typ().clone(); // N
             let param = tcx.gen_function_parameter(1, &fname, target_ty.clone());
             let var = tcx.gen_function_local_variable(2, &fname, cgt.clone()).to_expr();
+            let init = tcx.codegen_default_initializer(&var);
             let body = vec![
-                Stmt::decl(var.clone(), None, Location::none()),
+                Stmt::decl(var.clone(), init, Location::none()),
                 tcx.codegen_get_niche(var.clone(), offset, target_ty)
                     .assign(param.to_expr(), Location::none()),
                 var.ret(Location::none()),

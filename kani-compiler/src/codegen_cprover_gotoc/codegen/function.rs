@@ -78,7 +78,8 @@ impl<'tcx> GotocCtx<'tcx> {
             // Index 0 represents the return value, which does not need to be
             // declared in the first block
             if lc.index() < 1 || lc.index() > mir.arg_count {
-                self.current_fn_mut().push_onto_block(Stmt::decl(sym_e, None, loc));
+                let init = self.codegen_default_initializer(&sym_e);
+                self.current_fn_mut().push_onto_block(Stmt::decl(sym_e, init, loc));
             }
         });
     }

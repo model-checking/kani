@@ -83,6 +83,11 @@ pub struct KaniArgs {
     #[structopt(flatten)]
     pub checks: CheckArgs,
 
+    /// Zero initilize variables.
+    /// This is an unstable feature.
+    #[structopt(long, hidden = true, requires("enable-unstable"))]
+    pub zero_init_vars: bool,
+
     /// Entry point for verification (symbol name).
     /// This is an unstable feature. Consider using --harness instead
     #[structopt(long, hidden = true, requires("enable-unstable"), conflicts_with("dry-run"))]

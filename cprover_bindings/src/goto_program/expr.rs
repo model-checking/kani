@@ -84,6 +84,8 @@ pub enum ExprValue {
     Dereference(Expr),
     /// `1.0`
     DoubleConstant(f64),
+    // {}
+    EmptyUnion,
     /// `1.0f`
     FloatConstant(f32),
     /// `function(arguments)`
@@ -392,7 +394,6 @@ impl Expr {
 
     /// `typ x[width] = >>> {elem} <<<`
     pub fn array_constant(self, width: u64) -> Self {
-        assert!(self.is_int_constant());
         expr!(ArrayOf { elem: self }, self.typ.clone().array_of(width))
     }
 
@@ -519,6 +520,13 @@ impl Expr {
         Self::double_constant(c)
     }
 
+    pub fn empty_union(typ: Type, st: &SymbolTable) -> Self {
+        assert!(typ.is_union() || typ.is_union_tag());
+        assert!(typ.lookup_components(st).unwrap().is_empty());
+        let typ = typ.aggr_tag().unwrap();
+        expr!(EmptyUnion, typ)
+    }
+
     /// `1.0f`
     pub fn float_constant(c: f32) -> Self {
         expr!(FloatConstant(c), Type::float())
@@ -528,6 +536,11 @@ impl Expr {
     pub fn float_constant_from_bitpattern(bp: u32) -> Self {
         let c = f32::from_bits(bp);
         Self::float_constant(c)
+    }
+
+    /// `typ x[__CPROVER_infinity()] = >>> {elem} <<<`
+    pub fn infinite_array_constant(self) -> Self {
+        expr!(ArrayOf { elem: self }, self.typ.clone().infinite_array_of())
     }
 
     /// `self[index]`
@@ -543,7 +556,7 @@ impl Expr {
     where
         T: Into<BigInt>,
     {
-        assert!(typ.is_integer());
+        assert!(typ.is_integer() || typ.is_bitfield());
         let i = i.into();
         // TODO: <https://github.com/model-checking/kani/issues/996>
         // if i != 0 && i != 1 {
@@ -783,11 +796,12 @@ impl Expr {
         symbol_table: &SymbolTable,
     ) -> Self {
         assert!(
-            typ.is_struct_tag(),
-            "Error in struct_expr; must be given struct_tag.\n\t{:?}\n\t{:?}",
+            typ.is_struct_tag() || typ.is_struct(),
+            "Error in struct_expr; must be given struct.\n\t{:?}\n\t{:?}",
             typ,
             values
         );
+        let typ = if typ.is_struct() { typ.aggr_tag().unwrap() } else { typ };
         let fields = typ.lookup_components(symbol_table).unwrap();
         assert_eq!(
             fields.len(),
@@ -846,8 +860,9 @@ impl Expr {
         symbol_table: &SymbolTable,
     ) -> Self {
         let field = field.into();
-        assert!(typ.is_union_tag());
+        assert!(typ.is_union_tag() || typ.is_union());
         assert_eq!(typ.lookup_field_type(field, symbol_table).as_ref(), Some(value.typ()));
+        let typ = typ.aggr_tag().unwrap();
         expr!(Union { value, field }, typ)
     }
 }

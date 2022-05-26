@@ -217,8 +217,9 @@ impl<'tcx> GotocCtx<'tcx> {
             let inp = tcx.gen_function_parameter(1, &func_name, paramt);
             let res = tcx.gen_function_local_variable(2, &func_name, res_t.clone()).to_expr();
             let idx = tcx.gen_function_local_variable(3, &func_name, Type::size_t()).to_expr();
+            let res_init = tcx.codegen_default_initializer(&res);
             let mut body = vec![
-                Stmt::decl(res.clone(), None, Location::none()),
+                Stmt::decl(res.clone(), res_init, Location::none()),
                 Stmt::decl(idx.clone(), Some(Type::size_t().zero()), Location::none()),
             ];
 

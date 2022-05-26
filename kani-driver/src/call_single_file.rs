@@ -120,6 +120,9 @@ impl KaniSession {
         if self.args.ignore_global_asm {
             flags.push("--ignore-global-asm".into());
         }
+        if self.args.zero_init_vars {
+            flags.push("--zero-init-vars".into());
+        }
 
         // Stratification point!
         // Above are arguments that should be parsed by kani-compiler
