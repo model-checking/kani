@@ -32,8 +32,9 @@ pub fn setup_python_deps_on_ubuntu_18_04(pyroot: &Path, pkg_versions: &[&str]) -
 
     // Step 2: move `pyroot/lib/python3.6/site-packages/*` up to `pyroot`
     // This seems to successfully replicate the behavior of `--target`
+    // "mv" is not idempotent however so we need to do "cp -r"
     let mut mv_cmd = OsString::new();
-    mv_cmd.push("mv ");
+    mv_cmd.push("cp -r ");
     mv_cmd.push(pyroot.as_os_str());
     mv_cmd.push("/lib/python*/site-packages/* ");
     mv_cmd.push(pyroot.as_os_str());
