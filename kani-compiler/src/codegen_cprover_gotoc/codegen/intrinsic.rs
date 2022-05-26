@@ -982,8 +982,17 @@ impl<'tcx> GotocCtx<'tcx> {
         Stmt::block(vec![src_align_check, dst_align_check, overflow_check, copy_expr], loc)
     }
 
-    /// Computes the offset from a pointer
-    /// https://doc.rust-lang.org/std/intrinsics/fn.offset.html
+    /// Computes the offset from a pointer.
+    ///
+    /// Note that this function handles code generation for:
+    ///  1. The `offset` intrinsic.
+    ///     https://doc.rust-lang.org/std/intrinsics/fn.offset.html
+    ///  2. The `arith_offset` intrinsic.
+    ///     https://doc.rust-lang.org/std/intrinsics/fn.arith_offset.html
+    ///
+    /// Note(std): We don't check that the starting or resulting pointer stay
+    /// within bounds of the object they point to. Doing so causes spurious
+    /// failures due to the usage of these intrinsics in the standard library.
     fn codegen_offset(
         &mut self,
         intrinsic: &str,
