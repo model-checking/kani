@@ -37,6 +37,9 @@ pub const PRETTY_OUTPUT_FILES: &str = "pretty-json-files";
 /// Option used for suppressing global ASM error.
 pub const IGNORE_GLOBAL_ASM: &str = "ignore-global-asm";
 
+/// Option used for zero initilizing variables.
+pub const ZERO_INIT_VARS: &str = "zero-init-vars";
+
 /// Option name used to override the sysroot.
 pub const SYSROOT: &str = "sysroot";
 
@@ -142,6 +145,11 @@ pub fn parser<'a, 'b>() -> App<'a, 'b> {
             Arg::with_name(IGNORE_GLOBAL_ASM)
                 .long("--ignore-global-asm")
                 .help("Suppress error due to the existence of global_asm in a crate"),
+        )
+        .arg(
+            Arg::with_name(ZERO_INIT_VARS)
+                .long("--zero-init-vars")
+                .help("Zero initialize variables"),
         )
 }
 

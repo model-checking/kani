@@ -95,6 +95,14 @@ pub struct KaniArgs {
     #[structopt(flatten)]
     pub checks: CheckArgs,
 
+    /// Zero initilize variables.
+    /// This is useful for experiments to see whether assigning constant values produces better
+    /// performance by allowing CBMC to do more constant propegation.
+    /// Unfortunatly, it is unsafe to use for production code, since it may unsoundly hide bugs.
+    /// Marked as `unstable` to prevent use outside of experimental contexts.
+    #[structopt(long, hidden = true, requires("enable-unstable"))]
+    pub zero_init_vars: bool,
+
     /// Entry point for verification (symbol name).
     /// This is an unstable feature. Consider using --harness instead
     #[structopt(long, hidden = true, requires("enable-unstable"), conflicts_with("dry-run"))]
