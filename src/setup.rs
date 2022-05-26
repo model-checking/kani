@@ -33,6 +33,7 @@ pub fn appears_setup() -> bool {
 /// Sets up Kani by unpacking/installing to `~/.kani/kani-VERSION`
 pub fn setup(use_local_bundle: Option<OsString>) -> Result<()> {
     let kani_dir = kani_dir();
+    let os = os_info::get();
 
     println!("[0/6] Running Kani first-time setup...");
 
@@ -43,7 +44,7 @@ pub fn setup(use_local_bundle: Option<OsString>) -> Result<()> {
 
     let toolchain_version = setup_rust_toolchain(&kani_dir)?;
 
-    setup_python_deps(&kani_dir)?;
+    setup_python_deps(&kani_dir, &os)?;
 
     setup_build_kani_prelude(&kani_dir, toolchain_version)?;
 
@@ -103,15 +104,24 @@ fn setup_rust_toolchain(kani_dir: &Path) -> Result<String> {
 }
 
 /// Install into the pyroot the python dependencies we need
-fn setup_python_deps(kani_dir: &Path) -> Result<()> {
+fn setup_python_deps(kani_dir: &Path, os: &os_info::Info) -> Result<()> {
     println!("[4/6] Installing Kani python dependencies...");
     let pyroot = kani_dir.join("pyroot");
 
     // TODO: this is a repetition of versions from kani/scripts/setup/$OS/install_deps.sh
+    let pkg_versions = &["cbmc-viewer==3.2", "colorama==0.4.3"];
+
+    if os.os_type() == os_info::Type::Ubuntu && *os.version() == os_info::Version::Semantic(18, 4, 0) {
+        crate::os_hacks::setup_python_deps_on_ubuntu_18_04(&pyroot, pkg_versions)?;
+        return Ok(());
+    }
+
     Command::new("python3")
-        .args(&["-m", "pip", "install", "cbmc-viewer==3.2", "colorama==0.4.3", "--target"])
+        .args(&["-m", "pip", "install", "--target"])
         .arg(&pyroot)
+        .args(pkg_versions)
         .run()?;
+
     Ok(())
 }
 
