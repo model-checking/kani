@@ -1250,6 +1250,13 @@ impl Expr {
         self.lt(typ.zero())
     }
 
+    /// `self >= 0`
+    pub fn is_non_negative(self) -> Self {
+        assert!(self.typ.is_numeric());
+        let typ = self.typ.clone();
+        self.ge(typ.zero())
+    }
+
     /// `self == 0`
     pub fn is_zero(self) -> Self {
         assert!(self.typ.is_numeric());

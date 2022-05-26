@@ -1,0 +1,2 @@
+Failed Checks: attempt to subtract with overflow
+Failed Checks: internal error: entered unreachable code: "Previous statement should fail"

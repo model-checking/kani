@@ -18,3 +18,5 @@ Name | Description |
 `assert`, `assert_eq`, and `assert_ne` macros | Skips string formatting code, generates a more informative message and performs some instrumentation |
 `debug_assert`, `debug_assert_eq`, and `debug_assert_ne` macros | Rewrites as equivalent `assert*` macro |
 `print`, `eprint`, `println`, and `eprintln` macros | Skips string formatting and I/O operations |
+`unreachable` macro | Skips string formatting and invokes `panic!()` |
+`std::process::{abort, exit}` functions | Invokes `panic!()` to abort the execution |
