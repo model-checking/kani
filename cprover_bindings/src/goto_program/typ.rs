@@ -1165,18 +1165,32 @@ impl Type {
         }
     }
 
-    pub fn zero_initilizer(&self, st: &SymbolTable) -> Expr {
+    pub fn zero_initilizer(&self, st: &SymbolTable) -> Option<Expr> {
         let concrete = self.unwrap_typedef();
         match concrete {
-            Array { typ, size } => typ.zero_initilizer(st).array_constant(*size),
+            // Base case
+            Bool
+            | CInteger(_)
+            | Double
+            | Float
+            | Pointer { .. }
+            | Signedbv { .. }
+            | Unsignedbv { .. } => Some(self.zero()),
+
+            // Recursive cases
+            Array { typ, size } => Some(typ.zero_initilizer(st)?.array_constant(*size)),
             CBitField { typ, width } => todo!(),
             FlexibleArray { typ } => todo!(),
             InfiniteArray { typ } => todo!(),
-            Struct { tag, components } => Expr::struct_expr_from_padded_values(
-                self.clone(),
-                components.iter().map(|c| c.typ().zero_initilizer(st)).collect(),
-                st,
-            ),
+            Struct { tag, components } => {
+                let values: Vec<Option<Expr>> =
+                    components.iter().map(|c| c.typ().zero_initilizer(st)).collect();
+                if values.iter().any(|v| v.is_none()) {
+                    return None;
+                }
+                let values = values.into_iter().flatten().collect();
+                Some(Expr::struct_expr_from_padded_values(self.clone(), values, st))
+            }
             StructTag(tag) => st.lookup(*tag).unwrap().typ.zero_initilizer(st),
             TypeDef { name, typ } => unreachable!("Should have been normalized away"),
             Union { tag, components } => {
@@ -1184,37 +1198,28 @@ impl Type {
                     todo!()
                 }
                 let largest = components.iter().max_by_key(|c| c.sizeof_in_bits(st)).unwrap();
-                Expr::union_expr(
+                Some(Expr::union_expr(
                     self.clone(),
                     largest.name(),
-                    largest.typ().zero_initilizer(st),
+                    largest.typ().zero_initilizer(st)?,
                     st,
-                )
+                ))
             }
             UnionTag(tag) => st.lookup(*tag).unwrap().typ.zero_initilizer(st),
             VariadicCode { parameters, return_type } => todo!(),
             Vector { typ, size } => {
-                let zero = typ.zero_initilizer(st);
+                let zero = typ.zero_initilizer(st)?;
                 let size = (*size).try_into().unwrap();
                 let elems = vec![zero; size];
-                Expr::vector_expr(self.clone(), elems)
+                Some(Expr::vector_expr(self.clone(), elems))
             }
 
-            Bool
-            | CInteger(_)
-            | Double
-            | Float
-            | Pointer { .. }
-            | Signedbv { .. }
-            | Unsignedbv { .. } => self.zero(),
-
+            // Cases that can't be zero init
             Code { .. }
             | Constructor
             | Empty
             | IncompleteStruct { .. }
-            | IncompleteUnion { .. } => {
-                panic!("Type {:?} cannot be zero initilized")
-            }
+            | IncompleteUnion { .. } => None,
         }
     }
 }
