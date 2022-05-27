@@ -5,9 +5,9 @@
 //! "flow" of code in setup.rs, this module contains all functions that implement os-specific
 //! workarounds.
 
-use std::process::Command;
-use std::path::Path;
 use std::ffi::OsString;
+use std::path::Path;
+use std::process::Command;
 
 use anyhow::Result;
 

@@ -111,7 +111,9 @@ fn setup_python_deps(kani_dir: &Path, os: &os_info::Info) -> Result<()> {
     // TODO: this is a repetition of versions from kani/scripts/setup/$OS/install_deps.sh
     let pkg_versions = &["cbmc-viewer==3.2", "colorama==0.4.3"];
 
-    if os.os_type() == os_info::Type::Ubuntu && *os.version() == os_info::Version::Semantic(18, 4, 0) {
+    if os.os_type() == os_info::Type::Ubuntu
+        && *os.version() == os_info::Version::Semantic(18, 4, 0)
+    {
         crate::os_hacks::setup_python_deps_on_ubuntu_18_04(&pyroot, pkg_versions)?;
         return Ok(());
     }
