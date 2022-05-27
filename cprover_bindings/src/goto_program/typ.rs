@@ -1181,7 +1181,7 @@ impl Type {
             Array { typ, size } => Some(typ.zero_initializer(st)?.array_constant(*size)),
             CBitField { typ, width } => todo!(),
             FlexibleArray { typ } => todo!(),
-            InfiniteArray { typ } => todo!(),
+            InfiniteArray { typ } => Some(typ.zero_initializer(st)?.infinite_array_constant()),
             Struct { components, .. } => {
                 let values: Vec<Option<Expr>> =
                     components.iter().map(|c| c.typ().zero_initializer(st)).collect();
@@ -1195,15 +1195,16 @@ impl Type {
             TypeDef { .. } => unreachable!("Should have been normalized away"),
             Union { components, .. } => {
                 if components.is_empty() {
-                    todo!()
+                    Some(Expr::empty_union(self.clone(), st))
+                } else {
+                    let largest = components.iter().max_by_key(|c| c.sizeof_in_bits(st)).unwrap();
+                    Some(Expr::union_expr(
+                        self.clone(),
+                        largest.name(),
+                        largest.typ().zero_initializer(st)?,
+                        st,
+                    ))
                 }
-                let largest = components.iter().max_by_key(|c| c.sizeof_in_bits(st)).unwrap();
-                Some(Expr::union_expr(
-                    self.clone(),
-                    largest.name(),
-                    largest.typ().zero_initializer(st)?,
-                    st,
-                ))
             }
             UnionTag(tag) => st.lookup(*tag).unwrap().typ.zero_initializer(st),
             Vector { typ, size } => {

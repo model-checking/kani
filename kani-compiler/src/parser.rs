@@ -148,7 +148,7 @@ pub fn parser<'a, 'b>() -> App<'a, 'b> {
         )
         .arg(
             Arg::with_name(ZERO_INIT_VARS)
-                .long("--zero-init-args")
+                .long("--zero-init-vars")
                 .help("Zero initialize variables"),
         )
 }
