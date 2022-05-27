@@ -5,7 +5,7 @@
 set -eu
 
 UBUNTU_VERSION=$(lsb_release -rs)
-CBMC_VERSION=5.56.0
+CBMC_VERSION=5.58.1
 FILE="ubuntu-${UBUNTU_VERSION}-cbmc-${CBMC_VERSION}-Linux.deb"
 URL="https://github.com/diffblue/cbmc/releases/download/cbmc-${CBMC_VERSION}/$FILE"
 

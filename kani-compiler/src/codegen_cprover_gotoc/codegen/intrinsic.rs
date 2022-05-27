@@ -383,7 +383,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         match intrinsic {
             "add_with_overflow" => codegen_op_with_overflow!(add_overflow),
-            "arith_offset" => unstable_codegen!(codegen_wrapping_op!(plus)),
+            "arith_offset" => self.codegen_offset(intrinsic, instance, fargs, p, loc),
             "assert_inhabited" => self.codegen_assert_intrinsic(instance, intrinsic, span),
             "assert_uninit_valid" => self.codegen_assert_intrinsic(instance, intrinsic, span),
             "assert_zero_valid" => self.codegen_assert_intrinsic(instance, intrinsic, span),
@@ -412,6 +412,11 @@ impl<'tcx> GotocCtx<'tcx> {
             "atomic_load_acq" => self.codegen_atomic_load(intrinsic, fargs, p, loc),
             "atomic_load_relaxed" => self.codegen_atomic_load(intrinsic, fargs, p, loc),
             "atomic_load_unordered" => self.codegen_atomic_load(intrinsic, fargs, p, loc),
+            "atomic_max" => codegen_atomic_binop!(max),
+            "atomic_max_acq" => codegen_atomic_binop!(max),
+            "atomic_max_acqrel" => codegen_atomic_binop!(max),
+            "atomic_max_rel" => codegen_atomic_binop!(max),
+            "atomic_max_relaxed" => codegen_atomic_binop!(max),
             "atomic_min" => codegen_atomic_binop!(min),
             "atomic_min_acq" => codegen_atomic_binop!(min),
             "atomic_min_acqrel" => codegen_atomic_binop!(min),
@@ -435,6 +440,11 @@ impl<'tcx> GotocCtx<'tcx> {
             "atomic_store_rel" => self.codegen_atomic_store(intrinsic, fargs, p, loc),
             "atomic_store_relaxed" => self.codegen_atomic_store(intrinsic, fargs, p, loc),
             "atomic_store_unordered" => self.codegen_atomic_store(intrinsic, fargs, p, loc),
+            "atomic_umax" => codegen_atomic_binop!(max),
+            "atomic_umax_acq" => codegen_atomic_binop!(max),
+            "atomic_umax_acqrel" => codegen_atomic_binop!(max),
+            "atomic_umax_rel" => codegen_atomic_binop!(max),
+            "atomic_umax_relaxed" => codegen_atomic_binop!(max),
             "atomic_umin" => codegen_atomic_binop!(min),
             "atomic_umin_acq" => codegen_atomic_binop!(min),
             "atomic_umin_acqrel" => codegen_atomic_binop!(min),
@@ -552,7 +562,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 "https://github.com/model-checking/kani/issues/1025"
             ),
             "needs_drop" => codegen_intrinsic_const!(),
-            "offset" => self.codegen_offset(instance, fargs, p, loc),
+            "offset" => self.codegen_offset(intrinsic, instance, fargs, p, loc),
             "powf32" => unstable_codegen!(codegen_simple_intrinsic!(Powf)),
             "powf64" => unstable_codegen!(codegen_simple_intrinsic!(Pow)),
             "powif32" => unstable_codegen!(codegen_simple_intrinsic!(Powif)),
@@ -982,10 +992,24 @@ impl<'tcx> GotocCtx<'tcx> {
         Stmt::block(vec![src_align_check, dst_align_check, overflow_check, copy_expr], loc)
     }
 
-    /// Computes the offset from a pointer
-    /// https://doc.rust-lang.org/std/intrinsics/fn.offset.html
+    /// Computes the offset from a pointer.
+    ///
+    /// Note that this function handles code generation for:
+    ///  1. The `offset` intrinsic.
+    ///     https://doc.rust-lang.org/std/intrinsics/fn.offset.html
+    ///  2. The `arith_offset` intrinsic.
+    ///     https://doc.rust-lang.org/std/intrinsics/fn.arith_offset.html
+    ///
+    /// Note(std): We don't check that the starting or resulting pointer stay
+    /// within bounds of the object they point to. Doing so causes spurious
+    /// failures due to the usage of these intrinsics in the standard library.
+    /// See https://github.com/model-checking/kani/issues/1233 for more details.
+    /// Also, note that this isn't a requirement for `arith_offset`, but it's
+    /// one of the safety conditions specified for `offset`:
+    /// https://doc.rust-lang.org/std/primitive.pointer.html#safety-2
     fn codegen_offset(
         &mut self,
+        intrinsic: &str,
         instance: Instance<'tcx>,
         mut fargs: Vec<Expr>,
         p: &Place<'tcx>,
@@ -997,7 +1021,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // Check that computing `offset` in bytes would not overflow
         let ty = self.monomorphize(instance.substs.type_at(0));
         let (offset_bytes, bytes_overflow_check) =
-            self.count_in_bytes(offset.clone(), ty, Type::ssize_t(), "offset", loc);
+            self.count_in_bytes(offset.clone(), ty, Type::ssize_t(), intrinsic, loc);
 
         // Check that the computation would not overflow an `isize`
         // These checks may allow a wrapping-around behavior in CBMC:
