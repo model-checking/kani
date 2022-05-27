@@ -17,6 +17,8 @@ pub struct CurrentFnCtx<'tcx> {
     current_bb: Option<BasicBlock>,
     /// The codegen instance for the current function
     instance: Instance<'tcx>,
+    /// The crate this function is from
+    krate: String,
     /// The goto labels for all blocks
     labels: Vec<String>,
     /// The mir for the current instance
@@ -38,6 +40,7 @@ impl<'tcx> CurrentFnCtx<'tcx> {
             block: vec![],
             current_bb: None,
             instance,
+            krate: gcx.get_crate(instance),
             labels,
             mir: gcx.tcx.instance_mir(instance.def),
             name: gcx.symbol_name(instance),
@@ -81,6 +84,11 @@ impl<'tcx> CurrentFnCtx<'tcx> {
         self.instance
     }
 
+    /// The crate that function came from
+    pub fn krate(&self) -> String {
+        self.krate.to_string()
+    }
+
     /// The MIR for the function we are currently compiling
     pub fn mir(&self) -> &'tcx Body<'tcx> {
         self.mir
@@ -104,6 +112,11 @@ impl<'tcx> CurrentFnCtx<'tcx> {
 
 /// Utility functions
 impl CurrentFnCtx<'_> {
+    /// Is the current function from the `std` crate?
+    pub fn is_std(&self) -> bool {
+        self.krate == "std" || self.krate == "core"
+    }
+
     pub fn find_label(&self, bb: &BasicBlock) -> String {
         self.labels[bb.index()].clone()
     }

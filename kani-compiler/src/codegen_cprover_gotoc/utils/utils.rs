@@ -8,7 +8,7 @@ use cbmc::goto_program::{Expr, ExprValue, Location, Stmt, SymbolTable, Type};
 use cbmc::{btree_string_map, InternedString};
 use rustc_errors::FatalError;
 use rustc_middle::ty::layout::LayoutOf;
-use rustc_middle::ty::Ty;
+use rustc_middle::ty::{Instance, Ty};
 use tracing::debug;
 
 // Should move into rvalue
@@ -110,6 +110,13 @@ impl<'tcx> GotocCtx<'tcx> {
 
 /// Members traverse path to get to the raw pointer of a box (b.0.pointer.pointer).
 const RAW_PTR_FROM_BOX: [&str; 3] = ["0", "pointer", "pointer"];
+
+impl<'tcx> GotocCtx<'tcx> {
+    /// Given an "instance" find the crate it came from
+    pub fn get_crate(&self, instance: Instance<'tcx>) -> String {
+        self.tcx.crate_name(instance.def_id().krate).to_string()
+    }
+}
 
 impl<'tcx> GotocCtx<'tcx> {
     /// Dereference a boxed type `std::boxed::Box<T>` to get a `*T`.
