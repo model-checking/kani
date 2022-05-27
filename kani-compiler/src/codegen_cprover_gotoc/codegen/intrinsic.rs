@@ -993,6 +993,10 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Note(std): We don't check that the starting or resulting pointer stay
     /// within bounds of the object they point to. Doing so causes spurious
     /// failures due to the usage of these intrinsics in the standard library.
+    /// See https://github.com/model-checking/kani/issues/1233 for more details.
+    /// Also, note that this isn't a requirement for `arith_offset`, but it's
+    /// one of the safety conditions specified for `offset`:
+    /// https://doc.rust-lang.org/std/primitive.pointer.html#safety-2
     fn codegen_offset(
         &mut self,
         intrinsic: &str,
