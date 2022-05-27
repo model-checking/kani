@@ -1165,7 +1165,7 @@ impl Type {
         }
     }
 
-    pub fn zero_initilizer(&self, st: &SymbolTable) -> Option<Expr> {
+    pub fn zero_initializer(&self, st: &SymbolTable) -> Option<Expr> {
         let concrete = self.unwrap_typedef();
         match concrete {
             // Base case
@@ -1178,22 +1178,22 @@ impl Type {
             | Unsignedbv { .. } => Some(self.zero()),
 
             // Recursive cases
-            Array { typ, size } => Some(typ.zero_initilizer(st)?.array_constant(*size)),
+            Array { typ, size } => Some(typ.zero_initializer(st)?.array_constant(*size)),
             CBitField { typ, width } => todo!(),
             FlexibleArray { typ } => todo!(),
             InfiniteArray { typ } => todo!(),
-            Struct { tag, components } => {
+            Struct { components, .. } => {
                 let values: Vec<Option<Expr>> =
-                    components.iter().map(|c| c.typ().zero_initilizer(st)).collect();
+                    components.iter().map(|c| c.typ().zero_initializer(st)).collect();
                 if values.iter().any(|v| v.is_none()) {
                     return None;
                 }
                 let values = values.into_iter().flatten().collect();
                 Some(Expr::struct_expr_from_padded_values(self.clone(), values, st))
             }
-            StructTag(tag) => st.lookup(*tag).unwrap().typ.zero_initilizer(st),
-            TypeDef { name, typ } => unreachable!("Should have been normalized away"),
-            Union { tag, components } => {
+            StructTag(tag) => st.lookup(*tag).unwrap().typ.zero_initializer(st),
+            TypeDef { .. } => unreachable!("Should have been normalized away"),
+            Union { components, .. } => {
                 if components.is_empty() {
                     todo!()
                 }
@@ -1201,14 +1201,13 @@ impl Type {
                 Some(Expr::union_expr(
                     self.clone(),
                     largest.name(),
-                    largest.typ().zero_initilizer(st)?,
+                    largest.typ().zero_initializer(st)?,
                     st,
                 ))
             }
-            UnionTag(tag) => st.lookup(*tag).unwrap().typ.zero_initilizer(st),
-            VariadicCode { parameters, return_type } => todo!(),
+            UnionTag(tag) => st.lookup(*tag).unwrap().typ.zero_initializer(st),
             Vector { typ, size } => {
-                let zero = typ.zero_initilizer(st)?;
+                let zero = typ.zero_initializer(st)?;
                 let size = (*size).try_into().unwrap();
                 let elems = vec![zero; size];
                 Some(Expr::vector_expr(self.clone(), elems))
@@ -1219,7 +1218,8 @@ impl Type {
             | Constructor
             | Empty
             | IncompleteStruct { .. }
-            | IncompleteUnion { .. } => None,
+            | IncompleteUnion { .. }
+            | VariadicCode { .. } => None,
         }
     }
 }
