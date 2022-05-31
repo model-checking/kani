@@ -1,0 +1,17 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+# Note: this file is intended only for testing the kani release bundle
+
+FROM nixos/nix
+RUN nix-channel --update && \
+    nix-env -i bash python3 curl ctags clang rustup && \
+    rustup toolchain add stable
+
+WORKDIR /tmp/kani
+COPY ./tests ./tests
+COPY ./kani-latest-x86_64-unknown-linux-gnu.tar.gz ./
+# Very awkward glob (not regex!) to get `kani-verifier-*` and not `kani-verifier-*.crate`
+COPY ./target/package/kani-verifier-*[^e] ./kani-verifier
+RUN cargo install --path ./kani-verifier
+RUN cargo-kani setup --use-local-bundle ./kani-latest-x86_64-unknown-linux-gnu.tar.gz
