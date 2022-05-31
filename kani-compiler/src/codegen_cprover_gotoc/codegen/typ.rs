@@ -533,7 +533,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// In CBMC, this translates to a NONDET value.
     pub fn codegen_default_initializer(&self, e: &Expr) -> Option<Expr> {
         if self.queries.get_zero_init_vars() {
-            e.typ().zero_initializer(&self.symbol_table)
+            Some(e.typ().zero_initializer(&self.symbol_table))
         } else {
             None
         }

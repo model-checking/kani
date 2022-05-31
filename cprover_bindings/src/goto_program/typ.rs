@@ -1176,62 +1176,60 @@ impl Type {
         }
     }
 
-    pub fn zero_initializer(&self, st: &SymbolTable) -> Option<Expr> {
+    pub fn zero_initializer(&self, st: &SymbolTable) -> Expr {
         let concrete = self.unwrap_typedef();
         match concrete {
             // Base case
             Bool
-            | CBitField { .. } 
+            | CBitField { .. }
             | CInteger(_)
             | Double
             | Float
             | Pointer { .. }
             | Signedbv { .. }
-            | Unsignedbv { .. } => Some(self.zero()),
+            | Unsignedbv { .. } => self.zero(),
 
             // Recursive cases
-            Array { typ, size } => Some(typ.zero_initializer(st)?.array_constant(*size)),
-            InfiniteArray { typ } => Some(typ.zero_initializer(st)?.infinite_array_constant()),
+            Array { typ, size } => typ.zero_initializer(st).array_constant(*size),
+            InfiniteArray { typ } => typ.zero_initializer(st).infinite_array_constant(),
             Struct { components, .. } => {
-                let values: Vec<Option<Expr>> =
+                let values: Vec<Expr> =
                     components.iter().map(|c| c.typ().zero_initializer(st)).collect();
-                if values.iter().any(|v| v.is_none()) {
-                    return None;
-                }
-                let values = values.into_iter().flatten().collect();
-                Some(Expr::struct_expr_from_padded_values(self.clone(), values, st))
+                let values = values.into_iter().collect();
+                Expr::struct_expr_from_padded_values(self.clone(), values, st)
             }
             StructTag(tag) => st.lookup(*tag).unwrap().typ.zero_initializer(st),
             TypeDef { .. } => unreachable!("Should have been normalized away"),
             Union { components, .. } => {
                 if components.is_empty() {
-                    Some(Expr::empty_union(self.clone(), st))
+                    Expr::empty_union(self.clone(), st)
                 } else {
                     let largest = components.iter().max_by_key(|c| c.sizeof_in_bits(st)).unwrap();
-                    Some(Expr::union_expr(
+                    Expr::union_expr(
                         self.clone(),
                         largest.name(),
-                        largest.typ().zero_initializer(st)?,
+                        largest.typ().zero_initializer(st),
                         st,
-                    ))
+                    )
                 }
             }
             UnionTag(tag) => st.lookup(*tag).unwrap().typ.zero_initializer(st),
             Vector { typ, size } => {
-                let zero = typ.zero_initializer(st)?;
+                let zero = typ.zero_initializer(st);
                 let size = (*size).try_into().unwrap();
                 let elems = vec![zero; size];
-                Some(Expr::vector_expr(self.clone(), elems))
+                Expr::vector_expr(self.clone(), elems)
             }
 
             // Cases that can't be zero init
+            // Note that other than flexible array, none of these can be fields in a struct or union
             Code { .. }
             | Constructor
             | Empty
-            | FlexibleArray { .. } 
+            | FlexibleArray { .. }
             | IncompleteStruct { .. }
             | IncompleteUnion { .. }
-            | VariadicCode { .. } => None,
+            | VariadicCode { .. } => panic!("Can't zero init {:?}", self),
         }
     }
 }
