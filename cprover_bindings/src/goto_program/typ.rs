@@ -837,12 +837,7 @@ impl Type {
 
 /// Constructors
 impl Type {
-    /// elem_t[size]
-    pub fn array_of<T>(self, size: T) -> Self
-    where
-        T: TryInto<u64>,
-        T::Error: Debug,
-    {
+    fn typecheck_array_elem(&self) -> bool {
         match self.unwrap_typedef() {
             Array { .. }
             | Bool
@@ -858,7 +853,7 @@ impl Type {
             | Union { .. }
             | UnionTag(_)
             | Unsignedbv { .. }
-            | Vector { .. } => (),
+            | Vector { .. } => true,
 
             Code { .. }
             | Constructor
@@ -867,8 +862,17 @@ impl Type {
             | IncompleteStruct { .. }
             | IncompleteUnion { .. }
             | InfiniteArray { .. }
-            | VariadicCode { .. } => panic!("Can't make array of type {:?}", self),
+            | VariadicCode { .. } => false,
         }
+    }
+
+    /// elem_t[size]
+    pub fn array_of<T>(self, size: T) -> Self
+    where
+        T: TryInto<u64>,
+        T::Error: Debug,
+    {
+        assert!(self.typecheck_array_elem(), "Can't make array of type {:?}", self);
         let size: u64 = size.try_into().unwrap();
         Array { typ: Box::new(self), size }
     }
@@ -997,6 +1001,7 @@ impl Type {
     }
 
     pub fn infinite_array_of(self) -> Self {
+        assert!(self.typecheck_array_elem(), "Can't make infinite array of type {:?}", self);
         InfiniteArray { typ: Box::new(self) }
     }
 
