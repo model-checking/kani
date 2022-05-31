@@ -1109,6 +1109,13 @@ impl Expr {
         let cmp = self.clone().lt(e.clone());
         cmp.ternary(self, e)
     }
+
+    /// `max(self, e)`
+    pub fn max(self, e: Expr) -> Expr {
+        assert!(!self.is_side_effect() && !e.is_side_effect());
+        let cmp = self.clone().gt(e.clone());
+        cmp.ternary(self, e)
+    }
 }
 
 /// Constructors for self operations
