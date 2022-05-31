@@ -155,6 +155,7 @@ impl DatatypeComponent {
 //Constructors
 impl DatatypeComponent {
     pub fn field<T: Into<InternedString>>(name: T, typ: Type) -> Self {
+        // TODO: Only some types should be legal here
         let name = name.into();
         Field { name, typ }
     }
@@ -380,6 +381,11 @@ impl Type {
             Array { .. } | FlexibleArray { .. } | Vector { .. } => true,
             _ => false,
         }
+    }
+
+    pub fn is_bitfield(&self) -> bool {
+        let concrete = self.unwrap_typedef();
+        matches!(concrete, CBitField { .. })
     }
 
     pub fn is_bool(&self) -> bool {
@@ -837,6 +843,7 @@ impl Type {
         T: TryInto<u64>,
         T::Error: Debug,
     {
+        // TODO: Only some types are legal here
         let size: u64 = size.try_into().unwrap();
         Array { typ: Box::new(self), size }
     }
@@ -1136,6 +1143,8 @@ impl Type {
     pub fn one(&self) -> Expr {
         if self.is_integer() {
             Expr::int_constant(1, self.clone())
+        } else if self.is_bitfield() {
+            Expr::int_constant(1, self.clone())
         } else if self.is_c_bool() {
             Expr::c_true()
         } else if self.is_float() {
@@ -1149,6 +1158,8 @@ impl Type {
 
     pub fn zero(&self) -> Expr {
         if self.is_integer() {
+            Expr::int_constant(0, self.clone())
+        } else if self.is_bitfield() {
             Expr::int_constant(0, self.clone())
         } else if self.is_bool() {
             Expr::bool_false()
@@ -1170,6 +1181,7 @@ impl Type {
         match concrete {
             // Base case
             Bool
+            | CBitField { .. } 
             | CInteger(_)
             | Double
             | Float
@@ -1179,8 +1191,6 @@ impl Type {
 
             // Recursive cases
             Array { typ, size } => Some(typ.zero_initializer(st)?.array_constant(*size)),
-            CBitField { typ, width } => todo!(),
-            FlexibleArray { typ } => todo!(),
             InfiniteArray { typ } => Some(typ.zero_initializer(st)?.infinite_array_constant()),
             Struct { components, .. } => {
                 let values: Vec<Option<Expr>> =
@@ -1218,6 +1228,7 @@ impl Type {
             Code { .. }
             | Constructor
             | Empty
+            | FlexibleArray { .. } 
             | IncompleteStruct { .. }
             | IncompleteUnion { .. }
             | VariadicCode { .. } => None,

@@ -551,7 +551,7 @@ impl Expr {
     where
         T: Into<BigInt>,
     {
-        assert!(typ.is_integer());
+        assert!(typ.is_integer() || typ.is_bitfield());
         let i = i.into();
         // TODO: https://github.com/model-checking/kani/issues/996
         // if i != 0 && i != 1 {
