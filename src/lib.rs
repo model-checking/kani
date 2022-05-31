@@ -15,6 +15,7 @@
 #![warn(clippy::all, clippy::cargo)]
 
 mod cmd;
+mod os_hacks;
 mod setup;
 
 use std::env;

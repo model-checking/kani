@@ -395,6 +395,7 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "home",
+ "os_info",
 ]
 
 [[package]]
@@ -636,6 +637,16 @@ name = "once_cell"
 version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "87f3e037eac156d1775da914196f0f37741a274155e34a0b7e427c35d2a2ecb9"
+
+[[package]]
+name = "os_info"
+version = "3.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0eca3ecae1481e12c3d9379ec541b238a16f0b75c9a409942daa8ec20dbfdb62"
+dependencies = [
+ "log",
+ "winapi",
+]
 
 [[package]]
 name = "parking_lot"
