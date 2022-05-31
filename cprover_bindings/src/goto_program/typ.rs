@@ -843,7 +843,32 @@ impl Type {
         T: TryInto<u64>,
         T::Error: Debug,
     {
-        // TODO: Only some types are legal here
+        match self.unwrap_typedef() {
+            Array { .. }
+            | Bool
+            | CBitField { .. }
+            | CInteger(_)
+            | Double
+            | Float
+            | Pointer { .. }
+            | Signedbv { .. }
+            | Struct { .. }
+            | StructTag(_)
+            | TypeDef { .. }
+            | Union { .. }
+            | UnionTag(_)
+            | Unsignedbv { .. }
+            | Vector { .. } => (),
+
+            Code { .. }
+            | Constructor
+            | Empty
+            | FlexibleArray { .. }
+            | IncompleteStruct { .. }
+            | IncompleteUnion { .. }
+            | InfiniteArray { .. }
+            | VariadicCode { .. } => panic!("Can't make array of type {:?}", self),
+        }
         let size: u64 = size.try_into().unwrap();
         Array { typ: Box::new(self), size }
     }
