@@ -152,9 +152,39 @@ impl DatatypeComponent {
     }
 }
 
-//Constructors
+/// Constructors
 impl DatatypeComponent {
+    fn typecheck_datatype_field(typ: &Type) -> bool {
+        match typ.unwrap_typedef() {
+            Array { .. }
+            | Bool
+            | CBitField { .. }
+            | CInteger(_)
+            | Double
+            | FlexibleArray { .. }
+            | Float
+            | Pointer { .. }
+            | Signedbv { .. }
+            | Struct { .. }
+            | StructTag(_)
+            | TypeDef { .. }
+            | Union { .. }
+            | UnionTag(_)
+            | Unsignedbv { .. }
+            | Vector { .. } => true,
+
+            Code { .. }
+            | Constructor
+            | Empty
+            | IncompleteStruct { .. }
+            | IncompleteUnion { .. }
+            | InfiniteArray { .. }
+            | VariadicCode { .. } => false,
+        }
+    }
+
     pub fn field<T: Into<InternedString>>(name: T, typ: Type) -> Self {
+        assert!(Self::typecheck_datatype_field(&typ), "Illegal field type {:?}", typ);
         let name = name.into();
         Field { name, typ }
     }
@@ -831,12 +861,42 @@ impl Type {
 
 /// Constructors
 impl Type {
+    fn typecheck_array_elem(&self) -> bool {
+        match self.unwrap_typedef() {
+            Array { .. }
+            | Bool
+            | CBitField { .. }
+            | CInteger(_)
+            | Double
+            | Float
+            | Pointer { .. }
+            | Signedbv { .. }
+            | Struct { .. }
+            | StructTag(_)
+            | TypeDef { .. }
+            | Union { .. }
+            | UnionTag(_)
+            | Unsignedbv { .. }
+            | Vector { .. } => true,
+
+            Code { .. }
+            | Constructor
+            | Empty
+            | FlexibleArray { .. }
+            | IncompleteStruct { .. }
+            | IncompleteUnion { .. }
+            | InfiniteArray { .. }
+            | VariadicCode { .. } => false,
+        }
+    }
+
     /// elem_t[size]
     pub fn array_of<T>(self, size: T) -> Self
     where
         T: TryInto<u64>,
         T::Error: Debug,
     {
+        assert!(self.typecheck_array_elem(), "Can't make array of type {:?}", self);
         let size: u64 = size.try_into().unwrap();
         Array { typ: Box::new(self), size }
     }
@@ -965,6 +1025,7 @@ impl Type {
     }
 
     pub fn infinite_array_of(self) -> Self {
+        assert!(self.typecheck_array_elem(), "Can't make infinite array of type {:?}", self);
         InfiniteArray { typ: Box::new(self) }
     }
 
@@ -1013,11 +1074,25 @@ impl Type {
         StructTag(name)
     }
 
-    pub fn components_are_unique(components: &[DatatypeComponent]) -> bool {
+    fn components_are_unique(components: &[DatatypeComponent]) -> bool {
         let mut names: Vec<_> = components.iter().map(|x| x.name()).collect();
         names.sort();
         names.dedup();
         names.len() == components.len()
+    }
+
+    fn components_are_not_flexible_array(components: &[DatatypeComponent]) -> bool {
+        components.iter().all(|x| !x.typ().is_flexible_array())
+    }
+
+    /// A struct can only contain a flexible array as its last element
+    /// Check this
+    fn components_in_valid_order_for_struct(components: &[DatatypeComponent]) -> bool {
+        if let Some((_, cs)) = components.split_last() {
+            Type::components_are_not_flexible_array(cs)
+        } else {
+            true
+        }
     }
 
     /// struct name {
@@ -1032,6 +1107,12 @@ impl Type {
             "Components contain duplicates: {:?}",
             components
         );
+        assert!(
+            Type::components_in_valid_order_for_struct(&components),
+            "Components are not in valid order for struct: {:?}",
+            components
+        );
+
         let tag = tag.into();
         Struct { tag, components }
     }
@@ -1059,6 +1140,11 @@ impl Type {
         assert!(
             Type::components_are_unique(&components),
             "Components contain duplicates: {:?}",
+            components
+        );
+        assert!(
+            Type::components_are_not_flexible_array(&components),
+            "Unions cannot contain flexible arrays: {:?}",
             components
         );
         Union { tag, components }
