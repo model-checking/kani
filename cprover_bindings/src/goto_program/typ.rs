@@ -184,7 +184,13 @@ impl DatatypeComponent {
     }
 
     pub fn field<T: Into<InternedString>>(name: T, typ: Type) -> Self {
-        assert!(Self::typecheck_datatype_field(&typ), "Illegal field type {:?}", typ);
+        // TODO https://github.com/model-checking/kani/issues/1243
+        // assert!(
+        //     Self::typecheck_datatype_field(&typ),
+        //     "Illegal field.\n\tName: {}\n\tType: {:?}",
+        //     name.into(),
+        //     typ
+        // );
         let name = name.into();
         Field { name, typ }
     }
@@ -966,19 +972,6 @@ impl Type {
 
     pub fn constructor() -> Self {
         Constructor
-    }
-
-    /// A component of a datatype (e.g. a field of a struct or union)
-    pub fn datatype_component<T: Into<InternedString>>(name: T, typ: Type) -> DatatypeComponent {
-        let name = name.into();
-        Field { name, typ }
-    }
-
-    // `__CPROVER_bitvector[bits] $pad<n>`
-    pub fn datatype_padding<T: Into<InternedString>>(name: T, bits: u64) -> DatatypeComponent {
-        let name = name.into();
-
-        Padding { name, bits }
     }
 
     pub fn double() -> Self {
