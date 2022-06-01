@@ -27,7 +27,10 @@ impl KaniSession {
 
         if self.args.gen_c {
             if !self.args.quiet {
-                println!("Generated C code written to {}", output.to_string_lossy());
+                println!(
+                    "Generated C code written to {}",
+                    alter_extension(output, "c").to_string_lossy()
+                );
             }
             self.gen_c(output)?;
         }
