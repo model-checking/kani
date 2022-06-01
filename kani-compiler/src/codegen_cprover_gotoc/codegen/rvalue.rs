@@ -217,8 +217,9 @@ impl<'tcx> GotocCtx<'tcx> {
             let inp = tcx.gen_function_local_variable(1, &func_name, paramt);
             let res = tcx.gen_function_local_variable(2, &func_name, res_t.clone()).to_expr();
             let idx = tcx.gen_function_local_variable(3, &func_name, Type::size_t()).to_expr();
+            let res_init = tcx.codegen_default_initializer(&res);
             let mut body = vec![
-                Stmt::decl(res.clone(), None, Location::none()),
+                Stmt::decl(res.clone(), res_init, Location::none()),
                 Stmt::decl(idx.clone(), Some(Type::size_t().zero()), Location::none()),
             ];
 
@@ -892,7 +893,8 @@ impl<'tcx> GotocCtx<'tcx> {
         //     <Ty> local_temp = nondet();
         //     assert(__CPROVER_OBJECT_SIZE(&local_temp) == vt_size);
         let temp_var = self.gen_temp_variable(ty.clone(), Location::none()).to_expr();
-        let decl = Stmt::decl(temp_var.clone(), None, Location::none());
+        let temp_var_init = self.codegen_default_initializer(&temp_var);
+        let decl = Stmt::decl(temp_var.clone(), temp_var_init, Location::none());
         let cbmc_size = if ty.is_empty() {
             // CBMC errors on passing a pointer to void to __CPROVER_OBJECT_SIZE.
             // In practice, we have seen this with the Never type, which has size 0:

@@ -18,6 +18,9 @@ pub trait UserInput {
 
     fn set_ignore_global_asm(&mut self, global_asm: bool);
     fn get_ignore_global_asm(&self) -> bool;
+
+    fn set_zero_init_vars(&mut self, zero_init: bool);
+    fn get_zero_init_vars(&self) -> bool;
 }
 
 #[derive(Debug, Default)]
@@ -27,6 +30,7 @@ pub struct QueryDb {
     symbol_table_passes: Vec<String>,
     json_pretty_print: AtomicBool,
     ignore_global_asm: AtomicBool,
+    zero_init_vars: AtomicBool,
 }
 
 impl UserInput for QueryDb {
@@ -68,5 +72,13 @@ impl UserInput for QueryDb {
 
     fn get_ignore_global_asm(&self) -> bool {
         self.ignore_global_asm.load(Ordering::Relaxed)
+    }
+
+    fn set_zero_init_vars(&mut self, zero_init: bool) {
+        self.zero_init_vars.store(zero_init, Ordering::Relaxed);
+    }
+
+    fn get_zero_init_vars(&self) -> bool {
+        self.zero_init_vars.load(Ordering::Relaxed)
     }
 }

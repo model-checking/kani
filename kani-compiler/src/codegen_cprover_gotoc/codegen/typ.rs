@@ -5,6 +5,7 @@ use cbmc::goto_program::{DatatypeComponent, Expr, Location, Parameter, Symbol, S
 use cbmc::utils::aggr_tag;
 use cbmc::{btree_map, NO_PRETTY_NAME};
 use cbmc::{InternString, InternedString};
+use kani_queries::UserInput;
 use rustc_ast::ast::Mutability;
 use rustc_index::vec::IndexVec;
 use rustc_middle::mir::{HasLocalDecls, Local, Operand, Place, Rvalue};
@@ -524,6 +525,18 @@ impl<'tcx> GotocCtx<'tcx> {
             Symbol::incomplete_struct(name, Some(ctx.ty_pretty_name(ty)))
         });
         Type::struct_tag(name)
+    }
+
+    /// Codegens the an initalizer for variables without one.
+    /// If the zero initilizer flag is set, does zero init (if possible).
+    /// Otherwise, returns `None` which leaves the variable uninitilized.
+    /// In CBMC, this translates to a NONDET value.
+    pub fn codegen_default_initializer(&self, e: &Expr) -> Option<Expr> {
+        if self.queries.get_zero_init_vars() {
+            Some(e.typ().zero_initializer(&self.symbol_table))
+        } else {
+            None
+        }
     }
 
     /// The unit type in Rust is an empty struct in gotoc
