@@ -1,7 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// Checks that the time spent in CBMC is reported as "Verification time: <>s"
+// This test is meant for checking that the "Verification time:" line (which
+// reports the time spent in CBMC) is printed in the output
 
 fn is_sorted(s: &[i32]) -> bool {
     for i in 0..s.len() - 1 {
