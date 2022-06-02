@@ -167,7 +167,6 @@ impl DatatypeComponent {
             | Signedbv { .. }
             | Struct { .. }
             | StructTag(_)
-            | TypeDef { .. }
             | Union { .. }
             | UnionTag(_)
             | Unsignedbv { .. }
@@ -180,6 +179,8 @@ impl DatatypeComponent {
             | IncompleteUnion { .. }
             | InfiniteArray { .. }
             | VariadicCode { .. } => false,
+
+            TypeDef { .. } => unreachable!("typedefs should have been unwrapped"),
         }
     }
 
@@ -879,7 +880,6 @@ impl Type {
             | Signedbv { .. }
             | Struct { .. }
             | StructTag(_)
-            | TypeDef { .. }
             | Union { .. }
             | UnionTag(_)
             | Unsignedbv { .. }
@@ -893,6 +893,8 @@ impl Type {
             | IncompleteUnion { .. }
             | InfiniteArray { .. }
             | VariadicCode { .. } => false,
+
+            TypeDef { .. } => unreachable!("typedefs should have been unwrapped"),
         }
     }
 
