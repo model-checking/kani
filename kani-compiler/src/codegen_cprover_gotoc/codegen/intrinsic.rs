@@ -548,12 +548,12 @@ impl<'tcx> GotocCtx<'tcx> {
             "log2f64" => unstable_codegen!(codegen_simple_intrinsic!(Log2)),
             "logf32" => unstable_codegen!(codegen_simple_intrinsic!(Logf)),
             "logf64" => unstable_codegen!(codegen_simple_intrinsic!(Log)),
-            "maxnumf32" => unstable_codegen!(codegen_simple_intrinsic!(Fmaxf)),
-            "maxnumf64" => unstable_codegen!(codegen_simple_intrinsic!(Fmax)),
+            "maxnumf32" => codegen_simple_intrinsic!(Fmaxf),
+            "maxnumf64" => codegen_simple_intrinsic!(Fmax),
             "min_align_of" => codegen_intrinsic_const!(),
             "min_align_of_val" => codegen_size_align!(align),
-            "minnumf32" => unstable_codegen!(codegen_simple_intrinsic!(Fminf)),
-            "minnumf64" => unstable_codegen!(codegen_simple_intrinsic!(Fmin)),
+            "minnumf32" => codegen_simple_intrinsic!(Fminf),
+            "minnumf64" => codegen_simple_intrinsic!(Fmin),
             "mul_with_overflow" => codegen_op_with_overflow!(mul_overflow),
             "nearbyintf32" => codegen_unimplemented_intrinsic!(
                 "https://github.com/model-checking/kani/issues/1025"
