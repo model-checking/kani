@@ -35,5 +35,9 @@ fn test_both_nan() {
     let y: f64 = kani::any();
     kani::assume(x.is_nan() && y.is_nan());
     let res = std::intrinsics::minnumf64(x, y);
-    assert!(res.is_nan());
+    if x.is_nan() {
+        assert!(res == y);
+    } else {
+        assert!(res == x);
+    }
 }
