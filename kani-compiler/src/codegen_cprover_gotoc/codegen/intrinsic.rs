@@ -491,8 +491,8 @@ impl<'tcx> GotocCtx<'tcx> {
             "copy_nonoverlapping" => unreachable!(
                 "Expected `core::intrinsics::unreachable` to be handled by `StatementKind::CopyNonOverlapping`"
             ),
-            "copysignf32" => unstable_codegen!(codegen_simple_intrinsic!(Copysignf)),
-            "copysignf64" => unstable_codegen!(codegen_simple_intrinsic!(Copysign)),
+            "copysignf32" => codegen_simple_intrinsic!(Copysignf),
+            "copysignf64" => codegen_simple_intrinsic!(Copysign),
             "cosf32" => codegen_simple_intrinsic!(Cosf),
             "cosf64" => codegen_simple_intrinsic!(Cos),
             "ctlz" => codegen_count_intrinsic!(ctlz, true),
