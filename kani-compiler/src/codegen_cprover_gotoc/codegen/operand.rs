@@ -3,7 +3,7 @@
 use crate::codegen_cprover_gotoc::utils::slice_fat_ptr;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::unwrap_or_return_codegen_unimplemented;
-use cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
+use cbmc::goto_program::{DatatypeComponent, Expr, Location, Stmt, Symbol, Type};
 use cbmc::NO_PRETTY_NAME;
 use rustc_ast::ast::Mutability;
 use rustc_middle::mir::interpret::{
@@ -503,12 +503,12 @@ impl<'tcx> GotocCtx<'tcx> {
                     .iter()
                     .enumerate()
                     .map(|(i, d)| match d {
-                        AllocData::Bytes(bytes) => Type::datatype_component(
+                        AllocData::Bytes(bytes) => DatatypeComponent::field(
                             &i.to_string(),
                             Type::unsigned_int(8).array_of(bytes.len()),
                         ),
                         AllocData::Expr(e) => {
-                            Type::datatype_component(&i.to_string(), e.typ().clone())
+                            DatatypeComponent::field(&i.to_string(), e.typ().clone())
                         }
                     })
                     .collect()
