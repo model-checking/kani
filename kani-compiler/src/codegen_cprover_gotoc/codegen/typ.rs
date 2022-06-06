@@ -308,7 +308,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // vtable field name, i.e., 3_vol (idx_method)
         let vtable_field_name = self.vtable_field_name(instance.def_id(), idx);
 
-        Type::datatype_component(vtable_field_name, fn_ptr)
+        DatatypeComponent::field(vtable_field_name, fn_ptr)
     }
 
     /// Generates a vtable that looks like this:
@@ -382,8 +382,8 @@ impl<'tcx> GotocCtx<'tcx> {
             // See the comment on codegen_ty_ref.
             let vtable_name = ctx.vtable_name(trait_type);
             vec![
-                Type::datatype_component("data", data_type),
-                Type::datatype_component("vtable", Type::struct_tag(vtable_name).to_pointer()),
+                DatatypeComponent::field("data", data_type),
+                DatatypeComponent::field("vtable", Type::struct_tag(vtable_name).to_pointer()),
             ]
         })
     }
@@ -410,9 +410,9 @@ impl<'tcx> GotocCtx<'tcx> {
     /// `get_vtable`.
     fn trait_vtable_field_types(&mut self, t: ty::Ty<'tcx>) -> Vec<DatatypeComponent> {
         let mut vtable_base = vec![
-            Type::datatype_component("drop", self.trait_vtable_drop_type(t)),
-            Type::datatype_component("size", Type::size_t()),
-            Type::datatype_component("align", Type::size_t()),
+            DatatypeComponent::field("drop", self.trait_vtable_drop_type(t)),
+            DatatypeComponent::field("size", Type::size_t()),
+            DatatypeComponent::field("align", Type::size_t()),
         ];
         if let ty::Dynamic(binder, _region) = t.kind() {
             // The virtual methods on the trait ref. Some auto traits have no methods.
@@ -589,7 +589,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         // we do not generate a struct with an array of units
                         vec![]
                     } else {
-                        vec![Type::datatype_component(
+                        vec![DatatypeComponent::field(
                             &0usize.to_string(),
                             ctx.codegen_ty_raw_array(ty),
                         )]
@@ -692,7 +692,7 @@ impl<'tcx> GotocCtx<'tcx> {
             // We need to pad to the next offset
             let bits = next_offset - current_offset;
             let name = format!("$pad{}", idx);
-            Some(Type::datatype_padding(&name, bits))
+            Some(DatatypeComponent::padding(&name, bits))
         } else {
             None
         }
@@ -729,7 +729,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         final_fields.push(padding)
                     }
                     // we insert the actual field
-                    final_fields.push(Type::datatype_component(fld_name, self.codegen_ty(*fld_ty)));
+                    final_fields.push(DatatypeComponent::field(fld_name, self.codegen_ty(*fld_ty)));
                     let layout = self.layout_of(*fld_ty);
                     // we compute the overall offset of the end of the current struct
                     offset = fld_offset + layout.size.bits();
@@ -839,8 +839,8 @@ impl<'tcx> GotocCtx<'tcx> {
             };
             self.ensure_struct(pointer_name, NO_PRETTY_NAME, |_, _| {
                 vec![
-                    Type::datatype_component("data", element_type.to_pointer()),
-                    Type::datatype_component("len", Type::size_t()),
+                    DatatypeComponent::field("data", element_type.to_pointer()),
+                    DatatypeComponent::field("len", Type::size_t()),
                 ]
             })
         } else if self.use_vtable_fat_pointer(pointee_type) {
@@ -1016,7 +1016,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 .fields
                 .iter()
                 .map(|f| {
-                    Type::datatype_component(
+                    DatatypeComponent::field(
                         &f.name.to_string(),
                         ctx.codegen_ty(f.ty(ctx.tcx, subst)),
                     )
@@ -1100,13 +1100,13 @@ impl<'tcx> GotocCtx<'tcx> {
                             let discr_offset = ctx.layout_of(discr_t).size.bits_usize();
                             let initial_offset =
                                 ctx.variant_min_offset(variants).unwrap_or(discr_offset);
-                            let mut fields = vec![Type::datatype_component("case", int)];
+                            let mut fields = vec![DatatypeComponent::field("case", int)];
                             if let Some(padding) =
                                 ctx.codegen_struct_padding(discr_offset, initial_offset, 0)
                             {
                                 fields.push(padding);
                             }
-                            fields.push(Type::datatype_component(
+                            fields.push(DatatypeComponent::field(
                                 "cases",
                                 ctx.ensure_union(
                                     &format!("{}-union", name.to_string()),
@@ -1256,7 +1256,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     // Skip variant types that cannot be referenced.
                     None
                 } else {
-                    Some(Type::datatype_component(
+                    Some(DatatypeComponent::field(
                         &case.name.to_string(),
                         self.codegen_enum_case_struct(
                             name,
