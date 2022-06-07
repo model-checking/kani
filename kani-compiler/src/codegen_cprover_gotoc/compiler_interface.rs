@@ -189,11 +189,35 @@ impl CodegenBackend for GotocCodegenBackend {
 
     fn link(
         &self,
-        _sess: &Session,
-        _codegen_results: CodegenResults,
-        _outputs: &OutputFilenames,
+        sess: &Session,
+        codegen_results: CodegenResults,
+        outputs: &OutputFilenames,
     ) -> Result<(), ErrorGuaranteed> {
-        Ok(())
+        // In `link`, we need to do two things:
+        // 1. We need to emit `rlib` files normally. Cargo expects these in some circumstances and sends
+        //    them to subsequent builds with `-L`.
+        // 2. We MUST NOT try to invoke the native linker, because that will fail. We don't have real objects.
+        // This is normally not a problem: usually we only get one requested `crate-type`.
+        // But let's be carefuly and fail loudly if we get conflicting requests:
+        let requested_crate_types = sess.crate_types();
+        // Quit successfully if we don't need an Rlib:
+        if !requested_crate_types.contains(&rustc_session::config::CrateType::Rlib) {
+            return Ok(());
+        }
+        // Fail loudly if we need an Rlib (above!) and *also* an executable, which
+        // we can't produce, and can't easily suppress in `link_binary`:
+        if requested_crate_types.contains(&rustc_session::config::CrateType::Executable) {
+            sess.err("Build crate-type requested both rlib and executable, and Kani cannot handle this situation");
+            sess.abort_if_errors();
+        }
+
+        // All this ultimately boils down to is emitting an `rlib` that contains just one file: `lib.rmeta`
+        use rustc_codegen_ssa::back::link::link_binary;
+        link_binary::<crate::codegen_cprover_gotoc::archive::ArArchiveBuilder<'_>>(
+            sess,
+            &codegen_results,
+            outputs,
+        )
     }
 }
 
