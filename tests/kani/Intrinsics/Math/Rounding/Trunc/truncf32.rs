@@ -3,9 +3,9 @@
 #![feature(core_intrinsics)]
 use std::intrinsics::truncf32;
 
-//! Checks that `truncf32` does return:
-//!  * The integral part of a number for a couple of concrete cases.
-//!  * A value that is closer to zero in all cases.
+// Checks that `truncf32` does return:
+//  * The integral part of a number for a couple of concrete cases.
+//  * A value that is closer to zero in all cases.
 
 #[kani::proof]
 fn test_one() {
@@ -26,8 +26,7 @@ fn test_towards_zero() {
     let x: f32 = kani::any();
     kani::assume(!x.is_nan());
     let trunc_res = unsafe { truncf32(x) };
-    if x.is_sign_positive()
-    {
+    if x.is_sign_positive() {
         assert!(trunc_res <= x);
     } else {
         assert!(trunc_res >= x);
