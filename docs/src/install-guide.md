@@ -38,7 +38,7 @@ In general, the following dependencies are required.
 
 1. Cargo installed via [rustup](https://rustup.rs/)
 2. [CBMC](https://github.com/diffblue/cbmc) (>= 5.58.1)
-3. [CBMC Viewer](https://github.com/awslabs/aws-viewer-for-cbmc) (>= 2.10)
+3. [CBMC Viewer](https://github.com/awslabs/aws-viewer-for-cbmc) (>= 3.4)
 
 Kani has been tested in [Ubuntu](#install-dependencies-on-ubuntu) and [macOS](##install-dependencies-on-macos) platforms.
 
@@ -55,7 +55,7 @@ cd kani
 git submodule update --init
 ./scripts/setup/ubuntu/install_deps.sh
 ./scripts/setup/ubuntu/install_cbmc.sh
-./scripts/setup/install_viewer.sh 3.2
+./scripts/setup/install_viewer.sh 3.4
 ./scripts/setup/install_rustup.sh
 # If you haven't already:
 source $HOME/.cargo/env
@@ -72,7 +72,7 @@ cd kani
 git submodule update --init
 ./scripts/setup/macos-10.15/install_deps.sh
 ./scripts/setup/macos-10.15/install_cbmc.sh
-./scripts/setup/install_viewer.sh 3.2
+./scripts/setup/install_viewer.sh 3.4
 ./scripts/setup/install_rustup.sh
 # If you haven't already:
 source $HOME/.cargo/env
