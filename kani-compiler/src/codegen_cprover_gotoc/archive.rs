@@ -4,13 +4,18 @@
 // See GitHub history for details.
 // This file is a lightly modified version of upstream rustc:
 //     compiler/rustc_codegen_cranelift/src/archive.rs
+
 // Along with lifting the deps:
 //  object = { version = "0.27.0", default-features = false, features = ["std", "read_core", "write", "archive", "coff", "elf", "macho", "pe"] }
 //  ar = "0.8.0"
 
+// Also: I removed all mentions of 'ranlib' which caused issues on macos.
+// We don't actually need these to be passed to a real linker anyway.
+// 'ranlib' is about building a global symbol table out of all the object
+// files in the archive, and we just don't put object files in our archives.
+
 //! Creation of ar archives like for the lib and staticlib crate type
 
-use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::{self, Read, Seek};
 use std::path::{Path, PathBuf};
@@ -19,7 +24,7 @@ use rustc_codegen_ssa::back::archive::ArchiveBuilder;
 use rustc_session::Session;
 
 use object::read::archive::ArchiveFile;
-use object::{Object, ObjectSymbol, ReadCache};
+use object::ReadCache;
 
 #[derive(Debug)]
 enum ArchiveEntry {
@@ -31,7 +36,6 @@ pub(crate) struct ArArchiveBuilder<'a> {
     sess: &'a Session,
     dst: PathBuf,
     use_gnu_style_archive: bool,
-    no_builtin_ranlib: bool,
 
     src_archives: Vec<File>,
     // Don't use `HashMap` here, as the order is important. `rust.metadata.bin` must always be at
@@ -63,9 +67,6 @@ impl<'a> ArchiveBuilder<'a> for ArArchiveBuilder<'a> {
             sess,
             dst: output.to_path_buf(),
             use_gnu_style_archive: sess.target.archive_format == "gnu",
-            // FIXME fix builtin ranlib on macOS
-            no_builtin_ranlib: sess.target.is_like_osx,
-
             src_archives,
             entries,
         }
@@ -123,8 +124,6 @@ impl<'a> ArchiveBuilder<'a> for ArArchiveBuilder<'a> {
 
         let sess = self.sess;
 
-        let mut symbol_table = BTreeMap::new();
-
         let mut entries = Vec::new();
 
         for (entry_name, entry) in self.entries {
@@ -148,38 +147,6 @@ impl<'a> ArchiveBuilder<'a> for ArArchiveBuilder<'a> {
                     ));
                 }),
             };
-
-            if !self.no_builtin_ranlib {
-                match object::File::parse(&*data) {
-                    Ok(object) => {
-                        symbol_table.insert(
-                            entry_name.to_vec(),
-                            object
-                                .symbols()
-                                .filter_map(|symbol| {
-                                    if symbol.is_undefined() || symbol.is_local() {
-                                        None
-                                    } else {
-                                        symbol.name().map(|name| name.as_bytes().to_vec()).ok()
-                                    }
-                                })
-                                .collect::<Vec<_>>(),
-                        );
-                    }
-                    Err(err) => {
-                        let err = err.to_string();
-                        if err == "Unknown file magic" {
-                            // Not an object file; skip it.
-                        } else {
-                            sess.fatal(&format!(
-                                "error parsing `{}` during archive creation: {}",
-                                String::from_utf8_lossy(&entry_name),
-                                err
-                            ));
-                        }
-                    }
-                }
-            }
 
             entries.push((entry_name, data));
         }
@@ -211,20 +178,6 @@ impl<'a> ArchiveBuilder<'a> for ArArchiveBuilder<'a> {
 
         // Finalize archive
         std::mem::drop(builder);
-
-        if self.no_builtin_ranlib {
-            let ranlib = "ranlib";
-
-            // Run ranlib to be able to link the archive
-            let status = std::process::Command::new(ranlib)
-                .arg(self.dst)
-                .status()
-                .expect("Couldn't run ranlib");
-
-            if !status.success() {
-                self.sess.fatal(&format!("Ranlib exited with code {:?}", status.code()));
-            }
-        }
     }
 
     fn inject_dll_import_lib(
