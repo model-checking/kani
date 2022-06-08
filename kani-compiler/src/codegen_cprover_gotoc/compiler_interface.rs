@@ -198,7 +198,7 @@ impl CodegenBackend for GotocCodegenBackend {
         //    them to subsequent builds with `-L`.
         // 2. We MUST NOT try to invoke the native linker, because that will fail. We don't have real objects.
         // This is normally not a problem: usually we only get one requested `crate-type`.
-        // But let's be carefuly and fail loudly if we get conflicting requests:
+        // But let's be careful and fail loudly if we get conflicting requests:
         let requested_crate_types = sess.crate_types();
         // Quit successfully if we don't need an Rlib:
         if !requested_crate_types.contains(&rustc_session::config::CrateType::Rlib) {
