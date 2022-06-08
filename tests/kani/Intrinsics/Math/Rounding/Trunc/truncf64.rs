@@ -1,11 +1,13 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-#![feature(core_intrinsics)]
-use std::intrinsics::truncf64;
 
 // Checks that `truncf64` does return:
-//  * The integral part of a number for a couple of concrete cases.
+//  * The integral part of the argument for some concrete cases.
 //  * A value that is closer to zero in all cases.
+//  * A value that, when subtracted from the argument, is less than one in all
+//    cases.
+#![feature(core_intrinsics)]
+use std::intrinsics::truncf64;
 
 #[kani::proof]
 fn test_one() {
@@ -22,6 +24,20 @@ fn test_one_frac() {
 }
 
 #[kani::proof]
+fn test_conc() {
+    let conc = -42.6;
+    let trunc_res = unsafe { truncf64(conc) };
+    assert!(trunc_res == -42.0);
+}
+
+#[kani::proof]
+fn test_conc_sci() {
+    let conc = 5.4e-2;
+    let trunc_res = unsafe { truncf64(conc) };
+    assert!(trunc_res == 0.0);
+}
+
+#[kani::proof]
 fn test_towards_zero() {
     let x: f64 = kani::any();
     kani::assume(!x.is_nan());
@@ -31,4 +47,13 @@ fn test_towards_zero() {
     } else {
         assert!(trunc_res >= x);
     }
+}
+
+#[kani::proof]
+fn test_diff_one() {
+    let x: f64 = kani::any();
+    kani::assume(!x.is_nan());
+    kani::assume(!x.is_infinite());
+    let trunc_res = unsafe { truncf64(x) };
+    assert!(x - trunc_res < 1.0);
 }
