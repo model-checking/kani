@@ -13,6 +13,7 @@ pub trait Arbitrary {
 impl<T> Arbitrary for T
 where
     T: Invariant,
+    [(); std::mem::size_of::<T>()]:,
 {
     default fn any() -> Self {
         let value = unsafe { any_raw::<T>() };
