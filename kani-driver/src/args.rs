@@ -43,6 +43,10 @@ pub struct KaniArgs {
     /// Generate visualizer report to <target-dir>/report/html/index.html
     #[structopt(long)]
     pub visualize: bool,
+    /// Generate executable trace
+    // TODO: Need to exclude other options with this
+    #[structopt(long)]
+    pub gen_exec_trace: bool,
     /// Keep temporary files generated throughout Kani process
     #[structopt(long, hidden_short_help(true))]
     pub keep_temps: bool,
@@ -172,6 +176,7 @@ impl KaniArgs {
 
     pub fn assertion_reach_checks(&self) -> bool {
         // Turn them off when visualizing an error trace.
+        // TODO: disable this for exec_trace flag?
         !self.no_assertion_reach_checks && !self.visualize
     }
 

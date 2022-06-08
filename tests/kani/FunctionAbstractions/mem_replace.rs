@@ -3,6 +3,8 @@
 
 //! Tests the `std::mem::replace` function using various function types.
 
+#![feature(generic_const_exprs)]
+
 use std::mem;
 
 #[derive(PartialEq, Copy, Clone)]
@@ -17,7 +19,10 @@ unsafe impl kani::Invariant for Pair {
     }
 }
 
-fn test<T: kani::Arbitrary + std::cmp::PartialEq + Clone>() {
+fn test<T: kani::Invariant + std::cmp::PartialEq + Clone>()
+where
+    [(); std::mem::size_of::<T>()]:,
+{
     let mut var1 = kani::any::<T>();
     let var2 = kani::any::<T>();
     let old_var1 = var1.clone();

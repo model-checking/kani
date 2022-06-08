@@ -79,7 +79,10 @@ impl<T, const MAX_SLICE_LENGTH: usize> AnySlice<T, MAX_SLICE_LENGTH> {
         any_slice
     }
 
-    fn new_raw() -> Self {
+    fn new_raw() -> Self
+    where
+        [(); std::mem::size_of::<T>()]:,
+    {
         let any_slice = AnySlice::<T, MAX_SLICE_LENGTH>::alloc_slice();
         unsafe {
             let mut i = 0;
@@ -153,6 +156,9 @@ where
 ///
 /// TODO: Safety of any_raw_slice is a complex matter. See
 /// https://github.com/model-checking/kani/issues/1394
-pub unsafe fn any_raw_slice<T, const MAX_SLICE_LENGTH: usize>() -> AnySlice<T, MAX_SLICE_LENGTH> {
+pub unsafe fn any_raw_slice<T, const MAX_SLICE_LENGTH: usize>() -> AnySlice<T, MAX_SLICE_LENGTH>
+where
+    [(); std::mem::size_of::<T>()]:,
+{
     AnySlice::<T, MAX_SLICE_LENGTH>::new_raw()
 }

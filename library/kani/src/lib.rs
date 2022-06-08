@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 #![feature(rustc_attrs)] // Used for rustc_diagnostic_item.
 #![feature(min_specialization)] // Used for default implementation of Arbitrary.
+#![feature(generic_const_exprs)] // Used for getting size_of generic types
 
 pub mod arbitrary;
 pub mod invariant;
@@ -10,6 +11,10 @@ pub mod vec;
 
 pub use arbitrary::Arbitrary;
 pub use invariant::Invariant;
+
+use std::env;
+use std::fs;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// Creates an assumption that will be valid after this statement run. Note that the assumption
 /// will only be applied for paths that follow the assumption. If the assumption doesn't hold, the
@@ -95,10 +100,37 @@ pub fn any<T: Arbitrary>() -> T {
 /// kani::assume(char::from_u32(c as u32).is_ok());
 /// ```
 ///
+#[inline(never)]
+pub unsafe fn any_raw<T>() -> T
+where
+    [(); std::mem::size_of::<T>()]:,
+{
+    let non_det_byte_arr = any_raw_inner::<{ std::mem::size_of::<T>() }>();
+    let non_det_var =
+        std::mem::transmute_copy::<[u8; std::mem::size_of::<T>()], T>(&non_det_byte_arr);
+    non_det_var
+}
+
+static RAW_COUNT: AtomicUsize = AtomicUsize::new(0);
+
 #[rustc_diagnostic_item = "KaniAnyRaw"]
 #[inline(never)]
-pub unsafe fn any_raw<T>() -> T {
-    unimplemented!("Kani any_raw")
+unsafe fn any_raw_inner<const T: usize>() -> [u8; T] {
+    let det_vals_file = env::var("DET_VALS_FILE").unwrap();
+    let det_vals_err_msg = format!("Couldn't read {}", det_vals_file);
+    let contents_str = fs::read_to_string(det_vals_file).expect(&det_vals_err_msg);
+    let contents_vec: Vec<&str> = contents_str.split("\n").collect();
+    let raw_count = RAW_COUNT.fetch_add(T, Ordering::SeqCst);
+    let mut bytes_t = [0; T];
+
+    for i in 0..T {
+        let a_byte_quotes = contents_vec[raw_count + i];
+        let a_byte_quotes_len = a_byte_quotes.len();
+        let a_byte_str = &a_byte_quotes[1..a_byte_quotes_len - 1];
+        let a_byte: u8 = a_byte_str.parse().unwrap();
+        bytes_t[i] = a_byte;
+    }
+    bytes_t
 }
 
 /// This function has been split into a safe and unsafe functions: `kani::any` and `kani::any_raw`.
