@@ -481,12 +481,8 @@ impl<'tcx> GotocCtx<'tcx> {
                     "https://github.com/model-checking/kani/issues/374"
                 )
             }
-            "ceilf32" => codegen_unimplemented_intrinsic!(
-                "https://github.com/model-checking/kani/issues/1025"
-            ),
-            "ceilf64" => codegen_unimplemented_intrinsic!(
-                "https://github.com/model-checking/kani/issues/1025"
-            ),
+            "ceilf32" => codegen_simple_intrinsic!(Ceilf),
+            "ceilf64" => codegen_simple_intrinsic!(Ceil),
             "copy" => self.codegen_copy(intrinsic, false, fargs, farg_types, Some(p), loc),
             "copy_nonoverlapping" => unreachable!(
                 "Expected `core::intrinsics::unreachable` to be handled by `StatementKind::CopyNonOverlapping`"
