@@ -481,12 +481,8 @@ impl<'tcx> GotocCtx<'tcx> {
                     "https://github.com/model-checking/kani/issues/374"
                 )
             }
-            "ceilf32" => codegen_unimplemented_intrinsic!(
-                "https://github.com/model-checking/kani/issues/1025"
-            ),
-            "ceilf64" => codegen_unimplemented_intrinsic!(
-                "https://github.com/model-checking/kani/issues/1025"
-            ),
+            "ceilf32" => codegen_simple_intrinsic!(Ceilf),
+            "ceilf64" => codegen_simple_intrinsic!(Ceil),
             "copy" => self.codegen_copy(intrinsic, false, fargs, farg_types, Some(p), loc),
             "copy_nonoverlapping" => unreachable!(
                 "Expected `core::intrinsics::unreachable` to be handled by `StatementKind::CopyNonOverlapping`"
@@ -631,12 +627,8 @@ impl<'tcx> GotocCtx<'tcx> {
             "sqrtf64" => unstable_codegen!(codegen_simple_intrinsic!(Sqrt)),
             "sub_with_overflow" => codegen_op_with_overflow!(sub_overflow),
             "transmute" => self.codegen_intrinsic_transmute(fargs, ret_ty, p),
-            "truncf32" => codegen_unimplemented_intrinsic!(
-                "https://github.com/model-checking/kani/issues/1025"
-            ),
-            "truncf64" => codegen_unimplemented_intrinsic!(
-                "https://github.com/model-checking/kani/issues/1025"
-            ),
+            "truncf32" => codegen_simple_intrinsic!(Truncf),
+            "truncf64" => codegen_simple_intrinsic!(Trunc),
             "try" => {
                 codegen_unimplemented_intrinsic!(
                     "https://github.com/model-checking/kani/issues/267"
