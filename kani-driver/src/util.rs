@@ -11,7 +11,11 @@ pub fn alter_extension(path: &Path, ext: &str) -> PathBuf {
     path.with_extension(ext)
 }
 
-/// Attempt to guess the rlib name for rust source file
+/// Attempt to guess the rlib name for rust source file.
+/// This is only used by 'kani', never 'cargo-kani', so we hopefully don't have too many corner
+/// cases to deal with.
+/// In rustc, you can find some code dealing this this naming in:
+///      compiler/rustc_codegen_ssa/src/back/link.rs
 pub fn guess_rlib_name(path: &Path) -> PathBuf {
     let basedir = path.parent().unwrap_or(Path::new("."));
     let stem = path.file_stem().expect("has filename").to_str().expect("utf-8 filename");

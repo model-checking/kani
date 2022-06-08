@@ -1,8 +1,9 @@
-// Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-
-// Although the above copyright applies to very little here.
-// This file is a lightly modified version of: compiler/rustc_codegen_cranelift/src/archive.rs
+//
+// Modifications Copyright Kani Contributors
+// See GitHub history for details.
+// This file is a lightly modified version of upstream rustc:
+//     compiler/rustc_codegen_cranelift/src/archive.rs
 // Along with lifting the deps:
 //  object = { version = "0.27.0", default-features = false, features = ["std", "read_core", "write", "archive", "coff", "elf", "macho", "pe"] }
 //  ar = "0.8.0"

@@ -200,11 +200,11 @@ impl CodegenBackend for GotocCodegenBackend {
         // This is normally not a problem: usually we only get one requested `crate-type`.
         // But let's be careful and fail loudly if we get conflicting requests:
         let requested_crate_types = sess.crate_types();
-        // Quit successfully if we don't need an Rlib:
+        // Quit successfully if we don't need an `rlib`:
         if !requested_crate_types.contains(&rustc_session::config::CrateType::Rlib) {
             return Ok(());
         }
-        // Fail loudly if we need an Rlib (above!) and *also* an executable, which
+        // Fail loudly if we need an `rlib` (above!) and *also* an executable, which
         // we can't produce, and can't easily suppress in `link_binary`:
         if requested_crate_types.contains(&rustc_session::config::CrateType::Executable) {
             sess.err("Build crate-type requested both rlib and executable, and Kani cannot handle this situation");
