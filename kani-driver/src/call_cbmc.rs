@@ -91,6 +91,8 @@ impl KaniSession {
             args.push(unwind_value.to_string().into());
         }
 
+        args.push("--slice-formula".into());
+
         args.extend(self.args.cbmc_args.iter().cloned());
 
         args.push(file.to_owned().into_os_string());
