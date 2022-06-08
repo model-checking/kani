@@ -4,8 +4,8 @@
 // Checks that `truncf32` does return:
 //  * The integral part of the argument for some concrete cases.
 //  * A value that is closer to zero in all cases.
-//  * A value that, when subtracted from the argument, is less than one in all
-//    cases.
+//  * A value such that the difference between it and the argument is between
+//    zero and one.
 #![feature(core_intrinsics)]
 use std::intrinsics::truncf32;
 
@@ -55,5 +55,7 @@ fn test_diff_one() {
     kani::assume(!x.is_nan());
     kani::assume(!x.is_infinite());
     let trunc_res = unsafe { truncf32(x) };
-    assert!(x - trunc_res < 1.0);
+    let diff = (x - trunc_res).abs();
+    assert!(diff < 1.0);
+    assert!(diff >= 0.0);
 }
