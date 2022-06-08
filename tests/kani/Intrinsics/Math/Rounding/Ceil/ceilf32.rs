@@ -23,8 +23,8 @@ fn test_one_frac() {
 
 #[kani::proof]
 fn test_one_neg() {
-    let one_frac = -1.8;
-    let ceil_res = unsafe { ceilf32(one_frac) };
+    let one_neg = -1.8;
+    let ceil_res = unsafe { ceilf32(one_neg) };
     assert!(ceil_res == -1.0);
 }
 
