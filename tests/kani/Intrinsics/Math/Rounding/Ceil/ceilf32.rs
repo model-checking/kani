@@ -33,15 +33,15 @@ fn test_one_neg() {
 #[kani::proof]
 fn test_conc() {
     let conc = -42.6;
-    let trunc_res = unsafe { ceilf32(conc) };
-    assert!(trunc_res == -42.0);
+    let ceil_res = unsafe { ceilf32(conc) };
+    assert!(ceil_res == -42.0);
 }
 
 #[kani::proof]
 fn test_conc_sci() {
     let conc = 5.4e-2;
-    let trunc_res = unsafe { ceilf32(conc) };
-    assert!(trunc_res == 1.0);
+    let ceil_res = unsafe { ceilf32(conc) };
+    assert!(ceil_res == 1.0);
 }
 
 #[kani::proof]
