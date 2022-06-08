@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 // Checks that `ceilf64` does return:
-//  * The nearest integer above the argument for a few concrete cases.
+//  * The nearest integer above the argument for some concrete cases.
 //  * A value that is closer to infinity in all cases.
+//  * A value such that the difference between it and the argument is between
+//    zero and one.
 #![feature(core_intrinsics)]
 use std::intrinsics::ceilf64;
 
@@ -29,9 +31,35 @@ fn test_one_neg() {
 }
 
 #[kani::proof]
+fn test_conc() {
+    let conc = -42.6;
+    let trunc_res = unsafe { ceilf64(conc) };
+    assert!(trunc_res == -42.0);
+}
+
+#[kani::proof]
+fn test_conc_sci() {
+    let conc = 5.4e-2;
+    let trunc_res = unsafe { ceilf64(conc) };
+    assert!(trunc_res == 1.0);
+}
+
+#[kani::proof]
 fn test_towards_inf() {
     let x: f64 = kani::any();
     kani::assume(!x.is_nan());
     let ceil_res = unsafe { ceilf64(x) };
     assert!(ceil_res >= x);
+}
+
+#[kani::proof]
+fn test_diff_one() {
+    let x: f64 = kani::any();
+    kani::assume(!x.is_nan());
+    kani::assume(!x.is_infinite());
+    let ceil_res = unsafe { ceilf64(x) };
+    let diff = (x - ceil_res).abs();
+    // `diff` can be 1.0 if `x` is very small (e.g., 5.220244e-54)
+    assert!(diff <= 1.0);
+    assert!(diff >= 0.0);
 }
