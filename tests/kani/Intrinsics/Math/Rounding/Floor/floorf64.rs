@@ -45,7 +45,7 @@ fn test_conc_sci() {
 }
 
 #[kani::proof]
-fn test_towards_inf() {
+fn test_towards_neg_inf() {
     let x: f64 = kani::any();
     kani::assume(!x.is_nan());
     let result = unsafe { floorf64(x) };
