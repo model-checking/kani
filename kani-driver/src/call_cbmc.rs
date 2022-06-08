@@ -6,6 +6,7 @@ use kani_metadata::HarnessMetadata;
 use std::ffi::OsString;
 use std::path::Path;
 use std::process::Command;
+use std::time::Instant;
 
 use crate::args::KaniArgs;
 use crate::session::KaniSession;
@@ -40,7 +41,9 @@ impl KaniSession {
             // extra argument
             cmd.arg("--json-ui");
 
+            let now = Instant::now();
             let _cbmc_result = self.run_redirect(cmd, &output_filename)?;
+            let elapsed = now.elapsed().as_secs_f32();
             let format_result = self.format_cbmc_output(&output_filename);
 
             if format_result.is_err() {
@@ -51,6 +54,7 @@ impl KaniSession {
                 // the best possible fix is port to rust instead of using python, or getting more
                 // feedback than just exit status (or using a particular magic exit code?)
             }
+            println!("Verification Time: {}s", elapsed);
         }
 
         Ok(VerificationStatus::Success)
