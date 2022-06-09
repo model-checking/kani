@@ -567,12 +567,8 @@ impl<'tcx> GotocCtx<'tcx> {
             "ptr_offset_from" => self.codegen_ptr_offset_from(fargs, p, loc),
             "ptr_offset_from_unsigned" => self.codegen_ptr_offset_from_unsigned(fargs, p, loc),
             "raw_eq" => self.codegen_intrinsic_raw_eq(instance, fargs, p, loc),
-            "rintf32" => codegen_unimplemented_intrinsic!(
-                "https://github.com/model-checking/kani/issues/1025"
-            ),
-            "rintf64" => codegen_unimplemented_intrinsic!(
-                "https://github.com/model-checking/kani/issues/1025"
-            ),
+            "rintf32" => codegen_simple_intrinsic!(Rintf),
+            "rintf64" => codegen_simple_intrinsic!(Rint),
             "rotate_left" => codegen_intrinsic_binop!(rol),
             "rotate_right" => codegen_intrinsic_binop!(ror),
             "roundf32" => codegen_simple_intrinsic!(Roundf),
