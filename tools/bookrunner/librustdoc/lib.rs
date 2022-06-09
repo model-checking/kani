@@ -13,9 +13,7 @@
 #![feature(control_flow_enum)]
 #![feature(box_syntax)]
 #![feature(let_else)]
-#![feature(nll)]
 #![feature(test)]
-#![feature(crate_visibility_modifier)]
 #![feature(never_type)]
 #![feature(once_cell)]
 #![feature(type_ascription)]
@@ -94,7 +92,7 @@ mod fold;
 mod formats;
 // used by the error-index generator, so it needs to be public
 pub mod html;
-crate mod lint;
+pub(crate) mod lint;
 mod passes;
 mod scrape_examples;
 mod visit;

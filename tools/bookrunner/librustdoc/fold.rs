@@ -4,7 +4,7 @@
 // See GitHub history for details.
 use crate::clean::*;
 
-crate trait DocFolder: Sized {
+pub(crate) trait DocFolder: Sized {
     fn fold_item(&mut self, item: Item) -> Option<Item> {
         Some(self.fold_item_recur(item))
     }
