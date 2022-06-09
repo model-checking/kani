@@ -1,7 +1,7 @@
 # Command cheat sheets
 
 Development work in the Kani project depends on multiple tools. Regardless of
-your familiriaty with the project, the commands below may be useful for
+your familiarity with the project, the commands below may be useful for
 development purposes.
 
 ## Kani

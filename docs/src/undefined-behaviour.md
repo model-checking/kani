@@ -20,14 +20,14 @@ Rust’s [definition of UB](https://doc.rust-lang.org/reference/behavior-conside
 
 
 Given the lack of a formal semantics for UB, and given Kani's focus on memory safety, there are classes of UB which Kani does not detect.
-A non-exhaustive list of these, based on the the non-exhaustive list from the [Rust documentation](https://doc.rust-lang.org/reference/behavior-considered-undefined.html), is:
+A non-exhaustive list of these, based on the non-exhaustive list from the [Rust documentation](https://doc.rust-lang.org/reference/behavior-considered-undefined.html), is:
 
 * Data races. 
     * Kani focuses on sequential code.
 * Breaking the pointer aliasing rules (http://llvm.org/docs/LangRef.html#pointer-aliasing-rules). 
-    * Kani can detect if misuse of pointers causes memory safety or assertion violations, but does not not track reference lifetimes.
+    * Kani can detect if misuse of pointers causes memory safety or assertion violations, but does not track reference lifetimes.
 * Mutating immutable data.
-    * Kani can detect if modification of immutable data causes memory safety or assertion violations, but does not not track reference lifetimes.
+    * Kani can detect if modification of immutable data causes memory safety or assertion violations, but does not track reference lifetimes.
 * Invoking undefined behavior via compiler intrinsics.
     * Kani makes a best effort attempt to check the preconditions of compiler intrinsics, but does not guarantee to do so in all cases.
 * Executing code compiled with platform features that the current platform does not support (see [target_feature](https://doc.rust-lang.org/reference/attributes/codegen.html#the-target_feature-attribute)).
@@ -44,6 +44,4 @@ Kani makes a best-effort attempt to detect some cases of UB:
     * Kani can detect invalid dereferences, but may not detect them in [place expression context](https://doc.rust-lang.org/reference/expressions.html#place-expressions-and-value-expressions).
 * Invoking undefined behavior via compiler intrinsics.
     * See [current support for compiler intrinsics](./rust-feature-support/intrinsics.md).
-* Producing an invalid value, even in private fields and locals. 
-    * Kani provides a [mechanism](./tutorial-nondeterministic-variables.md#safe-nondeterministic-variables-for-custom-types) `is_valid()` which users can use to check validity of objects, but it does not currently apply to all types.
 
