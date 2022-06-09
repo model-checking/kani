@@ -30,7 +30,7 @@ pub trait GotocHook<'tcx> {
         tcx: &mut GotocCtx<'tcx>,
         instance: Instance<'tcx>,
         fargs: Vec<Expr>,
-        assign_to: Option<Place<'tcx>>,
+        assign_to: Place<'tcx>,
         target: Option<BasicBlock>,
         span: Option<Span>,
     ) -> Stmt;
@@ -66,7 +66,7 @@ impl<'tcx> GotocHook<'tcx> for ExpectFail {
         tcx: &mut GotocCtx<'tcx>,
         _instance: Instance<'tcx>,
         mut fargs: Vec<Expr>,
-        _assign_to: Option<Place<'tcx>>,
+        _assign_to: Place<'tcx>,
         target: Option<BasicBlock>,
         span: Option<Span>,
     ) -> Stmt {
@@ -108,7 +108,7 @@ impl<'tcx> GotocHook<'tcx> for Assume {
         tcx: &mut GotocCtx<'tcx>,
         _instance: Instance<'tcx>,
         mut fargs: Vec<Expr>,
-        _assign_to: Option<Place<'tcx>>,
+        _assign_to: Place<'tcx>,
         target: Option<BasicBlock>,
         span: Option<Span>,
     ) -> Stmt {
@@ -138,7 +138,7 @@ impl<'tcx> GotocHook<'tcx> for Assert {
         tcx: &mut GotocCtx<'tcx>,
         _instance: Instance<'tcx>,
         mut fargs: Vec<Expr>,
-        _assign_to: Option<Place<'tcx>>,
+        _assign_to: Place<'tcx>,
         target: Option<BasicBlock>,
         span: Option<Span>,
     ) -> Stmt {
@@ -203,20 +203,19 @@ impl<'tcx> GotocHook<'tcx> for Nondet {
         tcx: &mut GotocCtx<'tcx>,
         _instance: Instance<'tcx>,
         fargs: Vec<Expr>,
-        assign_to: Option<Place<'tcx>>,
+        assign_to: Place<'tcx>,
         target: Option<BasicBlock>,
         span: Option<Span>,
     ) -> Stmt {
         assert!(fargs.is_empty());
         let loc = tcx.codegen_span_option(span);
-        let p = assign_to.unwrap();
         let target = target.unwrap();
-        let pt = tcx.place_ty(&p);
+        let pt = tcx.place_ty(&assign_to);
         if pt.is_unit() {
             Stmt::goto(tcx.current_fn().find_label(&target), loc)
         } else {
             let pe =
-                unwrap_or_return_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&p)).goto_expr;
+                unwrap_or_return_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&assign_to)).goto_expr;
             Stmt::block(
                 vec![
                     pe.clone().assign(tcx.codegen_ty(pt).nondet(), loc.clone()),
@@ -244,7 +243,7 @@ impl<'tcx> GotocHook<'tcx> for Panic {
         tcx: &mut GotocCtx<'tcx>,
         _instance: Instance<'tcx>,
         fargs: Vec<Expr>,
-        _assign_to: Option<Place<'tcx>>,
+        _assign_to: Place<'tcx>,
         _target: Option<BasicBlock>,
         span: Option<Span>,
     ) -> Stmt {
@@ -270,17 +269,16 @@ impl<'tcx> GotocHook<'tcx> for PtrRead {
         tcx: &mut GotocCtx<'tcx>,
         _instance: Instance<'tcx>,
         mut fargs: Vec<Expr>,
-        assign_to: Option<Place<'tcx>>,
+        assign_to: Place<'tcx>,
         target: Option<BasicBlock>,
         span: Option<Span>,
     ) -> Stmt {
         let loc = tcx.codegen_span_option(span);
-        let p = assign_to.unwrap();
         let target = target.unwrap();
         let src = fargs.remove(0);
         Stmt::block(
             vec![
-                unwrap_or_return_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&p))
+                unwrap_or_return_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&assign_to))
                     .goto_expr
                     .assign(src.dereference().with_location(loc.clone()), loc.clone()),
                 Stmt::goto(tcx.current_fn().find_label(&target), loc.clone()),
@@ -306,7 +304,7 @@ impl<'tcx> GotocHook<'tcx> for PtrWrite {
         tcx: &mut GotocCtx<'tcx>,
         _instance: Instance<'tcx>,
         mut fargs: Vec<Expr>,
-        _assign_to: Option<Place<'tcx>>,
+        _assign_to: Place<'tcx>,
         target: Option<BasicBlock>,
         span: Option<Span>,
     ) -> Stmt {
@@ -338,32 +336,28 @@ impl<'tcx> GotocHook<'tcx> for RustAlloc {
         tcx: &mut GotocCtx<'tcx>,
         instance: Instance<'tcx>,
         mut fargs: Vec<Expr>,
-        assign_to: Option<Place<'tcx>>,
+        assign_to: Place<'tcx>,
         target: Option<BasicBlock>,
         span: Option<Span>,
     ) -> Stmt {
         debug!(?instance, "Replace allocation");
         let loc = tcx.codegen_span_option(span);
-        match (assign_to, target) {
-            (Some(p), Some(target)) => {
-                let size = fargs.remove(0);
-                Stmt::block(
-                    vec![
-                        unwrap_or_return_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&p))
-                            .goto_expr
-                            .assign(
-                                BuiltinFn::Malloc
-                                    .call(vec![size], loc.clone())
-                                    .cast_to(Type::unsigned_int(8).to_pointer()),
-                                loc,
-                            ),
-                        Stmt::goto(tcx.current_fn().find_label(&target), Location::none()),
-                    ],
-                    Location::none(),
-                )
-            }
-            _ => unreachable!(),
-        }
+        let target = target.unwrap();
+        let size = fargs.remove(0);
+        Stmt::block(
+            vec![
+                unwrap_or_return_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&assign_to))
+                    .goto_expr
+                    .assign(
+                        BuiltinFn::Malloc
+                            .call(vec![size], loc.clone())
+                            .cast_to(Type::unsigned_int(8).to_pointer()),
+                        loc,
+                    ),
+                Stmt::goto(tcx.current_fn().find_label(&target), Location::none()),
+            ],
+            Location::none(),
+        )
     }
 }
 
@@ -383,17 +377,16 @@ impl<'tcx> GotocHook<'tcx> for SliceFromRawPart {
         tcx: &mut GotocCtx<'tcx>,
         _instance: Instance<'tcx>,
         mut fargs: Vec<Expr>,
-        assign_to: Option<Place<'tcx>>,
+        assign_to: Place<'tcx>,
         target: Option<BasicBlock>,
         span: Option<Span>,
     ) -> Stmt {
         let loc = tcx.codegen_span_option(span);
-        let p = assign_to.unwrap();
         let target = target.unwrap();
-        let pt = tcx.codegen_ty(tcx.place_ty(&p));
+        let pt = tcx.codegen_ty(tcx.place_ty(&assign_to));
         let data = fargs.remove(0);
         let len = fargs.remove(0);
-        let code = unwrap_or_return_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&p))
+        let code = unwrap_or_return_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&assign_to))
             .goto_expr
             .assign(
                 Expr::struct_expr_from_values(pt, vec![data, len], &tcx.symbol_table),

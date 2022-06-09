@@ -48,17 +48,18 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         func: &Operand<'tcx>,
         args: &[Operand<'tcx>],
-        destination: &Option<(Place<'tcx>, BasicBlock)>,
+        destination: &Place<'tcx>,
+        target: &Option<BasicBlock>,
         span: Span,
     ) -> Stmt {
         let instance = self.get_intrinsic_instance(func).unwrap();
 
-        if let Some((assign_to, target)) = destination {
+        if let Some(target) = target {
             let loc = self.codegen_span(&span);
             let fargs = self.codegen_funcall_args(args);
             Stmt::block(
                 vec![
-                    self.codegen_intrinsic(instance, fargs, &assign_to, Some(span)),
+                    self.codegen_intrinsic(instance, fargs, &destination, Some(span)),
                     Stmt::goto(self.current_fn().find_label(&target), loc),
                 ],
                 loc,
