@@ -14,7 +14,7 @@ use num::bigint::BigInt;
 use rustc_middle::mir::{AggregateKind, BinOp, CastKind, NullOp, Operand, Place, Rvalue, UnOp};
 use rustc_middle::ty::adjustment::PointerCast;
 use rustc_middle::ty::layout::LayoutOf;
-use rustc_middle::ty::{self, Instance, IntTy, Ty, UintTy, VtblEntry, COMMON_VTABLE_ENTRIES};
+use rustc_middle::ty::{self, Instance, IntTy, Ty, UintTy, VtblEntry, TyCtxt};
 use rustc_target::abi::{FieldsShape, Primitive, TagEncoding, Variants};
 use tracing::{debug, warn};
 
@@ -950,7 +950,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
                     ctx.tcx.vtable_entries(trait_ref_binder)
                 } else {
-                    COMMON_VTABLE_ENTRIES
+                    TyCtxt::COMMON_VTABLE_ENTRIES
                 };
 
                 let (vt_size, vt_align) = ctx.codegen_vtable_size_and_align(src_mir_type);
