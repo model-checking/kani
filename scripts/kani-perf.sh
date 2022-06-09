@@ -2,9 +2,6 @@
 # Copyright Kani Contributors
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
-if [[ -z $KANI_REGRESSION_KEEP_GOING ]]; then
-  set -o errexit
-fi
 set -o pipefail
 set -o nounset
 
@@ -30,11 +27,16 @@ done
 suite="perf"
 mode="cargo-kani"
 echo "Check compiletest suite=$suite mode=$mode"
-cargo run -p compiletest --quiet -- --suite $suite --mode $mode --quiet
+cargo run -p compiletest -- --suite $suite --mode $mode
+exit_code=$?
 
 echo "Cleaning up..."
 rm ${to_delete}
 
 echo
-echo "All Kani perf tests completed successfully."
+if [ $exit_code -eq 0 ]; then
+  echo "All Kani perf tests completed successfully."
+else
+  echo "***Kani perf tests failed."
+fi
 echo
