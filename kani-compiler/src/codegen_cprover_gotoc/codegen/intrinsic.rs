@@ -518,12 +518,8 @@ impl<'tcx> GotocCtx<'tcx> {
                 let binop_stmt = codegen_intrinsic_binop!(div);
                 self.add_finite_args_checks(intrinsic, fargs_clone, binop_stmt, span)
             }
-            "floorf32" => codegen_unimplemented_intrinsic!(
-                "https://github.com/model-checking/kani/issues/1025"
-            ),
-            "floorf64" => codegen_unimplemented_intrinsic!(
-                "https://github.com/model-checking/kani/issues/1025"
-            ),
+            "floorf32" => codegen_simple_intrinsic!(Floorf),
+            "floorf64" => codegen_simple_intrinsic!(Floor),
             "fmaf32" => unstable_codegen!(codegen_simple_intrinsic!(Fmaf)),
             "fmaf64" => unstable_codegen!(codegen_simple_intrinsic!(Fma)),
             "fmul_fast" => {
