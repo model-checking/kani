@@ -8,6 +8,7 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
+ar = { version = "0.8.0", optional = true }
 atty = "0.2.14"
 bitflags = { version = "1.0", optional = true }
 cbmc = { path = "../cprover_bindings", package = "cprover_bindings", optional = true }
@@ -17,6 +18,7 @@ kani_queries = {path = "kani_queries"}
 kani_metadata = { path = "../kani_metadata", optional = true }
 libc = { version = "0.2", optional = true }
 num = { version = "0.4.0", optional = true }
+object = { version = "0.27.0", default-features = false, features = ["std", "read_core", "write", "archive", "coff", "elf", "macho", "pe"], optional = true }
 rustc-demangle = { version = "0.1.21", optional = true }
 serde = { version = "1", optional = true }
 serde_json = { version = "1", optional = true }
@@ -28,7 +30,7 @@ tracing-tree = "0.2.0"
 # Future proofing: enable backend dependencies using feature.
 [features]
 default = ['cprover']
-cprover = ['bitflags', 'cbmc', 'kani_metadata', 'libc', 'num', 'rustc-demangle', 'serde', 'serde_json']
+cprover = ['ar', 'bitflags', 'cbmc', 'kani_metadata', 'libc', 'num', 'object', 'rustc-demangle', 'serde', 'serde_json']
 
 [package.metadata.rust-analyzer]
 # This package uses rustc crates.
