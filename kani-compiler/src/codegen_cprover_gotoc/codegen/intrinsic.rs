@@ -573,12 +573,8 @@ impl<'tcx> GotocCtx<'tcx> {
             ),
             "rotate_left" => codegen_intrinsic_binop!(rol),
             "rotate_right" => codegen_intrinsic_binop!(ror),
-            "roundf32" => codegen_unimplemented_intrinsic!(
-                "https://github.com/model-checking/kani/issues/1025"
-            ),
-            "roundf64" => codegen_unimplemented_intrinsic!(
-                "https://github.com/model-checking/kani/issues/1025"
-            ),
+            "roundf32" => codegen_simple_intrinsic!(Roundf),
+            "roundf64" => codegen_simple_intrinsic!(Round),
             "saturating_add" => codegen_intrinsic_binop_with_mm!(saturating_add),
             "saturating_sub" => codegen_intrinsic_binop_with_mm!(saturating_sub),
             "sinf32" => codegen_simple_intrinsic!(Sinf),
