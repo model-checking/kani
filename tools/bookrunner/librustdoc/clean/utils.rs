@@ -102,7 +102,11 @@ pub(crate) fn qpath_to_string(p: &hir::QPath<'_>) -> String {
     s
 }
 
-pub(crate) fn build_deref_target_impls(cx: &mut DocContext<'_>, items: &[Item], ret: &mut Vec<Item>) {
+pub(crate) fn build_deref_target_impls(
+    cx: &mut DocContext<'_>,
+    items: &[Item],
+    ret: &mut Vec<Item>,
+) {
     let tcx = cx.tcx;
 
     for item in items {

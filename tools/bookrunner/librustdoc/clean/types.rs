@@ -1360,7 +1360,11 @@ pub(crate) struct Import {
 }
 
 impl Import {
-    pub(crate) fn new_simple(name: Symbol, source: ImportSource, should_be_displayed: bool) -> Self {
+    pub(crate) fn new_simple(
+        name: Symbol,
+        source: ImportSource,
+        should_be_displayed: bool,
+    ) -> Self {
         Self { kind: ImportKind::Simple(name), source, should_be_displayed }
     }
 

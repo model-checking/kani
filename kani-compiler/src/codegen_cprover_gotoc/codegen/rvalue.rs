@@ -14,7 +14,7 @@ use num::bigint::BigInt;
 use rustc_middle::mir::{AggregateKind, BinOp, CastKind, NullOp, Operand, Place, Rvalue, UnOp};
 use rustc_middle::ty::adjustment::PointerCast;
 use rustc_middle::ty::layout::LayoutOf;
-use rustc_middle::ty::{self, Instance, IntTy, Ty, UintTy, VtblEntry, TyCtxt};
+use rustc_middle::ty::{self, Instance, IntTy, Ty, TyCtxt, UintTy, VtblEntry};
 use rustc_target::abi::{FieldsShape, Primitive, TagEncoding, Variants};
 use tracing::{debug, warn};
 
@@ -425,7 +425,13 @@ impl<'tcx> GotocCtx<'tcx> {
             Rvalue::Ref(_, _, p) | Rvalue::AddressOf(_, p) => self.codegen_rvalue_ref(p, res_ty),
             Rvalue::Len(p) => self.codegen_rvalue_len(p),
             // Rust has begun distinguishing "ptr -> num" and "num -> ptr" (providence-relevent casts) but we do not yet:
-            Rvalue::Cast(CastKind::Misc | CastKind::PointerExposeAddress | CastKind::PointerFromExposedAddress, e, t) => {
+            Rvalue::Cast(
+                CastKind::Misc
+                | CastKind::PointerExposeAddress
+                | CastKind::PointerFromExposedAddress,
+                e,
+                t,
+            ) => {
                 let t = self.monomorphize(*t);
                 self.codegen_misc_cast(e, t)
             }

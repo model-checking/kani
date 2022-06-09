@@ -49,7 +49,11 @@ impl<'tcx> DocContext<'tcx> {
         self.tcx.sess
     }
 
-    pub(crate) fn with_param_env<T, F: FnOnce(&mut Self) -> T>(&mut self, def_id: DefId, f: F) -> T {
+    pub(crate) fn with_param_env<T, F: FnOnce(&mut Self) -> T>(
+        &mut self,
+        def_id: DefId,
+        f: F,
+    ) -> T {
         let old_param_env = mem::replace(&mut self.param_env, self.tcx.param_env(def_id));
         let ret = f(self);
         self.param_env = old_param_env;
@@ -58,7 +62,11 @@ impl<'tcx> DocContext<'tcx> {
 
     /// Call the closure with the given parameters set as
     /// the substitutions for a type alias' RHS.
-    pub(crate) fn enter_alias<F, R>(&mut self, substs: FxHashMap<DefId, clean::SubstParam>, f: F) -> R
+    pub(crate) fn enter_alias<F, R>(
+        &mut self,
+        substs: FxHashMap<DefId, clean::SubstParam>,
+        f: F,
+    ) -> R
     where
         F: FnOnce(&mut Self) -> R,
     {

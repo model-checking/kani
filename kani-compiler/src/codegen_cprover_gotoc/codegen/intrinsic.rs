@@ -787,7 +787,9 @@ impl<'tcx> GotocCtx<'tcx> {
 
         // Then we check if the type allows "raw" initialization for the cases
         // where memory is zero-initialized or entirely uninitialized
-        if intrinsic == "assert_zero_valid" && !layout.might_permit_raw_init(self, InitKind::Zero, false) {
+        if intrinsic == "assert_zero_valid"
+            && !layout.might_permit_raw_init(self, InitKind::Zero, false)
+        {
             return self.codegen_fatal_error(
                 PropertyClass::DefaultAssertion,
                 &format!("attempted to zero-initialize type `{}`, which is invalid", ty),
@@ -795,7 +797,9 @@ impl<'tcx> GotocCtx<'tcx> {
             );
         }
 
-        if intrinsic == "assert_uninit_valid" && !layout.might_permit_raw_init(self, InitKind::Uninit, false) {
+        if intrinsic == "assert_uninit_valid"
+            && !layout.might_permit_raw_init(self, InitKind::Uninit, false)
+        {
             return self.codegen_fatal_error(
                 PropertyClass::DefaultAssertion,
                 &format!("attempted to leave type `{}` uninitialized, which is invalid", ty),

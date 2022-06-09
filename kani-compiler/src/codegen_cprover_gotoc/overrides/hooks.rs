@@ -215,7 +215,8 @@ impl<'tcx> GotocHook<'tcx> for Nondet {
             Stmt::goto(tcx.current_fn().find_label(&target), loc)
         } else {
             let pe =
-                unwrap_or_return_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&assign_to)).goto_expr;
+                unwrap_or_return_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&assign_to))
+                    .goto_expr;
             Stmt::block(
                 vec![
                     pe.clone().assign(tcx.codegen_ty(pt).nondet(), loc.clone()),

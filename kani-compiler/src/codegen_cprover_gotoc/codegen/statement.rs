@@ -195,8 +195,7 @@ impl<'tcx> GotocCtx<'tcx> {
                                     .as_stmt(Location::None);
                             }
                         }
-                        let self_data =
-                            trait_fat_ptr.to_owned().member("data", &self.symbol_table);
+                        let self_data = trait_fat_ptr.to_owned().member("data", &self.symbol_table);
                         let self_ref =
                             self_data.clone().cast_to(trait_fat_ptr.typ().clone().to_pointer());
 
@@ -404,14 +403,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
 
                 if let Some(hk) = self.hooks.hook_applies(self.tcx, instance) {
-                    return hk.handle(
-                        self,
-                        instance,
-                        fargs,
-                        *destination,
-                        *target,
-                        Some(span),
-                    );
+                    return hk.handle(self, instance, fargs, *destination, *target, Some(span));
                 }
 
                 let mut stmts: Vec<Stmt> = match instance.def {
