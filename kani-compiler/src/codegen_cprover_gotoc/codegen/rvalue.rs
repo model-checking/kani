@@ -424,7 +424,8 @@ impl<'tcx> GotocCtx<'tcx> {
             Rvalue::Repeat(op, sz) => self.codegen_rvalue_repeat(op, sz, res_ty),
             Rvalue::Ref(_, _, p) | Rvalue::AddressOf(_, p) => self.codegen_rvalue_ref(p, res_ty),
             Rvalue::Len(p) => self.codegen_rvalue_len(p),
-            Rvalue::Cast(CastKind::Misc, e, t) => {
+            // Rust has begun distinguishing "ptr -> num" and "num -> ptr" (providence-relevent casts) but we do not yet:
+            Rvalue::Cast(CastKind::Misc | CastKind::PointerExposeAddress | CastKind::PointerFromExposedAddress, e, t) => {
                 let t = self.monomorphize(*t);
                 self.codegen_misc_cast(e, t)
             }
@@ -602,6 +603,8 @@ impl<'tcx> GotocCtx<'tcx> {
         src_goto_expr.member("data", &self.symbol_table).cast_to(dst_goto_typ)
     }
 
+    /// This handles all kinds of casts, except a limited subset that are instead
+    /// handled by [`codegen_pointer_cast`].
     fn codegen_misc_cast(&mut self, src: &Operand<'tcx>, dst_t: Ty<'tcx>) -> Expr {
         let src_t = self.operand_ty(src);
         debug!(
@@ -678,6 +681,10 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
+    /// "Pointer casts" are particular kinds of pointer-to-pointer casts.
+    /// See the [`PointerCast`] type for specifics.
+    /// Note that this does not include all casts involving pointers,
+    /// many of which are instead handled by [`codegen_misc_cast`] instead.
     pub fn codegen_pointer_cast(
         &mut self,
         k: &PointerCast,
