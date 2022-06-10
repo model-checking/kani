@@ -424,7 +424,8 @@ impl<'tcx> GotocCtx<'tcx> {
             Rvalue::Repeat(op, sz) => self.codegen_rvalue_repeat(op, sz, res_ty),
             Rvalue::Ref(_, _, p) | Rvalue::AddressOf(_, p) => self.codegen_rvalue_ref(p, res_ty),
             Rvalue::Len(p) => self.codegen_rvalue_len(p),
-            // Rust has begun distinguishing "ptr -> num" and "num -> ptr" (providence-relevent casts) but we do not yet:
+            // Rust has begun distinguishing "ptr -> num" and "num -> ptr" (providence-relevant casts) but we do not yet:
+            // Should we? Tracking ticket: https://github.com/model-checking/kani/issues/1274
             Rvalue::Cast(
                 CastKind::Misc
                 | CastKind::PointerExposeAddress
