@@ -26,6 +26,25 @@ jobs:
       - name: Execute Kani regression
         run: ./scripts/kani-regression.sh
 
+  perf:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout Kani
+        uses: actions/checkout@v2
+
+      - name: Setup Kani Dependencies
+        uses: ./.github/actions/setup
+        with:
+            os: ubuntu-20.04
+
+      - name: Build Kani
+        run: |
+          export RUST_BACKTRACE=1
+          cargo build --workspace
+
+      - name: Execute Kani performance tests
+        run: ./scripts/kani-perf.sh
+
   bookrunner:
     runs-on: ubuntu-20.04
     permissions:

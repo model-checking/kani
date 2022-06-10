@@ -1,5 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+mod archive;
 mod codegen;
 mod compiler_interface;
 mod context;

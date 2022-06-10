@@ -54,7 +54,7 @@ mod verification {
         let quantity: NonZeroU32 = unsafe { kani::any_raw() };
 
         // The assert bellow would fail if we comment it out.
-        // assert!(id.get() != 0, "NonZeroU32 is internally a u32 but it should never be 0.");
+        // assert!(quantity.get() != 0, "NonZeroU32 is internally a u32 but it should never be 0.");
 
         // Update the inventory and check the result.
         inventory.update(id.clone(), quantity);

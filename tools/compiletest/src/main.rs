@@ -373,6 +373,21 @@ fn collect_tests_from_dir(
     inputs: &Stamp,
     tests: &mut Vec<test::TestDescAndFn>,
 ) -> io::Result<()> {
+    match config.mode {
+        Mode::CargoKani => {
+            collect_expected_tests_from_dir(config, dir, relative_dir_path, inputs, tests)
+        }
+        _ => collect_rs_tests_from_dir(config, dir, relative_dir_path, inputs, tests),
+    }
+}
+
+fn collect_expected_tests_from_dir(
+    config: &Config,
+    dir: &Path,
+    relative_dir_path: &Path,
+    inputs: &Stamp,
+    tests: &mut Vec<test::TestDescAndFn>,
+) -> io::Result<()> {
     // If we find a test foo/bar.rs, we have to build the
     // output directory `$build/foo` so we can write
     // `$build/foo/bar` into it. We do this *now* in this
@@ -387,20 +402,51 @@ fn collect_tests_from_dir(
     // output directory corresponding to each to avoid race conditions during
     // the testing phase. We immediately return after adding the tests to avoid
     // treating `*.rs` files as tests.
-    if config.mode == Mode::CargoKani && dir.join("Cargo.toml").exists() {
-        for file in fs::read_dir(dir)? {
-            let file_path = file?.path();
-            if file_path.to_str().unwrap().ends_with(".expected")
-                || "expected" == file_path.file_name().unwrap()
-            {
-                fs::create_dir_all(&build_dir.join(file_path.file_stem().unwrap())).unwrap();
-                let paths =
-                    TestPaths { file: file_path, relative_dir: relative_dir_path.to_path_buf() };
-                tests.extend(make_test(config, &paths, inputs));
-            }
+    assert_eq!(config.mode, Mode::CargoKani);
+
+    let has_cargo_toml = dir.join("Cargo.toml").exists();
+    for file in fs::read_dir(dir)? {
+        let file = file?;
+        let file_path = file.path();
+        if has_cargo_toml
+            && (file_path.to_str().unwrap().ends_with(".expected")
+                || "expected" == file_path.file_name().unwrap())
+        {
+            fs::create_dir_all(&build_dir.join(file_path.file_stem().unwrap())).unwrap();
+            let paths =
+                TestPaths { file: file_path, relative_dir: relative_dir_path.to_path_buf() };
+            tests.extend(make_test(config, &paths, inputs));
+        } else if file_path.is_dir() {
+            // recurse on subdirectory
+            let relative_file_path = relative_dir_path.join(file.file_name());
+            debug!("found directory: {:?}", file_path.display());
+            collect_expected_tests_from_dir(
+                config,
+                &file_path,
+                &relative_file_path,
+                inputs,
+                tests,
+            )?;
         }
-        return Ok(());
     }
+    Ok(())
+}
+
+fn collect_rs_tests_from_dir(
+    config: &Config,
+    dir: &Path,
+    relative_dir_path: &Path,
+    inputs: &Stamp,
+    tests: &mut Vec<test::TestDescAndFn>,
+) -> io::Result<()> {
+    // If we find a test foo/bar.rs, we have to build the
+    // output directory `$build/foo` so we can write
+    // `$build/foo/bar` into it. We do this *now* in this
+    // sequential loop because otherwise, if we do it in the
+    // tests themselves, they race for the privilege of
+    // creating the directories and sometimes fail randomly.
+    let build_dir = output_relative_path(config, relative_dir_path);
+    fs::create_dir_all(&build_dir).unwrap();
 
     // Add each `.rs` file as a test, and recurse further on any
     // subdirectories we find, except for `aux` directories.
@@ -417,7 +463,7 @@ fn collect_tests_from_dir(
             let relative_file_path = relative_dir_path.join(file.file_name());
             if &file_name != "auxiliary" {
                 debug!("found directory: {:?}", file_path.display());
-                collect_tests_from_dir(config, &file_path, &relative_file_path, inputs, tests)?;
+                collect_rs_tests_from_dir(config, &file_path, &relative_file_path, inputs, tests)?;
             }
         } else {
             debug!("found other file/directory: {:?}", file_path.display());
