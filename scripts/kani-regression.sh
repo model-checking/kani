@@ -20,7 +20,7 @@ export KANI_FAIL_ON_UNEXPECTED_DESCRIPTION="true"
 
 # Required dependencies
 check-cbmc-version.py --major 5 --minor 59
-check-cbmc-viewer-version.py --major 2 --minor 10
+check-cbmc-viewer-version.py --major 3 --minor 5
 
 # Formatting check
 ${SCRIPT_DIR}/kani-fmt.sh --check
