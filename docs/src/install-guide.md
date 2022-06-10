@@ -55,7 +55,7 @@ cd kani
 git submodule update --init
 ./scripts/setup/ubuntu/install_deps.sh
 ./scripts/setup/ubuntu/install_cbmc.sh
-./scripts/setup/install_viewer.sh 3.4
+./scripts/setup/install_viewer.sh 3.5
 ./scripts/setup/install_rustup.sh
 # If you haven't already:
 source $HOME/.cargo/env
@@ -72,7 +72,7 @@ cd kani
 git submodule update --init
 ./scripts/setup/macos-10.15/install_deps.sh
 ./scripts/setup/macos-10.15/install_cbmc.sh
-./scripts/setup/install_viewer.sh 3.4
+./scripts/setup/install_viewer.sh 3.5
 ./scripts/setup/install_rustup.sh
 # If you haven't already:
 source $HOME/.cargo/env
