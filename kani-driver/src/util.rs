@@ -11,6 +11,19 @@ pub fn alter_extension(path: &Path, ext: &str) -> PathBuf {
     path.with_extension(ext)
 }
 
+/// Attempt to guess the rlib name for rust source file.
+/// This is only used by 'kani', never 'cargo-kani', so we hopefully don't have too many corner
+/// cases to deal with.
+/// In rustc, you can find some code dealing this this naming in:
+///      compiler/rustc_codegen_ssa/src/back/link.rs
+pub fn guess_rlib_name(path: &Path) -> PathBuf {
+    let basedir = path.parent().unwrap_or(Path::new("."));
+    let stem = path.file_stem().expect("has filename").to_str().expect("utf-8 filename");
+    let rlib_name = format!("lib{}.rlib", stem.replace('-', "_"));
+
+    basedir.join(rlib_name)
+}
+
 /// Add an extension to an existing file path (amazingly Rust doesn't support this well)
 pub fn append_path(path: &Path, ext: &str) -> PathBuf {
     let mut str = path.to_owned().into_os_string();
@@ -88,6 +101,14 @@ mod tests {
 
         let q = PathBuf::from("file.more.rs");
         assert_eq!(alter_extension(&q, "symtab.json"), PathBuf::from("file.more.symtab.json"));
+    }
+
+    #[test]
+    fn check_guess_rlib_name() {
+        assert_eq!(guess_rlib_name(Path::new("mycrate.rs")), PathBuf::from("libmycrate.rlib"));
+        assert_eq!(guess_rlib_name(Path::new("my-crate.rs")), PathBuf::from("libmy_crate.rlib"));
+        assert_eq!(guess_rlib_name(Path::new("./foo.rs")), PathBuf::from("./libfoo.rlib"));
+        assert_eq!(guess_rlib_name(Path::new("a/b/foo.rs")), PathBuf::from("a/b/libfoo.rlib"));
     }
 
     #[test]
