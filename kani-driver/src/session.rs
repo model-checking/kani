@@ -5,9 +5,11 @@ use crate::args::KaniArgs;
 use crate::util::render_command;
 use anyhow::{bail, Context, Result};
 use std::cell::RefCell;
-use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitStatus};
+use std::process::{Command, ExitStatus, Stdio};
+use std::io::{BufRead, BufReader, Error, ErrorKind, Write};
+use std::time::Duration;
+use std::thread::sleep;
 
 /// Contains information about the execution environment and arguments that affect operations
 pub struct KaniSession {
@@ -135,12 +137,40 @@ impl KaniSession {
                 return Ok(<ExitStatus as std::os::unix::prelude::ExitStatusExt>::from_raw(0));
             }
         }
+        println!("{}", render_command(&cmd).to_string_lossy());
         let output_file = std::fs::File::create(&stdout)?;
         cmd.stdout(output_file);
 
         return cmd
             .status()
             .context(format!("Failed to invoke {}", cmd.get_program().to_string_lossy()));
+    }
+
+    /// Run a job, redirect its output to a file, and allow the caller to decide what to do with failure.
+    pub fn run_piped(&self, mut cmd: Command) -> Result<ExitStatus> {
+        if self.args.verbose || self.args.dry_run {
+            println!("Inside piped output {}", render_command(&cmd).to_string_lossy());
+            if self.args.dry_run {
+                // Short circuit. Difficult to mock an ExitStatus :(
+                return Ok(<ExitStatus as std::os::unix::prelude::ExitStatusExt>::from_raw(0));
+            }
+        }
+        println!("{} ", render_command(&cmd).to_string_lossy());
+
+        let stdout = cmd
+            .stdout(Stdio::piped())
+            .spawn()?
+            .stdout
+            .ok_or_else(|| Error::new(ErrorKind::Other,"Could not capture standard output."))?;
+
+        let reader = BufReader::new(stdout);
+
+        for line in reader.lines() {
+            println!("{}", line?);
+            sleep(Duration::from_millis(100));
+        }
+
+        Ok(<ExitStatus as std::os::unix::prelude::ExitStatusExt>::from_raw(0))
     }
 }
 

@@ -42,7 +42,14 @@ impl KaniSession {
             cmd.arg("--json-ui");
 
             let now = Instant::now();
-            let _cbmc_result = self.run_redirect(cmd, &output_filename)?;
+            let piped_flag = 1;
+            if piped_flag == 1 {
+                let _cbmc_result_2 = self.run_piped(cmd)?;
+            }
+            else {
+                let _cbmc_result = self.run_redirect(cmd, &output_filename)?;
+            }
+
             let elapsed = now.elapsed().as_secs_f32();
             let format_result = self.format_cbmc_output(&output_filename);
 
