@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::session::KaniSession;
-use crate::util::alter_extension;
+use crate::util::{alter_extension, guess_rlib_name};
 
 /// The outputs of kani-compiler operating on a single Rust source file.
 pub struct SingleOutputs {
@@ -31,9 +31,11 @@ impl KaniSession {
         let typemap_filename = alter_extension(file, "type_map.json");
         let metadata_filename = alter_extension(file, "kani-metadata.json");
         let restrictions_filename = alter_extension(file, "restrictions.json");
+        let rlib_filename = guess_rlib_name(file);
 
         {
             let mut temps = self.temporaries.borrow_mut();
+            temps.push(rlib_filename);
             temps.push(output_filename.clone());
             temps.push(typemap_filename);
             temps.push(metadata_filename.clone());

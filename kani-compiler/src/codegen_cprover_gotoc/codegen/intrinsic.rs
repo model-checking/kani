@@ -481,18 +481,14 @@ impl<'tcx> GotocCtx<'tcx> {
                     "https://github.com/model-checking/kani/issues/374"
                 )
             }
-            "ceilf32" => codegen_unimplemented_intrinsic!(
-                "https://github.com/model-checking/kani/issues/1025"
-            ),
-            "ceilf64" => codegen_unimplemented_intrinsic!(
-                "https://github.com/model-checking/kani/issues/1025"
-            ),
+            "ceilf32" => codegen_simple_intrinsic!(Ceilf),
+            "ceilf64" => codegen_simple_intrinsic!(Ceil),
             "copy" => self.codegen_copy(intrinsic, false, fargs, farg_types, Some(p), loc),
             "copy_nonoverlapping" => unreachable!(
                 "Expected `core::intrinsics::unreachable` to be handled by `StatementKind::CopyNonOverlapping`"
             ),
-            "copysignf32" => unstable_codegen!(codegen_simple_intrinsic!(Copysignf)),
-            "copysignf64" => unstable_codegen!(codegen_simple_intrinsic!(Copysign)),
+            "copysignf32" => codegen_simple_intrinsic!(Copysignf),
+            "copysignf64" => codegen_simple_intrinsic!(Copysign),
             "cosf32" => codegen_simple_intrinsic!(Cosf),
             "cosf64" => codegen_simple_intrinsic!(Cos),
             "ctlz" => codegen_count_intrinsic!(ctlz, true),
@@ -522,12 +518,8 @@ impl<'tcx> GotocCtx<'tcx> {
                 let binop_stmt = codegen_intrinsic_binop!(div);
                 self.add_finite_args_checks(intrinsic, fargs_clone, binop_stmt, span)
             }
-            "floorf32" => codegen_unimplemented_intrinsic!(
-                "https://github.com/model-checking/kani/issues/1025"
-            ),
-            "floorf64" => codegen_unimplemented_intrinsic!(
-                "https://github.com/model-checking/kani/issues/1025"
-            ),
+            "floorf32" => codegen_simple_intrinsic!(Floorf),
+            "floorf64" => codegen_simple_intrinsic!(Floor),
             "fmaf32" => unstable_codegen!(codegen_simple_intrinsic!(Fmaf)),
             "fmaf64" => unstable_codegen!(codegen_simple_intrinsic!(Fma)),
             "fmul_fast" => {
@@ -548,12 +540,12 @@ impl<'tcx> GotocCtx<'tcx> {
             "log2f64" => unstable_codegen!(codegen_simple_intrinsic!(Log2)),
             "logf32" => unstable_codegen!(codegen_simple_intrinsic!(Logf)),
             "logf64" => unstable_codegen!(codegen_simple_intrinsic!(Log)),
-            "maxnumf32" => unstable_codegen!(codegen_simple_intrinsic!(Fmaxf)),
-            "maxnumf64" => unstable_codegen!(codegen_simple_intrinsic!(Fmax)),
+            "maxnumf32" => codegen_simple_intrinsic!(Fmaxf),
+            "maxnumf64" => codegen_simple_intrinsic!(Fmax),
             "min_align_of" => codegen_intrinsic_const!(),
             "min_align_of_val" => codegen_size_align!(align),
-            "minnumf32" => unstable_codegen!(codegen_simple_intrinsic!(Fminf)),
-            "minnumf64" => unstable_codegen!(codegen_simple_intrinsic!(Fmin)),
+            "minnumf32" => codegen_simple_intrinsic!(Fminf),
+            "minnumf64" => codegen_simple_intrinsic!(Fmin),
             "mul_with_overflow" => codegen_op_with_overflow!(mul_overflow),
             "nearbyintf32" => codegen_unimplemented_intrinsic!(
                 "https://github.com/model-checking/kani/issues/1025"
@@ -581,12 +573,8 @@ impl<'tcx> GotocCtx<'tcx> {
             ),
             "rotate_left" => codegen_intrinsic_binop!(rol),
             "rotate_right" => codegen_intrinsic_binop!(ror),
-            "roundf32" => codegen_unimplemented_intrinsic!(
-                "https://github.com/model-checking/kani/issues/1025"
-            ),
-            "roundf64" => codegen_unimplemented_intrinsic!(
-                "https://github.com/model-checking/kani/issues/1025"
-            ),
+            "roundf32" => codegen_simple_intrinsic!(Roundf),
+            "roundf64" => codegen_simple_intrinsic!(Round),
             "saturating_add" => codegen_intrinsic_binop_with_mm!(saturating_add),
             "saturating_sub" => codegen_intrinsic_binop_with_mm!(saturating_sub),
             "sinf32" => codegen_simple_intrinsic!(Sinf),
@@ -631,12 +619,8 @@ impl<'tcx> GotocCtx<'tcx> {
             "sqrtf64" => unstable_codegen!(codegen_simple_intrinsic!(Sqrt)),
             "sub_with_overflow" => codegen_op_with_overflow!(sub_overflow),
             "transmute" => self.codegen_intrinsic_transmute(fargs, ret_ty, p),
-            "truncf32" => codegen_unimplemented_intrinsic!(
-                "https://github.com/model-checking/kani/issues/1025"
-            ),
-            "truncf64" => codegen_unimplemented_intrinsic!(
-                "https://github.com/model-checking/kani/issues/1025"
-            ),
+            "truncf32" => codegen_simple_intrinsic!(Truncf),
+            "truncf64" => codegen_simple_intrinsic!(Trunc),
             "try" => {
                 codegen_unimplemented_intrinsic!(
                     "https://github.com/model-checking/kani/issues/267"

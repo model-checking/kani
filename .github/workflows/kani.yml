@@ -26,6 +26,25 @@ jobs:
       - name: Execute Kani regression
         run: ./scripts/kani-regression.sh
 
+  perf:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout Kani
+        uses: actions/checkout@v2
+
+      - name: Setup Kani Dependencies
+        uses: ./.github/actions/setup
+        with:
+            os: ubuntu-20.04
+
+      - name: Build Kani
+        run: |
+          export RUST_BACKTRACE=1
+          cargo build --workspace
+
+      - name: Execute Kani performance tests
+        run: ./scripts/kani-perf.sh
+
   bookrunner:
     runs-on: ubuntu-20.04
     permissions:
@@ -75,11 +94,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-10.15, ubuntu-20.04]
+        os: [macos-10.15, ubuntu-18.04]
         include:
           - os: macos-10.15
             artifact: kani-latest-x86_64-apple-darwin.tar.gz
-          - os: ubuntu-20.04
+          - os: ubuntu-18.04
             artifact: kani-latest-x86_64-unknown-linux-gnu.tar.gz
     steps:
       - name: Checkout Kani
@@ -96,18 +115,21 @@ jobs:
           cargo package -p kani-verifier
       
       - name: Build container test
-        if: ${{ matrix.os == 'ubuntu-20.04' }}
+        if: ${{ matrix.os == 'ubuntu-18.04' }}
         run: |
-          docker build -t kani-latest -f scripts/ci/Dockerfile.release-bundle-test .
+          docker build -t kani-20-04 -f scripts/ci/Dockerfile.bundle-test-20-04 .
+          docker build -t kani-18-04 -f scripts/ci/Dockerfile.bundle-test-18-04 .
 
       - name: Run installed tests
-        if: ${{ matrix.os == 'ubuntu-20.04' }}
+        if: ${{ matrix.os == 'ubuntu-18.04' }}
         run: |
-          docker run kani-latest  cargo kani --version
-          docker run -w /tmp/kani/tests/cargo-kani/simple-lib  kani-latest  cargo kani
-          docker run -w /tmp/kani/tests/cargo-kani/simple-visualize  kani-latest  cargo kani
-          docker run -w /tmp/kani/tests/cargo-kani/build-rs-works  kani-latest  cargo kani
-          docker run kani-latest  cargo-kani setup --use-local-bundle ./kani-latest-x86_64-unknown-linux-gnu.tar.gz
+          for tag in kani-20-04 kani-18-04; do
+            docker run $tag  cargo kani --version
+            docker run -w /tmp/kani/tests/cargo-kani/simple-lib  $tag  cargo kani
+            docker run -w /tmp/kani/tests/cargo-kani/simple-visualize  $tag  cargo kani
+            docker run -w /tmp/kani/tests/cargo-kani/build-rs-works  $tag  cargo kani
+            docker run $tag  cargo-kani setup --use-local-bundle ./${{ matrix.artifact }}
+          done
 
       # We can't run macos in a container, so we can only test locally.
       # Hopefully any dependency issues won't be unique to macos.
@@ -115,7 +137,7 @@ jobs:
         if: ${{ matrix.os == 'macos-10.15' }}
         run: |
           cargo install --path ./target/package/kani-verifier-*[^e]
-          cargo-kani setup --use-local-bundle ./kani-latest-x86_64-apple-darwin.tar.gz
+          cargo-kani setup --use-local-bundle ./${{ matrix.artifact }}
           (cd tests/cargo-kani/simple-lib && cargo kani)
           (cd tests/cargo-kani/simple-visualize && cargo kani)
           (cd tests/cargo-kani/build-rs-works && cargo kani)

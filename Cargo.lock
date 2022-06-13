@@ -48,6 +48,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4361135be9122e0870de935d7c439aef945b9f9ddd4199a553b5270b49c82a27"
 
 [[package]]
+name = "ar"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "450575f58f7bee32816abbff470cbc47797397c2a81e0eaced4b98436daf52e1"
+
+[[package]]
 name = "arrayvec"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -182,6 +188,15 @@ dependencies = [
  "serde_test",
  "string-interner",
  "tracing",
+]
+
+[[package]]
+name = "crc32fast"
+version = "1.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b540bd8bc810d3885c6ea91e2018302f68baba2129ab3e88f32389ee9370880d"
+dependencies = [
+ "cfg-if",
 ]
 
 [[package]]
@@ -323,6 +338,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "indexmap"
+version = "1.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e6012d540c5baa3589337a98ce73408de9b5a25ec9fc2c6fd6be8f0d39e0ca5a"
+dependencies = [
+ "autocfg",
+ "hashbrown",
+]
+
+[[package]]
 name = "instant"
 version = "0.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -348,15 +373,16 @@ checksum = "1aab8fc367588b89dcee83ab0fd66b72b50b72fa1904d7095045ace2b0c81c35"
 
 [[package]]
 name = "kani"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "kani_macros",
 ]
 
 [[package]]
 name = "kani-compiler"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
+ "ar",
  "atty",
  "bitflags",
  "clap",
@@ -366,6 +392,7 @@ dependencies = [
  "kani_queries",
  "libc",
  "num",
+ "object",
  "rustc-demangle",
  "serde",
  "serde_json",
@@ -377,7 +404,7 @@ dependencies = [
 
 [[package]]
 name = "kani-driver"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -391,19 +418,20 @@ dependencies = [
 
 [[package]]
 name = "kani-verifier"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "home",
+ "os_info",
 ]
 
 [[package]]
 name = "kani_macros"
-version = "0.2.0"
+version = "0.3.0"
 
 [[package]]
 name = "kani_metadata"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "cprover_bindings",
  "serde",
@@ -411,7 +439,7 @@ dependencies = [
 
 [[package]]
 name = "kani_queries"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "tracing",
 ]
@@ -632,10 +660,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "object"
+version = "0.27.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "67ac1d3f9a1d3616fd9a60c8d74296f22406a238b6a72f5cc1e6f314df4ffbf9"
+dependencies = [
+ "crc32fast",
+ "indexmap",
+ "memchr",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "87f3e037eac156d1775da914196f0f37741a274155e34a0b7e427c35d2a2ecb9"
+
+[[package]]
+name = "os_info"
+version = "3.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0eca3ecae1481e12c3d9379ec541b238a16f0b75c9a409942daa8ec20dbfdb62"
+dependencies = [
+ "log",
+ "winapi",
+]
 
 [[package]]
 name = "parking_lot"
@@ -899,7 +948,7 @@ checksum = "f2dd574626839106c320a323308629dcb1acfc96e32a8cba364ddc61ac23ee83"
 
 [[package]]
 name = "std"
-version = "0.2.0"
+version = "0.3.0"
 
 [[package]]
 name = "string-interner"
