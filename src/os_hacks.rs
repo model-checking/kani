@@ -52,6 +52,13 @@ pub fn setup_python_deps_on_ubuntu_18_04(pyroot: &Path, pkg_versions: &[&str]) -
 pub fn setup_os_hacks(kani_dir: &Path, os: &Info) -> Result<()> {
     match os.os_type() {
         os_info::Type::NixOS => setup_nixos_patchelf(kani_dir),
+        os_info::Type::Linux => {
+            // NixOs containers are detected as Unknown Linux, so use a fallback hack:
+            if std::env::var_os("NIX_CC").is_some() && Path::new("/etc/nix").exists() {
+                return setup_nixos_patchelf(kani_dir)
+            }
+            Ok(())
+        }
         _ => Ok(())
     }
 }
@@ -79,7 +86,7 @@ fn setup_nixos_patchelf(kani_dir: &Path) -> Result<()> {
         for entry in std::fs::read_dir(bin)? {
             let file = entry?;
             if file.file_type()?.is_file() {
-                Command::new("patchelf").args(&["--set-interpreter", interp]).arg(file.file_name()).run()?;
+                Command::new("patchelf").args(&["--set-interpreter", interp]).arg(file.path()).run()?;
             }
         }
     } else {
@@ -87,9 +94,4 @@ fn setup_nixos_patchelf(kani_dir: &Path) -> Result<()> {
     }
 
     Ok(())
-}
-
-#[test]
-fn check() {
-    assert_eq!("", env!("TARGET"));
 }
