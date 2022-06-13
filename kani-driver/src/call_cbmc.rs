@@ -42,26 +42,28 @@ impl KaniSession {
             cmd.arg("--json-ui");
 
             let now = Instant::now();
-            let piped_flag = 1;
-            if piped_flag == 1 {
+            if self.args.use_piped_output {
                 let _cbmc_result_2 = self.run_piped(cmd)?;
+                return Ok(VerificationStatus::Success);
             }
             else {
                 let _cbmc_result = self.run_redirect(cmd, &output_filename)?;
+                let format_result = self.format_cbmc_output(&output_filename);
+
+                let elapsed = now.elapsed().as_secs_f32();
+
+                if format_result.is_err() {
+                    // Because of things like --assertion-reach-checks and other future features,
+                    // we now decide if we fail or not based solely on the output of the formatter.
+                    return Ok(VerificationStatus::Failure);
+                    // todo: this is imperfect, since we don't know why failure happened.
+                    // the best possible fix is port to rust instead of using python, or getting more
+                    // feedback than just exit status (or using a particular magic exit code?)
+                }
+                println!("Verification Time: {}s", elapsed);
+
             }
 
-            let elapsed = now.elapsed().as_secs_f32();
-            let format_result = self.format_cbmc_output(&output_filename);
-
-            if format_result.is_err() {
-                // Because of things like --assertion-reach-checks and other future features,
-                // we now decide if we fail or not based solely on the output of the formatter.
-                return Ok(VerificationStatus::Failure);
-                // todo: this is imperfect, since we don't know why failure happened.
-                // the best possible fix is port to rust instead of using python, or getting more
-                // feedback than just exit status (or using a particular magic exit code?)
-            }
-            println!("Verification Time: {}s", elapsed);
         }
 
         Ok(VerificationStatus::Success)

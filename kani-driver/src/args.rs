@@ -148,6 +148,13 @@ pub struct KaniArgs {
     /// This option may impact the soundness of the analysis and may cause false proofs and/or counterexamples
     #[structopt(long, hidden_short_help(true), requires("enable-unstable"))]
     pub ignore_global_asm: bool,
+
+    // Hide option till https://github.com/model-checking/kani/issues/697 is
+    // fixed.
+    /// Use abstractions for the standard library.
+    /// This is an experimental feature and requires `--enable-unstable` to be used
+    #[structopt(long, hidden = true, requires("enable-unstable"))]
+    pub use_piped_output: bool
     /*
     The below is a "TODO list" of things not yet implemented from the kani_flags.py script.
 
