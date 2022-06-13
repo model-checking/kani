@@ -549,12 +549,8 @@ impl<'tcx> GotocCtx<'tcx> {
             "minnumf32" => codegen_simple_intrinsic!(Fminf),
             "minnumf64" => codegen_simple_intrinsic!(Fmin),
             "mul_with_overflow" => codegen_op_with_overflow!(mul_overflow),
-            "nearbyintf32" => codegen_unimplemented_intrinsic!(
-                "https://github.com/model-checking/kani/issues/1025"
-            ),
-            "nearbyintf64" => codegen_unimplemented_intrinsic!(
-                "https://github.com/model-checking/kani/issues/1025"
-            ),
+            "nearbyintf32" => codegen_simple_intrinsic!(Nearbyintf),
+            "nearbyintf64" => codegen_simple_intrinsic!(Nearbyint),
             "needs_drop" => codegen_intrinsic_const!(),
             "offset" => self.codegen_offset(intrinsic, instance, fargs, p, loc),
             "powf32" => unstable_codegen!(codegen_simple_intrinsic!(Powf)),
