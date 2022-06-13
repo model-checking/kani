@@ -31,7 +31,6 @@ from os import path
 
 import sys
 import subprocess
-import shlex
 
 # Enum to store the style of output that is given by the argument flags
 output_style_switcher = {
@@ -60,6 +59,7 @@ class GlobalMessages(str, Enum):
     CHECK_ID_RE = CHECK_ID + r"_.*_([0-9])*"
     UNSUPPORTED_CONSTRUCT_DESC = "is not currently supported by Kani"
     UNWINDING_ASSERT_DESC = "unwinding assertion loop"
+    READ_FROM_STREAM = "--read-cbmc-from-stream"
 
 
 def usage_error(msg):
@@ -74,6 +74,7 @@ def main(argv):
     Script main function.
     Usage:
       > cbmc_json_parser.py <cbmc_output.json> <format> [--extra-ptr-check]
+      > cbmc_json_parser.py --read-cbmc-from-stream <format> [--extra-ptr-check]
     """
     # We expect [3, 4] arguments.
     if len(argv) < 3:
@@ -88,14 +89,18 @@ def main(argv):
         usage_error(f"Invalid output format '{argv[2]}'.")
 
     extra_ptr_check = False
+
+    # The cbmc output can be either file mode (default) or stream mode (--read-cbmc-from-stream)
+    cbmc_output_mode = argv[1].split(".")[-1]
+    assert((cbmc_output_mode == "cbmc_output") or (cbmc_output_mode == GlobalMessages.READ_FROM_STREAM))
+
     if len(argv) == 4:
         if argv[3] == "--extra-ptr-check":
             extra_ptr_check = True
         else:
             usage_error(f"Unexpected argument '{argv[3]}'.")
 
-
-    if argv[1] != "read_from_pipe":
+    if argv[1] != GlobalMessages.READ_FROM_STREAM:
         # parse the input json file
         with open(argv[1]) as f:
             sample_json_file_parsing = f.read()
@@ -105,37 +110,15 @@ def main(argv):
                                             output_style, extra_ptr_check)
 
     else:
-        print("Inside piped output reading , what to print? -> " + " ".join(argv))
-
-        data = json.load(sys.stdin)
-        for index, object in enumerate(data):
-            print(index, " ", json.dumps(object))
-
-
-        # for index, line in enumerate(sys.stdin):
-        #     print(index, " " ,line)
-
-        # invoke_process_popen_poll_live()
+        # Print each streaming line live from cbmc without writing to file
+        # temporary output, will change to be parsed like the regular json objects
+        # that are written to a file
+        for line in sys.stdin:
+            print(line)
 
         return_code = 0
 
     sys.exit(return_code)
-
-def invoke_process_popen_poll_live(shellType=False, stdoutType=subprocess.PIPE):
-    """runs subprocess with Popen/poll so that live stdout is shown"""
-    try:
-        process = subprocess.Popen(shell=shellType, stdout=stdoutType)
-    except:
-        return None
-    while True:
-        read_input_string = process.stdin.readline()
-        if process.poll() is not None:
-            break
-        if read_input_string:
-            print(read_input_string.strip())
-    rc = process.poll()
-    return rc
-
 
 class SourceLocation:
     def __init__(self, source_location={}):
