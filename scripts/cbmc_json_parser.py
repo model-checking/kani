@@ -29,6 +29,10 @@ from colorama import Fore, Style
 from enum import Enum
 from os import path
 
+import sys
+import subprocess
+import shlex
+
 # Enum to store the style of output that is given by the argument flags
 output_style_switcher = {
     'default': 'regular',
@@ -90,14 +94,47 @@ def main(argv):
         else:
             usage_error(f"Unexpected argument '{argv[3]}'.")
 
-    # parse the input json file
-    with open(argv[1]) as f:
-        sample_json_file_parsing = f.read()
 
-    # the main function should take a json file as input
-    return_code = transform_cbmc_output(sample_json_file_parsing,
-                                        output_style, extra_ptr_check)
+    if argv[1] != "read_from_pipe":
+        # parse the input json file
+        with open(argv[1]) as f:
+            sample_json_file_parsing = f.read()
+
+        # the main function should take a json file as input
+        return_code = transform_cbmc_output(sample_json_file_parsing,
+                                            output_style, extra_ptr_check)
+
+    else:
+        print("Inside piped output reading , what to print? -> " + " ".join(argv))
+
+        data = json.load(sys.stdin)
+        for index, object in enumerate(data):
+            print(index, " ", json.dumps(object))
+
+
+        # for index, line in enumerate(sys.stdin):
+        #     print(index, " " ,line)
+
+        # invoke_process_popen_poll_live()
+
+        return_code = 0
+
     sys.exit(return_code)
+
+def invoke_process_popen_poll_live(shellType=False, stdoutType=subprocess.PIPE):
+    """runs subprocess with Popen/poll so that live stdout is shown"""
+    try:
+        process = subprocess.Popen(shell=shellType, stdout=stdoutType)
+    except:
+        return None
+    while True:
+        read_input_string = process.stdin.readline()
+        if process.poll() is not None:
+            break
+        if read_input_string:
+            print(read_input_string.strip())
+    rc = process.poll()
+    return rc
 
 
 class SourceLocation:

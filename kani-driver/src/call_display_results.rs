@@ -33,10 +33,10 @@ impl KaniSession {
     }
 
     /// Display the results of a CBMC run in a user-friendly manner.
-    pub fn format_cbmc_output_live(&self, file: &Path) -> Result<()> {
+    pub fn format_cbmc_output_live(&self) -> Result<()> {
         let mut args: Vec<OsString> = vec![
             self.cbmc_json_parser_py.clone().into(),
-            file.into(),
+            "read_from_pipe".into(),
             self.args.output_format.to_string().to_lowercase().into(),
         ];
 

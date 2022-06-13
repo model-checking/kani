@@ -5,9 +5,10 @@ use crate::args::KaniArgs;
 use crate::util::render_command;
 use anyhow::{bail, Context, Result};
 use std::cell::RefCell;
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
-use std::io::{BufRead, BufReader, Error, ErrorKind, Write};
+use std::io::{BufRead, BufReader, Error, ErrorKind, Write, Stdout};
 use std::time::Duration;
 use std::thread::sleep;
 
@@ -157,17 +158,27 @@ impl KaniSession {
         }
         println!("{} ", render_command(&cmd).to_string_lossy());
 
-        let stdout = cmd
+        let mut args: Vec<OsString> = vec![
+            self.cbmc_json_parser_py.clone().into(),
+            "read_from_pipe".into(),
+            self.args.output_format.to_string().to_lowercase().into(),
+        ];
+
+        if self.args.extra_pointer_checks {
+            args.push("--extra-ptr-check".into());
+        }
+
+        let mut cmd2 = Command::new("python3");
+        cmd2.args(args);
+
+        let mut cbmc_output = cmd
             .stdout(Stdio::piped())
-            .spawn()?
-            .stdout
-            .ok_or_else(|| Error::new(ErrorKind::Other,"Could not capture standard output."))?;
+            .spawn()?;
 
-        let reader = BufReader::new(stdout);
-
-        for line in reader.lines() {
-            println!("{}", line?);
-            sleep(Duration::from_millis(100));
+        if let Some(cbmc_stdout) = cbmc_output.stdout.take() {
+            let mut _python_output_child = cmd2
+                .stdin(cbmc_stdout)
+                .status();
         }
 
         Ok(<ExitStatus as std::os::unix::prelude::ExitStatusExt>::from_raw(0))

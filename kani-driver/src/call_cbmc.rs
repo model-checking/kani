@@ -44,7 +44,11 @@ impl KaniSession {
             let now = Instant::now();
             if self.args.use_piped_output {
                 let _cbmc_result_2 = self.run_piped(cmd)?;
-                return Ok(VerificationStatus::Success);
+                // let format_result = self.format_cbmc_output_live();
+
+                let elapsed = now.elapsed().as_secs_f32();
+
+                println!("Verification Time: {}s", elapsed);
             }
             else {
                 let _cbmc_result = self.run_redirect(cmd, &output_filename)?;
@@ -61,9 +65,7 @@ impl KaniSession {
                     // feedback than just exit status (or using a particular magic exit code?)
                 }
                 println!("Verification Time: {}s", elapsed);
-
             }
-
         }
 
         Ok(VerificationStatus::Success)
