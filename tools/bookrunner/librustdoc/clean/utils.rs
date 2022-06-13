@@ -83,7 +83,7 @@ pub(super) fn external_path(
     }
 }
 
-crate fn qpath_to_string(p: &hir::QPath<'_>) -> String {
+pub(crate) fn qpath_to_string(p: &hir::QPath<'_>) -> String {
     let segments = match *p {
         hir::QPath::Resolved(_, path) => &path.segments,
         hir::QPath::TypeRelative(_, segment) => return segment.ident.to_string(),
@@ -102,7 +102,11 @@ crate fn qpath_to_string(p: &hir::QPath<'_>) -> String {
     s
 }
 
-crate fn build_deref_target_impls(cx: &mut DocContext<'_>, items: &[Item], ret: &mut Vec<Item>) {
+pub(crate) fn build_deref_target_impls(
+    cx: &mut DocContext<'_>,
+    items: &[Item],
+    ret: &mut Vec<Item>,
+) {
     let tcx = cx.tcx;
 
     for item in items {
@@ -125,7 +129,7 @@ crate fn build_deref_target_impls(cx: &mut DocContext<'_>, items: &[Item], ret: 
     }
 }
 
-crate fn name_from_pat(p: &hir::Pat<'_>) -> Symbol {
+pub(crate) fn name_from_pat(p: &hir::Pat<'_>) -> Symbol {
     use rustc_hir::*;
     debug!("trying to get a name from pattern: {:?}", p);
 
@@ -158,7 +162,7 @@ crate fn name_from_pat(p: &hir::Pat<'_>) -> Symbol {
     })
 }
 
-crate fn print_const(cx: &DocContext<'_>, n: &ty::Const<'_>) -> String {
+pub(crate) fn print_const(cx: &DocContext<'_>, n: &ty::Const<'_>) -> String {
     match n.val() {
         ty::ConstKind::Unevaluated(ty::Unevaluated { def, substs: _, promoted }) => {
             let mut s = if let Some(def) = def.as_local() {
@@ -188,7 +192,7 @@ crate fn print_const(cx: &DocContext<'_>, n: &ty::Const<'_>) -> String {
     }
 }
 
-crate fn print_const_expr(tcx: TyCtxt<'_>, body: hir::BodyId) -> String {
+pub(crate) fn print_const_expr(tcx: TyCtxt<'_>, body: hir::BodyId) -> String {
     let hir = tcx.hir();
     let value = &hir.body(body).value;
 
@@ -202,7 +206,7 @@ crate fn print_const_expr(tcx: TyCtxt<'_>, body: hir::BodyId) -> String {
 }
 
 /// Given a type Path, resolve it to a Type using the TyCtxt
-crate fn resolve_type(cx: &mut DocContext<'_>, path: Path) -> Type {
+pub(crate) fn resolve_type(cx: &mut DocContext<'_>, path: Path) -> Type {
     debug!("resolve_type({:?})", path);
 
     match path.res {
@@ -221,7 +225,7 @@ crate fn resolve_type(cx: &mut DocContext<'_>, path: Path) -> Type {
 /// This is later used by [`href()`] to determine the HTML link for the item.
 ///
 /// [`href()`]: crate::html::format::href
-crate fn register_res(cx: &mut DocContext<'_>, res: Res) -> DefId {
+pub(crate) fn register_res(cx: &mut DocContext<'_>, res: Res) -> DefId {
     use DefKind::*;
     debug!("register_res({:?})", res);
 
@@ -260,14 +264,14 @@ crate fn register_res(cx: &mut DocContext<'_>, res: Res) -> DefId {
     did
 }
 
-crate fn resolve_use_source(cx: &mut DocContext<'_>, path: Path) -> ImportSource {
+pub(crate) fn resolve_use_source(cx: &mut DocContext<'_>, path: Path) -> ImportSource {
     ImportSource {
         did: if path.res.opt_def_id().is_none() { None } else { Some(register_res(cx, path.res)) },
         path,
     }
 }
 
-crate fn enter_impl_trait<F, R>(cx: &mut DocContext<'_>, f: F) -> R
+pub(crate) fn enter_impl_trait<F, R>(cx: &mut DocContext<'_>, f: F) -> R
 where
     F: FnOnce(&mut DocContext<'_>) -> R,
 {
@@ -287,7 +291,7 @@ where
 ///
 /// This function exists because it runs on `hir::Attributes` whereas the other is a
 /// `clean::Attributes` method.
-crate fn has_doc_flag(tcx: TyCtxt<'_>, did: DefId, flag: Symbol) -> bool {
+pub(crate) fn has_doc_flag(tcx: TyCtxt<'_>, did: DefId, flag: Symbol) -> bool {
     tcx.get_attrs(did, sym::doc).any(|attr| {
         attr.meta_item_list().map_or(false, |l| rustc_attr::list_contains_name(&l, flag))
     })

@@ -19,37 +19,41 @@ use crate::clean::{self, ItemId};
 use crate::config::RenderOptions;
 use crate::formats::cache::Cache;
 
-crate struct DocContext<'tcx> {
-    crate tcx: TyCtxt<'tcx>,
+pub(crate) struct DocContext<'tcx> {
+    pub(crate) tcx: TyCtxt<'tcx>,
     /// Used for normalization.
     ///
     /// Most of this logic is copied from rustc_lint::late.
-    crate param_env: ParamEnv<'tcx>,
+    pub(crate) param_env: ParamEnv<'tcx>,
     /// Later on moved through `clean::Crate` into `cache`
-    crate external_traits: Rc<RefCell<FxHashMap<DefId, clean::TraitWithExtraInfo>>>,
+    pub(crate) external_traits: Rc<RefCell<FxHashMap<DefId, clean::TraitWithExtraInfo>>>,
     /// Used while populating `external_traits` to ensure we don't process the same trait twice at
     /// the same time.
-    crate active_extern_traits: FxHashSet<DefId>,
+    pub(crate) active_extern_traits: FxHashSet<DefId>,
     // The current set of parameter substitutions,
     // for expanding type aliases at the HIR level:
     /// Table `DefId` of type, lifetime, or const parameter -> substituted type, lifetime, or const
-    crate substs: FxHashMap<DefId, clean::SubstParam>,
+    pub(crate) substs: FxHashMap<DefId, clean::SubstParam>,
     /// Table synthetic type parameter for `impl Trait` in argument position -> bounds
-    crate impl_trait_bounds: FxHashMap<ImplTraitParam, Vec<clean::GenericBound>>,
+    pub(crate) impl_trait_bounds: FxHashMap<ImplTraitParam, Vec<clean::GenericBound>>,
     /// The options given to rustdoc that could be relevant to a pass.
-    crate render_options: RenderOptions,
+    pub(crate) render_options: RenderOptions,
     /// This same cache is used throughout rustdoc, including in [`crate::html::render`].
-    crate cache: Cache,
+    pub(crate) cache: Cache,
     /// Used by [`clean::inline`] to tell if an item has already been inlined.
-    crate inlined: FxHashSet<ItemId>,
+    pub(crate) inlined: FxHashSet<ItemId>,
 }
 
 impl<'tcx> DocContext<'tcx> {
-    crate fn sess(&self) -> &'tcx Session {
+    pub(crate) fn sess(&self) -> &'tcx Session {
         self.tcx.sess
     }
 
-    crate fn with_param_env<T, F: FnOnce(&mut Self) -> T>(&mut self, def_id: DefId, f: F) -> T {
+    pub(crate) fn with_param_env<T, F: FnOnce(&mut Self) -> T>(
+        &mut self,
+        def_id: DefId,
+        f: F,
+    ) -> T {
         let old_param_env = mem::replace(&mut self.param_env, self.tcx.param_env(def_id));
         let ret = f(self);
         self.param_env = old_param_env;
@@ -58,7 +62,11 @@ impl<'tcx> DocContext<'tcx> {
 
     /// Call the closure with the given parameters set as
     /// the substitutions for a type alias' RHS.
-    crate fn enter_alias<F, R>(&mut self, substs: FxHashMap<DefId, clean::SubstParam>, f: F) -> R
+    pub(crate) fn enter_alias<F, R>(
+        &mut self,
+        substs: FxHashMap<DefId, clean::SubstParam>,
+        f: F,
+    ) -> R
     where
         F: FnOnce(&mut Self) -> R,
     {
@@ -70,7 +78,7 @@ impl<'tcx> DocContext<'tcx> {
 
     /// Like `hir().local_def_id_to_hir_id()`, but skips calling it on fake DefIds.
     /// (This avoids a slice-index-out-of-bounds panic.)
-    crate fn as_local_hir_id(tcx: TyCtxt<'_>, def_id: ItemId) -> Option<HirId> {
+    pub(crate) fn as_local_hir_id(tcx: TyCtxt<'_>, def_id: ItemId) -> Option<HirId> {
         match def_id {
             ItemId::DefId(real_id) => {
                 real_id.as_local().map(|def_id| tcx.hir().local_def_id_to_hir_id(def_id))
@@ -136,7 +144,7 @@ impl<'tcx> Visitor<'tcx> for EmitIgnoredResolutionErrors<'tcx> {
 /// `DefId` or parameter index (`ty::ParamTy.index`) of a synthetic type parameter
 /// for `impl Trait` in argument position.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-crate enum ImplTraitParam {
+pub(crate) enum ImplTraitParam {
     DefId(DefId),
     ParamIndex(u32),
 }

@@ -14,7 +14,7 @@ use rustc_span::edition::Edition;
 use rustc_target::spec::TargetTriple;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-crate enum OutputFormat {
+pub(crate) enum OutputFormat {
     Json,
     Html,
 }
@@ -41,86 +41,86 @@ impl TryFrom<&str> for OutputFormat {
 
 /// Configuration options for rustdoc.
 #[derive(Clone)]
-crate struct Options {
+pub(crate) struct Options {
     // Basic options / Options passed directly to rustc
     /// The crate root or Markdown file to load.
-    crate input: PathBuf,
+    pub(crate) input: PathBuf,
     /// The name of the crate being documented.
-    crate crate_name: Option<String>,
+    pub(crate) crate_name: Option<String>,
     /// Whether or not this is a proc-macro crate
-    crate proc_macro_crate: bool,
+    pub(crate) proc_macro_crate: bool,
     /// How to format errors and warnings.
-    crate error_format: ErrorOutputType,
+    pub(crate) error_format: ErrorOutputType,
     /// Library search paths to hand to the compiler.
-    crate libs: Vec<SearchPath>,
+    pub(crate) libs: Vec<SearchPath>,
     /// Library search paths strings to hand to the compiler.
-    crate lib_strs: Vec<String>,
+    pub(crate) lib_strs: Vec<String>,
     /// The list of external crates to link against.
-    crate externs: Externs,
+    pub(crate) externs: Externs,
     /// The list of external crates strings to link against.
-    crate extern_strs: Vec<String>,
+    pub(crate) extern_strs: Vec<String>,
     /// List of `cfg` flags to hand to the compiler. Always includes `rustdoc`.
-    crate cfgs: Vec<String>,
+    pub(crate) cfgs: Vec<String>,
     /// Codegen options strings to hand to the compiler.
-    crate codegen_options_strs: Vec<String>,
+    pub(crate) codegen_options_strs: Vec<String>,
     /// Debugging (`-Z`) options strings to pass to the compiler.
-    crate debugging_opts_strs: Vec<String>,
+    pub(crate) debugging_opts_strs: Vec<String>,
     /// The target used to compile the crate against.
-    crate target: TargetTriple,
+    pub(crate) target: TargetTriple,
     /// Edition used when reading the crate. Defaults to "2015". Also used by default when
     /// compiling doctests from the crate.
-    crate edition: Edition,
+    pub(crate) edition: Edition,
     /// The path to the sysroot. Used during the compilation process.
-    crate maybe_sysroot: Option<PathBuf>,
+    pub(crate) maybe_sysroot: Option<PathBuf>,
     /// Lint information passed over the command-line.
-    crate lint_opts: Vec<(String, Level)>,
+    pub(crate) lint_opts: Vec<(String, Level)>,
     /// Whether to ask rustc to describe the lints it knows.
-    crate describe_lints: bool,
+    pub(crate) describe_lints: bool,
     /// What level to cap lints at.
-    crate lint_cap: Option<Level>,
+    pub(crate) lint_cap: Option<Level>,
 
     // Options specific to running doctests
     /// Whether we should run doctests instead of generating docs.
-    crate should_test: bool,
+    pub(crate) should_test: bool,
     /// List of arguments to pass to the test harness, if running tests.
-    crate test_args: Vec<String>,
+    pub(crate) test_args: Vec<String>,
     /// The working directory in which to run tests.
-    crate test_run_directory: Option<PathBuf>,
+    pub(crate) test_run_directory: Option<PathBuf>,
     /// Optional path to persist the doctest executables to, defaults to a
     /// temporary directory if not set.
-    crate persist_doctests: Option<PathBuf>,
+    pub(crate) persist_doctests: Option<PathBuf>,
     /// Runtool to run doctests with
-    crate runtool: Option<String>,
+    pub(crate) runtool: Option<String>,
     /// Arguments to pass to the runtool
-    crate runtool_args: Vec<String>,
+    pub(crate) runtool_args: Vec<String>,
     /// Whether to allow ignoring doctests on a per-target basis
     /// For example, using ignore-foo to ignore running the doctest on any target that
     /// contains "foo" as a substring
-    crate enable_per_target_ignores: bool,
+    pub(crate) enable_per_target_ignores: bool,
     /// Do not run doctests, compile them if should_test is active.
-    crate no_run: bool,
+    pub(crate) no_run: bool,
 
     /// The path to a rustc-like binary to build tests with. If not set, we
     /// default to loading from `$sysroot/bin/rustc`.
-    crate test_builder: Option<PathBuf>,
+    pub(crate) test_builder: Option<PathBuf>,
 
     // Options that affect the documentation process
     /// Whether to run the `calculate-doc-coverage` pass, which counts the number of public items
     /// with and without documentation.
-    crate show_coverage: bool,
+    pub(crate) show_coverage: bool,
 
     // Options that alter generated documentation pages
     /// Crate version to note on the sidebar of generated docs.
-    crate crate_version: Option<String>,
+    pub(crate) crate_version: Option<String>,
     /// Collected options specific to outputting final pages.
-    crate render_options: RenderOptions,
+    pub(crate) render_options: RenderOptions,
     /// If this option is set to `true`, rustdoc will only run checks and not generate
     /// documentation.
-    crate run_check: bool,
+    pub(crate) run_check: bool,
     /// Whether doctests should emit unused externs
-    crate json_unused_externs: bool,
+    pub(crate) json_unused_externs: bool,
     /// Whether to skip capturing stdout and stderr of tests.
-    crate nocapture: bool,
+    pub(crate) nocapture: bool,
 }
 
 impl fmt::Debug for Options {
@@ -168,15 +168,15 @@ impl fmt::Debug for Options {
 
 /// Configuration options for the HTML page-creation process.
 #[derive(Clone, Debug)]
-crate struct RenderOptions {
+pub(crate) struct RenderOptions {
     /// Document items that have lower than `pub` visibility.
-    crate document_private: bool,
+    pub(crate) document_private: bool,
     /// Document items that have `doc(hidden)`.
-    crate document_hidden: bool,
+    pub(crate) document_hidden: bool,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-crate enum EmitType {
+pub(crate) enum EmitType {
     Unversioned,
     Toolchain,
     InvocationSpecific,
