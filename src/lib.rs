@@ -30,19 +30,25 @@ use anyhow::{bail, Context, Result};
 /// `bin` should be either `kani` or `cargo-kani`
 pub fn proxy(bin: &str) -> Result<()> {
     // In an effort to keep our dependencies minimal, we do the bare minimum argument parsing
-    let args: Vec<_> = env::args_os().collect();
-    if args.len() >= 2 && args[1] == "setup" {
-        if args.len() >= 4 && args[2] == "--use-local-bundle" {
+    let args: Vec<OsString> = env::args_os().collect();
+    // This makes it easy to do crude arg parsing with match
+    let args_ez: Vec<Option<&str>> = args.iter().map(|x| x.to_str()).collect();
+    // "cargo kani setup" comes in as "cargo-kani kani setup"
+    // "cargo-kani setup" comes in as "cargo-kani setup"
+    match &args_ez[..] {
+        &[_, Some("setup"), Some("--use-local-bundle"), _]
+        | &[_, Some("kani"), Some("setup"), Some("--use-local-bundle"), _] => {
+            // Grab it from args, so it can be non-utf-8
             setup::setup(Some(args[3].clone()))
-        } else {
-            setup::setup(None)
         }
-    } else {
-        fail_if_in_dev_environment()?;
-        if !setup::appears_setup() {
-            setup::setup(None)?;
+        &[_, Some("setup")] | &[_, Some("kani"), Some("setup")] => setup::setup(None),
+        _ => {
+            fail_if_in_dev_environment()?;
+            if !setup::appears_setup() {
+                setup::setup(None)?;
+            }
+            exec(bin)
         }
-        exec(bin)
     }
 }
 
