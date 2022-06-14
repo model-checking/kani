@@ -178,7 +178,7 @@ dependencies = [
 
 [[package]]
 name = "cprover_bindings"
-version = "0.0.0"
+version = "0.4.0"
 dependencies = [
  "lazy_static",
  "linear-map",
