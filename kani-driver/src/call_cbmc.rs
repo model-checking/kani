@@ -42,12 +42,15 @@ impl KaniSession {
             cmd.arg("--json-ui");
 
             let now = Instant::now();
+
+            // Use streaming output from CBMC
             if self.args.use_piped_output {
                 let _cbmc_result_piped = self.run_piped(cmd)?;
                 let elapsed = now.elapsed().as_secs_f32();
 
                 println!("Verification Time: {}s", elapsed);
             } else {
+                // Write cbmc output to a file
                 let _cbmc_result = self.run_redirect(cmd, &output_filename)?;
                 let format_result = self.format_cbmc_output(&output_filename);
 

@@ -149,9 +149,8 @@ pub struct KaniArgs {
     #[structopt(long, hidden_short_help(true), requires("enable-unstable"))]
     pub ignore_global_asm: bool,
 
-    // Hide option till https://github.com/model-checking/kani/issues/697 is
-    // fixed.
-    /// Use abstractions for the standard library.
+    // Use the flag for non termination issue https://github.com/model-checking/kani/issues/493
+    /// Use streaming output from CBMC vs writing in a cache, .
     /// This is an experimental feature and requires `--enable-unstable` to be used
     #[structopt(long, hidden = true, requires("enable-unstable"))]
     pub use_piped_output: bool,

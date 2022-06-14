@@ -6,11 +6,9 @@ use crate::util::render_command;
 use anyhow::{bail, Context, Result};
 use std::cell::RefCell;
 use std::ffi::OsString;
-use std::io::{BufRead, BufReader, Error, ErrorKind, Stdout, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
-use std::thread::sleep;
-use std::time::Duration;
 
 /// Contains information about the execution environment and arguments that affect operations
 pub struct KaniSession {
