@@ -45,7 +45,7 @@ impl KaniSession {
 
             // Use streaming output from CBMC
             if self.args.use_piped_output {
-                let _cbmc_result_piped = self.run_piped(cmd)?;
+                let _cbmc_result_stream = self.run_piped(cmd)?;
                 let elapsed = now.elapsed().as_secs_f32();
 
                 println!("Verification Time: {}s", elapsed);
