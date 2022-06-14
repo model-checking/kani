@@ -43,9 +43,7 @@ impl KaniSession {
 
             let now = Instant::now();
             if self.args.use_piped_output {
-                let _cbmc_result_2 = self.run_piped(cmd)?;
-                // let format_result = self.format_cbmc_output_live();
-
+                let _cbmc_result_piped = self.run_piped(cmd)?;
                 let elapsed = now.elapsed().as_secs_f32();
 
                 println!("Verification Time: {}s", elapsed);

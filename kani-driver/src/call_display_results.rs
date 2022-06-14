@@ -7,7 +7,6 @@ use std::path::Path;
 use std::process::Command;
 
 use crate::session::KaniSession;
-use crate::util::render_command;
 
 impl KaniSession {
     /// Display the results of a CBMC run in a user-friendly manner.
@@ -24,8 +23,6 @@ impl KaniSession {
 
         let mut cmd = Command::new("python3");
         cmd.args(args);
-
-        println!("{}", render_command(&cmd).to_string_lossy());
 
         self.run_terminal(cmd)?;
 

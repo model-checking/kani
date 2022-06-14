@@ -112,7 +112,7 @@ def main(argv):
             try:
                 for line in sys.stdin:
                     print(line)
-            except:
+            except BaseException:
                 usage_error(f"Unable to complete parsing CBMC Output\n")
         else:
             usage_error(f"CBMC Output not piped to post-processing\n")
@@ -126,7 +126,6 @@ def main(argv):
         # the main function should take a json file as input
         return_code = transform_cbmc_output(sample_json_file_parsing,
                                             output_style, extra_ptr_check)
-
 
     sys.exit(return_code)
 
