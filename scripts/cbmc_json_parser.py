@@ -29,8 +29,7 @@ from colorama import Fore, Style
 from enum import Enum
 from os import path
 
-import sys
-import stat
+from stat import S_ISFIFO
 
 # Enum to store the style of output that is given by the argument flags
 output_style_switcher = {
@@ -110,7 +109,7 @@ def main(argv):
         # that are written to a file
 
         # Check if the stdin input comes from the pipe
-        if stat.S_ISFIFO(mode):
+        if S_ISFIFO(mode):
             try:
                 for line in sys.stdin:
                     print(line)
