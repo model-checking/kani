@@ -64,7 +64,8 @@ class GlobalMessages(str, Enum):
 def usage_error(msg):
     """ Prints an error message followed by the expected usage. Then exit process. """
     print(f"Error: {msg} Usage:")
-    print("cbmc_json_parser.py <cbmc_output.json> <format> [--extra-ptr-check] or cbmc_json_parser.py --use-piped-output <format> [--extra-ptr-check]\n")
+    print(
+        "cbmc_json_parser.py <cbmc_output.json> <format> [--extra-ptr-check] or cbmc_json_parser.py --use-piped-output <format> [--extra-ptr-check]\n")
     sys.exit(1)
 
 
@@ -95,7 +96,6 @@ def main(argv):
     cbmc_output_mode = argv[1].split(".")[-1]
     if not ((cbmc_output_mode == "cbmc_output") or (cbmc_output_mode == GlobalMessages.READ_FROM_STREAM)):
         usage_error(f"CBMC output file or mode invalid\n")
-
 
     if len(argv) == 4:
         if argv[3] == "--extra-ptr-check":
