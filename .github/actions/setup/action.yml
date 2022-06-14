@@ -17,6 +17,7 @@ runs:
         shell: bash
 
       - name: Install cbmc-viewer
+        # If you update this version number, remember to bump it in `src/setup.rs` too
         run: ./scripts/setup/install_viewer.sh 3.5
         shell: bash
 
