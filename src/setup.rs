@@ -109,7 +109,7 @@ fn setup_python_deps(kani_dir: &Path, os: &os_info::Info) -> Result<()> {
     let pyroot = kani_dir.join("pyroot");
 
     // TODO: this is a repetition of versions from kani/scripts/setup/$OS/install_deps.sh
-    let pkg_versions = &["cbmc-viewer==3.2", "colorama==0.4.3"];
+    let pkg_versions = &["cbmc-viewer==3.5", "colorama==0.4.3"];
 
     if os.os_type() == os_info::Type::Ubuntu
         && *os.version() == os_info::Version::Semantic(18, 4, 0)
