@@ -88,12 +88,12 @@ fn test_towards_nearest() {
 }
 
 #[kani::proof]
-fn test_diff_one() {
+fn test_diff_half_one() {
     let x: f32 = kani::any();
     kani::assume(!x.is_nan());
     kani::assume(!x.is_infinite());
     let result = unsafe { nearbyintf32(x) };
     let diff = (x - result).abs();
-    assert!(diff < 1.0);
+    assert!(diff <= 0.5);
     assert!(diff >= 0.0);
 }
