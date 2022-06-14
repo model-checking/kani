@@ -154,14 +154,14 @@ pub struct KaniArgs {
     /// Use abstractions for the standard library.
     /// This is an experimental feature and requires `--enable-unstable` to be used
     #[structopt(long, hidden = true, requires("enable-unstable"))]
-    pub use_piped_output: bool
+    pub use_piped_output: bool,
     /*
     The below is a "TODO list" of things not yet implemented from the kani_flags.py script.
 
         add_flag(group, "--gen-c-runnable", default=False, action=BooleanOptionalAction,
-                 help="Generate C file equivalent to inputted program; "
-                      "performs additional processing to produce valid C code "
-                      "at the cost of some readability")
+                    help="Generate C file equivalent to inputted program; "
+                        "performs additional processing to produce valid C code "
+                        "at the cost of some readability")
         */
 }
 

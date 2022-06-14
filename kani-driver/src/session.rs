@@ -6,11 +6,11 @@ use crate::util::render_command;
 use anyhow::{bail, Context, Result};
 use std::cell::RefCell;
 use std::ffi::OsString;
+use std::io::{BufRead, BufReader, Error, ErrorKind, Stdout, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
-use std::io::{BufRead, BufReader, Error, ErrorKind, Write, Stdout};
-use std::time::Duration;
 use std::thread::sleep;
+use std::time::Duration;
 
 /// Contains information about the execution environment and arguments that affect operations
 pub struct KaniSession {
@@ -138,7 +138,6 @@ impl KaniSession {
                 return Ok(<ExitStatus as std::os::unix::prelude::ExitStatusExt>::from_raw(0));
             }
         }
-        println!("{}", render_command(&cmd).to_string_lossy());
         let output_file = std::fs::File::create(&stdout)?;
         cmd.stdout(output_file);
 
@@ -150,35 +149,35 @@ impl KaniSession {
     /// Run a job, redirect its output to a file, and allow the caller to decide what to do with failure.
     pub fn run_piped(&self, mut cmd: Command) -> Result<ExitStatus> {
         if self.args.verbose || self.args.dry_run {
-            println!("Inside piped output {}", render_command(&cmd).to_string_lossy());
             if self.args.dry_run {
                 // Short circuit. Difficult to mock an ExitStatus :(
                 return Ok(<ExitStatus as std::os::unix::prelude::ExitStatusExt>::from_raw(0));
             }
         }
-        println!("{} ", render_command(&cmd).to_string_lossy());
 
-        let mut args: Vec<OsString> = vec![
+        // Add flag --read-cbmc-from-stream for the parser
+        let mut python_args: Vec<OsString> = vec![
             self.cbmc_json_parser_py.clone().into(),
-            "read_from_pipe".into(),
+            "--read-cbmc-from-stream".into(),
             self.args.output_format.to_string().to_lowercase().into(),
         ];
 
         if self.args.extra_pointer_checks {
-            args.push("--extra-ptr-check".into());
+            python_args.push("--extra-ptr-check".into());
         }
 
-        let mut cmd2 = Command::new("python3");
-        cmd2.args(args);
+        // This is the equivalent to running the command
+        // > cbmc --flags test_file.out.for-main --json | python --read-cbmc-from-stream regular
+        let mut python_command = Command::new("python3");
+        python_command.args(python_args);
 
-        let mut cbmc_output = cmd
-            .stdout(Stdio::piped())
-            .spawn()?;
+        // Run the cbmc command as a child process
+        let mut cbmc_output = cmd.stdout(Stdio::piped()).spawn()?;
 
+        // Collect live streamed output from cbmc and pass it to the python parser
+        // Execute python command and print final output
         if let Some(cbmc_stdout) = cbmc_output.stdout.take() {
-            let mut _python_output_child = cmd2
-                .stdin(cbmc_stdout)
-                .status();
+            let mut _python_output_child = python_command.stdin(cbmc_stdout).status();
         }
 
         Ok(<ExitStatus as std::os::unix::prelude::ExitStatusExt>::from_raw(0))

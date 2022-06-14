@@ -49,8 +49,7 @@ impl KaniSession {
                 let elapsed = now.elapsed().as_secs_f32();
 
                 println!("Verification Time: {}s", elapsed);
-            }
-            else {
+            } else {
                 let _cbmc_result = self.run_redirect(cmd, &output_filename)?;
                 let format_result = self.format_cbmc_output(&output_filename);
 

@@ -31,26 +31,4 @@ impl KaniSession {
 
         Ok(())
     }
-
-    /// Display the results of a CBMC run in a user-friendly manner.
-    pub fn format_cbmc_output_live(&self) -> Result<()> {
-        let mut args: Vec<OsString> = vec![
-            self.cbmc_json_parser_py.clone().into(),
-            "read_from_pipe".into(),
-            self.args.output_format.to_string().to_lowercase().into(),
-        ];
-
-        if self.args.extra_pointer_checks {
-            args.push("--extra-ptr-check".into());
-        }
-
-        let mut cmd = Command::new("python3");
-        cmd.args(args);
-
-        println!("{}", render_command(&cmd).to_string_lossy());
-
-        self.run_terminal(cmd)?;
-
-        Ok(())
-    }
 }

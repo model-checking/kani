@@ -30,7 +30,7 @@ from enum import Enum
 from os import path
 
 import sys
-import subprocess
+import stat
 
 # Enum to store the style of output that is given by the argument flags
 output_style_switcher = {
@@ -88,11 +88,13 @@ def main(argv):
     if not output_style:
         usage_error(f"Invalid output format '{argv[2]}'.")
 
+    # Check the mode of the output
+    mode = os.fstat(sys.stdin.fileno()).st_mode
     extra_ptr_check = False
 
     # The cbmc output can be either file mode (default) or stream mode (--read-cbmc-from-stream)
     cbmc_output_mode = argv[1].split(".")[-1]
-    assert((cbmc_output_mode == "cbmc_output") or (cbmc_output_mode == GlobalMessages.READ_FROM_STREAM))
+    # assert((cbmc_output_mode == "cbmc_output") or (cbmc_output_mode == GlobalMessages.READ_FROM_STREAM))
 
     if len(argv) == 4:
         if argv[3] == "--extra-ptr-check":
@@ -100,7 +102,23 @@ def main(argv):
         else:
             usage_error(f"Unexpected argument '{argv[3]}'.")
 
-    if argv[1] != GlobalMessages.READ_FROM_STREAM:
+    if argv[1] == GlobalMessages.READ_FROM_STREAM:
+        # Print each streaming line live from cbmc without writing to file
+        # temporary output, will change to be parsed like the regular json objects
+        # that are written to a file
+
+        # Check if the stdin input comes from the pipe
+        if stat.S_ISFIFO(mode):
+            try:
+                for line in sys.stdin:
+                    print(line)
+            except:
+                usage_error(f"Unable to complete parsing CBMC Output\n")
+        else:
+            usage_error(f"CBMC Output not piped to post-processing\n")
+        return_code = 0
+
+    else:
         # parse the input json file
         with open(argv[1]) as f:
             sample_json_file_parsing = f.read()
@@ -109,14 +127,6 @@ def main(argv):
         return_code = transform_cbmc_output(sample_json_file_parsing,
                                             output_style, extra_ptr_check)
 
-    else:
-        # Print each streaming line live from cbmc without writing to file
-        # temporary output, will change to be parsed like the regular json objects
-        # that are written to a file
-        for line in sys.stdin:
-            print(line)
-
-        return_code = 0
 
     sys.exit(return_code)
 
