@@ -14,7 +14,7 @@ use num::bigint::BigInt;
 use rustc_middle::mir::{AggregateKind, BinOp, CastKind, NullOp, Operand, Place, Rvalue, UnOp};
 use rustc_middle::ty::adjustment::PointerCast;
 use rustc_middle::ty::layout::LayoutOf;
-use rustc_middle::ty::{self, Instance, IntTy, Ty, UintTy, VtblEntry, COMMON_VTABLE_ENTRIES};
+use rustc_middle::ty::{self, Instance, IntTy, Ty, TyCtxt, UintTy, VtblEntry};
 use rustc_target::abi::{FieldsShape, Primitive, TagEncoding, Variants};
 use tracing::{debug, warn};
 
@@ -424,7 +424,15 @@ impl<'tcx> GotocCtx<'tcx> {
             Rvalue::Repeat(op, sz) => self.codegen_rvalue_repeat(op, sz, res_ty),
             Rvalue::Ref(_, _, p) | Rvalue::AddressOf(_, p) => self.codegen_rvalue_ref(p, res_ty),
             Rvalue::Len(p) => self.codegen_rvalue_len(p),
-            Rvalue::Cast(CastKind::Misc, e, t) => {
+            // Rust has begun distinguishing "ptr -> num" and "num -> ptr" (providence-relevant casts) but we do not yet:
+            // Should we? Tracking ticket: https://github.com/model-checking/kani/issues/1274
+            Rvalue::Cast(
+                CastKind::Misc
+                | CastKind::PointerExposeAddress
+                | CastKind::PointerFromExposedAddress,
+                e,
+                t,
+            ) => {
                 let t = self.monomorphize(*t);
                 self.codegen_misc_cast(e, t)
             }
@@ -602,6 +610,8 @@ impl<'tcx> GotocCtx<'tcx> {
         src_goto_expr.member("data", &self.symbol_table).cast_to(dst_goto_typ)
     }
 
+    /// This handles all kinds of casts, except a limited subset that are instead
+    /// handled by [`codegen_pointer_cast`].
     fn codegen_misc_cast(&mut self, src: &Operand<'tcx>, dst_t: Ty<'tcx>) -> Expr {
         let src_t = self.operand_ty(src);
         debug!(
@@ -678,6 +688,10 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
+    /// "Pointer casts" are particular kinds of pointer-to-pointer casts.
+    /// See the [`PointerCast`] type for specifics.
+    /// Note that this does not include all casts involving pointers,
+    /// many of which are instead handled by [`codegen_misc_cast`] instead.
     pub fn codegen_pointer_cast(
         &mut self,
         k: &PointerCast,
@@ -950,7 +964,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
                     ctx.tcx.vtable_entries(trait_ref_binder)
                 } else {
-                    COMMON_VTABLE_ENTRIES
+                    TyCtxt::COMMON_VTABLE_ENTRIES
                 };
 
                 let (vt_size, vt_align) = ctx.codegen_vtable_size_and_align(src_mir_type);

@@ -10,6 +10,7 @@ use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{self, Ty};
 use rustc_middle::ty::{Instance, InstanceDef};
 use rustc_span::Span;
+use rustc_target::abi::InitKind;
 use tracing::{debug, warn};
 
 macro_rules! emit_concurrency_warning {
@@ -47,17 +48,18 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         func: &Operand<'tcx>,
         args: &[Operand<'tcx>],
-        destination: &Option<(Place<'tcx>, BasicBlock)>,
+        destination: &Place<'tcx>,
+        target: &Option<BasicBlock>,
         span: Span,
     ) -> Stmt {
         let instance = self.get_intrinsic_instance(func).unwrap();
 
-        if let Some((assign_to, target)) = destination {
+        if let Some(target) = target {
             let loc = self.codegen_span(&span);
             let fargs = self.codegen_funcall_args(args);
             Stmt::block(
                 vec![
-                    self.codegen_intrinsic(instance, fargs, &assign_to, Some(span)),
+                    self.codegen_intrinsic(instance, fargs, &destination, Some(span)),
                     Stmt::goto(self.current_fn().find_label(&target), loc),
                 ],
                 loc,
@@ -547,12 +549,8 @@ impl<'tcx> GotocCtx<'tcx> {
             "minnumf32" => codegen_simple_intrinsic!(Fminf),
             "minnumf64" => codegen_simple_intrinsic!(Fmin),
             "mul_with_overflow" => codegen_op_with_overflow!(mul_overflow),
-            "nearbyintf32" => codegen_unimplemented_intrinsic!(
-                "https://github.com/model-checking/kani/issues/1025"
-            ),
-            "nearbyintf64" => codegen_unimplemented_intrinsic!(
-                "https://github.com/model-checking/kani/issues/1025"
-            ),
+            "nearbyintf32" => codegen_simple_intrinsic!(Nearbyintf),
+            "nearbyintf64" => codegen_simple_intrinsic!(Nearbyint),
             "needs_drop" => codegen_intrinsic_const!(),
             "offset" => self.codegen_offset(intrinsic, instance, fargs, p, loc),
             "powf32" => unstable_codegen!(codegen_simple_intrinsic!(Powf)),
@@ -565,12 +563,8 @@ impl<'tcx> GotocCtx<'tcx> {
             "ptr_offset_from" => self.codegen_ptr_offset_from(fargs, p, loc),
             "ptr_offset_from_unsigned" => self.codegen_ptr_offset_from_unsigned(fargs, p, loc),
             "raw_eq" => self.codegen_intrinsic_raw_eq(instance, fargs, p, loc),
-            "rintf32" => codegen_unimplemented_intrinsic!(
-                "https://github.com/model-checking/kani/issues/1025"
-            ),
-            "rintf64" => codegen_unimplemented_intrinsic!(
-                "https://github.com/model-checking/kani/issues/1025"
-            ),
+            "rintf32" => codegen_simple_intrinsic!(Rintf),
+            "rintf64" => codegen_simple_intrinsic!(Rint),
             "rotate_left" => codegen_intrinsic_binop!(rol),
             "rotate_right" => codegen_intrinsic_binop!(ror),
             "roundf32" => codegen_simple_intrinsic!(Roundf),
@@ -785,7 +779,9 @@ impl<'tcx> GotocCtx<'tcx> {
 
         // Then we check if the type allows "raw" initialization for the cases
         // where memory is zero-initialized or entirely uninitialized
-        if intrinsic == "assert_zero_valid" && !layout.might_permit_raw_init(self, true) {
+        if intrinsic == "assert_zero_valid"
+            && !layout.might_permit_raw_init(self, InitKind::Zero, false)
+        {
             return self.codegen_fatal_error(
                 PropertyClass::DefaultAssertion,
                 &format!("attempted to zero-initialize type `{}`, which is invalid", ty),
@@ -793,7 +789,9 @@ impl<'tcx> GotocCtx<'tcx> {
             );
         }
 
-        if intrinsic == "assert_uninit_valid" && !layout.might_permit_raw_init(self, false) {
+        if intrinsic == "assert_uninit_valid"
+            && !layout.might_permit_raw_init(self, InitKind::Uninit, false)
+        {
             return self.codegen_fatal_error(
                 PropertyClass::DefaultAssertion,
                 &format!("attempted to leave type `{}` uninitialized, which is invalid", ty),

@@ -40,9 +40,9 @@ use crate::passes::span_of_attrs;
 #[derive(Clone, Default)]
 pub struct GlobalTestOptions {
     /// Whether to disable the default `extern crate my_crate;` when creating doctests.
-    crate no_crate_inject: bool,
+    pub(crate) no_crate_inject: bool,
     /// Additional crate-level attributes to add to doctests.
-    crate attrs: Vec<String>,
+    pub(crate) attrs: Vec<String>,
 }
 
 /// Documentation test failure modes.
@@ -594,8 +594,8 @@ pub trait Tester {
     fn register_header(&mut self, _name: &str, _level: u32) {}
 }
 
-crate struct Collector {
-    crate tests: Vec<test::TestDescAndFn>,
+pub(crate) struct Collector {
+    pub(crate) tests: Vec<test::TestDescAndFn>,
 
     // The name of the test displayed to the user, separated by `::`.
     //
@@ -642,7 +642,7 @@ impl Collector {
         format!("{} - {}(line {})", filename.prefer_local(), item_path, line)
     }
 
-    crate fn set_position(&mut self, position: Span) {
+    pub(crate) fn set_position(&mut self, position: Span) {
         self.position = position;
     }
 

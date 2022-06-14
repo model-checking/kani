@@ -27,7 +27,7 @@ pub enum ErrorCodes {
 }
 
 impl ErrorCodes {
-    crate fn as_bool(self) -> bool {
+    pub(crate) fn as_bool(self) -> bool {
         match self {
             ErrorCodes::Yes => true,
             ErrorCodes::No => false,
@@ -253,7 +253,7 @@ enum ExtraInfoId {
 }
 
 impl<'tcx> ExtraInfo<'tcx> {
-    crate fn new(tcx: TyCtxt<'tcx>, hir_id: HirId, sp: Span) -> ExtraInfo<'tcx> {
+    pub(crate) fn new(tcx: TyCtxt<'tcx>, hir_id: HirId, sp: Span) -> ExtraInfo<'tcx> {
         ExtraInfo { id: ExtraInfoId::Hir(hir_id), sp, tcx }
     }
 
@@ -287,13 +287,13 @@ impl<'tcx> ExtraInfo<'tcx> {
 pub struct LangString {
     original: String,
     pub should_panic: bool,
-    crate no_run: bool,
+    pub(crate) no_run: bool,
     pub ignore: Ignore,
-    crate rust: bool,
-    crate test_harness: bool,
+    pub(crate) rust: bool,
+    pub(crate) test_harness: bool,
     pub compile_fail: bool,
-    crate error_codes: Vec<String>,
-    crate allow_fail: bool,
+    pub(crate) error_codes: Vec<String>,
+    pub(crate) allow_fail: bool,
     pub edition: Option<Edition>,
 }
 

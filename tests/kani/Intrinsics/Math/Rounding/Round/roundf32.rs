@@ -61,7 +61,7 @@ fn test_towards_closer() {
 }
 
 #[kani::proof]
-fn test_diff_one() {
+fn test_diff_half_one() {
     let x: f32 = kani::any();
     kani::assume(!x.is_nan());
     kani::assume(!x.is_infinite());

@@ -8,21 +8,21 @@ use rustc_macros::{Decodable, Encodable};
 use rustc_span::edition::Edition;
 
 #[derive(Encodable, Decodable, Debug, Clone)]
-crate struct SyntaxRange {
-    crate byte_span: (u32, u32),
-    crate line_span: (usize, usize),
+pub(crate) struct SyntaxRange {
+    pub(crate) byte_span: (u32, u32),
+    pub(crate) line_span: (usize, usize),
 }
 
 #[derive(Encodable, Decodable, Debug, Clone)]
-crate struct CallLocation {
-    crate call_expr: SyntaxRange,
-    crate enclosing_item: SyntaxRange,
+pub(crate) struct CallLocation {
+    pub(crate) call_expr: SyntaxRange,
+    pub(crate) enclosing_item: SyntaxRange,
 }
 
 #[derive(Encodable, Decodable, Debug, Clone)]
-crate struct CallData {
-    crate locations: Vec<CallLocation>,
-    crate url: String,
-    crate display_name: String,
-    crate edition: Edition,
+pub(crate) struct CallData {
+    pub(crate) locations: Vec<CallLocation>,
+    pub(crate) url: String,
+    pub(crate) display_name: String,
+    pub(crate) edition: Edition,
 }

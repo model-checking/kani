@@ -7,9 +7,7 @@
 //! Like miri, clippy, and other tools developed on the top of rustc, we rely on the
 //! rustc_private feature and a specific version of rustc.
 #![deny(warnings)]
-#![feature(crate_visibility_modifier)]
 #![feature(extern_types)]
-#![feature(nll)]
 #![recursion_limit = "256"]
 #![feature(box_patterns)]
 #![feature(once_cell)]
