@@ -5,24 +5,29 @@
 
 static mut CELL: i32 = 0;
 
-enum EnumWithDifferentDrop {
-    Add1,
-    Add2,
+struct IncrementCELLWhenDropped {
+    increment_by: i32,
 }
 
-impl Drop for EnumWithDifferentDrop {
+impl Drop for IncrementCELLWhenDropped {
     fn drop(&mut self) {
         unsafe {
-            match self {
-                EnumWithDifferentDrop::Add1 => CELL += 1,
-                EnumWithDifferentDrop::Add2 => CELL += 2,
-            }
+            CELL += self.increment_by;
         }
     }
 }
 
-fn get_random_enum_variant(random: u32) -> EnumWithDifferentDrop {
-    if random % 2 == 0 { EnumWithDifferentDrop::Add1 } else { EnumWithDifferentDrop::Add2 }
+enum EnumWithTwoIncrements {
+    Add1(IncrementCELLWhenDropped),
+    Add2(IncrementCELLWhenDropped),
+}
+
+fn get_random_enum_variant(random: u32) -> EnumWithTwoIncrements {
+    if random % 2 == 0 {
+        EnumWithTwoIncrements::Add1(IncrementCELLWhenDropped { increment_by: 1 })
+    } else {
+        EnumWithTwoIncrements::Add2(IncrementCELLWhenDropped { increment_by: 2 })
+    }
 }
 
 #[kani::proof]
