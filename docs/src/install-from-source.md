@@ -16,7 +16,7 @@ In general, the following dependencies are required.
 
 1. Cargo installed via [rustup](https://rustup.rs/)
 2. [CBMC](https://github.com/diffblue/cbmc) (>= 5.59.0)
-3. [CBMC Viewer](https://github.com/awslabs/aws-viewer-for-cbmc) (>= 2.10)
+3. [CBMC Viewer](https://github.com/awslabs/aws-viewer-for-cbmc) (>= 3.2)
 
 Kani has been tested in [Ubuntu](#install-dependencies-on-ubuntu) and [macOS](##install-dependencies-on-macos) platforms.
 
