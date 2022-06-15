@@ -1,13 +1,9 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// Check drop implementation for an &dyn dynamic trait object.
+// Property that dropping enum drops exactly 1 case.
 
 static mut CELL: i32 = 0;
-
-trait T {
-    fn t(&self) {}
-}
 
 enum EnumWithDifferentDrop {
     Add1,
@@ -36,6 +32,5 @@ fn main() {
     }
     unsafe {
         assert!(CELL == 1 || CELL == 2);
-        assert!(CELL != 3);
     }
 }
