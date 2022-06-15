@@ -7,6 +7,13 @@
 name = "compiletest"
 version = "0.0.0"
 edition = "2021"
+license = "MIT OR Apache-2.0"
+# From upstream compiletest:
+# https://github.com/rust-lang/rust/tree/master/src/tools/compiletest
+# Upstream crate does not list license but Rust statues:
+#   Rust is primarily distributed under the terms of both the MIT
+#   license and the Apache License (Version 2.0), with portions
+#   covered by various BSD-like licenses.
 
 [dependencies]
 getopts = "0.2"
