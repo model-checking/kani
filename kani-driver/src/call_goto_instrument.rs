@@ -86,7 +86,7 @@ impl KaniSession {
             "assert-false-assume-false".into(),
             "--generate-function-body".into(),
             ".*".into(),
-            "--drop-unused-functions".into(),
+            //"--drop-unused-functions".into(),
             file.to_owned().into_os_string(), // input
             file.to_owned().into_os_string(), // output
         ];

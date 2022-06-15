@@ -918,8 +918,9 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Generate code for a trait function declaration.
     ///
-    /// Dynamic function calls first parameter is the fat-pointer representing self.
-    /// For closures, the type of the first argument is dyn T not &dyn T.
+    /// Dynamic function calls first parameter is self which can be one of the following:
+    /// P = &'lt S | &'lt mut S | Box<S> | Rc<S> | Arc<S> | Pin<P>
+    /// S = Self | P
     pub fn codegen_dynamic_function_sig(&mut self, sig: PolyFnSig<'tcx>) -> Type {
         let sig = self.monomorphize(sig);
         let sig = self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig);
@@ -930,12 +931,19 @@ impl<'tcx> GotocCtx<'tcx> {
             .iter()
             .filter_map(|arg_type| {
                 if is_first {
-                    // This should &dyn T or dyn T (for closures).
                     is_first = false;
-                    let first_ty = pointee_type(*arg_type).unwrap_or(*arg_type);
                     debug!(self_type=?arg_type, fn_signature=?sig, "codegen_dynamic_function_sig");
-                    assert!(first_ty.is_trait(), "Expected self type to be a trait");
-                    Some(self.codegen_trait_data_pointer(first_ty))
+                    if arg_type.is_ref() {
+                        // Convert fat pointer to thin pointer to data portion.
+                        let first_ty = pointee_type(*arg_type).unwrap();
+                        Some(self.codegen_trait_data_pointer(first_ty))
+                    } else if arg_type.is_trait() {
+                        // Convert dyn T to thin pointer.
+                        Some(self.codegen_trait_data_pointer(*arg_type))
+                    } else {
+                        // Codegen type as is for Arc / Rc / Box / Pin.
+                        Some(self.codegen_ty(*arg_type))
+                    }
                 } else if self.ignore_var_ty(*arg_type) {
                     debug!("Ignoring type {:?} in function signature", arg_type);
                     None

@@ -1,6 +1,5 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-use super::typ::TypeExt;
 use super::typ::FN_RETURN_VOID_VAR_NAME;
 use super::PropertyClass;
 use crate::codegen_cprover_gotoc::codegen::typ::pointee_type;
@@ -20,8 +19,8 @@ use rustc_middle::ty;
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{Instance, InstanceDef, Ty};
 use rustc_span::Span;
-use rustc_target::abi::{FieldsShape, Primitive, TagEncoding, Variants};
-use tracing::{debug, info_span, warn};
+use rustc_target::abi::{FieldsShape, Primitive, TagEncoding, VariantIdx, Variants};
+use tracing::{debug, info_span, trace, warn};
 
 impl<'tcx> GotocCtx<'tcx> {
     fn codegen_ret_unit(&mut self) -> Stmt {
@@ -379,6 +378,7 @@ impl<'tcx> GotocCtx<'tcx> {
         target: &Option<BasicBlock>,
         span: Span,
     ) -> Stmt {
+        debug!(?func, ?args, ?destination, ?span, "codegen_funcall");
         if self.is_intrinsic(func) {
             return self.codegen_funcall_of_intrinsic(func, args, destination, target, span);
         }
@@ -411,19 +411,15 @@ impl<'tcx> GotocCtx<'tcx> {
                     }
                     // Handle a virtual function call via a vtable lookup
                     InstanceDef::Virtual(def_id, idx) => {
+                        // TODO: Check by-value calls (rustc_codegen_ssa/src/mir/block.rs)
                         // We must have at least one argument, and the first one
-                        // should be a fat pointer for the trait
-                        let trait_fat_ptr = fargs[0].to_owned();
-
-                        //Check the Gotoc-level fat pointer type
-                        assert!(
-                            trait_fat_ptr.typ().is_rust_trait_fat_ptr(&self.symbol_table),
-                            "Expected fat pointer, got:\n{:?}",
-                            trait_fat_ptr,
-                        );
-
+                        // should have the following format:
+                        // P = &'lt S | &'lt mut S | Box<S> | Rc<S> | Arc<S> | Pin<P>
+                        // S = Self | P
+                        let self_ty = self.operand_ty(&args[0]);
+                        // TODO: Check if we need to update def_id.
                         self.codegen_virtual_funcall(
-                            trait_fat_ptr,
+                            self_ty,
                             def_id,
                             idx,
                             destination,
@@ -466,10 +462,44 @@ impl<'tcx> GotocCtx<'tcx> {
             x => unreachable!("Function call where the function was of unexpected type: {:?}", x),
         };
     }
+    /// Extract a reference to self for virtual method calls.
+    ///
+    /// Method calls can be done dereferencing one of the following:
+    /// P = &'lt S | &'lt mut S | Box<S> | Rc<S> | Arc<S> | Pin<P>
+    /// S = Self | P
+    /// https://doc.rust-lang.org/reference/items/associated-items.html#methods
+    /// TODO: Add tests for each type and for something like `mut Box<Box<Self>>`
+    fn extract_fat_ptr(&self, arg_expr: Expr, arg_ty: Ty<'tcx>) -> Expr {
+        trace!(mir_ty=?arg_ty, gotoc_ty=?arg_expr.typ(), gotoc_expr=?arg_expr.value(),
+            "extract_self: args");
+        let mut typ = arg_ty;
+        let mut expr = arg_expr;
+        // Traverse the layout following the non-zero field until we find a fat pointer.
+        while let ty::Adt(adt_def, adt_substs) = typ.kind() {
+            assert_eq!(
+                adt_def.variants().len(),
+                1,
+                "Expected a single-variant ADT. Found {:?}",
+                typ
+            );
+            let fields = &adt_def.variants().get(VariantIdx::from_u32(0)).unwrap().fields;
+            let non_zst = fields
+                .iter()
+                .find(|field| !self.layout_of(field.ty(self.tcx, adt_substs)).is_zst())
+                .expect("Expected one non-zst field.");
+            typ = non_zst.ty(self.tcx, adt_substs);
+            expr = expr.member(non_zst.name.to_string(), &self.symbol_table);
+        }
+
+        trace!(mir_ty=?typ, gotoc_ty=?expr.typ(), gotoc_expr=?expr.value(),
+            "extract_self: result");
+        assert!(typ.is_trait() || self.is_vtable_fat_pointer(typ));
+        expr
+    }
 
     fn codegen_virtual_funcall(
         &mut self,
-        trait_fat_ptr: Expr,
+        self_ty: Ty<'tcx>,
         def_id: DefId,
         idx: usize,
         place: &Place<'tcx>,
@@ -483,12 +513,15 @@ impl<'tcx> GotocCtx<'tcx> {
         // f(arg0, arg1);
         // The new call should be of the form
         // arg0.vtable->f(arg0.data,arg1);
+        let trait_fat_ptr = self.extract_fat_ptr(fargs[0].clone(), self_ty);
         let vtable_ref = trait_fat_ptr.to_owned().member("vtable", &self.symbol_table);
         let vtable = vtable_ref.dereference();
         let fn_ptr = vtable.member(vtable_field_name, &self.symbol_table);
 
-        // Update the argument from arg0 to arg0.data
-        fargs[0] = trait_fat_ptr.to_owned().member("data", &self.symbol_table);
+        if self.is_vtable_fat_pointer(self_ty) || self_ty.is_trait() {
+            // Update the argument from arg0 to arg0.data if arg0 is a fat pointer.
+            fargs[0] = trait_fat_ptr.to_owned().member("data", &self.symbol_table);
+        }
 
         // For soundness, add an assertion that the vtable function call is not null.
         // Otherwise, CBMC might treat this as an assert(0) and later user-added assertions
@@ -499,6 +532,7 @@ impl<'tcx> GotocCtx<'tcx> {
             self.codegen_assert(call_is_nonnull, PropertyClass::SanityCheck, &assert_msg, loc);
 
         // Virtual function call and corresponding nonnull assertion.
+        trace!(self=?fargs[0], "codegen_virtual_funcall");
         let call = fn_ptr.dereference().call(fargs.to_vec());
         let call_stmt = self.codegen_expr_to_place(place, call).with_location(loc);
         let call_stmt = if self.vtable_ctx.emit_vtable_restrictions {
@@ -506,6 +540,7 @@ impl<'tcx> GotocCtx<'tcx> {
         } else {
             call_stmt
         };
+        trace!(?call_stmt, "codegen_virtual_funcall stmt");
         vec![assert_nonnull, call_stmt]
     }
 
