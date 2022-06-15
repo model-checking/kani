@@ -4,11 +4,11 @@
 // See GitHub history for details.
 //! This module contains the "cleaned" pieces of the AST, and the functions
 //! that clean them.
-crate mod cfg;
-crate mod inline;
+pub(crate) mod cfg;
+pub(crate) mod inline;
 mod simplify;
-crate mod types;
-crate mod utils;
+pub(crate) mod types;
+pub(crate) mod utils;
 
 use rustc_ast as ast;
 use rustc_attr as attr;
@@ -39,10 +39,10 @@ use crate::visit_ast::Module as DocModule;
 
 use utils::*;
 
-crate use self::types::*;
-crate use self::utils::register_res;
+pub(crate) use self::types::*;
+pub(crate) use self::utils::register_res;
 
-crate trait Clean<T> {
+pub(crate) trait Clean<T> {
     fn clean(&self, cx: &mut DocContext<'_>) -> T;
 }
 
@@ -1362,7 +1362,7 @@ impl Clean<Type> for hir::Ty<'_> {
                 // Turning `fn f(&'_ self)` into `fn f(&self)` isn't the worst thing in the world, though;
                 // there's no case where it could cause the function to fail to compile.
                 let elided =
-                    l.is_elided() || matches!(l.name, LifetimeName::Param(ParamName::Fresh(_)));
+                    l.is_elided() || matches!(l.name, LifetimeName::Param(_, ParamName::Fresh));
                 let lifetime = if elided { None } else { Some(l.clean(cx)) };
                 BorrowedRef { lifetime, mutability: m.mutbl, type_: box m.ty.clean(cx) }
             }
@@ -1434,188 +1434,7 @@ fn normalize<'tcx>(cx: &mut DocContext<'tcx>, ty: Ty<'_>) -> Option<Ty<'tcx>> {
 impl<'tcx> Clean<Type> for Ty<'tcx> {
     fn clean(&self, cx: &mut DocContext<'_>) -> Type {
         trace!("cleaning type: {:?}", self);
-        let ty = normalize(cx, *self).unwrap_or(*self);
-        match *ty.kind() {
-            ty::Never => Primitive(PrimitiveType::Never),
-            ty::Bool => Primitive(PrimitiveType::Bool),
-            ty::Char => Primitive(PrimitiveType::Char),
-            ty::Int(int_ty) => Primitive(int_ty.into()),
-            ty::Uint(uint_ty) => Primitive(uint_ty.into()),
-            ty::Float(float_ty) => Primitive(float_ty.into()),
-            ty::Str => Primitive(PrimitiveType::Str),
-            ty::Slice(ty) => Slice(box ty.clean(cx)),
-            ty::Array(ty, n) => {
-                let mut n = cx.tcx.lift(n).expect("array lift failed");
-                n = n.eval(cx.tcx, ty::ParamEnv::reveal_all());
-                let n = print_const(cx, &n);
-                Array(box ty.clean(cx), n)
-            }
-            ty::RawPtr(mt) => RawPointer(mt.mutbl, box mt.ty.clean(cx)),
-            ty::Ref(r, ty, mutbl) => {
-                BorrowedRef { lifetime: r.clean(cx), mutability: mutbl, type_: box ty.clean(cx) }
-            }
-            ty::FnDef(..) | ty::FnPtr(_) => {
-                let ty = cx.tcx.lift(*self).expect("FnPtr lift failed");
-                let sig = ty.fn_sig(cx.tcx);
-                let def_id = DefId::local(CRATE_DEF_INDEX);
-                let decl = clean_fn_decl_from_did_and_sig(cx, def_id, sig);
-                BareFunction(box BareFunctionDecl {
-                    unsafety: sig.unsafety(),
-                    generic_params: Vec::new(),
-                    decl,
-                    abi: sig.abi(),
-                })
-            }
-            ty::Adt(def, substs) => {
-                let did = def.did();
-                let kind = match def.adt_kind() {
-                    AdtKind::Struct => ItemType::Struct,
-                    AdtKind::Union => ItemType::Union,
-                    AdtKind::Enum => ItemType::Enum,
-                };
-                inline::record_extern_fqn(cx, did, kind);
-                let path = external_path(cx, did, false, vec![], substs);
-                Type::Path { path }
-            }
-            ty::Foreign(did) => {
-                inline::record_extern_fqn(cx, did, ItemType::ForeignType);
-                let path = external_path(cx, did, false, vec![], InternalSubsts::empty());
-                Type::Path { path }
-            }
-            ty::Dynamic(obj, ref reg) => {
-                // HACK: pick the first `did` as the `did` of the trait object. Someone
-                // might want to implement "native" support for marker-trait-only
-                // trait objects.
-                let mut dids = obj.principal_def_id().into_iter().chain(obj.auto_traits());
-                let did = dids
-                    .next()
-                    .unwrap_or_else(|| panic!("found trait object `{:?}` with no traits?", self));
-                let substs = match obj.principal() {
-                    Some(principal) => principal.skip_binder().substs,
-                    // marker traits have no substs.
-                    _ => cx.tcx.intern_substs(&[]),
-                };
-
-                inline::record_extern_fqn(cx, did, ItemType::Trait);
-
-                let lifetime = reg.clean(cx);
-                let mut bounds = vec![];
-
-                for did in dids {
-                    let empty = cx.tcx.intern_substs(&[]);
-                    let path = external_path(cx, did, false, vec![], empty);
-                    inline::record_extern_fqn(cx, did, ItemType::Trait);
-                    let bound = PolyTrait { trait_: path, generic_params: Vec::new() };
-                    bounds.push(bound);
-                }
-
-                let mut bindings = vec![];
-                for pb in obj.projection_bounds() {
-                    bindings.push(TypeBinding {
-                        name: cx.tcx.associated_item(pb.item_def_id()).ident(cx.tcx).name,
-                        kind: TypeBindingKind::Equality {
-                            term: pb.skip_binder().term.clean(cx).into(),
-                        },
-                    });
-                }
-
-                let path = external_path(cx, did, false, bindings, substs);
-                bounds.insert(0, PolyTrait { trait_: path, generic_params: Vec::new() });
-
-                DynTrait(bounds, lifetime)
-            }
-            ty::Tuple(t) => Tuple(t.iter().map(|t| t.clean(cx)).collect()),
-
-            ty::Projection(ref data) => data.clean(cx),
-
-            ty::Param(ref p) => {
-                if let Some(bounds) = cx.impl_trait_bounds.remove(&p.index.into()) {
-                    ImplTrait(bounds)
-                } else {
-                    Generic(p.name)
-                }
-            }
-
-            ty::Opaque(def_id, substs) => {
-                // Grab the "TraitA + TraitB" from `impl TraitA + TraitB`,
-                // by looking up the bounds associated with the def_id.
-                let substs = cx.tcx.lift(substs).expect("Opaque lift failed");
-                let bounds = cx
-                    .tcx
-                    .explicit_item_bounds(def_id)
-                    .iter()
-                    .map(|(bound, _)| EarlyBinder(*bound).subst(cx.tcx, substs))
-                    .collect::<Vec<_>>();
-                let mut regions = vec![];
-                let mut has_sized = false;
-                let mut bounds = bounds
-                    .iter()
-                    .filter_map(|bound| {
-                        let bound_predicate = bound.kind();
-                        let trait_ref = match bound_predicate.skip_binder() {
-                            ty::PredicateKind::Trait(tr) => bound_predicate.rebind(tr.trait_ref),
-                            ty::PredicateKind::TypeOutlives(ty::OutlivesPredicate(_ty, reg)) => {
-                                if let Some(r) = reg.clean(cx) {
-                                    regions.push(GenericBound::Outlives(r));
-                                }
-                                return None;
-                            }
-                            _ => return None,
-                        };
-
-                        if let Some(sized) = cx.tcx.lang_items().sized_trait() {
-                            if trait_ref.def_id() == sized {
-                                has_sized = true;
-                                return None;
-                            }
-                        }
-
-                        let bindings: Vec<_> = bounds
-                            .iter()
-                            .filter_map(|bound| {
-                                if let ty::PredicateKind::Projection(proj) =
-                                    bound.kind().skip_binder()
-                                {
-                                    if proj.projection_ty.trait_ref(cx.tcx)
-                                        == trait_ref.skip_binder()
-                                    {
-                                        Some(TypeBinding {
-                                            name: cx
-                                                .tcx
-                                                .associated_item(proj.projection_ty.item_def_id)
-                                                .ident(cx.tcx)
-                                                .name,
-                                            kind: TypeBindingKind::Equality {
-                                                term: proj.term.clean(cx),
-                                            },
-                                        })
-                                    } else {
-                                        None
-                                    }
-                                } else {
-                                    None
-                                }
-                            })
-                            .collect();
-
-                        Some(clean_poly_trait_ref_with_bindings(cx, trait_ref, &bindings))
-                    })
-                    .collect::<Vec<_>>();
-                bounds.extend(regions);
-                if !has_sized && !bounds.is_empty() {
-                    bounds.insert(0, GenericBound::maybe_sized(cx));
-                }
-                ImplTrait(bounds)
-            }
-
-            ty::Closure(..) | ty::Generator(..) => Tuple(vec![]), // FIXME(pcwalton)
-
-            ty::Bound(..) => panic!("Bound"),
-            ty::Placeholder(..) => panic!("Placeholder"),
-            ty::GeneratorWitness(..) => panic!("GeneratorWitness"),
-            ty::Infer(..) => panic!("Infer"),
-            ty::Error(_) => panic!("Error"),
-        }
+        unreachable!();
     }
 }
 

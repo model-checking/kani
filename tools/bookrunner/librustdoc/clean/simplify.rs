@@ -25,7 +25,7 @@ use crate::clean::GenericArgs as PP;
 use crate::clean::WherePredicate as WP;
 use crate::core::DocContext;
 
-crate fn where_clauses(cx: &DocContext<'_>, clauses: Vec<WP>) -> Vec<WP> {
+pub(crate) fn where_clauses(cx: &DocContext<'_>, clauses: Vec<WP>) -> Vec<WP> {
     // First, partition the where clause into its separate components.
     //
     // We use `FxIndexMap` so that the insertion order is preserved to prevent messing up to
@@ -91,7 +91,7 @@ crate fn where_clauses(cx: &DocContext<'_>, clauses: Vec<WP>) -> Vec<WP> {
     clauses
 }
 
-crate fn merge_bounds(
+pub(crate) fn merge_bounds(
     cx: &clean::DocContext<'_>,
     bounds: &mut Vec<clean::GenericBound>,
     trait_did: DefId,

@@ -46,7 +46,7 @@ impl crate::doctest::Tester for Tests {
     }
 }
 
-crate fn should_have_doc_example(cx: &DocContext<'_>, item: &clean::Item) -> bool {
+pub(crate) fn should_have_doc_example(cx: &DocContext<'_>, item: &clean::Item) -> bool {
     if !cx.cache.access_levels.is_public(item.def_id.expect_def_id())
         || matches!(
             *item.kind,
@@ -95,7 +95,7 @@ crate fn should_have_doc_example(cx: &DocContext<'_>, item: &clean::Item) -> boo
     level != lint::Level::Allow || matches!(source, LintLevelSource::Default)
 }
 
-crate fn look_for_tests<'tcx>(cx: &DocContext<'tcx>, dox: &str, item: &Item) {
+pub(crate) fn look_for_tests<'tcx>(cx: &DocContext<'tcx>, dox: &str, item: &Item) {
     let hir_id = match DocContext::as_local_hir_id(cx.tcx, item.def_id) {
         Some(hir_id) => hir_id,
         None => {
