@@ -7,7 +7,7 @@ that is suitable for most users.
 
 The following must already be installed:
 
-* **Python version 3.8 or greater** and the package installer pip.
+* **Python version 3.6 or greater** and the package installer pip.
 * Rust installed via `rustup`.
 * `ctags` is required for Kani's `--visualize` option to work correctly.
 
