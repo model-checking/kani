@@ -2,9 +2,8 @@
 
 - [Getting started](./getting-started.md)
   - [Installation](./install-guide.md)
-    - [From pre-compiled binaries](./install-pre-compiled.md)
-    - [From source code](./install-from-source.md)
-    - [Basic installation check](./install-check.md)
+    - [Install Kani](./install-pre-compiled.md)
+    - [Or build from source](./install-from-source.md)
   - [Usage](./usage.md)
     - [On a single file](./kani-single-file.md)
     - [On a package](./cargo-kani.md)

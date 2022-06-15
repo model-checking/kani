@@ -1,7 +1,10 @@
 # Installing from source code
 
-This installation option is better suited for Kani developers
-who need to change the Kani source code.
+This is the non-default installation option.
+It is more suitable for Kani developers
+or users who want to try the latest changes.
+If those don't fit your use case, please see the default
+instructions for [installing from pre-compiled binaries](./install-pre-compiled.md).
 
 ## Dependencies
 
@@ -83,6 +86,4 @@ export PATH=$(pwd)/scripts:$PATH
 
 ## Next steps
 
-To check your install, you can
-[run a basic Kani test](./install-check.md).
 If you're learning Kani for the first time, you may be interested in our [tutorial](kani-tutorial.md).

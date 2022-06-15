@@ -2,15 +2,12 @@
 
 There are two ways to install Kani:
 
-1. By downloading
-[pre-compiled release binaries](./install-pre-compiled.md).
-This is suitable for Kani users who don't
-expect to change the source code.
-2. By [compiling the source code](./install-from-source.md).
-This is good for Kani developers.
-
-After installing, you can check your install
-by [running a basic Kani test](./install-check.md).
+1. **Default**:
+[install pre-compiled release binaries](./install-pre-compiled.md).
+Use this option unless you need the features listed below.
+2. [Build from source code](./install-from-source.md).
+This is more suitable for Kani developers
+or users who want to try the latest changes.
 
 Currently, only two platforms are supported:
 
