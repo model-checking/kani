@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// This test checks that structs moved into Box<Fn> is dropped when
+// This test checks that structs moved into Box<Fn> are dropped when
 // the function is dropped.
 
 static mut CELL: i32 = 0;
