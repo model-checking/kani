@@ -6,7 +6,8 @@
 //
 // This test case fails to resolve in a reasonable amount of
 // time. Settign kani::unwind(1) is insufficient for verification, but
-// kani::unwind(2) takes longer than 10m on a M1 Mac.
+// kani::unwind(2) takes longer than 10m on a M1 Mac. For details,
+// please see: https://github.com/model-checking/kani/issues/1286
 
 use std::sync::mpsc::*;
 
