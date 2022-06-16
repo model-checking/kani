@@ -33,7 +33,7 @@ fn setup_lib(out_dir: &str, lib_out: &str, lib: &str) {
         "--out-dir",
         lib_out,
         "--target-dir",
-        &out_dir,
+        out_dir,
     ];
     let result = Command::new("cargo")
         .env("CARGO_ENCODED_RUSTFLAGS", "--cfg=kani")

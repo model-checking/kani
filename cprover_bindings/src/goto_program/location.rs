@@ -138,7 +138,7 @@ impl Location {
                 file.into(),
                 function.intern(),
                 line,
-                col.map(|x| x.try_into().unwrap()),
+                col,
                 comment.into(),
                 property_name.into(),
             ),

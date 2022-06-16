@@ -171,7 +171,7 @@ impl KaniSession {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 enum InvocationType {
     CargoKani(Vec<OsString>),
     Standalone,

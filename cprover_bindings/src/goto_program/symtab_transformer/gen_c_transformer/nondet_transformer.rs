@@ -22,7 +22,7 @@ impl NondetTransformer {
 
     /// Extract `nondet_types` map for final processing.
     pub fn nondet_types_owned(&mut self) -> HashMap<String, Type> {
-        std::mem::replace(&mut self.nondet_types, HashMap::default())
+        std::mem::take(&mut self.nondet_types)
     }
 }
 
@@ -87,7 +87,7 @@ impl Transformer for NondetTransformer {
         let fields = transformed_typ.lookup_components(self.symbol_table()).unwrap().clone();
         let transformed_values: Vec<_> = fields
             .into_iter()
-            .zip(values.into_iter())
+            .zip(values.iter())
             .map(
                 |(field, value)| {
                     if field.is_padding() { value.clone() } else { self.transform_expr(value) }

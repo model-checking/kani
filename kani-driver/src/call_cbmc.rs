@@ -11,7 +11,7 @@ use std::time::Instant;
 use crate::args::KaniArgs;
 use crate::session::KaniSession;
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Eq)]
 pub enum VerificationStatus {
     Success,
     Failure,
@@ -150,15 +150,7 @@ impl KaniSession {
 pub fn resolve_unwind_value(args: &KaniArgs, harness_metadata: &HarnessMetadata) -> Option<u32> {
     // Check for which flag is being passed and prioritize extracting unwind from the
     // respective flag/annotation.
-    if let Some(harness_unwind) = args.unwind {
-        Some(harness_unwind)
-    } else if let Some(annotation_unwind) = harness_metadata.unwind_value {
-        Some(annotation_unwind)
-    } else if let Some(default_unwind) = args.default_unwind {
-        Some(default_unwind)
-    } else {
-        None
-    }
+    args.unwind.or(harness_metadata.unwind_value).or(args.default_unwind)
 }
 
 #[cfg(test)]

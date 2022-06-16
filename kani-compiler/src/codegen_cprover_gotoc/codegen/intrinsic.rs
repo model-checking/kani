@@ -59,8 +59,8 @@ impl<'tcx> GotocCtx<'tcx> {
             let fargs = self.codegen_funcall_args(args);
             Stmt::block(
                 vec![
-                    self.codegen_intrinsic(instance, fargs, &destination, Some(span)),
-                    Stmt::goto(self.current_fn().find_label(&target), loc),
+                    self.codegen_intrinsic(instance, fargs, destination, Some(span)),
+                    Stmt::goto(self.current_fn().find_label(target), loc),
                 ],
                 loc,
             )
@@ -351,11 +351,11 @@ impl<'tcx> GotocCtx<'tcx> {
                 emit_concurrency_warning!(intrinsic, loc);
                 let var1_ref = fargs.remove(0);
                 let var1 = var1_ref.dereference();
-                let tmp = self.gen_temp_variable(var1.typ().clone(), loc.clone()).to_expr();
-                let decl_stmt = Stmt::decl(tmp.clone(), Some(var1.to_owned()), loc.clone());
+                let tmp = self.gen_temp_variable(var1.typ().clone(), loc).to_expr();
+                let decl_stmt = Stmt::decl(tmp.clone(), Some(var1.to_owned()), loc);
                 let var2 = fargs.remove(0);
-                let op_expr = (var1.clone()).$op(var2).with_location(loc.clone());
-                let assign_stmt = (var1.clone()).assign(op_expr, loc.clone());
+                let op_expr = (var1.clone()).$op(var2).with_location(loc);
+                let assign_stmt = (var1.clone()).assign(op_expr, loc);
                 let res_stmt = self.codegen_expr_to_place(p, tmp.clone());
                 Stmt::atomic_block(vec![decl_stmt, assign_stmt, res_stmt], loc)
             }};
@@ -688,13 +688,13 @@ impl<'tcx> GotocCtx<'tcx> {
             arg1.is_finite(),
             PropertyClass::FiniteCheck,
             msg1.as_str(),
-            loc.clone(),
+            loc,
         );
         let finite_check2 = self.codegen_assert(
             arg2.is_finite(),
             PropertyClass::FiniteCheck,
             msg2.as_str(),
-            loc.clone(),
+            loc,
         );
         Stmt::block(vec![finite_check1, finite_check2, stmt], loc)
     }
@@ -703,7 +703,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let mm = self.symbol_table.machine_model();
         let atyp = a.typ();
         let btyp = b.typ();
-        let dividend_is_int_min = if atyp.is_signed(&mm) {
+        let dividend_is_int_min = if atyp.is_signed(mm) {
             a.clone().eq(atyp.min_int_expr(mm))
         } else {
             Expr::bool_false()
@@ -801,7 +801,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         // Otherwise we generate a no-op statement
         let loc = self.codegen_span_option(span);
-        return Stmt::skip(loc);
+        Stmt::skip(loc)
     }
 
     /// An atomic load simply returns the value referenced
@@ -820,7 +820,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> Stmt {
         emit_concurrency_warning!(intrinsic, loc);
         let var1_ref = fargs.remove(0);
-        let var1 = var1_ref.dereference().with_location(loc.clone());
+        let var1 = var1_ref.dereference().with_location(loc);
         let res_stmt = self.codegen_expr_to_place(p, var1);
         Stmt::atomic_block(vec![res_stmt], loc)
     }
@@ -848,19 +848,19 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> Stmt {
         emit_concurrency_warning!(intrinsic, loc);
         let var1_ref = fargs.remove(0);
-        let var1 = var1_ref.dereference().with_location(loc.clone());
-        let tmp = self.gen_temp_variable(var1.typ().clone(), loc.clone()).to_expr();
-        let decl_stmt = Stmt::decl(tmp.clone(), Some(var1.to_owned()), loc.clone());
-        let var2 = fargs.remove(0).with_location(loc.clone());
-        let var3 = fargs.remove(0).with_location(loc.clone());
-        let eq_expr = (var1.clone()).eq(var2.clone());
-        let assign_stmt = (var1.clone()).assign(var3, loc.clone());
-        let cond_update_stmt = Stmt::if_then_else(eq_expr, assign_stmt, None, loc.clone());
+        let var1 = var1_ref.dereference().with_location(loc);
+        let tmp = self.gen_temp_variable(var1.typ().clone(), loc).to_expr();
+        let decl_stmt = Stmt::decl(tmp.clone(), Some(var1.to_owned()), loc);
+        let var2 = fargs.remove(0).with_location(loc);
+        let var3 = fargs.remove(0).with_location(loc);
+        let eq_expr = (var1.clone()).eq(var2);
+        let assign_stmt = var1.assign(var3, loc);
+        let cond_update_stmt = Stmt::if_then_else(eq_expr, assign_stmt, None, loc);
         let place_type = self.place_ty(p);
         let res_type = self.codegen_ty(place_type);
         let tuple_expr =
             Expr::struct_expr_from_values(res_type, vec![tmp, Expr::c_true()], &self.symbol_table)
-                .with_location(loc.clone());
+                .with_location(loc);
         let res_stmt = self.codegen_expr_to_place(p, tuple_expr);
         Stmt::atomic_block(vec![decl_stmt, cond_update_stmt, res_stmt], loc)
     }
@@ -884,19 +884,19 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> Stmt {
         emit_concurrency_warning!(intrinsic, loc);
         let var1_ref = fargs.remove(0);
-        let var1 = var1_ref.dereference().with_location(loc.clone());
-        let tmp = self.gen_temp_variable(var1.typ().clone(), loc.clone()).to_expr();
-        let decl_stmt = Stmt::decl(tmp.clone(), Some(var1.to_owned()), loc.clone());
-        let var2 = fargs.remove(0).with_location(loc.clone());
-        let assign_stmt = (var1.clone()).assign(var2, loc.clone());
-        let res_stmt = self.codegen_expr_to_place(p, tmp.clone());
+        let var1 = var1_ref.dereference().with_location(loc);
+        let tmp = self.gen_temp_variable(var1.typ().clone(), loc).to_expr();
+        let decl_stmt = Stmt::decl(tmp.clone(), Some(var1.to_owned()), loc);
+        let var2 = fargs.remove(0).with_location(loc);
+        let assign_stmt = var1.assign(var2, loc);
+        let res_stmt = self.codegen_expr_to_place(p, tmp);
         Stmt::atomic_block(vec![decl_stmt, assign_stmt, res_stmt], loc)
     }
 
     /// Atomic no-ops (e.g., atomic_fence) are transformed into SKIP statements
     fn codegen_atomic_noop(&mut self, intrinsic: &str, loc: Location) -> Stmt {
         emit_concurrency_warning!(intrinsic, loc);
-        let skip_stmt = Stmt::skip(loc.clone());
+        let skip_stmt = Stmt::skip(loc);
         Stmt::atomic_block(vec![skip_stmt], loc)
     }
 
@@ -966,8 +966,8 @@ impl<'tcx> GotocCtx<'tcx> {
         // This comes up specifically when handling the empty string; CBMC will
         // fail on passing a reference to it unless we codegen this zero check.
         let copy_if_nontrivial = count_bytes.is_zero().ternary(dst, copy_call);
-        let copy_expr = if p.is_some() {
-            self.codegen_expr_to_place(p.unwrap(), copy_if_nontrivial)
+        let copy_expr = if let Some(p) = p {
+            self.codegen_expr_to_place(p, copy_if_nontrivial)
         } else {
             copy_if_nontrivial.as_stmt(loc)
         };
@@ -1277,11 +1277,11 @@ impl<'tcx> GotocCtx<'tcx> {
         let newval = fargs.remove(0);
         // Type checker should have ensured it's a vector type
         let elem_ty = cbmc_ret_ty.base_type().unwrap().clone();
-        let tmp = self.gen_temp_variable(cbmc_ret_ty, loc.clone()).to_expr();
+        let tmp = self.gen_temp_variable(cbmc_ret_ty, loc).to_expr();
         Stmt::block(
             vec![
-                Stmt::decl(tmp.clone(), Some(vec), loc.clone()),
-                tmp.clone().index_array(index).assign(newval.cast_to(elem_ty), loc.clone()),
+                Stmt::decl(tmp.clone(), Some(vec), loc),
+                tmp.clone().index_array(index).assign(newval.cast_to(elem_ty), loc),
                 self.codegen_expr_to_place(p, tmp),
             ],
             loc,
@@ -1417,7 +1417,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let size_of_count_elems = count.mul_overflow(size_of_elem);
         let message = format!(
             "{}: attempt to compute number in bytes which would overflow",
-            intrinsic.to_string()
+            intrinsic
         );
         let assert_stmt = self.codegen_assert(
             size_of_count_elems.overflowed.not(),

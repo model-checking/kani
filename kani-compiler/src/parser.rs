@@ -8,48 +8,48 @@ use clap::{
 use std::env;
 
 /// Option name used to set log level.
-pub const LOG_LEVEL: &'static str = "log-level";
+pub const LOG_LEVEL: &str = "log-level";
 
 /// Option name used to enable goto-c compilation.
-pub const GOTO_C: &'static str = "goto-c";
+pub const GOTO_C: &str = "goto-c";
 
 /// Option name used to override Kani library path.
-pub const KANI_LIB: &'static str = "kani-lib";
+pub const KANI_LIB: &str = "kani-lib";
 
 /// Option name used to select symbol table passes.
-pub const SYM_TABLE_PASSES: &'static str = "symbol-table-passes";
+pub const SYM_TABLE_PASSES: &str = "symbol-table-passes";
 
 /// Option name used to set the log output to a json file.
-pub const JSON_OUTPUT: &'static str = "json-output";
+pub const JSON_OUTPUT: &str = "json-output";
 
 /// Option name used to force logger to use color output. This doesn't work with --json-output.
-pub const COLOR_OUTPUT: &'static str = "color-output";
+pub const COLOR_OUTPUT: &str = "color-output";
 
 /// Option name used to dump function pointer restrictions.
-pub const RESTRICT_FN_PTRS: &'static str = "restrict-vtable-fn-ptrs";
+pub const RESTRICT_FN_PTRS: &str = "restrict-vtable-fn-ptrs";
 
 /// Option name used to enable assertion reachability checks.
-pub const ASSERTION_REACH_CHECKS: &'static str = "assertion-reach-checks";
+pub const ASSERTION_REACH_CHECKS: &str = "assertion-reach-checks";
 
 /// Option name used to use json pretty-print for output files.
-pub const PRETTY_OUTPUT_FILES: &'static str = "pretty-json-files";
+pub const PRETTY_OUTPUT_FILES: &str = "pretty-json-files";
 
 /// Option used for suppressing global ASM error.
-pub const IGNORE_GLOBAL_ASM: &'static str = "ignore-global-asm";
+pub const IGNORE_GLOBAL_ASM: &str = "ignore-global-asm";
 
 /// Option name used to override the sysroot.
-pub const SYSROOT: &'static str = "sysroot";
+pub const SYSROOT: &str = "sysroot";
 
 /// Option name used to pass extra rustc-options.
-pub const RUSTC_OPTIONS: &'static str = "rustc-options";
+pub const RUSTC_OPTIONS: &str = "rustc-options";
 
-pub const RUSTC_VERSION: &'static str = "rustc-version";
+pub const RUSTC_VERSION: &str = "rustc-version";
 
 /// Environmental variable used to retrieve extra Kani command arguments.
-const KANIFLAGS_ENV_VAR: &'static str = "KANIFLAGS";
+const KANIFLAGS_ENV_VAR: &str = "KANIFLAGS";
 
 /// Flag used to indicated that we should retrieve more arguments from `KANIFLAGS' env variable.
-const KANI_ARGS_FLAG: &'static str = "--kani-flags";
+const KANI_ARGS_FLAG: &str = "--kani-flags";
 
 /// Configure command options for the Kani compiler.
 pub fn parser<'a, 'b>() -> App<'a, 'b> {
@@ -160,7 +160,7 @@ pub fn command_arguments(args: &Vec<String>) -> Vec<String> {
     if has_kani_flags {
         let mut new_args: Vec<String> = Vec::new();
         new_args.push(args[0].clone());
-        let env_flags = env::var(KANIFLAGS_ENV_VAR).unwrap_or(String::new());
+        let env_flags = env::var(KANIFLAGS_ENV_VAR).unwrap_or_default();
         new_args.extend(
             shell_words::split(&env_flags)
                 .expect(&format!("Cannot parse {} value '{}'", KANIFLAGS_ENV_VAR, env_flags)),

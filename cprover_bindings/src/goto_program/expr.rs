@@ -1,5 +1,9 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+
+// This file has a lot of function with names like "div"
+#![allow(clippy::should_implement_trait)]
+
 use self::BinaryOperand::*;
 use self::ExprValue::*;
 use self::UnaryOperand::*;
@@ -488,7 +492,7 @@ impl Expr {
         let mut rval: Vec<_> = parameters
             .iter()
             .map(|parameter| {
-                arguments.remove(0).cast_to_machine_equivalent_type(&parameter.typ(), mm)
+                arguments.remove(0).cast_to_machine_equivalent_type(parameter.typ(), mm)
             })
             .collect();
 
@@ -510,7 +514,7 @@ impl Expr {
 
     /// `union {double d; uint64_t bp} u = {.bp = 0x1234}; >>> u.d <<<`
     pub fn double_constant_from_bitpattern(bp: u64) -> Self {
-        let c = unsafe { std::mem::transmute(bp) };
+        let c = f64::from_bits(bp);
         Self::double_constant(c)
     }
 
@@ -521,7 +525,7 @@ impl Expr {
 
     /// `union {float f; uint32_t bp} u = {.bp = 0x1234}; >>> u.f <<<`
     pub fn float_constant_from_bitpattern(bp: u32) -> Self {
-        let c = unsafe { std::mem::transmute(bp) };
+        let c = f32::from_bits(bp);
         Self::float_constant(c)
     }
 
@@ -622,7 +626,7 @@ impl Expr {
     /// e.g. `({ int y = foo (); int z; if (y > 0) z = y; else z = - y; z; })`
     /// `({ op1; op2; ...})`
     pub fn statement_expression(ops: Vec<Stmt>, typ: Type) -> Self {
-        assert!(ops.len() > 0);
+        assert!(!ops.is_empty());
         assert_eq!(ops.last().unwrap().get_expression().unwrap().typ, typ);
         expr!(StatementExpression { statements: ops }, typ)
     }
@@ -1350,7 +1354,7 @@ impl Expr {
         assert!(self.typ.is_integer());
         assert_eq!(self.typ, e.typ);
         let typ = self.typ.clone();
-        let res = self.clone().add_overflow(e.clone());
+        let res = self.clone().add_overflow(e);
         // If negative + something overflowed, the something must have been negative too, so we saturate to min.
         // (self < 0) ? min_int : max_int
         let saturating_val = self.is_negative().ternary(typ.min_int_expr(mm), typ.max_int_expr(mm));
@@ -1362,7 +1366,7 @@ impl Expr {
         assert!(self.typ.is_integer());
         assert_eq!(self.typ, e.typ);
         let typ = self.typ.clone();
-        let res = self.clone().sub_overflow(e.clone());
+        let res = self.sub_overflow(e.clone());
         // If something minus a negative overflowed, it must have overflowed past positive max. Saturate there.
         // Otherwise, if something minus a positive overflowed, it must have overflowed to past min. Saturate there.
         let saturating_val = e.is_negative().ternary(typ.max_int_expr(mm), typ.min_int_expr(mm));
@@ -1446,12 +1450,12 @@ impl Expr {
                 }
             }
             None => {
-                for i in 0..fields.len() {
-                    if fields[i].is_padding() {
+                for field in fields {
+                    if field.is_padding() {
                         continue;
                     }
-                    let name = fields[i].name();
-                    exprs.insert(name, self.clone().member(&name.to_string(), &symbol_table));
+                    let name = field.name();
+                    exprs.insert(name, self.clone().member(&name.to_string(), symbol_table));
                 }
             }
         }

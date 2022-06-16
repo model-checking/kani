@@ -198,7 +198,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // This follows the naming convention defined in `typ.rs`.
                 let lc = Local::from_usize(arg_i + starting_idx);
                 let (name, base_name) = self.codegen_spread_arg_name(&lc);
-                let sym = Symbol::variable(name, base_name, self.codegen_ty(arg_t), loc.clone())
+                let sym = Symbol::variable(name, base_name, self.codegen_ty(arg_t), loc)
                     .with_is_hidden(false);
                 // The spread arguments are additional function paramaters that are patched in
                 // They are to the function signature added in the `fn_typ` function.
@@ -212,7 +212,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }));
         let marshalled_tuple_value =
             Expr::struct_expr(tup_typ.clone(), marshalled_tuple_fields, &self.symbol_table)
-                .with_location(loc.clone());
+                .with_location(loc);
         self.declare_variable(
             self.codegen_var_name(&spread_arg),
             self.codegen_var_base_name(&spread_arg),
@@ -291,21 +291,19 @@ impl<'tcx> GotocCtx<'tcx> {
         let mangled_name = current_fn.name();
         let loc = self.codegen_span(&current_fn.mir().span);
 
-        let harness = HarnessMetadata {
+        HarnessMetadata {
             pretty_name,
             mangled_name,
             original_file: loc.filename().unwrap(),
             original_line: loc.line().unwrap().to_string(),
             unwind_value: None,
-        };
-
-        harness
+        }
     }
 
     /// Updates the proof harness with new unwind value
     fn handle_kanitool_unwind(&mut self, attr: &Attribute, harness: &mut HarnessMetadata) {
         // If some unwind value already exists, then the current unwind being handled is a duplicate
-        if !harness.unwind_value.is_none() {
+        if harness.unwind_value.is_some() {
             self.tcx.sess.span_err(attr.span, "Only one '#[kani::unwind]' allowed");
             return;
         }
