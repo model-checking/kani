@@ -1,8 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// This test checks whether dropping after mutating with Rc<Refcell<>>
-// is handled correctly.
+//! This test checks whether dropping after mutating with
+//! Rc<Refcell<>> is handled correctly.
 //
 // Note: If you were to use Rc<RefCell<dyn CELLValueInFuture>>, then
 // kani will fail with an unsupported feature error. This is because
