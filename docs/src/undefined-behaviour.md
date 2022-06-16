@@ -38,6 +38,8 @@ A non-exhaustive list of these, based on the non-exhaustive list from the [Rust 
     * Kani provides a [mechanism](./tutorial-nondeterministic-variables.md#safe-nondeterministic-variables-for-custom-types) `is_valid()` which users can use to check validity of objects, but it does not currently apply to all types.
 * Incorrect use of inline assembly.
     * Kani does not support inline assembly.
+* Using uninitialized memory.
+    * See the corresponding section in our [Rust feature support](./rust-feature-support.md#uninitialized-memory).
 
 Kani makes a best-effort attempt to detect some cases of UB:
 * Evaluating a dereference expression (`*expr`) on a raw pointer that is dangling or unaligned.
