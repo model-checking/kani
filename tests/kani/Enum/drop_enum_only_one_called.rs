@@ -22,8 +22,8 @@ enum EnumWithTwoIncrements {
     Add2(IncrementCELLWhenDropped),
 }
 
-fn get_random_enum_variant(random: u32) -> EnumWithTwoIncrements {
-    if random % 2 == 0 {
+fn get_random_enum_variant() -> EnumWithTwoIncrements {
+    if kani::any() {
         EnumWithTwoIncrements::Add1(IncrementCELLWhenDropped { increment_by: 1 })
     } else {
         EnumWithTwoIncrements::Add2(IncrementCELLWhenDropped { increment_by: 2 })
@@ -33,7 +33,7 @@ fn get_random_enum_variant(random: u32) -> EnumWithTwoIncrements {
 #[kani::proof]
 fn main() {
     {
-        let _e1 = get_random_enum_variant(kani::any());
+        let _e1 = get_random_enum_variant();
     }
     unsafe {
         assert!(CELL == 1 || CELL == 2);
