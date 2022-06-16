@@ -48,6 +48,7 @@ fn main() {
         let wrapped_drop: Rc<RefCell<DropSetCELLToInner>> = Rc::new(RefCell::new(set_to_one));
 
         wrapped_drop.borrow_mut().set_inner_value(2);
+        assert_eq!(wrapped_drop.borrow().get_inner_value(), 2, "Value should be updated.");
     }
     assert_eq!(unsafe { CELL }, 2, "Drop should be called. New value used during drop.");
 }
