@@ -3,6 +3,10 @@
 
 // This test checks whether dropping objects passed through
 // std::sync::mpsc::channel is handled.
+//
+// This test case fails to resolve in a reasonable amount of
+// time. Settign kani::unwind(1) is insufficient for verification, but
+// kani::unwind(2) takes longer than 10m on a M1 Mac.
 
 use std::sync::mpsc::*;
 
