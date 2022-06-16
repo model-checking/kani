@@ -1,8 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// This test checks whether dropping objects passed through
-// std::sync::mpsc::channel is handled.
+//! This test checks whether dropping objects passed through
+//! std::sync::mpsc::channel is handled.
 //
 // This test case fails to resolve in a reasonable amount of
 // time. Settign kani::unwind(1) is insufficient for verification, but
