@@ -138,9 +138,7 @@ impl KaniSession {
         let output_file = std::fs::File::create(&stdout)?;
         cmd.stdout(output_file);
 
-        cmd
-            .status()
-            .context(format!("Failed to invoke {}", cmd.get_program().to_string_lossy()))
+        cmd.status().context(format!("Failed to invoke {}", cmd.get_program().to_string_lossy()))
     }
 }
 

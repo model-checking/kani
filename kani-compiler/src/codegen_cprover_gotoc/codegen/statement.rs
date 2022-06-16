@@ -77,11 +77,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             TerminatorKind::Unreachable => Stmt::block(
                 vec![
-                    self.codegen_assert_false(
-                        PropertyClass::Unreachable,
-                        "unreachable code",
-                        loc,
-                    ),
+                    self.codegen_assert_false(PropertyClass::Unreachable, "unreachable code", loc),
                     Stmt::assume(Expr::bool_false(), loc),
                 ],
                 loc,
@@ -196,8 +192,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             }
                         }
                         let self_data = trait_fat_ptr.to_owned().member("data", &self.symbol_table);
-                        let self_ref =
-                            self_data.cast_to(trait_fat_ptr.typ().clone().to_pointer());
+                        let self_ref = self_data.cast_to(trait_fat_ptr.typ().clone().to_pointer());
 
                         let call =
                             fn_ptr.dereference().call(vec![self_ref]).as_stmt(Location::none());
@@ -500,12 +495,8 @@ impl<'tcx> GotocCtx<'tcx> {
         // could be vacuously true.
         let call_is_nonnull = fn_ptr.clone().is_nonnull();
         let assert_msg = format!("Non-null virtual function call for {:?}", vtable_field_name);
-        let assert_nonnull = self.codegen_assert(
-            call_is_nonnull,
-            PropertyClass::DefaultAssertion,
-            &assert_msg,
-            loc,
-        );
+        let assert_nonnull =
+            self.codegen_assert(call_is_nonnull, PropertyClass::DefaultAssertion, &assert_msg, loc);
 
         // Virtual function call and corresponding nonnull assertion.
         let call = fn_ptr.dereference().call(fargs.to_vec());

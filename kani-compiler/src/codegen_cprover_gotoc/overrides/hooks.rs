@@ -118,10 +118,7 @@ impl<'tcx> GotocHook<'tcx> for Assume {
         let loc = tcx.codegen_span_option(span);
 
         Stmt::block(
-            vec![
-                Stmt::assume(cond, loc),
-                Stmt::goto(tcx.current_fn().find_label(&target), loc),
-            ],
+            vec![Stmt::assume(cond, loc), Stmt::goto(tcx.current_fn().find_label(&target), loc)],
             loc,
         )
     }
@@ -171,12 +168,7 @@ impl<'tcx> GotocHook<'tcx> for Assert {
             vec![
                 reach_stmt,
                 Stmt::decl(tmp.clone(), Some(cond), caller_loc),
-                tcx.codegen_assert(
-                    tmp.clone(),
-                    PropertyClass::DefaultAssertion,
-                    &msg,
-                    caller_loc,
-                ),
+                tcx.codegen_assert(tmp.clone(), PropertyClass::DefaultAssertion, &msg, caller_loc),
                 Stmt::assume(tmp, caller_loc),
                 Stmt::goto(tcx.current_fn().find_label(&target), caller_loc),
             ],
@@ -389,10 +381,7 @@ impl<'tcx> GotocHook<'tcx> for SliceFromRawPart {
         let len = fargs.remove(0);
         let code = unwrap_or_return_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&assign_to))
             .goto_expr
-            .assign(
-                Expr::struct_expr_from_values(pt, vec![data, len], &tcx.symbol_table),
-                loc,
-            )
+            .assign(Expr::struct_expr_from_values(pt, vec![data, len], &tcx.symbol_table), loc)
             .with_location(loc);
         Stmt::block(vec![code, Stmt::goto(tcx.current_fn().find_label(&target), loc)], loc)
     }

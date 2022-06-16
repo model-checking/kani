@@ -684,18 +684,10 @@ impl<'tcx> GotocCtx<'tcx> {
         let msg1 = format!("first argument for {} is finite", intrinsic);
         let msg2 = format!("second argument for {} is finite", intrinsic);
         let loc = self.codegen_span_option(span);
-        let finite_check1 = self.codegen_assert(
-            arg1.is_finite(),
-            PropertyClass::FiniteCheck,
-            msg1.as_str(),
-            loc,
-        );
-        let finite_check2 = self.codegen_assert(
-            arg2.is_finite(),
-            PropertyClass::FiniteCheck,
-            msg2.as_str(),
-            loc,
-        );
+        let finite_check1 =
+            self.codegen_assert(arg1.is_finite(), PropertyClass::FiniteCheck, msg1.as_str(), loc);
+        let finite_check2 =
+            self.codegen_assert(arg2.is_finite(), PropertyClass::FiniteCheck, msg2.as_str(), loc);
         Stmt::block(vec![finite_check1, finite_check2, stmt], loc)
     }
 
@@ -1415,10 +1407,8 @@ impl<'tcx> GotocCtx<'tcx> {
         let layout = self.layout_of(ty);
         let size_of_elem = Expr::int_constant(layout.size.bytes(), res_ty);
         let size_of_count_elems = count.mul_overflow(size_of_elem);
-        let message = format!(
-            "{}: attempt to compute number in bytes which would overflow",
-            intrinsic
-        );
+        let message =
+            format!("{}: attempt to compute number in bytes which would overflow", intrinsic);
         let assert_stmt = self.codegen_assert(
             size_of_count_elems.overflowed.not(),
             PropertyClass::ArithmeticOverflow,

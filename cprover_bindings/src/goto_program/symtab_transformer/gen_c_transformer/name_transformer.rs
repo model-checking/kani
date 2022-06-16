@@ -95,7 +95,7 @@ impl NameTransformer {
                     return new_name.replace(illegal, replacement);
                 }
             }
-            
+
             new_name
         }
 

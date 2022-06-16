@@ -581,10 +581,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let dst_metadata_field = if let Some(vtable_typ) =
             dst_goto_typ.lookup_field_type("vtable", &self.symbol_table)
         {
-            (
-                "vtable",
-                src_goto_expr.member("vtable", &self.symbol_table).cast_to(vtable_typ),
-            )
+            ("vtable", src_goto_expr.member("vtable", &self.symbol_table).cast_to(vtable_typ))
         } else if let Some(len_typ) = dst_goto_typ.lookup_field_type("len", &self.symbol_table) {
             ("len", src_goto_expr.member("len", &self.symbol_table).cast_to(len_typ))
         } else {
