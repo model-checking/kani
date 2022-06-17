@@ -61,18 +61,18 @@ impl<'tcx> GotocCtx<'tcx> {
         if !self.unsupported_constructs.contains_key(&key) {
             self.unsupported_constructs.insert(key, Vec::new());
         }
-        self.unsupported_constructs.get_mut(&key).unwrap().push(loc.clone());
+        self.unsupported_constructs.get_mut(&key).unwrap().push(loc);
 
         let body = vec![
             // Assert false to alert the user that there is a path that uses an unimplemented feature.
             self.codegen_assert_false(
                 PropertyClass::UnsupportedConstruct,
                 &GotocCtx::unsupported_msg(operation_name, Some(url)),
-                loc.clone(),
+                loc,
             ),
             // Assume false to block any further exploration of this path.
-            Stmt::assume(Expr::bool_false(), loc.clone()),
-            t.nondet().as_stmt(loc.clone()).with_location(loc.clone()), //TODO assume rust validity contraints
+            Stmt::assume(Expr::bool_false(), loc),
+            t.nondet().as_stmt(loc).with_location(loc), //TODO assume rust validity contraints
         ];
 
         Expr::statement_expression(body, t).with_location(loc)
@@ -95,9 +95,9 @@ impl<'tcx> GotocCtx<'tcx> {
 
     pub fn unsupported_msg(item: &str, url: Option<&str>) -> String {
         let mut s = format!("{} is not currently supported by Kani", item);
-        if url.is_some() {
+        if let Some(url) = url {
             s.push_str(". Please post your example at ");
-            s.push_str(url.unwrap());
+            s.push_str(url);
         }
         s
     }

@@ -5,7 +5,6 @@
 
 use crate::parser;
 use clap::ArgMatches;
-use rustc_driver;
 use std::lazy::SyncLazy;
 use std::panic;
 use std::str::FromStr;
@@ -13,7 +12,7 @@ use tracing_subscriber::{filter::Directive, layer::SubscriberExt, EnvFilter, Reg
 use tracing_tree::HierarchicalLayer;
 
 /// Environment variable used to control this session log tracing.
-const LOG_ENV_VAR: &'static str = "KANI_LOG";
+const LOG_ENV_VAR: &str = "KANI_LOG";
 
 // Include Kani's bug reporting URL in our panics.
 const BUG_REPORT_URL: &str =

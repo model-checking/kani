@@ -16,7 +16,6 @@ use rustc_middle::ty::{
     self, AdtDef, FloatTy, Instance, IntTy, PolyFnSig, Ty, UintTy, VariantDef, VtblEntry,
 };
 use rustc_middle::ty::{List, TypeFoldable};
-use rustc_span;
 use rustc_span::def_id::DefId;
 use rustc_target::abi::{
     Abi::Vector, FieldsShape, Integer, Layout, Primitive, TagEncoding, VariantIdx, Variants,
@@ -139,7 +138,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
             // The leading argument should be exactly the environment
             assert!(prev_args.len() == 1);
-            let env = prev_args[0].clone();
+            let env = prev_args[0];
 
             // Recombine arguments: environment first, then the flattened tuple elements
             let recombined_args = iter::once(env).chain(args);
@@ -1109,7 +1108,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             fields.push(DatatypeComponent::field(
                                 "cases",
                                 ctx.ensure_union(
-                                    &format!("{}-union", name.to_string()),
+                                    &format!("{}-union", name),
                                     NO_PRETTY_NAME,
                                     |ctx, name| {
                                         ctx.codegen_enum_cases(
@@ -1279,7 +1278,7 @@ impl<'tcx> GotocCtx<'tcx> {
         variant: &Layout,
         initial_offset: usize,
     ) -> Type {
-        let case_name = format!("{}::{}", name.to_string(), case.name);
+        let case_name = format!("{}::{}", name, case.name);
         debug!("handling variant {}: {:?}", case_name, case);
         self.ensure_struct(&case_name, NO_PRETTY_NAME, |tcx, _| {
             tcx.codegen_variant_struct_fields(case, subst, variant, initial_offset)
@@ -1291,7 +1290,7 @@ impl<'tcx> GotocCtx<'tcx> {
         debug! {"handling simd with layout {:?}", layout};
 
         let (element, size) = match layout {
-            Vector { element, count } => (element.clone(), count),
+            Vector { element, count } => (element, count),
             _ => unreachable!(),
         };
 
@@ -1345,7 +1344,7 @@ impl<'tcx> GotocCtx<'tcx> {
             if let Some(self_param) = params.first() {
                 let ident = self_param.identifier();
                 let ty = self_param.typ().clone();
-                params[0] = ty.clone().to_pointer().as_parameter(ident, ident);
+                params[0] = ty.to_pointer().as_parameter(ident, ident);
             }
         }
 
@@ -1452,20 +1451,20 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn use_thin_pointer(&self, mir_type: Ty<'tcx>) -> bool {
         // ptr_metadata_ty is not defined on all types, the projection of an associated type
         let (metadata, _check_is_sized) = mir_type.ptr_metadata_ty(self.tcx, normalize_type);
-        return !self.is_unsized(mir_type) || metadata == self.tcx.types.unit;
+        !self.is_unsized(mir_type) || metadata == self.tcx.types.unit
     }
     /// A pointer to the mir type should be a slice fat pointer.
     /// We use a slice fat pointer if the metadata is the slice length (type usize).
     pub fn use_slice_fat_pointer(&self, mir_type: Ty<'tcx>) -> bool {
         let (metadata, _check_is_sized) = mir_type.ptr_metadata_ty(self.tcx, normalize_type);
-        return metadata == self.tcx.types.usize;
+        metadata == self.tcx.types.usize
     }
     /// A pointer to the mir type should be a vtable fat pointer.
     /// We use a vtable fat pointer if this is a fat pointer to anything that is not a slice ptr.
     /// I.e.: The metadata is not length (type usize).
     pub fn use_vtable_fat_pointer(&self, mir_type: Ty<'tcx>) -> bool {
         let (metadata, _check_is_sized) = mir_type.ptr_metadata_ty(self.tcx, normalize_type);
-        return metadata != self.tcx.types.unit && metadata != self.tcx.types.usize;
+        metadata != self.tcx.types.unit && metadata != self.tcx.types.usize
     }
 
     /// Check if the mir type already is a vtable fat pointer.

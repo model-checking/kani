@@ -189,7 +189,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let name = name.into();
         if !self.symbol_table.contains(name) {
             tracing::debug!(?name, "Ensure global variable");
-            let sym = Symbol::static_variable(name, name, t.clone(), loc)
+            let sym = Symbol::static_variable(name, name, t, loc)
                 .with_is_file_local(is_file_local)
                 .with_is_hidden(false);
             let var = sym.to_expr();
@@ -221,7 +221,7 @@ impl<'tcx> GotocCtx<'tcx> {
         if !self.symbol_table.contains(aggr_tag(struct_name)) {
             let pretty_name = pretty_name.intern();
             // Prevent recursion by inserting an incomplete value.
-            self.symbol_table.insert(Symbol::incomplete_struct(struct_name, pretty_name.clone()));
+            self.symbol_table.insert(Symbol::incomplete_struct(struct_name, pretty_name));
             let components = f(self, struct_name);
             let struct_name: InternedString = struct_name;
             let sym = Symbol::struct_type(struct_name, pretty_name, components);

@@ -68,7 +68,7 @@ impl Tree {
     /// A helper format function that indents each level of the tree.
     fn fmt_aux(&self, p: usize, f: &mut Formatter<'_>) -> Result {
         // Do not print line numbers.
-        if self.children.len() == 0 {
+        if self.children.is_empty() {
             return Ok(());
         }
         // Write `p` spaces into the formatter.

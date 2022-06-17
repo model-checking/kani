@@ -55,7 +55,7 @@ impl<'tcx> CurrentFnCtx<'tcx> {
 impl<'tcx> CurrentFnCtx<'tcx> {
     /// Returns the current block, replacing it with an empty vector.
     pub fn extract_block(&mut self) -> Vec<Stmt> {
-        std::mem::replace(&mut self.block, vec![])
+        std::mem::take(&mut self.block)
     }
 
     pub fn get_and_incr_counter(&mut self) -> u64 {

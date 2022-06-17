@@ -70,8 +70,8 @@ pub trait Transformer: Sized {
     }
 
     /// Transforms an array type (`typ x[size]`)
-    fn transform_type_array(&mut self, typ: &Box<Type>, size: &u64) -> Type {
-        let transformed_typ = self.transform_type(typ.as_ref());
+    fn transform_type_array(&mut self, typ: &Type, size: &u64) -> Type {
+        let transformed_typ = self.transform_type(typ);
         transformed_typ.array_of(*size)
     }
 
@@ -81,8 +81,8 @@ pub trait Transformer: Sized {
     }
 
     /// Transforms a c bit field type (`typ x : width`)
-    fn transform_type_c_bit_field(&mut self, typ: &Box<Type>, width: &u64) -> Type {
-        let transformed_typ = self.transform_type(typ.as_ref());
+    fn transform_type_c_bit_field(&mut self, typ: &Type, width: &u64) -> Type {
+        let transformed_typ = self.transform_type(typ);
         transformed_typ.as_bitfield(*width)
     }
 
@@ -104,7 +104,7 @@ pub trait Transformer: Sized {
     }
 
     /// Transforms a function type (`return_type x(parameters)`)
-    fn transform_type_code(&mut self, parameters: &[Parameter], return_type: &Box<Type>) -> Type {
+    fn transform_type_code(&mut self, parameters: &[Parameter], return_type: &Type) -> Type {
         let transformed_parameters =
             parameters.iter().map(|parameter| self.transform_type_parameter(parameter)).collect();
         let transformed_return_type = self.transform_type(return_type);
@@ -127,7 +127,7 @@ pub trait Transformer: Sized {
     }
 
     /// Transforms a flexible array type (`typ x[]`)
-    fn transform_type_flexible_array(&mut self, typ: &Box<Type>) -> Type {
+    fn transform_type_flexible_array(&mut self, typ: &Type) -> Type {
         let transformed_typ = self.transform_type(typ);
         Type::flexible_array_of(transformed_typ)
     }
@@ -148,14 +148,14 @@ pub trait Transformer: Sized {
     }
 
     /// Transforms an infinite array type (`typ x[__CPROVER_infinity()]`)
-    fn transform_type_infinite_array(&mut self, typ: &Box<Type>) -> Type {
-        let transformed_typ = self.transform_type(typ.as_ref());
+    fn transform_type_infinite_array(&mut self, typ: &Type) -> Type {
+        let transformed_typ = self.transform_type(typ);
         transformed_typ.infinite_array_of()
     }
 
     /// Transforms a pointer type (`typ*`)
-    fn transform_type_pointer(&mut self, typ: &Box<Type>) -> Type {
-        let transformed_typ = self.transform_type(typ.as_ref());
+    fn transform_type_pointer(&mut self, typ: &Type) -> Type {
+        let transformed_typ = self.transform_type(typ);
         transformed_typ.to_pointer()
     }
 
@@ -219,23 +219,23 @@ pub trait Transformer: Sized {
     fn transform_type_variadic_code(
         &mut self,
         parameters: &[Parameter],
-        return_type: &Box<Type>,
+        return_type: &Type,
     ) -> Type {
         let transformed_parameters =
             parameters.iter().map(|parameter| self.transform_type_parameter(parameter)).collect();
-        let transformed_return_type = self.transform_type(return_type.as_ref());
+        let transformed_return_type = self.transform_type(return_type);
         Type::variadic_code(transformed_parameters, transformed_return_type)
     }
 
     /// Transforms a vector type (`typ __attribute__((vector_size (size * sizeof(typ)))) var;`)
-    fn transform_type_vector(&mut self, typ: &Box<Type>, size: &u64) -> Type {
-        let transformed_typ = self.transform_type(typ.as_ref());
+    fn transform_type_vector(&mut self, typ: &Type, size: &u64) -> Type {
+        let transformed_typ = self.transform_type(typ);
         Type::vector(transformed_typ, *size)
     }
 
     /// Transforms a type def (`typedef typ tag`)
-    fn transform_type_def(&mut self, tag: InternedString, typ: &Box<Type>) -> Type {
-        let transformed_typ = self.transform_type(typ.as_ref());
+    fn transform_type_def(&mut self, tag: InternedString, typ: &Type) -> Type {
+        let transformed_typ = self.transform_type(typ);
         transformed_typ.to_typedef(tag)
     }
 
@@ -279,7 +279,7 @@ pub trait Transformer: Sized {
             ExprValue::UnOp { op, e } => self.transform_expr_un_op(typ, op, e),
             ExprValue::Vector { elems } => self.transform_expr_vector(typ, elems),
         }
-        .with_location(e.location().clone())
+        .with_location(*e.location())
     }
 
     /// Transforms a reference expr (`&self`)
@@ -450,7 +450,7 @@ pub trait Transformer: Sized {
             transformed_typ
         );
         let transformed_values: Vec<_> =
-            values.into_iter().map(|value| self.transform_expr(value)).collect();
+            values.iter().map(|value| self.transform_expr(value)).collect();
         Expr::struct_expr_from_padded_values(
             transformed_typ,
             transformed_values,
@@ -530,7 +530,7 @@ pub trait Transformer: Sized {
             }
             StmtBody::While { cond, body } => self.transform_stmt_while(cond, body),
         }
-        .with_location(stmt.location().clone())
+        .with_location(*stmt.location())
     }
 
     /// Transforms an assign stmt (`lhs = rhs;`)

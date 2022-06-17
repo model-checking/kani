@@ -159,7 +159,7 @@ impl Symbol {
             name.to_string(),
             loc,
             typ,
-            body.map_or(SymbolValues::None, |x| SymbolValues::Stmt(x)),
+            body.map_or(SymbolValues::None, SymbolValues::Stmt),
             Some(name),
             pretty_name,
         )

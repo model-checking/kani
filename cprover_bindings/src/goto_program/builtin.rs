@@ -312,6 +312,6 @@ impl BuiltinFn {
     }
 
     pub fn call(&self, arguments: Vec<Expr>, loc: Location) -> Expr {
-        self.as_expr().with_location(loc.clone()).call(arguments).with_location(loc)
+        self.as_expr().with_location(loc).call(arguments).with_location(loc)
     }
 }
