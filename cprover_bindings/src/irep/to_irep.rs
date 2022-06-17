@@ -206,7 +206,7 @@ impl ToIrep for ExprValue {
             }
             //TODO, determine if there is an endineness problem here
             ExprValue::DoubleConstant(i) => {
-                let c: u64 = unsafe { std::mem::transmute(*i) };
+                let c: u64 = i.to_bits();
                 Irep {
                     id: IrepId::Constant,
                     sub: vec![],
@@ -217,7 +217,7 @@ impl ToIrep for ExprValue {
                 }
             }
             ExprValue::FloatConstant(i) => {
-                let c: u32 = unsafe { std::mem::transmute(*i) };
+                let c: u32 = i.to_bits();
                 Irep {
                     id: IrepId::Constant,
                     sub: vec![],
@@ -405,8 +405,7 @@ impl ToIrep for StmtBody {
             StmtBody::Assume { cond } => code_irep(IrepId::Assume, vec![cond.to_irep(mm)]),
             StmtBody::AtomicBlock(stmts) => {
                 let mut irep_stmts = vec![code_irep(IrepId::AtomicBegin, vec![])];
-                irep_stmts
-                    .append(&mut stmts.into_iter().map(|x| x.to_irep(mm)).collect::<Vec<Irep>>());
+                irep_stmts.append(&mut stmts.iter().map(|x| x.to_irep(mm)).collect());
                 irep_stmts.push(code_irep(IrepId::AtomicEnd, vec![]));
                 code_irep(IrepId::Block, irep_stmts)
             }

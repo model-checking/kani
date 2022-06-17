@@ -57,7 +57,7 @@ fn prebundle(dir: &Path) -> Result<()> {
         );
     }
 
-    if !which::which("cbmc").is_ok() {
+    if which::which("cbmc").is_err() {
         bail!("Couldn't find the 'cbmc' binary to include in the release bundle.");
     }
 

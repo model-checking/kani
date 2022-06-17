@@ -81,7 +81,7 @@ impl ExprTransformer {
 
     /// Extract `empty_statics` map for final processing.
     fn empty_statics_owned(&mut self) -> HashMap<InternedString, Expr> {
-        std::mem::replace(&mut self.empty_statics, HashMap::default())
+        std::mem::take(&mut self.empty_statics)
     }
 
     /// Add identifier to a transformed parameter if it's missing;

@@ -24,9 +24,10 @@ use rustc_session::Session;
 use rustc_target::abi::Endian;
 use rustc_target::spec::PanicStrategy;
 use std::collections::BTreeMap;
+use std::fmt::Write;
 use std::io::BufWriter;
 use std::iter::FromIterator;
-use std::path::PathBuf;
+use std::path::Path;
 use std::rc::Rc;
 use tracing::{debug, warn};
 
@@ -37,7 +38,7 @@ pub struct GotocCodegenBackend {
 
 impl GotocCodegenBackend {
     pub fn new(queries: &Rc<QueryDb>) -> Box<dyn CodegenBackend> {
-        Box::new(GotocCodegenBackend { queries: Rc::clone(&queries) })
+        Box::new(GotocCodegenBackend { queries: Rc::clone(queries) })
     }
 }
 
@@ -58,8 +59,8 @@ impl CodegenBackend for GotocCodegenBackend {
     ) -> Box<dyn Any> {
         super::utils::init();
 
-        check_target(&tcx.sess);
-        check_options(&tcx.sess, need_metadata_module);
+        check_target(tcx.sess);
+        check_options(tcx.sess, need_metadata_module);
 
         let codegen_units: &'tcx [CodegenUnit<'_>] = tcx.collect_and_partition_mono_items(()).1;
         let mut c = GotocCtx::new(tcx, self.queries.clone());
@@ -279,7 +280,7 @@ fn check_options(session: &Session, need_metadata_module: bool) {
     session.abort_if_errors();
 }
 
-fn write_file<T>(base_filename: &PathBuf, extension: &str, source: &T, pretty: bool)
+fn write_file<T>(base_filename: &Path, extension: &str, source: &T, pretty: bool)
 where
     T: serde::Serialize,
 {
@@ -306,7 +307,7 @@ fn print_report<'tcx>(ctx: &GotocCtx, tcx: TyCtxt<'tcx>) {
             .collect();
         let mut msg = String::from("Found the following unsupported constructs:\n");
         unsupported.iter().for_each(|(construct, locations)| {
-            msg += &format!("    - {} ({})\n", construct, locations.len())
+            writeln!(&mut msg, "    - {} ({})", construct, locations.len()).unwrap();
         });
         msg += "\nVerification will fail if one or more of these constructs is reachable.";
         msg += "\nSee https://model-checking.github.io/kani/rust-feature-support.html for more \

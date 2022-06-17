@@ -18,8 +18,7 @@ use rustc_hir as hir;
 use rustc_hir::def::{CtorKind, DefKind, Res};
 use rustc_hir::def_id::{DefId, CRATE_DEF_INDEX, LOCAL_CRATE};
 use rustc_middle::middle::resolve_lifetime as rl;
-use rustc_middle::ty::subst::{InternalSubsts, Subst};
-use rustc_middle::ty::{self, AdtKind, DefIdTree, EarlyBinder, Lift, Ty, TyCtxt};
+use rustc_middle::ty::{self, DefIdTree, Lift, Ty, TyCtxt};
 use rustc_middle::{bug, span_bug};
 use rustc_span::hygiene::{AstPass, MacroKind};
 use rustc_span::symbol::{kw, sym, Ident, Symbol};
@@ -1432,7 +1431,7 @@ fn normalize<'tcx>(cx: &mut DocContext<'tcx>, ty: Ty<'_>) -> Option<Ty<'tcx>> {
 }
 
 impl<'tcx> Clean<Type> for Ty<'tcx> {
-    fn clean(&self, cx: &mut DocContext<'_>) -> Type {
+    fn clean(&self, _cx: &mut DocContext<'_>) -> Type {
         trace!("cleaning type: {:?}", self);
         unreachable!();
     }

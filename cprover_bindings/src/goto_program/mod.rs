@@ -1,6 +1,11 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+
 //! This module contains typesafe representations of CBMC's data structures
+
+// There are a fair number of constructs in this module that are better maintained as
+// explicit pattern matching versus using the `matches!` macro.
+#![allow(clippy::match_like_matches_macro)]
 
 mod builtin;
 mod expr;
