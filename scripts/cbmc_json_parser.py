@@ -95,7 +95,8 @@ def main(argv):
 
     # The cbmc output can be either file mode (default) or stream mode (--read-cbmc-from-stream)
     cbmc_output_mode = argv[1].split(".")[-1]
-    if not ((cbmc_output_mode == GlobalMessages.READ_FROM_FILE) or (cbmc_output_mode == GlobalMessages.READ_FROM_STREAM)):
+    if not ((cbmc_output_mode == GlobalMessages.READ_FROM_FILE) or (
+            cbmc_output_mode == GlobalMessages.READ_FROM_STREAM)):
         usage_error(f"CBMC output mode invalid\n")
 
     if len(argv) == 4:
@@ -123,7 +124,7 @@ def main(argv):
     else:
         # parse the input json file
         with open(argv[1]) as f:
-            sample_json_file_parsing = f.read() 
+            sample_json_file_parsing = f.read()
 
         # the main function should take a json file as input
         return_code = transform_cbmc_output(sample_json_file_parsing,
