@@ -1,0 +1,11 @@
+"description": "attempt to compute unchecked_mul which would overflow",
+"property": "core::num::<impl u8>::unchecked_mul.arithmetic_overflow.1",
+"status": "SUCCESS"
+
+"description": "attempt to compute unchecked_add which would overflow",
+"property": "core::num::<impl u8>::unchecked_add.arithmetic_overflow.1",
+"status": "SUCCESS"
+
+"description": "attempt to compute unchecked_sub which would overflow",
+"property": "core::num::<impl u8>::unchecked_sub.arithmetic_overflow.1",
+"status": "SUCCESS"
