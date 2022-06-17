@@ -52,7 +52,7 @@ impl Serialize for crate::goto_program::SymbolTable {
         S: Serializer,
     {
         let mut obj = serializer.serialize_map(None)?;
-        obj.serialize_entry("symbolTable", &StreamingSymbols(&self))?;
+        obj.serialize_entry("symbolTable", &StreamingSymbols(self))?;
         obj.end()
     }
 }

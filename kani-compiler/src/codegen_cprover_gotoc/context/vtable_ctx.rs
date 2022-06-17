@@ -97,8 +97,8 @@ impl VtableCtx {
         assert!(self.emit_vtable_restrictions);
         let site = CallSite {
             trait_method: TraitDefinedMethod { trait_name, vtable_idx: method },
-            function_name: function_name,
-            label: label,
+            function_name,
+            label,
         };
         self.call_sites.push(site);
     }

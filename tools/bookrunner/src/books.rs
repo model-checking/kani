@@ -17,7 +17,6 @@ use rustdoc::{
     doctest::Tester,
     html::markdown::{ErrorCodes, Ignore, LangString},
 };
-use serde_json;
 use std::{
     collections::{HashMap, HashSet},
     ffi::OsStr,
@@ -132,7 +131,7 @@ impl Book {
                         hierarchy_path.push(format!("{}{}", prev_text, text));
                     } else {
                         // If not, add the current title to the hierarchy.
-                        hierarchy_path.push(text.to_string());
+                        hierarchy_path.push(&text);
                     }
                     prev_event_is_text_or_code = true;
                 }
@@ -201,7 +200,7 @@ impl Book {
     fn extract_examples(&self) {
         let mut config_paths = get_config_paths(self.name.as_str());
         for (par_from, par_to) in &self.hierarchy {
-            extract(&par_from, &par_to, &mut config_paths, self.default_edition);
+            extract(par_from, par_to, &mut config_paths, self.default_edition);
         }
         if !config_paths.is_empty() {
             panic!(
@@ -459,7 +458,7 @@ fn paths_to_string(paths: HashSet<PathBuf>) -> String {
 
 /// Creates a new [`Tree`] from `path`, and a test `result`.
 fn tree_from_path(mut path: Vec<String>, result: bool) -> bookrunner::Tree {
-    assert!(path.len() > 0, "Error: `path` must contain at least 1 element.");
+    assert!(!path.is_empty(), "Error: `path` must contain at least 1 element.");
     let mut tree = bookrunner::Tree::new(
         bookrunner::Node::new(
             path.pop().unwrap(),

@@ -14,7 +14,7 @@ pub const BUG_REPORT_URL: &str =
 /// The aggregate name used in CBMC for aggregates of type `n`.
 pub fn aggr_tag<T: Into<InternedString>>(n: T) -> InternedString {
     let n = n.into();
-    format!("tag-{}", n.to_string()).into()
+    format!("tag-{}", n).into()
 }
 
 pub trait NumUtils {
@@ -96,8 +96,7 @@ pub fn max_int(width: u64, signed: bool) -> BigInt {
 pub fn min_int(width: u64, signed: bool) -> BigInt {
     if signed {
         let max = max_int(width, true);
-        let min = -max - 1;
-        min
+        -max - 1
     } else {
         BigInt::zero()
     }
