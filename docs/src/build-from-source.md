@@ -1,18 +1,14 @@
 # Installing from source code
 
-This is the non-default installation option.
-It is more suitable for Kani developers
-or users who want to try the latest changes.
-If those don't fit your use case, please see the default
-instructions for [installing from pre-compiled binaries](./install-pre-compiled.md).
+> If you were able to [install Kani](install-guide.md) normally, you do not need to build Kani from source.
+> You probably want to proceed to the [Kani tutorial](kani-tutorial.md).
 
 ## Dependencies
 
-In general, the following dependencies are required.
+In general, the following dependencies are required to build Kani from source.
 
-> **NOTE**: These dependencies may be installed by running the CI scripts shown
-> below and there's no need to install them separately, for their respective
-> OS.
+> **NOTE**: These dependencies may be installed by running the scripts shown
+> below and don't need to be manually installed.
 
 1. Cargo installed via [rustup](https://rustup.rs/)
 2. [CBMC](https://github.com/diffblue/cbmc) (>= 5.59.0)
@@ -33,7 +29,7 @@ cd kani
 git submodule update --init
 ./scripts/setup/ubuntu/install_deps.sh
 ./scripts/setup/ubuntu/install_cbmc.sh
-./scripts/setup/install_viewer.sh 3.2
+./scripts/setup/install_viewer.sh 3.5
 ./scripts/setup/install_rustup.sh
 # If you haven't already:
 source $HOME/.cargo/env
@@ -50,7 +46,7 @@ cd kani
 git submodule update --init
 ./scripts/setup/macos-10.15/install_deps.sh
 ./scripts/setup/macos-10.15/install_cbmc.sh
-./scripts/setup/install_viewer.sh 3.2
+./scripts/setup/install_viewer.sh 3.5
 ./scripts/setup/install_rustup.sh
 # If you haven't already:
 source $HOME/.cargo/env
