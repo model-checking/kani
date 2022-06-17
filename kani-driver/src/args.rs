@@ -186,7 +186,7 @@ impl KaniArgs {
 }
 
 arg_enum! {
-    #[derive(Debug, PartialEq)]
+    #[derive(Debug, PartialEq, Eq)]
     pub enum OutputFormat {
         Regular,
         Terse,
@@ -194,7 +194,7 @@ arg_enum! {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum AbstractionType {
     Std,
     Kani,

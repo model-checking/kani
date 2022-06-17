@@ -40,7 +40,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     _ => projection.goto_expr,
                 }
             }
-            Operand::Constant(c) => self.codegen_constant(&c),
+            Operand::Constant(c) => self.codegen_constant(c),
         }
     }
 
@@ -140,7 +140,7 @@ impl<'tcx> GotocCtx<'tcx> {
         match v {
             ConstValue::Scalar(s) => self.codegen_scalar(s, lit_ty, span),
             ConstValue::Slice { data, start, end } => {
-                self.codegen_slice_value(v, lit_ty, span, &data.inner(), start, end)
+                self.codegen_slice_value(v, lit_ty, span, data.inner(), start, end)
             }
             ConstValue::ByRef { alloc, offset } => {
                 debug!("ConstValue by ref {:?} {:?}", alloc, offset);
@@ -318,7 +318,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 var.clone()
                     .member("case", &tcx.symbol_table)
                     .assign(param.to_expr(), Location::none()),
-                var.clone().ret(Location::none()),
+                var.ret(Location::none()),
             ];
             Symbol::function(
                 &func_name,

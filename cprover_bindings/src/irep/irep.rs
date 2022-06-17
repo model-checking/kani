@@ -38,7 +38,7 @@ impl Irep {
 impl Irep {
     pub fn with_location(self, l: &Location, mm: &MachineModel) -> Self {
         if !l.is_none() {
-            self.with_named_sub(IrepId::CSourceLocation, l.to_irep(&mm))
+            self.with_named_sub(IrepId::CSourceLocation, l.to_irep(mm))
         } else {
             self
         }
@@ -102,7 +102,7 @@ impl Irep {
     }
 
     pub fn just_id(id: IrepId) -> Irep {
-        Irep { id: id, sub: Vec::new(), named_sub: LinearMap::new() }
+        Irep { id, sub: Vec::new(), named_sub: LinearMap::new() }
     }
 
     pub fn just_int_id<T>(i: T) -> Irep
@@ -112,7 +112,7 @@ impl Irep {
         Irep::just_id(IrepId::from_int(i))
     }
     pub fn just_named_sub(named_sub: LinearMap<IrepId, Irep>) -> Irep {
-        Irep { id: IrepId::EmptyString, sub: vec![], named_sub: named_sub }
+        Irep { id: IrepId::EmptyString, sub: vec![], named_sub }
     }
 
     pub fn just_string_id<T: Into<InternedString>>(s: T) -> Irep {
@@ -120,7 +120,7 @@ impl Irep {
     }
 
     pub fn just_sub(sub: Vec<Irep>) -> Irep {
-        Irep { id: IrepId::EmptyString, sub: sub, named_sub: LinearMap::new() }
+        Irep { id: IrepId::EmptyString, sub, named_sub: LinearMap::new() }
     }
 
     pub fn nil() -> Irep {

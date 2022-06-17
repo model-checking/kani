@@ -139,9 +139,7 @@ impl KaniSession {
         let output_file = std::fs::File::create(&stdout)?;
         cmd.stdout(output_file);
 
-        return cmd
-            .status()
-            .context(format!("Failed to invoke {}", cmd.get_program().to_string_lossy()));
+        cmd.status().context(format!("Failed to invoke {}", cmd.get_program().to_string_lossy()))
     }
 
     /// Run a job, redirect its output to a file, and allow the caller to decide what to do with failure.

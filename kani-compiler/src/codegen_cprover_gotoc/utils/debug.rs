@@ -55,7 +55,7 @@ static DEFAULT_HOOK: SyncLazy<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send + 
 impl<'tcx> GotocCtx<'tcx> {
     // Calls the closure while updating the tracked global variable marking the
     // codegen item for panic debugging.
-    pub fn call_with_panic_debug_info<F: FnOnce(&mut GotocCtx<'tcx>) -> ()>(
+    pub fn call_with_panic_debug_info<F: FnOnce(&mut GotocCtx<'tcx>)>(
         &mut self,
         call: F,
         panic_debug: String,

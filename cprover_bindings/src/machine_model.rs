@@ -46,7 +46,8 @@ impl From<RoundingMode> for BigInt {
     }
 }
 
-/// Constructor
+// TODO: This file should be refactored. This is a bit "OO" style when it doesn't have to be.
+// Delete this "constructor" and all the accessors below, just make all the fields pub!
 impl MachineModel {
     pub fn new(
         alignment: u64,

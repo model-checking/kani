@@ -22,7 +22,7 @@ pub struct TraitDefinedMethod {
 /// This is identified by:
 ///   1. The (mangled) name of the function this code is a part of
 ///   2. The (unique) label we applied
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CallSite {
     /// The "Trait::method" being invoked at this location
     pub trait_method: TraitDefinedMethod,
@@ -37,7 +37,7 @@ pub struct CallSite {
 }
 
 /// A set of possible targets for a vtable entry's function pointer.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PossibleMethodEntry {
     /// The `Trait::method` entry we have new possibilities for.
     pub trait_method: TraitDefinedMethod,

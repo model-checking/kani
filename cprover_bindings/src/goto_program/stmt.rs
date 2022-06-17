@@ -205,10 +205,10 @@ impl Stmt {
         Stmt::block(
             vec![
                 // Assert our expected true expression.
-                Stmt::assert(expect_true.clone(), "sanity_check", &assert_msg, loc.clone()),
+                Stmt::assert(expect_true.clone(), "sanity_check", &assert_msg, loc),
                 // If expect_true is false, assume false to block any further
                 // exploration of this path.
-                Stmt::assume(expect_true, loc.clone()),
+                Stmt::assume(expect_true, loc),
             ],
             loc,
         )
@@ -246,7 +246,7 @@ impl Stmt {
     /// SUCCESS/FAILURE, it uses SATISFIED/FAILED
     pub fn cover(cond: Expr, loc: Location) -> Self {
         assert!(cond.typ().is_bool());
-        BuiltinFn::CProverCover.call(vec![cond], loc.clone()).as_stmt(loc)
+        BuiltinFn::CProverCover.call(vec![cond], loc).as_stmt(loc)
     }
 
     /// `lhs.typ lhs = value;` or `lhs.typ lhs;`
@@ -330,7 +330,7 @@ impl Stmt {
     pub fn with_label<T: Into<InternedString>>(self, label: T) -> Self {
         let label = label.into();
         assert!(!label.is_empty());
-        stmt!(Label { label, body: self }, self.location().clone())
+        stmt!(Label { label, body: self }, *self.location())
     }
 }
 

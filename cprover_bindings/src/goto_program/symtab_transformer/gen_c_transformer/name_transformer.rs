@@ -48,8 +48,8 @@ impl NameTransformer {
         }
 
         // Don't tranform the `tag-` prefix of identifiers
-        let (prefix, name) = if orig_name.starts_with("tag-") {
-            (&orig_name[..4], &orig_name[4..])
+        let (prefix, name) = if let Some(tag) = orig_name.strip_prefix("tag-") {
+            ("tag-", tag)
         } else {
             ("", orig_name)
         };
@@ -95,7 +95,8 @@ impl NameTransformer {
                     return new_name.replace(illegal, replacement);
                 }
             }
-            return new_name;
+
+            new_name
         }
 
         let name = fix_name(name);

@@ -34,7 +34,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let typ = self.codegen_ty(self.tcx.type_of(def_id));
         let span = self.tcx.def_span(def_id);
         let location = self.codegen_span(&span);
-        let symbol = Symbol::static_variable(symbol_name.to_string(), base_name, typ, location)
+        let symbol = Symbol::static_variable(symbol_name, base_name, typ, location)
             .with_is_hidden(false) // Static items are always user defined.
             .with_pretty_name(pretty_name);
         self.symbol_table.insert(symbol);

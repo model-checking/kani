@@ -20,6 +20,8 @@ Acknowledgement:
 cbmc-viewer: https://github.com/model-checking/cbmc-viewer
 License: Apache-2.0
 
+## Notable Python dependencies
+
 colorama: https://github.com/tartley/colorama
 License: BSD-3-Clause
 
@@ -29,8 +31,13 @@ License: BSD-3-Clause
 jinja2: https://github.com/pallets/jinja
 License: BSD-3-Clause
 
-setuptools: https://github.com/pypa/setuptools
-License: MIT
-
 MarkupSafe: https://github.com/pallets/markupsafe
 License: BSD-3-Clause
+
+## Notable Rust crate dependencies
+
+instant: https://github.com/sebcrozet/instant
+License: BSD-3-Clause
+
+Inflector: https://github.com/whatisinternet/inflector
+License: BSD-2-Clause

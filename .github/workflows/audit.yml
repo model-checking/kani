@@ -1,9 +1,8 @@
 # Copyright Kani Contributors
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
-# A temporary, non-required workflow to notify us when cargo-audit has things to say.
-# TODO: Remove this, and make cargo-audit part of release automation (when we have it) instead.
-# And maybe also figure out why dependabot wasn't notifying us. :(
+# 1. Checks licenses for allowed license.
+# 2. Checks Rust-Sec registry for security advisories.
 
 name: Cargo Audit
 on: [pull_request]
@@ -13,6 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - uses: actions-rs/audit-check@v1
+      - uses: EmbarkStudios/cargo-deny-action@v1
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          arguments: --all-features --workspace
+          command-arguments: -s

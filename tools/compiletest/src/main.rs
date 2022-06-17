@@ -349,7 +349,7 @@ fn common_inputs_stamp() -> Stamp {
     let kani_bin_path = &rust_src_dir.join("target/debug/kani-compiler");
 
     // Create stamp based on the `kani-compiler` binary
-    let mut stamp = Stamp::from_path(&kani_bin_path);
+    let mut stamp = Stamp::from_path(kani_bin_path);
 
     // Add source, library and script directories
     stamp.add_dir(&rust_src_dir.join("src/"));

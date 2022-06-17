@@ -77,12 +77,8 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             TerminatorKind::Unreachable => Stmt::block(
                 vec![
-                    self.codegen_assert_false(
-                        PropertyClass::Unreachable,
-                        "unreachable code",
-                        loc.clone(),
-                    ),
-                    Stmt::assume(Expr::bool_false(), loc.clone()),
+                    self.codegen_assert_false(PropertyClass::Unreachable, "unreachable code", loc),
+                    Stmt::assume(Expr::bool_false(), loc),
                 ],
                 loc,
             ),
@@ -142,7 +138,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 .codegen_unimplemented(
                     "InlineAsm",
                     Type::empty(),
-                    loc.clone(),
+                    loc,
                     "https://github.com/model-checking/kani/issues/2",
                 )
                 .as_stmt(loc),
@@ -196,8 +192,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             }
                         }
                         let self_data = trait_fat_ptr.to_owned().member("data", &self.symbol_table);
-                        let self_ref =
-                            self_data.clone().cast_to(trait_fat_ptr.typ().clone().to_pointer());
+                        let self_ref = self_data.cast_to(trait_fat_ptr.typ().clone().to_pointer());
 
                         let call =
                             fn_ptr.dereference().call(vec![self_ref]).as_stmt(Location::none());
@@ -332,7 +327,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // ignore_var_ty. So the tuple is always the last arg, but it might be in the
         // first or the second position.
         // Note 2: For empty closures, the only argument needed is the environment struct.
-        if fargs.len() > 0 {
+        if !fargs.is_empty() {
             let tupe = fargs.remove(fargs.len() - 1);
             let tupled_args: Vec<Type> = match self.operand_ty(last_mir_arg.unwrap()).kind() {
                 ty::Tuple(tupled_args) => tupled_args.iter().map(|s| self.codegen_ty(s)).collect(),
@@ -350,7 +345,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     fn codegen_end_call(&self, target: Option<&BasicBlock>, loc: Location) -> Stmt {
         if let Some(next_bb) = target {
-            Stmt::goto(self.current_fn().find_label(&next_bb), loc)
+            Stmt::goto(self.current_fn().find_label(next_bb), loc)
         } else {
             Stmt::assert_sanity_check(
                 Expr::bool_false(),
@@ -433,26 +428,26 @@ impl<'tcx> GotocCtx<'tcx> {
                             idx,
                             destination,
                             &mut fargs,
-                            loc.clone(),
+                            loc,
                         )
                     }
                     // Normal, non-virtual function calls
                     InstanceDef::Item(..)
                     | InstanceDef::DropGlue(_, Some(_))
                     | InstanceDef::Intrinsic(..)
-                    | InstanceDef::FnPtrShim(.., _)
+                    | InstanceDef::FnPtrShim(..)
                     | InstanceDef::VtableShim(..)
                     | InstanceDef::ReifyShim(..)
                     | InstanceDef::ClosureOnceShim { .. }
                     | InstanceDef::CloneShim(..) => {
                         let func_exp = self.codegen_operand(func);
                         vec![
-                            self.codegen_expr_to_place(&destination, func_exp.call(fargs))
-                                .with_location(loc.clone()),
+                            self.codegen_expr_to_place(destination, func_exp.call(fargs))
+                                .with_location(loc),
                         ]
                     }
                 };
-                stmts.push(self.codegen_end_call(target.as_ref(), loc.clone()));
+                stmts.push(self.codegen_end_call(target.as_ref(), loc));
                 return Stmt::block(stmts, loc);
             }
             // Function call through a pointer
@@ -461,9 +456,9 @@ impl<'tcx> GotocCtx<'tcx> {
                 // Actually generate the function call and return.
                 return Stmt::block(
                     vec![
-                        self.codegen_expr_to_place(&destination, func_expr.call(fargs))
-                            .with_location(loc.clone()),
-                        Stmt::goto(self.current_fn().find_label(&target.unwrap()), loc.clone()),
+                        self.codegen_expr_to_place(destination, func_expr.call(fargs))
+                            .with_location(loc),
+                        Stmt::goto(self.current_fn().find_label(&target.unwrap()), loc),
                     ],
                     loc,
                 );
@@ -478,7 +473,7 @@ impl<'tcx> GotocCtx<'tcx> {
         def_id: DefId,
         idx: usize,
         place: &Place<'tcx>,
-        fargs: &mut Vec<Expr>,
+        fargs: &mut [Expr],
         loc: Location,
     ) -> Vec<Stmt> {
         let vtable_field_name = self.vtable_field_name(def_id, idx);
@@ -500,16 +495,12 @@ impl<'tcx> GotocCtx<'tcx> {
         // could be vacuously true.
         let call_is_nonnull = fn_ptr.clone().is_nonnull();
         let assert_msg = format!("Non-null virtual function call for {:?}", vtable_field_name);
-        let assert_nonnull = self.codegen_assert(
-            call_is_nonnull,
-            PropertyClass::DefaultAssertion,
-            &assert_msg,
-            loc.clone(),
-        );
+        let assert_nonnull =
+            self.codegen_assert(call_is_nonnull, PropertyClass::DefaultAssertion, &assert_msg, loc);
 
         // Virtual function call and corresponding nonnull assertion.
         let call = fn_ptr.dereference().call(fargs.to_vec());
-        let call_stmt = self.codegen_expr_to_place(place, call).with_location(loc.clone());
+        let call_stmt = self.codegen_expr_to_place(place, call).with_location(loc);
         let call_stmt = if self.vtable_ctx.emit_vtable_restrictions {
             self.virtual_call_with_restricted_fn_ptr(trait_fat_ptr.typ().clone(), idx, call_stmt)
         } else {
@@ -525,7 +516,7 @@ impl<'tcx> GotocCtx<'tcx> {
         if self.place_ty(p).is_unit() {
             e.as_stmt(Location::none())
         } else {
-            unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place(&p))
+            unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place(p))
                 .goto_expr
                 .assign(e, Location::none())
         }
@@ -554,7 +545,7 @@ impl<'tcx> GotocCtx<'tcx> {
         Stmt::block(
             vec![
                 self.codegen_assert_false(property_class, msg, loc),
-                BuiltinFn::Abort.call(vec![], loc.clone()).as_stmt(loc.clone()),
+                BuiltinFn::Abort.call(vec![], loc).as_stmt(loc),
             ],
             loc,
         )
@@ -631,7 +622,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             .codegen_unimplemented(
                                 "ty::Generator",
                                 Type::code(vec![], Type::empty()),
-                                location.clone(),
+                                location,
                                 "https://github.com/model-checking/kani/issues/416",
                             )
                             .as_stmt(location);
