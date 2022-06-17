@@ -50,7 +50,7 @@ rustc_interface = { path = "~/.rustup/toolchains/<toolchain>/lib/rustlib/rustc-s
 
 ### EMACS (with `use-package`)
 First, `Cargo.toml` and `rustup toolchain` steps are identical to VS
-Code. Install Rust-analyzer binaries under `~/.cargo/bin/`.
+Code. Install Rust-analyzer binary under `~/.cargo/bin/`.
 
 On EMACS, add the following to your EMACS lisp files. They will
 install the necessary packages using the `use-package` manager.
@@ -73,12 +73,12 @@ If EMACS complains that it cannot find certain packages, try running
 For LSP to be able to find `rustc_private` files used by Kani, you
 will need to modify variable `lsp-rust-analyzer-rustc-source`. Run
 `M-x customize-variable`, type in `lsp-rust-analyzer-rustc-source`,
-click `Value Menu` and change it to `Path`. Paste in the path `rustc`'s
-source code. You can find the source code under `.rustup`, and the
-path should end with `compiler/rustc/Cargo.toml` as of
-June 2022. **Important**: make sure that this `rustc` is the same
-version and architecture as what Kani uses. If not, LSP features like
-definition lookup may be break.
+click `Value Menu` and change it to `Path`. Paste in the path to
+`Cargo.toml` of `rustc`'s source code. You can find the source code
+under `.rustup`, and the path should end with
+`compiler/rustc/Cargo.toml`. **Important**: make sure that this
+`rustc` is the same version and architecture as what Kani uses. If
+not, LSP features like definition lookup may be break.
 
 This ends the basic install for EMACS. You can test your configuration
 with the following steps.
@@ -111,9 +111,9 @@ configuration.
 ```
 
 Finally lsp-mode can run rust-analyzer via TRAMP for remote
-development. **We found it to be unstable as of 2022-06**. If you want
-to give it a try you will need to add a new LSP client for that remote
-with the following code.
+development. **We found this way of using rust-analyzer to be unstable
+as of 2022-06**. If you want to give it a try you will need to add a
+new LSP client for that remote with the following code.
 ```elisp
 (lsp-register-client
   (make-lsp-client
