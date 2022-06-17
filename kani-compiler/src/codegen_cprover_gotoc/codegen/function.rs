@@ -225,6 +225,8 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn declare_function(&mut self, instance: Instance<'tcx>) {
         debug!("declaring {}; {:?}", instance, instance);
         self.set_current_fn(instance);
+        debug!(krate = self.current_fn().krate().as_str());
+        debug!(is_std = self.current_fn().is_std());
         self.ensure(&self.current_fn().name(), |ctx, fname| {
             let mir = ctx.current_fn().mir();
             Symbol::function(

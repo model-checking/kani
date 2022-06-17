@@ -90,8 +90,8 @@ impl<'tcx> GotocCtx<'tcx> {
             TerminatorKind::DropAndReplace { .. } => {
                 unreachable!("this instruction is unreachable")
             }
-            TerminatorKind::Call { func, args, destination, .. } => {
-                self.codegen_funcall(func, args, destination, term.source_info.span)
+            TerminatorKind::Call { func, args, destination, target, .. } => {
+                self.codegen_funcall(func, args, destination, target, term.source_info.span)
             }
             TerminatorKind::Assert { cond, expected, msg, target, .. } => {
                 let cond = {
@@ -155,112 +155,105 @@ impl<'tcx> GotocCtx<'tcx> {
         let loc_ty = self.place_ty(location);
         debug!(?loc_ty, "codegen_drop");
         let drop_instance = Instance::resolve_drop_in_place(self.tcx, loc_ty);
-        if let Some(hk) = self.hooks.hook_applies(self.tcx, drop_instance) {
-            let le =
-                unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place(location))
-                    .goto_expr;
-            hk.handle(self, drop_instance, vec![le], None, Some(*target), None)
-        } else {
-            let drop_implementation = match drop_instance.def {
-                InstanceDef::DropGlue(_, None) => {
-                    // We can skip empty DropGlue functions
-                    Stmt::skip(Location::none())
-                }
-                _ => {
-                    match loc_ty.kind() {
-                        ty::Dynamic(..) => {
-                            // Virtual drop via a vtable lookup
-                            let trait_fat_ptr = unwrap_or_return_codegen_unimplemented_stmt!(
-                                self,
-                                self.codegen_place(location)
-                            )
-                            .fat_ptr_goto_expr
-                            .unwrap();
-                            debug!(?trait_fat_ptr, "codegen_drop: ");
+        // Once upon a time we did a `hook_applies` check here, but we no longer seem to hook drops
+        let drop_implementation = match drop_instance.def {
+            InstanceDef::DropGlue(_, None) => {
+                // We can skip empty DropGlue functions
+                Stmt::skip(Location::none())
+            }
+            _ => {
+                match loc_ty.kind() {
+                    ty::Dynamic(..) => {
+                        // Virtual drop via a vtable lookup
+                        let trait_fat_ptr = unwrap_or_return_codegen_unimplemented_stmt!(
+                            self,
+                            self.codegen_place(location)
+                        )
+                        .fat_ptr_goto_expr
+                        .unwrap();
+                        debug!(?trait_fat_ptr, "codegen_drop: ");
 
-                            // Pull the function off of the fat pointer's vtable pointer
-                            let vtable_ref =
-                                trait_fat_ptr.to_owned().member("vtable", &self.symbol_table);
+                        // Pull the function off of the fat pointer's vtable pointer
+                        let vtable_ref =
+                            trait_fat_ptr.to_owned().member("vtable", &self.symbol_table);
 
-                            let vtable = vtable_ref.dereference();
-                            let fn_ptr = vtable.member("drop", &self.symbol_table);
+                        let vtable = vtable_ref.dereference();
+                        let fn_ptr = vtable.member("drop", &self.symbol_table);
 
-                            // Pull the self argument off of the fat pointer's data pointer
-                            if let Some(typ) = pointee_type(self.local_ty(location.local)) {
-                                if !(typ.is_trait() || typ.is_box()) {
-                                    warn!(self_type=?typ, "Unsupported drop of unsized");
-                                    return self
-                                        .codegen_unimplemented(
-                                            format!("Unsupported drop unsized struct: {:?}", typ)
-                                                .as_str(),
-                                            Type::Empty,
-                                            Location::None,
-                                            "https://github.com/model-checking/kani/issues/1072",
-                                        )
-                                        .as_stmt(Location::None);
-                                }
-                            }
-                            let self_data =
-                                trait_fat_ptr.to_owned().member("data", &self.symbol_table);
-                            let self_ref =
-                                self_data.clone().cast_to(trait_fat_ptr.typ().clone().to_pointer());
-
-                            let call =
-                                fn_ptr.dereference().call(vec![self_ref]).as_stmt(Location::none());
-                            if self.vtable_ctx.emit_vtable_restrictions {
-                                self.virtual_call_with_restricted_fn_ptr(
-                                    trait_fat_ptr.typ().clone(),
-                                    VtableCtx::drop_index(),
-                                    call,
-                                )
-                            } else {
-                                call
+                        // Pull the self argument off of the fat pointer's data pointer
+                        if let Some(typ) = pointee_type(self.local_ty(location.local)) {
+                            if !(typ.is_trait() || typ.is_box()) {
+                                warn!(self_type=?typ, "Unsupported drop of unsized");
+                                return self
+                                    .codegen_unimplemented(
+                                        format!("Unsupported drop unsized struct: {:?}", typ)
+                                            .as_str(),
+                                        Type::Empty,
+                                        Location::None,
+                                        "https://github.com/model-checking/kani/issues/1072",
+                                    )
+                                    .as_stmt(Location::None);
                             }
                         }
-                        _ => {
-                            // Non-virtual, direct drop call
-                            assert!(!matches!(drop_instance.def, InstanceDef::Virtual(_, _)));
+                        let self_data = trait_fat_ptr.to_owned().member("data", &self.symbol_table);
+                        let self_ref =
+                            self_data.clone().cast_to(trait_fat_ptr.typ().clone().to_pointer());
 
-                            let func = self.codegen_func_expr(drop_instance, None);
-                            let place = unwrap_or_return_codegen_unimplemented_stmt!(
-                                self,
-                                self.codegen_place(location)
-                            );
-                            let arg = if let Some(fat_ptr) = place.fat_ptr_goto_expr {
-                                // Drop takes the fat pointer if it exists
-                                fat_ptr
-                            } else {
-                                place.goto_expr.address_of()
-                            };
-                            // The only argument should be a self reference
-                            let args = vec![arg];
-
-                            // We have a known issue where nested Arc and Mutex objects result in
-                            // drop_in_place call implementations that fail to typecheck. Skipping
-                            // drop entirely causes unsound verification results in common cases
-                            // like vector extend, so for now, add a sound special case workaround
-                            // for calls that fail the typecheck.
-                            // https://github.com/model-checking/kani/issues/426
-                            // Unblocks: https://github.com/model-checking/kani/issues/435
-                            if Expr::typecheck_call(&func, &args) {
-                                func.call(args)
-                            } else {
-                                self.codegen_unimplemented(
-                                    format!("drop_in_place call for {:?}", func).as_str(),
-                                    func.typ().return_type().unwrap().clone(),
-                                    Location::none(),
-                                    "https://github.com/model-checking/kani/issues/426",
-                                )
-                            }
-                            .as_stmt(Location::none())
+                        let call =
+                            fn_ptr.dereference().call(vec![self_ref]).as_stmt(Location::none());
+                        if self.vtable_ctx.emit_vtable_restrictions {
+                            self.virtual_call_with_restricted_fn_ptr(
+                                trait_fat_ptr.typ().clone(),
+                                VtableCtx::drop_index(),
+                                call,
+                            )
+                        } else {
+                            call
                         }
                     }
+                    _ => {
+                        // Non-virtual, direct drop call
+                        assert!(!matches!(drop_instance.def, InstanceDef::Virtual(_, _)));
+
+                        let func = self.codegen_func_expr(drop_instance, None);
+                        let place = unwrap_or_return_codegen_unimplemented_stmt!(
+                            self,
+                            self.codegen_place(location)
+                        );
+                        let arg = if let Some(fat_ptr) = place.fat_ptr_goto_expr {
+                            // Drop takes the fat pointer if it exists
+                            fat_ptr
+                        } else {
+                            place.goto_expr.address_of()
+                        };
+                        // The only argument should be a self reference
+                        let args = vec![arg];
+
+                        // We have a known issue where nested Arc and Mutex objects result in
+                        // drop_in_place call implementations that fail to typecheck. Skipping
+                        // drop entirely causes unsound verification results in common cases
+                        // like vector extend, so for now, add a sound special case workaround
+                        // for calls that fail the typecheck.
+                        // https://github.com/model-checking/kani/issues/426
+                        // Unblocks: https://github.com/model-checking/kani/issues/435
+                        if Expr::typecheck_call(&func, &args) {
+                            func.call(args)
+                        } else {
+                            self.codegen_unimplemented(
+                                format!("drop_in_place call for {:?}", func).as_str(),
+                                func.typ().return_type().unwrap().clone(),
+                                Location::none(),
+                                "https://github.com/model-checking/kani/issues/426",
+                            )
+                        }
+                        .as_stmt(Location::none())
+                    }
                 }
-            };
-            let goto_target = Stmt::goto(self.current_fn().find_label(target), Location::none());
-            let block = vec![drop_implementation, goto_target];
-            Stmt::block(block, Location::none())
-        }
+            }
+        };
+        let goto_target = Stmt::goto(self.current_fn().find_label(target), Location::none());
+        let block = vec![drop_implementation, goto_target];
+        Stmt::block(block, Location::none())
     }
 
     /// https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/terminator/enum.TerminatorKind.html#variant.SwitchInt
@@ -387,11 +380,12 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         func: &Operand<'tcx>,
         args: &[Operand<'tcx>],
-        destination: &Option<(Place<'tcx>, BasicBlock)>,
+        destination: &Place<'tcx>,
+        target: &Option<BasicBlock>,
         span: Span,
     ) -> Stmt {
         if self.is_intrinsic(func) {
-            return self.codegen_funcall_of_intrinsic(func, args, destination, span);
+            return self.codegen_funcall_of_intrinsic(func, args, destination, target, span);
         }
 
         let loc = self.codegen_span(&span);
@@ -409,18 +403,8 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
 
                 if let Some(hk) = self.hooks.hook_applies(self.tcx, instance) {
-                    return hk.handle(
-                        self,
-                        instance,
-                        fargs,
-                        destination.map(|t| t.0),
-                        destination.map(|t| t.1),
-                        Some(span),
-                    );
+                    return hk.handle(self, instance, fargs, *destination, *target, Some(span));
                 }
-
-                let (place, target) =
-                    if let Some((p, t)) = destination { (Some(p), Some(t)) } else { (None, None) };
 
                 let mut stmts: Vec<Stmt> = match instance.def {
                     // Here an empty drop glue is invoked; we just ignore it.
@@ -447,7 +431,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             trait_fat_ptr,
                             def_id,
                             idx,
-                            place,
+                            destination,
                             &mut fargs,
                             loc.clone(),
                         )
@@ -462,29 +446,24 @@ impl<'tcx> GotocCtx<'tcx> {
                     | InstanceDef::ClosureOnceShim { .. }
                     | InstanceDef::CloneShim(..) => {
                         let func_exp = self.codegen_operand(func);
-                        if let Some(dest_place) = place {
-                            vec![
-                                self.codegen_expr_to_place(&dest_place, func_exp.call(fargs))
-                                    .with_location(loc.clone()),
-                            ]
-                        } else {
-                            vec![func_exp.call(fargs).as_stmt(loc.clone())]
-                        }
+                        vec![
+                            self.codegen_expr_to_place(&destination, func_exp.call(fargs))
+                                .with_location(loc.clone()),
+                        ]
                     }
                 };
-                stmts.push(self.codegen_end_call(target, loc.clone()));
+                stmts.push(self.codegen_end_call(target.as_ref(), loc.clone()));
                 return Stmt::block(stmts, loc);
             }
             // Function call through a pointer
             ty::FnPtr(_) => {
-                let (p, target) = destination.unwrap();
                 let func_expr = self.codegen_operand(func).dereference();
                 // Actually generate the function call and return.
                 return Stmt::block(
                     vec![
-                        self.codegen_expr_to_place(&p, func_expr.call(fargs))
+                        self.codegen_expr_to_place(&destination, func_expr.call(fargs))
                             .with_location(loc.clone()),
-                        Stmt::goto(self.current_fn().find_label(&target), loc.clone()),
+                        Stmt::goto(self.current_fn().find_label(&target.unwrap()), loc.clone()),
                     ],
                     loc,
                 );
@@ -498,7 +477,7 @@ impl<'tcx> GotocCtx<'tcx> {
         trait_fat_ptr: Expr,
         def_id: DefId,
         idx: usize,
-        place: Option<&Place<'tcx>>,
+        place: &Place<'tcx>,
         fargs: &mut Vec<Expr>,
         loc: Location,
     ) -> Vec<Stmt> {
@@ -530,11 +509,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         // Virtual function call and corresponding nonnull assertion.
         let call = fn_ptr.dereference().call(fargs.to_vec());
-        let call_stmt = if let Some(place) = place {
-            self.codegen_expr_to_place(place, call).with_location(loc.clone())
-        } else {
-            call.as_stmt(loc.clone())
-        };
+        let call_stmt = self.codegen_expr_to_place(place, call).with_location(loc.clone());
         let call_stmt = if self.vtable_ctx.emit_vtable_restrictions {
             self.virtual_call_with_restricted_fn_ptr(trait_fat_ptr.typ().clone(), idx, call_stmt)
         } else {

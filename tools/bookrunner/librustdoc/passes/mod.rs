@@ -12,7 +12,7 @@ use crate::clean::{self};
 mod check_doc_test_visibility;
 
 /// Returns a span encompassing all the given attributes.
-crate fn span_of_attrs(attrs: &clean::Attributes) -> Option<Span> {
+pub(crate) fn span_of_attrs(attrs: &clean::Attributes) -> Option<Span> {
     if attrs.doc_strings.is_empty() {
         return None;
     }
