@@ -43,8 +43,9 @@ impl KaniSession {
 
             let now = Instant::now();
 
-            // Use streaming output from CBMC
+            // Check cbmc output flag and extract cbmc output either as a live stream or in a cache
             if self.args.use_piped_output {
+                // Use streaming output from CBMC
                 let _cbmc_result_stream = self.run_piped(cmd)?;
                 let elapsed = now.elapsed().as_secs_f32();
 

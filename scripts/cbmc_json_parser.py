@@ -59,13 +59,14 @@ class GlobalMessages(str, Enum):
     UNSUPPORTED_CONSTRUCT_DESC = "is not currently supported by Kani"
     UNWINDING_ASSERT_DESC = "unwinding assertion loop"
     READ_FROM_STREAM = "--read-cbmc-from-stream"
+    READ_FROM_FILE = "cbmc_output"
 
 
 def usage_error(msg):
     """ Prints an error message followed by the expected usage. Then exit process. """
     print(f"Error: {msg} Usage:")
     print(
-        "cbmc_json_parser.py <cbmc_output.json> <format> [--extra-ptr-check] or cbmc_json_parser.py --use-piped-output <format> [--extra-ptr-check]\n")
+        "cbmc_json_parser.py {<cbmc_output.json>|--use-piped-output} <format> [--extra-ptr-check]\n")
     sys.exit(1)
 
 
@@ -94,8 +95,8 @@ def main(argv):
 
     # The cbmc output can be either file mode (default) or stream mode (--read-cbmc-from-stream)
     cbmc_output_mode = argv[1].split(".")[-1]
-    if not ((cbmc_output_mode == "cbmc_output") or (cbmc_output_mode == GlobalMessages.READ_FROM_STREAM)):
-        usage_error(f"CBMC output file or mode invalid\n")
+    if not ((cbmc_output_mode == GlobalMessages.READ_FROM_FILE) or (cbmc_output_mode == GlobalMessages.READ_FROM_STREAM)):
+        usage_error(f"CBMC output mode invalid\n")
 
     if len(argv) == 4:
         if argv[3] == "--extra-ptr-check":
@@ -122,7 +123,7 @@ def main(argv):
     else:
         # parse the input json file
         with open(argv[1]) as f:
-            sample_json_file_parsing = f.read()
+            sample_json_file_parsing = f.read() 
 
         # the main function should take a json file as input
         return_code = transform_cbmc_output(sample_json_file_parsing,
