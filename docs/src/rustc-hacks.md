@@ -110,6 +110,14 @@ configuration.
    (global-company-mode))
 ```
 
+`clippy` linter can be added by changing the LSP install to:
+```elisp
+(use-package lsp-mode
+  :commands lsp
+  :custom
+  (lsp-rust-analyzer-cargo-watch-command "clippy"))
+```
+
 Finally lsp-mode can run rust-analyzer via TRAMP for remote
 development. **We found this way of using rust-analyzer to be unstable
 as of 2022-06**. If you want to give it a try you will need to add a
