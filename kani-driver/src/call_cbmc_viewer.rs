@@ -70,6 +70,15 @@ impl KaniSession {
         // Let the user know
         if !self.args.quiet {
             println!("Report written to: {}/html/index.html", report_dir.to_string_lossy());
+            // If using VS Code with Remote-SSH, suggest an option for remote viewing:
+            if std::env::var("VSCODE_IPC_HOOK_CLI").is_ok()
+                && std::env::var("SSH_CONNECTION").is_ok()
+            {
+                println!(
+                    "VSCode Remote-SSH port forwards for you. Try:  python3 -m http.server --directory {}/html",
+                    report_dir.to_string_lossy()
+                );
+            }
         }
 
         Ok(())
