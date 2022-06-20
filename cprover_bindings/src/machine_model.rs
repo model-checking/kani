@@ -8,27 +8,27 @@ pub struct MachineModel {
     /// Minimum architectural alignment, in bytes
     /// The name of the architecture
     /// Width of a pointer, in bits
-    alignment: u64,
-    architecture: String,
-    bool_width: u64,
-    char_is_unsigned: bool,
-    char_width: u64,
-    double_width: u64,
-    float_width: u64,
-    int_width: u64,
-    is_big_endian: bool,
-    long_double_width: u64,
-    long_int_width: u64,
-    long_long_int_width: u64,
-    memory_operand_size: u64,
-    null_is_zero: bool,
-    pointer_width: u64,
-    rounding_mode: RoundingMode,
-    short_int_width: u64,
-    single_width: u64,
-    wchar_t_is_unsigned: bool,
-    wchar_t_width: u64,
-    word_size: u64,
+    pub alignment: u64,
+    pub architecture: String,
+    pub bool_width: u64,
+    pub char_is_unsigned: bool,
+    pub char_width: u64,
+    pub double_width: u64,
+    pub float_width: u64,
+    pub int_width: u64,
+    pub is_big_endian: bool,
+    pub long_double_width: u64,
+    pub long_int_width: u64,
+    pub long_long_int_width: u64,
+    pub memory_operand_size: u64,
+    pub null_is_zero: bool,
+    pub pointer_width: u64,
+    pub rounding_mode: RoundingMode,
+    pub short_int_width: u64,
+    pub single_width: u64,
+    pub wchar_t_is_unsigned: bool,
+    pub wchar_t_width: u64,
+    pub word_size: u64,
 }
 /// The different rounding modes supported by cbmc.
 /// https://github.com/diffblue/cbmc/blob/2bc93c24ea6c09b5fc99b31df682ec5b31c4b162/src/ansi-c/library/fenv.c#L7
@@ -43,145 +43,6 @@ pub enum RoundingMode {
 impl From<RoundingMode> for BigInt {
     fn from(rm: RoundingMode) -> Self {
         (rm as i32).into()
-    }
-}
-
-// TODO: This file should be refactored. This is a bit "OO" style when it doesn't have to be.
-// Delete this "constructor" and all the accessors below, just make all the fields pub!
-impl MachineModel {
-    pub fn new(
-        alignment: u64,
-        architecture: &str,
-        bool_width: u64,
-        char_is_unsigned: bool,
-        char_width: u64,
-        double_width: u64,
-        float_width: u64,
-        int_width: u64,
-        is_big_endian: bool,
-        long_double_width: u64,
-        long_int_width: u64,
-        long_long_int_width: u64,
-        memory_operand_size: u64,
-        null_is_zero: bool,
-        pointer_width: u64,
-        rounding_mode: RoundingMode,
-        short_int_width: u64,
-        single_width: u64,
-        wchar_t_is_unsigned: bool,
-        wchar_t_width: u64,
-        word_size: u64,
-    ) -> Self {
-        MachineModel {
-            alignment,
-            architecture: architecture.to_string(),
-            bool_width,
-            char_is_unsigned,
-            char_width,
-            double_width,
-            float_width,
-            int_width,
-            is_big_endian,
-            long_double_width,
-            long_int_width,
-            long_long_int_width,
-            memory_operand_size,
-            null_is_zero,
-            pointer_width,
-            rounding_mode,
-            short_int_width,
-            single_width,
-            wchar_t_is_unsigned,
-            wchar_t_width,
-            word_size,
-        }
-    }
-}
-
-/// Getters
-impl MachineModel {
-    pub fn alignment(&self) -> u64 {
-        self.alignment
-    }
-
-    pub fn architecture(&self) -> &str {
-        &self.architecture
-    }
-
-    pub fn bool_width(&self) -> u64 {
-        self.bool_width
-    }
-
-    pub fn char_is_unsigned(&self) -> bool {
-        self.char_is_unsigned
-    }
-
-    pub fn char_width(&self) -> u64 {
-        self.char_width
-    }
-
-    pub fn double_width(&self) -> u64 {
-        self.double_width
-    }
-
-    pub fn float_width(&self) -> u64 {
-        self.float_width
-    }
-
-    pub fn int_width(&self) -> u64 {
-        self.int_width
-    }
-
-    pub fn is_big_endian(&self) -> bool {
-        self.is_big_endian
-    }
-
-    pub fn long_double_width(&self) -> u64 {
-        self.long_double_width
-    }
-
-    pub fn long_int_width(&self) -> u64 {
-        self.long_int_width
-    }
-
-    pub fn long_long_int_width(&self) -> u64 {
-        self.long_long_int_width
-    }
-
-    pub fn memory_operand_size(&self) -> u64 {
-        self.memory_operand_size
-    }
-
-    pub fn null_is_zero(&self) -> bool {
-        self.null_is_zero
-    }
-
-    pub fn pointer_width(&self) -> u64 {
-        self.pointer_width
-    }
-
-    pub fn rounding_mode(&self) -> RoundingMode {
-        self.rounding_mode
-    }
-
-    pub fn short_int_width(&self) -> u64 {
-        self.short_int_width
-    }
-
-    pub fn single_width(&self) -> u64 {
-        self.single_width
-    }
-
-    pub fn wchar_t_is_unsigned(&self) -> bool {
-        self.wchar_t_is_unsigned
-    }
-
-    pub fn wchar_t_width(&self) -> u64 {
-        self.wchar_t_width
-    }
-
-    pub fn word_size(&self) -> u64 {
-        self.word_size
     }
 }
 
@@ -203,28 +64,28 @@ pub mod test_util {
     use super::RoundingMode;
 
     pub fn machine_model_test_stub() -> MachineModel {
-        MachineModel::new(
-            1,
-            "x86_64",
-            8,
-            false,
-            8,
-            64,
-            32,
-            32,
-            false,
-            128,
-            64,
-            64,
-            4,
-            true,
-            64,
-            RoundingMode::ToNearest,
-            16,
-            32,
-            false,
-            32,
-            32,
-        )
+        MachineModel {
+            alignment: 1,
+            architecture: "x86_64".to_string(),
+            bool_width: 8,
+            char_is_unsigned: false,
+            char_width: 8,
+            double_width: 64,
+            float_width: 32,
+            int_width: 32,
+            is_big_endian: false,
+            long_double_width: 128,
+            long_int_width: 64,
+            long_long_int_width: 64,
+            memory_operand_size: 4,
+            null_is_zero: true,
+            pointer_width: 64,
+            rounding_mode: RoundingMode::ToNearest,
+            short_int_width: 16,
+            single_width: 32,
+            wchar_t_is_unsigned: false,
+            wchar_t_width: 32,
+            word_size: 32,
+        }
     }
 }

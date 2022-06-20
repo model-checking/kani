@@ -229,11 +229,11 @@ impl Parameter {
 impl CIntType {
     pub fn sizeof_in_bits(&self, st: &SymbolTable) -> u64 {
         match self {
-            CIntType::Bool => st.machine_model().bool_width(),
-            CIntType::Char => st.machine_model().char_width(),
-            CIntType::Int => st.machine_model().int_width(),
-            CIntType::SizeT => st.machine_model().pointer_width(),
-            CIntType::SSizeT => st.machine_model().pointer_width(),
+            CIntType::Bool => st.machine_model().bool_width,
+            CIntType::Char => st.machine_model().char_width,
+            CIntType::Int => st.machine_model().int_width,
+            CIntType::SizeT => st.machine_model().pointer_width,
+            CIntType::SSizeT => st.machine_model().pointer_width,
         }
     }
 }
@@ -282,11 +282,11 @@ impl Type {
         let concrete = self.unwrap_typedef();
         match concrete {
             CInteger(CIntType::SizeT) | CInteger(CIntType::SSizeT) | Pointer { .. } => {
-                Some(mm.pointer_width())
+                Some(mm.pointer_width)
             }
-            CInteger(CIntType::Bool) => Some(mm.bool_width()),
-            CInteger(CIntType::Char) => Some(mm.char_width()),
-            CInteger(CIntType::Int) => Some(mm.int_width()),
+            CInteger(CIntType::Bool) => Some(mm.bool_width),
+            CInteger(CIntType::Char) => Some(mm.char_width),
+            CInteger(CIntType::Int) => Some(mm.int_width),
             Signedbv { width } | Unsignedbv { width } => Some(*width),
             _ => None,
         }
@@ -308,7 +308,7 @@ impl Type {
 
     pub fn sizeof(&self, st: &SymbolTable) -> u64 {
         let bits = self.sizeof_in_bits(st);
-        let char_width = st.machine_model().char_width();
+        let char_width = st.machine_model().char_width;
         assert_eq!(0, bits % char_width);
         bits / char_width
     }
@@ -337,14 +337,14 @@ impl Type {
             //     FnDef case in layout_raw_uncached, compiler/rustc_middle/src/ty/layout.rs
             Code { .. } => 0,
             Constructor => unreachable!("Constructor doesn't have a sizeof"),
-            Double => st.machine_model().double_width(),
+            Double => st.machine_model().double_width,
             Empty => 0,
             FlexibleArray { .. } => 0,
-            Float => st.machine_model().float_width(),
+            Float => st.machine_model().float_width,
             IncompleteStruct { .. } => unreachable!("IncompleteStruct doesn't have a sizeof"),
             IncompleteUnion { .. } => unreachable!("IncompleteUnion doesn't have a sizeof"),
             InfiniteArray { .. } => unreachable!("InfiniteArray doesn't have a sizeof"),
-            Pointer { .. } => st.machine_model().pointer_width(),
+            Pointer { .. } => st.machine_model().pointer_width,
             Signedbv { width } => *width,
             Struct { components, .. } => {
                 components.iter().map(|x| x.typ().sizeof_in_bits(st)).sum()
@@ -618,7 +618,7 @@ impl Type {
         let concrete = self.unwrap_typedef();
         match concrete {
             CInteger(CIntType::Int) | CInteger(CIntType::SSizeT) | Signedbv { .. } => true,
-            CInteger(CIntType::Char) => !mm.char_is_unsigned(),
+            CInteger(CIntType::Char) => !mm.char_is_unsigned,
             _ => false,
         }
     }
@@ -680,7 +680,7 @@ impl Type {
         let concrete = self.unwrap_typedef();
         match concrete {
             CInteger(CIntType::Bool) | CInteger(CIntType::SizeT) | Unsignedbv { .. } => true,
-            CInteger(CIntType::Char) => mm.char_is_unsigned(),
+            CInteger(CIntType::Char) => mm.char_is_unsigned,
             _ => false,
         }
     }

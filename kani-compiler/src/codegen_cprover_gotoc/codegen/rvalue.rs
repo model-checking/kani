@@ -278,7 +278,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     IntTy::I32 => Expr::int_constant(31, Type::signed_int(32)),
                     IntTy::I64 => Expr::int_constant(63, Type::signed_int(64)),
                     IntTy::I128 => Expr::int_constant(127, Type::signed_int(128)),
-                    IntTy::Isize => Expr::int_constant(mm.pointer_width() - 1, Type::ssize_t()),
+                    IntTy::Isize => Expr::int_constant(mm.pointer_width - 1, Type::ssize_t()),
                 },
                 ty::Uint(k) => match k {
                     UintTy::U8 => Expr::int_constant(7, Type::unsigned_int(8)),
@@ -286,7 +286,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     UintTy::U32 => Expr::int_constant(31, Type::unsigned_int(32)),
                     UintTy::U64 => Expr::int_constant(63, Type::unsigned_int(64)),
                     UintTy::U128 => Expr::int_constant(127, Type::unsigned_int(128)),
-                    UintTy::Usize => Expr::int_constant(mm.pointer_width() - 1, Type::size_t()),
+                    UintTy::Usize => Expr::int_constant(mm.pointer_width - 1, Type::size_t()),
                 },
                 _ => unreachable!(),
             }
