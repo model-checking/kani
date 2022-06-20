@@ -3,9 +3,8 @@
 
 use crate::args::KaniArgs;
 use crate::util::render_command;
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Context, Ok, Result};
 use std::cell::RefCell;
-use std::ffi::OsString;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
@@ -160,10 +159,14 @@ impl KaniSession {
         // Collect live streamed output from cbmc and pass it to the python parser
         // Execute python command and print final output
         if let Some(cbmc_stdout) = cbmc_output.stdout.take() {
-            let mut _python_output_child = python_command.stdin(cbmc_stdout).status();
+            let python_output_child = python_command.stdin(cbmc_stdout).status();
+            return python_output_child.context(format!(
+                "Failed to invoke {}",
+                python_command.get_program().to_string_lossy()
+            ));
+        } else {
+            Ok(<ExitStatus as std::os::unix::prelude::ExitStatusExt>::from_raw(0))
         }
-
-        Ok(<ExitStatus as std::os::unix::prelude::ExitStatusExt>::from_raw(0))
     }
 }
 

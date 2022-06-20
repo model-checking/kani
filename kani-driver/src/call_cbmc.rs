@@ -42,20 +42,19 @@ impl KaniSession {
             cmd.arg("--json-ui");
 
             let now = Instant::now();
+            let elapsed = now.elapsed().as_secs_f32();
 
             // Check cbmc output flag and extract cbmc output either as a live stream or in a cache
             if self.args.use_piped_output {
                 // Use streaming output from CBMC
-                let _cbmc_result_stream = self.run_piped(cmd)?;
-                let elapsed = now.elapsed().as_secs_f32();
-
-                println!("Verification Time: {}s", elapsed);
+                let format_result_live = self.run_piped(cmd);
+                if format_result_live.is_err() {
+                    return Ok(VerificationStatus::Failure);
+                }
             } else {
                 // Write cbmc output to a file
                 let _cbmc_result = self.run_redirect(cmd, &output_filename)?;
                 let format_result = self.format_cbmc_output(&output_filename);
-
-                let elapsed = now.elapsed().as_secs_f32();
 
                 if format_result.is_err() {
                     // Because of things like --assertion-reach-checks and other future features,
@@ -65,8 +64,9 @@ impl KaniSession {
                     // the best possible fix is port to rust instead of using python, or getting more
                     // feedback than just exit status (or using a particular magic exit code?)
                 }
-                println!("Verification Time: {}s", elapsed);
             }
+
+            println!("Verification Time: {}s", elapsed);
         }
 
         Ok(VerificationStatus::Success)

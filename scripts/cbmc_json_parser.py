@@ -61,7 +61,6 @@ class GlobalMessages(str, Enum):
     READ_FROM_STREAM = "--read-cbmc-from-stream"
     READ_FROM_FILE = "cbmc_output"
 
-
 def usage_error(msg):
     """ Prints an error message followed by the expected usage. Then exit process. """
     print(f"Error: {msg} Usage:")
@@ -116,11 +115,12 @@ def main(argv):
                 for line in sys.stdin:
                     print(line)
             except BaseException:
-                usage_error(f"Unable to complete parsing CBMC Output\n")
+                # Throw custom error & sys.exit(1)
+                print(f"Unable to complete parsing CBMC Output\n")
+                sys.exit(1)
+            return_code = 0
         else:
             usage_error(f"CBMC Output not piped to post-processing\n")
-        return_code = 0
-
     else:
         # parse the input json file
         with open(argv[1]) as f:
