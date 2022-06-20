@@ -111,15 +111,6 @@ git submodule update --init
 ```
 
 ```bash
-# Done with that PR, time for a new one?
-git switch main
-git pull origin
-git submodule update --init
-cd src/kani-compiler
-cargo build --workspace
-```
-
-```bash
 # Need to update local branch (e.g. for an open pull request?)
 git fetch origin
 git merge origin/main
@@ -134,16 +125,20 @@ git switch pr/$ID
 ```
 
 ```bash
+# Push to someone else's pull request
+git origin add $USER $GIR_URL_FOR_THAT_USER
+git push $USER $LOCAL_BRANCH:$THEIR_PR_BRANCH_NAME
+```
+
+```bash
 # Search only git-tracked files
 git grep codegen_panic
 ```
 
 ```bash
-# See all commits that are part of Kani, not part of Rust
-git log --graph --oneline origin/upstream-rustc..origin/main
-```
-
-```bash
-# See all files modified by Kani (compared to upstream Rust)
-git diff --stat origin/upstream-rustc..origin/main
+# Accidentally commit to main?
+# "Move" commit to a branch:
+git checkout -b my_branch
+# Fix main:
+git branch --force main origin/main
 ```
