@@ -17,7 +17,7 @@ use std::{
 };
 
 /// Step at which Kani should panic.
-#[derive(PartialEq)]
+#[derive(PartialEq, Eq)]
 pub enum FailStep {
     /// Kani panics before the codegen step (up to MIR generation). This step
     /// runs the same checks on the test code as `cargo check` including syntax,
@@ -113,7 +113,7 @@ fn try_parse_args(cur_args: Vec<String>, name: &str, line: &str) -> Vec<String> 
     let name = format!("{}-flags:", name);
     let mut split = line.split(&name).skip(1);
     let args: Vec<String> = if let Some(rest) = split.next() {
-        rest.trim().split_whitespace().map(String::from).collect()
+        rest.split_whitespace().map(String::from).collect()
     } else {
         Vec::new()
     };

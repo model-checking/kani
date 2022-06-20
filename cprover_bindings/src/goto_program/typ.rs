@@ -73,7 +73,7 @@ pub enum Type {
 }
 
 /// Machine dependent integers: `bool`, `char`, `int`, `size_t`, etc.
-#[derive(PartialEq, Debug, Clone, Copy)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum CIntType {
     /// `bool`
     Bool,
@@ -769,10 +769,10 @@ impl Type {
 
     /// If typ.field_name exists in the symbol table, return Some(field.typ),
     /// otherwise, return none.
-    pub fn lookup_field_type<'a, T: Into<InternedString>>(
+    pub fn lookup_field_type<T: Into<InternedString>>(
         &self,
         field_name: T,
-        st: &'a SymbolTable,
+        st: &SymbolTable,
     ) -> Option<Type> {
         self.lookup_field(field_name, st).map(|f| f.typ())
     }
@@ -1279,7 +1279,7 @@ impl Type {
             Type::Array { typ, size } => {
                 format!("array_of_{}_{}", size, typ.to_identifier())
             }
-            Type::Bool => format!("bool"),
+            Type::Bool => "bool".to_string(),
             Type::CBitField { width, typ } => {
                 format!("cbitfield_of_{}_{}", width, typ.to_identifier())
             }
@@ -1295,11 +1295,11 @@ impl Type {
                 let return_string = return_type.to_identifier();
                 format!("code_from_{}_to_{}", parameter_string, return_string)
             }
-            Type::Constructor => format!("constructor"),
-            Type::Double => format!("double"),
-            Type::Empty => format!("empty"),
+            Type::Constructor => "constructor".to_string(),
+            Type::Double => "double".to_string(),
+            Type::Empty => "empty".to_string(),
             Type::FlexibleArray { typ } => format!("flexarray_of_{}", typ.to_identifier()),
-            Type::Float => format!("float"),
+            Type::Float => "float".to_string(),
             Type::IncompleteStruct { tag } => tag.to_string(),
             Type::IncompleteUnion { tag } => tag.to_string(),
             Type::InfiniteArray { typ } => {

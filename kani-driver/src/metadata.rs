@@ -146,7 +146,7 @@ pub fn mock_proof_harness(name: &str, unwind_value: Option<u32>) -> HarnessMetad
         mangled_name: name.into(),
         original_file: "<unknown>".into(),
         original_line: "<unknown>".into(),
-        unwind_value: unwind_value,
+        unwind_value,
     }
 }
 

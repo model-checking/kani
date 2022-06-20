@@ -482,7 +482,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 self.codegen_get_discriminant(place, pt, res_ty)
             }
             Rvalue::Aggregate(ref k, operands) => {
-                self.codegen_rvalue_aggregate(&*k, operands, res_ty)
+                self.codegen_rvalue_aggregate(k, operands, res_ty)
             }
             Rvalue::ThreadLocalRef(_) => {
                 let typ = self.codegen_ty(res_ty);
@@ -581,10 +581,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let dst_metadata_field = if let Some(vtable_typ) =
             dst_goto_typ.lookup_field_type("vtable", &self.symbol_table)
         {
-            (
-                "vtable",
-                src_goto_expr.member("vtable", &self.symbol_table).cast_to(vtable_typ.clone()),
-            )
+            ("vtable", src_goto_expr.member("vtable", &self.symbol_table).cast_to(vtable_typ))
         } else if let Some(len_typ) = dst_goto_typ.lookup_field_type("len", &self.symbol_table) {
             ("len", src_goto_expr.member("len", &self.symbol_table).cast_to(len_typ))
         } else {
@@ -754,7 +751,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // vtable fat pointer (which can happen with auto trait fat pointers)
         if self.is_vtable_fat_pointer(src_mir_type) {
             self.cast_unsized_dyn_trait_to_unsized_dyn_trait(
-                src_goto_expr.clone(),
+                src_goto_expr,
                 src_mir_type,
                 dst_mir_type,
             )
@@ -766,7 +763,7 @@ impl<'tcx> GotocCtx<'tcx> {
             );
 
             // Sized to unsized cast
-            self.cast_sized_expr_to_unsized_expr(src_goto_expr.clone(), src_mir_type, dst_mir_type)
+            self.cast_sized_expr_to_unsized_expr(src_goto_expr, src_mir_type, dst_mir_type)
         }
     }
 
@@ -920,7 +917,7 @@ impl<'tcx> GotocCtx<'tcx> {
         } else {
             Expr::object_size(temp_var.address_of())
         };
-        let check = Expr::eq(cbmc_size, vt_size.clone());
+        let check = Expr::eq(cbmc_size, vt_size);
         let assert_msg =
             format!("Correct CBMC vtable size for {:?} (MIR type {:?})", ty, operand_type.kind());
         let size_assert =
@@ -1239,7 +1236,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         for (field, expr) in cast_required {
             // Replace the field expression with the cast expression
-            src_goto_field_values.insert(field.clone(), expr.clone());
+            src_goto_field_values.insert(field, expr.clone());
         }
         let dst_goto_expr = Expr::struct_expr(
             self.codegen_ty(dst_mir_type),
@@ -1270,7 +1267,7 @@ impl<'tcx> GotocCtx<'tcx> {
         }
 
         match (src_mir_type.kind(), dst_mir_type.kind()) {
-            (_, ty::Dynamic(..)) => Some((src_mir_type.clone(), dst_mir_type.clone())),
+            (_, ty::Dynamic(..)) => Some((src_mir_type, dst_mir_type)),
             (ty::Adt(..), ty::Adt(..)) => {
                 let src_fields = self.mir_struct_field_types(src_mir_type);
                 let dst_fields = self.mir_struct_field_types(dst_mir_type);

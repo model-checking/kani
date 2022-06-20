@@ -119,7 +119,7 @@ impl Callbacks for KaniCallbacks {}
 /// Generate the arguments to pass to rustc_driver.
 fn generate_rustc_args(args: &ArgMatches) -> Vec<String> {
     let mut gotoc_args =
-        rustc_gotoc_flags(&args.value_of(parser::KANI_LIB).unwrap_or(std::env!("KANI_LIB_PATH")));
+        rustc_gotoc_flags(args.value_of(parser::KANI_LIB).unwrap_or(std::env!("KANI_LIB_PATH")));
     let mut rustc_args = vec![String::from("rustc")];
     if args.is_present(parser::GOTO_C) {
         rustc_args.append(&mut gotoc_args);
