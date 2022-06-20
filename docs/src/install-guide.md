@@ -11,7 +11,7 @@ Other platforms are either not yet supported or require instead that you [build 
 
 The following must already be installed:
 
-* **Python version 3.6 or greater** and the package installer pip.
+* **Python version 3.6 or greater** and the package installer `pip`.
 * Rust installed via `rustup`.
 * `ctags` is required for Kani's `--visualize` option to work correctly. "Universal ctags" is recommended.
 
