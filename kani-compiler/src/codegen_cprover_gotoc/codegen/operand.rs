@@ -439,7 +439,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     fn codegen_allocation_data(&mut self, alloc: &'tcx Allocation) -> Vec<AllocData<'tcx>> {
         let mut alloc_vals = Vec::with_capacity(alloc.relocations().len() + 1);
-        let pointer_size = self.symbol_table.machine_model().pointer_width() as usize / 8;
+        let pointer_size = self.symbol_table.machine_model().pointer_width_in_bytes();
 
         let mut next_offset = 0;
         for &(offset, alloc_id) in alloc.relocations().iter() {
