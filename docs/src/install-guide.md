@@ -13,7 +13,7 @@ The following must already be installed:
 
 * **Python version 3.6 or greater** and the package installer `pip`.
 * Rust installed via `rustup`.
-* `ctags` is required for Kani's `--visualize` option to work correctly. "Universal ctags" is recommended.
+* `ctags` is required for Kani's `--visualize` option to work correctly. [Universal ctags](https://ctags.io/) is recommended.
 
 ## Installing the latest version
 
