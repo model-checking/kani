@@ -518,10 +518,34 @@ impl<'tcx> GotocCtx<'tcx> {
         let vtable = vtable_ref.dereference();
         let fn_ptr = vtable.member(vtable_field_name, &self.symbol_table);
 
-        if self.is_vtable_fat_pointer(self_ty) || self_ty.is_trait() {
-            // Update the argument from arg0 to arg0.data if arg0 is a fat pointer.
-            fargs[0] = trait_fat_ptr.to_owned().member("data", &self.symbol_table);
-        }
+        // Update the argument from arg0 to arg0.data if arg0 is a fat pointer.
+        let data_ptr = trait_fat_ptr.to_owned().member("data", &self.symbol_table);
+        let mut ret_stmts = Vec::<Stmt>::new();
+        fargs[0] = if self_ty.is_adt() {
+            debug!(fn_typ=?fn_ptr.typ(), ?self_ty, "codegen_virtual_funcall");
+            match fn_ptr.typ() {
+                Type::Pointer { typ } => match typ.as_ref() {
+                    Type::Code { parameters, .. } => {
+                        let param_typ = parameters.first().unwrap().typ();
+                        let tmp = self.gen_temp_variable(param_typ.clone(), loc).to_expr();
+                        debug!(?tmp,
+                            orig=?data_ptr.typ(),
+                            "codegen_virtual_funcall");
+                        ret_stmts.push(Stmt::decl(tmp.clone(), None, loc));
+                        ret_stmts.push(Stmt::assign(
+                            tmp.clone().member("pointer", &self.symbol_table),
+                            data_ptr,
+                            loc,
+                        ));
+                        tmp
+                    }
+                    _ => unreachable!("Unexpected virtual function type: {:?}", fn_ptr.typ()),
+                },
+                _ => unreachable!("Unexpected virtual function type: {:?}", fn_ptr.typ()),
+            }
+        } else {
+            data_ptr
+        };
 
         // For soundness, add an assertion that the vtable function call is not null.
         // Otherwise, CBMC might treat this as an assert(0) and later user-added assertions
@@ -541,7 +565,9 @@ impl<'tcx> GotocCtx<'tcx> {
             call_stmt
         };
         trace!(?call_stmt, "codegen_virtual_funcall stmt");
-        vec![assert_nonnull, call_stmt]
+        ret_stmts.push(assert_nonnull);
+        ret_stmts.push(call_stmt);
+        ret_stmts
     }
 
     /// A place is similar to the C idea of a LHS. For example, the returned value of a function call is stored to a place.

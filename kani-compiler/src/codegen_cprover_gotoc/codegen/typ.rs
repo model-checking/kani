@@ -387,6 +387,20 @@ impl<'tcx> GotocCtx<'tcx> {
         })
     }
 
+    /// Creates a new type that represents a struct that wraps a thin pointer.
+    /// struct Wrapper<T> {
+    ///     pointer: *T;
+    /// }
+    fn codegen_data_pointer_wrapper(&mut self, pointer_ty: ty::Ty<'tcx>) -> Type {
+        trace!(?pointer_ty, "codegen_data_pointer_wrapper");
+        let pointee_ty = pointee_type(pointer_ty).unwrap();
+        let name = self.ty_mangled_name(pointee_ty).to_string() + "::Wrapper";
+        let ptr_type = self.codegen_ty(pointee_ty).to_pointer();
+        self.ensure_struct(&name, NO_PRETTY_NAME, |_, _| {
+            vec![DatatypeComponent::field("pointer", ptr_type)]
+        })
+    }
+
     /// `drop_in_place` is a function with type &self -> (), the vtable for
     /// dynamic trait objects needs a pointer to it
     pub fn trait_vtable_drop_type(&mut self, t: ty::Ty<'tcx>) -> Type {
@@ -408,6 +422,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// We follow the order implemented by the compiler in compiler/rustc_codegen_ssa/src/meth.rs
     /// `get_vtable`.
     fn trait_vtable_field_types(&mut self, t: ty::Ty<'tcx>) -> Vec<DatatypeComponent> {
+        debug!(ty=?t, "trait_vtable_field_types");
         let mut vtable_base = vec![
             DatatypeComponent::field("drop", self.trait_vtable_drop_type(t)),
             DatatypeComponent::field("size", Type::size_t()),
@@ -916,6 +931,30 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
+    fn extract_thin_pointer(&self, arg_ty: Ty<'tcx>) -> Ty<'tcx> {
+        trace!(mir_ty=?arg_ty, "extract_data_pointer: args");
+        let mut typ = arg_ty;
+        // Traverse the layout following the non-zero field until we find a fat pointer.
+        while let ty::Adt(adt_def, adt_substs) = typ.kind() {
+            assert_eq!(
+                adt_def.variants().len(),
+                1,
+                "Expected a single-variant ADT. Found {:?}",
+                typ
+            );
+            let fields = &adt_def.variants().get(VariantIdx::from_u32(0)).unwrap().fields;
+            let non_zst = fields
+                .iter()
+                .find(|field| !self.layout_of(field.ty(self.tcx, adt_substs)).is_zst())
+                .expect("Expected one non-zst field.");
+            typ = non_zst.ty(self.tcx, adt_substs);
+        }
+
+        trace!(mir_ty=?typ, "extract_data_pointer: result");
+        typ
+        // pointee_type(typ).unwrap()
+    }
+
     /// Generate code for a trait function declaration.
     ///
     /// Dynamic function calls first parameter is self which can be one of the following:
@@ -924,7 +963,7 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_dynamic_function_sig(&mut self, sig: PolyFnSig<'tcx>) -> Type {
         let sig = self.monomorphize(sig);
         let sig = self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig);
-
+        debug!(name=?sig.to_string() , params=?sig.inputs(), "codegen_dynamic_function_sig");
         let mut is_first = true;
         let params = sig
             .inputs()
@@ -941,8 +980,9 @@ impl<'tcx> GotocCtx<'tcx> {
                         // Convert dyn T to thin pointer.
                         Some(self.codegen_trait_data_pointer(*arg_type))
                     } else {
-                        // Codegen type as is for Arc / Rc / Box / Pin.
-                        Some(self.codegen_ty(*arg_type))
+                        // Codegen type with thin pointer (E.g.: Box<dyn T> -> Wrapper<data_ptr>).
+                        let first_ty = self.extract_thin_pointer(*arg_type);
+                        Some(self.codegen_data_pointer_wrapper(first_ty))
                     }
                 } else if self.ignore_var_ty(*arg_type) {
                     debug!("Ignoring type {:?} in function signature", arg_type);
