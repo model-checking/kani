@@ -33,6 +33,25 @@ You may also need to install the `rustc-dev` package using rustup
 rustup toolchain install nightly --component rustc-dev
 ```
 
+#### Debugging in VS code
+
+To debug Kani in VS code, first install the [CodeLLDB extension](https://marketplace.visualstudio.com/items?itemName=vadimcn.vscode-lldb).
+Then add the following lines at the start of the `main` function (see [the CodeLLDB manual](https://github.com/vadimcn/vscode-lldb/blob/master/MANUAL.md#attaching-debugger-to-the-current-process-rust) for details):
+
+```rust
+{
+    let url = format!(
+        "vscode://vadimcn.vscode-lldb/launch/config?{{'request':'attach','sourceLanguages':['rust'],'waitFor':true,'pid':{}}}",
+        std::process::id()
+    );
+    std::process::Command::new("code").arg("--open-url").arg(url).output().unwrap();
+}
+```
+
+Note that pretty printing for the Rust nightly toolchain (which Kani uses) is not very good as of June 2022.
+For example, a vector may be displayed as `vec![{...}, {...}]` on nightly Rust, when it would be displayed as `vec![Some(0), None]` on stable Rust.
+Hopefully, this will be fixed soon.
+
 ### CLion / IntelliJ
 This is not a great solution, but it works for now (see <https://github.com/intellij-rust/intellij-rust/issues/1618>
 for more details).
