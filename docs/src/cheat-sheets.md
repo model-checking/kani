@@ -72,7 +72,12 @@ kani --keep-temps file.rs
 # Generate "C code" from CBMC IR (.c)
 kani --gen-c file.rs
 ```
-
+```bash
+# "Demangle" the tags in the "C code" (file.out.c) with the Rust type names (file.type_map.json).
+# The result is written to file.out.demangled.c
+# This makes reading the generated C code much easier.
+demangle.py file
+```
 ## CBMC
 
 ```bash
