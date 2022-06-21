@@ -185,7 +185,7 @@ impl ToIrep for ExprValue {
                 )],
             },
             ExprValue::ByteExtract { e, offset } => Irep {
-                id: if mm.is_big_endian() {
+                id: if mm.is_big_endian {
                     IrepId::ByteExtractBigEndian
                 } else {
                     IrepId::ByteExtractLittleEndian
@@ -198,7 +198,7 @@ impl ToIrep for ExprValue {
                 sub: vec![],
                 named_sub: linear_map![(
                     IrepId::Value,
-                    Irep::just_bitpattern_id(if *i { 1u8 } else { 0 }, mm.bool_width(), false)
+                    Irep::just_bitpattern_id(if *i { 1u8 } else { 0 }, mm.bool_width, false)
                 )],
             },
             ExprValue::Dereference(e) => {
@@ -212,7 +212,7 @@ impl ToIrep for ExprValue {
                     sub: vec![],
                     named_sub: linear_map![(
                         IrepId::Value,
-                        Irep::just_bitpattern_id(c, mm.double_width(), false)
+                        Irep::just_bitpattern_id(c, mm.double_width, false)
                     )],
                 }
             }
@@ -223,7 +223,7 @@ impl ToIrep for ExprValue {
                     sub: vec![],
                     named_sub: linear_map![(
                         IrepId::Value,
-                        Irep::just_bitpattern_id(c, mm.float_width(), false)
+                        Irep::just_bitpattern_id(c, mm.float_width, false)
                     )],
                 }
             }
@@ -263,7 +263,7 @@ impl ToIrep for ExprValue {
                 sub: vec![],
                 named_sub: linear_map![(
                     IrepId::Value,
-                    Irep::just_bitpattern_id(*i, mm.pointer_width(), false)
+                    Irep::just_bitpattern_id(*i, mm.pointer_width, false)
                 )],
             },
             ExprValue::SelfOp { op, e } => side_effect_irep(op.to_irep_id(), vec![e.to_irep(mm)]),
@@ -555,27 +555,27 @@ impl ToIrep for Type {
             Type::CInteger(CIntType::Bool) => Irep {
                 id: IrepId::CBool,
                 sub: vec![],
-                named_sub: linear_map![(IrepId::Width, Irep::just_int_id(mm.bool_width()))],
+                named_sub: linear_map![(IrepId::Width, Irep::just_int_id(mm.bool_width))],
             },
             Type::CInteger(CIntType::Char) => Irep {
-                id: if mm.char_is_unsigned() { IrepId::Unsignedbv } else { IrepId::Signedbv },
+                id: if mm.char_is_unsigned { IrepId::Unsignedbv } else { IrepId::Signedbv },
                 sub: vec![],
-                named_sub: linear_map![(IrepId::Width, Irep::just_int_id(mm.char_width()),)],
+                named_sub: linear_map![(IrepId::Width, Irep::just_int_id(mm.char_width),)],
             },
             Type::CInteger(CIntType::Int) => Irep {
                 id: IrepId::Signedbv,
                 sub: vec![],
-                named_sub: linear_map![(IrepId::Width, Irep::just_int_id(mm.int_width()),)],
+                named_sub: linear_map![(IrepId::Width, Irep::just_int_id(mm.int_width),)],
             },
             Type::CInteger(CIntType::SizeT) => Irep {
                 id: IrepId::Unsignedbv,
                 sub: vec![],
-                named_sub: linear_map![(IrepId::Width, Irep::just_int_id(mm.pointer_width()),)],
+                named_sub: linear_map![(IrepId::Width, Irep::just_int_id(mm.pointer_width),)],
             },
             Type::CInteger(CIntType::SSizeT) => Irep {
                 id: IrepId::Signedbv,
                 sub: vec![],
-                named_sub: linear_map![(IrepId::Width, Irep::just_int_id(mm.pointer_width()),)],
+                named_sub: linear_map![(IrepId::Width, Irep::just_int_id(mm.pointer_width),)],
             },
             Type::Code { parameters, return_type } => Irep {
                 id: IrepId::Code,
@@ -645,7 +645,7 @@ impl ToIrep for Type {
             Type::Pointer { typ } => Irep {
                 id: IrepId::Pointer,
                 sub: vec![typ.to_irep(mm)],
-                named_sub: linear_map![(IrepId::Width, Irep::just_int_id(mm.pointer_width()),)],
+                named_sub: linear_map![(IrepId::Width, Irep::just_int_id(mm.pointer_width),)],
             },
             Type::Signedbv { width } => Irep {
                 id: IrepId::Signedbv,
