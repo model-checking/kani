@@ -139,7 +139,7 @@ impl CodegenBackend for GotocCodegenBackend {
 
         // Map MIR types to GotoC types
         let type_map: BTreeMap<InternedString, InternedString> =
-            BTreeMap::from_iter(c.type_map.into_iter().map(|(k, v)| (k, v.to_string().into())));
+            BTreeMap::from_iter(c.tag_map.into_iter().map(|(k, v)| (k, v.to_string().into())));
 
         // Get the vtable function pointer restrictions if requested
         let vtable_restrictions = if c.vtable_ctx.emit_vtable_restrictions {

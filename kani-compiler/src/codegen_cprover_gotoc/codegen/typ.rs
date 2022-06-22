@@ -538,15 +538,22 @@ impl<'tcx> GotocCtx<'tcx> {
     /// also c.f. https://www.ralfj.de/blog/2020/04/04/layout-debugging.html
     ///      c.f. https://rust-lang.github.io/unsafe-code-guidelines/introduction.html
     pub fn codegen_ty(&mut self, ty: Ty<'tcx>) -> Type {
-        let normalized = self.tcx.normalize_erasing_regions(ty::ParamEnv::reveal_all(), ty);
-        let goto_typ = self.codegen_ty_inner(normalized);
-        if let Some(tag) = goto_typ.tag() {
-            if !self.type_map.contains_key(&tag) {
-                debug!(mir_type=?normalized, gotoc_name=?tag, ?goto_typ,  "codegen_ty: new type");
-                self.type_map.insert(tag, normalized);
+        if let Some(cached_type) = self.type_map.get(&ty) {
+            // Return previously generated type.
+            cached_type.clone()
+        } else {
+            // Codegen type.
+            let normalized = self.tcx.normalize_erasing_regions(ty::ParamEnv::reveal_all(), ty);
+            let goto_typ = self.codegen_ty_inner(normalized);
+            self.type_map.insert(ty, goto_typ.clone());
+            if let Some(tag) = goto_typ.tag() {
+                if !self.tag_map.contains_key(&tag) {
+                    debug!(mir_type=?normalized, gotoc_name=?tag, ?goto_typ,  "codegen_ty: new type");
+                    self.tag_map.insert(tag, normalized);
+                }
             }
+            goto_typ
         }
-        goto_typ
     }
 
     fn codegen_ty_inner(&mut self, ty: Ty<'tcx>) -> Type {

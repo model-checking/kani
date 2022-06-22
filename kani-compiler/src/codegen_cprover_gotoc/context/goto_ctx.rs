@@ -57,7 +57,10 @@ pub struct GotocCtx<'tcx> {
     /// map (trait, method) pairs to possible implementations
     pub vtable_ctx: VtableCtx,
     pub current_fn: Option<CurrentFnCtx<'tcx>>,
-    pub type_map: FxHashMap<InternedString, Ty<'tcx>>,
+    /// Store the goto-c tag generated while generating a given type.
+    pub tag_map: FxHashMap<InternedString, Ty<'tcx>>,
+    /// Reverse map from `type_map` which allow us to cache the codegen type result.
+    pub type_map: FxHashMap<Ty<'tcx>, Type>,
     pub proof_harnesses: Vec<HarnessMetadata>,
     /// a global counter for generating unique IDs for checks
     pub global_checks_count: u64,
@@ -82,6 +85,7 @@ impl<'tcx> GotocCtx<'tcx> {
             alloc_map: FxHashMap::default(),
             vtable_ctx: VtableCtx::new(emit_vtable_restrictions),
             current_fn: None,
+            tag_map: FxHashMap::default(),
             type_map: FxHashMap::default(),
             proof_harnesses: vec![],
             global_checks_count: 0,
