@@ -117,8 +117,8 @@ jobs:
       - name: Build container test
         if: ${{ matrix.os == 'ubuntu-18.04' }}
         run: |
-          docker build -t kani-20-04 -f scripts/ci/Dockerfile.bundle-test-20-04 .
-          docker build -t kani-18-04 -f scripts/ci/Dockerfile.bundle-test-18-04 .
+          docker build -t kani-20-04 -f scripts/ci/Dockerfile.bundle-test-ubuntu-20-04 .
+          docker build -t kani-18-04 -f scripts/ci/Dockerfile.bundle-test-ubuntu-18-04 .
 
       - name: Run installed tests
         if: ${{ matrix.os == 'ubuntu-18.04' }}
