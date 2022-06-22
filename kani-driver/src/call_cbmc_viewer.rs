@@ -75,7 +75,7 @@ impl KaniSession {
                 && std::env::var("SSH_CONNECTION").is_ok()
             {
                 println!(
-                    "VSCode Remote-SSH port forwards for you. Try:  python3 -m http.server --directory {}/html",
+                    "VS Code automatically forwards ports for locally hosted servers. To view the report remotely,\nTry:  python3 -m http.server --directory {}/html",
                     report_dir.to_string_lossy()
                 );
             }
