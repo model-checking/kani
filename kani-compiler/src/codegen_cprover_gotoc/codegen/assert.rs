@@ -10,17 +10,19 @@ use cbmc::goto_program::{Expr, Location, Stmt};
 #[allow(dead_code)]
 pub enum PropertyClass {
     ArithmeticOverflow,
-    AssertFalse,
     Assume,
     Cover,
-    CustomProperty(String),
+    /// Assertions and Panic that are not specific to Kani. In a concrete execution, we expect
+    /// these assertions to be available to the user.
+    /// E.g.: User assertions, compiler invariant checks
     DefaultAssertion,
     ExactDiv,
     ExpectFail,
     FiniteCheck,
-    /// Checks added by Kani compiler to detect UB or unstable behavior.
-    KaniCheck,
-    PointerOffset,
+    /// Checks added by Kani compiler to detect safety conditions violation.
+    /// E.g., things that trigger UB or unstable behavior.
+    SafetyCheck,
+    /// Checks to ensure that Kani's code generation is correct.
     SanityCheck,
     Unimplemented,
     UnsupportedConstruct,
@@ -32,16 +34,13 @@ impl PropertyClass {
     pub fn as_str(&self) -> &str {
         match self {
             PropertyClass::ArithmeticOverflow => "arithmetic_overflow",
-            PropertyClass::AssertFalse => "assert_false",
             PropertyClass::Assume => "assume",
             PropertyClass::Cover => "coverage_check",
-            PropertyClass::CustomProperty(property_string) => property_string.as_str(),
             PropertyClass::DefaultAssertion => "assertion",
             PropertyClass::ExactDiv => "exact_div",
             PropertyClass::ExpectFail => "expect_fail",
             PropertyClass::FiniteCheck => "finite_check",
-            PropertyClass::KaniCheck => "kani_check",
-            PropertyClass::PointerOffset => "pointer_offset",
+            PropertyClass::SafetyCheck => "kani_check",
             PropertyClass::SanityCheck => "sanity_check",
             PropertyClass::Unimplemented => "unimplemented",
             PropertyClass::Unreachable => "unreachable",
@@ -52,20 +51,18 @@ impl PropertyClass {
     pub fn from_str(input: &str) -> PropertyClass {
         match input {
             "arithmetic_overflow" => PropertyClass::ArithmeticOverflow,
-            "assert_false" => PropertyClass::AssertFalse,
             "assume" => PropertyClass::Assume,
             "assertion" => PropertyClass::DefaultAssertion,
             "coverage_check" => PropertyClass::Cover,
             "exact_div" => PropertyClass::ExactDiv,
             "expect_fail" => PropertyClass::ExpectFail,
             "finite_check" => PropertyClass::FiniteCheck,
-            "kani_check" => PropertyClass::KaniCheck,
-            "pointer_offset" => PropertyClass::PointerOffset,
+            "kani_check" => PropertyClass::SafetyCheck,
             "sanity_check" => PropertyClass::SanityCheck,
             "unimplemented" => PropertyClass::Unimplemented,
             "unreachable" => PropertyClass::Unreachable,
             "unsupported_construct" => PropertyClass::UnsupportedConstruct,
-            _ => PropertyClass::CustomProperty(input.to_owned()),
+            _ => unreachable!("Invalid property class {}", input),
         }
     }
 }

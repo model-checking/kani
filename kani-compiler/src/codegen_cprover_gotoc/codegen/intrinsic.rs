@@ -113,7 +113,7 @@ impl<'tcx> GotocCtx<'tcx> {
             ),
             // Transmuting to an uninhabited type is UB.
             "transmute" => self.codegen_fatal_error(
-                PropertyClass::DefaultAssertion,
+                PropertyClass::SafetyCheck,
                 "transmuting to uninhabited type has undefined behavior",
                 span,
             ),
@@ -763,7 +763,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // precise error message
         if layout.abi.is_uninhabited() {
             return self.codegen_fatal_error(
-                PropertyClass::DefaultAssertion,
+                PropertyClass::SafetyCheck,
                 &format!("attempted to instantiate uninhabited type `{}`", ty),
                 span,
             );
@@ -775,7 +775,7 @@ impl<'tcx> GotocCtx<'tcx> {
             && !layout.might_permit_raw_init(self, InitKind::Zero, false)
         {
             return self.codegen_fatal_error(
-                PropertyClass::DefaultAssertion,
+                PropertyClass::SafetyCheck,
                 &format!("attempted to zero-initialize type `{}`, which is invalid", ty),
                 span,
             );
@@ -785,7 +785,7 @@ impl<'tcx> GotocCtx<'tcx> {
             && !layout.might_permit_raw_init(self, InitKind::Uninit, false)
         {
             return self.codegen_fatal_error(
-                PropertyClass::DefaultAssertion,
+                PropertyClass::SafetyCheck,
                 &format!("attempted to leave type `{}` uninitialized, which is invalid", ty),
                 span,
             );
@@ -928,14 +928,14 @@ impl<'tcx> GotocCtx<'tcx> {
         let src_align = self.is_ptr_aligned(farg_types[0], src.clone());
         let src_align_check = self.codegen_assert(
             src_align,
-            PropertyClass::DefaultAssertion,
+            PropertyClass::SafetyCheck,
             "`src` must be properly aligned",
             loc,
         );
         let dst_align = self.is_ptr_aligned(farg_types[1], dst.clone());
         let dst_align_check = self.codegen_assert(
             dst_align,
-            PropertyClass::DefaultAssertion,
+            PropertyClass::SafetyCheck,
             "`dst` must be properly aligned",
             loc,
         );
@@ -1061,7 +1061,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         let non_negative_check = self.codegen_assert_assume(
             offset_overflow.result.is_non_negative(),
-            PropertyClass::KaniCheck,
+            PropertyClass::SafetyCheck,
             "attempt to compute unsigned offset with negative distance",
             loc,
         );
@@ -1341,7 +1341,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let align = self.is_ptr_aligned(dst_typ, dst.clone());
         let align_check = self.codegen_assert(
             align,
-            PropertyClass::DefaultAssertion,
+            PropertyClass::SafetyCheck,
             "`dst` must be properly aligned",
             loc,
         );
@@ -1372,7 +1372,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let align = self.is_ptr_aligned(dst_typ, dst.clone());
         let align_check = self.codegen_assert(
             align,
-            PropertyClass::DefaultAssertion,
+            PropertyClass::SafetyCheck,
             "`dst` must be properly aligned",
             loc,
         );
