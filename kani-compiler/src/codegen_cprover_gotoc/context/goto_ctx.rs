@@ -390,9 +390,9 @@ fn machine_model_from_session(sess: &Session) -> MachineModel {
     let word_size = 32;
     let rounding_mode = RoundingMode::ToNearest;
 
-    MachineModel::new(
+    MachineModel {
+        architecture: architecture.to_string(),
         alignment,
-        architecture,
         bool_width,
         char_is_unsigned,
         char_width,
@@ -412,5 +412,5 @@ fn machine_model_from_session(sess: &Session) -> MachineModel {
         wchar_t_is_unsigned,
         wchar_t_width,
         word_size,
-    )
+    }
 }

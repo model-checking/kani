@@ -171,7 +171,7 @@ impl CodegenBackend for GotocCodegenBackend {
                 allocator_module: None,
                 metadata_module: None,
                 metadata: rustc_metadata,
-                crate_info: CrateInfo::new(tcx, symtab.machine_model().architecture().to_string()),
+                crate_info: CrateInfo::new(tcx, symtab.machine_model().architecture.clone()),
             },
             work_products,
         ))

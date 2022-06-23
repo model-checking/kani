@@ -1,5 +1,10 @@
 ## Kani documentation development
 
+VS Code recognizes localhost URLs in the terminal and automatically offers to port-forward them for you.
+All you need to do is run `mdbook serve` and then click "Open in browser".
+
+### Outside VS Code
+
 A good trick when developing Kani on a remote machine is to SSH forward to test documentation changes.
 
 ```

@@ -34,31 +34,31 @@ fn string_constant(name: &str, value: &str) -> Symbol {
 
 pub fn machine_model_symbols(mm: &MachineModel) -> Vec<Symbol> {
     vec![
-        string_constant("__CPROVER_architecture_arch", mm.architecture()),
-        int_constant_from_bool("__CPROVER_architecture_NULL_is_zero", mm.null_is_zero()),
-        int_constant("__CPROVER_architecture_alignment", mm.alignment()),
-        int_constant("__CPROVER_architecture_bool_width", mm.bool_width()),
-        int_constant_from_bool("__CPROVER_architecture_char_is_unsigned", mm.char_is_unsigned()),
-        int_constant("__CPROVER_architecture_char_width", mm.char_width()),
-        int_constant("__CPROVER_architecture_double_width", mm.double_width()),
+        string_constant("__CPROVER_architecture_arch", &mm.architecture),
+        int_constant_from_bool("__CPROVER_architecture_NULL_is_zero", mm.null_is_zero),
+        int_constant("__CPROVER_architecture_alignment", mm.alignment),
+        int_constant("__CPROVER_architecture_bool_width", mm.bool_width),
+        int_constant_from_bool("__CPROVER_architecture_char_is_unsigned", mm.char_is_unsigned),
+        int_constant("__CPROVER_architecture_char_width", mm.char_width),
+        int_constant("__CPROVER_architecture_double_width", mm.double_width),
         // c.f. https://github.com/diffblue/cbmc/blob/develop/src/util/config.h
         // the numbers are from endiannesst
-        int_constant("__CPROVER_architecture_endianness", if mm.is_big_endian() { 2 } else { 1 }),
-        int_constant("__CPROVER_architecture_int_width", mm.int_width()),
-        int_constant("__CPROVER_architecture_long_double_width", mm.long_double_width()),
-        int_constant("__CPROVER_architecture_long_int_width", mm.long_int_width()),
-        int_constant("__CPROVER_architecture_long_long_int_width", mm.long_long_int_width()),
-        int_constant("__CPROVER_architecture_memory_operand_size", mm.memory_operand_size()),
-        int_constant("__CPROVER_architecture_pointer_width", mm.pointer_width()),
-        int_constant("__CPROVER_architecture_short_int_width", mm.short_int_width()),
-        int_constant("__CPROVER_architecture_single_width", mm.single_width()),
+        int_constant("__CPROVER_architecture_endianness", if mm.is_big_endian { 2 } else { 1 }),
+        int_constant("__CPROVER_architecture_int_width", mm.int_width),
+        int_constant("__CPROVER_architecture_long_double_width", mm.long_double_width),
+        int_constant("__CPROVER_architecture_long_int_width", mm.long_int_width),
+        int_constant("__CPROVER_architecture_long_long_int_width", mm.long_long_int_width),
+        int_constant("__CPROVER_architecture_memory_operand_size", mm.memory_operand_size),
+        int_constant("__CPROVER_architecture_pointer_width", mm.pointer_width),
+        int_constant("__CPROVER_architecture_short_int_width", mm.short_int_width),
+        int_constant("__CPROVER_architecture_single_width", mm.single_width),
         int_constant_from_bool(
             "__CPROVER_architecture_wchar_t_is_unsigned",
-            mm.wchar_t_is_unsigned(),
+            mm.wchar_t_is_unsigned,
         ),
-        int_constant("__CPROVER_architecture_wchar_t_width", mm.wchar_t_width()),
-        int_constant("__CPROVER_architecture_word_size", mm.word_size()),
-        int_constant("__CPROVER_rounding_mode", mm.rounding_mode()),
+        int_constant("__CPROVER_architecture_wchar_t_width", mm.wchar_t_width),
+        int_constant("__CPROVER_architecture_word_size", mm.word_size),
+        int_constant("__CPROVER_rounding_mode", mm.rounding_mode),
     ]
 }
 
