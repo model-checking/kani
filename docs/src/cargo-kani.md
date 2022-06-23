@@ -11,6 +11,10 @@ cargo kani [<kani-args>]*
 `cargo kani` is the recommended approach for using Kani on a project, due to its
 ability to handle external dependencies and the option add configurations via the `Cargo.toml` file.
 
+If your proof harness is placed under `tests/`, you will need to run
+`cargo kani` with the `--tests` for Kani to be able to find your
+harness.
+
 ## Configuration
 
 Users can add a default configuration to the `Cargo.toml` file for running harnesses in a package.
