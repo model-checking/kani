@@ -1,6 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+use crate::goto_program::typ::Spec;
 use crate::goto_program::{
     BinaryOperand, CIntType, DatatypeComponent, Expr, ExprValue, Location, Parameter, SelfOperand,
     Stmt, StmtBody, SwitchCase, Symbol, SymbolTable, SymbolValues, Type, UnaryOperand,
@@ -46,8 +47,8 @@ pub trait Transformer: Sized {
             Type::Code { parameters, return_type } => {
                 self.transform_type_code(parameters, return_type)
             }
-            Type::CodeWithContract { parameters, return_type, requires: _, ensures: _ } => {
-                self.transform_type_code(parameters, return_type)
+            Type::CodeWithContract { parameters, return_type, requires, ensures } => {
+                self.transform_type_code_with_contract(parameters, return_type, requires, ensures)
             }
             Type::Constructor => self.transform_type_constructor(),
             Type::Double => self.transform_type_double(),
@@ -112,6 +113,30 @@ pub trait Transformer: Sized {
             parameters.iter().map(|parameter| self.transform_type_parameter(parameter)).collect();
         let transformed_return_type = self.transform_type(return_type);
         Type::code(transformed_parameters, transformed_return_type)
+    }
+
+    fn transform_type_code_with_contract(
+        &mut self,
+        parameters: &[Parameter],
+        return_type: &Type,
+        requires: &Spec,
+        ensures: &Spec,
+    ) -> Type {
+        let transformed_parameters =
+            parameters.iter().map(|parameter| self.transform_type_parameter(parameter)).collect();
+        let transformed_return_type = self.transform_type(return_type);
+        let transformed_requires = Spec {
+            clauses: requires.clauses.iter().map(|clause| self.transform_expr(clause)).collect(),
+        };
+        let transformed_ensures = Spec {
+            clauses: ensures.clauses.iter().map(|clause| self.transform_expr(clause)).collect(),
+        };
+        Type::code_with_contract(
+            transformed_parameters,
+            transformed_return_type,
+            transformed_requires,
+            transformed_ensures,
+        )
     }
 
     /// Transforms a constructor type (`__attribute__(constructor)`)

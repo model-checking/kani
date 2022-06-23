@@ -32,7 +32,9 @@ pub enum Type {
     /// `return_type x(parameters)`
     Code { parameters: Vec<Parameter>, return_type: Box<Type> },
     /// Type for function contracts.
-    /// `return_type x(parameters, requires, ensures)
+    /// `__CPROVER_requires()` for specifying pre-conditions of function contracts.
+    /// `__CPROVER_ensures()` for specifying post-conditions of function contracts.
+    /// `return_type x(parameters)`
     CodeWithContract {
         parameters: Vec<Parameter>,
         return_type: Box<Type>,
@@ -226,7 +228,7 @@ impl PartialEq for Parameter {
 }
 
 /// Implement partial equal for Spec.
-/// Always return false when comparing two function contract objects.
+/// Always returns a false because there is no meaningful way to compare two function contracts or even a use case to do so right now.
 impl PartialEq for Spec {
     fn eq(&self, _other: &Self) -> bool {
         false
@@ -316,14 +318,18 @@ impl Type {
 
     pub fn parameters(&self) -> Option<&Vec<Parameter>> {
         match self {
-            Code { parameters, .. } | VariadicCode { parameters, .. } => Some(parameters),
+            Code { parameters, .. }
+            | CodeWithContract { parameters, .. }
+            | VariadicCode { parameters, .. } => Some(parameters),
             _ => None,
         }
     }
 
     pub fn return_type(&self) -> Option<&Type> {
         match self {
-            Code { return_type, .. } | VariadicCode { return_type, .. } => Some(return_type),
+            Code { return_type, .. }
+            | CodeWithContract { return_type, .. }
+            | VariadicCode { return_type, .. } => Some(return_type),
             _ => None,
         }
     }
@@ -358,7 +364,7 @@ impl Type {
             // type with no fields (and thus a size of 0 in the layout):
             //     FnDef case in layout_raw_uncached, compiler/rustc_middle/src/ty/layout.rs
             Code { .. } => 0,
-            CodeWithContract { .. } => todo!("Implement sizeof for code with function contracts"),
+            CodeWithContract { .. } => unreachable!("CodeWithContract doesn't have a sizeof"),
             Constructor => unreachable!("Constructor doesn't have a sizeof"),
             Double => st.machine_model().double_width,
             Empty => 0,
@@ -477,6 +483,13 @@ impl Type {
     pub fn is_code(&self) -> bool {
         match self {
             Code { .. } => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_code_with_contract(&self) -> bool {
+        match self {
+            CodeWithContract { .. } => true,
             _ => false,
         }
     }
@@ -991,6 +1004,15 @@ impl Type {
         Code { parameters, return_type: Box::new(return_type) }
     }
 
+    pub fn code_with_contract(
+        parameters: Vec<Parameter>,
+        return_type: Type,
+        requires: Spec,
+        ensures: Spec,
+    ) -> Self {
+        CodeWithContract { parameters, return_type: Box::new(return_type), requires, ensures }
+    }
+
     /// CBMC, like c, allows function types to have unnamed formal paramaters
     /// `int foo(int, char, double)`
     pub fn code_with_unnamed_parameters(param_types: Vec<Type>, return_type: Type) -> Self {
@@ -1321,7 +1343,7 @@ impl Type {
                 let return_string = return_type.to_identifier();
                 format!("code_from_{}_to_{}", parameter_string, return_string)
             }
-            Type::CodeWithContract { parameters, return_type, requires: _, ensures: _ } => {
+            Type::CodeWithContract { parameters, return_type, .. } => {
                 let parameter_string = parameters
                     .iter()
                     .map(|param| param.typ().to_identifier())
