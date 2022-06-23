@@ -48,6 +48,8 @@ rustc_driver = { path = "~/.rustup/toolchains/<toolchain>/lib/rustlib/rustc-src/
 rustc_interface = { path = "~/.rustup/toolchains/<toolchain>/lib/rustlib/rustc-src/rust/compiler/rustc_interface" }
 ```
 
+**Don't forget to rollback the changes before you create your PR.**
+
 ### EMACS (with `use-package`)
 First, `Cargo.toml` and `rustup toolchain` steps are identical to VS
 Code. Install Rust-analyzer binary under `~/.cargo/bin/`.
@@ -132,8 +134,6 @@ new LSP client for that remote with the following code.
 ```
 
 For further details, please see https://emacs-lsp.github.io/lsp-mode/page/remote/.
-
-**Don't forget to rollback the changes before you create your PR.**
 
 ## Custom `rustc`
 
