@@ -11,6 +11,7 @@ use std::process::Command;
 use anyhow::{bail, Context, Result};
 
 use crate::cmd::AutoRun;
+use crate::os_hacks;
 
 /// Comes from our Cargo.toml manifest file. Must correspond to our release verion.
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -47,6 +48,8 @@ pub fn setup(use_local_bundle: Option<OsString>) -> Result<()> {
     setup_python_deps(&kani_dir, &os)?;
 
     setup_build_kani_prelude(&kani_dir, toolchain_version)?;
+
+    os_hacks::setup_os_hacks(&kani_dir, &os)?;
 
     println!("[6/6] Successfully completed Kani first-time setup.");
 
@@ -114,7 +117,7 @@ fn setup_python_deps(kani_dir: &Path, os: &os_info::Info) -> Result<()> {
     if os.os_type() == os_info::Type::Ubuntu
         && *os.version() == os_info::Version::Semantic(18, 4, 0)
     {
-        crate::os_hacks::setup_python_deps_on_ubuntu_18_04(&pyroot, pkg_versions)?;
+        os_hacks::setup_python_deps_on_ubuntu_18_04(&pyroot, pkg_versions)?;
         return Ok(());
     }
 
