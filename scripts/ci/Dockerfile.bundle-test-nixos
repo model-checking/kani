@@ -32,3 +32,13 @@ COPY ./kani-latest-x86_64-unknown-linux-gnu.tar.gz ./
 COPY ./target/package/kani-verifier-*[^e] ./kani-verifier
 RUN cargo install --path ./kani-verifier
 RUN cargo-kani setup --use-local-bundle ./kani-latest-x86_64-unknown-linux-gnu.tar.gz
+
+# Temporary hack: nix-shell causes problems when trying to run these with 'docker run'
+# like we do for other tests, so we've imported these into the dockerfile for now
+# until everything can be replaced with 'self-test':
+# https://github.com/model-checking/kani/issues/1246
+RUN cargo kani --version
+RUN (cd /tmp/kani/tests/cargo-kani/simple-lib && cargo kani)
+RUN (cd /tmp/kani/tests/cargo-kani/simple-visualize && cargo kani)
+RUN (cd /tmp/kani/tests/cargo-kani/build-rs-works && cargo kani)
+RUN cargo-kani setup --use-local-bundle ./kani-latest-x86_64-unknown-linux-gnu.tar.gz
