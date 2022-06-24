@@ -1,0 +1,44 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+# Note: this file is intended only for testing the kani release bundle
+
+FROM nixos/nix
+RUN nix-channel --update
+WORKDIR /tmp/kani
+RUN echo $' \n\
+with import <nixpkgs> {}; \n\
+mkShell { \n\
+  packages = [ \n\
+    ctags \n\
+    curl \n\
+    gcc \n\
+    patchelf \n\
+    python310 \n\
+    python310Packages.pip \n\
+    rustup \n\
+  ]; \n\
+}' >> ./default.nix
+# we need to switch to nix-shell to get proper support for e.g. pip
+SHELL ["nix-shell", "--command"]
+ENTRYPOINT ["nix-shell"]
+RUN rustup toolchain add stable
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+WORKDIR /tmp/kani
+COPY ./tests ./tests
+COPY ./kani-latest-x86_64-unknown-linux-gnu.tar.gz ./
+# Very awkward glob (not regex!) to get `kani-verifier-*` and not `kani-verifier-*.crate`
+COPY ./target/package/kani-verifier-*[^e] ./kani-verifier
+RUN cargo install --path ./kani-verifier
+RUN cargo-kani setup --use-local-bundle ./kani-latest-x86_64-unknown-linux-gnu.tar.gz
+
+# Temporary hack: nix-shell causes problems when trying to run these with 'docker run'
+# like we do for other tests, so we've imported these into the dockerfile for now
+# until everything can be replaced with 'self-test':
+# https://github.com/model-checking/kani/issues/1246
+RUN cargo kani --version
+RUN (cd /tmp/kani/tests/cargo-kani/simple-lib && cargo kani)
+RUN (cd /tmp/kani/tests/cargo-kani/simple-visualize && cargo kani)
+RUN (cd /tmp/kani/tests/cargo-kani/build-rs-works && cargo kani)
+RUN cargo-kani setup --use-local-bundle ./kani-latest-x86_64-unknown-linux-gnu.tar.gz
