@@ -3,6 +3,8 @@
 
 use anyhow::Result;
 use std::ffi::OsString;
+use std::fs::File;
+use std::io::BufReader;
 use std::path::Path;
 use std::process::Command;
 
@@ -12,7 +14,13 @@ use crate::util::alter_extension;
 
 impl KaniSession {
     /// Postprocess a goto binary (before cbmc, after linking) in-place by calling goto-instrument
-    pub fn run_goto_instrument(&self, input: &Path, output: &Path, function: &str) -> Result<()> {
+    pub fn run_goto_instrument(
+        &self,
+        input: &Path,
+        output: &Path,
+        symtabs: &[impl AsRef<Path>],
+        function: &str,
+    ) -> Result<()> {
         // We actually start by calling goto-cc to start the specialization:
         self.specialize_to_proof_harness(input, output, function)?;
 
@@ -26,13 +34,20 @@ impl KaniSession {
         self.rewrite_back_edges(output)?;
 
         if self.args.gen_c {
+            let c_outfile = alter_extension(output, "c");
+            // We don't put the C file into temporaries to be deleted.
+
+            self.gen_c(output, &c_outfile)?;
+
             if !self.args.quiet {
-                println!(
-                    "Generated C code written to {}",
-                    alter_extension(output, "c").to_string_lossy()
-                );
+                println!("Generated C code written to {}", c_outfile.to_string_lossy());
             }
-            self.gen_c(output)?;
+
+            let c_demangled = alter_extension(output, "demangled.c");
+            self.demangle_c(symtabs, &c_outfile, &c_demangled)?;
+            if !self.args.quiet {
+                println!("Demangled GotoC code written to {}", c_demangled.to_string_lossy())
+            }
         }
 
         Ok(())
@@ -116,17 +131,42 @@ impl KaniSession {
     }
 
     /// Generate a .c file from a goto binary (i.e. --gen-c)
-    pub fn gen_c(&self, file: &Path) -> Result<()> {
-        let output_filename = alter_extension(file, "c");
-        // We don't put the C file into temporaries to be deleted.
-
+    pub fn gen_c(&self, file: &Path, output_file: &Path) -> Result<()> {
         let args: Vec<OsString> = vec![
             "--dump-c".into(),
             file.to_owned().into_os_string(),
-            output_filename.into_os_string(),
+            output_file.to_owned().into_os_string(),
         ];
 
         self.call_goto_instrument(args)
+    }
+
+    pub fn demangle_c(
+        &self,
+        symtab_files: &[impl AsRef<Path>],
+        c_file: &Path,
+        demangled_file: &Path,
+    ) -> Result<()> {
+        let c_code = std::fs::read_to_string(c_file)?;
+        let mut demangled_code = c_code.clone();
+        for symtab_file in symtab_files {
+            let reader = BufReader::new(File::open(symtab_file.as_ref())?);
+            let symtab: serde_json::Value = serde_json::from_reader(reader)?;
+            if let Some(symtab) = symtab.get("symbolTable").and_then(|s| s.as_object()) {
+                for (_, symbol) in symtab {
+                    if let Some(serde_json::Value::String(name)) = symbol.get("name") {
+                        if let Some(serde_json::Value::String(pretty)) = symbol.get("prettyName") {
+                            let name = name.strip_prefix("tag-").unwrap_or(name);
+                            if !pretty.is_empty() && pretty != name {
+                                demangled_code = demangled_code.replace(name, pretty);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        std::fs::write(demangled_file, demangled_code)?;
+        Ok(())
     }
 
     /// Non-public helper function to actually do the run of goto-instrument
