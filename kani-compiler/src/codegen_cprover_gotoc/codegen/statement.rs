@@ -124,7 +124,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             None,
                             loc,
                         ),
-                        self.codegen_assert_false(PropertyClass::DefaultAssertion, &msg_str, loc),
+                        self.codegen_assert_false(PropertyClass::Assertion, &msg_str, loc),
                         Stmt::goto(self.current_fn().find_label(target), loc),
                     ],
                     loc,
@@ -530,7 +530,7 @@ impl<'tcx> GotocCtx<'tcx> {
             "This is a placeholder message; Kani doesn't support message formatted at runtime",
         ));
 
-        self.codegen_fatal_error(PropertyClass::DefaultAssertion, &msg, span)
+        self.codegen_fatal_error(PropertyClass::Assertion, &msg, span)
     }
 
     // Generate code for fatal error which should trigger an assertion failure and abort the

@@ -4,10 +4,12 @@
 //! This file contains the code that acts as a wrapper to create the new assert and related statements
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{Expr, Location, Stmt};
+use std::convert::AsRef;
+use strum_macros::{AsRefStr, EnumString};
 
 /// The Property Class enum stores all viable options for classifying asserts, cover assume and other related statements
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
+#[derive(Debug, Clone, EnumString, AsRefStr)]
+#[strum(serialize_all = "snake_case")]
 pub enum PropertyClass {
     ArithmeticOverflow,
     Assume,
@@ -15,7 +17,7 @@ pub enum PropertyClass {
     /// Assertions and Panic that are not specific to Kani. In a concrete execution, we expect
     /// these assertions to be available to the user.
     /// E.g.: User assertions, compiler invariant checks
-    DefaultAssertion,
+    Assertion,
     ExactDiv,
     ExpectFail,
     FiniteCheck,
@@ -32,38 +34,7 @@ pub enum PropertyClass {
 #[allow(dead_code)]
 impl PropertyClass {
     pub fn as_str(&self) -> &str {
-        match self {
-            PropertyClass::ArithmeticOverflow => "arithmetic_overflow",
-            PropertyClass::Assume => "assume",
-            PropertyClass::Cover => "coverage_check",
-            PropertyClass::DefaultAssertion => "assertion",
-            PropertyClass::ExactDiv => "exact_div",
-            PropertyClass::ExpectFail => "expect_fail",
-            PropertyClass::FiniteCheck => "finite_check",
-            PropertyClass::SafetyCheck => "kani_check",
-            PropertyClass::SanityCheck => "sanity_check",
-            PropertyClass::Unimplemented => "unimplemented",
-            PropertyClass::Unreachable => "unreachable",
-            PropertyClass::UnsupportedConstruct => "unsupported_construct",
-        }
-    }
-
-    pub fn from_str(input: &str) -> PropertyClass {
-        match input {
-            "arithmetic_overflow" => PropertyClass::ArithmeticOverflow,
-            "assume" => PropertyClass::Assume,
-            "assertion" => PropertyClass::DefaultAssertion,
-            "coverage_check" => PropertyClass::Cover,
-            "exact_div" => PropertyClass::ExactDiv,
-            "expect_fail" => PropertyClass::ExpectFail,
-            "finite_check" => PropertyClass::FiniteCheck,
-            "kani_check" => PropertyClass::SafetyCheck,
-            "sanity_check" => PropertyClass::SanityCheck,
-            "unimplemented" => PropertyClass::Unimplemented,
-            "unreachable" => PropertyClass::Unreachable,
-            "unsupported_construct" => PropertyClass::UnsupportedConstruct,
-            _ => unreachable!("Invalid property class {}", input),
-        }
+        self.as_ref()
     }
 }
 
