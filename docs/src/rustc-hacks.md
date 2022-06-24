@@ -33,6 +33,25 @@ You may also need to install the `rustc-dev` package using rustup
 rustup toolchain install nightly --component rustc-dev
 ```
 
+#### Debugging in VS code
+
+To debug Kani in VS code, first install the [CodeLLDB extension](https://marketplace.visualstudio.com/items?itemName=vadimcn.vscode-lldb).
+Then add the following lines at the start of the `main` function (see [the CodeLLDB manual](https://github.com/vadimcn/vscode-lldb/blob/master/MANUAL.md#attaching-debugger-to-the-current-process-rust) for details):
+
+```rust
+{
+    let url = format!(
+        "vscode://vadimcn.vscode-lldb/launch/config?{{'request':'attach','sourceLanguages':['rust'],'waitFor':true,'pid':{}}}",
+        std::process::id()
+    );
+    std::process::Command::new("code").arg("--open-url").arg(url).output().unwrap();
+}
+```
+
+Note that pretty printing for the Rust nightly toolchain (which Kani uses) is not very good as of June 2022.
+For example, a vector may be displayed as `vec![{...}, {...}]` on nightly Rust, when it would be displayed as `vec![Some(0), None]` on stable Rust.
+Hopefully, this will be fixed soon.
+
 ### CLion / IntelliJ
 This is not a great solution, but it works for now (see <https://github.com/intellij-rust/intellij-rust/issues/1618>
 for more details).
@@ -49,6 +68,91 @@ rustc_interface = { path = "~/.rustup/toolchains/<toolchain>/lib/rustlib/rustc-s
 ```
 
 **Don't forget to rollback the changes before you create your PR.**
+
+### EMACS (with `use-package`)
+First, `Cargo.toml` and `rustup toolchain` steps are identical to VS
+Code. Install Rust-analyzer binary under `~/.cargo/bin/`.
+
+On EMACS, add the following to your EMACS lisp files. They will
+install the necessary packages using the `use-package` manager.
+```elisp
+;; Install LSP
+(use-package lsp-mode
+  :commands lsp)
+(use-package lsp-ui)
+
+;; Install Rust mode
+(use-package toml-mode)
+(use-package rust-mode)
+
+(setq lsp-rust-server 'rust-analyzer)
+(setenv "PATH" (concat (getenv "PATH") ":/home/USER/.cargo/bin/"))
+```
+If EMACS complains that it cannot find certain packages, try running
+`M-x package-refresh-contents`.
+
+For LSP to be able to find `rustc_private` files used by Kani, you
+will need to modify variable `lsp-rust-analyzer-rustc-source`. Run
+`M-x customize-variable`, type in `lsp-rust-analyzer-rustc-source`,
+click `Value Menu` and change it to `Path`. Paste in the path to
+`Cargo.toml` of `rustc`'s source code. You can find the source code
+under `.rustup`, and the path should end with
+`compiler/rustc/Cargo.toml`. **Important**: make sure that this
+`rustc` is the same version and architecture as what Kani uses. If
+not, LSP features like definition lookup may be break.
+
+This ends the basic install for EMACS. You can test your configuration
+with the following steps.
+1. Opening up a rust file with at least one `rustc_private` import.
+2. Activate LSP mode with `M-x lsp`.
+3. When asked about the root of the project, pick one of them. **Make
+   sure** that whichever root you pick has a `Cargo.toml` with
+   `rustc_private=true` added.
+4. If LSP asks if you want to watch all files, select yes. For less
+   powerful machines, you may want to adjust that later.
+5. On the file with `rustc_private` imports, do the following. If both
+   work, then you are set up.
+   - Hover mouse over the `rustc_private` import. If LSP is working,
+	 you should get information about the imported item.
+   - With text cursor over the same `rustc_private` import, run `M-x
+     lsp-find-definition`. This should jump to the definition within
+     `rustc`'s source code.
+
+LSP mode can integrate with `flycheck` for instant error checking and
+`company` for auto-complete. Consider adding the following to the
+configuration.
+```elisp
+(use-package flycheck
+  :hook (prog-mode . flycheck-mode))
+
+(use-package company
+  :hook (prog-mode . company-mode)
+  :config
+   (global-company-mode))
+```
+
+`clippy` linter can be added by changing the LSP install to:
+```elisp
+(use-package lsp-mode
+  :commands lsp
+  :custom
+  (lsp-rust-analyzer-cargo-watch-command "clippy"))
+```
+
+Finally lsp-mode can run rust-analyzer via TRAMP for remote
+development. **We found this way of using rust-analyzer to be unstable
+as of 2022-06**. If you want to give it a try you will need to add a
+new LSP client for that remote with the following code.
+```elisp
+(lsp-register-client
+  (make-lsp-client
+	:new-connection (lsp-tramp-connection "/full/path/to/remote/machines/rust-analyzer")
+	:major-modes '(rust-mode)
+	:remote? t
+	:server-id 'rust-analyzer-remote))
+```
+
+For further details, please see https://emacs-lsp.github.io/lsp-mode/page/remote/.
 
 ## Custom `rustc`
 
