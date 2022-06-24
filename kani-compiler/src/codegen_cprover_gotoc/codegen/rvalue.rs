@@ -51,7 +51,7 @@ impl<'tcx> GotocCtx<'tcx> {
             let ret_type = Type::Bool;
             let body = vec![
                 self.codegen_assert_false(
-                    PropertyClass::KaniCheck,
+                    PropertyClass::SafetyCheck,
                     format!("Reached unstable vtable comparison '{:?}'", op).as_str(),
                     loc,
                 ),
