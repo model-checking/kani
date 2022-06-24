@@ -141,6 +141,7 @@ impl KaniSession {
         self.call_goto_instrument(args)
     }
 
+    /// Generate a .demangled.c file from the .c file using the `prettyName`s from the symbol tables
     pub fn demangle_c(
         &self,
         symtab_files: &[impl AsRef<Path>],
