@@ -31,14 +31,9 @@ use rustc_target::abi::VariantIdx;
 use rustc_target::spec::abi::Abi;
 
 use crate::clean::cfg::Cfg;
-use crate::formats::cache::Cache;
 use crate::formats::item_type::ItemType;
 
 pub(crate) use self::ItemKind::*;
-pub(crate) use self::Type::{
-    Array, BareFunction, BorrowedRef, DynTrait, Generic, ImplTrait, Infer, Primitive, QPath,
-    RawPointer, Slice, Tuple,
-};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 pub(crate) enum ItemId {
@@ -50,51 +45,6 @@ pub(crate) enum ItemId {
     Blanket { impl_id: DefId, for_: DefId },
     /// Identifier for primitive types.
     Primitive(PrimitiveType, CrateNum),
-}
-
-impl ItemId {
-    #[inline]
-    pub(crate) fn is_local(self) -> bool {
-        match self {
-            ItemId::Auto { for_: id, .. }
-            | ItemId::Blanket { for_: id, .. }
-            | ItemId::DefId(id) => id.is_local(),
-            ItemId::Primitive(_, krate) => krate == LOCAL_CRATE,
-        }
-    }
-
-    #[inline]
-    #[track_caller]
-    pub(crate) fn expect_def_id(self) -> DefId {
-        self.as_def_id()
-            .unwrap_or_else(|| panic!("ItemId::expect_def_id: `{:?}` isn't a DefId", self))
-    }
-
-    #[inline]
-    pub(crate) fn as_def_id(self) -> Option<DefId> {
-        match self {
-            ItemId::DefId(id) => Some(id),
-            _ => None,
-        }
-    }
-
-    #[inline]
-    pub(crate) fn krate(self) -> CrateNum {
-        match self {
-            ItemId::Auto { for_: id, .. }
-            | ItemId::Blanket { for_: id, .. }
-            | ItemId::DefId(id) => id.krate,
-            ItemId::Primitive(_, krate) => krate,
-        }
-    }
-
-    #[inline]
-    pub(crate) fn index(self) -> Option<DefIndex> {
-        match self {
-            ItemId::DefId(id) => Some(id.index),
-            _ => None,
-        }
-    }
 }
 
 impl From<DefId> for ItemId {
@@ -122,14 +72,9 @@ impl ExternalCrate {}
 /// directly to the AST's concept of an item; it's a strict superset.
 #[derive(Clone, Debug)]
 pub(crate) struct Item {
-    /// The name of this item.
-    /// Optional because not every item has a name, e.g. impls.
-    pub(crate) name: Option<Symbol>,
-    pub(crate) attrs: Box<Attributes>,
     /// Information about this item that is specific to what kind of item it is.
     /// E.g., struct vs enum vs function.
     pub(crate) kind: Box<ItemKind>,
-    pub(crate) def_id: ItemId,
 }
 
 impl Item {
@@ -411,40 +356,6 @@ pub(crate) enum DocFragmentKind {
     RawDoc,
 }
 
-/// The goal of this function is to apply the `DocFragment` transformation that is required when
-/// transforming into the final Markdown, which is applying the computed indent to each line in
-/// each doc fragment (a `DocFragment` can contain multiple lines in case of `#[doc = ""]`).
-///
-/// Note: remove the trailing newline where appropriate
-fn add_doc_fragment(out: &mut String, frag: &DocFragment) {
-    let s = frag.doc.as_str();
-    let mut iter = s.lines();
-    if s == "" {
-        out.push('\n');
-        return;
-    }
-    while let Some(line) = iter.next() {
-        if line.chars().any(|c| !c.is_whitespace()) {
-            assert!(line.len() >= frag.indent);
-            out.push_str(&line[frag.indent..]);
-        } else {
-            out.push_str(line);
-        }
-        out.push('\n');
-    }
-}
-
-/// Collapse a collection of [`DocFragment`]s into one string,
-/// handling indentation and newlines as needed.
-pub(crate) fn collapse_doc_fragments(doc_strings: &[DocFragment]) -> String {
-    let mut acc = String::new();
-    for frag in doc_strings {
-        add_doc_fragment(&mut acc, frag);
-    }
-    acc.pop();
-    acc
-}
-
 /// A link that has not yet been rendered.
 ///
 /// This link will be turned into a rendered link by [`Item::links`].
@@ -479,71 +390,6 @@ pub(crate) struct Attributes {
     pub(crate) other_attrs: Vec<ast::Attribute>,
 }
 
-impl Attributes {
-    pub(crate) fn has_doc_flag(&self, flag: Symbol) -> bool {
-        for attr in &self.other_attrs {
-            if !attr.has_name(sym::doc) {
-                continue;
-            }
-
-            if let Some(items) = attr.meta_item_list() {
-                if items.iter().filter_map(|i| i.meta_item()).any(|it| it.has_name(flag)) {
-                    return true;
-                }
-            }
-        }
-
-        false
-    }
-
-    pub(crate) fn from_ast(
-        attrs: &[ast::Attribute],
-        additional_attrs: Option<(&[ast::Attribute], DefId)>,
-    ) -> Attributes {
-        let mut doc_strings: Vec<DocFragment> = vec![];
-        let clean_attr = |(attr, parent_module): (&ast::Attribute, Option<DefId>)| {
-            if let Some((value, kind)) = attr.doc_str_and_comment_kind() {
-                trace!("got doc_str={:?}", value);
-                let value = beautify_doc_string(value, kind);
-                let kind = if attr.is_doc_comment() {
-                    DocFragmentKind::SugaredDoc
-                } else {
-                    DocFragmentKind::RawDoc
-                };
-
-                let frag =
-                    DocFragment { span: attr.span, doc: value, kind, parent_module, indent: 0 };
-
-                doc_strings.push(frag);
-
-                None
-            } else {
-                Some(attr.clone())
-            }
-        };
-
-        // Additional documentation should be shown before the original documentation
-        let other_attrs = additional_attrs
-            .into_iter()
-            .map(|(attrs, id)| attrs.iter().map(move |attr| (attr, Some(id))))
-            .flatten()
-            .chain(attrs.iter().map(|attr| (attr, None)))
-            .filter_map(clean_attr)
-            .collect();
-
-        Attributes { doc_strings, other_attrs }
-    }
-    /// Finds all `doc` attributes as NameValues and returns their corresponding values, joined
-    /// with newlines.
-    pub(crate) fn collapsed_doc_value(&self) -> Option<String> {
-        if self.doc_strings.is_empty() {
-            None
-        } else {
-            Some(collapse_doc_fragments(&self.doc_strings))
-        }
-    }
-}
-
 impl PartialEq for Attributes {
     fn eq(&self, rhs: &Self) -> bool {
         self.doc_strings == rhs.doc_strings
@@ -566,31 +412,11 @@ pub(crate) enum GenericBound {
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
 pub(crate) struct Lifetime(pub(crate) Symbol);
 
-impl Lifetime {
-    pub(crate) fn statik() -> Lifetime {
-        Lifetime(kw::StaticLifetime)
-    }
-
-    pub(crate) fn elided() -> Lifetime {
-        Lifetime(kw::UnderscoreLifetime)
-    }
-}
-
 #[derive(Clone, Debug)]
 pub(crate) enum WherePredicate {
     BoundPredicate { ty: Type, bounds: Vec<GenericBound>, bound_params: Vec<Lifetime> },
     RegionPredicate { lifetime: Lifetime, bounds: Vec<GenericBound> },
     EqPredicate { lhs: Type, rhs: Term },
-}
-
-impl WherePredicate {
-    pub(crate) fn get_bounds(&self) -> Option<&[GenericBound]> {
-        match *self {
-            WherePredicate::BoundPredicate { ref bounds, .. } => Some(bounds),
-            WherePredicate::RegionPredicate { ref bounds, .. } => Some(bounds),
-            _ => None,
-        }
-    }
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
@@ -724,74 +550,6 @@ pub(crate) enum Type {
 #[cfg(all(target_arch = "x86_64", target_pointer_width = "64"))]
 rustc_data_structures::static_assert_size!(Type, 72);
 
-impl Type {
-    pub(crate) fn primitive_type(&self) -> Option<PrimitiveType> {
-        match *self {
-            Primitive(p) | BorrowedRef { type_: box Primitive(p), .. } => Some(p),
-            Slice(..) | BorrowedRef { type_: box Slice(..), .. } => Some(PrimitiveType::Slice),
-            Array(..) | BorrowedRef { type_: box Array(..), .. } => Some(PrimitiveType::Array),
-            Tuple(ref tys) => {
-                if tys.is_empty() {
-                    Some(PrimitiveType::Unit)
-                } else {
-                    Some(PrimitiveType::Tuple)
-                }
-            }
-            RawPointer(..) => Some(PrimitiveType::RawPointer),
-            BareFunction(..) => Some(PrimitiveType::Fn),
-            _ => None,
-        }
-    }
-
-    pub(crate) fn generics(&self) -> Option<Vec<&Type>> {
-        match self {
-            Type::Path { path, .. } => path.generics(),
-            _ => None,
-        }
-    }
-
-    pub(crate) fn projection(&self) -> Option<(&Type, DefId, Symbol)> {
-        let (self_, trait_, name) = match self {
-            QPath { self_type, trait_, name, .. } => (self_type, trait_, name),
-            _ => return None,
-        };
-        Some((&self_, trait_.def_id(), *name))
-    }
-
-    fn inner_def_id(&self, cache: Option<&Cache>) -> Option<DefId> {
-        let t: PrimitiveType = match *self {
-            Type::Path { ref path } => return Some(path.def_id()),
-            DynTrait(ref bounds, _) => return Some(bounds[0].trait_.def_id()),
-            Primitive(p) => return cache.and_then(|c| c.primitive_locations.get(&p).cloned()),
-            BorrowedRef { type_: box Generic(..), .. } => PrimitiveType::Reference,
-            BorrowedRef { ref type_, .. } => return type_.inner_def_id(cache),
-            Tuple(ref tys) => {
-                if tys.is_empty() {
-                    PrimitiveType::Unit
-                } else {
-                    PrimitiveType::Tuple
-                }
-            }
-            BareFunction(..) => PrimitiveType::Fn,
-            Slice(..) => PrimitiveType::Slice,
-            Array(..) => PrimitiveType::Array,
-            RawPointer(..) => PrimitiveType::RawPointer,
-            QPath { ref self_type, .. } => return self_type.inner_def_id(cache),
-            Generic(_) | Infer | ImplTrait(_) => return None,
-        };
-        cache.and_then(|c| Primitive(t).def_id(c))
-    }
-
-    /// Use this method to get the [DefId] of a [clean] AST node, including [PrimitiveType]s.
-    ///
-    /// See [`Self::def_id_no_primitives`] for more.
-    ///
-    /// [clean]: crate::clean
-    pub(crate) fn def_id(&self, cache: &Cache) -> Option<DefId> {
-        self.inner_def_id(Some(cache))
-    }
-}
-
 /// A primitive (aka, builtin) type.
 ///
 /// This represents things like `i32`, `str`, etc.
@@ -825,102 +583,6 @@ pub(crate) enum PrimitiveType {
     Reference,
     Fn,
     Never,
-}
-
-type SimplifiedTypes = FxHashMap<PrimitiveType, ArrayVec<SimplifiedType, 2>>;
-impl PrimitiveType {
-    pub(crate) fn simplified_types() -> &'static SimplifiedTypes {
-        use ty::fast_reject::SimplifiedTypeGen::*;
-        use ty::{FloatTy, IntTy, UintTy};
-        use PrimitiveType::*;
-        static CELL: OnceCell<SimplifiedTypes> = OnceCell::new();
-
-        let single = |x| iter::once(x).collect();
-        CELL.get_or_init(move || {
-            map! {
-                Isize => single(IntSimplifiedType(IntTy::Isize)),
-                I8 => single(IntSimplifiedType(IntTy::I8)),
-                I16 => single(IntSimplifiedType(IntTy::I16)),
-                I32 => single(IntSimplifiedType(IntTy::I32)),
-                I64 => single(IntSimplifiedType(IntTy::I64)),
-                I128 => single(IntSimplifiedType(IntTy::I128)),
-                Usize => single(UintSimplifiedType(UintTy::Usize)),
-                U8 => single(UintSimplifiedType(UintTy::U8)),
-                U16 => single(UintSimplifiedType(UintTy::U16)),
-                U32 => single(UintSimplifiedType(UintTy::U32)),
-                U64 => single(UintSimplifiedType(UintTy::U64)),
-                U128 => single(UintSimplifiedType(UintTy::U128)),
-                F32 => single(FloatSimplifiedType(FloatTy::F32)),
-                F64 => single(FloatSimplifiedType(FloatTy::F64)),
-                Str => single(StrSimplifiedType),
-                Bool => single(BoolSimplifiedType),
-                Char => single(CharSimplifiedType),
-                Array => single(ArraySimplifiedType),
-                Slice => single(SliceSimplifiedType),
-                // FIXME: If we ever add an inherent impl for tuples
-                // with different lengths, they won't show in rustdoc.
-                //
-                // Either manually update this arrayvec at this point
-                // or start with a more complex refactoring.
-                Tuple => [TupleSimplifiedType(2), TupleSimplifiedType(3)].into(),
-                Unit => single(TupleSimplifiedType(0)),
-                RawPointer => [PtrSimplifiedType(Mutability::Not), PtrSimplifiedType(Mutability::Mut)].into(),
-                Reference => [RefSimplifiedType(Mutability::Not), RefSimplifiedType(Mutability::Mut)].into(),
-                // FIXME: This will be wrong if we ever add inherent impls
-                // for function pointers.
-                Fn => ArrayVec::new(),
-                Never => single(NeverSimplifiedType),
-            }
-        })
-    }
-
-    pub(crate) fn impls<'tcx>(&self, tcx: TyCtxt<'tcx>) -> impl Iterator<Item = DefId> + 'tcx {
-        Self::simplified_types()
-            .get(self)
-            .into_iter()
-            .flatten()
-            .flat_map(move |&simp| tcx.incoherent_impls(simp))
-            .copied()
-    }
-
-    pub(crate) fn all_impls(tcx: TyCtxt<'_>) -> impl Iterator<Item = DefId> + '_ {
-        Self::simplified_types()
-            .values()
-            .flatten()
-            .flat_map(move |&simp| tcx.incoherent_impls(simp))
-            .copied()
-    }
-
-    pub(crate) fn as_sym(&self) -> Symbol {
-        use PrimitiveType::*;
-        match self {
-            Isize => sym::isize,
-            I8 => sym::i8,
-            I16 => sym::i16,
-            I32 => sym::i32,
-            I64 => sym::i64,
-            I128 => sym::i128,
-            Usize => sym::usize,
-            U8 => sym::u8,
-            U16 => sym::u16,
-            U32 => sym::u32,
-            U64 => sym::u64,
-            U128 => sym::u128,
-            F32 => sym::f32,
-            F64 => sym::f64,
-            Str => sym::str,
-            Bool => sym::bool,
-            Char => sym::char,
-            Array => sym::array,
-            Slice => sym::slice,
-            Tuple => sym::tuple,
-            Unit => sym::unit,
-            RawPointer => sym::pointer,
-            Reference => sym::reference,
-            Fn => kw::Fn,
-            Never => sym::never,
-        }
-    }
 }
 
 impl From<ast::IntTy> for PrimitiveType {
@@ -1062,51 +724,10 @@ pub(crate) enum Variant {
 #[derive(Copy, Clone, Debug)]
 pub(crate) struct Span(rustc_span::Span);
 
-impl Span {
-    /// Wraps a [`rustc_span::Span`]. In case this span is the result of a macro expansion, the
-    /// span will be updated to point to the macro invocation instead of the macro definition.
-    ///
-    /// (See rust-lang/rust#39726)
-    pub(crate) fn new(sp: rustc_span::Span) -> Self {
-        Self(sp.source_callsite())
-    }
-
-    pub(crate) fn inner(&self) -> rustc_span::Span {
-        self.0
-    }
-
-    pub(crate) fn dummy() -> Self {
-        Self(rustc_span::DUMMY_SP)
-    }
-}
-
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
 pub(crate) struct Path {
     pub(crate) res: Res,
     pub(crate) segments: Vec<PathSegment>,
-}
-
-impl Path {
-    pub(crate) fn def_id(&self) -> DefId {
-        self.res.def_id()
-    }
-
-    pub(crate) fn generics(&self) -> Option<Vec<&Type>> {
-        self.segments.last().and_then(|seg| {
-            if let GenericArgs::AngleBracketed { ref args, .. } = seg.args {
-                Some(
-                    args.iter()
-                        .filter_map(|arg| match arg {
-                            GenericArg::Type(ty) => Some(ty),
-                            _ => None,
-                        })
-                        .collect(),
-                )
-            } else {
-                None
-            }
-        })
-    }
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
@@ -1236,31 +857,11 @@ pub(crate) enum ImplKind {
     Blanket(Box<Type>),
 }
 
-impl ImplKind {
-    pub(crate) fn is_blanket(&self) -> bool {
-        matches!(self, ImplKind::Blanket(_))
-    }
-}
-
 #[derive(Clone, Debug)]
 pub(crate) struct Import {
     pub(crate) kind: ImportKind,
     pub(crate) source: ImportSource,
     pub(crate) should_be_displayed: bool,
-}
-
-impl Import {
-    pub(crate) fn new_simple(
-        name: Symbol,
-        source: ImportSource,
-        should_be_displayed: bool,
-    ) -> Self {
-        Self { kind: ImportKind::Simple(name), source, should_be_displayed }
-    }
-
-    pub(crate) fn new_glob(source: ImportSource, should_be_displayed: bool) -> Self {
-        Self { kind: ImportKind::Glob, source, should_be_displayed }
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -1319,14 +920,4 @@ pub(crate) enum SubstParam {
     Type(Type),
     Lifetime(Lifetime),
     Constant(Constant),
-}
-
-impl SubstParam {
-    pub(crate) fn as_ty(&self) -> Option<&Type> {
-        if let Self::Type(ty) = self { Some(ty) } else { None }
-    }
-
-    pub(crate) fn as_lt(&self) -> Option<&Lifetime> {
-        if let Self::Lifetime(lt) = self { Some(lt) } else { None }
-    }
 }
