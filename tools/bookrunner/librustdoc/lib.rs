@@ -65,13 +65,9 @@ extern crate rustc_trait_selection;
 extern crate rustc_typeck;
 extern crate test;
 
-mod clean;
 mod config;
 mod core;
 pub mod doctest;
-mod fold;
-mod formats;
 // used by the error-index generator, so it needs to be public
 pub mod html;
 pub(crate) mod lint;
-mod visit;
