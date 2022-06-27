@@ -87,13 +87,9 @@ mod clean;
 mod config;
 mod core;
 pub mod doctest;
-//mod externalfiles;
 mod fold;
 mod formats;
 // used by the error-index generator, so it needs to be public
 pub mod html;
 pub(crate) mod lint;
-mod passes;
-//mod scrape_examples;
 mod visit;
-//mod visit_ast;

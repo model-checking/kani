@@ -11,8 +11,6 @@ use std::mem;
 use std::ops;
 
 use rustc_ast::{LitKind, MetaItem, MetaItemKind, NestedMetaItem};
-use rustc_feature::Features;
-use rustc_session::parse::ParseSess;
 use rustc_span::symbol::{sym, Symbol};
 
 use rustc_span::Span;
@@ -93,25 +91,6 @@ impl Cfg {
                     _ => Err(InvalidCfgError { msg: "invalid predicate", span: cfg.span }),
                 }
             }
-        }
-    }
-
-    /// Checks whether the given configuration can be matched in the current session.
-    ///
-    /// Equivalent to `attr::cfg_matches`.
-    // FIXME: Actually make use of `features`.
-    pub(crate) fn matches(&self, parse_sess: &ParseSess, features: Option<&Features>) -> bool {
-        match *self {
-            Cfg::False => false,
-            Cfg::True => true,
-            Cfg::Not(ref child) => !child.matches(parse_sess, features),
-            Cfg::All(ref sub_cfgs) => {
-                sub_cfgs.iter().all(|sub_cfg| sub_cfg.matches(parse_sess, features))
-            }
-            Cfg::Any(ref sub_cfgs) => {
-                sub_cfgs.iter().any(|sub_cfg| sub_cfg.matches(parse_sess, features))
-            }
-            Cfg::Cfg(name, value) => parse_sess.config.contains(&(name, value)),
         }
     }
 }

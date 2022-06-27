@@ -40,22 +40,6 @@ pub(crate) struct Cache {
     /// necessary.
     pub(crate) paths: FxHashMap<DefId, (Vec<Symbol>, ItemType)>,
 
-    /// Similar to `paths`, but only holds external paths. This is only used for
-    /// generating explicit hyperlinks to other crates.
-    pub(crate) external_paths: FxHashMap<DefId, (Vec<Symbol>, ItemType)>,
-
-    /// Maps local `DefId`s of exported types to fully qualified paths.
-    /// Unlike 'paths', this mapping ignores any renames that occur
-    /// due to 'use' statements.
-    ///
-    /// This map is used when writing out the special 'implementors'
-    /// javascript file. By using the exact path that the type
-    /// is declared with, we ensure that each path will be identical
-    /// to the path used if the corresponding type is inlined. By
-    /// doing this, we can detect duplicate impls on a trait page, and only display
-    /// the impl for the inlined type.
-    pub(crate) exact_paths: FxHashMap<DefId, Vec<Symbol>>,
-
     /// This map contains information about all known traits of this crate.
     /// Implementations of a crate should inherit the documentation of the
     /// parent trait if no extra documentation is specified, and default methods
@@ -101,9 +85,6 @@ pub(crate) struct Cache {
     // when gathering trait documentation on a type, hold impls here while
     // folding and add them to the cache later on if we find the trait.
     orphan_trait_impls: Vec<(DefId, FxHashSet<DefId>, Impl)>,
-
-    /// Cfg that have been hidden via #![doc(cfg_hide(...))]
-    pub(crate) hidden_cfg: FxHashSet<clean::cfg::Cfg>,
 }
 
 /// This struct is used to wrap the `cache` and `tcx` in order to run `DocFolder`.

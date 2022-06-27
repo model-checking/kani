@@ -126,16 +126,11 @@ pub(crate) struct Item {
     /// Optional because not every item has a name, e.g. impls.
     pub(crate) name: Option<Symbol>,
     pub(crate) attrs: Box<Attributes>,
-    pub(crate) visibility: Visibility,
     /// Information about this item that is specific to what kind of item it is.
     /// E.g., struct vs enum vs function.
     pub(crate) kind: Box<ItemKind>,
     pub(crate) def_id: ItemId,
 }
-
-// `Item` is used a lot. Make sure it doesn't unintentionally get bigger.
-#[cfg(all(target_arch = "x86_64", target_pointer_width = "64"))]
-rustc_data_structures::static_assert_size!(Item, 48);
 
 impl Item {
     pub(crate) fn is_stripped(&self) -> bool {

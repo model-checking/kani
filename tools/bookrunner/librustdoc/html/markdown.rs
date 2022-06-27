@@ -253,10 +253,6 @@ enum ExtraInfoId {
 }
 
 impl<'tcx> ExtraInfo<'tcx> {
-    pub(crate) fn new(tcx: TyCtxt<'tcx>, hir_id: HirId, sp: Span) -> ExtraInfo<'tcx> {
-        ExtraInfo { id: ExtraInfoId::Hir(hir_id), sp, tcx }
-    }
-
     fn error_invalid_codeblock_attr(&self, msg: &str, help: &str) {
         let hir_id = match self.id {
             ExtraInfoId::Hir(hir_id) => hir_id,
