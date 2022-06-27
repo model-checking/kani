@@ -124,7 +124,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             None,
                             loc,
                         ),
-                        self.codegen_assert_false(PropertyClass::DefaultAssertion, &msg_str, loc),
+                        self.codegen_assert_false(PropertyClass::Assertion, &msg_str, loc),
                         Stmt::goto(self.current_fn().find_label(target), loc),
                     ],
                     loc,
@@ -496,7 +496,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let call_is_nonnull = fn_ptr.clone().is_nonnull();
         let assert_msg = format!("Non-null virtual function call for {:?}", vtable_field_name);
         let assert_nonnull =
-            self.codegen_assert(call_is_nonnull, PropertyClass::DefaultAssertion, &assert_msg, loc);
+            self.codegen_assert(call_is_nonnull, PropertyClass::SanityCheck, &assert_msg, loc);
 
         // Virtual function call and corresponding nonnull assertion.
         let call = fn_ptr.dereference().call(fargs.to_vec());
@@ -530,7 +530,7 @@ impl<'tcx> GotocCtx<'tcx> {
             "This is a placeholder message; Kani doesn't support message formatted at runtime",
         ));
 
-        self.codegen_fatal_error(PropertyClass::DefaultAssertion, &msg, span)
+        self.codegen_fatal_error(PropertyClass::Assertion, &msg, span)
     }
 
     // Generate code for fatal error which should trigger an assertion failure and abort the

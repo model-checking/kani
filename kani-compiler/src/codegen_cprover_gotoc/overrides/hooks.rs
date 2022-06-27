@@ -168,7 +168,7 @@ impl<'tcx> GotocHook<'tcx> for Assert {
             vec![
                 reach_stmt,
                 Stmt::decl(tmp.clone(), Some(cond), caller_loc),
-                tcx.codegen_assert(tmp.clone(), PropertyClass::DefaultAssertion, &msg, caller_loc),
+                tcx.codegen_assert(tmp.clone(), PropertyClass::Assertion, &msg, caller_loc),
                 Stmt::assume(tmp, caller_loc),
                 Stmt::goto(tcx.current_fn().find_label(&target), caller_loc),
             ],
