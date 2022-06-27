@@ -139,13 +139,14 @@ pub fn find_testable_code<T: doctest::Tester>(
     }
 }
 
+// We never pass an actual ExtraInfo, only None for Option<ExtraInfo>
 pub struct ExtraInfo<'tcx> {
     _unused: PhantomData<&'tcx ()>,
 }
 
 impl<'tcx> ExtraInfo<'tcx> {
-    fn error_invalid_codeblock_attr(&self, _msg: &str, _help: &str) {
-        unreachable!();
+    fn error_invalid_codeblock_attr(&self, msg: &str, _help: &str) {
+        unreachable!("{}", msg);
     }
 }
 

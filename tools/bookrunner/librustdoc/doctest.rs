@@ -24,18 +24,6 @@ pub struct GlobalTestOptions {
     pub(crate) attrs: Vec<String>,
 }
 
-// NOTE: Keep this in sync with the equivalent structs in rustc
-// and cargo.
-// We could unify this struct the one in rustc but they have different
-// ownership semantics, so doing so would create wasteful allocations.
-#[derive(serde::Serialize, serde::Deserialize)]
-struct UnusedExterns {
-    /// Lint level of the unused_crate_dependencies lint
-    lint_level: String,
-    /// List of unused externs by their names.
-    unused_extern_names: Vec<String>,
-}
-
 /// Transforms a test into code that can be compiled into a Rust binary, and returns the number of
 /// lines before the test code begins as well as if the output stream supports colors or not.
 pub fn make_test(
