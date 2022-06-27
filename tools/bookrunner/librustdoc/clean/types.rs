@@ -19,7 +19,6 @@ use rustc_data_structures::thin_vec::ThinVec;
 use rustc_hir as hir;
 use rustc_hir::def::{CtorKind, Res};
 use rustc_hir::def_id::{CrateNum, DefId, DefIndex, LOCAL_CRATE};
-use rustc_hir::lang_items::LangItem;
 use rustc_hir::{BodyId, Mutability};
 use rustc_index::vec::IndexVec;
 use rustc_middle::ty::fast_reject::SimplifiedType;
@@ -32,20 +31,14 @@ use rustc_target::abi::VariantIdx;
 use rustc_target::spec::abi::Abi;
 
 use crate::clean::cfg::Cfg;
-use crate::clean::external_path;
-use crate::clean::inline;
-use crate::clean::Clean;
-use crate::core::DocContext;
 use crate::formats::cache::Cache;
 use crate::formats::item_type::ItemType;
 
-pub(crate) use self::FnRetTy::*;
 pub(crate) use self::ItemKind::*;
 pub(crate) use self::Type::{
     Array, BareFunction, BorrowedRef, DynTrait, Generic, ImplTrait, Infer, Primitive, QPath,
     RawPointer, Slice, Tuple,
 };
-pub(crate) use self::Visibility::{Inherited, Public};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 pub(crate) enum ItemId {
@@ -144,82 +137,7 @@ pub(crate) struct Item {
 #[cfg(all(target_arch = "x86_64", target_pointer_width = "64"))]
 rustc_data_structures::static_assert_size!(Item, 48);
 
-pub(crate) fn rustc_span(def_id: DefId, tcx: TyCtxt<'_>) -> Span {
-    Span::new(def_id.as_local().map_or_else(
-        || tcx.def_span(def_id),
-        |local| {
-            let hir = tcx.hir();
-            hir.span_with_body(hir.local_def_id_to_hir_id(local))
-        },
-    ))
-}
-
 impl Item {
-    pub(crate) fn span(&self, tcx: TyCtxt<'_>) -> Span {
-        let kind = match &*self.kind {
-            ItemKind::StrippedItem(k) => k,
-            _ => &*self.kind,
-        };
-        match kind {
-            ItemKind::ModuleItem(Module { span, .. }) => *span,
-            ItemKind::ImplItem(Impl { kind: ImplKind::Auto, .. }) => Span::dummy(),
-            ItemKind::ImplItem(Impl { kind: ImplKind::Blanket(_), .. }) => {
-                if let ItemId::Blanket { impl_id, .. } = self.def_id {
-                    rustc_span(impl_id, tcx)
-                } else {
-                    panic!("blanket impl item has non-blanket ID")
-                }
-            }
-            _ => {
-                self.def_id.as_def_id().map(|did| rustc_span(did, tcx)).unwrap_or_else(Span::dummy)
-            }
-        }
-    }
-
-    pub(crate) fn attr_span(&self, tcx: TyCtxt<'_>) -> rustc_span::Span {
-        crate::passes::span_of_attrs(&self.attrs).unwrap_or_else(|| self.span(tcx).inner())
-    }
-
-    /// Convenience wrapper around [`Self::from_def_id_and_parts`] which converts
-    /// `hir_id` to a [`DefId`]
-    pub(crate) fn from_hir_id_and_parts(
-        hir_id: hir::HirId,
-        name: Option<Symbol>,
-        kind: ItemKind,
-        cx: &mut DocContext<'_>,
-    ) -> Item {
-        Item::from_def_id_and_parts(cx.tcx.hir().local_def_id(hir_id).to_def_id(), name, kind, cx)
-    }
-
-    pub(crate) fn from_def_id_and_parts(
-        def_id: DefId,
-        name: Option<Symbol>,
-        kind: ItemKind,
-        cx: &mut DocContext<'_>,
-    ) -> Item {
-        let ast_attrs = cx.tcx.get_attrs_unchecked(def_id);
-
-        Self::from_def_id_and_attrs_and_parts(def_id, name, kind, box ast_attrs.clean(cx), cx)
-    }
-
-    pub(crate) fn from_def_id_and_attrs_and_parts(
-        def_id: DefId,
-        name: Option<Symbol>,
-        kind: ItemKind,
-        attrs: Box<Attributes>,
-        cx: &mut DocContext<'_>,
-    ) -> Item {
-        trace!("name={:?}, def_id={:?}", name, def_id);
-
-        Item {
-            def_id: def_id.into(),
-            kind: box kind,
-            name,
-            attrs,
-            visibility: cx.tcx.visibility(def_id).clean(cx),
-        }
-    }
-
     pub(crate) fn is_stripped(&self) -> bool {
         match *self.kind {
             StrippedItem(..) => true,
@@ -648,29 +566,6 @@ impl Eq for Attributes {}
 pub(crate) enum GenericBound {
     TraitBound(PolyTrait, hir::TraitBoundModifier),
     Outlives(Lifetime),
-}
-
-impl GenericBound {
-    pub(crate) fn maybe_sized(cx: &mut DocContext<'_>) -> GenericBound {
-        let did = cx.tcx.require_lang_item(LangItem::Sized, None);
-        let empty = cx.tcx.intern_substs(&[]);
-        let path = external_path(cx, did, false, vec![], empty);
-        inline::record_extern_fqn(cx, did, ItemType::Trait);
-        GenericBound::TraitBound(
-            PolyTrait { trait_: path, generic_params: Vec::new() },
-            hir::TraitBoundModifier::Maybe,
-        )
-    }
-
-    pub(crate) fn is_sized_bound(&self, cx: &DocContext<'_>) -> bool {
-        use rustc_hir::TraitBoundModifier as TBM;
-        if let GenericBound::TraitBound(PolyTrait { ref trait_, .. }, TBM::None) = *self {
-            if Some(trait_.def_id()) == cx.tcx.lang_items().sized_trait() {
-                return true;
-            }
-        }
-        false
-    }
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
