@@ -142,14 +142,16 @@ impl KaniSession {
     }
 
     /// Generate a .demangled.c file from the .c file using the `prettyName`s from the symbol tables
+    ///
+    /// Currently, only top-level function names and (most) type names are demangled.
+    /// For local variables, it would be more complicated than a simple search and replace to obtain the demangled name.
     pub fn demangle_c(
         &self,
         symtab_files: &[impl AsRef<Path>],
         c_file: &Path,
         demangled_file: &Path,
     ) -> Result<()> {
-        let c_code = std::fs::read_to_string(c_file)?;
-        let mut demangled_code = c_code.clone();
+        let mut c_code = std::fs::read_to_string(c_file)?;
         for symtab_file in symtab_files {
             let reader = BufReader::new(File::open(symtab_file.as_ref())?);
             let symtab: serde_json::Value = serde_json::from_reader(reader)?;
@@ -157,16 +159,17 @@ impl KaniSession {
                 for (_, symbol) in symtab {
                     if let Some(serde_json::Value::String(name)) = symbol.get("name") {
                         if let Some(serde_json::Value::String(pretty)) = symbol.get("prettyName") {
+                            // Struct names start with "tag-", but this prefix is not used in the GotoC files, so we strip it.
                             let name = name.strip_prefix("tag-").unwrap_or(name);
                             if !pretty.is_empty() && pretty != name {
-                                demangled_code = demangled_code.replace(name, pretty);
+                                c_code = c_code.replace(name, pretty);
                             }
                         }
                     }
                 }
             }
         }
-        std::fs::write(demangled_file, demangled_code)?;
+        std::fs::write(demangled_file, c_code)?;
         Ok(())
     }
 
