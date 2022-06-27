@@ -5,15 +5,11 @@
 //! Markdown formatting for rustdoc.
 //!
 
-use rustc_hir::def_id::DefId;
-use rustc_hir::HirId;
-use rustc_middle::ty::TyCtxt;
 use rustc_span::edition::Edition;
-use rustc_span::Span;
 
-use std::borrow::Cow;
 use std::default::Default;
 use std::str;
+use std::{borrow::Cow, marker::PhantomData};
 
 use crate::clean::RenderedLink;
 use crate::doctest;
@@ -242,40 +238,12 @@ pub fn find_testable_code<T: doctest::Tester>(
 }
 
 pub struct ExtraInfo<'tcx> {
-    id: ExtraInfoId,
-    sp: Span,
-    tcx: TyCtxt<'tcx>,
-}
-
-enum ExtraInfoId {
-    Hir(HirId),
-    Def(DefId),
+    _unused: PhantomData<&'tcx ()>,
 }
 
 impl<'tcx> ExtraInfo<'tcx> {
-    fn error_invalid_codeblock_attr(&self, msg: &str, help: &str) {
-        let hir_id = match self.id {
-            ExtraInfoId::Hir(hir_id) => hir_id,
-            ExtraInfoId::Def(item_did) => {
-                match item_did.as_local() {
-                    Some(item_did) => self.tcx.hir().local_def_id_to_hir_id(item_did),
-                    None => {
-                        // If non-local, no need to check anything.
-                        return;
-                    }
-                }
-            }
-        };
-        self.tcx.struct_span_lint_hir(
-            crate::lint::INVALID_CODEBLOCK_ATTRIBUTES,
-            hir_id,
-            self.sp,
-            |lint| {
-                let mut diag = lint.build(msg);
-                diag.help(help);
-                diag.emit();
-            },
-        );
+    fn error_invalid_codeblock_attr(&self, _msg: &str, _help: &str) {
+        unreachable!();
     }
 }
 
