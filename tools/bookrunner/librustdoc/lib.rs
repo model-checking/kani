@@ -65,35 +65,6 @@ extern crate rustc_trait_selection;
 extern crate rustc_typeck;
 extern crate test;
 
-/// A macro to create a FxHashMap.
-///
-/// Example:
-///
-/// ```
-/// let letters = map!{"a" => "b", "c" => "d"};
-/// ```
-///
-/// Trailing commas are allowed.
-/// Commas between elements are required (even if the expression is a block).
-macro_rules! map {
-    ($( $key: expr => $val: expr ),* $(,)*) => {{
-        let mut map = ::rustc_data_structures::fx::FxHashMap::default();
-        $( map.insert($key, $val); )*
-        map
-    }}
-}
-
-mod clean;
-mod config;
-mod core;
 pub mod doctest;
-mod externalfiles;
-mod fold;
-mod formats;
 // used by the error-index generator, so it needs to be public
 pub mod html;
-pub(crate) mod lint;
-mod passes;
-mod scrape_examples;
-mod visit;
-mod visit_ast;
