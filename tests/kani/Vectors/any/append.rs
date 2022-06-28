@@ -4,15 +4,16 @@
 // Append 2 arbitrary vectors, lengths at most 3 and 4 respectively,
 // and assert they have been appended.
 #[kani::proof]
+#[kani::unwind(75)]
 fn main() {
-    let mut v1: Vec<u128> = kani::any_vec::<3>();
-    let mut v2: Vec<u128> = kani::any_vec::<4>();
+    let mut v1: Vec<u128> = kani::vec::any_vec::<3, _>();
+    let mut v2: Vec<u128> = kani::vec::any_vec::<4, _>();
     let v1_initial = v1.clone();
     let v2_initial = v2.clone();
     let l1 = v1.len();
     let l2 = v2.len();
 
-    v1.append(v2);
+    v1.append(&mut v2);
     assert!(v2.len() == 0);
     assert!(v1.len() == (l1 + l2));
 
