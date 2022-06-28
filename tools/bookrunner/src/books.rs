@@ -14,8 +14,8 @@ use inflector::cases::{snakecase::to_snake_case, titlecase::to_title_case};
 use pulldown_cmark::{Event, Parser, Tag};
 use rustc_span::edition::Edition;
 use rustdoc::{
-    doctest::Tester,
-    html::markdown::{ErrorCodes, Ignore, LangString},
+    doctest::{make_test, Tester},
+    html::markdown::{find_testable_code, ErrorCodes, Ignore, LangString},
 };
 use std::{
     collections::{HashMap, HashSet},
@@ -312,7 +312,7 @@ struct Example {
     // Line number of the code block.
     line: usize,
     // Configurations in the header of the codeblock.
-    config: rustdoc::html::markdown::LangString,
+    config: LangString,
 }
 
 /// Data structure representing a list of examples. Mainly for implementing the
@@ -411,11 +411,11 @@ fn extract(
 ) {
     let code = fs::read_to_string(&par_from).unwrap();
     let mut examples = Examples(Vec::new());
-    rustdoc::html::markdown::find_testable_code(&code, &mut examples, ErrorCodes::No, false, None);
+    find_testable_code(&code, &mut examples, ErrorCodes::No, false, None);
     for mut example in examples.0 {
         apply_diff(par_to, &mut example, config_paths);
         example.config.edition = Some(example.config.edition.unwrap_or(default_edition));
-        example.code = rustdoc::doctest::make_test(
+        example.code = make_test(
             &example.code,
             None,
             false,
