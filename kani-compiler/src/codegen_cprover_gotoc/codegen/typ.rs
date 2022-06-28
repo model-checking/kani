@@ -354,9 +354,9 @@ impl<'tcx> GotocCtx<'tcx> {
         Type::unit().to_typedef(inner_name)
     }
 
-    /// This will codegen the raw pointer to the trait data.
+    /// This will codegen the raw pointer to the data portion of a vtable fat pointer.
     pub fn codegen_trait_data_pointer(&mut self, typ: ty::Ty<'tcx>) -> Type {
-        assert!(typ.is_trait());
+        assert!(self.use_vtable_fat_pointer(typ));
         self.codegen_ty(typ).to_pointer()
     }
 
@@ -384,20 +384,6 @@ impl<'tcx> GotocCtx<'tcx> {
                 DatatypeComponent::field("data", data_type),
                 DatatypeComponent::field("vtable", Type::struct_tag(vtable_name).to_pointer()),
             ]
-        })
-    }
-
-    /// Creates a new type that represents a struct that wraps a thin pointer.
-    /// struct Wrapper<T> {
-    ///     pointer: *T;
-    /// }
-    fn codegen_data_pointer_wrapper(&mut self, pointer_ty: ty::Ty<'tcx>) -> Type {
-        trace!(?pointer_ty, "codegen_data_pointer_wrapper");
-        let pointee_ty = pointee_type(pointer_ty).unwrap();
-        let name = self.ty_mangled_name(pointee_ty).to_string() + "::Wrapper";
-        let ptr_type = self.codegen_ty(pointee_ty).to_pointer();
-        self.ensure_struct(&name, NO_PRETTY_NAME, |_, _| {
-            vec![DatatypeComponent::field("pointer", ptr_type)]
         })
     }
 
@@ -931,11 +917,11 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    fn extract_thin_pointer(&self, arg_ty: Ty<'tcx>) -> Ty<'tcx> {
-        trace!(mir_ty=?arg_ty, "extract_data_pointer: args");
-        let mut typ = arg_ty;
-        // Traverse the layout following the non-zero field until we find a fat pointer.
-        while let ty::Adt(adt_def, adt_substs) = typ.kind() {
+    /// This function is used to extract fat pointers from Self receiver type.
+    ///
+    /// It assumes that if the type is a struct, that it has one and only one non-zst field.
+    pub fn get_non_zst_field(&self, typ: Ty<'tcx>) -> Option<(String, Ty<'tcx>)> {
+        if let ty::Adt(adt_def, adt_substs) = typ.kind() {
             assert_eq!(
                 adt_def.variants().len(),
                 1,
@@ -943,24 +929,47 @@ impl<'tcx> GotocCtx<'tcx> {
                 typ
             );
             let fields = &adt_def.variants().get(VariantIdx::from_u32(0)).unwrap().fields;
-            let non_zst = fields
+            let mut non_zsts = fields
                 .iter()
-                .find(|field| !self.layout_of(field.ty(self.tcx, adt_substs)).is_zst())
-                .expect("Expected one non-zst field.");
-            typ = non_zst.ty(self.tcx, adt_substs);
+                .filter(|field| !self.layout_of(field.ty(self.tcx, adt_substs)).is_zst());
+            let non_zst = non_zsts.next().expect("Expected one non-zst field.");
+            assert!(non_zsts.next().is_none(), "Expected only one non-zst field.");
+            Some((non_zst.name.to_string(), non_zst.ty(self.tcx, adt_substs)))
+        } else {
+            None
+        }
+    }
+
+    /// Extract the fat pointer out of the self receiver type.
+    ///
+    /// As of Jul 2022:
+    /// P = &Self | &mut Self | Box<Self> | Rc<Self> | Arc<Self>
+    /// S = P | Pin<P>
+    ///
+    /// See https://doc.rust-lang.org/reference/items/traits.html#object-safety for more details.
+    fn receiver_fat_ptr(&self, arg_ty: Ty<'tcx>) -> Ty<'tcx> {
+        trace!(mir_ty=?arg_ty, "receiver_fat_ptr");
+        let mut typ = arg_ty;
+        // Traverse the layout following the non-zero field until we find a fat pointer.
+        while let Some((_, new_typ)) = self.get_non_zst_field(typ) {
+            typ = new_typ;
         }
 
-        trace!(mir_ty=?typ, "extract_data_pointer: result");
+        assert!(self.is_vtable_fat_pointer(typ));
+        trace!(?typ, "receiver_fat_ptr");
         typ
-        // pointee_type(typ).unwrap()
     }
 
     /// Generate code for a trait function declaration.
     ///
-    /// Dynamic function calls first parameter is self which can be one of the following:
-    /// P = &'lt S | &'lt mut S | Box<S> | Rc<S> | Arc<S> | Pin<P>
-    /// S = Self | P
-    pub fn codegen_dynamic_function_sig(&mut self, sig: PolyFnSig<'tcx>) -> Type {
+    /// Dynamic function calls first parameter is self which must be one of the following:
+    ///
+    /// As of Jul 2022:
+    /// P = &Self | &mut Self | Box<Self> | Rc<Self> | Arc<Self>
+    /// S = P | Pin<P>
+    ///
+    /// See https://doc.rust-lang.org/reference/items/traits.html#object-safety for more details.
+    fn codegen_dynamic_function_sig(&mut self, sig: PolyFnSig<'tcx>) -> Type {
         let sig = self.monomorphize(sig);
         let sig = self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig);
         debug!(name=?sig.to_string() , params=?sig.inputs(), "codegen_dynamic_function_sig");
@@ -972,18 +981,17 @@ impl<'tcx> GotocCtx<'tcx> {
                 if is_first {
                     is_first = false;
                     debug!(self_type=?arg_type, fn_signature=?sig, "codegen_dynamic_function_sig");
-                    if arg_type.is_ref() {
-                        // Convert fat pointer to thin pointer to data portion.
-                        let first_ty = pointee_type(*arg_type).unwrap();
-                        Some(self.codegen_trait_data_pointer(first_ty))
+                    let self_ty = if arg_type.is_ref() {
+                        // Use the thin pointer to data portion.
+                        pointee_type(*arg_type).unwrap()
                     } else if arg_type.is_trait() {
-                        // Convert dyn T to thin pointer.
-                        Some(self.codegen_trait_data_pointer(*arg_type))
+                        // Convert dyn T to thin pointer. Used for closures.
+                        *arg_type
                     } else {
-                        // Codegen type with thin pointer (E.g.: Box<dyn T> -> Wrapper<data_ptr>).
-                        let first_ty = self.extract_thin_pointer(*arg_type);
-                        Some(self.codegen_data_pointer_wrapper(first_ty))
-                    }
+                        // Get data portion from receiver's fat pointer.
+                        pointee_type(self.receiver_fat_ptr(*arg_type)).unwrap()
+                    };
+                    Some(self.codegen_trait_data_pointer(self_ty))
                 } else if self.ignore_var_ty(*arg_type) {
                     debug!("Ignoring type {:?} in function signature", arg_type);
                     None

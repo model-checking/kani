@@ -19,7 +19,7 @@ use rustc_middle::ty;
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{Instance, InstanceDef, Ty};
 use rustc_span::Span;
-use rustc_target::abi::{FieldsShape, Primitive, TagEncoding, VariantIdx, Variants};
+use rustc_target::abi::{FieldsShape, Primitive, TagEncoding, Variants};
 use tracing::{debug, info_span, trace, warn};
 
 impl<'tcx> GotocCtx<'tcx> {
@@ -462,37 +462,24 @@ impl<'tcx> GotocCtx<'tcx> {
             x => unreachable!("Function call where the function was of unexpected type: {:?}", x),
         };
     }
+
     /// Extract a reference to self for virtual method calls.
-    ///
-    /// Method calls can be done dereferencing one of the following:
-    /// P = &'lt S | &'lt mut S | Box<S> | Rc<S> | Arc<S> | Pin<P>
-    /// S = Self | P
-    /// https://doc.rust-lang.org/reference/items/associated-items.html#methods
-    /// TODO: Add tests for each type and for something like `mut Box<Box<Self>>`
+    /// See [codegen_dynamic_function_sig](super::typ::codegen_dynamic_function_sig) for more
+    /// details.
     fn extract_fat_ptr(&self, arg_expr: Expr, arg_ty: Ty<'tcx>) -> Expr {
         trace!(mir_ty=?arg_ty, gotoc_ty=?arg_expr.typ(), gotoc_expr=?arg_expr.value(),
             "extract_self: args");
         let mut typ = arg_ty;
         let mut expr = arg_expr;
         // Traverse the layout following the non-zero field until we find a fat pointer.
-        while let ty::Adt(adt_def, adt_substs) = typ.kind() {
-            assert_eq!(
-                adt_def.variants().len(),
-                1,
-                "Expected a single-variant ADT. Found {:?}",
-                typ
-            );
-            let fields = &adt_def.variants().get(VariantIdx::from_u32(0)).unwrap().fields;
-            let non_zst = fields
-                .iter()
-                .find(|field| !self.layout_of(field.ty(self.tcx, adt_substs)).is_zst())
-                .expect("Expected one non-zst field.");
-            typ = non_zst.ty(self.tcx, adt_substs);
-            expr = expr.member(non_zst.name.to_string(), &self.symbol_table);
+        while let Some((name, new_typ)) = self.get_non_zst_field(typ) {
+            typ = new_typ;
+            expr = expr.member(name, &self.symbol_table);
         }
 
         trace!(mir_ty=?typ, gotoc_ty=?expr.typ(), gotoc_expr=?expr.value(),
             "extract_self: result");
+        // FnOnce do generate dyn T as self.
         assert!(typ.is_trait() || self.is_vtable_fat_pointer(typ));
         expr
     }
@@ -518,34 +505,8 @@ impl<'tcx> GotocCtx<'tcx> {
         let vtable = vtable_ref.dereference();
         let fn_ptr = vtable.member(vtable_field_name, &self.symbol_table);
 
-        // Update the argument from arg0 to arg0.data if arg0 is a fat pointer.
-        let data_ptr = trait_fat_ptr.to_owned().member("data", &self.symbol_table);
-        let mut ret_stmts = Vec::<Stmt>::new();
-        fargs[0] = if self_ty.is_adt() {
-            debug!(fn_typ=?fn_ptr.typ(), ?self_ty, "codegen_virtual_funcall");
-            match fn_ptr.typ() {
-                Type::Pointer { typ } => match typ.as_ref() {
-                    Type::Code { parameters, .. } => {
-                        let param_typ = parameters.first().unwrap().typ();
-                        let tmp = self.gen_temp_variable(param_typ.clone(), loc).to_expr();
-                        debug!(?tmp,
-                            orig=?data_ptr.typ(),
-                            "codegen_virtual_funcall");
-                        ret_stmts.push(Stmt::decl(tmp.clone(), None, loc));
-                        ret_stmts.push(Stmt::assign(
-                            tmp.clone().member("pointer", &self.symbol_table),
-                            data_ptr,
-                            loc,
-                        ));
-                        tmp
-                    }
-                    _ => unreachable!("Unexpected virtual function type: {:?}", fn_ptr.typ()),
-                },
-                _ => unreachable!("Unexpected virtual function type: {:?}", fn_ptr.typ()),
-            }
-        } else {
-            data_ptr
-        };
+        // Update the argument from arg0 to arg0.data
+        fargs[0] = trait_fat_ptr.to_owned().member("data", &self.symbol_table);
 
         // For soundness, add an assertion that the vtable function call is not null.
         // Otherwise, CBMC might treat this as an assert(0) and later user-added assertions
@@ -564,10 +525,7 @@ impl<'tcx> GotocCtx<'tcx> {
         } else {
             call_stmt
         };
-        trace!(?call_stmt, "codegen_virtual_funcall stmt");
-        ret_stmts.push(assert_nonnull);
-        ret_stmts.push(call_stmt);
-        ret_stmts
+        vec![assert_nonnull, call_stmt]
     }
 
     /// A place is similar to the C idea of a LHS. For example, the returned value of a function call is stored to a place.
