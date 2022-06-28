@@ -21,7 +21,7 @@ then
   TARGET="aarch64-apple-darwin"
 else
   echo
-  echo "Test only works on Linux or OSX x86 platforms, skipping..."
+  echo "Test only works on Linux or OSX platforms, skipping..."
   echo
   exit 0
 fi
