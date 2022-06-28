@@ -20,6 +20,14 @@ trait Trait {
     fn pin_id(self: Pin<&Self>) -> u8;
     fn pin_box_id(self: Pin<Box<Self>>) -> u8;
     fn replace_id(&mut self, new_id: u8) -> u8;
+
+    /// `Self` is a valid associated type but not object-safe.
+    ///
+    /// It can be used as bounds to generic items. Thus, it has to be explicitly marked as
+    /// non-dispatchable.
+    fn bound_value(self) -> u8
+    where
+        Self: Sized;
 }
 
 struct Concrete {
@@ -63,6 +71,13 @@ impl Trait for Concrete {
 
     fn replace_id(&mut self, new_id: u8) -> u8 {
         std::mem::replace(&mut self.id, new_id)
+    }
+
+    fn bound_value(self) -> u8
+    where
+        Self: Sized,
+    {
+        self.id
     }
 }
 
@@ -115,4 +130,14 @@ pub fn check_mut() {
     let trt = &mut obj as &mut dyn Trait;
     assert_eq!(trt.replace_id(new_id), initial_id);
     assert_eq!(trt.ref_id(), new_id);
+}
+
+#[kani::proof]
+pub fn check_bound() {
+    fn assert_value<T: Trait>(obj: T, id: u8) {
+        assert_eq!(obj.bound_value(), id);
+    }
+    let id = kani::any();
+    let obj = Concrete { id };
+    assert_value(obj, id);
 }

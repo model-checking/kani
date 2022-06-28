@@ -972,7 +972,6 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_dynamic_function_sig(&mut self, sig: PolyFnSig<'tcx>) -> Type {
         let sig = self.monomorphize(sig);
         let sig = self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig);
-        debug!(name=?sig.to_string() , params=?sig.inputs(), "codegen_dynamic_function_sig");
         let mut is_first = true;
         let params = sig
             .inputs()

@@ -3,6 +3,7 @@
 use super::typ::FN_RETURN_VOID_VAR_NAME;
 use super::PropertyClass;
 use crate::codegen_cprover_gotoc::codegen::typ::pointee_type;
+use crate::codegen_cprover_gotoc::codegen::TypeExt;
 use crate::codegen_cprover_gotoc::utils;
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
@@ -411,13 +412,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     }
                     // Handle a virtual function call via a vtable lookup
                     InstanceDef::Virtual(def_id, idx) => {
-                        // TODO: Check by-value calls (rustc_codegen_ssa/src/mir/block.rs)
-                        // We must have at least one argument, and the first one
-                        // should have the following format:
-                        // P = &'lt S | &'lt mut S | Box<S> | Rc<S> | Arc<S> | Pin<P>
-                        // S = Self | P
                         let self_ty = self.operand_ty(&args[0]);
-                        // TODO: Check if we need to update def_id.
                         self.codegen_virtual_funcall(
                             self_ty,
                             def_id,
@@ -481,6 +476,7 @@ impl<'tcx> GotocCtx<'tcx> {
             "extract_self: result");
         // FnOnce do generate dyn T as self.
         assert!(typ.is_trait() || self.is_vtable_fat_pointer(typ));
+        assert!(expr.typ().is_rust_trait_fat_ptr(&self.symbol_table));
         expr
     }
 
