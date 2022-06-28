@@ -155,8 +155,7 @@ impl KaniSession {
         for symtab_file in symtab_files {
             let reader = BufReader::new(File::open(symtab_file.as_ref())?);
             let symtab: serde_json::Value = serde_json::from_reader(reader)?;
-            let symtab = symtab["symbolTable"].as_object().unwrap();
-            for (_, symbol) in symtab {
+            for (_, symbol) in symtab["symbolTable"].as_object().unwrap() {
                 if let Some(serde_json::Value::String(name)) = symbol.get("name") {
                     if let Some(serde_json::Value::String(pretty)) = symbol.get("prettyName") {
                         // Struct names start with "tag-", but this prefix is not used in the GotoC files, so we strip it.
