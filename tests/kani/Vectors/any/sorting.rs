@@ -5,7 +5,9 @@
 #[kani::proof]
 #[kani::unwind(10)]
 fn main() {
-    let mut v: Vec<u32> = kani::vec::any_vec::<3, _>();
+    // let mut v: Vec<u32> = kani::vec::any_vec::<_, 3>();
+    let slice = kani::slice::any_slice::<u32, 3>();
+    let mut v: Vec<u32> = slice.to_vec(); //kani::vec::any_vec::<_, 3>();
     kani::assume(v.len() == 3);
     v.sort();
 

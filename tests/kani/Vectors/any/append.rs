@@ -6,8 +6,8 @@
 #[kani::proof]
 #[kani::unwind(75)]
 fn main() {
-    let mut v1: Vec<u128> = kani::vec::any_vec::<3, _>();
-    let mut v2: Vec<u128> = kani::vec::any_vec::<4, _>();
+    let mut v1: Vec<u128> = kani::vec::any_vec::<_, 3>();
+    let mut v2: Vec<u128> = kani::vec::any_vec::<_, 4>();
     let v1_initial = v1.clone();
     let v2_initial = v2.clone();
     let l1 = v1.len();

@@ -4,7 +4,7 @@
 // Push 5 elements to force the vector to resize, then check that the values were correctly copied.
 #[kani::proof]
 fn main() {
-    let mut v: Vec<isize> = kani::vec::any_vec::<0, _>();
+    let mut v: Vec<isize> = kani::vec::any_vec::<_, 0>();
     v.push(72);
     v.push(2);
     v.push(3);

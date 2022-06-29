@@ -7,7 +7,7 @@
 #[kani::proof]
 #[kani::unwind(50)]
 fn main() {
-    let mut v: Vec<i64> = kani::vec::any_vec::<5, _>();
+    let mut v: Vec<i64> = kani::vec::any_vec::<_, 5>();
     kani::assume(v.len() >= 2);
 
     let initial_length = v.len();
