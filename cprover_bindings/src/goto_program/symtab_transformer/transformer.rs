@@ -46,9 +46,6 @@ pub trait Transformer: Sized {
             Type::Code { parameters, return_type } => {
                 self.transform_type_code(parameters, return_type)
             }
-            Type::CodeWithContract { parameters, return_type, requires: _, ensures: _ } => {
-                self.transform_type_code(parameters, return_type)
-            }
             Type::Constructor => self.transform_type_constructor(),
             Type::Double => self.transform_type_double(),
             Type::Empty => self.transform_type_empty(),

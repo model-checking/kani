@@ -31,14 +31,6 @@ pub enum Type {
     CInteger(CIntType),
     /// `return_type x(parameters)`
     Code { parameters: Vec<Parameter>, return_type: Box<Type> },
-    /// Type for function contracts.
-    /// `return_type x(parameters, requires, ensures)
-    CodeWithContract {
-        parameters: Vec<Parameter>,
-        return_type: Box<Type>,
-        requires: Spec,
-        ensures: Spec,
-    },
     /// `__attribute__(constructor)`. Only valid as a function return type.
     /// <https://gcc.gnu.org/onlinedocs/gcc-4.7.0/gcc/Function-Attributes.html>
     Constructor,
@@ -112,12 +104,6 @@ pub struct Parameter {
     base_name: Option<InternedString>,
 }
 
-/// Type for `spec_requires` and `spec_ensures` in function contracts.
-#[derive(Debug, Clone)]
-pub struct Spec {
-    pub clauses: Vec<Expr>,
-}
-
 ///////////////////////////////////////////////////////////////////////////////////////////////
 /// Implementations
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -187,7 +173,6 @@ impl DatatypeComponent {
             | Vector { .. } => true,
 
             Code { .. }
-            | CodeWithContract { .. }
             | Constructor
             | Empty
             | IncompleteStruct { .. }
@@ -222,14 +207,6 @@ impl DatatypeComponent {
 impl PartialEq for Parameter {
     fn eq(&self, other: &Self) -> bool {
         self.typ == other.typ
-    }
-}
-
-/// Implement partial equal for Spec.
-/// Always return false when comparing two function contract objects.
-impl PartialEq for Spec {
-    fn eq(&self, _other: &Self) -> bool {
-        false
     }
 }
 
@@ -358,7 +335,6 @@ impl Type {
             // type with no fields (and thus a size of 0 in the layout):
             //     FnDef case in layout_raw_uncached, compiler/rustc_middle/src/ty/layout.rs
             Code { .. } => 0,
-            CodeWithContract { .. } => todo!("Implement sizeof for code with function contracts"),
             Constructor => unreachable!("Constructor doesn't have a sizeof"),
             Double => st.machine_model().double_width,
             Empty => 0,
@@ -570,7 +546,6 @@ impl Type {
 
             Array { .. }
             | Code { .. }
-            | CodeWithContract { .. }
             | Constructor
             | Empty
             | FlexibleArray { .. }
@@ -621,7 +596,6 @@ impl Type {
 
             Array { .. }
             | Code { .. }
-            | CodeWithContract { .. }
             | Constructor
             | FlexibleArray { .. }
             | IncompleteStruct { .. }
@@ -911,7 +885,6 @@ impl Type {
             | Vector { .. } => true,
 
             Code { .. }
-            | CodeWithContract { .. }
             | Constructor
             | Empty
             | FlexibleArray { .. }
@@ -1320,15 +1293,6 @@ impl Type {
                     .join("_");
                 let return_string = return_type.to_identifier();
                 format!("code_from_{}_to_{}", parameter_string, return_string)
-            }
-            Type::CodeWithContract { parameters, return_type, requires: _, ensures: _ } => {
-                let parameter_string = parameters
-                    .iter()
-                    .map(|param| param.typ().to_identifier())
-                    .collect::<Vec<_>>()
-                    .join("_");
-                let return_string = return_type.to_identifier();
-                format!("code_with_contract_from_{}_to_{}", parameter_string, return_string)
             }
             Type::Constructor => "constructor".to_string(),
             Type::Double => "double".to_string(),

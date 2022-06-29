@@ -588,25 +588,6 @@ impl ToIrep for Type {
                     (IrepId::ReturnType, return_type.to_irep(mm)),
                 ],
             },
-            Type::CodeWithContract { parameters, return_type, requires, ensures } => Irep {
-                id: IrepId::Code,
-                sub: vec![],
-                named_sub: linear_map![
-                    (
-                        IrepId::Parameters,
-                        Irep::just_sub(parameters.iter().map(|x| x.to_irep(mm)).collect()),
-                    ),
-                    (IrepId::ReturnType, return_type.to_irep(mm)),
-                    (
-                        IrepId::CSpecEnsures,
-                        Irep::just_sub(requires.clauses.iter().map(|x| x.to_irep(mm)).collect()),
-                    ),
-                    (
-                        IrepId::CSpecRequires,
-                        Irep::just_sub(ensures.clauses.iter().map(|x| x.to_irep(mm)).collect()),
-                    ),
-                ],
-            },
             Type::Constructor => Irep::just_id(IrepId::Constructor),
             Type::Double => Irep {
                 id: IrepId::Floatbv,
