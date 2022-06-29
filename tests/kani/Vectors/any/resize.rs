@@ -1,14 +1,13 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// Resizing arbitrary vector of Vec<i64> length at most 5, at least
-// 2. Asserts that the modification occurs, and only on memory that
-// should be changed.
+/// Resizing arbitrary vector of Vec<i64> length at most 5, at least
+/// 2. Asserts that the modification occurs, and only on memory that
+/// should be changed.
 #[kani::proof]
 #[kani::unwind(50)]
 fn main() {
-    let mut v: Vec<i64> = kani::vec::any_vec::<_, 5>();
-    kani::assume(v.len() >= 2);
+    let mut v: Vec<i64> = kani::vec::exact_vec::<_, 5>();
 
     let initial_length = v.len();
     let initial_vector = v.clone();

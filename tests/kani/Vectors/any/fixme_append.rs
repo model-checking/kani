@@ -1,13 +1,17 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// Append 2 arbitrary vectors, lengths at most 3 and 4 respectively,
-// and assert they have been appended.
+/// Append 2 arbitrary vectors, lengths at most 1 and 2 respectively,
+/// and assert they have been appended.  However, times out with
+/// unwinding > 1. However, note that this works fine with exact_vec.
 #[kani::proof]
 #[kani::unwind(75)]
 fn main() {
-    let mut v1: Vec<u128> = kani::vec::any_vec::<_, 3>();
-    let mut v2: Vec<u128> = kani::vec::any_vec::<_, 4>();
+    let mut v1: Vec<u128> = kani::vec::any_vec::<_, 1>();
+    kani::assume(v1.len() == 1);
+    let mut v2: Vec<u128> = kani::vec::any_vec::<_, 2>();
+    kani::assume(v2.len() == 2);
+
     let v1_initial = v1.clone();
     let v2_initial = v2.clone();
     let l1 = v1.len();
