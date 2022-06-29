@@ -2,6 +2,7 @@
 
 SELF_SCRIPT=$0
 NPROC=$(nproc 2> /dev/null || sysctl -n hw.ncpu 2> /dev/null || echo 4)  # Linux or Mac or hard-coded default of 4
+WORK_DIRECTORY_PREFIX='target/top-100'
 HARD_CODED_TOP_100_CRATES_AS_OF_2022_6_17='0 https://github.com/Amanieu/parking_lot
 1 https://github.com/Amanieu/thread_local-rs
 2 https://github.com/BurntSushi/aho-corasick
@@ -89,13 +90,30 @@ HARD_CODED_TOP_100_CRATES_AS_OF_2022_6_17='0 https://github.com/Amanieu/parking_
 # worker function that clones target repos and runs kani over
 # them. This functions is called in parallel by
 # parallel_clone_and_run, and should not be run explicitly
+STDOUT_SUFFIX='stdout.cargo-kani'
+STDERR_SUFFIX='stderr.cargo-kani'
+EXIT_CODE_SUFFIX='exit-code.cargo-kani'
 function clone_and_run_kani {
     WORK_NUMBER_ID=$1
     REPOSITORY_URL=$2
+    REPO_DIRECTORY="$WORK_DIRECTORY_PREFIX/$WORK_NUMBER_ID"
     echo "work# $WORK_NUMBER_ID -- $REPOSITORY_URL"
-    # todo! clone repository
-    # todo! run kani compile on repo.
-    # todo! save results to file.
+
+    # clone repository
+    if [ ! -d "$REPO_DIRECTORY/.git" ]; then
+	git clone $REPOSITORY_URL $REPO_DIRECTORY
+    fi
+
+    # run cargo kani compile on repo. save results to file.
+    (cd $REPO_DIRECTORY; nice -n15 cargo kani --only-codegen) \
+	 1> $REPO_DIRECTORY/$STDOUT_SUFFIX \
+	 2> $REPO_DIRECTORY/$STDERR_SUFFIX
+    echo $? > $REPO_DIRECTORY/$EXIT_CODE_SUFFIX
+}
+
+function print_errors_for_each_repo_result {
+    DIRECTORY=$1
+    # todo! grep $DIRECTORY/$STDERR_SUFFIX for errors
 }
 
 if ! which xargs 1>&2 1> /dev/null; then
@@ -103,9 +121,13 @@ if ! which xargs 1>&2 1> /dev/null; then
     exit -1
 elif [ "$#" -eq "0" ]; then
     # top level logic that runs clone_and_run_kani in parallel with xargs.
+    mkdir -p $WORK_DIRECTORY_PREFIX
     echo $HARD_CODED_TOP_100_CRATES_AS_OF_2022_6_17 | xargs -n2 -I {} -P $NPROC bash -c "$SELF_SCRIPT {} {}"
 else
-    # todo! wait until load is appropriate
     clone_and_run_kani $1 $2
+
     # serially print out the ones that failed.
+    for directory in $(ls $WORK_DIRECTORY_PREFIX); do
+	REPOSITORY= $(git -C $WORK_DIRECTORY_PREFIX/$directory remote -v | awk '{ print $2 }' | head -1)
+    done
 fi
