@@ -63,7 +63,12 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
         let harness_filename = harness.pretty_name.replace("::", "-");
         let report_dir = report_base.join(format!("report-{}", harness_filename));
         let specialized_obj = outputs.outdir.join(format!("cbmc-for-{}.out", harness_filename));
-        ctx.run_goto_instrument(&linked_obj, &specialized_obj, &harness.mangled_name)?;
+        ctx.run_goto_instrument(
+            &linked_obj,
+            &specialized_obj,
+            &outputs.symtabs,
+            &harness.mangled_name,
+        )?;
 
         let result = ctx.check_harness(&specialized_obj, &report_dir, harness)?;
         if result == VerificationStatus::Failure {
@@ -109,7 +114,12 @@ fn standalone_main() -> Result<()> {
             let mut temps = ctx.temporaries.borrow_mut();
             temps.push(specialized_obj.to_owned());
         }
-        ctx.run_goto_instrument(&linked_obj, &specialized_obj, &harness.mangled_name)?;
+        ctx.run_goto_instrument(
+            &linked_obj,
+            &specialized_obj,
+            &[&outputs.symtab],
+            &harness.mangled_name,
+        )?;
 
         let result = ctx.check_harness(&specialized_obj, &report_dir, harness)?;
         if result == VerificationStatus::Failure {
