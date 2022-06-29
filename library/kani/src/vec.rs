@@ -7,6 +7,6 @@ pub fn any_vec<T, const VEC_LENGTH: usize>() -> Vec<T>
 where
     T: Arbitrary,
 {
-    let boxed_any_sice: Box<[T; VEC_LENGTH]> = Box::new(any());
-    <[T]>::into_vec(boxed_any_sice)
+    let boxed_any_slice: Box<[T; VEC_LENGTH]> = Box::new(any());
+    <[T]>::into_vec(boxed_any_slice)
 }
