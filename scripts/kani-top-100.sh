@@ -161,7 +161,7 @@ function print_errors_for_each_repo_result {
     fi
 
     STDOUT_GREP=$(grep -A3 -n $TARGET_ERROR_REGEX $DIRECTORY/$STDOUT_SUFFIX 2> /dev/null && echo 'STDOUT has warnings')
-    if [[ "$STDOUT_GREP" =~ [a-zA-Z0-9] ]] && [ "$PRINT_STDOUT" -eq "1" ]; then
+    if [[ "$STDOUT_GREP" =~ [a-zA-Z0-9] ]] && [ "$PRINT_STDOUT" = '1' ]; then
 	echo -e "------ STDOUT Warnings (Plus 3 lines after) -----\n$STDOUT_GREP"
 	IS_FAIL='1'
     fi
