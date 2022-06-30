@@ -30,7 +30,7 @@ The second step (`cargo-kani setup`) will download the Kani compiler and other n
 ## Installing an older version
 
 ```bash
-cargo install --lock kani-verifier --version <VERSION>
+cargo install --locked kani-verifier --version <VERSION>
 cargo-kani setup
 ```
 
