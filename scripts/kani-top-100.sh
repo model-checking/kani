@@ -181,7 +181,7 @@ elif [ "$#" -eq "0" ]; then
     mkdir -p $WORK_DIRECTORY_PREFIX
     echo -e "$HARD_CODED_TOP_100_CRATES_AS_OF_2022_6_17" | \
 	awk -F '\n' 'BEGIN{ a=0 }{ print a++ "," $1  }' | \
-	xargs -d '\n' -I {} -P $NPROC bash -c "$SELF_SCRIPT {}"
+	xargs -n1 -I {} -P $NPROC bash -c "$SELF_SCRIPT {}"
 
     # serially print out the ones that failed.
     for directory in $(ls $WORK_DIRECTORY_PREFIX); do
