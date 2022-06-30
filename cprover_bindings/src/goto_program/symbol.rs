@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use super::super::utils::aggr_tag;
-use super::{Contract, DatatypeComponent, Expr, Location, Parameter, Stmt, Type};
+use super::{DatatypeComponent, Expr, Location, Parameter, Stmt, Type};
 use crate::{InternStringOption, InternedString};
 
 /// Based off the CBMC symbol implementation here:
@@ -13,8 +13,6 @@ pub struct Symbol {
     pub location: Location,
     pub typ: Type,
     pub value: SymbolValues,
-    /// For storing function contract, loop contract, etc associated with the symbol.
-    pub contract: Option<Contract>,
 
     /// Optional debugging information
 
@@ -80,7 +78,6 @@ impl Symbol {
             value,
             base_name,
             pretty_name,
-            contract: None,
 
             module: None,
             mode: SymbolModes::C,
