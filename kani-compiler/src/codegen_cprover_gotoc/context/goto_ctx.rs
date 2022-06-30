@@ -350,10 +350,10 @@ impl MetadataLoader for GotocMetadataLoader {
 
 /// Builds a machine model which is required by CBMC
 fn machine_model_from_session(sess: &Session) -> MachineModel {
-    // The model assumes a `x86_64-unknown-linux-gnu` or `x86_64-apple-darwin`
-    // platform. We check the target platform in function `check_target` from
-    // src/kani-compiler/src/codegen_cprover_gotoc/compiler_interface.rs and
-    // error if it is not any of the ones we expect.
+    // The model assumes a `x86_64-unknown-linux-gnu`, `x86_64-apple-darwin`
+    // or `aarch64-apple-darwin` platform. We check the target platform in function
+    // `check_target` from src/kani-compiler/src/codegen_cprover_gotoc/compiler_interface.rs
+    // and error if it is not any of the ones we expect.
     let architecture = &sess.target.arch;
     let pointer_width = sess.target.pointer_width.into();
 
@@ -372,45 +372,90 @@ fn machine_model_from_session(sess: &Session) -> MachineModel {
 
     // The values below cannot be obtained from the session so they are
     // hardcoded using standard ones for the supported platforms
-    let bool_width = 8;
-    let char_is_unsigned = false;
-    let char_width = 8;
-    let double_width = 64;
-    let float_width = 32;
-    let int_width = 32;
-    let long_double_width = 128;
-    let long_int_width = 64;
-    let long_long_int_width = 64;
-    let memory_operand_size = 4;
-    let null_is_zero = true;
-    let short_int_width = 16;
-    let single_width = 32;
-    let wchar_t_is_unsigned = false;
-    let wchar_t_width = 32;
-    let word_size = 32;
-    let rounding_mode = RoundingMode::ToNearest;
+    // see /tools/sizeofs/main.cpp.
+    // For reference, the definition in CBMC:
+    //https://github.com/diffblue/cbmc/blob/develop/src/util/config.cpp
+    match architecture.as_ref() {
+        "x86_64" => {
+            let bool_width = 8;
+            let char_is_unsigned = false;
+            let char_width = 8;
+            let double_width = 64;
+            let float_width = 32;
+            let int_width = 32;
+            let long_double_width = 128;
+            let long_int_width = 64;
+            let long_long_int_width = 64;
+            let short_int_width = 16;
+            let single_width = 32;
+            let wchar_t_is_unsigned = false;
+            let wchar_t_width = 32;
 
-    MachineModel {
-        architecture: architecture.to_string(),
-        alignment,
-        bool_width,
-        char_is_unsigned,
-        char_width,
-        double_width,
-        float_width,
-        int_width,
-        is_big_endian,
-        long_double_width,
-        long_int_width,
-        long_long_int_width,
-        memory_operand_size,
-        null_is_zero,
-        pointer_width,
-        rounding_mode,
-        short_int_width,
-        single_width,
-        wchar_t_is_unsigned,
-        wchar_t_width,
-        word_size,
+            MachineModel {
+                architecture: architecture.to_string(),
+                alignment,
+                bool_width,
+                char_is_unsigned,
+                char_width,
+                double_width,
+                float_width,
+                int_width,
+                is_big_endian,
+                long_double_width,
+                long_int_width,
+                long_long_int_width,
+                memory_operand_size: int_width / 8,
+                null_is_zero: true,
+                pointer_width,
+                rounding_mode: RoundingMode::ToNearest,
+                short_int_width,
+                single_width,
+                wchar_t_is_unsigned,
+                wchar_t_width,
+                word_size: int_width,
+            }
+        }
+        "aarch64" => {
+            let bool_width = 8;
+            let char_is_unsigned = true;
+            let char_width = 8;
+            let double_width = 64;
+            let float_width = 32;
+            let int_width = 32;
+            let long_double_width = 64;
+            let long_int_width = 64;
+            let long_long_int_width = 64;
+            let short_int_width = 16;
+            let single_width = 32;
+            let wchar_t_is_unsigned = false;
+            let wchar_t_width = 32;
+
+            MachineModel {
+                architecture: architecture.to_string(),
+                alignment,
+                bool_width,
+                char_is_unsigned,
+                char_width,
+                double_width,
+                float_width,
+                int_width,
+                is_big_endian,
+                long_double_width,
+                long_int_width,
+                long_long_int_width,
+                memory_operand_size: int_width / 8,
+                null_is_zero: true,
+                pointer_width,
+                rounding_mode: RoundingMode::ToNearest,
+                short_int_width,
+                single_width,
+                wchar_t_is_unsigned,
+                wchar_t_width,
+                word_size: int_width,
+            }
+        }
+        _ => {
+            panic!("Unsupported architecture: {}", architecture);
+        }
     }
 }
