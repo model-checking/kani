@@ -1,4 +1,7 @@
 #!/bin/bash
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
 
 DOCUMENTATION=\
 'kani-top-100.sh -- script to clone and compile the top 100 crates with Kani.
@@ -21,7 +24,11 @@ EDITING:
 - To adjust the git clone or kani args, modify the function
   `clone_and_run_kani`.
 - To adjust the errors this script searches for, edit the function
-  `print_errors_for_each_repo_result`'
+  `print_errors_for_each_repo_result`
+
+Copyright Kani Contributors
+SPDX-License-Identifier: Apache-2.0 OR MIT'
+
 
 SELF_SCRIPT=$0
 SELF_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
