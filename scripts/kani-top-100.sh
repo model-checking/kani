@@ -131,7 +131,7 @@ function print_errors_for_each_repo_result {
     fi
 
     STDOUT_GREP=$(grep -A3 -n $TARGET_ERROR_REGEX $DIRECTORY/$STDOUT_SUFFIX 2> /dev/null && echo 'STDOUT has warnings')
-    if [[ "$STDOUT_GREP" =~ [a-zA-Z0-9] ]]; then
+    if [[ "$STDOUT_GREP" =~ [a-zA-Z0-9] ]] && [ "$PRINT_STDOUT" -eq "1" ]; then
 	echo -e "------ STDOUT Warnings (Plus 3 lines after) -----\n$STDOUT_GREP"
 	IS_FAIL='1'
     fi
@@ -144,6 +144,8 @@ function print_errors_for_each_repo_result {
 if ! which xargs 1>&2 1> /dev/null; then
     echo "Need to have xargs installed. Please install with `apt-get install -y xargs`"
     exit -1
+elif [[ "$*" == *"--help"* ]]; then
+    echo -e "$DOCUMENTATION"
 elif [ "$#" -eq "0" ]; then
     # top level logic that runs clone_and_run_kani in parallel with xargs.
     mkdir -p $WORK_DIRECTORY_PREFIX
