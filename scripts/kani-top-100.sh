@@ -1,5 +1,29 @@
 #!/bin/bash
 
+DOCUMENTATION=\
+'kani-top-100.sh -- script to clone and compile the top 100 crates with Kani.
+
+USAGE:
+./scripts/kani-top-100.sh
+
+Download the top 100 crates and runs kani on them. Prints out the
+errors and warning when done. Xargs is required for this script to
+work.
+
+ENV:
+- PRINT_STDOUT=1 forces this script to search for warning in
+  STDOUT in addition to STDERR
+
+EDITING:
+
+- To modify the list of crates to crawl, modify
+  `HARD_CODED_TOP_100_CRATES_AS_OF_2022_6_17`. Note that the first
+  column should have unique integers per row.
+- To adjust the git clone or kani args, modify the function
+  `clone_and_run_kani`.
+- To adjust the errors this script searches for, edit the function
+  `print_errors_for_each_repo_result`'
+
 SELF_SCRIPT=$0
 SELF_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 NPROC=$(nproc 2> /dev/null || sysctl -n hw.ncpu 2> /dev/null || echo 4)  # Linux or Mac or hard-coded default of 4
@@ -113,7 +137,7 @@ function clone_and_run_kani {
 
 OVERALL_EXIT_CODE='0'
 TARGET_ERROR_REGEX='warning:\sFound\sthe\sfollowing\sunsupported\sconstructs:\|WARN'
-# printing function that greps the error logs signal
+# printing function that greps the error logs and exit code.
 function print_errors_for_each_repo_result {
     DIRECTORY=$1
     IS_FAIL='0'
