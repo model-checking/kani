@@ -95,12 +95,18 @@ impl KaniSession {
             args.push(unwind_value.to_string().into());
         }
 
+        if !harness_metadata.mmio_regions.is_empty() {
+            for (start, len) in &harness_metadata.mmio_regions {
+                args.push("--mmio-regions".into());
+                args.push(format!("{}:{}", start, len).into());
+            }
+        }
+
         args.push("--slice-formula".into());
 
         args.extend(self.args.cbmc_args.iter().cloned());
 
         args.push(file.to_owned().into_os_string());
-
         Ok(args)
     }
 

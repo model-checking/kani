@@ -16,4 +16,6 @@ pub struct HarnessMetadata {
     pub original_line: String,
     /// Optional data to store unwind value
     pub unwind_value: Option<u32>,
+    /// Optional MMIO regions
+    pub mmio_regions: Vec<(u128, u128)>,
 }

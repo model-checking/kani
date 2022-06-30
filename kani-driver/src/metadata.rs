@@ -147,6 +147,7 @@ pub fn mock_proof_harness(name: &str, unwind_value: Option<u32>) -> HarnessMetad
         original_file: "<unknown>".into(),
         original_line: "<unknown>".into(),
         unwind_value,
+        mmio_regions: vec![],
     }
 }
 

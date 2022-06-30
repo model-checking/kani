@@ -13,7 +13,6 @@ use rustc_ast::{Attribute, LitKind};
 use rustc_middle::mir::{HasLocalDecls, Local};
 use rustc_middle::ty::{self, Instance};
 use std::collections::BTreeMap;
-use std::convert::TryInto;
 use std::iter::FromIterator;
 use tracing::{debug, info_span};
 
@@ -272,6 +271,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let mut harness = self.default_kanitool_proof();
         for attr in other_attributes.iter() {
             match attr.0.as_str() {
+                "mmio_region" => self.handle_kanitool_mmio_region(attr.1, &mut harness),
                 "unwind" => self.handle_kanitool_unwind(attr.1, &mut harness),
                 _ => {
                     self.tcx.sess.span_err(
@@ -297,7 +297,29 @@ impl<'tcx> GotocCtx<'tcx> {
             original_file: loc.filename().unwrap(),
             original_line: loc.line().unwrap().to_string(),
             unwind_value: None,
+            mmio_regions: vec![],
         }
+    }
+
+    fn handle_kanitool_mmio_region(&mut self, attr: &Attribute, harness: &mut HarnessMetadata) {
+        let attr_args = attr.meta_item_list();
+        if let Some(attr_args) = attr_args {
+            if attr_args.len() == 2 {
+                if let (Some(start), Some(len)) = (attr_args[0].literal(), attr_args[1].literal()) {
+                    if let (LitKind::Int(start, ..), LitKind::Int(len, ..)) =
+                        (&start.kind, &len.kind)
+                    {
+                        harness.mmio_regions.push((*start, *len));
+                        return;
+                    }
+                }
+            }
+        }
+
+        // If we didn't successfully process, give an error message
+        self.tcx
+            .sess
+            .span_err(attr.span, "Expected exactly two integers are the argument to 'mmio_region'");
     }
 
     /// Updates the proof harness with new unwind value
@@ -307,6 +329,7 @@ impl<'tcx> GotocCtx<'tcx> {
             self.tcx.sess.span_err(attr.span, "Only one '#[kani::unwind]' allowed");
             return;
         }
+
         // Get Attribute value and if it's not none, assign it to the metadata
         match extract_integer_argument(attr) {
             None => {
@@ -382,3 +405,16 @@ fn extract_integer_argument(attr: &Attribute) -> Option<u128> {
         None
     }
 }
+
+// /// Extracts the integer value argument from the attribute provided
+// /// For example, `unwind(8)` return `Some(8)`
+// fn extract_integer_arguments(attr: &Attribute) -> Result<Vec<u128>, String> {
+//     // Vector of meta items , that contain the arguments given the attribute
+//     let attr_args = attr.meta_item_list().unwrap;
+//     Ok(attr_args.iter().map(|a| {
+//         match a.literal()?.kind {
+//             LitKind::Int(y, ..) => Some(y),
+//             _ => None,
+//         }
+//     }).collect())
+// }
