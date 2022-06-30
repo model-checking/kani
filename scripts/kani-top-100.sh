@@ -112,21 +112,33 @@ function clone_and_run_kani {
 }
 
 OVERALL_EXIT_CODE='0'
-TARGET_ERROR_REGEX='warning: Found the following unsupported constructs:\|WARN'
+TARGET_ERROR_REGEX='warning:\sFound\sthe\sfollowing\sunsupported\sconstructs:\|WARN'
 # printing function that greps the error logs signal
 function print_errors_for_each_repo_result {
     DIRECTORY=$1
+    IS_FAIL='0'
 
-    error_code="$($DIRECTORY/$EXIT_CODE_SUFFIX)"
-    if [ "$($DIRECTORY/$EXIT_CODE_SUFFIX)" -ne "0" ]; then
+    error_code="$(cat $DIRECTORY/$EXIT_CODE_SUFFIX)"
+    if [ "$error_code" -ne "0" ]; then
 	echo -e "Error exit: code $error_code\n"
+	IS_FAIL='1'
     fi
 
-    echo -e '------ STDERR Warnings (Plus 3 lines after) -----\n'
-    grep -A3 -i $TARGET_ERROR_REGEX $DIRECTORY/$STDERR_SUFFIX && echo 'STDERR has warnings'
+    STDERR_GREP=$(grep -A3 -n $TARGET_ERROR_REGEX $DIRECTORY/$STDERR_SUFFIX 2> /dev/null && echo 'STDERR has warnings')
+    if [[ "$STDERR_GREP" =~ [a-zA-Z0-9] ]]; then
+	echo -e "------ STDERR Warnings (Plus 3 lines after) -----\n$STDERR_GREP"
+	IS_FAIL='1'
+    fi
 
-    echo -e '------ STDOUT Warnings (Plus 3 lines after) -----\n'
-    grep -A3 -i $TARGET_ERROR_REGEX $DIRECTORY/$STDOUT_SUFFIX && echo 'STDOUT has warnings'
+    STDOUT_GREP=$(grep -A3 -n $TARGET_ERROR_REGEX $DIRECTORY/$STDOUT_SUFFIX 2> /dev/null && echo 'STDOUT has warnings')
+    if [[ "$STDOUT_GREP" =~ [a-zA-Z0-9] ]]; then
+	echo -e "------ STDOUT Warnings (Plus 3 lines after) -----\n$STDOUT_GREP"
+	IS_FAIL='1'
+    fi
+
+    if [ "$IS_FAIL" -eq "0" ]; then
+	echo 'Ok'
+    fi
 }
 
 if ! which xargs 1>&2 1> /dev/null; then
@@ -137,16 +149,17 @@ elif [ "$#" -eq "0" ]; then
     mkdir -p $WORK_DIRECTORY_PREFIX
     echo $HARD_CODED_TOP_100_CRATES_AS_OF_2022_6_17 | xargs -d ' ' -I {} -P $NPROC bash -c "$SELF_SCRIPT {}"
     # serially print out the ones that failed.
-#     for directory in $(ls $WORK_DIRECTORY_PREFIX); do
-# 	REPOSITORY= $(git -C $WORK_DIRECTORY_PREFIX/$directory remote -v | awk '{ print $2 }' | head -1)
-# 	ERROR_OUTPUTS=$(print_errors_for_each_repo_result $WORK_DIRECTORY_PREFIX/$directory)
-# 	if $(cat $ERROR_OUTPUTS | grep 'STD... has warnings' 1>&2 1> /dev/null); then
-# 	    OVERALL_EXIT_CODE='1'
-# 	fi
+    for directory in $(ls $WORK_DIRECTORY_PREFIX); do
+	REPOSITORY=$(git -C $WORK_DIRECTORY_PREFIX/$directory remote -v | awk '{ print $2 }' | head -1)
+	echo "repository: $REPOSITORY"
 
-# 	echo "repository: $REPOSITORY"
-#         echo $ERROR_OUTPUTS | sed 's/^/    /g\'
-#     done
+	ERROR_OUTPUTS=$(print_errors_for_each_repo_result $WORK_DIRECTORY_PREFIX/$directory)
+	if [[ ! "$ERROR_OUTPUTS" =~ 'STD... has warnings' ]]; then
+	    OVERALL_EXIT_CODE='1'
+	fi
+
+        echo -e "$ERROR_OUTPUTS" | sed 's/^/    /'
+    done
 else
     (clone_and_run_kani $1 $2)
 fi
