@@ -1,6 +1,9 @@
+// Copyright Kani Contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 #include <iostream>
 #include <type_traits>
  
+ // generates the arch-dependent constants for MachineModel
 int main() 
 {    
     std::cout << "let bool_width = " << sizeof(bool)*8 << ";" << std::endl;
