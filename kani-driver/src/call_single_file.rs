@@ -24,7 +24,11 @@ pub struct SingleOutputs {
 
 impl KaniSession {
     /// Used by `kani` and not `cargo-kani` to process a single Rust file into a `.symtab.json`
-    pub fn compile_single_rust_file(&self, file: &Path) -> Result<SingleOutputs> {
+    pub fn compile_single_rust_file(
+        &self,
+        file: &Path,
+        has_run_once: bool,
+    ) -> Result<SingleOutputs> {
         let outdir =
             file.canonicalize()?.parent().context("File doesn't exist in a directory?")?.to_owned();
         let output_filename = alter_extension(file, "symtab.json");
@@ -44,7 +48,7 @@ impl KaniSession {
             }
         }
 
-        let mut args = self.kani_rustc_flags();
+        let mut args = self.kani_rustc_flags(has_run_once);
 
         // kani-compiler workaround part 1/2: *.symtab.json gets generated in the local
         // directory, instead of based on file name like we expect.
@@ -95,8 +99,13 @@ impl KaniSession {
 
     /// These arguments are passed directly here for single file runs,
     /// but are also used by call_cargo to pass as the env var KANIFLAGS.
-    pub fn kani_rustc_flags(&self) -> Vec<OsString> {
-        let mut flags = vec![OsString::from("--goto-c")];
+    pub fn kani_rustc_flags(&self, has_run_once: bool) -> Vec<OsString> {
+        let mut flags: Vec<OsString> = Vec::new();
+        if !has_run_once {
+            flags.push("--goto-c".into());
+        } else {
+            flags.push("--exec-trace".into());
+        }
 
         if let Some(rlib) = &self.kani_rlib {
             flags.push("--kani-lib".into());

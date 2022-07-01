@@ -1,6 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+use crate::util::alter_extension;
 use anyhow::Result;
 use args_toml::join_args;
 use call_cbmc::VerificationStatus;
@@ -8,6 +9,7 @@ use kani_metadata::HarnessMetadata;
 use session::KaniSession;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use structopt::StructOpt;
 use util::append_path;
 
@@ -21,6 +23,7 @@ mod call_goto_cc;
 mod call_goto_instrument;
 mod call_single_file;
 mod call_symtab;
+mod get_det_vals;
 mod metadata;
 mod session;
 mod util;
@@ -38,7 +41,8 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     args.validate();
     let ctx = session::KaniSession::new(args.common_opts)?;
 
-    let outputs = ctx.cargo_build()?;
+    let mut has_run_once = false;
+    let mut outputs = ctx.cargo_build(has_run_once)?;
     if ctx.args.only_codegen {
         return Ok(());
     }
@@ -73,6 +77,23 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
         let result = ctx.check_harness(&specialized_obj, &report_dir, harness)?;
         if result == VerificationStatus::Failure {
             failed_harnesses.push(harness);
+
+            if !has_run_once && ctx.args.gen_exec_trace {
+                has_run_once = true;
+                outputs = ctx.cargo_build(has_run_once)?;
+                let det_vals_file = alter_extension(&specialized_obj, "det_vals.txt");
+                let metadata_file = outputs.metadata[0].to_str().unwrap();
+
+                // Chop off .kani-metadata.json part of the file
+                let mut split_dot: Vec<&str> = metadata_file.split(".").collect();
+                split_dot.pop();
+                split_dot.pop();
+                let bin_file = split_dot.join(".");
+
+                let mut bin_cmd = Command::new(bin_file);
+                bin_cmd.env("DET_VALS_FILE", det_vals_file);
+                ctx.run_terminal(bin_cmd)?;
+            }
         }
     }
 
@@ -84,7 +105,8 @@ fn standalone_main() -> Result<()> {
     args.validate();
     let ctx = session::KaniSession::new(args.common_opts)?;
 
-    let outputs = ctx.compile_single_rust_file(&args.input)?;
+    let mut has_run_once = false;
+    let outputs = ctx.compile_single_rust_file(&args.input, has_run_once)?;
     if ctx.args.only_codegen {
         return Ok(());
     }
@@ -127,6 +149,11 @@ fn standalone_main() -> Result<()> {
         }
     }
 
+    has_run_once = true;
+    if ctx.args.gen_exec_trace {
+        ctx.compile_single_rust_file(&args.input, has_run_once)?;
+    }
+
     ctx.print_final_summary(&harnesses, &failed_harnesses)
 }
 
@@ -145,6 +172,9 @@ impl KaniSession {
             self.run_visualize(binary, report_dir, harness)?;
             // Strictly speaking, we're faking success here. This is more "no error"
             Ok(VerificationStatus::Success)
+        } else if self.args.gen_exec_trace {
+            self.get_det_vals(binary, harness)?;
+            self.run_cbmc(binary, harness)
         } else {
             self.run_cbmc(binary, harness)
         }
