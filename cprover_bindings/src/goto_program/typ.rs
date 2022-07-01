@@ -813,7 +813,7 @@ impl Type {
     /// But, `struct foo` is not structurally equivalent to:
     /// ```
     /// __attribute__((packed))
-    /// struct baz {}
+    /// struct baz {
     ///     char x;
     ///     int y;
     /// }
