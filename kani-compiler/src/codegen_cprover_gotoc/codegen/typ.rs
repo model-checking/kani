@@ -533,7 +533,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// codegen for types. it finds a C type which corresponds to a rust type.
     /// that means [ty] has to be monomorphized.
     ///
-    /// check [LayoutCx::layout_raw_uncached] for LLVM codegen
+    /// check [rustc_middle::ty::layout::LayoutCx::layout_of_uncached] for LLVM codegen
     ///
     /// also c.f. <https://www.ralfj.de/blog/2020/04/04/layout-debugging.html>
     ///      c.f. <https://rust-lang.github.io/unsafe-code-guidelines/introduction.html>
