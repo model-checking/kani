@@ -2,7 +2,7 @@
 
 Kani is unlike the testing tools you may already be familiar with.
 Much of testing is concerned with thinking of new corner cases that need to be covered.
-With Kani, all the corner cases are covered from the start, and the new concern is narrowing down the scope to something manageable for the checker.
+With Kani, all the corner cases are covered from the start, and the new concern is narrowing down the scope to something manageable for the verifier.
 
 Consider this first program (which can be found under [`first-steps-v1`](https://github.com/model-checking/kani/tree/main/docs/src/tutorial/first-steps-v1/)):
 
@@ -29,7 +29,8 @@ test tests::doesnt_crash ... ok
 
 There's only 1 in 4 billion inputs that fail, so it's vanishingly unlikely the property test will find it, even with a million samples.
 
-With Kani, however, we can use `kani::any()` to represent all possible `u32` values:
+Let's write a Kani _proof harness_ for `estimate_size`.
+This is a lot like a test harness, but now we can use `kani::any()` to represent all possible `u32` values:
 
 ```rust
 {{#include tutorial/first-steps-v1/src/main.rs:kani}}
@@ -54,18 +55,26 @@ Notably, we haven't had to write explicit assertions in our proof harness: by de
 ### Getting a trace
 
 By default, Kani only reports failures, not how the failure happened.
-This is because, in its full generality, understanding how a failure happened requires exploring a full (potentially large) execution trace.
-Here, we've just got some nondeterministic inputs up front, but that's something of a special case that has a "simpler" explanation (just the choice of nondeterministic input).
+In this running example, it seems obvious what we're interested in (what `x`?) because we just have one unknown input at the start (similar to the property test), but that's something of a special case.
+In general, understanding how a failure happened requires exploring a full (potentially large) _execution trace_.
 
-To see traces, run:
+An execution trace is a record of exactly how a failure can occur.
+Nondeterminism (like a call to `kani::any()`, which could return any value) can appear in the middle of its execution.
+A trace is a record of exactly how execution proceeded, including concrete choices (like `1023`) for all of these nondeterministic values.
+
+To get a trace for a failing check in Kani, run:
 
 ```
-kani --visualize src/main.rs
+cargo kani --visualize
 ```
 
-This command runs Kani and generates the HTML report in `report-main/html/index.html`.
+This command runs Kani and generates an HTML report that includes a trace.
 Open the report with your preferred browser.
-From this report, we can find the trace of the failure and filter through it to find the relevant line (at present time, an unfortunate amount of generated code is present in the trace):
+Under the "Errors" heading, click on the "trace" link to find the trace for this failure.
+
+From this trace report, we can filter through it to find relevant lines.
+A good rule of thumb is to search for either `kani::any()` or assignments to variables you're interested in.
+At present time, an unfortunate amount of generated code is present in the trace, but we can find:
 
 ```
 let x: u32 = kani::any();
@@ -73,8 +82,8 @@ x = 1023u
 ```
 
 Here we're seeing the line of code and the value assigned in this particular trace.
-Like property testing, this is just one example of a failure.
-To find more, we'd presumably fix this issue and then re-run Kani.
+Like property testing, this is just one **example** of a failure.
+To proceed, we'd presumably fix the code to avoid this particular issue and then re-run Kani to see if we find more.
 
 ### Exercise: Try other failures
 
@@ -106,14 +115,14 @@ But Kani still catches the issue:
 [...]
 RESULTS:
 [...]
-Check 2: foo.pointer_dereference.1
+Check 2: estimate_size.pointer_dereference.1
          - Status: FAILURE
          - Description: "dereference failure: pointer NULL"
 [...]
 VERIFICATION:- FAILED
 ```
 
-**Can you find an example where the Rust compiler will not complain, and Kani will?**
+**Exercise: Can you find an example where the Rust compiler will not complain, and Kani will?**
 
 <details>
 <summary>Click to show one possible answer</summary>
@@ -127,11 +136,11 @@ Overflow (in addition, multiplication or, in this case, [bit-shifting by too muc
 ```
 RESULTS:
 [...]
-Check 3: foo.assertion.1
+Check 1: estimate_size.assertion.1
          - Status: FAILURE
          - Description: "attempt to shift left with overflow"
 
-Check 4: foo.undefined-shift.1
+Check 3: estimate_size.undefined-shift.1
          - Status: FAILURE
          - Description: "shift distance too large"
 [...]
@@ -142,33 +151,38 @@ VERIFICATION:- FAILED
 
 ## Assertions, Assumptions, and Harnesses
 
-It seems a bit odd that we can take billions of inputs when our function only handles up to a few thousand.
-Let's encode this fact about our function by asserting some reasonable bound on our input, after we've fixed our bug (code available under
-[`first-steps-v2`](https://github.com/model-checking/kani/tree/main/docs/src/tutorial/first-steps-v2/)):
+It seems a bit odd that we accept billions of inputs when our function really only seems to handle up to a few thousand.
+Let's encode this fact about our function by asserting some reasonable bound on our input, after we've fixed our bug.
+(New code available under [`first-steps-v2`](https://github.com/model-checking/kani/tree/main/docs/src/tutorial/first-steps-v2/)):
 
 ```rust
 {{#include tutorial/first-steps-v2/src/main.rs:code}}
 ```
 
-Now we've stated our previously implicit expectation: this function should never be called with inputs that are too big.
-But if we attempt to verify this, we get a problem:
+Now we've explicitly stated our previously implicit expectation: this function should never be called with inputs that are too big.
+But if we attempt to verify this modified function, we run into a problem:
 
 ```
 [...]
 RESULTS:
 [...]
-Check 3: final_form::estimate_size.assertion.1
+Check 3: estimate_size.assertion.1
          - Status: FAILURE
          - Description: "assertion failed: x < 4096"
 [...]
 VERIFICATION:- FAILED
 ```
 
-We intended this to be a precondition of calling the function, but Kani is treating it like a failure.
-If we call this function with too large of a value, it will crash with an assertion failure.
-But we know that, that was our intention.
+What we want is a _precondition_ for `estimate_size`.
+That is, something that should always be true every time we call the function.
+By putting the assertion at the beginning, we ensure the function immediately fails if that expectation is not met.
 
-This is the purpose of _proof harnesses_.
+But our proof harness will still call this function with any integer, even ones that just don't meet the function's preconditions.
+That's... not a useful or interesting result.
+We know that won't work already.
+How do we go back to successfully verifying this function?
+
+This is the purpose of writing a proof harness.
 Much like property testing (which would also fail in this assertion), we need to set up our preconditions, call the function in question, then assert our postconditions.
 Here's a revised example of the proof harness, one that now succeeds:
 
@@ -183,14 +197,25 @@ Fortunately, Kani is able to report a coverage metric for each proof harness.
 Try running:
 
 ```
-kani --visualize src/main.rs --harness verify_success
-open report-verify_success/html/index.html
+cargo kani --visualize --harness verify_success
 ```
 
 The beginning of the report includes coverage information.
 Clicking through to the file will show fully-covered lines in green.
 Lines not covered by our proof harness will show in red.
 
-1. Try changing the assumption in the proof harness to `x < 2048`. Now the harness won't be testing all possible cases.
-2. Rerun `kani --visualize` on the file
-3. Look at the report: you'll see we no longer have 100% coverage of the function.
+Try changing the assumption in the proof harness to `x < 2048`.
+Now the harness won't be testing all possible cases.
+Rerun `cargo kani --visualize`.
+Look at the report: you'll see we no longer have 100% coverage of the function.
+
+## Summary
+
+In this section:
+
+1. We saw Kani find panics, assertion failures, and even some other failures like unsafe dereferencing of null pointers.
+2. We saw Kani find failures that testing could not easily find.
+3. We saw how to write a proof harness and use `kani::any()`.
+4. We saw how to get a failing **trace** using `kani --visualize`
+5. We saw how proof harnesses are used to set up preconditions with `kani::assume()`.
+6. We saw how to obtain **coverage** metrics and use them to ensure our proofs are covering as much as they should be.
