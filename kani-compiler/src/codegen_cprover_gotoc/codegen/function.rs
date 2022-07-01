@@ -405,16 +405,3 @@ fn extract_integer_argument(attr: &Attribute) -> Option<u128> {
         None
     }
 }
-
-// /// Extracts the integer value argument from the attribute provided
-// /// For example, `unwind(8)` return `Some(8)`
-// fn extract_integer_arguments(attr: &Attribute) -> Result<Vec<u128>, String> {
-//     // Vector of meta items , that contain the arguments given the attribute
-//     let attr_args = attr.meta_item_list().unwrap;
-//     Ok(attr_args.iter().map(|a| {
-//         match a.literal()?.kind {
-//             LitKind::Int(y, ..) => Some(y),
-//             _ => None,
-//         }
-//     }).collect())
-// }

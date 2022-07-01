@@ -96,10 +96,14 @@ impl KaniSession {
         }
 
         if !harness_metadata.mmio_regions.is_empty() {
-            for (start, len) in &harness_metadata.mmio_regions {
-                args.push("--mmio-regions".into());
-                args.push(format!("{}:{}", start, len).into());
-            }
+            args.push("--mmio-regions".into());
+            let mmio_string = harness_metadata
+                .mmio_regions
+                .iter()
+                .map(|(s, l)| format!("{}:{}", s, l))
+                .collect::<Vec<String>>()
+                .join(",");
+            args.push(mmio_string.into());
         }
 
         args.push("--slice-formula".into());
