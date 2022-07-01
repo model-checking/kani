@@ -32,7 +32,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Since vtable pointer comparison is not well defined and it has many nuances, we decided to
     /// fail if the user code performs such comparison.
     ///
-    /// See https://github.com/model-checking/kani/issues/327 for more details.
+    /// See <https://github.com/model-checking/kani/issues/327> for more details.
     fn codegen_comparison_fat_ptr(
         &mut self,
         op: &BinOp,
