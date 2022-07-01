@@ -898,7 +898,7 @@ impl Type {
         }
     }
 
-    /// elem_t[size]
+    /// elem_t\[size\]
     pub fn array_of<T>(self, size: T) -> Self
     where
         T: TryInto<u64>,
@@ -959,7 +959,7 @@ impl Type {
         CInteger(CIntType::SSizeT)
     }
 
-    /// corresponds to [code_typet] in CBMC, representing a function type
+    /// corresponds to \[code_typet\] in CBMC, representing a function type
     ///    ret (params ..)
     pub fn code(parameters: Vec<Parameter>, return_type: Type) -> Self {
         Code { parameters, return_type: Box::new(return_type) }
@@ -1155,7 +1155,7 @@ impl Type {
         Unsignedbv { width }
     }
 
-    /// corresponds to [code_typet] in CBMC, representing a function type
+    /// corresponds to \[code_typet\] in CBMC, representing a function type
     ///    ret (params, ... )
     pub fn variadic_code(parameters: Vec<Parameter>, return_type: Type) -> Self {
         VariadicCode { parameters, return_type: Box::new(return_type) }
