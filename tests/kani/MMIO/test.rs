@@ -26,3 +26,15 @@ fn test_write2() {
 
     }
 }
+
+#[cfg(kani)]
+#[kani::proof]
+#[kani::mmio_region(0x8000, 8)]
+/// Check that larger MMIO regions also work
+fn test_write3() {
+    let val = 12;
+    unsafe {
+        *BUFFER = val;
+        *(BUFFER.offset(1)) = val;
+    }
+}
