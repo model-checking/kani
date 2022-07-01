@@ -14,6 +14,5 @@ fn test_write() {
         *(BUFFER.offset(2)) = val;
         //BUFFER2 is not in the MMIO region. Expect pointer check failures.
         *BUFFER2 = val;
-
     }
 }

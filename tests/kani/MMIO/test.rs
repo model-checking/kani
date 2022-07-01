@@ -23,7 +23,6 @@ fn test_write2() {
     unsafe {
         core::ptr::write_volatile(BUFFER, val);
         core::ptr::write_volatile(BUFFER2, val);
-
     }
 }
 
