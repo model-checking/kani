@@ -4,6 +4,7 @@
 
 #![allow(dead_code)]
 #![allow(unused_variables)]
+#![feature(generic_const_exprs)]
 
 mod descriptor_permission_checker;
 use descriptor_permission_checker::*;
@@ -42,6 +43,7 @@ impl GuestMemoryMmap {
     fn read_obj<T>(&self, addr: GuestAddress) -> Result<T, Error>
     where
         T: ByteValued + kani::Invariant + ReadObjChecks<T>,
+        [(); std::mem::size_of::<T>()]:,
     {
         if kani::any() {
             let val = kani::any::<T>();
