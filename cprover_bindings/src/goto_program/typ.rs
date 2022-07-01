@@ -32,7 +32,7 @@ pub enum Type {
     /// `return_type x(parameters)`
     Code { parameters: Vec<Parameter>, return_type: Box<Type> },
     /// `__attribute__(constructor)`. Only valid as a function return type.
-    /// https://gcc.gnu.org/onlinedocs/gcc-4.7.0/gcc/Function-Attributes.html
+    /// <https://gcc.gnu.org/onlinedocs/gcc-4.7.0/gcc/Function-Attributes.html>
     Constructor,
     /// `double`
     Double,
@@ -185,7 +185,7 @@ impl DatatypeComponent {
     }
 
     pub fn field<T: Into<InternedString>>(name: T, typ: Type) -> Self {
-        // TODO https://github.com/model-checking/kani/issues/1243
+        // TODO <https://github.com/model-checking/kani/issues/1243>
         // assert!(
         //     Self::typecheck_datatype_field(&typ),
         //     "Illegal field.\n\tName: {}\n\tType: {:?}",
@@ -819,7 +819,7 @@ impl Type {
     /// }
     /// ```
     /// Since they have different padding.
-    /// https://github.com/diffblue/cbmc/blob/develop/src/solvers/lowering/byte_operators.cpp#L1093..L1136
+    /// <https://github.com/diffblue/cbmc/blob/develop/src/solvers/lowering/byte_operators.cpp#L1093..L1136>
     pub fn is_structurally_equivalent_to(&self, other: &Type, st: &SymbolTable) -> bool {
         let concrete_other = other.unwrap_typedef();
         let concrete_self = self.unwrap_typedef();

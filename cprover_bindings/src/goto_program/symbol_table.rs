@@ -5,7 +5,7 @@ use super::{BuiltinFn, Stmt, Symbol};
 use crate::InternedString;
 use std::collections::BTreeMap;
 /// This is a typesafe implementation of the CBMC symbol table, based on the CBMC code at:
-/// https://github.com/diffblue/cbmc/blob/develop/src/util/symbol_table.h
+/// <https://github.com/diffblue/cbmc/blob/develop/src/util/symbol_table.h>
 /// Since the field is kept private, with only immutable references handed out, elements can only
 #[derive(Clone, Debug)]
 pub struct SymbolTable {
