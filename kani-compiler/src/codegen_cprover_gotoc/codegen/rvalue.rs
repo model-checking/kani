@@ -608,7 +608,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// This handles all kinds of casts, except a limited subset that are instead
-    /// handled by [`codegen_pointer_cast`].
+    /// handled by [`Self::codegen_pointer_cast`].
     fn codegen_misc_cast(&mut self, src: &Operand<'tcx>, dst_t: Ty<'tcx>) -> Expr {
         let src_t = self.operand_ty(src);
         debug!(
@@ -688,7 +688,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// "Pointer casts" are particular kinds of pointer-to-pointer casts.
     /// See the [`PointerCast`] type for specifics.
     /// Note that this does not include all casts involving pointers,
-    /// many of which are instead handled by [`codegen_misc_cast`] instead.
+    /// many of which are instead handled by [`Self::codegen_misc_cast`] instead.
     pub fn codegen_pointer_cast(
         &mut self,
         k: &PointerCast,
