@@ -11,6 +11,7 @@
 // proc_macro::quote is nightly-only, so we'll cobble things together instead
 use proc_macro::{
     Ident,
+    Group,
     TokenStream,
     TokenTree,
 };
@@ -97,7 +98,7 @@ pub fn kani_proptest_translate(input: TokenStream) -> TokenStream {
     const REWRITE_FROM : &str = "proptest";
     const REWRITE_TO : &str = "kani_proptest";
 
-    if std::env::var_os("CARGO_CFG_KANI").is_some() {
+    fn translate_recursive_helper(input: TokenStream) -> TokenStream {
         input.into_iter()
             .fold(
                 (TokenStream::new(), None),
@@ -129,11 +130,22 @@ pub fn kani_proptest_translate(input: TokenStream) -> TokenStream {
                         acc.extend(vec![TokenTree::Punct(punctuation)]);
                         (acc, None)
                     }
+                } else if let TokenTree::Group(group) = cur {
+                    let delimiter = group.delimiter();
+                    let stream = translate_recursive_helper(group.stream());
+                    acc.extend(vec![TokenTree::Group(Group::new(delimiter, stream))]);
+                    (acc, None)
                 } else {
                     acc.extend(vec![cur]);
                     (acc, None)
                 }
             ).0
+    }
+
+
+    if std::env::var_os("CARGO_CFG_KANI").is_some() {
+        let result = translate_recursive_helper(input);
+        panic!("{}", result)
     } else {
         input
     }
