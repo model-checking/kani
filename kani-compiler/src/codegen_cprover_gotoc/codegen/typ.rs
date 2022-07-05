@@ -607,9 +607,12 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Slice(e) => self.codegen_ty(*e).flexible_array_of(),
             ty::Str => Type::c_char().flexible_array_of(),
             ty::Ref(_, t, _) | ty::RawPtr(ty::TypeAndMut { ty: t, .. }) => self.codegen_ty_ref(*t),
-            ty::FnDef(_, _) => {
-                let sig = self.monomorphize(ty.fn_sig(self.tcx));
-                self.codegen_function_sig(sig)
+            ty::FnDef(def_id, substs) => {
+                let instance =
+                    Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), *def_id, substs)
+                        .unwrap()
+                        .unwrap();
+                self.ensure_fndef_zst(instance)
             }
             ty::FnPtr(sig) => self.codegen_function_sig(*sig).to_pointer(),
             ty::Closure(_, subst) => self.codegen_ty_closure(ty, subst),
@@ -1359,7 +1362,6 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Whether a variable of type ty should be ignored as a parameter to a function
     pub fn ignore_var_ty(&self, ty: Ty<'tcx>) -> bool {
         match ty.kind() {
-            ty::FnDef(_, _) => true,
             // Ignore variables of the generator type until we add support for
             // them:
             // https://github.com/model-checking/kani/issues/416

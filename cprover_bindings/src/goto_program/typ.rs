@@ -185,13 +185,12 @@ impl DatatypeComponent {
     }
 
     pub fn field<T: Into<InternedString>>(name: T, typ: Type) -> Self {
-        // TODO https://github.com/model-checking/kani/issues/1243
-        // assert!(
-        //     Self::typecheck_datatype_field(&typ),
-        //     "Illegal field.\n\tName: {}\n\tType: {:?}",
-        //     name.into(),
-        //     typ
-        // );
+        assert!(
+            Self::typecheck_datatype_field(&typ),
+            "Illegal field.\n\tName: {}\n\tType: {:?}",
+            name.into(),
+            typ
+        );
         let name = name.into();
         Field { name, typ }
     }

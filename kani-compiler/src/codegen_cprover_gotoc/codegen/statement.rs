@@ -440,7 +440,13 @@ impl<'tcx> GotocCtx<'tcx> {
                     | InstanceDef::ReifyShim(..)
                     | InstanceDef::ClosureOnceShim { .. }
                     | InstanceDef::CloneShim(..) => {
-                        let func_exp = self.codegen_operand(func);
+                        // We need to codegen the operand normally even though we discard the result
+                        // because we need to ensure the symbol table is updated correctly.
+                        // (When deleted, the function `lang_start_internal` is not found anymore when running `cargo kani`.)
+                        let _ = self.codegen_operand(func);
+                        // We need to handle FnDef items specially because we compile them to dummy structs.
+                        let (func_name, funct) = self.ensure_func(instance);
+                        let func_exp = Expr::symbol_expression(func_name, funct);
                         vec![
                             self.codegen_expr_to_place(destination, func_exp.call(fargs))
                                 .with_location(loc),

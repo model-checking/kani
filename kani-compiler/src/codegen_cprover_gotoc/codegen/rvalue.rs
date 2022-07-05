@@ -696,7 +696,21 @@ impl<'tcx> GotocCtx<'tcx> {
         t: Ty<'tcx>,
     ) -> Expr {
         match k {
-            PointerCast::ReifyFnPointer => self.codegen_operand(o).address_of(),
+            PointerCast::ReifyFnPointer => match self.operand_ty(o).kind() {
+                ty::FnDef(def_id, substs) => {
+                    // To be safe, run normal codegen to ensure the symbol table is updated as normally.
+                    // Maybe this isn't necessary though?
+                    let _ = self.codegen_operand(o);
+                    // Resolve the function and create a pointer to it:
+                    let instance =
+                        Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), *def_id, substs)
+                            .unwrap()
+                            .unwrap();
+                    let (func, funct) = self.ensure_func(instance);
+                    Expr::symbol_expression(func, funct).address_of()
+                }
+                _ => unreachable!(),
+            },
             PointerCast::UnsafeFnPointer => self.codegen_operand(o),
             PointerCast::ClosureFnPointer(_) => {
                 let dest_typ = self.codegen_ty(t);

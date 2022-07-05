@@ -340,7 +340,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> Expr {
         let instance =
             Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), d, substs).unwrap().unwrap();
-        self.codegen_func_expr(instance, span)
+        self.codegen_func_expr_zst(instance, span)
     }
 
     fn codegen_alloc_pointer(
@@ -618,7 +618,7 @@ impl<'tcx> GotocCtx<'tcx> {
         self.find_function(&fname).unwrap().call(vec![init])
     }
 
-    pub fn codegen_func_expr(&mut self, instance: Instance<'tcx>, span: Option<&Span>) -> Expr {
+    pub fn ensure_func(&mut self, instance: Instance<'tcx>) -> (String, Type) {
         let func = self.symbol_name(instance);
         let funct = self.codegen_function_sig(self.fn_sig_of_instance(instance).unwrap());
         // make sure the functions imported from other modules are in the symbol table
@@ -632,6 +632,41 @@ impl<'tcx> GotocCtx<'tcx> {
             )
             .with_is_extern(true)
         });
+        (func, funct)
+    }
+
+    /// For a given function instance, generates an expression for the function symbol of type Code.
+    pub fn codegen_func_expr(&mut self, instance: Instance<'tcx>, span: Option<&Span>) -> Expr {
+        let (func, funct) = self.ensure_func(instance);
         Expr::symbol_expression(func, funct).with_location(self.codegen_span_option(span.cloned()))
+    }
+
+    /// For a given function instance, generates a zero-sized dummy symbol (because FnDefs are zero-sized).
+    pub fn codegen_func_expr_zst(&mut self, instance: Instance<'tcx>, span: Option<&Span>) -> Expr {
+        let (func, _funct) = self.ensure_func(instance);
+        let fn_struct_ty = self.ensure_fndef_zst(instance);
+        // This zero-sized object that a function name refers to in Rust is globally unique, so we create such a global object.
+        let fn_singleton_name = format!("{func}::FnDefSingleton");
+        let fn_singleton = self.ensure_global_var(
+            &fn_singleton_name,
+            false,
+            fn_struct_ty.clone(),
+            Location::none(),
+            |_, _| None, // zero-sized, so no initialization necessary
+        );
+        fn_singleton.with_location(self.codegen_span_option(span.cloned()))
+    }
+
+    /// Creates a zero-sized struct for a FnDef.
+    ///
+    /// A FnDef instance in Rust is a zero-sized type, which can be passed around directly, without creating a pointer.
+    /// To mirror this in GotoC, we create a dummy struct for the function, similarly to what we do for closures.
+    pub fn ensure_fndef_zst(&mut self, instance: Instance<'tcx>) -> Type {
+        let func = self.symbol_name(instance);
+        self.ensure_struct(
+            format!("{func}::FnDefStruct"),
+            Some(self.readable_instance_name(instance)),
+            |_, _| vec![],
+        )
     }
 }
