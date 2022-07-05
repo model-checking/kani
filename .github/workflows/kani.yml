@@ -26,25 +26,6 @@ jobs:
       - name: Execute Kani regression
         run: ./scripts/kani-regression.sh
 
-  documentation:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [macos-10.15, ubuntu-18.04, ubuntu-20.04]
-    steps:
-      - name: Checkout Kani
-        uses: actions/checkout@v2
-
-      - name: Setup Kani Dependencies
-        uses: ./.github/actions/setup
-        with:
-            os: ${{ matrix.os }}
-
-      - name: Build Kani documentation
-        run: |
-          export RUST_BACKTRACE=1
-          cargo doc --workspace
-
   perf:
     runs-on: ubuntu-20.04
     steps:
