@@ -703,7 +703,11 @@ pub trait Transformer: Sized {
     fn transform_value(&mut self, value: &SymbolValues) -> SymbolValues {
         match value {
             SymbolValues::None => SymbolValues::None,
-            SymbolValues::Contract => todo!(),
+            SymbolValues::Contract(variables, requires, ensures) => SymbolValues::Contract(
+                self.transform_expr(variables),
+                self.transform_expr(requires),
+                self.transform_expr(ensures),
+            ),
             SymbolValues::Expr(expr) => SymbolValues::Expr(self.transform_expr(expr)),
             SymbolValues::Stmt(stmt) => SymbolValues::Stmt(self.transform_stmt(stmt)),
         }

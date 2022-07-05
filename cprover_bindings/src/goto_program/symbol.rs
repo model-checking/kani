@@ -56,7 +56,7 @@ pub enum SymbolModes {
 pub enum SymbolValues {
     Expr(Expr),
     Stmt(Stmt),
-    Contract,
+    Contract(Expr, Expr, Expr),
     None,
 }
 /// Constructors
@@ -129,26 +129,29 @@ impl Symbol {
         )
     }
 
-    // pub fn contract<T: Into<InternedString>, U: Into<InternedString>>(
-    //     name: T,
-    //     base_name: U,
-    //     typ: Type,
-    //     loc: Location,
-    // ) -> Symbol {
-    //     let name = name.into();
-    //     // Base name is the name of the function that the contract is written for.
-    //     let base_name: InternedString = base_name.into();
-    //     let pretty_name: InternedString = base_name;
-    //     Symbol::new(
-    //         name,
-    //         loc,
-    //         typ,
-    //         SymbolValues::Contract( ),
-    //         Some(base_name),
-    //         Some(pretty_name),
-    //     )
-    //     .with_is_property(true)
-    // }
+    pub fn contract<T: Into<InternedString>, U: Into<InternedString>>(
+        name: T,
+        base_name: U,
+        typ: Type,
+        variables: Expr,
+        requires: Expr,
+        ensures: Expr,
+        loc: Location,
+    ) -> Symbol {
+        let name = name.into();
+        // Base name is the name of the function that the contract is written for.
+        let base_name: InternedString = base_name.into();
+        let pretty_name: InternedString = base_name;
+        Symbol::new(
+            name,
+            loc,
+            typ,
+            SymbolValues::Contract(variables, requires, ensures),
+            Some(base_name),
+            Some(pretty_name),
+        )
+        .with_is_property(true)
+    }
 
     pub fn constant(
         name: &str,
@@ -305,6 +308,11 @@ impl Symbol {
         self
     }
 
+    pub fn with_is_property(mut self, v: bool) -> Symbol {
+        self.is_property = v;
+        self
+    }
+
     pub fn with_is_thread_local(mut self, v: bool) -> Symbol {
         self.is_thread_local = v;
         self
@@ -365,7 +373,7 @@ impl Symbol {
 impl SymbolValues {
     pub fn is_contract(&self) -> bool {
         match self {
-            SymbolValues::Contract => true,
+            SymbolValues::Contract(_, _, _) => true,
             SymbolValues::None | SymbolValues::Expr(_) | SymbolValues::Stmt(_) => false,
         }
     }
@@ -373,21 +381,23 @@ impl SymbolValues {
     pub fn is_expr(&self) -> bool {
         match self {
             SymbolValues::Expr(_) => true,
-            SymbolValues::None | SymbolValues::Contract | SymbolValues::Stmt(_) => false,
+            SymbolValues::None | SymbolValues::Contract(_, _, _) | SymbolValues::Stmt(_) => false,
         }
     }
 
     pub fn is_none(&self) -> bool {
         match self {
             SymbolValues::None => true,
-            SymbolValues::Contract | SymbolValues::Expr(_) | SymbolValues::Stmt(_) => false,
+            SymbolValues::Contract(_, _, _) | SymbolValues::Expr(_) | SymbolValues::Stmt(_) => {
+                false
+            }
         }
     }
 
     pub fn is_stmt(&self) -> bool {
         match self {
             SymbolValues::Stmt(_) => true,
-            SymbolValues::Contract | SymbolValues::Expr(_) | SymbolValues::None => false,
+            SymbolValues::Contract(_, _, _) | SymbolValues::Expr(_) | SymbolValues::None => false,
         }
     }
 }

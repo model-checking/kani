@@ -484,7 +484,7 @@ impl goto_program::Symbol {
             value: match &self.value {
                 SymbolValues::Expr(e) => e.to_irep(mm),
                 SymbolValues::Stmt(s) => s.to_irep(mm),
-                SymbolValues::Contract => Irep::nil(),
+                SymbolValues::Contract(_, _, _) => Irep::nil(),
                 SymbolValues::None => Irep::nil(),
             },
             location: self.location.to_irep(mm),
