@@ -6,7 +6,7 @@
 //! the current compilation instance's session information.
 //!
 //! c.f. CBMC code [src/ansi-c/ansi_c_internal_additions.cpp].
-//! One possible invocation of this insertion in CBMC can be found in [ansi_c_languaget::parse].
+//! One possible invocation of this insertion in CBMC can be found in \[ansi_c_languaget::parse\].
 
 use super::goto_program::{Expr, Location, Symbol, Type};
 use super::MachineModel;
