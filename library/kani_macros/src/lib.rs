@@ -9,7 +9,12 @@
 //   RUSTFLAGS="-Zcrate-attr=feature(register_tool) -Zcrate-attr=register_tool(kanitool)"
 
 // proc_macro::quote is nightly-only, so we'll cobble things together instead
-use proc_macro::TokenStream;
+use proc_macro::{
+    Ident,
+    TokenStream,
+    TokenTree,
+};
+
 
 #[cfg(all(not(kani), not(test)))]
 #[proc_macro_attribute]
@@ -72,4 +77,64 @@ pub fn unwind(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     result.extend(item);
     result
+}
+
+
+
+/// This proc macro does one of the following. (1) if kani is
+/// configured, then it substitutes all occurrences of the proptest
+/// crate with a custom kani_proptest crate. (2) otherwise, it keeps
+/// the body and pastes it in.
+///
+/// Implementation of the rewrite is done via a state machine in the
+/// .1 position of the fold accumulator. After seeing "proptest"
+/// token, it puts the span of this token in the option. If "proptest"
+/// is followed by ":" or ";", then a re-write is
+/// triggered. Otherwise, it pushes the same token and goes back to
+/// the original state until "proptest" is seen again.
+#[proc_macro]
+pub fn kani_proptest_translate(input: TokenStream) -> TokenStream {
+    const REWRITE_FROM : &str = "proptest";
+    const REWRITE_TO : &str = "kani_proptest";
+
+    if std::env::var_os("CARGO_CFG_KANI").is_some() {
+        input.into_iter()
+            .fold(
+                (TokenStream::new(), None),
+                |(mut acc, maybe_proptest_span), cur|
+                if let TokenTree::Ident(ident) = cur {
+                    if &ident.to_string() == REWRITE_FROM {
+                        (acc, Some(ident.span()))
+                    } else {
+                        acc.extend(vec![TokenTree::Ident(ident)]);
+                        (acc, maybe_proptest_span)
+                    }
+                } else if let TokenTree::Punct(punctuation) = cur {
+                    if let Some(proptest_span) = maybe_proptest_span {
+                        acc.extend(vec![
+                            TokenTree::Ident(
+                                Ident::new_raw(
+                                    if punctuation.as_char() == ':' || punctuation.as_char() == ';' {
+                                        REWRITE_TO
+                                    } else {
+                                        REWRITE_FROM
+                                    },
+                                    proptest_span
+                                )
+                            ),
+                            TokenTree::Punct(punctuation)]
+                        );
+                        (acc, None)
+                    } else {
+                        acc.extend(vec![TokenTree::Punct(punctuation)]);
+                        (acc, None)
+                    }
+                } else {
+                    acc.extend(vec![cur]);
+                    (acc, None)
+                }
+            ).0
+    } else {
+        input
+    }
 }
