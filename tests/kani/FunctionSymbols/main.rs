@@ -51,3 +51,15 @@ fn test_fn_pointer_call() {
 fn id<T>(x: T) -> T {
     x
 }
+
+struct Wrapper<T> {
+    inner: T,
+}
+
+#[kani::proof]
+fn test_fn_wrapper() {
+    let w = Wrapper { inner: id::<bool> };
+    assert!(w.inner as fn(bool) -> bool == id::<bool> as fn(bool) -> bool);
+    let x: bool = kani::any();
+    assert_eq!((w.inner)(x), x);
+}
