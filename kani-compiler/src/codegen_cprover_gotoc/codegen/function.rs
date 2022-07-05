@@ -118,7 +118,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// back to the tuple local for use in the body.
     ///
     /// See:
-    /// https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp/topic/Determine.20untupled.20closure.20args.20from.20Instance.3F
+    /// <https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp/topic/Determine.20untupled.20closure.20args.20from.20Instance.3F>
     fn codegen_function_prelude(&mut self) {
         let mir = self.current_fn().mir();
         if mir.spread_arg.is_none() {

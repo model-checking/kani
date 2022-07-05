@@ -32,7 +32,7 @@ pub enum Type {
     /// `return_type x(parameters)`
     Code { parameters: Vec<Parameter>, return_type: Box<Type> },
     /// `__attribute__(constructor)`. Only valid as a function return type.
-    /// https://gcc.gnu.org/onlinedocs/gcc-4.7.0/gcc/Function-Attributes.html
+    /// <https://gcc.gnu.org/onlinedocs/gcc-4.7.0/gcc/Function-Attributes.html>
     Constructor,
     /// `double`
     Double,
@@ -185,7 +185,7 @@ impl DatatypeComponent {
     }
 
     pub fn field<T: Into<InternedString>>(name: T, typ: Type) -> Self {
-        // TODO https://github.com/model-checking/kani/issues/1243
+        // TODO <https://github.com/model-checking/kani/issues/1243>
         // assert!(
         //     Self::typecheck_datatype_field(&typ),
         //     "Illegal field.\n\tName: {}\n\tType: {:?}",
@@ -813,13 +813,13 @@ impl Type {
     /// But, `struct foo` is not structurally equivalent to:
     /// ```
     /// __attribute__((packed))
-    /// struct baz {}
+    /// struct baz {
     ///     char x;
     ///     int y;
     /// }
     /// ```
     /// Since they have different padding.
-    /// https://github.com/diffblue/cbmc/blob/develop/src/solvers/lowering/byte_operators.cpp#L1093..L1136
+    /// <https://github.com/diffblue/cbmc/blob/develop/src/solvers/lowering/byte_operators.cpp#L1093..L1136>
     pub fn is_structurally_equivalent_to(&self, other: &Type, st: &SymbolTable) -> bool {
         let concrete_other = other.unwrap_typedef();
         let concrete_self = self.unwrap_typedef();
@@ -898,7 +898,7 @@ impl Type {
         }
     }
 
-    /// elem_t[size]
+    /// elem_t\[size\]
     pub fn array_of<T>(self, size: T) -> Self
     where
         T: TryInto<u64>,
@@ -959,7 +959,7 @@ impl Type {
         CInteger(CIntType::SSizeT)
     }
 
-    /// corresponds to [code_typet] in CBMC, representing a function type
+    /// corresponds to \[code_typet\] in CBMC, representing a function type
     ///    ret (params ..)
     pub fn code(parameters: Vec<Parameter>, return_type: Type) -> Self {
         Code { parameters, return_type: Box::new(return_type) }
@@ -1155,7 +1155,7 @@ impl Type {
         Unsignedbv { width }
     }
 
-    /// corresponds to [code_typet] in CBMC, representing a function type
+    /// corresponds to \[code_typet\] in CBMC, representing a function type
     ///    ret (params, ... )
     pub fn variadic_code(parameters: Vec<Parameter>, return_type: Type) -> Self {
         VariadicCode { parameters, return_type: Box::new(return_type) }

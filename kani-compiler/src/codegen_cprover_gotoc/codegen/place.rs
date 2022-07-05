@@ -3,7 +3,7 @@
 //! responsible for handling codegening places.
 //!
 //! a place is an expression of specifying a location in memory, like a left value. check the cases
-//! in [codegen_place] below.
+//! in [GotocCtx::codegen_place] below.
 
 use super::typ::TypeExt;
 use crate::codegen_cprover_gotoc::utils::slice_fat_ptr;
