@@ -56,6 +56,7 @@ pub enum SymbolModes {
 pub enum SymbolValues {
     Expr(Expr),
     Stmt(Stmt),
+    Contract,
     None,
 }
 /// Constructors
@@ -127,6 +128,27 @@ impl Symbol {
             Location::builtin_function(name, None),
         )
     }
+
+    // pub fn contract<T: Into<InternedString>, U: Into<InternedString>>(
+    //     name: T,
+    //     base_name: U,
+    //     typ: Type,
+    //     loc: Location,
+    // ) -> Symbol {
+    //     let name = name.into();
+    //     // Base name is the name of the function that the contract is written for.
+    //     let base_name: InternedString = base_name.into();
+    //     let pretty_name: InternedString = base_name;
+    //     Symbol::new(
+    //         name,
+    //         loc,
+    //         typ,
+    //         SymbolValues::Contract( ),
+    //         Some(base_name),
+    //         Some(pretty_name),
+    //     )
+    //     .with_is_property(true)
+    // }
 
     pub fn constant(
         name: &str,
@@ -341,24 +363,31 @@ impl Symbol {
 }
 
 impl SymbolValues {
+    pub fn is_contract(&self) -> bool {
+        match self {
+            SymbolValues::Contract => true,
+            SymbolValues::None | SymbolValues::Expr(_) | SymbolValues::Stmt(_) => false,
+        }
+    }
+
     pub fn is_expr(&self) -> bool {
         match self {
             SymbolValues::Expr(_) => true,
-            SymbolValues::None | SymbolValues::Stmt(_) => false,
+            SymbolValues::None | SymbolValues::Contract | SymbolValues::Stmt(_) => false,
         }
     }
 
     pub fn is_none(&self) -> bool {
         match self {
             SymbolValues::None => true,
-            SymbolValues::Expr(_) | SymbolValues::Stmt(_) => false,
+            SymbolValues::Contract | SymbolValues::Expr(_) | SymbolValues::Stmt(_) => false,
         }
     }
 
     pub fn is_stmt(&self) -> bool {
         match self {
             SymbolValues::Stmt(_) => true,
-            SymbolValues::Expr(_) | SymbolValues::None => false,
+            SymbolValues::Contract | SymbolValues::Expr(_) | SymbolValues::None => false,
         }
     }
 }
