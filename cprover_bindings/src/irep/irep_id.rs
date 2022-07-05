@@ -831,7 +831,7 @@ impl IrepId {
     }
 
     /// CBMC expects two's complement for negative numbers.
-    /// https://github.com/diffblue/cbmc/blob/develop/src/util/arith_tools.cpp#L401..L424
+    /// <https://github.com/diffblue/cbmc/blob/develop/src/util/arith_tools.cpp#L401..L424>
     /// The bignum crate instead does sign/magnitude when making hex.
     /// So for negatives, do the two's complement ourselves.
     pub fn bitpattern_from_int<T>(i: T, width: u64, _signed: bool) -> IrepId
