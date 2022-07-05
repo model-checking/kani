@@ -456,7 +456,7 @@ fn paths_to_string(paths: HashSet<PathBuf>) -> String {
     f
 }
 
-/// Creates a new [`Tree`] from `path`, and a test `result`.
+/// Creates a new [`bookrunner::Tree`] from `path`, and a test `result`.
 fn tree_from_path(mut path: Vec<String>, result: bool) -> bookrunner::Tree {
     assert!(!path.is_empty(), "Error: `path` must contain at least 1 element.");
     let mut tree = bookrunner::Tree::new(

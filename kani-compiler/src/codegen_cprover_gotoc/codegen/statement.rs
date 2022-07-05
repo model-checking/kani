@@ -251,7 +251,7 @@ impl<'tcx> GotocCtx<'tcx> {
         Stmt::block(block, Location::none())
     }
 
-    /// https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/terminator/enum.TerminatorKind.html#variant.SwitchInt
+    /// <https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/terminator/enum.TerminatorKind.html#variant.SwitchInt>
     /// Operand evaluates to an integer;
     /// jump depending on its value to one of the targets, and otherwise fallback to otherwise.
     /// The otherwise value is stores as the last value of targets.
