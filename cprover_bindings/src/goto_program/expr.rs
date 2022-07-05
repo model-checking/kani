@@ -104,6 +104,10 @@ pub enum ExprValue {
     },
     /// `123`
     IntConstant(BigInt),
+    Lambda {
+        variables: Expr,
+        body: Expr,
+    },
     /// `lhs.field`
     Member {
         lhs: Expr,
@@ -137,6 +141,9 @@ pub enum ExprValue {
     /// `self`
     Symbol {
         identifier: InternedString,
+    },
+    Tuple {
+        operands: Vec<Expr>,
     },
     /// `(typ) self`. Target type is in the outer `Expr` struct.
     Typecast(Expr),
@@ -409,6 +416,14 @@ impl Expr {
             unreachable!("Can't make an array_val with non-array target type {:?}", typ);
         }
         expr!(Array { elems }, typ)
+    }
+
+    pub fn lambda(typ: Type, variables: Expr, body: Expr) -> Self {
+        expr!(Lambda { variables, body }, typ)
+    }
+
+    pub fn tuple(typ: Type, operands: Vec<Expr>) -> Self {
+        expr!(Tuple { operands }, typ)
     }
 
     pub fn vector_expr(typ: Type, elems: Vec<Expr>) -> Self {
@@ -1388,6 +1403,14 @@ impl Expr {
         expr!(StringConstant { s }, Type::c_char().array_of(s.len() + 1)).array_to_ptr()
     }
 }
+
+impl Expr {
+    pub fn as_lambda_expression(&self, variables: &[Expr]) -> Expr {
+        let operands = Expr::tuple(self.typ.clone(), variables.to_vec());
+        Expr::lambda(self.typ.clone(), operands, self.clone())
+    }
+}
+
 /// Conversions to statements
 /// The statement constructors do typechecking, so we don't redundantly do that here.
 impl Expr {

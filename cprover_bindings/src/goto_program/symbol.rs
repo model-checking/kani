@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use super::super::utils::aggr_tag;
-use super::{DatatypeComponent, Expr, Location, Parameter, Stmt, Type};
+use super::{Contract, DatatypeComponent, Expr, Location, Parameter, Stmt, Type};
 use crate::{InternStringOption, InternedString};
 
 /// Based off the CBMC symbol implementation here:
@@ -56,7 +56,7 @@ pub enum SymbolModes {
 pub enum SymbolValues {
     Expr(Expr),
     Stmt(Stmt),
-    Contract(Expr, Expr, Expr),
+    Contract(Contract),
     None,
 }
 /// Constructors
@@ -133,9 +133,7 @@ impl Symbol {
         name: T,
         base_name: U,
         typ: Type,
-        variables: Expr,
-        requires: Expr,
-        ensures: Expr,
+        contract: Contract,
         loc: Location,
     ) -> Symbol {
         let name = name.into();
@@ -146,7 +144,7 @@ impl Symbol {
             name,
             loc,
             typ,
-            SymbolValues::Contract(variables, requires, ensures),
+            SymbolValues::Contract(contract),
             Some(base_name),
             Some(pretty_name),
         )
@@ -373,7 +371,7 @@ impl Symbol {
 impl SymbolValues {
     pub fn is_contract(&self) -> bool {
         match self {
-            SymbolValues::Contract(_, _, _) => true,
+            SymbolValues::Contract(_) => true,
             SymbolValues::None | SymbolValues::Expr(_) | SymbolValues::Stmt(_) => false,
         }
     }
@@ -381,23 +379,21 @@ impl SymbolValues {
     pub fn is_expr(&self) -> bool {
         match self {
             SymbolValues::Expr(_) => true,
-            SymbolValues::None | SymbolValues::Contract(_, _, _) | SymbolValues::Stmt(_) => false,
+            SymbolValues::None | SymbolValues::Contract(_) | SymbolValues::Stmt(_) => false,
         }
     }
 
     pub fn is_none(&self) -> bool {
         match self {
             SymbolValues::None => true,
-            SymbolValues::Contract(_, _, _) | SymbolValues::Expr(_) | SymbolValues::Stmt(_) => {
-                false
-            }
+            SymbolValues::Contract(_) | SymbolValues::Expr(_) | SymbolValues::Stmt(_) => false,
         }
     }
 
     pub fn is_stmt(&self) -> bool {
         match self {
             SymbolValues::Stmt(_) => true,
-            SymbolValues::Contract(_, _, _) | SymbolValues::Expr(_) | SymbolValues::None => false,
+            SymbolValues::Contract(_) | SymbolValues::Expr(_) | SymbolValues::None => false,
         }
     }
 }

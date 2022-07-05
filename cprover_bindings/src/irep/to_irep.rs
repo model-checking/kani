@@ -244,6 +244,11 @@ impl ToIrep for ExprValue {
             ExprValue::IntConstant(_) => {
                 unreachable!("Should have been processed in previous step")
             }
+            ExprValue::Lambda { variables, body } => Irep {
+                id: IrepId::Lambda,
+                sub: vec![variables.to_irep(mm), body.to_irep(mm)],
+                named_sub: linear_map![],
+            },
             ExprValue::Member { lhs, field } => Irep {
                 id: IrepId::Member,
                 sub: vec![lhs.to_irep(mm)],
@@ -288,6 +293,11 @@ impl ToIrep for ExprValue {
                     IrepId::Identifier,
                     Irep::just_string_id(identifier.to_string()),
                 )],
+            },
+            ExprValue::Tuple { operands } => Irep {
+                id: IrepId::Tuple,
+                sub: operands.iter().map(|x| x.to_irep(mm)).collect(),
+                named_sub: linear_map![(IrepId::Tuple, Irep::just_id(IrepId::Tuple))],
             },
             ExprValue::Typecast(e) => {
                 Irep { id: IrepId::Typecast, sub: vec![e.to_irep(mm)], named_sub: linear_map![] }
@@ -480,11 +490,11 @@ impl ToIrep for SwitchCase {
 impl goto_program::Symbol {
     pub fn to_irep(&self, mm: &MachineModel) -> super::Symbol {
         super::Symbol {
-            typ: self.typ.to_irep(mm),
+            typ: self.typ.to_irep(mm).with_contract(&self.typ, &self.value, mm),
             value: match &self.value {
                 SymbolValues::Expr(e) => e.to_irep(mm),
                 SymbolValues::Stmt(s) => s.to_irep(mm),
-                SymbolValues::Contract(_, _, _) => Irep::nil(),
+                SymbolValues::Contract(_) => Irep::nil(),
                 SymbolValues::None => Irep::nil(),
             },
             location: self.location.to_irep(mm),

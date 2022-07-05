@@ -265,6 +265,7 @@ pub trait Transformer: Sized {
             ExprValue::Index { array, index } => self.transform_expr_index(typ, array, index),
             ExprValue::IntConstant(value) => self.transform_expr_int_constant(typ, value),
             ExprValue::Member { lhs, field } => self.transform_expr_member(typ, lhs, *field),
+            ExprValue::Lambda { variables, body } => todo!(),
             ExprValue::Nondet => self.transform_expr_nondet(typ),
             ExprValue::PointerConstant(value) => self.transform_expr_pointer_constant(typ, value),
             ExprValue::SelfOp { op, e } => self.transform_expr_self_op(typ, op, e),
@@ -274,6 +275,7 @@ pub trait Transformer: Sized {
             ExprValue::StringConstant { s } => self.transform_expr_string_constant(typ, *s),
             ExprValue::Struct { values } => self.transform_expr_struct(typ, values),
             ExprValue::Symbol { identifier } => self.transform_expr_symbol(typ, *identifier),
+            ExprValue::Tuple { operands } => todo!(),
             ExprValue::Typecast(child) => self.transform_expr_typecast(typ, child),
             ExprValue::Union { value, field } => self.transform_expr_union(typ, value, *field),
             ExprValue::UnOp { op, e } => self.transform_expr_un_op(typ, op, e),
@@ -703,11 +705,7 @@ pub trait Transformer: Sized {
     fn transform_value(&mut self, value: &SymbolValues) -> SymbolValues {
         match value {
             SymbolValues::None => SymbolValues::None,
-            SymbolValues::Contract(variables, requires, ensures) => SymbolValues::Contract(
-                self.transform_expr(variables),
-                self.transform_expr(requires),
-                self.transform_expr(ensures),
-            ),
+            SymbolValues::Contract(contract) => SymbolValues::Contract(todo!()),
             SymbolValues::Expr(expr) => SymbolValues::Expr(self.transform_expr(expr)),
             SymbolValues::Stmt(stmt) => SymbolValues::Stmt(self.transform_stmt(stmt)),
         }

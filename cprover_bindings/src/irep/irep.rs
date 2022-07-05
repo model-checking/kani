@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! The actual `Irep` structure, and associated constructors, getters, and setters.
 
-use super::super::goto_program::{Location, Type};
+use super::super::goto_program::{Contract, Location, SymbolValues, Type};
 use super::super::MachineModel;
 use super::{IrepId, ToIrep};
 use crate::cbmc_string::InternedString;
@@ -36,6 +36,32 @@ impl Irep {
 
 /// Fluent Builders
 impl Irep {
+    pub fn with_contract(self, typ: &Type, value: &SymbolValues, mm: &MachineModel) -> Self {
+        match value {
+            SymbolValues::Contract(Contract::FunctionContract { variables, requires, ensures }) => {
+                self.with_named_sub(
+                    IrepId::CSpecEnsures,
+                    Irep::just_sub(
+                        ensures
+                            .iter()
+                            .map(|clause| clause.as_lambda_expression(variables).to_irep(mm))
+                            .collect(),
+                    ),
+                )
+                .with_named_sub(
+                    IrepId::CSpecRequires,
+                    Irep::just_sub(
+                        requires
+                            .iter()
+                            .map(|clause| clause.as_lambda_expression(variables).to_irep(mm))
+                            .collect(),
+                    ),
+                )
+            }
+            _ => self,
+        }
+    }
+
     pub fn with_location(self, l: &Location, mm: &MachineModel) -> Self {
         if !l.is_none() {
             self.with_named_sub(IrepId::CSourceLocation, l.to_irep(mm))
