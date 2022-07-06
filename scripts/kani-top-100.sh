@@ -67,7 +67,7 @@ function print_errors_for_each_repo_result {
     IS_FAIL='0'
 
     error_code="$(cat $DIRECTORY/$EXIT_CODE_SUFFIX)"
-    if ! [ "$error_code" = "0" ]; then
+    if [ "$error_code" != "0" ]; then
         echo -e "Error exit: code $error_code\n"
         IS_FAIL='1'
     fi
