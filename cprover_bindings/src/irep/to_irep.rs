@@ -244,7 +244,7 @@ impl ToIrep for ExprValue {
             ExprValue::IntConstant(_) => {
                 unreachable!("Should have been processed in previous step")
             }
-            ExprValue::Lambda { variables, body } => Irep {
+            ExprValue::LambdaExpression { variables, body } => Irep {
                 id: IrepId::Lambda,
                 sub: vec![variables.to_irep(mm), body.to_irep(mm)],
                 named_sub: linear_map![],
@@ -296,8 +296,8 @@ impl ToIrep for ExprValue {
             },
             ExprValue::Tuple { operands } => Irep {
                 id: IrepId::Tuple,
-                sub: operands.iter().map(|x| x.to_irep(mm)).collect(),
-                named_sub: linear_map![(IrepId::Tuple, Irep::just_id(IrepId::Tuple))],
+                sub: operands.iter().map(|op| op.to_irep(mm)).collect(),
+                named_sub: linear_map![(IrepId::Type, Irep::just_id(IrepId::Tuple))],
             },
             ExprValue::Typecast(e) => {
                 Irep { id: IrepId::Typecast, sub: vec![e.to_irep(mm)], named_sub: linear_map![] }
@@ -490,7 +490,7 @@ impl ToIrep for SwitchCase {
 impl goto_program::Symbol {
     pub fn to_irep(&self, mm: &MachineModel) -> super::Symbol {
         super::Symbol {
-            typ: self.typ.to_irep(mm).with_contract(&self.typ, &self.value, mm),
+            typ: self.typ.to_irep(mm).with_contract(&self.value, mm),
             value: match &self.value {
                 SymbolValues::Expr(e) => e.to_irep(mm),
                 SymbolValues::Stmt(s) => s.to_irep(mm),
@@ -653,6 +653,14 @@ impl ToIrep for Type {
                     named_sub: linear_map![(IrepId::Size, infinity)],
                 }
             }
+            Type::MathematicalFunction { codomain, domain } => Irep {
+                id: IrepId::MathematicalFunction,
+                sub: vec![
+                    Irep::just_sub(domain.iter().map(|x| x.to_irep(mm)).collect()),
+                    codomain.to_irep(mm),
+                ],
+                named_sub: linear_map![],
+            },
             Type::Pointer { typ } => Irep {
                 id: IrepId::Pointer,
                 sub: vec![typ.to_irep(mm)],

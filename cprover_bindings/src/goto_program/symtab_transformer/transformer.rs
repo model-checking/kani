@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use crate::goto_program::{
-    BinaryOperand, CIntType, DatatypeComponent, Expr, ExprValue, Location, Parameter, SelfOperand,
-    Stmt, StmtBody, SwitchCase, Symbol, SymbolTable, SymbolValues, Type, UnaryOperand,
+    BinaryOperand, CIntType, Contract, DatatypeComponent, Expr, ExprValue, Location, Parameter,
+    SelfOperand, Stmt, StmtBody, SwitchCase, Symbol, SymbolTable, SymbolValues, Type, UnaryOperand,
 };
 use crate::InternedString;
 use num::bigint::BigInt;
@@ -54,6 +54,9 @@ pub trait Transformer: Sized {
             Type::IncompleteStruct { tag } => self.transform_type_incomplete_struct(*tag),
             Type::IncompleteUnion { tag } => self.transform_type_incomplete_union(*tag),
             Type::InfiniteArray { typ } => self.transform_type_infinite_array(typ),
+            Type::MathematicalFunction { domain, codomain } => {
+                self.transform_type_mathematical_function(domain, codomain)
+            }
             Type::Pointer { typ } => self.transform_type_pointer(typ),
             Type::Signedbv { width } => self.transform_type_signedbv(width),
             Type::Struct { tag, components } => self.transform_type_struct(*tag, components),
@@ -153,6 +156,19 @@ pub trait Transformer: Sized {
         transformed_typ.infinite_array_of()
     }
 
+    fn transform_type_mathematical_function(
+        &mut self,
+        domain: &Vec<Type>,
+        codomain: &Type,
+    ) -> Type {
+        let transformed_domain: Vec<Type> = domain.iter().map(|x| self.transform_type(x)).collect();
+        let transformed_codomain = self.transform_type(codomain);
+        Type::MathematicalFunction {
+            domain: transformed_domain,
+            codomain: Box::new(transformed_codomain),
+        }
+    }
+
     /// Transforms a pointer type (`typ*`)
     fn transform_type_pointer(&mut self, typ: &Type) -> Type {
         let transformed_typ = self.transform_type(typ);
@@ -239,6 +255,24 @@ pub trait Transformer: Sized {
         transformed_typ.to_typedef(tag)
     }
 
+    fn transform_contract(&mut self, c: &Contract) -> Contract {
+        match c {
+            Contract::FunctionContract { ensures, requires, variables } => {
+                let transformed_ensures: Vec<Expr> =
+                    ensures.iter().map(|clause| self.transform_expr(clause)).collect();
+                let transformed_requires: Vec<Expr> =
+                    requires.iter().map(|clause| self.transform_expr(clause)).collect();
+                let transformed_variables: Vec<Expr> =
+                    variables.iter().map(|v| self.transform_expr(v)).collect();
+                Contract::FunctionContract {
+                    ensures: transformed_ensures,
+                    requires: transformed_requires,
+                    variables: transformed_variables,
+                }
+            }
+        }
+    }
+
     /// Perform recursive descent on a `Expr` data structure.
     /// Extracts the variant's field data, and passes them into
     /// the corresponding expr transformer method along with the expr type.
@@ -264,8 +298,10 @@ pub trait Transformer: Sized {
             ExprValue::If { c, t, e } => self.transform_expr_if(typ, c, t, e),
             ExprValue::Index { array, index } => self.transform_expr_index(typ, array, index),
             ExprValue::IntConstant(value) => self.transform_expr_int_constant(typ, value),
+            ExprValue::LambdaExpression { variables, body } => {
+                self.transform_expr_lambda_expression(typ, variables, body)
+            }
             ExprValue::Member { lhs, field } => self.transform_expr_member(typ, lhs, *field),
-            ExprValue::Lambda { variables, body } => todo!(),
             ExprValue::Nondet => self.transform_expr_nondet(typ),
             ExprValue::PointerConstant(value) => self.transform_expr_pointer_constant(typ, value),
             ExprValue::SelfOp { op, e } => self.transform_expr_self_op(typ, op, e),
@@ -275,7 +311,7 @@ pub trait Transformer: Sized {
             ExprValue::StringConstant { s } => self.transform_expr_string_constant(typ, *s),
             ExprValue::Struct { values } => self.transform_expr_struct(typ, values),
             ExprValue::Symbol { identifier } => self.transform_expr_symbol(typ, *identifier),
-            ExprValue::Tuple { operands } => todo!(),
+            ExprValue::Tuple { operands } => self.transform_expr_tuple(typ, operands),
             ExprValue::Typecast(child) => self.transform_expr_typecast(typ, child),
             ExprValue::Union { value, field } => self.transform_expr_union(typ, value, *field),
             ExprValue::UnOp { op, e } => self.transform_expr_un_op(typ, op, e),
@@ -294,6 +330,18 @@ pub trait Transformer: Sized {
         let transformed_typ = self.transform_type(typ);
         let transformed_elems = elems.iter().map(|elem| self.transform_expr(elem)).collect();
         Expr::array_expr(transformed_typ, transformed_elems)
+    }
+
+    fn transform_expr_lambda_expression(
+        &mut self,
+        typ: &Type,
+        variables: &Expr,
+        body: &Expr,
+    ) -> Expr {
+        let transformed_typ = self.transform_type(typ);
+        let transformed_variables = self.transform_expr(variables);
+        let transformed_body = self.transform_expr(body);
+        Expr::lambda_expression(transformed_typ, transformed_variables, transformed_body)
     }
 
     /// Transform a vector expr (`vec_typ x[] = >>> {elems0, elems1 ...} <<<`)
@@ -464,6 +512,12 @@ pub trait Transformer: Sized {
     fn transform_expr_symbol(&mut self, typ: &Type, identifier: InternedString) -> Expr {
         let transformed_typ = self.transform_type(typ);
         Expr::symbol_expression(identifier, transformed_typ)
+    }
+
+    fn transform_expr_tuple(&mut self, typ: &Type, operands: &Vec<Expr>) -> Expr {
+        let transformed_typ = self.transform_type(typ);
+        let transformed_operands = operands.iter().map(|op| self.transform_expr(op)).collect();
+        Expr::tuple_expr(transformed_typ, transformed_operands)
     }
 
     /// Transforms a typecast expr (`(typ) self`)
@@ -705,7 +759,9 @@ pub trait Transformer: Sized {
     fn transform_value(&mut self, value: &SymbolValues) -> SymbolValues {
         match value {
             SymbolValues::None => SymbolValues::None,
-            SymbolValues::Contract(contract) => SymbolValues::Contract(todo!()),
+            SymbolValues::Contract(contract) => {
+                SymbolValues::Contract(self.transform_contract(contract))
+            }
             SymbolValues::Expr(expr) => SymbolValues::Expr(self.transform_expr(expr)),
             SymbolValues::Stmt(stmt) => SymbolValues::Stmt(self.transform_stmt(stmt)),
         }

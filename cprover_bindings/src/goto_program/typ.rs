@@ -22,15 +22,24 @@ use std::fmt::Debug;
 #[derive(PartialEq, Debug, Clone)]
 pub enum Type {
     /// `typ x[size]`. E.g. `unsigned int x[3]`
-    Array { typ: Box<Type>, size: u64 },
+    Array {
+        typ: Box<Type>,
+        size: u64,
+    },
     /// CBMC specific. `__CPROVER_bool x`. A single bit boolean
     Bool,
     /// `typ x : width`. e.g. `unsigned int x: 3`.
-    CBitField { typ: Box<Type>, width: u64 },
+    CBitField {
+        typ: Box<Type>,
+        width: u64,
+    },
     /// Machine dependent integers: `bool`, `char`, `int`, `size_t`, etc.
     CInteger(CIntType),
     /// `return_type x(parameters)`
-    Code { parameters: Vec<Parameter>, return_type: Box<Type> },
+    Code {
+        parameters: Vec<Parameter>,
+        return_type: Box<Type>,
+    },
     /// `__attribute__(constructor)`. Only valid as a function return type.
     /// <https://gcc.gnu.org/onlinedocs/gcc-4.7.0/gcc/Function-Attributes.html>
     Constructor,
@@ -39,37 +48,70 @@ pub enum Type {
     /// `void`
     Empty,
     /// `typ x[]`. Has a type, but no size. Only valid as the last element of a struct.
-    FlexibleArray { typ: Box<Type> },
+    FlexibleArray {
+        typ: Box<Type>,
+    },
     /// `float`
     Float,
     /// `struct x {}`
-    IncompleteStruct { tag: InternedString },
+    IncompleteStruct {
+        tag: InternedString,
+    },
     /// `union x {}`
-    IncompleteUnion { tag: InternedString },
+    IncompleteUnion {
+        tag: InternedString,
+    },
     /// CBMC specific. `typ x[__CPROVER_infinity()]`
-    InfiniteArray { typ: Box<Type> },
+    InfiniteArray {
+        typ: Box<Type>,
+    },
+    MathematicalFunction {
+        domain: Vec<Type>,
+        codomain: Box<Type>,
+    },
     /// `typ*`
-    Pointer { typ: Box<Type> },
+    Pointer {
+        typ: Box<Type>,
+    },
     /// `int<width>_t`. e.g. `int32_t`
-    Signedbv { width: u64 },
+    Signedbv {
+        width: u64,
+    },
     /// `struct tag {component1.typ component1.name; component2.typ component2.name ... }`
-    Struct { tag: InternedString, components: Vec<DatatypeComponent> },
+    Struct {
+        tag: InternedString,
+        components: Vec<DatatypeComponent>,
+    },
     /// CBMC specific. A reference into the symbol table, where the tag is the name of the symbol.
     StructTag(InternedString),
     /// Typedef construct. It has a name and a type.
-    TypeDef { name: InternedString, typ: Box<Type> },
+    TypeDef {
+        name: InternedString,
+        typ: Box<Type>,
+    },
     /// `union tag {component1.typ component1.name; component2.typ component2.name ... }`
-    Union { tag: InternedString, components: Vec<DatatypeComponent> },
+    Union {
+        tag: InternedString,
+        components: Vec<DatatypeComponent>,
+    },
     /// CBMC specific. A reference into the symbol table, where the tag is the name of the symbol.
     UnionTag(InternedString),
     /// `uint<width>_t`. e.g. `uint32_t`
-    Unsignedbv { width: u64 },
+    Unsignedbv {
+        width: u64,
+    },
     /// `return_type x(parameters, ...)`
-    VariadicCode { parameters: Vec<Parameter>, return_type: Box<Type> },
+    VariadicCode {
+        parameters: Vec<Parameter>,
+        return_type: Box<Type>,
+    },
     /// Packed SIMD vectors
     /// In CBMC/gcc, variables of this type are declared as:
     /// `typ __attribute__((vector_size (size * sizeof(typ)))) var;`
-    Vector { typ: Box<Type>, size: u64 },
+    Vector {
+        typ: Box<Type>,
+        size: u64,
+    },
 }
 
 /// Machine dependent integers: `bool`, `char`, `int`, `size_t`, etc.
@@ -104,9 +146,10 @@ pub struct Parameter {
     base_name: Option<InternedString>,
 }
 
+/// Type for function contracts, loop contracts, etc.
 #[derive(Debug, Clone)]
 pub enum Contract {
-    FunctionContract { variables: Vec<Expr>, ensures: Vec<Expr>, requires: Vec<Expr> },
+    FunctionContract { ensures: Vec<Expr>, requires: Vec<Expr>, variables: Vec<Expr> },
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -183,6 +226,7 @@ impl DatatypeComponent {
             | IncompleteStruct { .. }
             | IncompleteUnion { .. }
             | InfiniteArray { .. }
+            | MathematicalFunction { .. }
             | VariadicCode { .. } => false,
 
             TypeDef { .. } => unreachable!("typedefs should have been unwrapped"),
@@ -348,6 +392,9 @@ impl Type {
             IncompleteStruct { .. } => unreachable!("IncompleteStruct doesn't have a sizeof"),
             IncompleteUnion { .. } => unreachable!("IncompleteUnion doesn't have a sizeof"),
             InfiniteArray { .. } => unreachable!("InfiniteArray doesn't have a sizeof"),
+            MathematicalFunction { .. } => {
+                unreachable!("MathematicalFunction doesn't have a sizeof")
+            }
             Pointer { .. } => st.machine_model().pointer_width,
             Signedbv { width } => *width,
             Struct { components, .. } => {
@@ -557,6 +604,7 @@ impl Type {
             | IncompleteStruct { .. }
             | IncompleteUnion { .. }
             | InfiniteArray { .. }
+            | MathematicalFunction { .. }
             | VariadicCode { .. } => false,
 
             TypeDef { .. } => unreachable!("Expected concrete type only."),
@@ -606,6 +654,7 @@ impl Type {
             | IncompleteStruct { .. }
             | IncompleteUnion { .. }
             | InfiniteArray { .. }
+            | MathematicalFunction { .. }
             | Struct { .. }
             | StructTag(_)
             | Union { .. }
@@ -896,6 +945,7 @@ impl Type {
             | IncompleteStruct { .. }
             | IncompleteUnion { .. }
             | InfiniteArray { .. }
+            | MathematicalFunction { .. }
             | VariadicCode { .. } => false,
 
             TypeDef { .. } => unreachable!("typedefs should have been unwrapped"),
@@ -1308,6 +1358,18 @@ impl Type {
             Type::IncompleteUnion { tag } => tag.to_string(),
             Type::InfiniteArray { typ } => {
                 format!("infinite_array_of_{}", typ.to_identifier())
+            }
+            Type::MathematicalFunction { domain, codomain } => {
+                let domain_string = domain
+                    .iter()
+                    .map(|domain| domain.to_identifier())
+                    .collect::<Vec<_>>()
+                    .join("_");
+                format!(
+                    "mathematical_functional_from_{}_to_{}",
+                    domain_string,
+                    codomain.to_identifier()
+                )
             }
             Type::Pointer { typ } => format!("pointer_to_{}", typ.to_identifier()),
             Type::Signedbv { width } => format!("signed_bv_{}", width),

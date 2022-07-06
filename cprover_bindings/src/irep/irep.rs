@@ -36,15 +36,23 @@ impl Irep {
 
 /// Fluent Builders
 impl Irep {
-    pub fn with_contract(self, typ: &Type, value: &SymbolValues, mm: &MachineModel) -> Self {
+    pub fn with_contract(self, value: &SymbolValues, mm: &MachineModel) -> Self {
         match value {
-            SymbolValues::Contract(Contract::FunctionContract { variables, requires, ensures }) => {
+            SymbolValues::Contract(Contract::FunctionContract { ensures, requires, variables }) => {
+                let lambda_typ = Type::MathematicalFunction {
+                    domain: variables.to_vec().iter().map(|v| v.typ().clone()).collect(),
+                    codomain: Box::new(Type::bool()),
+                };
                 self.with_named_sub(
                     IrepId::CSpecEnsures,
                     Irep::just_sub(
                         ensures
                             .iter()
-                            .map(|clause| clause.as_lambda_expression(variables).to_irep(mm))
+                            .map(|clause| {
+                                clause
+                                    .as_lambda_expression(lambda_typ.clone(), variables)
+                                    .to_irep(mm)
+                            })
                             .collect(),
                     ),
                 )
@@ -53,7 +61,11 @@ impl Irep {
                     Irep::just_sub(
                         requires
                             .iter()
-                            .map(|clause| clause.as_lambda_expression(variables).to_irep(mm))
+                            .map(|clause| {
+                                clause
+                                    .as_lambda_expression(lambda_typ.clone(), variables)
+                                    .to_irep(mm)
+                            })
                             .collect(),
                     ),
                 )

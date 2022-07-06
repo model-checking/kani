@@ -104,7 +104,8 @@ pub enum ExprValue {
     },
     /// `123`
     IntConstant(BigInt),
-    Lambda {
+    /// Lambda expressions do not exist immediately in C.
+    LambdaExpression {
         variables: Expr,
         body: Expr,
     },
@@ -142,6 +143,7 @@ pub enum ExprValue {
     Symbol {
         identifier: InternedString,
     },
+    /// Tuple does not represent any expression in C.
     Tuple {
         operands: Vec<Expr>,
     },
@@ -313,8 +315,12 @@ impl Expr {
             Dereference(e) => e.is_side_effect(),
             If { c, t, e } => c.is_side_effect() || t.is_side_effect() || e.is_side_effect(),
             Index { array, index } => array.is_side_effect() || index.is_side_effect(),
+            LambdaExpression { variables, body } => {
+                variables.is_side_effect() || body.is_side_effect()
+            }
             Member { lhs, field: _ } => lhs.is_side_effect(),
             Struct { values } => values.iter().any(|e| e.is_side_effect()),
+            Tuple { operands } => operands.iter().any(|op| op.is_side_effect()),
             Typecast(e) => e.is_side_effect(),
             Union { value, field: _ } => value.is_side_effect(),
             UnOp { op: _, e } => e.is_side_effect(),
@@ -418,11 +424,11 @@ impl Expr {
         expr!(Array { elems }, typ)
     }
 
-    pub fn lambda(typ: Type, variables: Expr, body: Expr) -> Self {
-        expr!(Lambda { variables, body }, typ)
+    pub fn lambda_expression(typ: Type, variables: Expr, body: Expr) -> Self {
+        expr!(LambdaExpression { variables, body }, typ)
     }
 
-    pub fn tuple(typ: Type, operands: Vec<Expr>) -> Self {
+    pub fn tuple_expr(typ: Type, operands: Vec<Expr>) -> Self {
         expr!(Tuple { operands }, typ)
     }
 
@@ -1404,10 +1410,12 @@ impl Expr {
     }
 }
 
+/// Wrap expression in a lambda
 impl Expr {
-    pub fn as_lambda_expression(&self, variables: &[Expr]) -> Expr {
-        let operands = Expr::tuple(self.typ.clone(), variables.to_vec());
-        Expr::lambda(self.typ.clone(), operands, self.clone())
+    pub fn as_lambda_expression(&self, typ: Type, variables: &Vec<Expr>) -> Expr {
+        assert!(variables.iter().all(|x| x.is_symbol()), "Variables must be symbols");
+        let v = Expr::tuple_expr(Type::Empty, variables.to_vec());
+        Expr::lambda_expression(typ, v, self.clone())
     }
 }
 
