@@ -1,12 +1,12 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// Check that `atomic_or` and other variants (unstable version) return the
+// Check that `atomic_or_seqcst` and other variants (unstable version) return the
 // expected result.
 
 #![feature(core_intrinsics)]
 use std::intrinsics::{
-    atomic_or, atomic_or_acq, atomic_or_acqrel, atomic_or_rel, atomic_or_relaxed,
+    atomic_or_acqrel, atomic_or_acquire, atomic_or_relaxed, atomic_or_release, atomic_or_seqcst,
 };
 
 #[kani::proof]
@@ -27,10 +27,10 @@ fn main() {
     let c = 1 as u8;
 
     unsafe {
-        let x1 = atomic_or(ptr_a1, b);
-        let x2 = atomic_or_acq(ptr_a2, b);
+        let x1 = atomic_or_seqcst(ptr_a1, b);
+        let x2 = atomic_or_acquire(ptr_a2, b);
         let x3 = atomic_or_acqrel(ptr_a3, b);
-        let x4 = atomic_or_rel(ptr_a4, b);
+        let x4 = atomic_or_release(ptr_a4, b);
         let x5 = atomic_or_relaxed(ptr_a5, b);
 
         assert!(x1 == 1);

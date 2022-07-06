@@ -80,6 +80,7 @@ impl<'a> ArgParser<'a> {
 }
 
 #[kani::proof]
+#[kani::unwind(2)]
 fn main() {
     let a: ArgParser = ArgParser { arguments: BTreeMap::new() };
     a.format_arguments();
