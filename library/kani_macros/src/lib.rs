@@ -80,8 +80,6 @@ pub fn unwind(attr: TokenStream, item: TokenStream) -> TokenStream {
     result
 }
 
-
-
 /// This proc macro does one of the following. (1) if kani is
 /// configured, then it substitutes all occurrences of the proptest
 /// crate with a custom kani_proptest crate. (2) otherwise, it keeps
