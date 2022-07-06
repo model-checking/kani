@@ -102,17 +102,27 @@ elif [ "$#" -eq "0" ]; then
         xargs -n1 -I {} -P $NPROC bash -c "$SELF_SCRIPT {}"
 
     # serially print out the ones that failed.
+    num_failed="0"
+    num_with_warning='0'
     for directory in $(ls $WORK_DIRECTORY_PREFIX); do
         REPOSITORY=$(git -C $WORK_DIRECTORY_PREFIX/$directory remote -v | awk '{ print $2 }' | head -1)
         echo "repository: $REPOSITORY"
 
         ERROR_OUTPUTS=$(print_errors_for_each_repo_result $WORK_DIRECTORY_PREFIX/$directory)
-        if [[ ! "$ERROR_OUTPUTS" =~ 'STD... has warnings' ]]; then
+        if [[ "$ERROR_OUTPUTS" =~ '------ STDERR Warnings' ]]; then
             OVERALL_EXIT_CODE='1'
+            num_with_warning=$(($num_with_warning + 1))
+        fi
+        if [[ "$ERROR_OUTPUTS" =~ 'Error exit: code' ]]; then
+            num_failed=$(($num_failed + 1))
         fi
 
         echo -e "$ERROR_OUTPUTS" | sed 's/^/    /'
     done
+
+    echo -e '\n--- OVERALL STATS ---'
+    echo "$num_failed crates failed to compile"
+    echo "$num_with_warning crates had warning(s)"
 else
     (clone_and_run_kani $1 $2)
 fi
