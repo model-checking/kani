@@ -7,7 +7,7 @@
 kani::translate_from_proptest!{
 proptest! {
     #[kani::proof]
-    fn proptest_u8 (input_ in proptest::arbitrary::any<u8>) {
+    fn proptest_u8 (input_1 in proptest::arbitrary::any<u8>) {
 	assert!(input_1 + input_1 >= 0);
 	assert_eq!(input_1 - input_1, 0);
     }
@@ -15,7 +15,7 @@ proptest! {
 
 proptest! {
     #[kani::proof]
-    fn proptest_u16 (input_ in proptest::arbitrary::any<u16>) {
+    fn proptest_u16 (input_1 in proptest::arbitrary::any<u16>) {
 	assert!(input_1 + input_1 >= 0);
 	assert_eq!(input_1 - input_1, 0);
     }
@@ -23,7 +23,7 @@ proptest! {
 
 proptest! {
     #[kani::proof]
-    fn proptest_u32 (input_ in proptest::arbitrary::any<u32>) {
+    fn proptest_u32 (input_1 in proptest::arbitrary::any<u32>) {
 	assert!(input_1 + input_1 >= 0);
 	assert_eq!(input_1 - input_1, 0);
     }
@@ -31,7 +31,7 @@ proptest! {
 
 proptest! {
     #[kani::proof]
-    fn proptest_u64 (input_ in proptest::arbitrary::any<u64>) {
+    fn proptest_u64 (input_1 in proptest::arbitrary::any<u64>) {
 	assert!(input_1 + input_1 >= 0);
 	assert_eq!(input_1 - input_1, 0);
     }
@@ -39,7 +39,7 @@ proptest! {
 
 proptest! {
     #[kani::proof]
-    fn proptest_u128 (input_ in proptest::arbitrary::any<u128>) {
+    fn proptest_u128 (input_1 in proptest::arbitrary::any<u128>) {
 	assert!(input_1 + input_1 >= 0);
 	assert_eq!(input_1 - input_1, 0);
     }
@@ -47,7 +47,7 @@ proptest! {
 
 proptest! {
     #[kani::proof]
-    fn proptest_usize (input_ in proptest::arbitrary::any<usize>) {
+    fn proptest_usize (input_1 in proptest::arbitrary::any<usize>) {
 	assert!(input_1 + input_1 >= 0);
 	assert_eq!(input_1 - input_1, 0);
     }
@@ -55,7 +55,7 @@ proptest! {
 
 proptest! {
     #[kani::proof]
-    fn proptest_i8 (input_ in proptest::arbitrary::any<i8>) {
+    fn proptest_i8 (input_1 in proptest::arbitrary::any<i8>) {
 	assert!(input_1 * input_1 >= 0);
 	assert_eq!(input_1 - input_1, 0);
     }
@@ -63,7 +63,7 @@ proptest! {
 
 proptest! {
     #[kani::proof]
-    fn proptest_i16 (input_ in proptest::arbitrary::any<i16>) {
+    fn proptest_i16 (input_1 in proptest::arbitrary::any<i16>) {
 	assert!(input_1 * input_1 >= 0);
 	assert_eq!(input_1 - input_1, 0);
     }
@@ -71,7 +71,7 @@ proptest! {
 
 proptest! {
     #[kani::proof]
-    fn proptest_i32 (input_ in proptest::arbitrary::any<i32>) {
+    fn proptest_i32 (input_1 in proptest::arbitrary::any<i32>) {
 	assert!(input_1 * input_1 >= 0);
 	assert_eq!(input_1 - input_1, 0);
     }
@@ -79,7 +79,7 @@ proptest! {
 
 proptest! {
     #[kani::proof]
-    fn proptest_i64 (input_ in proptest::arbitrary::any<i64>) {
+    fn proptest_i64 (input_1 in proptest::arbitrary::any<i64>) {
 	assert!(input_1 * input_1 >= 0);
 	assert_eq!(input_1 - input_1, 0);
     }
@@ -87,7 +87,7 @@ proptest! {
 
 proptest! {
     #[kani::proof]
-    fn proptest_i128 (input_ in proptest::arbitrary::any<i128>) {
+    fn proptest_i128 (input_1 in proptest::arbitrary::any<i128>) {
 	assert!(input_1 * input_1 >= 0);
 	assert_eq!(input_1 - input_1, 0);
     }
@@ -95,7 +95,7 @@ proptest! {
 
 proptest! {
     #[kani::proof]
-    fn proptest_isize (input_ in proptest::arbitrary::any<isize>) {
+    fn proptest_isize (input_1 in proptest::arbitrary::any<isize>) {
 	assert!(input_1 * input_1 >= 0);
 	assert_eq!(input_1 - input_1, 0);
     }
