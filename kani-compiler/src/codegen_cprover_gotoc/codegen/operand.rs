@@ -57,7 +57,7 @@ impl<'tcx> GotocCtx<'tcx> {
         debug!("found literal: {:?}", lit);
         let lit = self.monomorphize(lit);
 
-        match lit.val() {
+        match lit.kind() {
             // evaluate constant if it has no been evaluated yet
             ConstKind::Unevaluated(unevaluated) => {
                 debug!("The literal was a Unevaluated");
@@ -68,14 +68,15 @@ impl<'tcx> GotocCtx<'tcx> {
                 self.codegen_const_value(const_val, lit.ty(), span)
             }
 
-            ConstKind::Value(v) => {
-                debug!("The literal was a ConstValue {:?}", v);
-                self.codegen_const_value(v, lit.ty(), span)
+            ConstKind::Value(valtree) => {
+                let value = self.tcx.valtree_to_const_val((lit.ty(), valtree));
+                debug!("The literal was a ConstValue {:?}", value);
+                self.codegen_const_value(value, lit.ty(), span)
             }
             _ => {
                 unreachable!(
                     "monomorphized item shouldn't have this constant value: {:?}",
-                    lit.val()
+                    lit.kind()
                 )
             }
         }
@@ -128,7 +129,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 _ => {}
             }
         }
-        unimplemented!("\nv {:?}\nlit_ty {:?}\nspan {:?}", v, lit_ty, span);
+        unimplemented!("\nv {:?}\nlit_ty {:?}\nspan {:?}", v, lit_ty.kind(), span);
     }
 
     pub fn codegen_const_value(
