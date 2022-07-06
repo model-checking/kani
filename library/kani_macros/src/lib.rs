@@ -94,7 +94,7 @@ pub fn unwind(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// triggered. Otherwise, it pushes the same token and goes back to
 /// the original state until "proptest" is seen again.
 #[proc_macro]
-pub fn kani_proptest_translate(input: TokenStream) -> TokenStream {
+pub fn translate_from_proptest(input: TokenStream) -> TokenStream {
     const REWRITE_FROM : &str = "proptest";
     const REWRITE_TO : &str = "kani_proptest";
 
