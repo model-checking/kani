@@ -618,6 +618,7 @@ impl<'tcx> GotocCtx<'tcx> {
         self.find_function(&fname).unwrap().call(vec![init])
     }
 
+    /// Ensure that the given instance is in the symbol table, returning its symbol name and type.
     pub fn ensure_func(&mut self, instance: Instance<'tcx>) -> (String, Type) {
         let func = self.symbol_name(instance);
         let funct = self.codegen_function_sig(self.fn_sig_of_instance(instance).unwrap());
@@ -642,7 +643,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// For a given function instance, generates a zero-sized dummy symbol (because FnDefs are zero-sized).
-    pub fn codegen_func_expr_zst(&mut self, instance: Instance<'tcx>, span: Option<&Span>) -> Expr {
+    fn codegen_func_expr_zst(&mut self, instance: Instance<'tcx>, span: Option<&Span>) -> Expr {
         let (func, _funct) = self.ensure_func(instance);
         let fn_struct_ty = self.ensure_fndef_zst(instance);
         // This zero-sized object that a function name refers to in Rust is globally unique, so we create such a global object.
