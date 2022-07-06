@@ -928,7 +928,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// P = &Self | &mut Self | Box<Self> | Rc<Self> | Arc<Self>
     /// S = P | Pin<P>
     ///
-    /// See https://doc.rust-lang.org/reference/items/traits.html#object-safety for more details.
+    /// See <https://doc.rust-lang.org/reference/items/traits.html#object-safety> for more details.
     fn codegen_dynamic_function_sig(&mut self, sig: PolyFnSig<'tcx>) -> Type {
         let sig = self.monomorphize(sig);
         let sig = self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig);
@@ -1490,15 +1490,15 @@ impl<'tcx> GotocCtx<'tcx> {
     /// ```
     ///
     /// The behavior will be:
-    /// ```
+    /// ```text
     /// let it = self.receiver_data_path(rc_typ);
-    /// assert_eq!(it.next(), Some(String::from("ptr", non_null_typ));
-    /// assert_eq!(it.next(), Some(String::from("pointer", raw_ptr_typ));
+    /// assert_eq!(it.next(), Some((String::from("ptr"), non_null_typ);
+    /// assert_eq!(it.next(), Some((String::from("pointer"), raw_ptr_typ);
     /// assert_eq!(it.next(), None);
     /// ```
     ///
     /// Pre-condition: The argument must be a valid receiver for dispatchable trait functions.
-    /// See https://doc.rust-lang.org/reference/items/traits.html#object-safety for more details.
+    /// See <https://doc.rust-lang.org/reference/items/traits.html#object-safety> for more details.
     pub fn receiver_data_path<'a>(
         self: &'a Self,
         typ: Ty<'tcx>,

@@ -459,7 +459,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Extract a reference to self for virtual method calls.
-    /// See [codegen_dynamic_function_sig](super::typ::codegen_dynamic_function_sig) for more
+    /// See [codegen_dynamic_function_sig](GotocCtx::codegen_dynamic_function_sig) for more
     /// details.
     fn extract_ptr(&self, arg_expr: Expr, arg_ty: Ty<'tcx>) -> Expr {
         // Generate an expression that indexes the pointer.
