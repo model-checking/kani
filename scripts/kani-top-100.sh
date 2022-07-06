@@ -17,10 +17,9 @@ ENV:
 - PRINT_STDOUT=1 forces this script to search for warning in
   STDOUT in addition to STDERR
 
-EDITING:
+STDIN: Pipe in a list of Git URLs, one  per line.
 
-- To modify the list of crates to crawl, modify
-  `HARD_CODED_TOP_100_CRATES_AS_OF_2022_6_17`.
+EDITING:
 - To adjust the git clone or kani args, modify the function
   `clone_and_run_kani`.
 - To adjust the errors this script searches for, edit the function
@@ -29,12 +28,11 @@ EDITING:
 Copyright Kani Contributors
 SPDX-License-Identifier: Apache-2.0 OR MIT'
 
-
 SELF_SCRIPT=$0
 SELF_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 NPROC=$(nproc 2> /dev/null || sysctl -n hw.ncpu 2> /dev/null || echo 4)  # Linux or Mac or hard-coded default of 4
 WORK_DIRECTORY_PREFIX="$SELF_DIR/../target/top-100"
-HARD_CODED_TOP_100_CRATES_AS_OF_2022_6_17=$(cat $SELF_DIR/../tests/large-crawl/crates-top-100.txt)
+
 
 STDOUT_SUFFIX='stdout.cargo-kani'
 STDERR_SUFFIX='stderr.cargo-kani'
@@ -96,8 +94,14 @@ elif [[ "$*" == *"--help"* ]]; then
     echo -e "$DOCUMENTATION"
 elif [ "$#" -eq "0" ]; then
     # top level logic that runs clone_and_run_kani in parallel with xargs.
+    echo 'Reading URLs from STDIN...';
+    LIST_OF_CRATE_GIT_URLS=$(cat -)
+    if [ "$LIST_OF_CRATE_GIT_URLS" =~ "\s"* ]; then
+        exit -1
+    fi
+
     mkdir -p $WORK_DIRECTORY_PREFIX
-    echo -e "$HARD_CODED_TOP_100_CRATES_AS_OF_2022_6_17" | \
+    echo -e "$LIST_OF_CRATE_GIT_URLS" | \
         awk -F '\n' 'BEGIN{ a=0 }{ print a++ "," $1  }' | \
         xargs -n1 -I {} -P $NPROC bash -c "$SELF_SCRIPT {}"
 
