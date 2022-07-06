@@ -124,7 +124,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         );
                     } else {
                         // TODO: Handle cases with other types such as tuples and larger integers.
-                        let loc = span.map_or(Location::none(), |s| self.codegen_span(s));
+                        let loc = self.codegen_span_option(span.cloned());
                         let typ = self.codegen_ty(lit_ty);
                         return self.codegen_unimplemented(
                             "Constant slice value with 2+ bytes",
