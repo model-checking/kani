@@ -1,5 +1,5 @@
-// Copyright Kani Contributor_seqcsts
-// SPDX-License-Identifier: Apache-2.0 OR_seqcst MIT
+// Copyright Kani Contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 
 // Check that `atomic_or_seqcst` and other variants (unstable version) return the
 // expected result.
