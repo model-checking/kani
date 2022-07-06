@@ -425,10 +425,18 @@ impl Expr {
     }
 
     pub fn lambda_expression(typ: Type, variables: Expr, body: Expr) -> Self {
-        match *variables.value() {
-            Expr::Tuple {operands} => {
-                todo!()
+        if let Type::MathematicalFunction { domain, codomain } = typ.clone() {
+            if let ExprValue::Tuple { operands } = variables.clone().value() {
+                assert_eq!(operands.len(), domain.len() + 1);
+                let mut value_typ = domain;
+                value_typ.insert(0, *codomain);
+                let operands_typ = operands.iter().map(|x| x.typ.clone()).collect::<Vec<Type>>();
+                assert_eq!(operands_typ, value_typ);
+            } else {
+                unreachable!("Variables must be specified as a tuple");
             }
+        } else {
+            unreachable!("Can't make a lambda expression with non-lambda target type {:?}", typ);
         }
         expr!(LambdaExpression { variables, body }, typ)
     }
