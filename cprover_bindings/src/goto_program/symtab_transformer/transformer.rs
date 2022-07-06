@@ -291,8 +291,8 @@ pub trait Transformer: Sized {
             ExprValue::If { c, t, e } => self.transform_expr_if(typ, c, t, e),
             ExprValue::Index { array, index } => self.transform_expr_index(typ, array, index),
             ExprValue::IntConstant(value) => self.transform_expr_int_constant(typ, value),
-            ExprValue::LambdaExpression { variables, body } => {
-                self.transform_expr_lambda_expression(typ, variables, body)
+            ExprValue::LambdaExpression { variables_tuple, body } => {
+                self.transform_expr_lambda_expression(typ, variables_tuple, body)
             }
             ExprValue::Member { lhs, field } => self.transform_expr_member(typ, lhs, *field),
             ExprValue::Nondet => self.transform_expr_nondet(typ),

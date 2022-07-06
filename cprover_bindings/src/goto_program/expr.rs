@@ -106,7 +106,7 @@ pub enum ExprValue {
     IntConstant(BigInt),
     /// Lambda expressions do not exist immediately in C.
     LambdaExpression {
-        variables: Expr,
+        variables_tuple: Expr,
         body: Expr,
     },
     /// `lhs.field`
@@ -315,8 +315,8 @@ impl Expr {
             Dereference(e) => e.is_side_effect(),
             If { c, t, e } => c.is_side_effect() || t.is_side_effect() || e.is_side_effect(),
             Index { array, index } => array.is_side_effect() || index.is_side_effect(),
-            LambdaExpression { variables, body } => {
-                variables.is_side_effect() || body.is_side_effect()
+            LambdaExpression { variables_tuple, body } => {
+                variables_tuple.is_side_effect() || body.is_side_effect()
             }
             Member { lhs, field: _ } => lhs.is_side_effect(),
             Struct { values } => values.iter().any(|e| e.is_side_effect()),
@@ -424,9 +424,9 @@ impl Expr {
         expr!(Array { elems }, typ)
     }
 
-    pub fn lambda_expression(typ: Type, variables: Expr, body: Expr) -> Self {
+    pub fn lambda_expression(typ: Type, variables_tuple: Expr, body: Expr) -> Self {
         if let Type::MathematicalFunction { domain, codomain } = typ.clone() {
-            if let ExprValue::Tuple { operands } = variables.clone().value() {
+            if let ExprValue::Tuple { operands } = variables_tuple.clone().value() {
                 assert_eq!(operands.len(), domain.len() + 1);
                 let mut value_typ = domain;
                 value_typ.insert(0, *codomain);
@@ -438,7 +438,7 @@ impl Expr {
         } else {
             unreachable!("Can't make a lambda expression with non-lambda target type {:?}", typ);
         }
-        expr!(LambdaExpression { variables, body }, typ)
+        expr!(LambdaExpression { variables_tuple, body }, typ)
     }
 
     pub fn tuple_expr(typ: Type, operands: Vec<Expr>) -> Self {

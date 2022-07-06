@@ -244,9 +244,9 @@ impl ToIrep for ExprValue {
             ExprValue::IntConstant(_) => {
                 unreachable!("Should have been processed in previous step")
             }
-            ExprValue::LambdaExpression { variables, body } => Irep {
+            ExprValue::LambdaExpression { variables_tuple, body } => Irep {
                 id: IrepId::Lambda,
-                sub: vec![variables.to_irep(mm), body.to_irep(mm)],
+                sub: vec![variables_tuple.to_irep(mm), body.to_irep(mm)],
                 named_sub: linear_map![],
             },
             ExprValue::Member { lhs, field } => Irep {
