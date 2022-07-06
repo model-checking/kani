@@ -103,10 +103,10 @@ The first is Rust's runtime bounds checking for the safe indexing operation.
 The second is Kani's check to ensure the pointer operation is actually safe.
 This pattern (two checks for similar issues in safe Rust code) is common to see, and we'll see it again in the next section.
 
-(Not that, while Kani will emit both kinds of checks always, in the future the output here may change.
-Kani is not currently recognizing that the runtime bounds check means it cannot reach the unsafe pointer dereference.
-It may do so in the future.
-In that case, just the bounds check would appear as a failing assertion here.)
+> **NOTE**: While Kani will always emit both kinds of checks, in the future the output here may change.
+> Kani is not currently recognizing that the runtime bounds check means it cannot reach the unsafe pointer dereference.
+> It may do so in the future.
+> In that case, just the bounds check would appear as a failing assertion here.
 
 </details>
 
@@ -121,7 +121,7 @@ Having run `cargo kani --harness bound_check --visualize` and clicked on one of 
 
 To navigate this trace to find the information you need, we again recommend searching for things you expect to be somewhere in the trace:
 
-1. Search the document for `kani::any` or `<variable_of_interest> =` such as `size =` or `let size`.
+1. Search the page for `kani::any` or `<variable_of_interest> =` such as `size =` or `let size`.
 We can use this to find out what example values lead to a problem.
 In this case, where we just have a couple of `kani::any` values in our proof harness, we can learn a lot just by seeing what these are.
 In this trace we find (and the values you get may be different):
@@ -138,10 +138,11 @@ index = 2463ul
 
 You may see different values here, as it depends on the solver's behavior.
 
-2. Try searching for `failure:`. This will be near the end of the document.
-You can now search upwards from a failure to see what value certain variables had.
-Sometime it can be helpful to change the source code to add intermediate variables, so their value is visible in the trace.
-For instance, you might want to compute the index before indexing into the array, that way you'd see exactly what value is being used.
+2. Try searching for `failure:`. This will be near the end of the page.
+You can now search upwards from a failure to see what values certain variables had.
+Sometimes it can be helpful to change the source code to add intermediate variables, so their value is visible in the trace.
+For instance, you might want to compute the index before indexing into the array.
+That way you'd see in the trace exactly what value is being used.
 
 These two techniques should help you find both the nondeterministic inputs, and the values that were involved in the failing assertion.
 
