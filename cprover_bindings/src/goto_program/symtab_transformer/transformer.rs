@@ -253,17 +253,14 @@ pub trait Transformer: Sized {
 
     fn transform_contract(&mut self, c: &Contract) -> Contract {
         match c {
-            Contract::FunctionContract { ensures, requires, variables } => {
+            Contract::FunctionContract { ensures, requires } => {
                 let transformed_ensures: Vec<Expr> =
                     ensures.iter().map(|clause| self.transform_expr(clause)).collect();
                 let transformed_requires: Vec<Expr> =
                     requires.iter().map(|clause| self.transform_expr(clause)).collect();
-                let transformed_variables: Vec<Expr> =
-                    variables.iter().map(|v| self.transform_expr(v)).collect();
                 Contract::FunctionContract {
                     ensures: transformed_ensures,
                     requires: transformed_requires,
-                    variables: transformed_variables,
                 }
             }
         }

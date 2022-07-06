@@ -149,7 +149,7 @@ pub struct Parameter {
 /// Type for function contracts, loop contracts, etc.
 #[derive(Debug, Clone)]
 pub enum Contract {
-    FunctionContract { ensures: Vec<Expr>, requires: Vec<Expr>, variables: Vec<Expr> },
+    FunctionContract { ensures: Vec<Expr>, requires: Vec<Expr> },
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////

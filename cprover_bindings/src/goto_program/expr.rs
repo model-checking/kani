@@ -425,6 +425,11 @@ impl Expr {
     }
 
     pub fn lambda_expression(typ: Type, variables: Expr, body: Expr) -> Self {
+        match *variables.value() {
+            Expr::Tuple {operands} => {
+                todo!()
+            }
+        }
         expr!(LambdaExpression { variables, body }, typ)
     }
 
@@ -1407,15 +1412,6 @@ impl Expr {
         // TODO: do we need the `.index(0)` here?
         let s = s.into();
         expr!(StringConstant { s }, Type::c_char().array_of(s.len() + 1)).array_to_ptr()
-    }
-}
-
-/// Wrap expression in a lambda
-impl Expr {
-    pub fn as_lambda_expression(&self, typ: Type, variables: &[Expr]) -> Expr {
-        assert!(variables.iter().all(|x| x.is_symbol()), "Variables must be symbols");
-        let v = Expr::tuple_expr(Type::Empty, variables.to_vec());
-        Expr::lambda_expression(typ, v, self.clone())
     }
 }
 

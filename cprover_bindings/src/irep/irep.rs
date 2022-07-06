@@ -38,38 +38,15 @@ impl Irep {
 impl Irep {
     pub fn with_contract(self, value: &SymbolValues, mm: &MachineModel) -> Self {
         match value {
-            SymbolValues::Contract(Contract::FunctionContract { ensures, requires, variables }) => {
-                let lambda_typ = Type::MathematicalFunction {
-                    domain: variables.to_vec().iter().map(|v| v.typ().clone()).collect(),
-                    codomain: Box::new(Type::bool()),
-                };
-                self.with_named_sub(
+            SymbolValues::Contract(Contract::FunctionContract { ensures, requires }) => self
+                .with_named_sub(
                     IrepId::CSpecEnsures,
-                    Irep::just_sub(
-                        ensures
-                            .iter()
-                            .map(|clause| {
-                                clause
-                                    .as_lambda_expression(lambda_typ.clone(), variables)
-                                    .to_irep(mm)
-                            })
-                            .collect(),
-                    ),
+                    Irep::just_sub(ensures.iter().map(|clause| clause.to_irep(mm)).collect()),
                 )
                 .with_named_sub(
                     IrepId::CSpecRequires,
-                    Irep::just_sub(
-                        requires
-                            .iter()
-                            .map(|clause| {
-                                clause
-                                    .as_lambda_expression(lambda_typ.clone(), variables)
-                                    .to_irep(mm)
-                            })
-                            .collect(),
-                    ),
-                )
-            }
+                    Irep::just_sub(requires.iter().map(|clause| clause.to_irep(mm)).collect()),
+                ),
             _ => self,
         }
     }
