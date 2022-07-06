@@ -1412,7 +1412,7 @@ impl Expr {
 
 /// Wrap expression in a lambda
 impl Expr {
-    pub fn as_lambda_expression(&self, typ: Type, variables: &Vec<Expr>) -> Expr {
+    pub fn as_lambda_expression(&self, typ: Type, variables: &[Expr]) -> Expr {
         assert!(variables.iter().all(|x| x.is_symbol()), "Variables must be symbols");
         let v = Expr::tuple_expr(Type::Empty, variables.to_vec());
         Expr::lambda_expression(typ, v, self.clone())

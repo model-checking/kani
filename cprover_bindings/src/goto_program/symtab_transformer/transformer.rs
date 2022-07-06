@@ -156,11 +156,7 @@ pub trait Transformer: Sized {
         transformed_typ.infinite_array_of()
     }
 
-    fn transform_type_mathematical_function(
-        &mut self,
-        domain: &Vec<Type>,
-        codomain: &Type,
-    ) -> Type {
+    fn transform_type_mathematical_function(&mut self, domain: &[Type], codomain: &Type) -> Type {
         let transformed_domain: Vec<Type> = domain.iter().map(|x| self.transform_type(x)).collect();
         let transformed_codomain = self.transform_type(codomain);
         Type::MathematicalFunction {
