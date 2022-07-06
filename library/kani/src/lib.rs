@@ -6,6 +6,7 @@
 pub mod arbitrary;
 pub mod invariant;
 pub mod slice;
+pub mod vec;
 
 pub use arbitrary::Arbitrary;
 pub use invariant::Invariant;
