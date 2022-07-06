@@ -74,7 +74,9 @@ Under the "Errors" heading, click on the "trace" link to find the trace for this
 
 From this trace report, we can filter through it to find relevant lines.
 A good rule of thumb is to search for either `kani::any()` or assignments to variables you're interested in.
-At present time, an unfortunate amount of generated code is present in the trace, but we can find:
+At present time, an unfortunate amount of generated code is present in the trace.
+This code isn't a part of the Rust code you wrote, but is an internal implementation detail of how Kani runs proof harnesses.
+Still, searching for `kani::any()` quickly finds us these lines:
 
 ```
 let x: u32 = kani::any();
@@ -83,7 +85,7 @@ x = 1023u
 
 Here we're seeing the line of code and the value assigned in this particular trace.
 Like property testing, this is just one **example** of a failure.
-To proceed, we'd presumably fix the code to avoid this particular issue and then re-run Kani to see if we find more.
+To proceed, we recommend fixing the code to avoid this particular issue and then re-running Kani to see if you find more issues.
 
 ### Exercise: Try other failures
 
@@ -151,8 +153,8 @@ VERIFICATION:- FAILED
 
 ## Assertions, Assumptions, and Harnesses
 
-It seems a bit odd that we accept billions of inputs when our function really only seems to handle up to a few thousand.
-Let's encode this fact about our function by asserting some reasonable bound on our input, after we've fixed our bug.
+It seems a bit odd that our example function is tested against billions of possible inputs, when it really only seems to be designed to handle a few thousand.
+Let's encode this fact about our function by asserting some reasonable upper bound on our input, after we've fixed our bug.
 (New code available under [`first-steps-v2`](https://github.com/model-checking/kani/tree/main/docs/src/tutorial/first-steps-v2/)):
 
 ```rust
