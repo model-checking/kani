@@ -4,7 +4,7 @@
 
 
 DOCUMENTATION=\
-'kani-top-100.sh -- script to clone and compile the top 100 crates with Kani.
+'kani-run-on-repos.sh -- script to clone and compile multiple remote git repositories with Kani.
 
 USAGE:
 ./scripts/kani-top-100.sh
@@ -13,11 +13,11 @@ Download the top 100 crates and runs kani on them. Prints out the
 errors and warning when done. Xargs is required for this script to
 work.
 
+STDIN: Pipe in a list of Git URLs to run Kani on, one  per line.
+
 ENV:
 - PRINT_STDOUT=1 forces this script to search for warning in
   STDOUT in addition to STDERR
-
-STDIN: Pipe in a list of Git URLs, one  per line.
 
 EDITING:
 - To adjust the git clone or kani args, modify the function
