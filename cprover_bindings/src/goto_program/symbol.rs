@@ -137,7 +137,7 @@ impl Symbol {
         loc: Location,
     ) -> Symbol {
         let name = name.into();
-        // Base name is the name of the function that the contract is written for.
+        // Both base name and pretty name contain the name of the function that the contract is written for.
         let base_name: InternedString = base_name.into();
         let pretty_name: InternedString = base_name;
         Symbol::new(
