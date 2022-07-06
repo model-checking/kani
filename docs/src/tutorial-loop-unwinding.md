@@ -13,94 +13,147 @@ We can try to find this bug with a proof harness like this:
 {{#include tutorial/loops-unwinding/src/lib.rs:kani}}
 ```
 
-When we run Kani on this, we run into an unfortunate result: non-termination.
-This non-termination is caused by CBMC trying to unwind the loop an unlimited number of times.
-
-> **NOTE**: Presently, [due to a bug](https://github.com/model-checking/kani/issues/493), this is especially bad: we don't see any output at all.
-> Kani is supposed to emit some log lines that might give some clue that an infinite loop is occurring.
-> If Kani doesn't terminate, it's almost always the problem that this section covers.
-
-To verify programs like this, we need to do two things:
-
-1. Set an upper bound on the size of the problem.
-We've actually already done part of this: our proof harness seems to be trying to set an upper limit of 10.
-2. Tell Kani about this limit if it's not able to figure it out on its own.
-
-Bounding proofs like this means we may no longer be proving as much as we originally hoped.
-Who's to say, if we prove everything works up to size 10, that there isn't a novel bug lurking, expressible only with problems of size 11+?
-But, let's get back to the issue at hand.
-
-We can "make progress" in our work by giving Kani a global bound on the problem size using the `--default-unwind <bound>` flag.
-This flag puts a fixed upper bound on loop unwinding.
-Kani will automatically generate verification conditions that help us understand if that bound isn't enough.
-Let's start with a small unwinding value:
+But we've just used a new feature (`#[kani::unwind(1)]`) that requires some explanation.
+When we run `cargo kani` on this code as we have written it, we see an odd verification failure:
 
 ```
-# kani src/lib.rs --default-unwind 1
-Check 69: .unwind.0
-         - Status: FAILURE
-         - Description: "unwinding assertion loop 0"
-[...]
+SUMMARY:
+ ** 1 of 67 failed (66 undetermined)
+Failed Checks: unwinding assertion loop 0
+
 VERIFICATION:- FAILED
 ```
 
-This output is showing us two things:
+If we try removing this "unwind" annotation and re-running Kani, we get a worse failure: non-termination.
+Kani simply doesn't produce a result.
 
-1. Kani tells us we haven't unwound enough. This is the failure of the "unwinding assertion."
-2. We aren't seeing other failures if we only unwind the loop once.
-The execution can't progress far enough to reveal the bug we're interested in (which actually only happens in the last iteration of the loop).
+> **NOTE**: Presently, [due to a bug](https://github.com/model-checking/kani/issues/493), this is especially bad: we don't see any output at all.
+> Kani is supposed to emit some log lines that might give some clue that an infinite loop is occurring.
+> If Kani doesn't terminate, it's most frequently the problem that this section covers.
+> The workaround is to use the technique we're demoing here: use `#[kani::unwind(1)]` to force termination of the loops, and work upwards from there.
 
-Doing an initial `--default-unwind 1` is generally enough to force termination, but often too little for verification.
+The problem we're struggling with is the technique Kani uses to verify code.
+We're not able to handle code with "unbounded" loops, and what "bounded" means can be quite subtle.
+It has to have a constant number of iterations that's _"obviously constant"_ enough for the verifier to actually figure this out.
+In practice, very few loops are like this.
 
-We were clearly aiming at a size limit of 10 in our proof harness, so let's try a few things:
+To verify programs like this with Kani as it exists today, we need to do two things:
+
+1. Set an upper bound on the size of the problem.
+We've actually already done part of this: our proof harness above seems to be trying to set an upper `LIMIT` of 10.
+2. Tell Kani about this limit if (or when) it's not able to figure it out on its own.
+This is the purpose of the `kani::unwind` annotation.
+
+Bounding proofs like this means we may no longer be proving as much as we originally hoped.
+Who's to say, if we prove everything works up to size 10, that there isn't a novel bug lurking, reachable only with problems of size 11+?
+Perhaps!
+But, let's get back to the issue at hand.
+
+By putting `#[kani::unwind(1)]` on the proof harness, we've placed an upper bound of 1 loop iteration.
+The "unwinding assertion" failure that Kani reports is because this bound is not high enough.
+The code tries to execute more than 1 loop iteration.
+(And, because the unwinding isn't high enough, many of the other properties Kani is verifying become "undetermined": we don't really know if they're true or false, because we can't get far enough.)
+
+**Exercise**: Try increasing the bound. Where might you start? How high do you need to go to get rid of the "unwinding assertion" failure?
+
+<details>
+<summary>Click to see explanation for the exercise</summary>
+
+Since the proof harness is trying to limit the array to size 10, an initial unwind value of 10 seems like the obvious place to start.
+But that's not large enough for Kani.
+
+At size 11, we still see the "unwinding assertion" failure, but now we can see the actual failures we're trying to find, too.
+Finally at size 12, the "unwinding assertion" goes away, just leaving the other failures.
+We'll explain why we see this behavior in a moment.
+
+</details>
+
+Once we have increased the unwinding limit high enough, we're left with these failures:
 
 ```
-# kani src/lib.rs --default-unwind 10 | grep Failed
-Failed Checks: unwinding assertion loop 0
-```
-
-A bound of 10 still isn't enough because we generally need to unwind one greater than the number of executed loop iterations:
-
-```
-# kani src/lib.rs --default-unwind 11 | grep Failed
+SUMMARY:
+ ** 2 of 67 failed
 Failed Checks: index out of bounds: the length is less than or equal to the given index
+ File: "./src/lib.rs", line 12, in initialize_prefix
 Failed Checks: dereference failure: pointer outside object bounds
-Failed Checks: unwinding assertion loop 0
+ File: "./src/lib.rs", line 12, in initialize_prefix
+
+VERIFICATION:- FAILED
 ```
 
-We're still not seeing the unwinding assertion failure go away!
-This is because our error is really an off-by-one problem, we loop one too many times, so let's add one more:
+**Exercise**: Fix the off-by-one error, and get the (bounded) proof to go through.
 
-```
-# kani src/lib.rs --default-unwind 12 | grep Failed
-Failed Checks: index out of bounds: the length is less than or equal to the given index
-Failed Checks: dereference failure: pointer outside object bounds
-```
+We now return to the question: why is 12 the unwinding bound?
+Well, the first answer is: it isn't!
+Reduce it to 11 and observe that the proof now still works!
 
-Kani is now sure we've unwound the loop enough to verify our proof harness, and now we're seeing just the bound checking failures from the off-by-one error.
+Kani needs the unwinding bound to be "one more than" the number of loops.
+We previously had an off-by-one error that tried to do 11 iterations on an array of size 10.
+So... it needed to be 12, then.
+Fixing that error to do the correct 10 iterations means we can now successfully reduce that unwind bound to 11 again.
+
+> **NOTE**: Presently, there are some situations where "number of iterations of a loop" can be less obvious than it seems.
+> This can be easily triggered with use of `break` or `continue` within loops.
+> Often this manifests itself as needing "two more" or "three more" iterations in the unwind bound than seems like it would actually run.
+> In those situations, we might still need a bound like `kani::unwind(13)`, despite looking like a loop bounded to 10 iterations.
+
+The approach we've taken here is a general method for getting a bounded proof to go through:
+
+1. Put an actual upper bound on the problem itself.
+Here that's accomplished via `LIMIT` in our proof harness.
+We don't create a slice any bigger than that, and that's what we loop over.
+2. Start at a reasonable guess for an `kani::unwind` bound, and increase until the unwinding assertion goes away.
+3. Or, if that starts to take too long to verify, decrease your problem's bound, to accommodate the verifier's performance.
 
 ## Unwinding value specification
 
-Kani allows three options to specify the unwind value for a particular harness:
+The best approach to supplying Kani with unwind bounds is using the annotation `kani::unwind`, as we show above.
 
-1. The unwind annotation `#[kani::unwind(<num>)]`. This sets the unwind value for the harness with the annotation. Example -
-``` rust
-#[kani::proof]
-#[kani::unwind(3)]
-fn proof_harness() {
-[...]
-}
+You might want to supply one via command line when experimenting, however.
+In that case you can either use `--default-unwind x` to set an unwind bound for every proof harness that **does not** have an explicit bound.
+
+Or you can _override_ a harness's bound, but only when running a specific harness:
+
 ```
-2. `--default-unwind` flag. This sets the global or default unwind value for the entire file/crate on which kani or cargo-kani is called. Example -
-```
-kani file.rs --default-unwind 3
-```
-3. `--unwind` flag. This overrides any annotation and forces the harness to use the specified value. This needs to be used alongside `--harness` and sets the unwind value for the harness specified. Example -
-```
-kani file.rs --unwind 2 --harness proof_harness
+cargo kani --harness check_initialize_prefix --unwind 12
 ```
 
-### Exercises -
+Finally, you might be interested in defaulting the unwind bound to 1, to force termination (and force supplying a bound) on all your proof harnesses.
+You can do this by putting this into your `Cargo.toml` file:
 
-1. Exercise: Fix the off-by-one bounds error and get Kani to verify successfully.
-2. Exercise: After fixing the error, `--default-unwind 11` works. Why?
+```toml
+[workspace.metadata.kani.flags]
+default-unwind = 1
+```
+
+## Bounded proof
+
+Before we finish, it's worth revisiting the implications of what we've done here.
+Kani frequently needs to do "bounded proof", which contrasts with unbounded or full verification.
+
+We've written a proof harness that shows `initialize_prefix` has no errors on input slices of size 10, but no higher.
+The particular size we choose is usually determined by balancing the level of assurance we want, versus runtime of Kani.
+It's often not worth running proofs for large numbers of iterations, unless either very high assurance is necessary, or there's reason to suspect larger problems will contain novel failure modes.
+
+**Exercise**: Try increasing the problem size (both the unwind and the `LIMIT` constant). When does it start to take more than a few seconds?
+
+<details>
+<summary>Click to see explanation for the exercise</summary>
+
+On your friendly neighborhood author's machine, a `LIMIT` of 100 takes about 3.8 seconds end-to-end.
+This is a relatively simple bit of code, though, and it's not uncommon for some proofs to scale poorly even to 5 iterations.
+
+</details>
+
+One consequence of this, however, is that Kani often scales poorly to "big string problems" like parsing.
+Often a parser will need to consume inputs larger than 10-20 characters to exhibit strange behaviors.
+
+## Summary
+
+In this section:
+
+1. We saw Kani fail to terminate.
+2. We saw how `#[kani::unwind(1)]` can force a proof to terminate.
+3. We saw "unwinding assertions" verify that we've set the unwinding limit high enough.
+4. We saw how to put a practical bound on problem size in our proof harness.
+5. We saw how to pick an unwinding size large enough to successfully verify that bounded proof.
