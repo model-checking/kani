@@ -145,7 +145,7 @@ pub fn kani_proptest_translate(input: TokenStream) -> TokenStream {
 
     if std::env::var_os("CARGO_CFG_KANI").is_some() {
         let result = translate_recursive_helper(input);
-        panic!("{}", result)
+        result
     } else {
         input
     }
