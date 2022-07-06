@@ -105,8 +105,6 @@ impl<'tcx> GotocCtx<'tcx> {
                 ty::Slice(slice_ty) => {
                     if let Uint(UintTy::U8) = slice_ty.kind() {
                         // The case where we have a slice of u8 is easy enough: make an array of u8
-                        // TODO: Handle cases with larger int types by making an array of bytes,
-                        // then using byte-extract on it.
                         let slice =
                             data.inspect_with_uninit_and_ptr_outside_interpreter(start..end);
                         let vec_of_bytes: Vec<Expr> = slice
@@ -123,6 +121,16 @@ impl<'tcx> GotocCtx<'tcx> {
                             data_expr,
                             len_expr,
                             &self.symbol_table,
+                        );
+                    } else {
+                        // TODO: Handle cases with other types such as tuples and larger integers.
+                        let loc = span.map_or(Location::none(), |s| self.codegen_span(s));
+                        let typ = self.codegen_ty(lit_ty);
+                        return self.codegen_unimplemented(
+                            "Constant slice value with 2+ bytes",
+                            typ,
+                            loc,
+                            "https://github.com/model-checking/kani/issues/1339",
                         );
                     }
                 }
