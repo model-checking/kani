@@ -698,16 +698,14 @@ impl<'tcx> GotocCtx<'tcx> {
         match k {
             PointerCast::ReifyFnPointer => match self.operand_ty(o).kind() {
                 ty::FnDef(def_id, substs) => {
-                    // To be safe, run normal codegen to ensure the symbol table is updated as normally.
-                    // Maybe this isn't necessary though?
-                    let _ = self.codegen_operand(o);
-                    // Resolve the function and create a pointer to it:
+                    // We need to handle this case in a special way because `codegen_operand` compiles FnDefs to dummy structs.
+                    // In this case, we want to create an actual function pointer, not a pointer to a dummy struct.
+                    // For a full explanation, see https://github.com/model-checking/kani/pull/1338
                     let instance =
                         Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), *def_id, substs)
                             .unwrap()
                             .unwrap();
-                    let (func, funct) = self.ensure_func(instance);
-                    Expr::symbol_expression(func, funct).address_of()
+                    self.codegen_func_expr(instance, None).address_of()
                 }
                 _ => unreachable!(),
             },

@@ -636,13 +636,22 @@ impl<'tcx> GotocCtx<'tcx> {
         (func, funct)
     }
 
-    /// For a given function instance, generates an expression for the function symbol of type Code.
+    /// For a given function instance, generates an expression for the function symbol of type `Code`.
+    ///
+    /// Note: use `codegen_func_expr_zst` in the general case because GotoC does not allow functions to be used in all contexts
+    /// (e.g. struct fields).
+    /// For details, see https://github.com/model-checking/kani/pull/1338
     pub fn codegen_func_expr(&mut self, instance: Instance<'tcx>, span: Option<&Span>) -> Expr {
         let (func, funct) = self.ensure_func(instance);
         Expr::symbol_expression(func, funct).with_location(self.codegen_span_option(span.cloned()))
     }
 
-    /// For a given function instance, generates a zero-sized dummy symbol (because FnDefs are zero-sized).
+    /// For a given function instance, generates a zero-sized dummy symbol of type `Struct`.
+    ///
+    /// This is often necessary because GotoC does not allow functions to be used in all contexts (e.g. struct fields).
+    /// For details, see https://github.com/model-checking/kani/pull/1338
+    ///
+    /// Note: use `codegen_func_expr` instead if you want to call the function immediately.
     fn codegen_func_expr_zst(&mut self, instance: Instance<'tcx>, span: Option<&Span>) -> Expr {
         let (func, _funct) = self.ensure_func(instance);
         let fn_struct_ty = self.ensure_fndef_zst(instance);
@@ -662,6 +671,8 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// A FnDef instance in Rust is a zero-sized type, which can be passed around directly, without creating a pointer.
     /// To mirror this in GotoC, we create a dummy struct for the function, similarly to what we do for closures.
+    ///
+    /// For details, see https://github.com/model-checking/kani/pull/1338
     pub fn ensure_fndef_zst(&mut self, instance: Instance<'tcx>) -> Type {
         let func = self.symbol_name(instance);
         self.ensure_struct(
