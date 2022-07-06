@@ -27,7 +27,3 @@ glob = "0.3"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
-
-[target.'cfg(windows)'.dependencies]
-miow = "0.3"
-winapi = { version = "0.3", features = ["winerror"] }
