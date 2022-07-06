@@ -612,6 +612,9 @@ impl<'tcx> GotocCtx<'tcx> {
                     Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), *def_id, substs)
                         .unwrap()
                         .unwrap();
+                // A function in Rust is a zero-sized object of a unique anonymous type.
+                // Since this differs from the way functions work in C, we generate a zero-sized struct.
+                // For full details, see https://github.com/model-checking/kani/pull/1338
                 self.ensure_fndef_zst(instance)
             }
             ty::FnPtr(sig) => self.codegen_function_sig(*sig).to_pointer(),
