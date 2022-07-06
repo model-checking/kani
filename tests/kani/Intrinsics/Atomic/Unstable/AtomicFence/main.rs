@@ -5,14 +5,16 @@
 // processed.
 
 #![feature(core_intrinsics)]
-use std::intrinsics::{atomic_fence, atomic_fence_acq, atomic_fence_acqrel, atomic_fence_rel};
+use std::intrinsics::{
+    atomic_fence_acqrel, atomic_fence_acquire, atomic_fence_release, atomic_fence_seqcst,
+};
 
 #[kani::proof]
 fn main() {
     unsafe {
-        atomic_fence();
-        atomic_fence_acq();
+        atomic_fence_seqcst();
+        atomic_fence_acquire();
         atomic_fence_acqrel();
-        atomic_fence_rel();
+        atomic_fence_release();
     }
 }
