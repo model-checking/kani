@@ -511,27 +511,24 @@ impl<'tcx> GotocCtx<'tcx> {
         trace!(fn_typ=?fn_ptr.typ(), "codegen_virtual_funcall");
 
         let data_ptr = trait_fat_ptr.to_owned().member("data", &self.symbol_table);
-        let mut ret_stmts = Vec::<Stmt>::new();
+        let mut ret_stmts = vec![];
         fargs[0] = if self_ty.is_adt() {
             // Generate a temp variable and assign its inner pointer to the fat_ptr.data.
             match fn_ptr.typ() {
-                Type::Pointer { typ } => match typ.as_ref() {
-                    Type::Code { parameters, .. } => {
-                        let param_typ = parameters.first().unwrap().typ();
-                        let tmp = self.gen_temp_variable(param_typ.clone(), loc).to_expr();
-                        debug!(?tmp,
-                            orig=?data_ptr.typ(),
-                            "codegen_virtual_funcall");
-                        ret_stmts.push(Stmt::decl(tmp.clone(), None, loc));
-                        ret_stmts.push(Stmt::assign(
-                            self.extract_ptr(tmp.clone(), self_ty),
-                            data_ptr,
-                            loc,
-                        ));
-                        tmp
-                    }
-                    _ => unreachable!("Unexpected virtual function type: {:?}", fn_ptr.typ()),
-                },
+                Type::Pointer { typ: box Type::Code { parameters, .. } } => {
+                    let param_typ = parameters.first().unwrap().typ();
+                    let tmp = self.gen_temp_variable(param_typ.clone(), loc).to_expr();
+                    debug!(?tmp,
+                        orig=?data_ptr.typ(),
+                        "codegen_virtual_funcall");
+                    ret_stmts.push(Stmt::decl(tmp.clone(), None, loc));
+                    ret_stmts.push(Stmt::assign(
+                        self.extract_ptr(tmp.clone(), self_ty),
+                        data_ptr,
+                        loc,
+                    ));
+                    tmp
+                }
                 _ => unreachable!("Unexpected virtual function type: {:?}", fn_ptr.typ()),
             }
         } else {

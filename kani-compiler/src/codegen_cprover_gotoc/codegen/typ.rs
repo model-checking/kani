@@ -355,7 +355,9 @@ impl<'tcx> GotocCtx<'tcx> {
         Type::unit().to_typedef(inner_name)
     }
 
-    /// This will codegen the raw pointer to the data portion of a vtable fat pointer.
+    /// Codegen the pointer type for a concrete object that implements the trait object.
+    /// I.e.: A trait object is a fat pointer which contains a pointer to a concrete object
+    /// and a pointer to its vtable. This method returns a type for the first pointer.
     pub fn codegen_trait_data_pointer(&mut self, typ: ty::Ty<'tcx>) -> Type {
         assert!(self.use_vtable_fat_pointer(typ));
         self.codegen_ty(typ).to_pointer()
@@ -1388,7 +1390,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// `codegen_ty(arg_ty)` so we don't have information about the final type.
     fn codegen_trait_receiver(&mut self, arg_ty: Ty<'tcx>) -> Type {
         // Collect structs that need to be modified
-        // Collect the non-zero fields until we find a fat pointer.
+        // Collect the non-ZST fields until we find a fat pointer.
         let mut data_path = vec![arg_ty];
         data_path.extend(self.receiver_data_path(arg_ty).map(|(_, typ)| typ));
 
