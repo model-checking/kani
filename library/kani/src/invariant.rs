@@ -5,7 +5,7 @@
 use std::num::*;
 
 /// Types that implement a check to ensure its value is valid and safe to be used. See
-/// https://doc.rust-lang.org/stable/nomicon/what-unsafe-does.html for examples of valid values.
+/// <https://doc.rust-lang.org/stable/nomicon/what-unsafe-does.html> for examples of valid values.
 ///
 /// Implementations of Invariant traits must ensure that the current bit values of the given type
 /// is valid and that all its invariants hold.
@@ -61,7 +61,7 @@ unsafe impl Invariant for bool {
 }
 
 /// Validate that a char is not outside the ranges [0x0, 0xD7FF] and [0xE000, 0x10FFFF]
-/// Ref: https://doc.rust-lang.org/stable/nomicon/what-unsafe-does.html
+/// Ref: <https://doc.rust-lang.org/stable/nomicon/what-unsafe-does.html>
 unsafe impl Invariant for char {
     #[inline(always)]
     fn is_valid(&self) -> bool {

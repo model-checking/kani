@@ -88,6 +88,9 @@ time "$SCRIPT_DIR"/codegen-firecracker.sh
 #         dependency2
 time "$KANI_DIR"/tests/kani-dependency-test/diamond-dependency/run-dependency-test.sh
 
+# Check that documentation compiles.
+cargo doc --workspace --no-deps
+
 echo
 echo "All Kani regression tests completed successfully."
 echo

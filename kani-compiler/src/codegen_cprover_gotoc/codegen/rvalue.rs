@@ -32,7 +32,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Since vtable pointer comparison is not well defined and it has many nuances, we decided to
     /// fail if the user code performs such comparison.
     ///
-    /// See https://github.com/model-checking/kani/issues/327 for more details.
+    /// See <https://github.com/model-checking/kani/issues/327> for more details.
     fn codegen_comparison_fat_ptr(
         &mut self,
         op: &BinOp,
@@ -608,7 +608,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// This handles all kinds of casts, except a limited subset that are instead
-    /// handled by [`codegen_pointer_cast`].
+    /// handled by [`Self::codegen_pointer_cast`].
     fn codegen_misc_cast(&mut self, src: &Operand<'tcx>, dst_t: Ty<'tcx>) -> Expr {
         let src_t = self.operand_ty(src);
         debug!(
@@ -688,7 +688,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// "Pointer casts" are particular kinds of pointer-to-pointer casts.
     /// See the [`PointerCast`] type for specifics.
     /// Note that this does not include all casts involving pointers,
-    /// many of which are instead handled by [`codegen_misc_cast`] instead.
+    /// many of which are instead handled by [`Self::codegen_misc_cast`] instead.
     pub fn codegen_pointer_cast(
         &mut self,
         k: &PointerCast,

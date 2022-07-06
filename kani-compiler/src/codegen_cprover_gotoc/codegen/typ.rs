@@ -462,7 +462,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// TODO: to handle trait upcasting, this will need to use a
     /// poly existential trait type as a part of the key as well.
     /// See compiler/rustc_middle/src/ty/vtable.rs
-    /// https://github.com/model-checking/kani/issues/358
+    /// <https://github.com/model-checking/kani/issues/358>
     pub fn vtable_name(&self, t: Ty<'tcx>) -> String {
         format!("{}::vtable", self.normalized_trait_name(t))
     }
@@ -537,10 +537,10 @@ impl<'tcx> GotocCtx<'tcx> {
     /// codegen for types. it finds a C type which corresponds to a rust type.
     /// that means [ty] has to be monomorphized.
     ///
-    /// check [LayoutCx::layout_raw_uncached] for LLVM codegen
+    /// check [rustc_middle::ty::layout::LayoutCx::layout_of_uncached] for LLVM codegen
     ///
-    /// also c.f. https://www.ralfj.de/blog/2020/04/04/layout-debugging.html
-    ///      c.f. https://rust-lang.github.io/unsafe-code-guidelines/introduction.html
+    /// also c.f. <https://www.ralfj.de/blog/2020/04/04/layout-debugging.html>
+    ///      c.f. <https://rust-lang.github.io/unsafe-code-guidelines/introduction.html>
     pub fn codegen_ty(&mut self, ty: Ty<'tcx>) -> Type {
         let normalized = self.tcx.normalize_erasing_regions(ty::ParamEnv::reveal_all(), ty);
         let goto_typ = self.codegen_ty_inner(normalized);
@@ -1070,7 +1070,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// struct Option<&i32> {
     ///     u8 *_0;
     /// }
-    /// c.f. https://rust-lang.github.io/unsafe-code-guidelines/layout/enums.html#layout-of-a-data-carrying-enums-without-a-repr-annotation
+    /// c.f. <https://rust-lang.github.io/unsafe-code-guidelines/layout/enums.html#layout-of-a-data-carrying-enums-without-a-repr-annotation>
     fn codegen_enum(
         &mut self,
         ty: Ty<'tcx>,
@@ -1565,7 +1565,7 @@ pub fn is_repr_c_adt(mir_type: Ty) -> bool {
 /// This is a place holder function that should normalize the given type.
 ///
 /// TODO: We should normalize the type projection here. For more details, see
-/// https://github.com/model-checking/kani/issues/752
+/// <https://github.com/model-checking/kani/issues/752>
 fn normalize_type(ty: Ty) -> Ty {
     ty
 }

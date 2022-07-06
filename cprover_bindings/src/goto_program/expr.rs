@@ -118,7 +118,7 @@ pub enum ExprValue {
         op: SelfOperand,
         e: Expr,
     },
-    /// https://gcc.gnu.org/onlinedocs/gcc/Statement-Exprs.html
+    /// <https://gcc.gnu.org/onlinedocs/gcc/Statement-Exprs.html>
     /// e.g. `({ int y = foo (); int z; if (y > 0) z = y; else z = - y; z; })`
     /// `({ op1; op2; ...})`
     StatementExpression {
@@ -326,7 +326,7 @@ impl Expr {
 
     /// What typecasts are legal. Based off the C standard, plus some additional types
     /// that don't appear in the standard, like `bool`
-    /// https://docs.microsoft.com/en-us/cpp/c-language/type-cast-conversions?view=msvc-160
+    /// <https://docs.microsoft.com/en-us/cpp/c-language/type-cast-conversions?view=msvc-160>
     pub fn can_cast_from(source: &Type, target: &Type) -> bool {
         let source = source.unwrap_typedef();
         let target = target.unwrap_typedef();
@@ -544,7 +544,7 @@ impl Expr {
     {
         assert!(typ.is_integer());
         let i = i.into();
-        // TODO: https://github.com/model-checking/kani/issues/996
+        // TODO: <https://github.com/model-checking/kani/issues/996>
         // if i != 0 && i != 1 {
         //     assert!(
         //         typ.min_int() <= i && i <= typ.max_int(),
@@ -622,7 +622,7 @@ impl Expr {
         expr!(PointerConstant(c), typ)
     }
 
-    /// https://gcc.gnu.org/onlinedocs/gcc/Statement-Exprs.html
+    /// <https://gcc.gnu.org/onlinedocs/gcc/Statement-Exprs.html>
     /// e.g. `({ int y = foo (); int z; if (y > 0) z = y; else z = - y; z; })`
     /// `({ op1; op2; ...})`
     pub fn statement_expression(ops: Vec<Stmt>, typ: Type) -> Self {

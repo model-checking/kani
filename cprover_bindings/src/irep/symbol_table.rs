@@ -5,7 +5,7 @@ use crate::InternedString;
 use std::collections::BTreeMap;
 
 /// A direct implementation of the CBMC serilization format for symbol tables implemented in
-/// https://github.com/diffblue/cbmc/blob/develop/src/util/symbol_table.h
+/// <https://github.com/diffblue/cbmc/blob/develop/src/util/symbol_table.h>
 #[derive(Debug, PartialEq)]
 pub struct SymbolTable {
     pub symbol_table: BTreeMap<InternedString, Symbol>,

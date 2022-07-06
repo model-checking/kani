@@ -3,7 +3,7 @@
 use super::Irep;
 use crate::InternedString;
 /// A direct implementation of the CBMC serilization format for symbols implemented in
-/// https://github.com/diffblue/cbmc/blob/develop/src/util/symbol.h
+/// <https://github.com/diffblue/cbmc/blob/develop/src/util/symbol.h>
 // TODO: do we want these members to be public?
 #[derive(Clone, Debug, PartialEq)]
 pub struct Symbol {
@@ -19,7 +19,7 @@ pub struct Symbol {
     /// Almost always the same as base_name, but with name mangling can be relevant
     pub pretty_name: InternedString,
     /// Currently set to C. Consider creating a "rust" mode and using it in cbmc
-    /// https://github.com/model-checking/kani/issues/1
+    /// <https://github.com/model-checking/kani/issues/1>
     pub mode: InternedString,
 
     // global properties
