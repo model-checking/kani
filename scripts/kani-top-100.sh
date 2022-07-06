@@ -136,8 +136,8 @@ function clone_and_run_kani {
     # run cargo kani compile on repo. save results to file.
     PATH=$PATH:$SELF_DIR
     (cd $REPO_DIRECTORY; nice -n15 cargo kani --only-codegen) \
-	 1> $REPO_DIRECTORY/$STDOUT_SUFFIX \
-	 2> $REPO_DIRECTORY/$STDERR_SUFFIX
+         1> $REPO_DIRECTORY/$STDOUT_SUFFIX \
+         2> $REPO_DIRECTORY/$STDERR_SUFFIX
     echo $? > $REPO_DIRECTORY/$EXIT_CODE_SUFFIX
 }
 
@@ -150,24 +150,24 @@ function print_errors_for_each_repo_result {
 
     error_code="$(cat $DIRECTORY/$EXIT_CODE_SUFFIX)"
     if ! [ "$error_code" = "0" ]; then
-	echo -e "Error exit: code $error_code\n"
-	IS_FAIL='1'
+        echo -e "Error exit: code $error_code\n"
+        IS_FAIL='1'
     fi
 
     STDERR_GREP=$(grep -A3 -n $TARGET_ERROR_REGEX $DIRECTORY/$STDERR_SUFFIX 2> /dev/null && echo 'STDERR has warnings')
     if [[ "$STDERR_GREP" =~ [a-zA-Z0-9] ]]; then
-	echo -e "------ STDERR Warnings (Plus 3 lines after) -----\n$STDERR_GREP"
-	IS_FAIL='1'
+        echo -e "------ STDERR Warnings (Plus 3 lines after) -----\n$STDERR_GREP"
+        IS_FAIL='1'
     fi
 
     STDOUT_GREP=$(grep -A3 -n $TARGET_ERROR_REGEX $DIRECTORY/$STDOUT_SUFFIX 2> /dev/null && echo 'STDOUT has warnings')
     if [[ "$STDOUT_GREP" =~ [a-zA-Z0-9] ]] && [ "$PRINT_STDOUT" = '1' ]; then
-	echo -e "------ STDOUT Warnings (Plus 3 lines after) -----\n$STDOUT_GREP"
-	IS_FAIL='1'
+        echo -e "------ STDOUT Warnings (Plus 3 lines after) -----\n$STDOUT_GREP"
+        IS_FAIL='1'
     fi
 
     if [ "$IS_FAIL" -eq "0" ]; then
-	echo 'Ok'
+        echo 'Ok'
     fi
 }
 
@@ -180,18 +180,18 @@ elif [ "$#" -eq "0" ]; then
     # top level logic that runs clone_and_run_kani in parallel with xargs.
     mkdir -p $WORK_DIRECTORY_PREFIX
     echo -e "$HARD_CODED_TOP_100_CRATES_AS_OF_2022_6_17" | \
-	awk -F '\n' 'BEGIN{ a=0 }{ print a++ "," $1  }' | \
-	xargs -n1 -I {} -P $NPROC bash -c "$SELF_SCRIPT {}"
+        awk -F '\n' 'BEGIN{ a=0 }{ print a++ "," $1  }' | \
+        xargs -n1 -I {} -P $NPROC bash -c "$SELF_SCRIPT {}"
 
     # serially print out the ones that failed.
     for directory in $(ls $WORK_DIRECTORY_PREFIX); do
-	REPOSITORY=$(git -C $WORK_DIRECTORY_PREFIX/$directory remote -v | awk '{ print $2 }' | head -1)
-	echo "repository: $REPOSITORY"
+        REPOSITORY=$(git -C $WORK_DIRECTORY_PREFIX/$directory remote -v | awk '{ print $2 }' | head -1)
+        echo "repository: $REPOSITORY"
 
-	ERROR_OUTPUTS=$(print_errors_for_each_repo_result $WORK_DIRECTORY_PREFIX/$directory)
-	if [[ ! "$ERROR_OUTPUTS" =~ 'STD... has warnings' ]]; then
-	    OVERALL_EXIT_CODE='1'
-	fi
+        ERROR_OUTPUTS=$(print_errors_for_each_repo_result $WORK_DIRECTORY_PREFIX/$directory)
+        if [[ ! "$ERROR_OUTPUTS" =~ 'STD... has warnings' ]]; then
+            OVERALL_EXIT_CODE='1'
+        fi
 
         echo -e "$ERROR_OUTPUTS" | sed 's/^/    /'
     done
