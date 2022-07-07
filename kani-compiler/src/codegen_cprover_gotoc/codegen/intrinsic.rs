@@ -644,9 +644,7 @@ impl<'tcx> GotocCtx<'tcx> {
             "volatile_copy_nonoverlapping_memory" => {
                 unstable_codegen!(codegen_intrinsic_copy!(Memcpy))
             }
-            "volatile_load" => {
-                unstable_codegen!(self.codegen_expr_to_place(p, fargs.remove(0).dereference()))
-            }
+            "volatile_load" => self.codegen_volatile_load(fargs, farg_types, loc),
             "volatile_store" => {
                 assert!(self.place_ty(p).is_unit());
                 self.codegen_volatile_store(fargs, farg_types, loc)
@@ -1319,6 +1317,35 @@ impl<'tcx> GotocCtx<'tcx> {
             })
             .collect();
         self.codegen_expr_to_place(p, Expr::vector_expr(cbmc_ret_ty, elems))
+    }
+
+    /// A volatile load of a memory location:
+    /// <https://doc.rust-lang.org/std/ptr/fn.read_volatile.html>
+    ///
+    /// Undefined behavior if any of these conditions are violated:
+    ///  * `src` must be valid for writes (done by `--pointer-check`)
+    ///  * `src` must be properly aligned (done by `align_check` below)
+    ///
+    /// TODO: Add a check for the condition:
+    ///  * `src` must point to a properly initialized value of type `T`
+    /// See https://github.com/model-checking/kani/issues/920 for more details
+    fn codegen_volatile_load(
+        &mut self,
+        mut fargs: Vec<Expr>,
+        farg_types: &[Ty<'tcx>],
+        loc: Location,
+    ) -> Stmt {
+        let src = fargs.remove(0);
+        let src_typ = farg_types[0];
+        let align = self.is_ptr_aligned(src_typ, src.clone());
+        let align_check = self.codegen_assert(
+            align,
+            PropertyClass::SafetyCheck,
+            "`src` must be properly aligned",
+            loc,
+        );
+        let expr = src.dereference().as_stmt(loc);
+        Stmt::block(vec![align_check, expr], loc)
     }
 
     /// A volatile write of a memory location:
