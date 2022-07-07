@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use crate::goto_program::{
-    BinaryOperand, CIntType, Contract, DatatypeComponent, Expr, ExprValue, Location, Parameter,
-    SelfOperand, Stmt, StmtBody, SwitchCase, Symbol, SymbolTable, SymbolValues, Type, UnaryOperand,
+    BinaryOperand, CIntType, DatatypeComponent, Expr, ExprValue, Location, Parameter, SelfOperand,
+    Stmt, StmtBody, SwitchCase, Symbol, SymbolTable, SymbolValues, Type, UnaryOperand,
 };
 use crate::InternedString;
 use num::bigint::BigInt;
@@ -251,20 +251,20 @@ pub trait Transformer: Sized {
         transformed_typ.to_typedef(tag)
     }
 
-    fn transform_contract(&mut self, c: &Contract) -> Contract {
-        match c {
-            Contract::FunctionContract { ensures, requires } => {
-                let transformed_ensures =
-                    ensures.iter().map(|clause| self.transform_expr(clause)).collect();
-                let transformed_requires =
-                    requires.iter().map(|clause| self.transform_expr(clause)).collect();
-                Contract::FunctionContract {
-                    ensures: transformed_ensures,
-                    requires: transformed_requires,
-                }
-            }
-        }
-    }
+    // fn transform_contract(&mut self, c: &Contract) -> Contract {
+    //     match c {
+    //         Contract::FunctionContract { ensures, requires } => {
+    //             let transformed_ensures =
+    //                 ensures.iter().map(|clause| self.transform_expr(clause)).collect();
+    //             let transformed_requires =
+    //                 requires.iter().map(|clause| self.transform_expr(clause)).collect();
+    //             Contract::FunctionContract {
+    //                 ensures: transformed_ensures,
+    //                 requires: transformed_requires,
+    //             }
+    //         }
+    //     }
+    // }
 
     /// Perform recursive descent on a `Expr` data structure.
     /// Extracts the variant's field data, and passes them into
@@ -730,9 +730,9 @@ pub trait Transformer: Sized {
     fn transform_value(&mut self, value: &SymbolValues) -> SymbolValues {
         match value {
             SymbolValues::None => SymbolValues::None,
-            SymbolValues::Contract(contract) => {
-                SymbolValues::Contract(self.transform_contract(contract))
-            }
+            // SymbolValues::Contract(contract) => {
+            //     SymbolValues::Contract(self.transform_contract(contract))
+            // }
             SymbolValues::Expr(expr) => SymbolValues::Expr(self.transform_expr(expr)),
             SymbolValues::Stmt(stmt) => SymbolValues::Stmt(self.transform_stmt(stmt)),
         }

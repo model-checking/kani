@@ -480,11 +480,12 @@ impl ToIrep for SwitchCase {
 impl goto_program::Symbol {
     pub fn to_irep(&self, mm: &MachineModel) -> super::Symbol {
         super::Symbol {
-            typ: self.typ.to_irep(mm).with_contract(&self.value, mm),
+            typ: self.typ.to_irep(mm),
+            // .with_contract(&self.value, mm),
             value: match &self.value {
                 SymbolValues::Expr(e) => e.to_irep(mm),
                 SymbolValues::Stmt(s) => s.to_irep(mm),
-                SymbolValues::Contract(_) => Irep::nil(),
+                // SymbolValues::Contract(_) => Irep::nil(),
                 SymbolValues::None => Irep::nil(),
             },
             location: self.location.to_irep(mm),
