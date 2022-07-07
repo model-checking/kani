@@ -995,7 +995,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Creates a zero-sized struct for a FnDef.
     ///
     /// A FnDef instance in Rust is a zero-sized type, which can be passed around directly, without creating a pointer.
-    /// (Rust docs: https://doc.rust-lang.org/reference/types/function-item.html)
+    /// (Rust docs: <https://doc.rust-lang.org/reference/types/function-item.html>)
     /// To mirror this in GotoC, we create a dummy struct for the function, similarly to what we do for closures.
     ///
     /// For details, see <https://github.com/model-checking/kani/pull/1338>

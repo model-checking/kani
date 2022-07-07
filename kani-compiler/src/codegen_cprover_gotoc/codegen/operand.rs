@@ -628,20 +628,26 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Ensure that the given instance is in the symbol table, returning the symbol.
-    pub fn codegen_func_symbol(&mut self, instance: Instance<'tcx>) -> &Symbol {
+    ///
+    /// FIXME: The function should not have to return the type of the function symbol as well
+    /// because the symbol should have the type. The problem is that the type in the symbol table
+    /// sometimes subtly differs from the type that codegen_function_sig returns.
+    /// This is tracked in <https://github.com/model-checking/kani/issues/1350>.
+    pub fn codegen_func_symbol(&mut self, instance: Instance<'tcx>) -> (&Symbol, Type) {
         let func = self.symbol_name(instance);
         let funct = self.codegen_function_sig(self.fn_sig_of_instance(instance).unwrap());
         // make sure the functions imported from other modules are in the symbol table
-        self.ensure(&func, |ctx, _| {
+        let sym = self.ensure(&func, |ctx, _| {
             Symbol::function(
                 &func,
-                funct,
+                funct.clone(),
                 None,
                 Some(ctx.readable_instance_name(instance)),
                 Location::none(),
             )
             .with_is_extern(true)
-        })
+        });
+        (sym, funct)
     }
 
     /// For a given function instance, generates an expression for the function symbol of type `Code`.
@@ -651,8 +657,8 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// For details, see <https://github.com/model-checking/kani/pull/1338>
     pub fn codegen_func_expr(&mut self, instance: Instance<'tcx>, span: Option<&Span>) -> Expr {
-        let func_symbol = self.codegen_func_symbol(instance);
-        Expr::symbol_expression(func_symbol.name, func_symbol.typ.clone())
+        let (func_symbol, func_typ) = self.codegen_func_symbol(instance);
+        Expr::symbol_expression(func_symbol.name, func_typ)
             .with_location(self.codegen_span_option(span.cloned()))
     }
 
@@ -663,7 +669,8 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// Note: use `codegen_func_expr` instead if you want to call the function immediately.
     fn codegen_fn_item(&mut self, instance: Instance<'tcx>, span: Option<&Span>) -> Expr {
-        let func = self.codegen_func_symbol(instance).name;
+        let (func_symbol, _) = self.codegen_func_symbol(instance);
+        let func = func_symbol.name;
         let fn_struct_ty = self.codegen_fndef_type(instance);
         // This zero-sized object that a function name refers to in Rust is globally unique, so we create such a global object.
         let fn_singleton_name = format!("{func}::FnDefSingleton");
