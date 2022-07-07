@@ -644,7 +644,7 @@ impl<'tcx> GotocCtx<'tcx> {
             "volatile_copy_nonoverlapping_memory" => {
                 unstable_codegen!(codegen_intrinsic_copy!(Memcpy))
             }
-            "volatile_load" => self.codegen_volatile_load(fargs, farg_types, loc),
+            "volatile_load" => self.codegen_volatile_load(fargs, farg_types, p, loc),
             "volatile_store" => {
                 assert!(self.place_ty(p).is_unit());
                 self.codegen_volatile_store(fargs, farg_types, loc)
@@ -1333,6 +1333,7 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         mut fargs: Vec<Expr>,
         farg_types: &[Ty<'tcx>],
+        p: &Place<'tcx>,
         loc: Location,
     ) -> Stmt {
         let src = fargs.remove(0);
@@ -1344,8 +1345,9 @@ impl<'tcx> GotocCtx<'tcx> {
             "`src` must be properly aligned",
             loc,
         );
-        let expr = src.dereference().as_stmt(loc);
-        Stmt::block(vec![align_check, expr], loc)
+        let expr = src.dereference();
+        let res_stmt = self.codegen_expr_to_place(p, expr);
+        Stmt::block(vec![align_check, res_stmt], loc)
     }
 
     /// A volatile write of a memory location:
