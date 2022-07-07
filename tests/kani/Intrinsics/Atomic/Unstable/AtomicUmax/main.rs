@@ -1,12 +1,13 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// Check that `atomic_umax` and other variants (unstable version) return the
+// Check that `atomic_umax_seqcst` and other variants (unstable version) return the
 // expected result.
 
 #![feature(core_intrinsics)]
 use std::intrinsics::{
-    atomic_umax, atomic_umax_acq, atomic_umax_acqrel, atomic_umax_rel, atomic_umax_relaxed,
+    atomic_umax_acqrel, atomic_umax_acquire, atomic_umax_relaxed, atomic_umax_release,
+    atomic_umax_seqcst,
 };
 
 #[kani::proof]
@@ -26,10 +27,10 @@ fn main() {
     let b = 1 as u8;
 
     unsafe {
-        let x1 = atomic_umax(ptr_a1, b);
-        let x2 = atomic_umax_acq(ptr_a2, b);
+        let x1 = atomic_umax_seqcst(ptr_a1, b);
+        let x2 = atomic_umax_acquire(ptr_a2, b);
         let x3 = atomic_umax_acqrel(ptr_a3, b);
-        let x4 = atomic_umax_rel(ptr_a4, b);
+        let x4 = atomic_umax_release(ptr_a4, b);
         let x5 = atomic_umax_relaxed(ptr_a5, b);
 
         assert!(x1 == 0);

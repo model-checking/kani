@@ -6,7 +6,8 @@
 
 #![feature(core_intrinsics)]
 use std::intrinsics::{
-    atomic_xadd, atomic_xadd_acq, atomic_xadd_acqrel, atomic_xadd_rel, atomic_xadd_relaxed,
+    atomic_xadd_acqrel, atomic_xadd_acquire, atomic_xadd_relaxed, atomic_xadd_release,
+    atomic_xadd_seqcst,
 };
 
 #[kani::proof]
@@ -27,10 +28,10 @@ fn main() {
     let c = 1 as u8;
 
     unsafe {
-        let x1 = atomic_xadd(ptr_a1, b);
-        let x2 = atomic_xadd_acq(ptr_a2, b);
+        let x1 = atomic_xadd_seqcst(ptr_a1, b);
+        let x2 = atomic_xadd_acquire(ptr_a2, b);
         let x3 = atomic_xadd_acqrel(ptr_a3, b);
-        let x4 = atomic_xadd_rel(ptr_a4, b);
+        let x4 = atomic_xadd_release(ptr_a4, b);
         let x5 = atomic_xadd_relaxed(ptr_a5, b);
 
         assert!(x1 == 0);
