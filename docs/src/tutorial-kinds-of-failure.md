@@ -72,7 +72,7 @@ VERIFICATION:- FAILED
 
 Notice that, for Kani, this has gone from a simple bounds-checking problem to a pointer-checking problem.
 Kani will check operations on pointers to ensure they're not potentially invalid memory accesses.
-Any unsafe code that manipulates pointers will, as we see here, raise failures if its behavior is actually unsafe. 
+Any unsafe code that manipulates pointers will, as we see here, raise failures if its behavior is actually a problem.
 
 Consider trying a few more small exercises with this example:
 
@@ -103,10 +103,9 @@ The first is Rust's runtime bounds checking for the safe indexing operation.
 The second is Kani's check to ensure the pointer operation is actually safe.
 This pattern (two checks for similar issues in safe Rust code) is common to see, and we'll see it again in the next section.
 
-> **NOTE**: While Kani will always emit both kinds of checks, in the future the output here may change.
-> Kani is not currently recognizing that the runtime bounds check means it cannot reach the unsafe pointer dereference.
-> It may do so in the future.
-> In that case, just the bounds check would appear as a failing assertion here.
+> **NOTE**: While Kani will always be checking for both properties, [in the future the output here may change](https://github.com/model-checking/kani/issues/1349).
+> You might have noticed that the bad pointer dereference can't happen, since the bounds check would panic first.
+> In the future, Kani's output may report only the bounds checking failure in this example.
 
 </details>
 
