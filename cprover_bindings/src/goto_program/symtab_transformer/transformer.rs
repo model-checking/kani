@@ -157,7 +157,7 @@ pub trait Transformer: Sized {
     }
 
     fn transform_type_mathematical_function(&mut self, domain: &[Type], codomain: &Type) -> Type {
-        let transformed_domain: Vec<Type> = domain.iter().map(|x| self.transform_type(x)).collect();
+        let transformed_domain = domain.iter().map(|x| self.transform_type(x)).collect();
         let transformed_codomain = self.transform_type(codomain);
         Type::MathematicalFunction {
             domain: transformed_domain,
@@ -254,9 +254,9 @@ pub trait Transformer: Sized {
     fn transform_contract(&mut self, c: &Contract) -> Contract {
         match c {
             Contract::FunctionContract { ensures, requires } => {
-                let transformed_ensures: Vec<Expr> =
+                let transformed_ensures =
                     ensures.iter().map(|clause| self.transform_expr(clause)).collect();
-                let transformed_requires: Vec<Expr> =
+                let transformed_requires =
                     requires.iter().map(|clause| self.transform_expr(clause)).collect();
                 Contract::FunctionContract {
                     ensures: transformed_ensures,
