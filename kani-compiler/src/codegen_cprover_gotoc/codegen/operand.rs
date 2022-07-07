@@ -57,7 +57,7 @@ impl<'tcx> GotocCtx<'tcx> {
         debug!("found literal: {:?}", lit);
         let lit = self.monomorphize(lit);
 
-        match lit.val() {
+        match lit.kind() {
             // evaluate constant if it has no been evaluated yet
             ConstKind::Unevaluated(unevaluated) => {
                 debug!("The literal was a Unevaluated");
@@ -68,14 +68,15 @@ impl<'tcx> GotocCtx<'tcx> {
                 self.codegen_const_value(const_val, lit.ty(), span)
             }
 
-            ConstKind::Value(v) => {
-                debug!("The literal was a ConstValue {:?}", v);
-                self.codegen_const_value(v, lit.ty(), span)
+            ConstKind::Value(valtree) => {
+                let value = self.tcx.valtree_to_const_val((lit.ty(), valtree));
+                debug!("The literal was a ConstValue {:?}", value);
+                self.codegen_const_value(value, lit.ty(), span)
             }
             _ => {
                 unreachable!(
                     "monomorphized item shouldn't have this constant value: {:?}",
-                    lit.val()
+                    lit.kind()
                 )
             }
         }
@@ -104,8 +105,6 @@ impl<'tcx> GotocCtx<'tcx> {
                 ty::Slice(slice_ty) => {
                     if let Uint(UintTy::U8) = slice_ty.kind() {
                         // The case where we have a slice of u8 is easy enough: make an array of u8
-                        // TODO: Handle cases with larger int types by making an array of bytes,
-                        // then using byte-extract on it.
                         let slice =
                             data.inspect_with_uninit_and_ptr_outside_interpreter(start..end);
                         let vec_of_bytes: Vec<Expr> = slice
@@ -123,12 +122,22 @@ impl<'tcx> GotocCtx<'tcx> {
                             len_expr,
                             &self.symbol_table,
                         );
+                    } else {
+                        // TODO: Handle cases with other types such as tuples and larger integers.
+                        let loc = self.codegen_span_option(span.cloned());
+                        let typ = self.codegen_ty(lit_ty);
+                        return self.codegen_unimplemented(
+                            "Constant slice value with 2+ bytes",
+                            typ,
+                            loc,
+                            "https://github.com/model-checking/kani/issues/1339",
+                        );
                     }
                 }
                 _ => {}
             }
         }
-        unimplemented!("\nv {:?}\nlit_ty {:?}\nspan {:?}", v, lit_ty, span);
+        unimplemented!("\nv {:?}\nlit_ty {:?}\nspan {:?}", v, lit_ty.kind(), span);
     }
 
     pub fn codegen_const_value(
