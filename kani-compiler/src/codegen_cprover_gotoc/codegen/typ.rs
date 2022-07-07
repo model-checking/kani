@@ -998,7 +998,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// (Rust docs: https://doc.rust-lang.org/reference/types/function-item.html)
     /// To mirror this in GotoC, we create a dummy struct for the function, similarly to what we do for closures.
     ///
-    /// For details, see https://github.com/model-checking/kani/pull/1338
+    /// For details, see <https://github.com/model-checking/kani/pull/1338>
     pub fn codegen_fndef_type(&mut self, instance: Instance<'tcx>) -> Type {
         let func = self.symbol_name(instance);
         self.ensure_struct(

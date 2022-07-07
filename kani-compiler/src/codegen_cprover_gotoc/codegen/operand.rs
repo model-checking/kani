@@ -649,7 +649,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Note: use `codegen_func_expr_zst` in the general case because GotoC does not allow functions to be used in all contexts
     /// (e.g. struct fields).
     ///
-    /// For details, see https://github.com/model-checking/kani/pull/1338
+    /// For details, see <https://github.com/model-checking/kani/pull/1338>
     pub fn codegen_func_expr(&mut self, instance: Instance<'tcx>, span: Option<&Span>) -> Expr {
         let func_symbol = self.codegen_func_symbol(instance);
         Expr::symbol_expression(func_symbol.name, func_symbol.typ.clone())
@@ -659,7 +659,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// For a given function instance, generates a zero-sized dummy symbol of type `Struct`.
     ///
     /// This is often necessary because GotoC does not allow functions to be used in all contexts (e.g. struct fields).
-    /// For details, see https://github.com/model-checking/kani/pull/1338
+    /// For details, see <https://github.com/model-checking/kani/pull/1338>
     ///
     /// Note: use `codegen_func_expr` instead if you want to call the function immediately.
     fn codegen_fn_item(&mut self, instance: Instance<'tcx>, span: Option<&Span>) -> Expr {
