@@ -1,12 +1,13 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// Check that `atomic_xor` and other variants (unstable version) return the
+// Check that `atomic_xor_seqcst` and other variants (unstable version) return the
 // expected result.
 
 #![feature(core_intrinsics)]
 use std::intrinsics::{
-    atomic_xor, atomic_xor_acq, atomic_xor_acqrel, atomic_xor_rel, atomic_xor_relaxed,
+    atomic_xor_acqrel, atomic_xor_acquire, atomic_xor_relaxed, atomic_xor_release,
+    atomic_xor_seqcst,
 };
 
 #[kani::proof]
@@ -26,10 +27,10 @@ fn main() {
     let b = 1 as u8;
 
     unsafe {
-        let x1 = atomic_xor(ptr_a1, b);
-        let x2 = atomic_xor_acq(ptr_a2, b);
+        let x1 = atomic_xor_seqcst(ptr_a1, b);
+        let x2 = atomic_xor_acquire(ptr_a2, b);
         let x3 = atomic_xor_acqrel(ptr_a3, b);
-        let x4 = atomic_xor_rel(ptr_a4, b);
+        let x4 = atomic_xor_release(ptr_a4, b);
         let x5 = atomic_xor_relaxed(ptr_a5, b);
 
         assert!(x1 == 1);
