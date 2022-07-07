@@ -244,11 +244,6 @@ impl ToIrep for ExprValue {
             ExprValue::IntConstant(_) => {
                 unreachable!("Should have been processed in previous step")
             }
-            ExprValue::LambdaExpression { variables_tuple, body } => Irep {
-                id: IrepId::Lambda,
-                sub: vec![variables_tuple.to_irep(mm), body.to_irep(mm)],
-                named_sub: linear_map![],
-            },
             ExprValue::Member { lhs, field } => Irep {
                 id: IrepId::Member,
                 sub: vec![lhs.to_irep(mm)],
@@ -293,11 +288,6 @@ impl ToIrep for ExprValue {
                     IrepId::Identifier,
                     Irep::just_string_id(identifier.to_string()),
                 )],
-            },
-            ExprValue::Tuple { operands } => Irep {
-                id: IrepId::Tuple,
-                sub: operands.iter().map(|op| op.to_irep(mm)).collect(),
-                named_sub: linear_map![(IrepId::Type, Irep::just_id(IrepId::Tuple))],
             },
             ExprValue::Typecast(e) => {
                 Irep { id: IrepId::Typecast, sub: vec![e.to_irep(mm)], named_sub: linear_map![] }

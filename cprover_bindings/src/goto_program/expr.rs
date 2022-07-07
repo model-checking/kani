@@ -104,11 +104,6 @@ pub enum ExprValue {
     },
     /// `123`
     IntConstant(BigInt),
-    /// Lambda expressions do not exist immediately in C.
-    LambdaExpression {
-        variables_tuple: Expr,
-        body: Expr,
-    },
     /// `lhs.field`
     Member {
         lhs: Expr,
@@ -142,10 +137,6 @@ pub enum ExprValue {
     /// `self`
     Symbol {
         identifier: InternedString,
-    },
-    /// Tuple does not represent any expression in C.
-    Tuple {
-        operands: Vec<Expr>,
     },
     /// `(typ) self`. Target type is in the outer `Expr` struct.
     Typecast(Expr),
@@ -315,12 +306,8 @@ impl Expr {
             Dereference(e) => e.is_side_effect(),
             If { c, t, e } => c.is_side_effect() || t.is_side_effect() || e.is_side_effect(),
             Index { array, index } => array.is_side_effect() || index.is_side_effect(),
-            LambdaExpression { variables_tuple, body } => {
-                variables_tuple.is_side_effect() || body.is_side_effect()
-            }
             Member { lhs, field: _ } => lhs.is_side_effect(),
             Struct { values } => values.iter().any(|e| e.is_side_effect()),
-            Tuple { operands } => operands.iter().any(|op| op.is_side_effect()),
             Typecast(e) => e.is_side_effect(),
             Union { value, field: _ } => value.is_side_effect(),
             UnOp { op: _, e } => e.is_side_effect(),
@@ -422,27 +409,6 @@ impl Expr {
             unreachable!("Can't make an array_val with non-array target type {:?}", typ);
         }
         expr!(Array { elems }, typ)
-    }
-
-    pub fn lambda_expression(typ: Type, variables_tuple: Expr, body: Expr) -> Self {
-        if let Type::MathematicalFunction { domain, codomain } = typ.clone() {
-            if let ExprValue::Tuple { operands } = variables_tuple.clone().value() {
-                assert_eq!(operands.len(), domain.len() + 1);
-                let mut value_typ = domain;
-                value_typ.insert(0, *codomain);
-                let operands_typ = operands.iter().map(|x| x.typ.clone()).collect::<Vec<Type>>();
-                assert_eq!(operands_typ, value_typ);
-            } else {
-                unreachable!("Variables must be specified as a tuple");
-            }
-        } else {
-            unreachable!("Can't make a lambda expression with non-lambda target type {:?}", typ);
-        }
-        expr!(LambdaExpression { variables_tuple, body }, typ)
-    }
-
-    pub fn tuple_expr(typ: Type, operands: Vec<Expr>) -> Self {
-        expr!(Tuple { operands }, typ)
     }
 
     pub fn vector_expr(typ: Type, elems: Vec<Expr>) -> Self {

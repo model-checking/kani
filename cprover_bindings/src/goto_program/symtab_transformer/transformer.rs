@@ -291,9 +291,6 @@ pub trait Transformer: Sized {
             ExprValue::If { c, t, e } => self.transform_expr_if(typ, c, t, e),
             ExprValue::Index { array, index } => self.transform_expr_index(typ, array, index),
             ExprValue::IntConstant(value) => self.transform_expr_int_constant(typ, value),
-            ExprValue::LambdaExpression { variables_tuple, body } => {
-                self.transform_expr_lambda_expression(typ, variables_tuple, body)
-            }
             ExprValue::Member { lhs, field } => self.transform_expr_member(typ, lhs, *field),
             ExprValue::Nondet => self.transform_expr_nondet(typ),
             ExprValue::PointerConstant(value) => self.transform_expr_pointer_constant(typ, value),
@@ -304,7 +301,6 @@ pub trait Transformer: Sized {
             ExprValue::StringConstant { s } => self.transform_expr_string_constant(typ, *s),
             ExprValue::Struct { values } => self.transform_expr_struct(typ, values),
             ExprValue::Symbol { identifier } => self.transform_expr_symbol(typ, *identifier),
-            ExprValue::Tuple { operands } => self.transform_expr_tuple(typ, operands),
             ExprValue::Typecast(child) => self.transform_expr_typecast(typ, child),
             ExprValue::Union { value, field } => self.transform_expr_union(typ, value, *field),
             ExprValue::UnOp { op, e } => self.transform_expr_un_op(typ, op, e),
@@ -323,18 +319,6 @@ pub trait Transformer: Sized {
         let transformed_typ = self.transform_type(typ);
         let transformed_elems = elems.iter().map(|elem| self.transform_expr(elem)).collect();
         Expr::array_expr(transformed_typ, transformed_elems)
-    }
-
-    fn transform_expr_lambda_expression(
-        &mut self,
-        typ: &Type,
-        variables: &Expr,
-        body: &Expr,
-    ) -> Expr {
-        let transformed_typ = self.transform_type(typ);
-        let transformed_variables = self.transform_expr(variables);
-        let transformed_body = self.transform_expr(body);
-        Expr::lambda_expression(transformed_typ, transformed_variables, transformed_body)
     }
 
     /// Transform a vector expr (`vec_typ x[] = >>> {elems0, elems1 ...} <<<`)
@@ -505,12 +489,6 @@ pub trait Transformer: Sized {
     fn transform_expr_symbol(&mut self, typ: &Type, identifier: InternedString) -> Expr {
         let transformed_typ = self.transform_type(typ);
         Expr::symbol_expression(identifier, transformed_typ)
-    }
-
-    fn transform_expr_tuple(&mut self, typ: &Type, operands: &Vec<Expr>) -> Expr {
-        let transformed_typ = self.transform_type(typ);
-        let transformed_operands = operands.iter().map(|op| self.transform_expr(op)).collect();
-        Expr::tuple_expr(transformed_typ, transformed_operands)
     }
 
     /// Transforms a typecast expr (`(typ) self`)
