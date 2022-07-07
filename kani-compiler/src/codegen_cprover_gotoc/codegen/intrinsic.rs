@@ -1328,7 +1328,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// TODO: Add a check for the condition:
     ///  * `src` must point to a properly initialized value of type `T`
-    /// See https://github.com/model-checking/kani/issues/920 for more details
+    /// See <https://github.com/model-checking/kani/issues/920> for more details
     fn codegen_volatile_load(
         &mut self,
         mut fargs: Vec<Expr>,
