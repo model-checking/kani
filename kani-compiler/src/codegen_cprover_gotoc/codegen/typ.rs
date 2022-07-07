@@ -1406,9 +1406,10 @@ impl<'tcx> GotocCtx<'tcx> {
         data_path.iter().rev().fold(ptr_type, |last_type, curr| {
             // Codegen the type replacing the non-zst field.
             let new_name = self.ty_mangled_name(*curr).to_string() + "::WithDataPtr";
+            let new_pretty_name = format!("{}::WithDataPtr", self.ty_pretty_name(*curr));
             if let ty::Adt(adt_def, adt_substs) = curr.kind() {
                 let fields = &adt_def.variants().get(VariantIdx::from_u32(0)).unwrap().fields;
-                self.ensure_struct(new_name, NO_PRETTY_NAME, |ctx, s_name| {
+                self.ensure_struct(new_name, new_pretty_name, |ctx, s_name| {
                     let fields_shape = ctx.layout_of(*curr).layout.fields();
                     let components = fields_shape
                         .index_by_increasing_offset()
