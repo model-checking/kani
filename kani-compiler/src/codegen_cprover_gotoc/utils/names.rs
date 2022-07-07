@@ -56,7 +56,9 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// A human readable name in Rust for reference, should not be used as a key.
     pub fn readable_instance_name(&self, instance: Instance<'tcx>) -> String {
-        with_no_trimmed_paths!(self.tcx.def_path_str(instance.def_id()))
+        with_no_trimmed_paths!(
+            self.tcx.def_path_str_with_substs(instance.def_id(), instance.substs)
+        )
     }
 
     /// The actual function name used in the symbol table
