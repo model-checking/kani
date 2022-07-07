@@ -24,7 +24,7 @@ Failed Checks: unwinding assertion loop 0
 VERIFICATION:- FAILED
 ```
 
-If we try removing this "unwind" annotation and re-running Kani, we get a worse failure: non-termination.
+If we try removing this "unwind" annotation and re-running Kani, the result is worse: non-termination.
 Kani simply doesn't produce a result.
 
 > **NOTE**: Presently, [due to a bug](https://github.com/model-checking/kani/issues/493), this is especially bad: we don't see any output at all.
@@ -87,9 +87,9 @@ We now return to the question: why is 12 the unwinding bound?
 Well, the first answer is: it isn't!
 Reduce it to 11 and observe that the proof now still works!
 
-Kani needs the unwinding bound to be "one more than" the number of loops.
+Kani needs the unwinding bound to be "one more than" the number of loop iterations.
 We previously had an off-by-one error that tried to do 11 iterations on an array of size 10.
-So... it needed to be 12, then.
+So... the unwinding bound needed to be 12, then.
 Fixing that error to do the correct 10 iterations means we can now successfully reduce that unwind bound to 11 again.
 
 > **NOTE**: Presently, there are some situations where "number of iterations of a loop" can be less obvious than it seems.
@@ -102,7 +102,7 @@ The approach we've taken here is a general method for getting a bounded proof to
 1. Put an actual upper bound on the problem itself.
 Here that's accomplished via `LIMIT` in our proof harness.
 We don't create a slice any bigger than that, and that's what we loop over.
-2. Start at a reasonable guess for an `kani::unwind` bound, and increase until the unwinding assertion goes away.
+2. Start at a reasonable guess for a `kani::unwind` bound, and increase until the unwinding assertion failure goes away.
 3. Or, if that starts to take too long to verify, decrease your problem's bound, to accommodate the verifier's performance.
 
 ## Unwinding value specification
@@ -153,7 +153,7 @@ Often a parser will need to consume inputs larger than 10-20 characters to exhib
 In this section:
 
 1. We saw Kani fail to terminate.
-2. We saw how `#[kani::unwind(1)]` can force a proof to terminate.
+2. We saw how `#[kani::unwind(1)]` can help force Kani to terminate (with a verification failure).
 3. We saw "unwinding assertions" verify that we've set the unwinding limit high enough.
 4. We saw how to put a practical bound on problem size in our proof harness.
 5. We saw how to pick an unwinding size large enough to successfully verify that bounded proof.
