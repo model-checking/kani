@@ -31,7 +31,7 @@ SPDX-License-Identifier: Apache-2.0 OR MIT'
 SELF_SCRIPT=$0
 SELF_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 NPROC=$(nproc 2> /dev/null || sysctl -n hw.ncpu 2> /dev/null || echo 4)  # Linux or Mac or hard-coded default of 4
-WORK_DIRECTORY_PREFIX="$SELF_DIR/../target/top-100"
+WORK_DIRECTORY_PREFIX="$SELF_DIR/../target/remote-repos"
 
 
 STDOUT_SUFFIX='stdout.cargo-kani'
