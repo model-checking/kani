@@ -618,32 +618,33 @@ impl<'tcx> GotocCtx<'tcx> {
         self.find_function(&fname).unwrap().call(vec![init])
     }
 
-    /// Ensure that the given instance is in the symbol table, returning its symbol name and type.
-    pub fn ensure_func(&mut self, instance: Instance<'tcx>) -> (String, Type) {
+    /// Ensure that the given instance is in the symbol table, returning the symbol.
+    pub fn codegen_func_symbol(&mut self, instance: Instance<'tcx>) -> &Symbol {
         let func = self.symbol_name(instance);
         let funct = self.codegen_function_sig(self.fn_sig_of_instance(instance).unwrap());
         // make sure the functions imported from other modules are in the symbol table
         self.ensure(&func, |ctx, _| {
             Symbol::function(
                 &func,
-                funct.clone(),
+                funct,
                 None,
                 Some(ctx.readable_instance_name(instance)),
                 Location::none(),
             )
             .with_is_extern(true)
-        });
-        (func, funct)
+        })
     }
 
     /// For a given function instance, generates an expression for the function symbol of type `Code`.
     ///
     /// Note: use `codegen_func_expr_zst` in the general case because GotoC does not allow functions to be used in all contexts
     /// (e.g. struct fields).
+    ///
     /// For details, see https://github.com/model-checking/kani/pull/1338
     pub fn codegen_func_expr(&mut self, instance: Instance<'tcx>, span: Option<&Span>) -> Expr {
-        let (func, funct) = self.ensure_func(instance);
-        Expr::symbol_expression(func, funct).with_location(self.codegen_span_option(span.cloned()))
+        let func_symbol = self.codegen_func_symbol(instance);
+        Expr::symbol_expression(func_symbol.name, func_symbol.typ.clone())
+            .with_location(self.codegen_span_option(span.cloned()))
     }
 
     /// For a given function instance, generates a zero-sized dummy symbol of type `Struct`.
@@ -653,8 +654,8 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// Note: use `codegen_func_expr` instead if you want to call the function immediately.
     fn codegen_func_expr_zst(&mut self, instance: Instance<'tcx>, span: Option<&Span>) -> Expr {
-        let (func, _funct) = self.ensure_func(instance);
-        let fn_struct_ty = self.ensure_fndef_zst(instance);
+        let func = self.codegen_func_symbol(instance).name;
+        let fn_struct_ty = self.codegen_fndef_zst(instance);
         // This zero-sized object that a function name refers to in Rust is globally unique, so we create such a global object.
         let fn_singleton_name = format!("{func}::FnDefSingleton");
         let fn_singleton = self.ensure_global_var(
@@ -665,20 +666,5 @@ impl<'tcx> GotocCtx<'tcx> {
             |_, _| None, // zero-sized, so no initialization necessary
         );
         fn_singleton.with_location(self.codegen_span_option(span.cloned()))
-    }
-
-    /// Creates a zero-sized struct for a FnDef.
-    ///
-    /// A FnDef instance in Rust is a zero-sized type, which can be passed around directly, without creating a pointer.
-    /// To mirror this in GotoC, we create a dummy struct for the function, similarly to what we do for closures.
-    ///
-    /// For details, see https://github.com/model-checking/kani/pull/1338
-    pub fn ensure_fndef_zst(&mut self, instance: Instance<'tcx>) -> Type {
-        let func = self.symbol_name(instance);
-        self.ensure_struct(
-            format!("{func}::FnDefStruct"),
-            Some(self.readable_instance_name(instance)),
-            |_, _| vec![],
-        )
     }
 }

@@ -612,10 +612,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), *def_id, substs)
                         .unwrap()
                         .unwrap();
-                // A function in Rust is a zero-sized object of a unique anonymous type.
-                // Since this differs from the way functions work in C, we generate a zero-sized struct.
-                // For full details, see https://github.com/model-checking/kani/pull/1338
-                self.ensure_fndef_zst(instance)
+                self.codegen_fndef_zst(instance)
             }
             ty::FnPtr(sig) => self.codegen_function_sig(*sig).to_pointer(),
             ty::Closure(_, subst) => self.codegen_ty_closure(ty, subst),
@@ -978,6 +975,21 @@ impl<'tcx> GotocCtx<'tcx> {
         } else {
             Type::code_with_unnamed_parameters(params, self.codegen_ty(sig.output()))
         }
+    }
+
+    /// Creates a zero-sized struct for a FnDef.
+    ///
+    /// A FnDef instance in Rust is a zero-sized type, which can be passed around directly, without creating a pointer.
+    /// To mirror this in GotoC, we create a dummy struct for the function, similarly to what we do for closures.
+    ///
+    /// For details, see https://github.com/model-checking/kani/pull/1338
+    pub fn codegen_fndef_zst(&mut self, instance: Instance<'tcx>) -> Type {
+        let func = self.symbol_name(instance);
+        self.ensure_struct(
+            format!("{func}::FnDefStruct"),
+            Some(self.readable_instance_name(instance)),
+            |_, _| vec![],
+        )
     }
 
     /// codegen for struct

@@ -441,8 +441,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     | InstanceDef::ClosureOnceShim { .. }
                     | InstanceDef::CloneShim(..) => {
                         // We need to handle FnDef items in a special way because `codegen_operand` compiles them to dummy structs.
-                        // For a function call, we need to compile them to actual functions.
-                        // For a full explanation, see https://github.com/model-checking/kani/pull/1338
+                        // (cf. the function documentation)
                         let func_exp = self.codegen_func_expr(instance, None);
                         vec![
                             self.codegen_expr_to_place(destination, func_exp.call(fargs))
