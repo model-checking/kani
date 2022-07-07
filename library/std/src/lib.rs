@@ -141,7 +141,7 @@ macro_rules! eprintln {
 #[macro_export]
 macro_rules! unreachable {
     ($($arg:tt)*) => ({
-        panic!(concat!("internal error: entered unreachable code: ",
-        stringify!($($arg)*)));
+        kani::panic(concat!("internal error: entered unreachable code: ", stringify!($($arg)
+        *)));
     });
 }

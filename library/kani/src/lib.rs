@@ -113,5 +113,13 @@ pub fn nondet<T: Arbitrary>() -> T {
 #[rustc_diagnostic_item = "KaniExpectFail"]
 pub fn expect_fail(_cond: bool, _message: &'static str) {}
 
+/// Function used to generate panic with a static message as this is the only one currently
+/// supported by Kani display.
+#[inline(never)]
+#[rustc_diagnostic_item = "KaniPanic"]
+pub fn panic(message: &'static str) -> ! {
+    panic!("{}", message)
+}
+
 /// Kani proc macros must be in a separate crate
 pub use kani_macros::*;
