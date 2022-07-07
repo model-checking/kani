@@ -6,9 +6,9 @@
 
 #![feature(core_intrinsics)]
 use std::intrinsics::{
-    atomic_cxchg, atomic_cxchg_acq, atomic_cxchg_acq_failrelaxed, atomic_cxchg_acqrel,
-    atomic_cxchg_acqrel_failrelaxed, atomic_cxchg_failacq, atomic_cxchg_failrelaxed,
-    atomic_cxchg_rel, atomic_cxchg_relaxed,
+    atomic_cxchg_acqrel_acquire, atomic_cxchg_acqrel_relaxed, atomic_cxchg_acquire_acquire,
+    atomic_cxchg_acquire_relaxed, atomic_cxchg_relaxed_relaxed, atomic_cxchg_release_relaxed,
+    atomic_cxchg_seqcst_acquire, atomic_cxchg_seqcst_relaxed, atomic_cxchg_seqcst_seqcst,
 };
 
 #[kani::proof]
@@ -38,15 +38,15 @@ fn main() {
         // Returns (val, ok) where
         //  * val: the old value
         //  * ok:  bool indicating whether the operation was successful or not
-        let x1 = atomic_cxchg(ptr_a1, 0, 1);
-        let x2 = atomic_cxchg_acq(ptr_a2, 0, 1);
-        let x3 = atomic_cxchg_acq_failrelaxed(ptr_a3, 0, 1);
-        let x4 = atomic_cxchg_acqrel(ptr_a4, 0, 1);
-        let x5 = atomic_cxchg_acqrel_failrelaxed(ptr_a5, 0, 1);
-        let x6 = atomic_cxchg_failacq(ptr_a6, 0, 1);
-        let x7 = atomic_cxchg_failrelaxed(ptr_a7, 0, 1);
-        let x8 = atomic_cxchg_rel(ptr_a8, 0, 1);
-        let x9 = atomic_cxchg_relaxed(ptr_a9, 0, 1);
+        let x1 = atomic_cxchg_seqcst_seqcst(ptr_a1, 0, 1);
+        let x2 = atomic_cxchg_acquire_acquire(ptr_a2, 0, 1);
+        let x3 = atomic_cxchg_acquire_relaxed(ptr_a3, 0, 1);
+        let x4 = atomic_cxchg_acqrel_acquire(ptr_a4, 0, 1);
+        let x5 = atomic_cxchg_acqrel_relaxed(ptr_a5, 0, 1);
+        let x6 = atomic_cxchg_seqcst_acquire(ptr_a6, 0, 1);
+        let x7 = atomic_cxchg_seqcst_relaxed(ptr_a7, 0, 1);
+        let x8 = atomic_cxchg_release_relaxed(ptr_a8, 0, 1);
+        let x9 = atomic_cxchg_relaxed_relaxed(ptr_a9, 0, 1);
 
         assert!(x1 == (0, true));
         assert!(x2 == (0, true));
@@ -58,15 +58,15 @@ fn main() {
         assert!(x8 == (0, true));
         assert!(x9 == (0, true));
 
-        let y1 = atomic_cxchg(ptr_a1, 1, 1);
-        let y2 = atomic_cxchg_acq(ptr_a2, 1, 1);
-        let y3 = atomic_cxchg_acq_failrelaxed(ptr_a3, 1, 1);
-        let y4 = atomic_cxchg_acqrel(ptr_a4, 1, 1);
-        let y5 = atomic_cxchg_acqrel_failrelaxed(ptr_a5, 1, 1);
-        let y6 = atomic_cxchg_failacq(ptr_a6, 1, 1);
-        let y7 = atomic_cxchg_failrelaxed(ptr_a7, 1, 1);
-        let y8 = atomic_cxchg_rel(ptr_a8, 1, 1);
-        let y9 = atomic_cxchg_relaxed(ptr_a9, 1, 1);
+        let y1 = atomic_cxchg_seqcst_seqcst(ptr_a1, 1, 1);
+        let y2 = atomic_cxchg_acquire_acquire(ptr_a2, 1, 1);
+        let y3 = atomic_cxchg_acqrel_relaxed(ptr_a3, 1, 1);
+        let y4 = atomic_cxchg_acqrel_acquire(ptr_a4, 1, 1);
+        let y5 = atomic_cxchg_acqrel_relaxed(ptr_a5, 1, 1);
+        let y6 = atomic_cxchg_seqcst_acquire(ptr_a6, 1, 1);
+        let y7 = atomic_cxchg_seqcst_relaxed(ptr_a7, 1, 1);
+        let y8 = atomic_cxchg_release_relaxed(ptr_a8, 1, 1);
+        let y9 = atomic_cxchg_relaxed_relaxed(ptr_a9, 1, 1);
 
         assert!(y1 == (1, true));
         assert!(y2 == (1, true));

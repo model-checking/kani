@@ -1,12 +1,13 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// Check that `atomic_xchg` and other variants (unstable version) return the
+// Check that `atomic_xchg_seqcst` and other variants (unstable version) return the
 // expected result.
 
 #![feature(core_intrinsics)]
 use std::intrinsics::{
-    atomic_xchg, atomic_xchg_acq, atomic_xchg_acqrel, atomic_xchg_rel, atomic_xchg_relaxed,
+    atomic_xchg_acqrel, atomic_xchg_acquire, atomic_xchg_relaxed, atomic_xchg_release,
+    atomic_xchg_seqcst,
 };
 
 #[kani::proof]
@@ -28,14 +29,14 @@ fn main() {
         // Returns (val, ok) where
         //  * val: the old value
         //  * ok:  bool indicating whether the operation was successful or not
-        assert!(atomic_xchg(ptr_a1, 1) == 0);
-        assert!(atomic_xchg(ptr_a1, 0) == 1);
-        assert!(atomic_xchg_acq(ptr_a2, 1) == 0);
-        assert!(atomic_xchg_acq(ptr_a2, 0) == 1);
+        assert!(atomic_xchg_seqcst(ptr_a1, 1) == 0);
+        assert!(atomic_xchg_seqcst(ptr_a1, 0) == 1);
+        assert!(atomic_xchg_acquire(ptr_a2, 1) == 0);
+        assert!(atomic_xchg_acquire(ptr_a2, 0) == 1);
         assert!(atomic_xchg_acqrel(ptr_a3, 1) == 0);
         assert!(atomic_xchg_acqrel(ptr_a3, 0) == 1);
-        assert!(atomic_xchg_rel(ptr_a4, 1) == 0);
-        assert!(atomic_xchg_rel(ptr_a4, 0) == 1);
+        assert!(atomic_xchg_release(ptr_a4, 1) == 0);
+        assert!(atomic_xchg_release(ptr_a4, 0) == 1);
         assert!(atomic_xchg_relaxed(ptr_a5, 1) == 0);
         assert!(atomic_xchg_relaxed(ptr_a5, 0) == 1);
     }
