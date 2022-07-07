@@ -5,7 +5,7 @@ use super::{DatatypeComponent, Expr, Location, Parameter, Stmt, Type};
 use crate::{InternStringOption, InternedString};
 
 /// Based off the CBMC symbol implementation here:
-/// https://github.com/diffblue/cbmc/blob/develop/src/util/symbol.h
+/// <https://github.com/diffblue/cbmc/blob/develop/src/util/symbol.h>
 #[derive(Clone, Debug)]
 pub struct Symbol {
     /// Unique identifier. Mangled name from compiler `foo12_bar17_x@1`
@@ -45,7 +45,7 @@ pub struct Symbol {
 }
 
 /// Currently, only C is understood by CBMC.
-// TODO: https://github.com/model-checking/kani/issues/1
+// TODO: <https://github.com/model-checking/kani/issues/1>
 #[derive(Clone, Debug)]
 pub enum SymbolModes {
     C,

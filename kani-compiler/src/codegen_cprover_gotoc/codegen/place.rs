@@ -3,7 +3,7 @@
 //! responsible for handling codegening places.
 //!
 //! a place is an expression of specifying a location in memory, like a left value. check the cases
-//! in [codegen_place] below.
+//! in [GotocCtx::codegen_place] below.
 
 use super::typ::TypeExt;
 use crate::codegen_cprover_gotoc::utils::slice_fat_ptr;
@@ -446,7 +446,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // https://rust-lang.github.io/rfcs/2359-subslice-pattern-syntax.html
                 match before.mir_typ().kind() {
                     ty::Array(ty, len) => {
-                        let len = len.val().try_to_machine_usize(self.tcx).unwrap();
+                        let len = len.kind().try_to_machine_usize(self.tcx).unwrap();
                         let subarray_len = if from_end {
                             // `to` counts from the end of the array
                             len - to - from
@@ -578,7 +578,7 @@ impl<'tcx> GotocCtx<'tcx> {
         match before.mir_typ().kind() {
             //TODO, ask on zulip if we can ever have from_end here?
             ty::Array(elemt, length) => {
-                let length = length.val().try_to_machine_usize(self.tcx).unwrap();
+                let length = length.kind().try_to_machine_usize(self.tcx).unwrap();
                 assert!(length >= min_length);
                 let idx = if from_end { length - offset } else { offset };
                 let idxe = Expr::int_constant(idx, Type::ssize_t());

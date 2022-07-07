@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! this module contains various codegen hooks for functions.
 //! e.g.
-//! functions start with [__nondet] is silently replaced by nondeterministic values, and
-//! [begin_panic] is replaced by [assert(false)], etc.
+//! functions start with \[__nondet\] is silently replaced by nondeterministic values, and
+//! \[begin_panic\] is replaced by \[assert(false)\], etc.
 //!
 //! It would be too nasty if we spread around these sort of undocumented hooks in place, so
 //! this module addresses this issue.
@@ -168,7 +168,7 @@ impl<'tcx> GotocHook<'tcx> for Assert {
             vec![
                 reach_stmt,
                 Stmt::decl(tmp.clone(), Some(cond), caller_loc),
-                tcx.codegen_assert(tmp.clone(), PropertyClass::DefaultAssertion, &msg, caller_loc),
+                tcx.codegen_assert(tmp.clone(), PropertyClass::Assertion, &msg, caller_loc),
                 Stmt::assume(tmp, caller_loc),
                 Stmt::goto(tcx.current_fn().find_label(&target), caller_loc),
             ],

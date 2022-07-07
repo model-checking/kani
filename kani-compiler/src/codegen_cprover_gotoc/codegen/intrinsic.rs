@@ -106,14 +106,12 @@ impl<'tcx> GotocCtx<'tcx> {
         debug!("codegen_never_return_intrinsic:\n\tinstance {:?}\n\tspan {:?}", instance, span);
 
         match intrinsic {
-            "abort" => self.codegen_fatal_error(
-                PropertyClass::DefaultAssertion,
-                "reached intrinsic::abort",
-                span,
-            ),
+            "abort" => {
+                self.codegen_fatal_error(PropertyClass::Assertion, "reached intrinsic::abort", span)
+            }
             // Transmuting to an uninhabited type is UB.
             "transmute" => self.codegen_fatal_error(
-                PropertyClass::DefaultAssertion,
+                PropertyClass::SafetyCheck,
                 "transmuting to uninhabited type has undefined behavior",
                 span,
             ),
@@ -127,7 +125,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// c.f. rustc_codegen_llvm::intrinsic impl IntrinsicCallMethods<'tcx> for Builder<'a, 'll, 'tcx>
     /// fn codegen_intrinsic_call
-    /// c.f. https://doc.rust-lang.org/std/intrinsics/index.html
+    /// c.f. <https://doc.rust-lang.org/std/intrinsics/index.html>
     fn codegen_intrinsic(
         &mut self,
         instance: Instance<'tcx>,
@@ -398,79 +396,79 @@ impl<'tcx> GotocCtx<'tcx> {
                 "assumption failed",
                 loc,
             ),
-            "atomic_and" => codegen_atomic_binop!(bitand),
-            "atomic_and_acq" => codegen_atomic_binop!(bitand),
+            "atomic_and_seqcst" => codegen_atomic_binop!(bitand),
+            "atomic_and_acquire" => codegen_atomic_binop!(bitand),
             "atomic_and_acqrel" => codegen_atomic_binop!(bitand),
-            "atomic_and_rel" => codegen_atomic_binop!(bitand),
+            "atomic_and_release" => codegen_atomic_binop!(bitand),
             "atomic_and_relaxed" => codegen_atomic_binop!(bitand),
             name if name.starts_with("atomic_cxchg") => {
                 self.codegen_atomic_cxchg(intrinsic, fargs, p, loc)
             }
-            "atomic_fence" => self.codegen_atomic_noop(intrinsic, loc),
-            "atomic_fence_acq" => self.codegen_atomic_noop(intrinsic, loc),
+            "atomic_fence_seqcst" => self.codegen_atomic_noop(intrinsic, loc),
+            "atomic_fence_acquire" => self.codegen_atomic_noop(intrinsic, loc),
             "atomic_fence_acqrel" => self.codegen_atomic_noop(intrinsic, loc),
-            "atomic_fence_rel" => self.codegen_atomic_noop(intrinsic, loc),
-            "atomic_load" => self.codegen_atomic_load(intrinsic, fargs, p, loc),
-            "atomic_load_acq" => self.codegen_atomic_load(intrinsic, fargs, p, loc),
+            "atomic_fence_release" => self.codegen_atomic_noop(intrinsic, loc),
+            "atomic_load_seqcst" => self.codegen_atomic_load(intrinsic, fargs, p, loc),
+            "atomic_load_acquire" => self.codegen_atomic_load(intrinsic, fargs, p, loc),
             "atomic_load_relaxed" => self.codegen_atomic_load(intrinsic, fargs, p, loc),
             "atomic_load_unordered" => self.codegen_atomic_load(intrinsic, fargs, p, loc),
-            "atomic_max" => codegen_atomic_binop!(max),
-            "atomic_max_acq" => codegen_atomic_binop!(max),
+            "atomic_max_seqcst" => codegen_atomic_binop!(max),
+            "atomic_max_acquire" => codegen_atomic_binop!(max),
             "atomic_max_acqrel" => codegen_atomic_binop!(max),
-            "atomic_max_rel" => codegen_atomic_binop!(max),
+            "atomic_max_release" => codegen_atomic_binop!(max),
             "atomic_max_relaxed" => codegen_atomic_binop!(max),
-            "atomic_min" => codegen_atomic_binop!(min),
-            "atomic_min_acq" => codegen_atomic_binop!(min),
+            "atomic_min_seqcst" => codegen_atomic_binop!(min),
+            "atomic_min_acquire" => codegen_atomic_binop!(min),
             "atomic_min_acqrel" => codegen_atomic_binop!(min),
-            "atomic_min_rel" => codegen_atomic_binop!(min),
+            "atomic_min_release" => codegen_atomic_binop!(min),
             "atomic_min_relaxed" => codegen_atomic_binop!(min),
-            "atomic_nand" => codegen_atomic_binop!(bitnand),
-            "atomic_nand_acq" => codegen_atomic_binop!(bitnand),
+            "atomic_nand_seqcst" => codegen_atomic_binop!(bitnand),
+            "atomic_nand_acquire" => codegen_atomic_binop!(bitnand),
             "atomic_nand_acqrel" => codegen_atomic_binop!(bitnand),
-            "atomic_nand_rel" => codegen_atomic_binop!(bitnand),
+            "atomic_nand_release" => codegen_atomic_binop!(bitnand),
             "atomic_nand_relaxed" => codegen_atomic_binop!(bitnand),
-            "atomic_or" => codegen_atomic_binop!(bitor),
-            "atomic_or_acq" => codegen_atomic_binop!(bitor),
+            "atomic_or_seqcst" => codegen_atomic_binop!(bitor),
+            "atomic_or_acquire" => codegen_atomic_binop!(bitor),
             "atomic_or_acqrel" => codegen_atomic_binop!(bitor),
-            "atomic_or_rel" => codegen_atomic_binop!(bitor),
+            "atomic_or_release" => codegen_atomic_binop!(bitor),
             "atomic_or_relaxed" => codegen_atomic_binop!(bitor),
-            "atomic_singlethreadfence" => self.codegen_atomic_noop(intrinsic, loc),
-            "atomic_singlethreadfence_acq" => self.codegen_atomic_noop(intrinsic, loc),
+            "atomic_singlethreadfence_seqcst" => self.codegen_atomic_noop(intrinsic, loc),
+            "atomic_singlethreadfence_acquire" => self.codegen_atomic_noop(intrinsic, loc),
             "atomic_singlethreadfence_acqrel" => self.codegen_atomic_noop(intrinsic, loc),
-            "atomic_singlethreadfence_rel" => self.codegen_atomic_noop(intrinsic, loc),
-            "atomic_store" => self.codegen_atomic_store(intrinsic, fargs, p, loc),
-            "atomic_store_rel" => self.codegen_atomic_store(intrinsic, fargs, p, loc),
+            "atomic_singlethreadfence_release" => self.codegen_atomic_noop(intrinsic, loc),
+            "atomic_store_seqcst" => self.codegen_atomic_store(intrinsic, fargs, p, loc),
+            "atomic_store_release" => self.codegen_atomic_store(intrinsic, fargs, p, loc),
             "atomic_store_relaxed" => self.codegen_atomic_store(intrinsic, fargs, p, loc),
             "atomic_store_unordered" => self.codegen_atomic_store(intrinsic, fargs, p, loc),
-            "atomic_umax" => codegen_atomic_binop!(max),
-            "atomic_umax_acq" => codegen_atomic_binop!(max),
+            "atomic_umax_seqcst" => codegen_atomic_binop!(max),
+            "atomic_umax_acquire" => codegen_atomic_binop!(max),
             "atomic_umax_acqrel" => codegen_atomic_binop!(max),
-            "atomic_umax_rel" => codegen_atomic_binop!(max),
+            "atomic_umax_release" => codegen_atomic_binop!(max),
             "atomic_umax_relaxed" => codegen_atomic_binop!(max),
-            "atomic_umin" => codegen_atomic_binop!(min),
-            "atomic_umin_acq" => codegen_atomic_binop!(min),
+            "atomic_umin_seqcst" => codegen_atomic_binop!(min),
+            "atomic_umin_acquire" => codegen_atomic_binop!(min),
             "atomic_umin_acqrel" => codegen_atomic_binop!(min),
-            "atomic_umin_rel" => codegen_atomic_binop!(min),
+            "atomic_umin_release" => codegen_atomic_binop!(min),
             "atomic_umin_relaxed" => codegen_atomic_binop!(min),
-            "atomic_xadd" => codegen_atomic_binop!(plus),
-            "atomic_xadd_acq" => codegen_atomic_binop!(plus),
+            "atomic_xadd_seqcst" => codegen_atomic_binop!(plus),
+            "atomic_xadd_acquire" => codegen_atomic_binop!(plus),
             "atomic_xadd_acqrel" => codegen_atomic_binop!(plus),
-            "atomic_xadd_rel" => codegen_atomic_binop!(plus),
+            "atomic_xadd_release" => codegen_atomic_binop!(plus),
             "atomic_xadd_relaxed" => codegen_atomic_binop!(plus),
-            "atomic_xchg" => self.codegen_atomic_store(intrinsic, fargs, p, loc),
-            "atomic_xchg_acq" => self.codegen_atomic_store(intrinsic, fargs, p, loc),
+            "atomic_xchg_seqcst" => self.codegen_atomic_store(intrinsic, fargs, p, loc),
+            "atomic_xchg_acquire" => self.codegen_atomic_store(intrinsic, fargs, p, loc),
             "atomic_xchg_acqrel" => self.codegen_atomic_store(intrinsic, fargs, p, loc),
-            "atomic_xchg_rel" => self.codegen_atomic_store(intrinsic, fargs, p, loc),
+            "atomic_xchg_release" => self.codegen_atomic_store(intrinsic, fargs, p, loc),
             "atomic_xchg_relaxed" => self.codegen_atomic_store(intrinsic, fargs, p, loc),
-            "atomic_xor" => codegen_atomic_binop!(bitxor),
-            "atomic_xor_acq" => codegen_atomic_binop!(bitxor),
+            "atomic_xor_seqcst" => codegen_atomic_binop!(bitxor),
+            "atomic_xor_acquire" => codegen_atomic_binop!(bitxor),
             "atomic_xor_acqrel" => codegen_atomic_binop!(bitxor),
-            "atomic_xor_rel" => codegen_atomic_binop!(bitxor),
+            "atomic_xor_release" => codegen_atomic_binop!(bitxor),
             "atomic_xor_relaxed" => codegen_atomic_binop!(bitxor),
-            "atomic_xsub" => codegen_atomic_binop!(sub),
-            "atomic_xsub_acq" => codegen_atomic_binop!(sub),
+            "atomic_xsub_seqcst" => codegen_atomic_binop!(sub),
+            "atomic_xsub_acquire" => codegen_atomic_binop!(sub),
             "atomic_xsub_acqrel" => codegen_atomic_binop!(sub),
-            "atomic_xsub_rel" => codegen_atomic_binop!(sub),
+            "atomic_xsub_release" => codegen_atomic_binop!(sub),
             "atomic_xsub_relaxed" => codegen_atomic_binop!(sub),
             "bitreverse" => self.codegen_expr_to_place(p, fargs.remove(0).bitreverse()),
             // black_box is an identity function that hints to the compiler
@@ -745,9 +743,9 @@ impl<'tcx> GotocCtx<'tcx> {
     /// These are intrinsics that statically compile to panics if the type
     /// layout is invalid so we get a message that mentions the offending type.
     ///
-    /// https://doc.rust-lang.org/std/intrinsics/fn.assert_inhabited.html
-    /// https://doc.rust-lang.org/std/intrinsics/fn.assert_uninit_valid.html
-    /// https://doc.rust-lang.org/std/intrinsics/fn.assert_zero_valid.html
+    /// <https://doc.rust-lang.org/std/intrinsics/fn.assert_inhabited.html>
+    /// <https://doc.rust-lang.org/std/intrinsics/fn.assert_uninit_valid.html>
+    /// <https://doc.rust-lang.org/std/intrinsics/fn.assert_zero_valid.html>
     fn codegen_assert_intrinsic(
         &mut self,
         instance: Instance<'tcx>,
@@ -763,7 +761,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // precise error message
         if layout.abi.is_uninhabited() {
             return self.codegen_fatal_error(
-                PropertyClass::DefaultAssertion,
+                PropertyClass::SafetyCheck,
                 &format!("attempted to instantiate uninhabited type `{}`", ty),
                 span,
             );
@@ -775,7 +773,7 @@ impl<'tcx> GotocCtx<'tcx> {
             && !layout.might_permit_raw_init(self, InitKind::Zero, false)
         {
             return self.codegen_fatal_error(
-                PropertyClass::DefaultAssertion,
+                PropertyClass::SafetyCheck,
                 &format!("attempted to zero-initialize type `{}`, which is invalid", ty),
                 span,
             );
@@ -785,7 +783,7 @@ impl<'tcx> GotocCtx<'tcx> {
             && !layout.might_permit_raw_init(self, InitKind::Uninit, false)
         {
             return self.codegen_fatal_error(
-                PropertyClass::DefaultAssertion,
+                PropertyClass::SafetyCheck,
                 &format!("attempted to leave type `{}` uninitialized, which is invalid", ty),
                 span,
             );
@@ -896,9 +894,9 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// Note that this function handles code generation for:
     ///  1. The `copy` intrinsic.
-    ///     https://doc.rust-lang.org/core/intrinsics/fn.copy.html
+    ///     <https://doc.rust-lang.org/core/intrinsics/fn.copy.html>
     ///  2. The `CopyNonOverlapping` statement.
-    ///     https://doc.rust-lang.org/core/intrinsics/fn.copy_nonoverlapping.html
+    ///     <https://doc.rust-lang.org/core/intrinsics/fn.copy_nonoverlapping.html>
     ///
     /// Undefined behavior if any of these conditions are violated:
     ///  * Both `src`/`dst` must be properly aligned (done by alignment checks)
@@ -928,14 +926,14 @@ impl<'tcx> GotocCtx<'tcx> {
         let src_align = self.is_ptr_aligned(farg_types[0], src.clone());
         let src_align_check = self.codegen_assert(
             src_align,
-            PropertyClass::DefaultAssertion,
+            PropertyClass::SafetyCheck,
             "`src` must be properly aligned",
             loc,
         );
         let dst_align = self.is_ptr_aligned(farg_types[1], dst.clone());
         let dst_align_check = self.codegen_assert(
             dst_align,
-            PropertyClass::DefaultAssertion,
+            PropertyClass::SafetyCheck,
             "`dst` must be properly aligned",
             loc,
         );
@@ -970,17 +968,17 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// Note that this function handles code generation for:
     ///  1. The `offset` intrinsic.
-    ///     https://doc.rust-lang.org/std/intrinsics/fn.offset.html
+    ///     <https://doc.rust-lang.org/std/intrinsics/fn.offset.html>
     ///  2. The `arith_offset` intrinsic.
-    ///     https://doc.rust-lang.org/std/intrinsics/fn.arith_offset.html
+    ///     <https://doc.rust-lang.org/std/intrinsics/fn.arith_offset.html>
     ///
     /// Note(std): We don't check that the starting or resulting pointer stay
     /// within bounds of the object they point to. Doing so causes spurious
     /// failures due to the usage of these intrinsics in the standard library.
-    /// See https://github.com/model-checking/kani/issues/1233 for more details.
+    /// See <https://github.com/model-checking/kani/issues/1233> for more details.
     /// Also, note that this isn't a requirement for `arith_offset`, but it's
     /// one of the safety conditions specified for `offset`:
-    /// https://doc.rust-lang.org/std/primitive.pointer.html#safety-2
+    /// <https://doc.rust-lang.org/std/primitive.pointer.html#safety-2>
     fn codegen_offset(
         &mut self,
         intrinsic: &str,
@@ -1015,7 +1013,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// ptr_offset_from returns the offset between two pointers
-    /// https://doc.rust-lang.org/std/intrinsics/fn.ptr_offset_from.html
+    /// <https://doc.rust-lang.org/std/intrinsics/fn.ptr_offset_from.html>
     fn codegen_ptr_offset_from(
         &mut self,
         fargs: Vec<Expr>,
@@ -1040,7 +1038,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// `ptr_offset_from_unsigned` returns the offset between two pointers where the order is known.
     /// The logic is similar to `ptr_offset_from` but the return value is a `usize`.
-    /// See https://github.com/rust-lang/rust/issues/95892 for more details
+    /// See <https://github.com/rust-lang/rust/issues/95892> for more details
     fn codegen_ptr_offset_from_unsigned(
         &mut self,
         fargs: Vec<Expr>,
@@ -1061,7 +1059,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         let non_negative_check = self.codegen_assert_assume(
             offset_overflow.result.is_non_negative(),
-            PropertyClass::KaniCheck,
+            PropertyClass::SafetyCheck,
             "attempt to compute unsigned offset with negative distance",
             loc,
         );
@@ -1090,7 +1088,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// A transmute is a bitcast from the argument type to the return type.
-    /// https://doc.rust-lang.org/std/intrinsics/fn.transmute.html
+    /// <https://doc.rust-lang.org/std/intrinsics/fn.transmute.html>
     ///
     /// let bitpattern = unsafe {
     ///     std::mem::transmute::<f32, u32>(1.0)
@@ -1284,11 +1282,11 @@ impl<'tcx> GotocCtx<'tcx> {
     /// choosing values according to an input array of indexes.
     ///
     /// This code mimics CBMC's `shuffle_vector_exprt::lower()` here:
-    /// https://github.com/diffblue/cbmc/blob/develop/src/ansi-c/c_expr.cpp
+    /// <https://github.com/diffblue/cbmc/blob/develop/src/ansi-c/c_expr.cpp>
     ///
     /// We can't use shuffle_vector_exprt because it's not understood by the CBMC backend,
     /// it's immediately lowered by the C frontend.
-    /// Issue: https://github.com/diffblue/cbmc/issues/6297
+    /// Issue: <https://github.com/diffblue/cbmc/issues/6297>
     fn _codegen_intrinsic_simd_shuffle(
         &mut self,
         mut fargs: Vec<Expr>,
@@ -1324,7 +1322,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// A volatile write of a memory location:
-    /// https://doc.rust-lang.org/std/ptr/fn.write_volatile.html
+    /// <https://doc.rust-lang.org/std/ptr/fn.write_volatile.html>
     ///
     /// Undefined behavior if any of these conditions are violated:
     ///  * `dst` must be valid for writes (done by `--pointer-check`)
@@ -1341,7 +1339,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let align = self.is_ptr_aligned(dst_typ, dst.clone());
         let align_check = self.codegen_assert(
             align,
-            PropertyClass::DefaultAssertion,
+            PropertyClass::SafetyCheck,
             "`dst` must be properly aligned",
             loc,
         );
@@ -1350,7 +1348,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Sets `count * size_of::<T>()` bytes of memory starting at `dst` to `val`
-    /// https://doc.rust-lang.org/std/ptr/fn.write_bytes.html
+    /// <https://doc.rust-lang.org/std/ptr/fn.write_bytes.html>
     ///
     /// Undefined behavior if any of these conditions are violated:
     ///  * `dst` must be valid for writes (done by memset writable check)
@@ -1372,7 +1370,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let align = self.is_ptr_aligned(dst_typ, dst.clone());
         let align_check = self.codegen_assert(
             align,
-            PropertyClass::DefaultAssertion,
+            PropertyClass::SafetyCheck,
             "`dst` must be properly aligned",
             loc,
         );

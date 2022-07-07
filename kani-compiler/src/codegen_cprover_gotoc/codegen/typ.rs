@@ -101,6 +101,7 @@ impl TypeExt for Type {
         }
     }
 }
+
 trait ExprExt {
     fn unit(symbol_table: &SymbolTable) -> Self;
 
@@ -354,9 +355,11 @@ impl<'tcx> GotocCtx<'tcx> {
         Type::unit().to_typedef(inner_name)
     }
 
-    /// This will codegen the raw pointer to the trait data.
+    /// Codegen the pointer type for a concrete object that implements the trait object.
+    /// I.e.: A trait object is a fat pointer which contains a pointer to a concrete object
+    /// and a pointer to its vtable. This method returns a type for the first pointer.
     pub fn codegen_trait_data_pointer(&mut self, typ: ty::Ty<'tcx>) -> Type {
-        assert!(typ.is_trait());
+        assert!(self.use_vtable_fat_pointer(typ));
         self.codegen_ty(typ).to_pointer()
     }
 
@@ -441,6 +444,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
                 vtable_base.append(&mut flds);
             }
+            debug!(ty=?t, ?vtable_base, "trait_vtable_field_types");
             vtable_base
         } else {
             unreachable!("Expected to get a dynamic object here");
@@ -459,7 +463,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// TODO: to handle trait upcasting, this will need to use a
     /// poly existential trait type as a part of the key as well.
     /// See compiler/rustc_middle/src/ty/vtable.rs
-    /// https://github.com/model-checking/kani/issues/358
+    /// <https://github.com/model-checking/kani/issues/358>
     pub fn vtable_name(&self, t: Ty<'tcx>) -> String {
         format!("{}::vtable", self.normalized_trait_name(t))
     }
@@ -534,10 +538,10 @@ impl<'tcx> GotocCtx<'tcx> {
     /// codegen for types. it finds a C type which corresponds to a rust type.
     /// that means [ty] has to be monomorphized.
     ///
-    /// check [LayoutCx::layout_raw_uncached] for LLVM codegen
+    /// check [rustc_middle::ty::layout::LayoutCx::layout_of_uncached] for LLVM codegen
     ///
-    /// also c.f. https://www.ralfj.de/blog/2020/04/04/layout-debugging.html
-    ///      c.f. https://rust-lang.github.io/unsafe-code-guidelines/introduction.html
+    /// also c.f. <https://www.ralfj.de/blog/2020/04/04/layout-debugging.html>
+    ///      c.f. <https://rust-lang.github.io/unsafe-code-guidelines/introduction.html>
     pub fn codegen_ty(&mut self, ty: Ty<'tcx>) -> Type {
         let normalized = self.tcx.normalize_erasing_regions(ty::ParamEnv::reveal_all(), ty);
         let goto_typ = self.codegen_ty_inner(normalized);
@@ -917,24 +921,35 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Generate code for a trait function declaration.
     ///
-    /// Dynamic function calls first parameter is the fat-pointer representing self.
-    /// For closures, the type of the first argument is dyn T not &dyn T.
-    pub fn codegen_dynamic_function_sig(&mut self, sig: PolyFnSig<'tcx>) -> Type {
+    /// Dynamic function calls first parameter is self which must be one of the following:
+    ///
+    /// As of Jul 2022:
+    /// P = &Self | &mut Self | Box<Self> | Rc<Self> | Arc<Self>
+    /// S = P | Pin<P>
+    ///
+    /// See <https://doc.rust-lang.org/reference/items/traits.html#object-safety> for more details.
+    fn codegen_dynamic_function_sig(&mut self, sig: PolyFnSig<'tcx>) -> Type {
         let sig = self.monomorphize(sig);
         let sig = self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig);
-
         let mut is_first = true;
         let params = sig
             .inputs()
             .iter()
             .filter_map(|arg_type| {
                 if is_first {
-                    // This should &dyn T or dyn T (for closures).
                     is_first = false;
-                    let first_ty = pointee_type(*arg_type).unwrap_or(*arg_type);
                     debug!(self_type=?arg_type, fn_signature=?sig, "codegen_dynamic_function_sig");
-                    assert!(first_ty.is_trait(), "Expected self type to be a trait");
-                    Some(self.codegen_trait_data_pointer(first_ty))
+                    if arg_type.is_ref() {
+                        // Convert fat pointer to thin pointer to data portion.
+                        let first_ty = pointee_type(*arg_type).unwrap();
+                        Some(self.codegen_trait_data_pointer(first_ty))
+                    } else if arg_type.is_trait() {
+                        // Convert dyn T to thin pointer.
+                        Some(self.codegen_trait_data_pointer(*arg_type))
+                    } else {
+                        // Codegen type with thin pointer (E.g.: Box<dyn T> -> Box<data_ptr>).
+                        Some(self.codegen_trait_receiver(*arg_type))
+                    }
                 } else if self.ignore_var_ty(*arg_type) {
                     debug!("Ignoring type {:?} in function signature", arg_type);
                     None
@@ -1054,7 +1069,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// struct Option<&i32> {
     ///     u8 *_0;
     /// }
-    /// c.f. https://rust-lang.github.io/unsafe-code-guidelines/layout/enums.html#layout-of-a-data-carrying-enums-without-a-repr-annotation
+    /// c.f. <https://rust-lang.github.io/unsafe-code-guidelines/layout/enums.html#layout-of-a-data-carrying-enums-without-a-repr-annotation>
     fn codegen_enum(
         &mut self,
         ty: Ty<'tcx>,
@@ -1370,6 +1385,52 @@ impl<'tcx> GotocCtx<'tcx> {
             _ => false,
         }
     }
+
+    /// Generate code for a valid object-safe trait receiver type.
+    ///
+    /// Note that all these types only contain the data pointer and ZST fields. Thus, we generate
+    /// the non-ZST branch manually. In some cases, this method is called from inside
+    /// `codegen_ty(arg_ty)` so we don't have information about the final type.
+    fn codegen_trait_receiver(&mut self, arg_ty: Ty<'tcx>) -> Type {
+        // Collect structs that need to be modified
+        // Collect the non-ZST fields until we find a fat pointer.
+        let mut data_path = vec![arg_ty];
+        data_path.extend(self.receiver_data_path(arg_ty).map(|(_, typ)| typ));
+
+        trace!(?arg_ty, ?data_path, "codegen_trait_receiver");
+        let orig_pointer_ty = data_path.pop().unwrap();
+        assert!(self.is_vtable_fat_pointer(orig_pointer_ty));
+
+        // Traverse type and replace pointer type.
+        let ptr_type = self.codegen_trait_data_pointer(pointee_type(orig_pointer_ty).unwrap());
+        data_path.iter().rev().fold(ptr_type, |last_type, curr| {
+            // Codegen the type replacing the non-zst field.
+            let new_name = self.ty_mangled_name(*curr).to_string() + "::WithDataPtr";
+            if let ty::Adt(adt_def, adt_substs) = curr.kind() {
+                let fields = &adt_def.variants().get(VariantIdx::from_u32(0)).unwrap().fields;
+                self.ensure_struct(new_name, NO_PRETTY_NAME, |ctx, s_name| {
+                    let fields_shape = ctx.layout_of(*curr).layout.fields();
+                    let components = fields_shape
+                        .index_by_increasing_offset()
+                        .map(|idx| {
+                            let name = fields[idx].name.to_string().intern();
+                            let field_ty = fields[idx].ty(ctx.tcx, adt_substs);
+                            let typ = if !ctx.layout_of(field_ty).is_zst() {
+                                last_type.clone()
+                            } else {
+                                ctx.codegen_ty(field_ty)
+                            };
+                            DatatypeComponent::Field { name, typ }
+                        })
+                        .collect();
+                    trace!(?data_path, ?curr, ?s_name, ?components, "codegen_trait_receiver");
+                    components
+                })
+            } else {
+                unreachable!("Expected structs only {:?}", curr);
+            }
+        })
+    }
 }
 
 /// Use maps instead of lists to manage mir struct components.
@@ -1415,6 +1476,70 @@ impl<'tcx> GotocCtx<'tcx> {
         }
         if typ.is_trait() { Some(typ) } else { None }
     }
+
+    /// This function provides an iterator that traverses the data path of a receiver type. I.e.:
+    /// the path that leads to the data pointer.
+    ///
+    /// E.g.: For `Rc<dyn T>` where the Rc definition is:
+    /// ```
+    /// pub struct Rc<T: ?Sized> {
+    ///    ptr: NonNull<RcBox<T>>,
+    ///    phantom: PhantomData<RcBox<T>>,
+    /// }
+    ///
+    /// pub struct NonNull<T: ?Sized> {
+    ///    pointer: *const T,
+    /// }
+    /// ```
+    ///
+    /// The behavior will be:
+    /// ```text
+    /// let it = self.receiver_data_path(rc_typ);
+    /// assert_eq!(it.next(), Some((String::from("ptr"), non_null_typ);
+    /// assert_eq!(it.next(), Some((String::from("pointer"), raw_ptr_typ);
+    /// assert_eq!(it.next(), None);
+    /// ```
+    ///
+    /// Pre-condition: The argument must be a valid receiver for dispatchable trait functions.
+    /// See <https://doc.rust-lang.org/reference/items/traits.html#object-safety> for more details.
+    pub fn receiver_data_path<'a>(
+        self: &'a Self,
+        typ: Ty<'tcx>,
+    ) -> impl Iterator<Item = (String, Ty<'tcx>)> + 'a {
+        struct ReceiverIter<'tcx, 'a> {
+            pub curr: Ty<'tcx>,
+            pub ctx: &'a GotocCtx<'tcx>,
+        }
+
+        impl<'tcx, 'a> Iterator for ReceiverIter<'tcx, 'a> {
+            type Item = (String, Ty<'tcx>);
+
+            fn next(&mut self) -> Option<Self::Item> {
+                if let ty::Adt(adt_def, adt_substs) = self.curr.kind() {
+                    assert_eq!(
+                        adt_def.variants().len(),
+                        1,
+                        "Expected a single-variant ADT. Found {:?}",
+                        self.curr
+                    );
+                    let ctx = self.ctx;
+                    let fields = &adt_def.variants().get(VariantIdx::from_u32(0)).unwrap().fields;
+                    let mut non_zsts = fields
+                        .iter()
+                        .filter(|field| !ctx.layout_of(field.ty(ctx.tcx, adt_substs)).is_zst())
+                        .map(|non_zst| (non_zst.name.to_string(), non_zst.ty(ctx.tcx, adt_substs)));
+                    let (name, next) = non_zsts.next().expect("Expected one non-zst field.");
+                    self.curr = next;
+                    assert!(non_zsts.next().is_none(), "Expected only one non-zst field.");
+                    Some((name, self.curr))
+                } else {
+                    None
+                }
+            }
+        }
+
+        ReceiverIter { ctx: self, curr: typ }
+    }
 }
 
 /// The mir type is a mir pointer type.
@@ -1443,7 +1568,7 @@ pub fn is_repr_c_adt(mir_type: Ty) -> bool {
 /// This is a place holder function that should normalize the given type.
 ///
 /// TODO: We should normalize the type projection here. For more details, see
-/// https://github.com/model-checking/kani/issues/752
+/// <https://github.com/model-checking/kani/issues/752>
 fn normalize_type(ty: Ty) -> Ty {
     ty
 }

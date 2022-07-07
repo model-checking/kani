@@ -10,8 +10,8 @@ use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::Instance;
 use rustc_span::def_id::DefId;
 use std::cell::RefCell;
-use std::lazy::SyncLazy;
 use std::panic;
+use std::sync::LazyLock;
 use tracing::debug;
 
 // Use a thread-local global variable to track the current codegen item for debugging.
@@ -21,12 +21,12 @@ thread_local!(static CURRENT_CODEGEN_ITEM: RefCell<(Option<String>, Option<Locat
 
 pub fn init() {
     // Install panic hook
-    SyncLazy::force(&DEFAULT_HOOK); // Install ice hook
+    LazyLock::force(&DEFAULT_HOOK); // Install ice hook
 }
 
 // Custom panic hook to add more information when panic occurs during goto-c codegen.
-static DEFAULT_HOOK: SyncLazy<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send + 'static>> =
-    SyncLazy::new(|| {
+static DEFAULT_HOOK: LazyLock<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send + 'static>> =
+    LazyLock::new(|| {
         let hook = panic::take_hook();
         panic::set_hook(Box::new(|info| {
             // Invoke the default handler, which prints the actual panic message and

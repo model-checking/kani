@@ -19,7 +19,7 @@ KANI_DIR=$SCRIPT_DIR/..
 export KANI_FAIL_ON_UNEXPECTED_DESCRIPTION="true"
 
 # Required dependencies
-check-cbmc-version.py --major 5 --minor 59
+check-cbmc-version.py --major 5 --minor 60
 check-cbmc-viewer-version.py --major 3 --minor 5
 
 # Formatting check
@@ -35,6 +35,10 @@ cargo build --workspace
 cargo test -p cprover_bindings
 cargo test -p kani-compiler
 cargo test -p kani-driver
+
+# Check output files (--gen-c option)
+echo "Check GotoC output file generation"
+time "$KANI_DIR"/tests/output-files/check-output.sh
 
 # Declare testing suite information (suite and mode)
 TESTS=(
@@ -83,6 +87,9 @@ time "$SCRIPT_DIR"/codegen-firecracker.sh
 #        \           / v0.1.1
 #         dependency2
 time "$KANI_DIR"/tests/kani-dependency-test/diamond-dependency/run-dependency-test.sh
+
+# Check that documentation compiles.
+cargo doc --workspace --no-deps
 
 echo
 echo "All Kani regression tests completed successfully."

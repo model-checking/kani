@@ -6,6 +6,7 @@
 use std::ptr;
 
 #[kani::proof]
+#[kani::unwind(17)]
 fn test_append() {
     let mut a = vec!['r'];
     let mut b = vec!['u', 's', 't'];
