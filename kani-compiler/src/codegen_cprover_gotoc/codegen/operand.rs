@@ -340,7 +340,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> Expr {
         let instance =
             Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), d, substs).unwrap().unwrap();
-        self.codegen_func_expr_zst(instance, span)
+        self.codegen_fn_item(instance, span)
     }
 
     fn codegen_alloc_pointer(
@@ -653,9 +653,9 @@ impl<'tcx> GotocCtx<'tcx> {
     /// For details, see https://github.com/model-checking/kani/pull/1338
     ///
     /// Note: use `codegen_func_expr` instead if you want to call the function immediately.
-    fn codegen_func_expr_zst(&mut self, instance: Instance<'tcx>, span: Option<&Span>) -> Expr {
+    fn codegen_fn_item(&mut self, instance: Instance<'tcx>, span: Option<&Span>) -> Expr {
         let func = self.codegen_func_symbol(instance).name;
-        let fn_struct_ty = self.codegen_fndef_zst(instance);
+        let fn_struct_ty = self.codegen_fndef_type(instance);
         // This zero-sized object that a function name refers to in Rust is globally unique, so we create such a global object.
         let fn_singleton_name = format!("{func}::FnDefSingleton");
         let fn_singleton = self.ensure_global_var(

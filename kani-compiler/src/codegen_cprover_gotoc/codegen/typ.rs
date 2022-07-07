@@ -612,7 +612,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), *def_id, substs)
                         .unwrap()
                         .unwrap();
-                self.codegen_fndef_zst(instance)
+                self.codegen_fndef_type(instance)
             }
             ty::FnPtr(sig) => self.codegen_function_sig(*sig).to_pointer(),
             ty::Closure(_, subst) => self.codegen_ty_closure(ty, subst),
@@ -984,7 +984,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// To mirror this in GotoC, we create a dummy struct for the function, similarly to what we do for closures.
     ///
     /// For details, see https://github.com/model-checking/kani/pull/1338
-    pub fn codegen_fndef_zst(&mut self, instance: Instance<'tcx>) -> Type {
+    pub fn codegen_fndef_type(&mut self, instance: Instance<'tcx>) -> Type {
         let func = self.symbol_name(instance);
         self.ensure_struct(
             format!("{func}::FnDefStruct"),
