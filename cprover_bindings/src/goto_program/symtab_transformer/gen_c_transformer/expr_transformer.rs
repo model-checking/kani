@@ -255,7 +255,7 @@ impl Transformer for ExprTransformer {
             "main",
             Type::code(Vec::new(), Type::CInteger(CIntType::Int)),
             Some(Stmt::block(main_body, Location::none())),
-            Some("main"),
+            "main",
             Location::none(),
         );
 

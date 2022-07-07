@@ -19,7 +19,7 @@ use crate::codegen_cprover_gotoc::overrides::{fn_hooks, GotocHooks};
 use crate::codegen_cprover_gotoc::utils::full_crate_name;
 use cbmc::goto_program::{DatatypeComponent, Expr, Location, Stmt, Symbol, SymbolTable, Type};
 use cbmc::utils::aggr_tag;
-use cbmc::{InternStringOption, InternedString, NO_PRETTY_NAME};
+use cbmc::InternedString;
 use cbmc::{MachineModel, RoundingMode};
 use kani_metadata::HarnessMetadata;
 use kani_queries::{QueryDb, UserInput};
@@ -212,14 +212,14 @@ impl<'tcx> GotocCtx<'tcx> {
     >(
         &mut self,
         struct_name: T,
-        pretty_name: Option<U>,
+        pretty_name: U,
         f: F,
     ) -> Type {
         let struct_name = struct_name.into();
 
         assert!(!struct_name.starts_with("tag-"));
         if !self.symbol_table.contains(aggr_tag(struct_name)) {
-            let pretty_name = pretty_name.intern();
+            let pretty_name = pretty_name.into();
             // Prevent recursion by inserting an incomplete value.
             self.symbol_table.insert(Symbol::incomplete_struct(struct_name, pretty_name));
             let components = f(self, struct_name);
@@ -240,11 +240,11 @@ impl<'tcx> GotocCtx<'tcx> {
     >(
         &mut self,
         union_name: T,
-        pretty_name: Option<U>,
+        pretty_name: U,
         f: F,
     ) -> Type {
         let union_name = union_name.into();
-        let pretty_name = pretty_name.intern();
+        let pretty_name = pretty_name.into();
         assert!(!union_name.starts_with("tag-"));
         if !self.symbol_table.contains(aggr_tag(union_name)) {
             // Prevent recursion by inserting an incomplete value.
@@ -263,12 +263,13 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Makes a __attribute__((constructor)) fnname() {body} initalizer function
     pub fn register_initializer(&mut self, var_name: &str, body: Stmt) -> &Symbol {
         let fn_name = Self::initializer_fn_name(var_name);
+        let pretty_name = format!("{var_name}::init");
         self.ensure(&fn_name, |_tcx, _| {
             Symbol::function(
                 &fn_name,
                 Type::code(vec![], Type::constructor()),
                 Some(Stmt::block(vec![body], Location::none())), //TODO is this block needed?
-                NO_PRETTY_NAME,
+                &pretty_name,
                 Location::none(),
             )
             .with_is_file_local(true)

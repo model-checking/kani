@@ -1,9 +1,9 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use crate::codegen_cprover_gotoc::GotocCtx;
+use cbmc::btree_map;
 use cbmc::goto_program::{DatatypeComponent, Expr, Location, Parameter, Symbol, SymbolTable, Type};
 use cbmc::utils::aggr_tag;
-use cbmc::{btree_map, NO_PRETTY_NAME};
 use cbmc::{InternString, InternedString};
 use rustc_ast::ast::Mutability;
 use rustc_index::vec::IndexVec;
@@ -320,9 +320,9 @@ impl<'tcx> GotocCtx<'tcx> {
     ///   }
     /// Ensures that the vtable is added to the symbol table.
     fn codegen_trait_vtable_type(&mut self, t: ty::Ty<'tcx>) -> Type {
-        self.ensure_struct(self.vtable_name(t), NO_PRETTY_NAME, |ctx, _| {
-            ctx.trait_vtable_field_types(t)
-        })
+        let struct_name = self.vtable_name(t);
+        let pretty_name = format!("{}::vtable", self.ty_pretty_name(t));
+        self.ensure_struct(&struct_name, pretty_name, |ctx, _| ctx.trait_vtable_field_types(t))
     }
 
     /// This will codegen the trait data type. Since this is unsized, we just create a typedef.
@@ -374,8 +374,9 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> Type {
         trace!(?pointee_type, ?trait_type, "codegen_trait_fat_ptr_type");
         let name = self.ty_mangled_name(pointee_type).to_string() + "::FatPtr";
+        let pretty_name = format!("{}::FatPtr", self.ty_pretty_name(pointee_type));
         let data_type = self.codegen_ty(pointee_type).to_pointer();
-        self.ensure_struct(&name, NO_PRETTY_NAME, |ctx, _| {
+        self.ensure_struct(&name, &pretty_name, |ctx, _| {
             // At this point in time, the vtable hasn't been codegen yet.
             // However, all we need to know is its name, which we do know.
             // See the comment on codegen_ty_ref.
@@ -520,14 +521,14 @@ impl<'tcx> GotocCtx<'tcx> {
         debug!("codegen_foreign {:?} {:?}", ty, defid);
         let name = self.ty_mangled_name(ty).intern();
         self.ensure(aggr_tag(name), |ctx, _| {
-            Symbol::incomplete_struct(name, Some(ctx.ty_pretty_name(ty)))
+            Symbol::incomplete_struct(name, ctx.ty_pretty_name(ty))
         });
         Type::struct_tag(name)
     }
 
     /// The unit type in Rust is an empty struct in gotoc
     pub fn codegen_ty_unit(&mut self) -> Type {
-        self.ensure_struct(UNIT_TYPE_EMPTY_STRUCT_NAME, NO_PRETTY_NAME, |_, _| vec![])
+        self.ensure_struct(UNIT_TYPE_EMPTY_STRUCT_NAME, "()", |_, _| vec![])
     }
 
     /// codegen for types. it finds a C type which corresponds to a rust type.
@@ -573,17 +574,16 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             ty::Foreign(defid) => self.codegen_foreign(ty, *defid),
             ty::Array(et, len) => {
-                let array_name = format!(
-                    "[{}; {}]",
-                    self.ty_mangled_name(*et),
-                    len.try_eval_usize(self.tcx, self.param_env()).unwrap()
-                );
+                let evaluated_len = len.try_eval_usize(self.tcx, self.param_env()).unwrap();
+                let array_name = format!("[{}; {}]", self.ty_mangled_name(*et), evaluated_len);
+                let array_pretty_name =
+                    format!("[{}; {}]", self.ty_pretty_name(*et), evaluated_len);
                 // wrap arrays into struct so that one can take advantage of struct copy in C
                 //
                 // struct [T; n] {
                 //   T _0[n];
                 // }
-                self.ensure_struct(&array_name, NO_PRETTY_NAME, |ctx, _| {
+                self.ensure_struct(&array_name, &array_pretty_name, |ctx, _| {
                     if et.is_unit() {
                         // we do not generate a struct with an array of units
                         vec![]
@@ -614,9 +614,7 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::FnPtr(sig) => self.codegen_function_sig(*sig).to_pointer(),
             ty::Closure(_, subst) => self.codegen_ty_closure(ty, subst),
             ty::Generator(_, subst, _) => self.codegen_ty_generator(subst),
-            ty::Never => {
-                self.ensure_struct(NEVER_TYPE_EMPTY_STRUCT_NAME, NO_PRETTY_NAME, |_, _| vec![])
-            }
+            ty::Never => self.ensure_struct(NEVER_TYPE_EMPTY_STRUCT_NAME, "!", |_, _| vec![]),
             ty::Tuple(ts) => {
                 if ts.is_empty() {
                     self.codegen_ty_unit()
@@ -625,7 +623,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     // finite tuples to loop.
                     self.ensure_struct(
                         self.ty_mangled_name(ty),
-                        Some(self.ty_pretty_name(ty)),
+                        self.ty_pretty_name(ty),
                         |tcx, _| tcx.codegen_ty_tuple_fields(ty, *ts),
                     )
                 }
@@ -794,7 +792,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// just a tuple with a unique type identifier, so that Fn related traits
     /// can find its impl.
     fn codegen_ty_closure(&mut self, t: Ty<'tcx>, substs: ty::subst::SubstsRef<'tcx>) -> Type {
-        self.ensure_struct(self.ty_mangled_name(t), Some(self.ty_pretty_name(t)), |ctx, _| {
+        self.ensure_struct(self.ty_mangled_name(t), self.ty_pretty_name(t), |ctx, _| {
             ctx.codegen_ty_tuple_like(t, substs.as_closure().upvar_tys().collect())
         })
     }
@@ -829,6 +827,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 ty::Adt(..) => format!("&{}", self.ty_mangled_name(pointee_type)).intern(),
                 kind => unreachable!("Generating a slice fat pointer to {:?}", kind),
             };
+            let pretty_name = format!("&{}", self.ty_pretty_name(pointee_type));
             let element_type = match pointee_type.kind() {
                 ty::Slice(elt_type) => self.codegen_ty(*elt_type),
                 ty::Str => Type::c_char(),
@@ -836,7 +835,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 ty::Adt(..) => self.codegen_ty(pointee_type),
                 kind => unreachable!("Generating a slice fat pointer to {:?}", kind),
             };
-            self.ensure_struct(pointer_name, NO_PRETTY_NAME, |_, _| {
+            self.ensure_struct(pointer_name, pretty_name, |_, _| {
                 vec![
                     DatatypeComponent::field("data", element_type.to_pointer()),
                     DatatypeComponent::field("len", Type::size_t()),
@@ -983,7 +982,7 @@ impl<'tcx> GotocCtx<'tcx> {
         def: &'tcx AdtDef,
         subst: &'tcx InternalSubsts<'tcx>,
     ) -> Type {
-        self.ensure_struct(self.ty_mangled_name(ty), Some(self.ty_pretty_name(ty)), |ctx, _| {
+        self.ensure_struct(self.ty_mangled_name(ty), self.ty_pretty_name(ty), |ctx, _| {
             let variant = &def.variants().raw[0];
             let layout = ctx.layout_of(ty);
             ctx.codegen_variant_struct_fields(variant, subst, &layout.layout, 0)
@@ -1010,7 +1009,7 @@ impl<'tcx> GotocCtx<'tcx> {
         def: &'tcx AdtDef,
         subst: &'tcx InternalSubsts<'tcx>,
     ) -> Type {
-        self.ensure_union(self.ty_mangled_name(ty), Some(self.ty_pretty_name(ty)), |ctx, _| {
+        self.ensure_union(self.ty_mangled_name(ty), self.ty_pretty_name(ty), |ctx, _| {
             def.variants().raw[0]
                 .fields
                 .iter()
@@ -1062,7 +1061,8 @@ impl<'tcx> GotocCtx<'tcx> {
         adtdef: &'tcx AdtDef,
         subst: &'tcx InternalSubsts<'tcx>,
     ) -> Type {
-        self.ensure_struct(self.ty_mangled_name(ty), Some(self.ty_pretty_name(ty)), |ctx, name| {
+        let pretty_name = self.ty_pretty_name(ty);
+        self.ensure_struct(self.ty_mangled_name(ty), pretty_name, |ctx, name| {
             // variants appearing in source code (in source code order)
             let source_variants = &adtdef.variants();
             // variants appearing in mir code
@@ -1105,21 +1105,20 @@ impl<'tcx> GotocCtx<'tcx> {
                             {
                                 fields.push(padding);
                             }
+                            let union_name = format!("{}-union", name);
+                            let union_pretty_name = format!("{}-union", pretty_name);
                             fields.push(DatatypeComponent::field(
                                 "cases",
-                                ctx.ensure_union(
-                                    &format!("{}-union", name),
-                                    NO_PRETTY_NAME,
-                                    |ctx, name| {
-                                        ctx.codegen_enum_cases(
-                                            name,
-                                            adtdef,
-                                            subst,
-                                            variants,
-                                            initial_offset,
-                                        )
-                                    },
-                                ),
+                                ctx.ensure_union(&union_name, &union_pretty_name, |ctx, name| {
+                                    ctx.codegen_enum_cases(
+                                        name,
+                                        pretty_name,
+                                        adtdef,
+                                        subst,
+                                        variants,
+                                        initial_offset,
+                                    )
+                                }),
                             ));
                             fields
                         }
@@ -1148,7 +1147,7 @@ impl<'tcx> GotocCtx<'tcx> {
                                 ?subst,
                                 "codegen_enum: Niche"
                             );
-                            ctx.codegen_enum_cases(name, adtdef, subst, variants, 0)
+                            ctx.codegen_enum_cases(name, pretty_name, adtdef, subst, variants, 0)
                         }
                     }
                 }
@@ -1243,6 +1242,7 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_enum_cases(
         &mut self,
         name: InternedString,
+        pretty_name: InternedString,
         def: &'tcx AdtDef,
         subst: &'tcx InternalSubsts<'tcx>,
         layouts: &IndexVec<VariantIdx, Layout>,
@@ -1259,6 +1259,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         &case.name.to_string(),
                         self.codegen_enum_case_struct(
                             name,
+                            pretty_name,
                             case,
                             subst,
                             &layouts[i],
@@ -1273,14 +1274,16 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_enum_case_struct(
         &mut self,
         name: InternedString,
+        pretty_name: InternedString,
         case: &VariantDef,
         subst: &'tcx InternalSubsts<'tcx>,
         variant: &Layout,
         initial_offset: usize,
     ) -> Type {
         let case_name = format!("{}::{}", name, case.name);
+        let pretty_name = format!("{}::{}", pretty_name, case.name);
         debug!("handling variant {}: {:?}", case_name, case);
-        self.ensure_struct(&case_name, NO_PRETTY_NAME, |tcx, _| {
+        self.ensure_struct(&case_name, &pretty_name, |tcx, _| {
             tcx.codegen_variant_struct_fields(case, subst, variant, initial_offset)
         })
     }
