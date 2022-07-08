@@ -7,7 +7,7 @@ DOCUMENTATION=\
 'kani-run-on-repos.sh -- script to clone and compile multiple remote git repositories with Kani.
 
 USAGE:
-./scripts/kani-top-100.sh path/to/url-list
+./scripts/kani-run-on-repos.sh path/to/url-list
 
 Download the top 100 crates and runs kani on them. Prints out the
 errors and warning when done. Xargs is required for this script to
@@ -95,7 +95,7 @@ elif [[ "$*" == *"--help"* ]]; then
     echo -e "$DOCUMENTATION"
 elif [ "$#" -eq "1" ]; then
     # top level logic that runs clone_and_run_kani in parallel with xargs.
-    echo 'Reading URLs from STDIN...';
+    echo "Reading URLs from $1...";
     LIST_OF_CRATE_GIT_URLS=$(cat $1)
     if [ "$LIST_OF_CRATE_GIT_URLS" =~ "\s"* ]; then
         exit -1
