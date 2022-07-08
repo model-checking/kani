@@ -696,7 +696,18 @@ impl<'tcx> GotocCtx<'tcx> {
         t: Ty<'tcx>,
     ) -> Expr {
         match k {
-            PointerCast::ReifyFnPointer => self.codegen_operand(o).address_of(),
+            PointerCast::ReifyFnPointer => match self.operand_ty(o).kind() {
+                ty::FnDef(def_id, substs) => {
+                    let instance =
+                        Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), *def_id, substs)
+                            .unwrap()
+                            .unwrap();
+                    // We need to handle this case in a special way because `codegen_operand` compiles FnDefs to dummy structs.
+                    // (cf. the function documentation)
+                    self.codegen_func_expr(instance, None).address_of()
+                }
+                _ => unreachable!(),
+            },
             PointerCast::UnsafeFnPointer => self.codegen_operand(o),
             PointerCast::ClosureFnPointer(_) => {
                 let dest_typ = self.codegen_ty(t);
