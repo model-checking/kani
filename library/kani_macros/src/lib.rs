@@ -9,13 +9,7 @@
 //   RUSTFLAGS="-Zcrate-attr=feature(register_tool) -Zcrate-attr=register_tool(kanitool)"
 
 // proc_macro::quote is nightly-only, so we'll cobble things together instead
-use proc_macro::{
-    Ident,
-    Group,
-    TokenStream,
-    TokenTree,
-};
-
+use proc_macro::{Group, Ident, TokenStream, TokenTree};
 
 #[cfg(all(not(kani), not(test)))]
 #[proc_macro_attribute]
@@ -93,14 +87,13 @@ pub fn unwind(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// the original state until "proptest" is seen again.
 #[proc_macro]
 pub fn translate_from_proptest(input: TokenStream) -> TokenStream {
-    const REWRITE_FROM : &str = "proptest";
-    const REWRITE_TO : &str = "kani_proptest";
+    const REWRITE_FROM: &str = "proptest";
+    const REWRITE_TO: &str = "kani_proptest";
 
     fn translate_recursive_helper(input: TokenStream) -> TokenStream {
-        input.into_iter()
-            .fold(
-                (TokenStream::new(), None),
-                |(mut acc, maybe_proptest_span), cur|
+        input
+            .into_iter()
+            .fold((TokenStream::new(), None), |(mut acc, maybe_proptest_span), cur| {
                 if let TokenTree::Ident(ident) = cur {
                     if &ident.to_string() == REWRITE_FROM {
                         (acc, Some(ident.span()))
@@ -111,18 +104,16 @@ pub fn translate_from_proptest(input: TokenStream) -> TokenStream {
                 } else if let TokenTree::Punct(punctuation) = cur {
                     if let Some(proptest_span) = maybe_proptest_span {
                         acc.extend(vec![
-                            TokenTree::Ident(
-                                Ident::new_raw(
-                                    if punctuation.as_char() == ':' || punctuation.as_char() == ';' {
-                                        REWRITE_TO
-                                    } else {
-                                        REWRITE_FROM
-                                    },
-                                    proptest_span
-                                )
-                            ),
-                            TokenTree::Punct(punctuation)]
-                        );
+                            TokenTree::Ident(Ident::new_raw(
+                                if punctuation.as_char() == ':' || punctuation.as_char() == ';' {
+                                    REWRITE_TO
+                                } else {
+                                    REWRITE_FROM
+                                },
+                                proptest_span,
+                            )),
+                            TokenTree::Punct(punctuation),
+                        ]);
                         (acc, None)
                     } else {
                         acc.extend(vec![TokenTree::Punct(punctuation)]);
@@ -137,9 +128,9 @@ pub fn translate_from_proptest(input: TokenStream) -> TokenStream {
                     acc.extend(vec![cur]);
                     (acc, None)
                 }
-            ).0
+            })
+            .0
     }
-
 
     if std::env::var_os("CARGO_CFG_KANI").is_some() {
         let result = translate_recursive_helper(input);
