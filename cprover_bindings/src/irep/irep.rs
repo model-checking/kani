@@ -38,13 +38,15 @@ impl Irep {
 impl Irep {
     pub fn with_contract(self, contract: &Contract, mm: &MachineModel) -> Self {
         match contract {
-            Contract::FunctionContract { requires, ensures } => {
-                self.with_named_sub(
+            Contract::FunctionContract { requires, ensures } => self
+                .with_named_sub(
                     IrepId::CSpecEnsures,
-                    ensures.to_irep(mm), // Irep::just_sub(ensures.clauses.iter().map(|clause| clause.to_irep(mm)).collect()),
+                    Irep::just_sub(ensures.iter().map(|spec| spec.to_irep(mm)).collect()),
                 )
-                .with_named_sub(IrepId::CSpecRequires, requires.to_irep(mm))
-            }
+                .with_named_sub(
+                    IrepId::CSpecRequires,
+                    Irep::just_sub(requires.iter().map(|spec| spec.to_irep(mm)).collect()),
+                ),
         }
     }
 

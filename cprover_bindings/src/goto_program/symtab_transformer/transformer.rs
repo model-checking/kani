@@ -252,23 +252,28 @@ pub trait Transformer: Sized {
         transformed_typ.to_typedef(tag)
     }
 
+    /// Transforms a contract data structure by recursively transforming its clauses.
     fn transform_contract(&mut self, c: &Contract) -> Contract {
         match c {
             Contract::FunctionContract { ensures, requires } => {
-                let transformed_ensures_clauses =
-                    ensures.clauses().iter().map(|clause| self.transform_expr(clause)).collect();
-                let transformed_ensures_symbols =
-                    ensures.temporary_symbols().iter().map(|s| self.transform_expr(s)).collect();
-                let transformed_requires_clauses =
-                    requires.clauses().iter().map(|clause| self.transform_expr(clause)).collect();
-                let transformed_requires_symbols =
-                    requires.temporary_symbols().iter().map(|s| self.transform_expr(s)).collect();
+                let transformed_ensures =
+                    ensures.iter().map(|spec| self.transform_spec(spec)).collect();
+                let transformed_requires =
+                    requires.iter().map(|spec| self.transform_spec(spec)).collect();
                 Contract::FunctionContract {
-                    ensures: Spec::new(transformed_ensures_symbols, transformed_ensures_clauses),
-                    requires: Spec::new(transformed_requires_symbols, transformed_requires_clauses),
+                    ensures: transformed_ensures,
+                    requires: transformed_requires,
                 }
             }
         }
+    }
+
+    /// Transforms a `Spec` data structure.
+    fn transform_spec(&mut self, spec: &Spec) -> Spec {
+        let transformed_symbols =
+            spec.temporary_symbols().iter().map(|s| self.transform_expr(s)).collect();
+        let transformed_clause = self.transform_expr(spec.clause());
+        Spec::new(transformed_symbols, transformed_clause)
     }
 
     /// Perform recursive descent on a `Expr` data structure.

@@ -65,6 +65,7 @@ pub enum Type {
     InfiniteArray {
         typ: Box<Type>,
     },
+    /// Corresponds to `mathematical_function_typet` in CBMC. Used to represent type signatures.
     MathematicalFunction {
         domain: Vec<Type>,
         codomain: Box<Type>,
