@@ -7,13 +7,13 @@ DOCUMENTATION=\
 'kani-run-on-repos.sh -- script to clone and compile multiple remote git repositories with Kani.
 
 USAGE:
-./scripts/kani-top-100.sh
+./scripts/kani-top-100.sh path/to/url-list
 
 Download the top 100 crates and runs kani on them. Prints out the
 errors and warning when done. Xargs is required for this script to
 work.
 
-STDIN: Pipe in a list of Git URLs to run Kani on, one  per line.
+url-list: A list of URLs to run Kani on. One per line.
 
 ENV:
 - PRINT_STDOUT=1 forces this script to search for warning in
@@ -28,15 +28,15 @@ EDITING:
 Copyright Kani Contributors
 SPDX-License-Identifier: Apache-2.0 OR MIT'
 
-SELF_SCRIPT=$0
-SELF_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+export SELF_SCRIPT=$0
+export SELF_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 NPROC=$(nproc 2> /dev/null || sysctl -n hw.ncpu 2> /dev/null || echo 4)  # Linux or Mac or hard-coded default of 4
-WORK_DIRECTORY_PREFIX="$SELF_DIR/../target/remote-repos"
+export WORK_DIRECTORY_PREFIX="$SELF_DIR/../target/remote-repos"
 
 
-STDOUT_SUFFIX='stdout.cargo-kani'
-STDERR_SUFFIX='stderr.cargo-kani'
-EXIT_CODE_SUFFIX='exit-code.cargo-kani'
+export STDOUT_SUFFIX='stdout.cargo-kani'
+export STDERR_SUFFIX='stderr.cargo-kani'
+export EXIT_CODE_SUFFIX='exit-code.cargo-kani'
 # worker function that clones target repos and runs kani over
 # them. This functions is called in parallel by
 # parallel_clone_and_run, and should not be run explicitly
@@ -56,6 +56,7 @@ function clone_and_run_kani {
          2> $REPO_DIRECTORY/$STDERR_SUFFIX
     echo $? > $REPO_DIRECTORY/$EXIT_CODE_SUFFIX
 }
+export -f clone_and_run_kani
 
 OVERALL_EXIT_CODE='0'
 TARGET_ERROR_REGEX='warning:\sFound\sthe\sfollowing\sunsupported\sconstructs:\|WARN'
@@ -92,10 +93,10 @@ if ! which xargs 1>&2 1> /dev/null; then
     exit -1
 elif [[ "$*" == *"--help"* ]]; then
     echo -e "$DOCUMENTATION"
-elif [ "$#" -eq "0" ]; then
+elif [ "$#" -eq "1" ]; then
     # top level logic that runs clone_and_run_kani in parallel with xargs.
     echo 'Reading URLs from STDIN...';
-    LIST_OF_CRATE_GIT_URLS=$(cat -)
+    LIST_OF_CRATE_GIT_URLS=$(cat $1)
     if [ "$LIST_OF_CRATE_GIT_URLS" =~ "\s"* ]; then
         exit -1
     fi
@@ -103,7 +104,7 @@ elif [ "$#" -eq "0" ]; then
     mkdir -p $WORK_DIRECTORY_PREFIX
     echo -e "$LIST_OF_CRATE_GIT_URLS" | \
         awk -F '\n' 'BEGIN{ a=0 }{ print a++ "," $1  }' | \
-        xargs -n1 -I {} -P $NPROC bash -c "$SELF_SCRIPT {}"
+        xargs -n1 -I {} -P $NPROC bash -c "clone_and_run_kani {}"
 
     # serially print out the ones that failed.
     num_failed="0"
@@ -128,7 +129,8 @@ elif [ "$#" -eq "0" ]; then
     echo "$num_failed crates failed to compile"
     echo "$num_with_warning crates had warning(s)"
 else
-    (clone_and_run_kani $1 $2)
+    echo -e 'Needs exactly 1 argument path/to/url-list.\n'
+    echo -e "$DOCUMENTATION"
 fi
 
 exit $OVERALL_EXIT_CODE
