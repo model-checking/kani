@@ -11,9 +11,7 @@ pub enum Contract {
 }
 
 /// A `Spec` is a struct for representing the `requires`, `ensures`, and `assigns` clauses in a function contract.
-/// A function contract can have multiple `__CPROVER_requires(...)` or `__CPROVER_ensures(...)` statements.
-/// The expressions from all the statements are stored in a single vector called `clauses`.
-/// Furthermore, every expression is wrapped into a lambda expression on the CBMC side.
+/// Every expression inside a function contract clause is wrapped into a lambda expression on the CBMC side.
 /// This is because CBMC generates a new symbol for each contract and the symbol needs to be self-contained.
 /// That is, variables that may have only existed in the scope of a function declaration are
 ///     treated as binding variables in the lambda expression and hence made available to the contract symbol.
