@@ -103,6 +103,6 @@ Checking harness check_bound...
 
 Status: SUCCESS\
 Description: "assertion failed: obj.bound_value() == id"\
-in function check_bound::assert_value
+in function check_bound::assert_value::<Concrete>
 
 VERIFICATION:- SUCCESSFUL
