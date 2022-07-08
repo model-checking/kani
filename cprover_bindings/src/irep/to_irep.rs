@@ -416,8 +416,7 @@ impl ToIrep for Parameter {
 
 impl ToIrep for Spec {
     fn to_irep(&self, mm: &MachineModel) -> Irep {
-            lambda_irep(&self.temporary_symbols(), self.clause(), mm)
-                .with_location(self.location(), mm)
+        lambda_irep(&self.temporary_symbols(), self.clause(), mm).with_location(self.location(), mm)
     }
 }
 

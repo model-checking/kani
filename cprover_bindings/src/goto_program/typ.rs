@@ -22,24 +22,15 @@ use std::fmt::Debug;
 #[derive(PartialEq, Debug, Clone)]
 pub enum Type {
     /// `typ x[size]`. E.g. `unsigned int x[3]`
-    Array {
-        typ: Box<Type>,
-        size: u64,
-    },
+    Array { typ: Box<Type>, size: u64 },
     /// CBMC specific. `__CPROVER_bool x`. A single bit boolean
     Bool,
     /// `typ x : width`. e.g. `unsigned int x: 3`.
-    CBitField {
-        typ: Box<Type>,
-        width: u64,
-    },
+    CBitField { typ: Box<Type>, width: u64 },
     /// Machine dependent integers: `bool`, `char`, `int`, `size_t`, etc.
     CInteger(CIntType),
     /// `return_type x(parameters)`
-    Code {
-        parameters: Vec<Parameter>,
-        return_type: Box<Type>,
-    },
+    Code { parameters: Vec<Parameter>, return_type: Box<Type> },
     /// `__attribute__(constructor)`. Only valid as a function return type.
     /// <https://gcc.gnu.org/onlinedocs/gcc-4.7.0/gcc/Function-Attributes.html>
     Constructor,
@@ -48,71 +39,39 @@ pub enum Type {
     /// `void`
     Empty,
     /// `typ x[]`. Has a type, but no size. Only valid as the last element of a struct.
-    FlexibleArray {
-        typ: Box<Type>,
-    },
+    FlexibleArray { typ: Box<Type> },
     /// `float`
     Float,
     /// `struct x {}`
-    IncompleteStruct {
-        tag: InternedString,
-    },
+    IncompleteStruct { tag: InternedString },
     /// `union x {}`
-    IncompleteUnion {
-        tag: InternedString,
-    },
+    IncompleteUnion { tag: InternedString },
     /// CBMC specific. `typ x[__CPROVER_infinity()]`
-    InfiniteArray {
-        typ: Box<Type>,
-    },
+    InfiniteArray { typ: Box<Type> },
     /// Corresponds to `mathematical_function_typet` in CBMC. Used to represent type signatures.
-    MathematicalFunction {
-        domain: Vec<Type>,
-        codomain: Box<Type>,
-    },
+    MathematicalFunction { domain: Vec<Type>, codomain: Box<Type> },
     /// `typ*`
-    Pointer {
-        typ: Box<Type>,
-    },
+    Pointer { typ: Box<Type> },
     /// `int<width>_t`. e.g. `int32_t`
-    Signedbv {
-        width: u64,
-    },
+    Signedbv { width: u64 },
     /// `struct tag {component1.typ component1.name; component2.typ component2.name ... }`
-    Struct {
-        tag: InternedString,
-        components: Vec<DatatypeComponent>,
-    },
+    Struct { tag: InternedString, components: Vec<DatatypeComponent> },
     /// CBMC specific. A reference into the symbol table, where the tag is the name of the symbol.
     StructTag(InternedString),
     /// Typedef construct. It has a name and a type.
-    TypeDef {
-        name: InternedString,
-        typ: Box<Type>,
-    },
+    TypeDef { name: InternedString, typ: Box<Type> },
     /// `union tag {component1.typ component1.name; component2.typ component2.name ... }`
-    Union {
-        tag: InternedString,
-        components: Vec<DatatypeComponent>,
-    },
+    Union { tag: InternedString, components: Vec<DatatypeComponent> },
     /// CBMC specific. A reference into the symbol table, where the tag is the name of the symbol.
     UnionTag(InternedString),
     /// `uint<width>_t`. e.g. `uint32_t`
-    Unsignedbv {
-        width: u64,
-    },
+    Unsignedbv { width: u64 },
     /// `return_type x(parameters, ...)`
-    VariadicCode {
-        parameters: Vec<Parameter>,
-        return_type: Box<Type>,
-    },
+    VariadicCode { parameters: Vec<Parameter>, return_type: Box<Type> },
     /// Packed SIMD vectors
     /// In CBMC/gcc, variables of this type are declared as:
     /// `typ __attribute__((vector_size (size * sizeof(typ)))) var;`
-    Vector {
-        typ: Box<Type>,
-        size: u64,
-    },
+    Vector { typ: Box<Type>, size: u64 },
 }
 
 /// Machine dependent integers: `bool`, `char`, `int`, `size_t`, etc.
