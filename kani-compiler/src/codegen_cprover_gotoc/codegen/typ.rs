@@ -1002,7 +1002,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let func = self.symbol_name(instance);
         self.ensure_struct(
             format!("{func}::FnDefStruct"),
-            Some(self.readable_instance_name(instance)),
+            format!("{}::FnDefStruct", self.readable_instance_name(instance)),
             |_, _| vec![],
         )
     }
