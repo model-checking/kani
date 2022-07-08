@@ -38,6 +38,7 @@ strip = "debuginfo"
 members = [
   "library/kani",
   "library/std",
+  "library/proptest",
   "tools/bookrunner",
   "tools/compiletest",
   "tools/make-kani-release",
