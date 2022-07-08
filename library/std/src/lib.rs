@@ -140,8 +140,25 @@ macro_rules! eprintln {
 
 #[macro_export]
 macro_rules! unreachable {
-    ($($arg:tt)*) => ({
-        kani::panic(concat!("internal error: entered unreachable code: ", stringify!($($arg)
-        *)));
+    ($($msg:literal)? $(,)?) => (
+        kani::panic(concat!("internal error: entered unreachable code: ", $($msg)?))
+    );
+    ($fmt:expr, $($arg:tt)*) => (
+        kani::panic(concat!("internal error: entered unreachable code: ", $fmt), stringify!($($arg)*)));
+}
+
+#[macro_export]
+macro_rules! panic {
+    () => (
+        kani::panic("explicit panic")
+    );
+    ($msg:literal $(,)?) => ({
+        kani::panic(concat!($msg));
+    });
+    ($msg:expr $(,)?) => ({
+        kani::panic(stringify!($msg));
+    });
+    ($msg:expr, $($arg:tt)*) => ({
+        kani::panic(stringify!($msg, $($arg)*));
     });
 }
