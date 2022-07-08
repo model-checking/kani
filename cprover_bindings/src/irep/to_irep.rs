@@ -8,7 +8,7 @@ use super::{Irep, IrepId};
 use crate::linear_map;
 use goto_program::{
     BinaryOperand, CIntType, DatatypeComponent, Expr, ExprValue, Location, Parameter, SelfOperand,
-    Stmt, StmtBody, SwitchCase, SymbolValues, Type, UnaryOperand,
+    Spec, Stmt, StmtBody, SwitchCase, SymbolValues, Type, UnaryOperand,
 };
 
 pub trait ToIrep {
@@ -30,6 +30,17 @@ fn code_irep(kind: IrepId, ops: Vec<Irep>) -> Irep {
         named_sub: linear_map![(IrepId::Statement, Irep::just_id(kind))],
     }
 }
+fn lambda_irep(binding_variables: &[Expr], body: &Expr, mm: &MachineModel) -> Irep {
+    Irep {
+        id: IrepId::Lambda,
+        sub: vec![
+            tuple_irep(binding_variables, mm)
+                .with_named_sub(IrepId::Type, Irep::just_id(IrepId::Tuple)),
+            body.to_irep(mm),
+        ],
+        named_sub: linear_map![],
+    }
+}
 fn side_effect_irep(kind: IrepId, ops: Vec<Irep>) -> Irep {
     Irep {
         id: IrepId::SideEffect,
@@ -41,6 +52,13 @@ fn switch_default_irep(body: &Stmt, mm: &MachineModel) -> Irep {
     code_irep(IrepId::SwitchCase, vec![Irep::nil(), body.to_irep(mm)])
         .with_named_sub(IrepId::Default, Irep::one())
         .with_location(body.location(), mm)
+}
+fn tuple_irep(operands: &[Expr], mm: &MachineModel) -> Irep {
+    Irep {
+        id: IrepId::Tuple,
+        sub: operands.iter().map(|op| op.to_irep(mm)).collect(),
+        named_sub: linear_map![],
+    }
 }
 
 /// ID Converters
@@ -389,6 +407,17 @@ impl ToIrep for Parameter {
     }
 }
 
+impl ToIrep for Spec {
+    fn to_irep(&self, mm: &MachineModel) -> Irep {
+        Irep::just_sub(
+            self.clauses()
+                .iter()
+                .map(|clause| lambda_irep(&self.temporary_symbols(), clause, mm))
+                .collect(),
+        )
+    }
+}
+
 impl ToIrep for Stmt {
     fn to_irep(&self, mm: &MachineModel) -> Irep {
         self.body().to_irep(mm).with_location(self.location(), mm)
@@ -480,12 +509,14 @@ impl ToIrep for SwitchCase {
 impl goto_program::Symbol {
     pub fn to_irep(&self, mm: &MachineModel) -> super::Symbol {
         super::Symbol {
-            typ: self.typ.to_irep(mm),
-            // .with_contract(&self.value, mm),
+            typ: match &self.value {
+                SymbolValues::Contract(c) => self.typ.to_irep(mm).with_contract(c, mm),
+                _ => self.typ.to_irep(mm),
+            },
             value: match &self.value {
                 SymbolValues::Expr(e) => e.to_irep(mm),
                 SymbolValues::Stmt(s) => s.to_irep(mm),
-                // SymbolValues::Contract(_) => Irep::nil(),
+                SymbolValues::Contract(_) => Irep::nil(),
                 SymbolValues::None => Irep::nil(),
             },
             location: self.location.to_irep(mm),

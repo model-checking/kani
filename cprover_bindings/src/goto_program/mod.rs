@@ -8,6 +8,7 @@
 #![allow(clippy::match_like_matches_macro)]
 
 mod builtin;
+mod contract;
 mod expr;
 mod location;
 mod stmt;
@@ -17,6 +18,7 @@ pub mod symtab_transformer;
 mod typ;
 
 pub use builtin::BuiltinFn;
+pub use contract::{Contract, Spec};
 pub use expr::{
     ArithmeticOverflowResult, BinaryOperand, Expr, ExprValue, SelfOperand, UnaryOperand,
 };
