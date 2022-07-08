@@ -840,7 +840,7 @@ impl<'tcx> GotocCtx<'tcx> {
             // We skip an entire submodule of the standard library, so drop is missing
             // for it. Build and insert a function that just calls an unimplemented block
             // to maintain soundness.
-            let drop_sym_name = format!("{}_unimplemented", self.symbol_name(drop_instance));
+            let drop_sym_name = format!("drop_unimplemented_{}", self.symbol_name(drop_instance));
             let pretty_name =
                 format!("drop_unimplemented<{}>", self.readable_instance_name(drop_instance));
             let drop_sym = self.ensure(&drop_sym_name, |ctx, name| {
