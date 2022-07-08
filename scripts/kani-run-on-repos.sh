@@ -97,7 +97,8 @@ elif [ "$#" -eq "1" ]; then
     # top level logic that runs clone_and_run_kani in parallel with xargs.
     echo "Reading URLs from $1...";
     LIST_OF_CRATE_GIT_URLS=$(cat $1)
-    if [ "$LIST_OF_CRATE_GIT_URLS" =~ "\s"* ]; then
+    if [[ -z "$(echo $LIST_OF_CRATE_GIT_URLS | sed 's/\s//g')"  ]]; then
+        echo 'No targets found.'
         exit -1
     fi
 
