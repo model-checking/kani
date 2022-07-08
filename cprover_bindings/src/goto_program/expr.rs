@@ -1388,7 +1388,6 @@ impl Expr {
         expr!(StringConstant { s }, Type::c_char().array_of(s.len() + 1)).array_to_ptr()
     }
 }
-
 /// Conversions to statements
 /// The statement constructors do typechecking, so we don't redundantly do that here.
 impl Expr {
