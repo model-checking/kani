@@ -396,79 +396,79 @@ impl<'tcx> GotocCtx<'tcx> {
                 "assumption failed",
                 loc,
             ),
-            "atomic_and" => codegen_atomic_binop!(bitand),
-            "atomic_and_acq" => codegen_atomic_binop!(bitand),
+            "atomic_and_seqcst" => codegen_atomic_binop!(bitand),
+            "atomic_and_acquire" => codegen_atomic_binop!(bitand),
             "atomic_and_acqrel" => codegen_atomic_binop!(bitand),
-            "atomic_and_rel" => codegen_atomic_binop!(bitand),
+            "atomic_and_release" => codegen_atomic_binop!(bitand),
             "atomic_and_relaxed" => codegen_atomic_binop!(bitand),
             name if name.starts_with("atomic_cxchg") => {
                 self.codegen_atomic_cxchg(intrinsic, fargs, p, loc)
             }
-            "atomic_fence" => self.codegen_atomic_noop(intrinsic, loc),
-            "atomic_fence_acq" => self.codegen_atomic_noop(intrinsic, loc),
+            "atomic_fence_seqcst" => self.codegen_atomic_noop(intrinsic, loc),
+            "atomic_fence_acquire" => self.codegen_atomic_noop(intrinsic, loc),
             "atomic_fence_acqrel" => self.codegen_atomic_noop(intrinsic, loc),
-            "atomic_fence_rel" => self.codegen_atomic_noop(intrinsic, loc),
-            "atomic_load" => self.codegen_atomic_load(intrinsic, fargs, p, loc),
-            "atomic_load_acq" => self.codegen_atomic_load(intrinsic, fargs, p, loc),
+            "atomic_fence_release" => self.codegen_atomic_noop(intrinsic, loc),
+            "atomic_load_seqcst" => self.codegen_atomic_load(intrinsic, fargs, p, loc),
+            "atomic_load_acquire" => self.codegen_atomic_load(intrinsic, fargs, p, loc),
             "atomic_load_relaxed" => self.codegen_atomic_load(intrinsic, fargs, p, loc),
             "atomic_load_unordered" => self.codegen_atomic_load(intrinsic, fargs, p, loc),
-            "atomic_max" => codegen_atomic_binop!(max),
-            "atomic_max_acq" => codegen_atomic_binop!(max),
+            "atomic_max_seqcst" => codegen_atomic_binop!(max),
+            "atomic_max_acquire" => codegen_atomic_binop!(max),
             "atomic_max_acqrel" => codegen_atomic_binop!(max),
-            "atomic_max_rel" => codegen_atomic_binop!(max),
+            "atomic_max_release" => codegen_atomic_binop!(max),
             "atomic_max_relaxed" => codegen_atomic_binop!(max),
-            "atomic_min" => codegen_atomic_binop!(min),
-            "atomic_min_acq" => codegen_atomic_binop!(min),
+            "atomic_min_seqcst" => codegen_atomic_binop!(min),
+            "atomic_min_acquire" => codegen_atomic_binop!(min),
             "atomic_min_acqrel" => codegen_atomic_binop!(min),
-            "atomic_min_rel" => codegen_atomic_binop!(min),
+            "atomic_min_release" => codegen_atomic_binop!(min),
             "atomic_min_relaxed" => codegen_atomic_binop!(min),
-            "atomic_nand" => codegen_atomic_binop!(bitnand),
-            "atomic_nand_acq" => codegen_atomic_binop!(bitnand),
+            "atomic_nand_seqcst" => codegen_atomic_binop!(bitnand),
+            "atomic_nand_acquire" => codegen_atomic_binop!(bitnand),
             "atomic_nand_acqrel" => codegen_atomic_binop!(bitnand),
-            "atomic_nand_rel" => codegen_atomic_binop!(bitnand),
+            "atomic_nand_release" => codegen_atomic_binop!(bitnand),
             "atomic_nand_relaxed" => codegen_atomic_binop!(bitnand),
-            "atomic_or" => codegen_atomic_binop!(bitor),
-            "atomic_or_acq" => codegen_atomic_binop!(bitor),
+            "atomic_or_seqcst" => codegen_atomic_binop!(bitor),
+            "atomic_or_acquire" => codegen_atomic_binop!(bitor),
             "atomic_or_acqrel" => codegen_atomic_binop!(bitor),
-            "atomic_or_rel" => codegen_atomic_binop!(bitor),
+            "atomic_or_release" => codegen_atomic_binop!(bitor),
             "atomic_or_relaxed" => codegen_atomic_binop!(bitor),
-            "atomic_singlethreadfence" => self.codegen_atomic_noop(intrinsic, loc),
-            "atomic_singlethreadfence_acq" => self.codegen_atomic_noop(intrinsic, loc),
+            "atomic_singlethreadfence_seqcst" => self.codegen_atomic_noop(intrinsic, loc),
+            "atomic_singlethreadfence_acquire" => self.codegen_atomic_noop(intrinsic, loc),
             "atomic_singlethreadfence_acqrel" => self.codegen_atomic_noop(intrinsic, loc),
-            "atomic_singlethreadfence_rel" => self.codegen_atomic_noop(intrinsic, loc),
-            "atomic_store" => self.codegen_atomic_store(intrinsic, fargs, p, loc),
-            "atomic_store_rel" => self.codegen_atomic_store(intrinsic, fargs, p, loc),
+            "atomic_singlethreadfence_release" => self.codegen_atomic_noop(intrinsic, loc),
+            "atomic_store_seqcst" => self.codegen_atomic_store(intrinsic, fargs, p, loc),
+            "atomic_store_release" => self.codegen_atomic_store(intrinsic, fargs, p, loc),
             "atomic_store_relaxed" => self.codegen_atomic_store(intrinsic, fargs, p, loc),
             "atomic_store_unordered" => self.codegen_atomic_store(intrinsic, fargs, p, loc),
-            "atomic_umax" => codegen_atomic_binop!(max),
-            "atomic_umax_acq" => codegen_atomic_binop!(max),
+            "atomic_umax_seqcst" => codegen_atomic_binop!(max),
+            "atomic_umax_acquire" => codegen_atomic_binop!(max),
             "atomic_umax_acqrel" => codegen_atomic_binop!(max),
-            "atomic_umax_rel" => codegen_atomic_binop!(max),
+            "atomic_umax_release" => codegen_atomic_binop!(max),
             "atomic_umax_relaxed" => codegen_atomic_binop!(max),
-            "atomic_umin" => codegen_atomic_binop!(min),
-            "atomic_umin_acq" => codegen_atomic_binop!(min),
+            "atomic_umin_seqcst" => codegen_atomic_binop!(min),
+            "atomic_umin_acquire" => codegen_atomic_binop!(min),
             "atomic_umin_acqrel" => codegen_atomic_binop!(min),
-            "atomic_umin_rel" => codegen_atomic_binop!(min),
+            "atomic_umin_release" => codegen_atomic_binop!(min),
             "atomic_umin_relaxed" => codegen_atomic_binop!(min),
-            "atomic_xadd" => codegen_atomic_binop!(plus),
-            "atomic_xadd_acq" => codegen_atomic_binop!(plus),
+            "atomic_xadd_seqcst" => codegen_atomic_binop!(plus),
+            "atomic_xadd_acquire" => codegen_atomic_binop!(plus),
             "atomic_xadd_acqrel" => codegen_atomic_binop!(plus),
-            "atomic_xadd_rel" => codegen_atomic_binop!(plus),
+            "atomic_xadd_release" => codegen_atomic_binop!(plus),
             "atomic_xadd_relaxed" => codegen_atomic_binop!(plus),
-            "atomic_xchg" => self.codegen_atomic_store(intrinsic, fargs, p, loc),
-            "atomic_xchg_acq" => self.codegen_atomic_store(intrinsic, fargs, p, loc),
+            "atomic_xchg_seqcst" => self.codegen_atomic_store(intrinsic, fargs, p, loc),
+            "atomic_xchg_acquire" => self.codegen_atomic_store(intrinsic, fargs, p, loc),
             "atomic_xchg_acqrel" => self.codegen_atomic_store(intrinsic, fargs, p, loc),
-            "atomic_xchg_rel" => self.codegen_atomic_store(intrinsic, fargs, p, loc),
+            "atomic_xchg_release" => self.codegen_atomic_store(intrinsic, fargs, p, loc),
             "atomic_xchg_relaxed" => self.codegen_atomic_store(intrinsic, fargs, p, loc),
-            "atomic_xor" => codegen_atomic_binop!(bitxor),
-            "atomic_xor_acq" => codegen_atomic_binop!(bitxor),
+            "atomic_xor_seqcst" => codegen_atomic_binop!(bitxor),
+            "atomic_xor_acquire" => codegen_atomic_binop!(bitxor),
             "atomic_xor_acqrel" => codegen_atomic_binop!(bitxor),
-            "atomic_xor_rel" => codegen_atomic_binop!(bitxor),
+            "atomic_xor_release" => codegen_atomic_binop!(bitxor),
             "atomic_xor_relaxed" => codegen_atomic_binop!(bitxor),
-            "atomic_xsub" => codegen_atomic_binop!(sub),
-            "atomic_xsub_acq" => codegen_atomic_binop!(sub),
+            "atomic_xsub_seqcst" => codegen_atomic_binop!(sub),
+            "atomic_xsub_acquire" => codegen_atomic_binop!(sub),
             "atomic_xsub_acqrel" => codegen_atomic_binop!(sub),
-            "atomic_xsub_rel" => codegen_atomic_binop!(sub),
+            "atomic_xsub_release" => codegen_atomic_binop!(sub),
             "atomic_xsub_relaxed" => codegen_atomic_binop!(sub),
             "bitreverse" => self.codegen_expr_to_place(p, fargs.remove(0).bitreverse()),
             // black_box is an identity function that hints to the compiler
@@ -644,9 +644,7 @@ impl<'tcx> GotocCtx<'tcx> {
             "volatile_copy_nonoverlapping_memory" => {
                 unstable_codegen!(codegen_intrinsic_copy!(Memcpy))
             }
-            "volatile_load" => {
-                unstable_codegen!(self.codegen_expr_to_place(p, fargs.remove(0).dereference()))
-            }
+            "volatile_load" => self.codegen_volatile_load(fargs, farg_types, p, loc),
             "volatile_store" => {
                 assert!(self.place_ty(p).is_unit());
                 self.codegen_volatile_store(fargs, farg_types, loc)
@@ -1319,6 +1317,37 @@ impl<'tcx> GotocCtx<'tcx> {
             })
             .collect();
         self.codegen_expr_to_place(p, Expr::vector_expr(cbmc_ret_ty, elems))
+    }
+
+    /// A volatile load of a memory location:
+    /// <https://doc.rust-lang.org/std/ptr/fn.read_volatile.html>
+    ///
+    /// Undefined behavior if any of these conditions are violated:
+    ///  * `src` must be valid for writes (done by `--pointer-check`)
+    ///  * `src` must be properly aligned (done by `align_check` below)
+    ///
+    /// TODO: Add a check for the condition:
+    ///  * `src` must point to a properly initialized value of type `T`
+    /// See <https://github.com/model-checking/kani/issues/920> for more details
+    fn codegen_volatile_load(
+        &mut self,
+        mut fargs: Vec<Expr>,
+        farg_types: &[Ty<'tcx>],
+        p: &Place<'tcx>,
+        loc: Location,
+    ) -> Stmt {
+        let src = fargs.remove(0);
+        let src_typ = farg_types[0];
+        let align = self.is_ptr_aligned(src_typ, src.clone());
+        let align_check = self.codegen_assert(
+            align,
+            PropertyClass::SafetyCheck,
+            "`src` must be properly aligned",
+            loc,
+        );
+        let expr = src.dereference();
+        let res_stmt = self.codegen_expr_to_place(p, expr);
+        Stmt::block(vec![align_check, res_stmt], loc)
     }
 
     /// A volatile write of a memory location:
