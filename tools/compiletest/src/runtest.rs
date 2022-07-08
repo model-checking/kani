@@ -10,9 +10,8 @@ use crate::common::{output_base_dir, output_base_name};
 use crate::common::{CargoKani, Expected, Kani, KaniFixme, Stub};
 use crate::common::{Config, TestPaths};
 use crate::header::TestProps;
-use crate::json;
-use crate::read2::read2_abbreviated;
 use crate::util::logv;
+use crate::{json, read2::read2};
 use regex::Regex;
 
 use std::env;
@@ -87,8 +86,7 @@ impl<'test> TestCx<'test> {
         let child = disable_error_reporting(|| command.spawn())
             .unwrap_or_else(|_| panic!("failed to exec `{:?}`", &command));
 
-        let Output { status, stdout, stderr } =
-            read2_abbreviated(child).expect("failed to read output");
+        let Output { status, stdout, stderr } = read2(child).expect("failed to read output");
 
         let result = ProcRes {
             status,
@@ -406,8 +404,8 @@ impl<'test> TestCx<'test> {
     /// Check if there is a set of consecutive lines in `str` where each line
     /// contains a line from `lines`
     fn contains(str: &Vec<&str>, lines: &Vec<&str>) -> bool {
-        let mut i = str.iter();
-        while let Some(output_line) = i.next() {
+        let mut i = str.iter().enumerate();
+        while let Some((line_num, output_line)) = i.next() {
             if output_line.contains(&lines[0]) {
                 // Check if the rest of the lines in `lines` are contained in
                 // the subsequent lines in `str`
@@ -415,11 +413,17 @@ impl<'test> TestCx<'test> {
                 // Clone the iterator so that we keep i unchanged
                 let mut j = i.clone();
                 for i in 1..lines.len() {
-                    if let Some(output_line) = j.next() {
+                    if let Some((_, output_line)) = j.next() {
                         if output_line.contains(lines[i]) {
                             continue;
                         }
                     }
+                    eprintln!(
+                        "Match for \"{}\" at line {line_num}, but failed at line {} for \"{}\"",
+                        lines[0],
+                        line_num + i,
+                        lines[i]
+                    );
                     matches = false;
                     break;
                 }
@@ -428,6 +432,7 @@ impl<'test> TestCx<'test> {
                 }
             }
         }
+        eprintln!("Match for \"{}\" not found at all.", lines[0]);
         false
     }
 
