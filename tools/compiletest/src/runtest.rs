@@ -404,8 +404,8 @@ impl<'test> TestCx<'test> {
     /// Check if there is a set of consecutive lines in `str` where each line
     /// contains a line from `lines`
     fn contains(str: &Vec<&str>, lines: &Vec<&str>) -> bool {
-        let mut i = str.iter().enumerate();
-        while let Some((line_num, output_line)) = i.next() {
+        let mut i = str.iter();
+        while let Some(output_line) = i.next() {
             if output_line.contains(&lines[0]) {
                 // Check if the rest of the lines in `lines` are contained in
                 // the subsequent lines in `str`
@@ -413,17 +413,11 @@ impl<'test> TestCx<'test> {
                 // Clone the iterator so that we keep i unchanged
                 let mut j = i.clone();
                 for i in 1..lines.len() {
-                    if let Some((_, output_line)) = j.next() {
+                    if let Some(output_line) = j.next() {
                         if output_line.contains(lines[i]) {
                             continue;
                         }
                     }
-                    eprintln!(
-                        "Match for \"{}\" at line {line_num}, but failed at line {} for \"{}\"",
-                        lines[0],
-                        line_num + i,
-                        lines[i]
-                    );
                     matches = false;
                     break;
                 }
@@ -432,7 +426,6 @@ impl<'test> TestCx<'test> {
                 }
             }
         }
-        eprintln!("Match for \"{}\" not found at all.", lines[0]);
         false
     }
 
