@@ -19,4 +19,16 @@ then
 fi
 KANI_PATH=${KANI_CANDIDATES[0]}
 
+CARGO_TOML_SAVE_FILE='.save-cargo.toml'
+if [[ "$PROPTEST" == "1" ]]; then
+    cp Cargo.toml $CARGO_TOML_SAVE_FILE
+    cat Cargo.toml |  sed 's/^\s*proptest.*$//g' | tee Cargo.toml 1>/dev/null
+
+fi
+
 exec -a cargo-kani "${KANI_PATH}" "$@"
+EXIT_CODE="$?"
+
+# todo! Somehow, this is not running. Exits fro cargo kani error.
+cat $CARGO_TOML_SAVE_FILE > Cargo.toml
+exit $EXIT_CODE
