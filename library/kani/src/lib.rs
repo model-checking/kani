@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 #![feature(rustc_attrs)] // Used for rustc_diagnostic_item.
 #![feature(min_specialization)] // Used for default implementation of Arbitrary.
+#![feature(generic_const_exprs)] // Used for getting size_of generic types
 
 pub mod arbitrary;
 pub mod invariant;
@@ -95,10 +96,26 @@ pub fn any<T: Arbitrary>() -> T {
 /// kani::assume(char::from_u32(c as u32).is_ok());
 /// ```
 ///
+#[inline(never)]
+pub unsafe fn any_raw<T>() -> T
+where
+    // This where bound guarantees constant `size_of::<T>()` so we can use `size_of::<T>()`
+    // as a const generic argument and as a compile-time constant array length.
+    [(); std::mem::size_of::<T>()]:,
+{
+    let non_det_byte_arr = any_raw_inner::<{ std::mem::size_of::<T>() }>();
+    // We need `transmute_copy` instead of `transmute` because right now, rustc can't guarantee that the
+    // source and destination types are the same size, even though they are.
+    let non_det_var =
+        std::mem::transmute_copy::<[u8; std::mem::size_of::<T>()], T>(&non_det_byte_arr);
+    non_det_var
+}
+
+/// This function creates an unconstrained byte array of length `T`.
 #[rustc_diagnostic_item = "KaniAnyRaw"]
 #[inline(never)]
-pub unsafe fn any_raw<T>() -> T {
-    unimplemented!("Kani any_raw")
+unsafe fn any_raw_inner<const T: usize>() -> [u8; T] {
+    unimplemented!("Kani any_raw_inner")
 }
 
 /// This function has been split into a safe and unsafe functions: `kani::any` and `kani::any_raw`.
