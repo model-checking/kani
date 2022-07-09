@@ -611,9 +611,12 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Slice(e) => self.codegen_ty(*e).flexible_array_of(),
             ty::Str => Type::c_char().flexible_array_of(),
             ty::Ref(_, t, _) | ty::RawPtr(ty::TypeAndMut { ty: t, .. }) => self.codegen_ty_ref(*t),
-            ty::FnDef(_, _) => {
-                let sig = self.monomorphize(ty.fn_sig(self.tcx));
-                self.codegen_function_sig(sig)
+            ty::FnDef(def_id, substs) => {
+                let instance =
+                    Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), *def_id, substs)
+                        .unwrap()
+                        .unwrap();
+                self.codegen_fndef_type(instance)
             }
             ty::FnPtr(sig) => self.codegen_function_sig(*sig).to_pointer(),
             ty::Closure(_, subst) => self.codegen_ty_closure(ty, subst),
@@ -987,6 +990,22 @@ impl<'tcx> GotocCtx<'tcx> {
         } else {
             Type::code_with_unnamed_parameters(params, self.codegen_ty(sig.output()))
         }
+    }
+
+    /// Creates a zero-sized struct for a FnDef.
+    ///
+    /// A FnDef instance in Rust is a zero-sized type, which can be passed around directly, without creating a pointer.
+    /// (Rust docs: <https://doc.rust-lang.org/reference/types/function-item.html>)
+    /// To mirror this in GotoC, we create a dummy struct for the function, similarly to what we do for closures.
+    ///
+    /// For details, see <https://github.com/model-checking/kani/pull/1338>
+    pub fn codegen_fndef_type(&mut self, instance: Instance<'tcx>) -> Type {
+        let func = self.symbol_name(instance);
+        self.ensure_struct(
+            format!("{func}::FnDefStruct"),
+            Some(self.readable_instance_name(instance)),
+            |_, _| vec![],
+        )
     }
 
     /// codegen for struct
@@ -1374,7 +1393,6 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Whether a variable of type ty should be ignored as a parameter to a function
     pub fn ignore_var_ty(&self, ty: Ty<'tcx>) -> bool {
         match ty.kind() {
-            ty::FnDef(_, _) => true,
             // Ignore variables of the generator type until we add support for
             // them:
             // https://github.com/model-checking/kani/issues/416
