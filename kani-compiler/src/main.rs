@@ -48,7 +48,7 @@ fn rustc_gotoc_flags(lib_path: &str) -> Vec<String> {
     let kani_std_rlib = PathBuf::from(lib_path).join("libstd.rlib");
     let kani_std_wrapper = format!("noprelude:std={}", kani_std_rlib.to_str().unwrap());
     let kani_proptest_rlib = PathBuf::from(lib_path).join("libproptest.rlib");
-    let kani_proptest_wrapper =
+    let _kani_proptest_wrapper =
         format!("noprelude:proptest={}", kani_proptest_rlib.to_str().unwrap());
     // println!("libproptest wrapper is: {}", &kani_proptest_wrapper);
     let args = vec![
@@ -76,8 +76,9 @@ fn rustc_gotoc_flags(lib_path: &str) -> Vec<String> {
         "--extern",
         kani_std_wrapper.as_str(),
         "--extern",
-        // "proptest=/Users/ytakashl/Desktop/kani/target/debug/libproptest.rlib",
-        kani_proptest_wrapper.as_str(),
+        "proptest=/Users/ytakashl/Desktop/kani/target/debug/libproptest.rlib",
+        // todo! why does this need to be hard-coded???
+        // kani_proptest_wrapper.as_str(), //Why is the other one off?
     ];
     args.iter().map(|s| s.to_string()).collect()
 }
