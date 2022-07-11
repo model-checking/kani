@@ -6,6 +6,9 @@
 DOCUMENTATION=\
 'kani-run-on-repos.sh -- script to clone and compile multiple remote git repositories with Kani.
 
+WARNING: Because this script clones repositories at the HEAD, the
+results may not be stable when the target code changes.
+
 USAGE:
 ./scripts/kani-run-on-repos.sh path/to/url-list
 
