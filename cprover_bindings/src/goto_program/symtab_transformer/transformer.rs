@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use crate::goto_program::{
-    BinaryOperand, CIntType, DatatypeComponent, Expr, ExprValue, Location, Parameter, SelfOperand,
-    Stmt, StmtBody, SwitchCase, Symbol, SymbolTable, SymbolValues, Type, UnaryOperand,
+    BinaryOperator, CIntType, DatatypeComponent, Expr, ExprValue, Location, Parameter,
+    SelfOperator, Stmt, StmtBody, SwitchCase, Symbol, SymbolTable, SymbolValues, Type,
+    UnaryOperator,
 };
 use crate::InternedString;
 use num::bigint::BigInt;
@@ -322,7 +323,7 @@ pub trait Transformer: Sized {
     fn transform_expr_bin_op(
         &mut self,
         _typ: &Type,
-        op: &BinaryOperand,
+        op: &BinaryOperator,
         lhs: &Expr,
         rhs: &Expr,
     ) -> Expr {
@@ -418,13 +419,13 @@ pub trait Transformer: Sized {
     }
 
     /// Transforms a self-op expr (`op++`, etc.)
-    fn transform_expr_self_op(&mut self, _typ: &Type, op: &SelfOperand, e: &Expr) -> Expr {
+    fn transform_expr_self_op(&mut self, _typ: &Type, op: &SelfOperator, e: &Expr) -> Expr {
         let transformed_e = self.transform_expr(e);
         match op {
-            SelfOperand::Postdecrement => transformed_e.postdecr(),
-            SelfOperand::Postincrement => transformed_e.postincr(),
-            SelfOperand::Predecrement => transformed_e.predecr(),
-            SelfOperand::Preincrement => transformed_e.preincr(),
+            SelfOperator::Postdecrement => transformed_e.postdecr(),
+            SelfOperator::Postincrement => transformed_e.postincr(),
+            SelfOperator::Predecrement => transformed_e.predecr(),
+            SelfOperator::Preincrement => transformed_e.preincr(),
         }
     }
 
@@ -479,22 +480,22 @@ pub trait Transformer: Sized {
     }
 
     /// Transforms a unary operator expr (`op self`)
-    fn transform_expr_un_op(&mut self, _typ: &Type, op: &UnaryOperand, e: &Expr) -> Expr {
+    fn transform_expr_un_op(&mut self, _typ: &Type, op: &UnaryOperator, e: &Expr) -> Expr {
         let transformed_e = self.transform_expr(e);
         match op {
-            UnaryOperand::Bitnot => transformed_e.bitnot(),
-            UnaryOperand::BitReverse => transformed_e.bitreverse(),
-            UnaryOperand::Bswap => transformed_e.bswap(),
-            UnaryOperand::IsDynamicObject => transformed_e.dynamic_object(),
-            UnaryOperand::IsFinite => transformed_e.is_finite(),
-            UnaryOperand::Not => transformed_e.not(),
-            UnaryOperand::ObjectSize => transformed_e.object_size(),
-            UnaryOperand::PointerObject => transformed_e.pointer_object(),
-            UnaryOperand::PointerOffset => transformed_e.pointer_offset(),
-            UnaryOperand::Popcount => transformed_e.popcount(),
-            UnaryOperand::CountTrailingZeros { allow_zero } => transformed_e.cttz(*allow_zero),
-            UnaryOperand::CountLeadingZeros { allow_zero } => transformed_e.ctlz(*allow_zero),
-            UnaryOperand::UnaryMinus => transformed_e.neg(),
+            UnaryOperator::Bitnot => transformed_e.bitnot(),
+            UnaryOperator::BitReverse => transformed_e.bitreverse(),
+            UnaryOperator::Bswap => transformed_e.bswap(),
+            UnaryOperator::IsDynamicObject => transformed_e.dynamic_object(),
+            UnaryOperator::IsFinite => transformed_e.is_finite(),
+            UnaryOperator::Not => transformed_e.not(),
+            UnaryOperator::ObjectSize => transformed_e.object_size(),
+            UnaryOperator::PointerObject => transformed_e.pointer_object(),
+            UnaryOperator::PointerOffset => transformed_e.pointer_offset(),
+            UnaryOperator::Popcount => transformed_e.popcount(),
+            UnaryOperator::CountTrailingZeros { allow_zero } => transformed_e.cttz(*allow_zero),
+            UnaryOperator::CountLeadingZeros { allow_zero } => transformed_e.ctlz(*allow_zero),
+            UnaryOperator::UnaryMinus => transformed_e.neg(),
         }
     }
 
