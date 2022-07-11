@@ -25,6 +25,7 @@
   - [Testing](./testing.md)
     - [Regression testing](./regression-testing.md)
     - [Book runner](./bookrunner.md)
+    - [(Experimental) Testing with a Large Number of Repositories](./repo-crawl.md)
 
 - [Limitations](./limitations.md)
   - [Undefined behaviour](./undefined-behaviour.md)
