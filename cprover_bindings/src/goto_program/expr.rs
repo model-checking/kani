@@ -4,9 +4,9 @@
 // This file has a lot of function with names like "div"
 #![allow(clippy::should_implement_trait)]
 
-use self::BinaryOperand::*;
+use self::BinaryOperator::*;
 use self::ExprValue::*;
-use self::UnaryOperand::*;
+use self::UnaryOperator::*;
 use super::super::MachineModel;
 use super::{DatatypeComponent, Location, Parameter, Stmt, SwitchCase, SymbolTable, Type};
 use crate::InternedString;
@@ -65,9 +65,9 @@ pub enum ExprValue {
         left: Expr,
         right: Expr,
     },
-    /// `lhs op rhs`.  E.g. `lhs + rhs` if `op == BinaryOperand::Plus`
+    /// `lhs op rhs`.  E.g. `lhs + rhs` if `op == BinaryOperator::Plus`
     BinOp {
-        op: BinaryOperand,
+        op: BinaryOperator,
         lhs: Expr,
         rhs: Expr,
     },
@@ -115,7 +115,7 @@ pub enum ExprValue {
     PointerConstant(u64),
     // `op++` etc
     SelfOp {
-        op: SelfOperand,
+        op: SelfOperator,
         e: Expr,
     },
     /// <https://gcc.gnu.org/onlinedocs/gcc/Statement-Exprs.html>
@@ -146,9 +146,9 @@ pub enum ExprValue {
         value: Expr,
         field: InternedString,
     },
-    // `op self` eg `! self` if `op == UnaryOperand::Not`
+    // `op self` eg `! self` if `op == UnaryOperator::Not`
     UnOp {
-        op: UnaryOperand,
+        op: UnaryOperator,
         e: Expr,
     },
     /// `vec_typ x = >>> {elems0, elems1 ...} <<<`
@@ -159,7 +159,7 @@ pub enum ExprValue {
 
 /// Binary operators. The names are the same as in the Irep representation.
 #[derive(Debug, Clone, Copy)]
-pub enum BinaryOperand {
+pub enum BinaryOperator {
     And,
     Ashr,
     Bitand,
@@ -194,7 +194,7 @@ pub enum BinaryOperand {
 
 // Unary operators with side-effects
 #[derive(Debug, Clone, Copy)]
-pub enum SelfOperand {
+pub enum SelfOperator {
     /// `self--`
     Postdecrement,
     /// `self++`
@@ -206,7 +206,7 @@ pub enum SelfOperand {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum UnaryOperand {
+pub enum UnaryOperator {
     /// `~self`
     Bitnot,
     /// `__builtin_bitreverse<n>(self)`
@@ -846,7 +846,7 @@ impl Expr {
 
 /// Constructors for Binary Operations
 impl Expr {
-    fn typecheck_binop_args(op: BinaryOperand, lhs: &Expr, rhs: &Expr) -> bool {
+    fn typecheck_binop_args(op: BinaryOperator, lhs: &Expr, rhs: &Expr) -> bool {
         match op {
             // Arithmetic which can include pointers
             Minus => {
@@ -902,7 +902,7 @@ impl Expr {
         }
     }
 
-    fn binop_return_type(op: BinaryOperand, lhs: &Expr, rhs: &Expr) -> Type {
+    fn binop_return_type(op: BinaryOperator, lhs: &Expr, rhs: &Expr) -> Type {
         match op {
             // Arithmetic which can include pointers
             Minus => {
@@ -944,7 +944,7 @@ impl Expr {
         }
     }
     /// self op right;
-    pub fn binop(self, op: BinaryOperand, rhs: Expr) -> Expr {
+    pub fn binop(self, op: BinaryOperator, rhs: Expr) -> Expr {
         assert!(
             Expr::typecheck_binop_args(op, &self, &rhs),
             "BinaryOperation Expression does not typecheck {:?} {:?} {:?}",
@@ -1125,35 +1125,35 @@ impl Expr {
 /// Constructors for self operations
 impl Expr {
     /// Private constructor for self operations
-    fn self_op(self, op: SelfOperand) -> Expr {
+    fn self_op(self, op: SelfOperator) -> Expr {
         assert!(self.typ.is_integer() || self.typ.is_pointer());
         expr!(SelfOp { op, e: self }, self.typ.clone())
     }
 
     /// `self++`
     pub fn postincr(self) -> Expr {
-        self.self_op(SelfOperand::Postincrement)
+        self.self_op(SelfOperator::Postincrement)
     }
 
     /// `self--`
     pub fn postdecr(self) -> Expr {
-        self.self_op(SelfOperand::Postdecrement)
+        self.self_op(SelfOperator::Postdecrement)
     }
 
     /// `++self`
     pub fn preincr(self) -> Expr {
-        self.self_op(SelfOperand::Postincrement)
+        self.self_op(SelfOperator::Postincrement)
     }
 
     /// `--self`
     pub fn predecr(self) -> Expr {
-        self.self_op(SelfOperand::Postdecrement)
+        self.self_op(SelfOperator::Postdecrement)
     }
 }
 
 /// Constructors for unary operators
 impl Expr {
-    fn typecheck_unop_arg(op: UnaryOperand, arg: &Expr) -> bool {
+    fn typecheck_unop_arg(op: UnaryOperator, arg: &Expr) -> bool {
         match op {
             Bitnot | BitReverse | Bswap | Popcount => arg.typ.is_integer(),
             CountLeadingZeros { .. } | CountTrailingZeros { .. } => arg.typ.is_integer(),
@@ -1165,7 +1165,7 @@ impl Expr {
         }
     }
 
-    fn unop_return_type(op: UnaryOperand, arg: &Expr) -> Type {
+    fn unop_return_type(op: UnaryOperator, arg: &Expr) -> Type {
         match op {
             Bitnot | BitReverse | Bswap | UnaryMinus => arg.typ.clone(),
             CountLeadingZeros { .. } | CountTrailingZeros { .. } => arg.typ.clone(),
@@ -1176,7 +1176,7 @@ impl Expr {
         }
     }
     /// Private helper function to make unary operators
-    fn unop(self, op: UnaryOperand) -> Expr {
+    fn unop(self, op: UnaryOperator) -> Expr {
         assert!(Expr::typecheck_unop_arg(op, &self));
         let typ = Expr::unop_return_type(op, &self);
         expr!(ExprValue::UnOp { op, e: self }, typ)

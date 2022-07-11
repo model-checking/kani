@@ -431,7 +431,9 @@ impl<'tcx> GotocCtx<'tcx> {
                     | InstanceDef::ReifyShim(..)
                     | InstanceDef::ClosureOnceShim { .. }
                     | InstanceDef::CloneShim(..) => {
-                        let func_exp = self.codegen_operand(func);
+                        // We need to handle FnDef items in a special way because `codegen_operand` compiles them to dummy structs.
+                        // (cf. the function documentation)
+                        let func_exp = self.codegen_func_expr(instance, None);
                         vec![
                             self.codegen_expr_to_place(destination, func_exp.call(fargs))
                                 .with_location(loc),
