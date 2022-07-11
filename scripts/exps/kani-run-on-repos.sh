@@ -34,7 +34,7 @@ SPDX-License-Identifier: Apache-2.0 OR MIT'
 export SELF_SCRIPT=$0
 export SELF_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 NPROC=$(nproc 2> /dev/null || sysctl -n hw.ncpu 2> /dev/null || echo 4)  # Linux or Mac or hard-coded default of 4
-export WORK_DIRECTORY_PREFIX="$SELF_DIR/../target/remote-repos"
+export WORK_DIRECTORY_PREFIX="$SELF_DIR/../../target/remote-repos"
 
 
 export STDOUT_SUFFIX='stdout.cargo-kani'
@@ -53,7 +53,7 @@ function clone_and_run_kani {
     (git clone $REPOSITORY_URL $REPO_DIRECTORY 2> /dev/null || git -C $REPO_DIRECTORY pull)
 
     # run cargo kani compile on repo. save results to file.
-    PATH=$PATH:$SELF_DIR
+    PATH=$PATH:$(readlink -f $SELF_DIR/..)
     (cd $REPO_DIRECTORY; nice -n15 cargo kani --only-codegen) \
          1> $REPO_DIRECTORY/$STDOUT_SUFFIX \
          2> $REPO_DIRECTORY/$STDERR_SUFFIX
@@ -118,11 +118,11 @@ elif [ "$#" -eq "1" ]; then
         echo "repository: $REPOSITORY"
 
         ERROR_OUTPUTS=$(print_errors_for_each_repo_result $WORK_DIRECTORY_PREFIX/$directory)
-        if [[ "$ERROR_OUTPUTS" =~ '------ STDERR Warnings' ]]; then
+        if [[ "$ERROR_OUTPUTS" =~ 'STDERR Warnings' ]]; then
             OVERALL_EXIT_CODE='1'
             num_with_warning=$(($num_with_warning + 1))
         fi
-        if [[ "$ERROR_OUTPUTS" =~ 'Error exit: code' ]]; then
+        if [[ "$ERROR_OUTPUTS" =~ 'Error exit in' ]]; then
             num_failed=$(($num_failed + 1))
         fi
 
