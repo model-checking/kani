@@ -273,7 +273,7 @@ pub trait Transformer: Sized {
         let transformed_symbols =
             spec.temporary_symbols().iter().map(|s| self.transform_expr(s)).collect();
         let transformed_clause = self.transform_expr(spec.clause());
-        Spec::new(transformed_symbols, transformed_clause).with_location(*spec.location())
+        Spec::new(transformed_symbols, transformed_clause, *spec.location())
     }
 
     /// Perform recursive descent on a `Expr` data structure.

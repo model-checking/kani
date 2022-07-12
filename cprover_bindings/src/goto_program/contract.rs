@@ -54,8 +54,8 @@ impl Spec {
 
 /// Constructor
 impl Spec {
-    pub fn new(temporary_symbols: Vec<Expr>, clause: Expr) -> Self {
+    pub fn new(temporary_symbols: Vec<Expr>, clause: Expr, location: Location) -> Self {
         assert!(temporary_symbols.iter().all(|x| x.is_symbol()), "Variables must be symbols");
-        Spec { temporary_symbols, clause, location: Location::none() }
+        Spec { temporary_symbols, clause, location }
     }
 }
