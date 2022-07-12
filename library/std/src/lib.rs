@@ -143,8 +143,14 @@ macro_rules! unreachable {
     ($($msg:literal)? $(,)?) => (
         kani::panic(concat!("internal error: entered unreachable code: ", $($msg)?))
     );
+    // Needed for 2018 and older rust editions.
+    // TODO: Is it possible to trigger an error if 2021 and above?
+    ($($msg:expr)? $(,)?) => (
+        kani::panic(concat!("internal error: entered unreachable code: ", stringify!($($msg)?)))
+    );
     ($fmt:expr, $($arg:tt)*) => (
-        kani::panic(concat!("internal error: entered unreachable code: ", $fmt), stringify!($($arg)*)));
+        kani::panic(concat!("internal error: entered unreachable code: ",
+        stringify!($fmt, $($arg)*))));
 }
 
 #[macro_export]
@@ -155,6 +161,8 @@ macro_rules! panic {
     ($msg:literal $(,)?) => ({
         kani::panic(concat!($msg));
     });
+    // Needed for 2018 and older rust editions.
+    // TODO: Is it possible to trigger an error if 2021 and above?
     ($msg:expr $(,)?) => ({
         kani::panic(stringify!($msg));
     });
