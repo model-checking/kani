@@ -176,12 +176,10 @@ impl<'test> TestCx<'test> {
             if proc_res.status.success() {
                 self.fatal_proc_rec("test failed: expected check failure, got success", &proc_res);
             }
-        } else {
-            if !proc_res.status.success() {
+        } else if !proc_res.status.success() {
                 self.fatal_proc_rec("test failed: expected check success, got failure", &proc_res);
             }
         }
-    }
 
     /// Runs `kani-compiler` on the test file specified by `self.testpaths.file`. An
     /// error message is printed to stdout if the codegen result is not
@@ -202,12 +200,8 @@ impl<'test> TestCx<'test> {
                     &proc_res,
                 );
             }
-        } else {
-            if !proc_res.status.success() {
-                self.fatal_proc_rec(
-                    "test failed: expected codegen success, got failure",
-                    &proc_res,
-                );
+        } else if !proc_res.status.success() {
+            self.fatal_proc_rec("test failed: expected codegen success, got failure", &proc_res);
             }
         }
     }
@@ -247,13 +241,11 @@ impl<'test> TestCx<'test> {
                         &proc_res,
                     );
                 }
-            } else {
-                if !proc_res.status.success() {
+            } else if !proc_res.status.success() {
                     self.fatal_proc_rec(
                         "test failed: expected verification success, got failure",
                         &proc_res,
                     );
-                }
             }
         }
     }
@@ -281,8 +273,8 @@ impl<'test> TestCx<'test> {
         let re = Regex::new(r"line [0-9]+ EXPECTED FAIL: SUCCESS").unwrap();
         let mut lines = vec![];
         for m in re.find_iter(str) {
-            let splits = m.as_str().split_ascii_whitespace();
-            let num_str = splits.skip(1).next().unwrap();
+            let mut splits = m.as_str().split_ascii_whitespace();
+            let num_str = splits.nth(1).unwrap();
             let num = num_str.parse().unwrap();
             lines.push(num);
         }
@@ -365,15 +357,16 @@ impl<'test> TestCx<'test> {
     fn verify_output(&self, proc_res: &ProcRes, expected: &str) {
         // Include the output from stderr here for cases where there are exceptions
         let output = proc_res.stdout.to_string() + &proc_res.stderr;
-        if let Some(lines) =
-            TestCx::contains_lines(&output.split('\n').collect(), expected.split('\n').collect())
-        {
+        if let Some(lines) = TestCx::contains_lines(
+            &output.split('\n').collect::<Vec<_>>(),
+            expected.split('\n').collect(),
+        ) {
             self.fatal_proc_rec(
                 &format!(
                     "test failed: expected output to contain the line(s):\n{}",
                     lines.join("\n")
                 ),
-                &proc_res,
+                proc_res,
             );
         }
     }
@@ -381,19 +374,19 @@ impl<'test> TestCx<'test> {
     /// Looks for each line or set of lines in `str`. Returns `None` if all
     /// lines are in `str`.  Otherwise, it returns the first line not found in
     /// `str`.
-    fn contains_lines<'a>(str: &Vec<&str>, lines: Vec<&'a str>) -> Option<Vec<&'a str>> {
+    fn contains_lines<'a>(str: &[&str], lines: Vec<&'a str>) -> Option<Vec<&'a str>> {
         let mut consecutive_lines: Vec<&str> = Vec::new();
         for line in lines {
             // A line that ends in "\" indicates that the next line in the
             // expected file should appear on the consecutive line in the
             // output. This is a temporary mechanism until we have more robust
             // json-based checking of verification results
-            if let Some(prefix) = line.strip_suffix("\\") {
+            if let Some(prefix) = line.strip_suffix('\\') {
                 // accumulate the lines
                 consecutive_lines.push(prefix);
             } else {
                 consecutive_lines.push(line);
-                if !TestCx::contains(&str, &consecutive_lines) {
+                if !TestCx::contains(str, &consecutive_lines) {
                     return Some(consecutive_lines);
                 }
                 consecutive_lines.clear();
@@ -404,7 +397,7 @@ impl<'test> TestCx<'test> {
 
     /// Check if there is a set of consecutive lines in `str` where each line
     /// contains a line from `lines`
-    fn contains(str: &Vec<&str>, lines: &Vec<&str>) -> bool {
+    fn contains(str: &[&str], lines: &[&str]) -> bool {
         let mut i = str.iter();
         while let Some(output_line) = i.next() {
             if output_line.contains(&lines[0]) {
@@ -413,9 +406,9 @@ impl<'test> TestCx<'test> {
                 let mut matches = true;
                 // Clone the iterator so that we keep i unchanged
                 let mut j = i.clone();
-                for i in 1..lines.len() {
+                for line in lines.iter().skip(1) {
                     if let Some(output_line) = j.next() {
-                        if output_line.contains(lines[i]) {
+                        if output_line.contains(line) {
                             continue;
                         }
                     }
@@ -431,7 +424,7 @@ impl<'test> TestCx<'test> {
     }
 
     fn create_stamp(&self) {
-        let stamp = crate::stamp(&self.config, self.testpaths, self.revision);
+        let stamp = crate::stamp(self.config, self.testpaths, self.revision);
         fs::write(&stamp, "we only support one configuration").unwrap();
     }
 }
