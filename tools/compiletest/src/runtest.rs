@@ -10,6 +10,8 @@ use crate::common::{output_base_dir, output_base_name};
 use crate::common::{CargoKani, Expected, Kani, KaniFixme, Stub};
 use crate::common::{Config, TestPaths};
 use crate::header::TestProps;
+use crate::json;
+use crate::read2::read2;
 use crate::util::logv;
 use crate::{json, read2::read2};
 use regex::Regex;

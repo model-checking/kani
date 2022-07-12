@@ -3,12 +3,6 @@
 // Modifications Copyright Kani Contributors
 // See GitHub history for details.
 
-// FIXME: This is a complete copy of `cargo/src/cargo/util/read2.rs`
-// Consider unify the read2() in libstd, cargo and this to prevent further code duplication.
-
-// Note: read2_abbreviated was replaced by read2 because the original function skipped some of the output,
-// which caused issues with our tests (in particular tests with large outputs).
-
 use std::io;
 use std::process::{Child, Output};
 
