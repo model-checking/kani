@@ -55,7 +55,7 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
 
     let metadata = ctx.collect_kani_metadata(&outputs.metadata)?;
     let harnesses = ctx.determine_targets(&metadata)?;
-    let report_base = ctx.args.target_dir.clone().unwrap_or(PathBuf::from("target"));
+    let report_base = ctx.args.target_dir.clone().unwrap_or_else(|| PathBuf::from("target"));
 
     let mut failed_harnesses: Vec<&HarnessMetadata> = Vec::new();
 
@@ -102,7 +102,7 @@ fn standalone_main() -> Result<()> {
 
     let metadata = ctx.collect_kani_metadata(&[outputs.metadata])?;
     let harnesses = ctx.determine_targets(&metadata)?;
-    let report_base = ctx.args.target_dir.clone().unwrap_or(PathBuf::from("."));
+    let report_base = ctx.args.target_dir.clone().unwrap_or_else(|| PathBuf::from("."));
 
     let mut failed_harnesses: Vec<&HarnessMetadata> = Vec::new();
 
