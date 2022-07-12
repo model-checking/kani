@@ -115,7 +115,9 @@ fn setup_python_deps(kani_dir: &Path, os: &os_info::Info) -> Result<()> {
     let pkg_versions = &["cbmc-viewer==3.5", "colorama==0.4.3"];
 
     if os.os_type() == os_info::Type::Ubuntu
-        && *os.version() == os_info::Version::Semantic(18, 4, 0)
+        // Check both versions: https://github.com/stanislav-tkach/os_info/issues/318
+        && (*os.version() == os_info::Version::Semantic(18, 4, 0)
+            || *os.version() == os_info::Version::Custom("18.04".into()))
     {
         os_hacks::setup_python_deps_on_ubuntu_18_04(&pyroot, pkg_versions)?;
         return Ok(());
