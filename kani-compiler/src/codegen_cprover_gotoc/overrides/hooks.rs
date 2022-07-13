@@ -282,40 +282,6 @@ impl<'tcx> GotocHook<'tcx> for PtrRead {
     }
 }
 
-struct PtrWrite;
-
-impl<'tcx> GotocHook<'tcx> for PtrWrite {
-    fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-        let name = with_no_trimmed_paths!(tcx.def_path_str(instance.def_id()));
-        name == "core::ptr::write"
-            || name == "core::ptr::write_unaligned"
-            || name == "std::ptr::write"
-            || name == "std::ptr::write_unaligned"
-    }
-
-    fn handle(
-        &self,
-        tcx: &mut GotocCtx<'tcx>,
-        _instance: Instance<'tcx>,
-        mut fargs: Vec<Expr>,
-        _assign_to: Place<'tcx>,
-        target: Option<BasicBlock>,
-        span: Option<Span>,
-    ) -> Stmt {
-        let loc = tcx.codegen_span_option(span);
-        let target = target.unwrap();
-        let dst = fargs.remove(0);
-        let src = fargs.remove(0);
-        Stmt::block(
-            vec![
-                dst.dereference().assign(src, loc).with_location(loc),
-                Stmt::goto(tcx.current_fn().find_label(&target), loc),
-            ],
-            loc,
-        )
-    }
-}
-
 struct RustAlloc;
 // Removing this hook causes regression failures.
 // https://github.com/model-checking/kani/issues/1170
@@ -397,7 +363,6 @@ pub fn fn_hooks<'tcx>() -> GotocHooks<'tcx> {
             Rc::new(ExpectFail),
             Rc::new(Nondet),
             Rc::new(PtrRead),
-            Rc::new(PtrWrite),
             Rc::new(RustAlloc),
             Rc::new(SliceFromRawPart),
         ],
