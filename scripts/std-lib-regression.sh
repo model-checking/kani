@@ -16,6 +16,11 @@ then
   TARGET="x86_64-apple-darwin"
   # mac 'time' doesn't have -v
   WRAPPER=""
+elif [[ $PLATFORM == "Darwin arm" ]]
+then
+  TARGET="aarch64-apple-darwin"
+  # mac 'time' doesn't have -v
+  WRAPPER=""
 else
   echo
   echo "Std-Lib codegen regression only works on Linux or OSX x86 platforms, skipping..."
