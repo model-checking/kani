@@ -140,33 +140,54 @@ macro_rules! eprintln {
 
 #[macro_export]
 macro_rules! unreachable {
+    // The argument, if present, is a literal that represents the error message, i.e.:
+    // `unreachable!("Error message")` or `unreachable!()`
     ($($msg:literal)? $(,)?) => (
         kani::panic(concat!("internal error: entered unreachable code: ", $($msg)?))
     );
-    // Needed for 2018 and older rust editions.
+    // The argument is an expression, such as a variable.
+    // ```
+    // let msg = format!("Error: {}", code);
+    // unreachable!(msg);
+    // ```
+    // This was supported for 2018 and older rust editions.
     // TODO: Is it possible to trigger an error if 2021 and above?
+    // https://github.com/model-checking/kani/issues/1375
     ($($msg:expr)? $(,)?) => (
         kani::panic(concat!("internal error: entered unreachable code: ", stringify!($($msg)?)))
     );
-    ($fmt:expr, $($arg:tt)*) => (
+    // The first argument is the format and the rest contains tokens to be included in the msg.
+    // `unreachable!("Error: {}", code);`
+    ($fmt:literal, $($arg:tt)*) => (
         kani::panic(concat!("internal error: entered unreachable code: ",
         stringify!($fmt, $($arg)*))));
 }
 
 #[macro_export]
 macro_rules! panic {
+    // No argument is given.
     () => (
         kani::panic("explicit panic")
     );
+    // The argument is a literal that represents the error message, i.e.:
+    // `panic!("Error message")`
     ($msg:literal $(,)?) => ({
         kani::panic(concat!($msg));
     });
-    // Needed for 2018 and older rust editions.
+    // The argument is an expression, such as a variable.
+    // ```
+    // let msg = format!("Error: {}", code);
+    // panic!(msg);
+    // ```
+    // This was supported for 2018 and older rust editions.
     // TODO: Is it possible to trigger an error if 2021 and above?
+    // https://github.com/model-checking/kani/issues/1375
     ($msg:expr $(,)?) => ({
         kani::panic(stringify!($msg));
     });
-    ($msg:expr, $($arg:tt)*) => ({
-        kani::panic(stringify!($msg, $($arg)*));
+    // The first argument is the format and the rest contains tokens to be included in the msg.
+    // `panic!("Error: {}", code);`
+    ($msg:literal, $($arg:tt)+) => ({
+        kani::panic(stringify!($msg, $($arg)+));
     });
 }
