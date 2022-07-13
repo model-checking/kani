@@ -245,43 +245,6 @@ impl<'tcx> GotocHook<'tcx> for Panic {
     }
 }
 
-struct PtrRead;
-
-impl<'tcx> GotocHook<'tcx> for PtrRead {
-    fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-        let name = with_no_trimmed_paths!(tcx.def_path_str(instance.def_id()));
-        name == "core::ptr::read"
-            || name == "core::ptr::read_unaligned"
-            || name == "core::ptr::read_volatile"
-            || name == "std::ptr::read"
-            || name == "std::ptr::read_unaligned"
-            || name == "std::ptr::read_volatile"
-    }
-
-    fn handle(
-        &self,
-        tcx: &mut GotocCtx<'tcx>,
-        _instance: Instance<'tcx>,
-        mut fargs: Vec<Expr>,
-        assign_to: Place<'tcx>,
-        target: Option<BasicBlock>,
-        span: Option<Span>,
-    ) -> Stmt {
-        let loc = tcx.codegen_span_option(span);
-        let target = target.unwrap();
-        let src = fargs.remove(0);
-        Stmt::block(
-            vec![
-                unwrap_or_return_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&assign_to))
-                    .goto_expr
-                    .assign(src.dereference().with_location(loc), loc),
-                Stmt::goto(tcx.current_fn().find_label(&target), loc),
-            ],
-            loc,
-        )
-    }
-}
-
 struct RustAlloc;
 // Removing this hook causes regression failures.
 // https://github.com/model-checking/kani/issues/1170
@@ -362,7 +325,6 @@ pub fn fn_hooks<'tcx>() -> GotocHooks<'tcx> {
             Rc::new(Assert),
             Rc::new(ExpectFail),
             Rc::new(Nondet),
-            Rc::new(PtrRead),
             Rc::new(RustAlloc),
             Rc::new(SliceFromRawPart),
         ],
