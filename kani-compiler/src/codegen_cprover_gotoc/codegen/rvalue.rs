@@ -8,7 +8,6 @@ use crate::unwrap_or_return_codegen_unimplemented;
 use cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
 use cbmc::utils::BUG_REPORT_URL;
 use cbmc::MachineModel;
-use cbmc::NO_PRETTY_NAME;
 use cbmc::{btree_string_map, InternString, InternedString};
 use num::bigint::BigInt;
 use rustc_middle::mir::{AggregateKind, BinOp, CastKind, NullOp, Operand, Place, Rvalue, UnOp};
@@ -211,6 +210,7 @@ impl<'tcx> GotocCtx<'tcx> {
         res_ty: Ty<'tcx>,
     ) -> Expr {
         let func_name = format!("gen-repeat<{}>", self.ty_mangled_name(res_ty));
+        let pretty_name = format!("init_array_repeat<{}>", self.ty_pretty_name(res_ty));
         self.ensure(&func_name, |tcx, _| {
             let paramt = tcx.codegen_ty(tcx.operand_ty(op));
             let res_t = tcx.codegen_ty(res_ty);
@@ -241,7 +241,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 &func_name,
                 Type::code(vec![inp.to_function_parameter()], res_t),
                 Some(Stmt::block(body, Location::none())),
-                NO_PRETTY_NAME,
+                &pretty_name,
                 Location::none(),
             )
         });
@@ -851,7 +851,9 @@ impl<'tcx> GotocCtx<'tcx> {
             // We skip an entire submodule of the standard library, so drop is missing
             // for it. Build and insert a function that just calls an unimplemented block
             // to maintain soundness.
-            let drop_sym_name = format!("{}_unimplemented", self.symbol_name(drop_instance));
+            let drop_sym_name = format!("drop_unimplemented_{}", self.symbol_name(drop_instance));
+            let pretty_name =
+                format!("drop_unimplemented<{}>", self.readable_instance_name(drop_instance));
             let drop_sym = self.ensure(&drop_sym_name, |ctx, name| {
                 // Function body
                 let unimplemented = ctx
@@ -878,7 +880,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     name,
                     Type::code(vec![param_sym.to_function_parameter()], Type::empty()),
                     Some(Stmt::block(vec![unimplemented], Location::none())),
-                    NO_PRETTY_NAME,
+                    pretty_name,
                     Location::none(),
                 )
             });
