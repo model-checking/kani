@@ -1,6 +1,6 @@
 Status: UNDETERMINED\
 Description: "assertion failed: self.w_id == 0"\
-in function <Wrapper<T> as std::ops::Drop>::drop
+in function <Wrapper<DummyImpl> as std::ops::Drop>::drop
 
 Status: UNDETERMINED\
 Description: "assertion failed: self.id == 1"\
