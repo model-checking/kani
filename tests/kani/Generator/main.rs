@@ -2,14 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 // Check that we can codegen code that has a Generator type present,
-// as long as the path is not dynamically used. Full Generator support
-// tracked in: https://github.com/model-checking/kani/issues/416
-
+// when the path is not dynamically used.
 #![feature(generators, generator_trait)]
 
 use std::ops::{Generator, GeneratorState};
 
-// Seperate function to force translation
+// Separate function to force translation
 fn maybe_call(call: bool) {
     if call {
         let mut _generator = || {

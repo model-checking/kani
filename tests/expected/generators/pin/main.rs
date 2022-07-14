@@ -13,7 +13,7 @@ use std::pin::Pin;
 fn main() {
     let mut generator = || {
         yield 1;
-        return "foo";
+        return true;
     };
 
     match Pin::new(&mut generator).resume(()) {
@@ -21,7 +21,7 @@ fn main() {
         _ => panic!("unexpected return from resume"),
     }
     match Pin::new(&mut generator).resume(()) {
-        GeneratorState::Complete("foo") => {}
-        _ => panic!("unexpected return from resume"),
+        GeneratorState::Complete(true) => {}
+        _ => panic!("unexpected yield from resume"),
     }
 }
