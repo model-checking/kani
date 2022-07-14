@@ -51,11 +51,12 @@ VERIFICATION:- FAILED
 
 Kani has immediately found a failure.
 Notably, we haven't had to write explicit assertions in our proof harness: by default, Kani will find a host of erroneous conditions which include a reachable call to `panic` or a failing `assert`.
+If Kani had run successfully on this harness, this amounts to a mathematical proof that there is no input that could cause a panic in `estimate_size`.
 
 ### Getting a trace
 
 By default, Kani only reports failures, not how the failure happened.
-In this running example, it seems obvious what we're interested in (what `x`?) because we just have one unknown input at the start (similar to the property test), but that's something of a special case.
+In this running example, it seems obvious what we're interested in (the value of `x` that caused the failure) because we just have one unknown input at the start (similar to the property test), but that's kind of a special case.
 In general, understanding how a failure happened requires exploring a full (potentially large) _execution trace_.
 
 An execution trace is a record of exactly how a failure can occur.
