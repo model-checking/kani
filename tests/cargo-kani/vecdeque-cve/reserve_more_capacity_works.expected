@@ -1,14 +1,14 @@
-fixed::VecDeque::<T, A>::handle_capacity_increase.assertion\
+fixed::VecDeque::<u8>::handle_capacity_increase.assertion\
 Status: SUCCESS\
 Description: "assertion failed: self.head < self.cap()"\
 Location: src/fixed.rs
 
-fixed::VecDeque::<T, A>::handle_capacity_increase.assertion\
+fixed::VecDeque::<u8>::handle_capacity_increase.assertion\
 Status: SUCCESS\
 Description: "assertion failed: self.tail < self.cap()"\
 Location: src/fixed.rs
 
-fixed::VecDeque::<T, A>::handle_capacity_increase.assertion\
+fixed::VecDeque::<u8>::handle_capacity_increase.assertion\
 Status: SUCCESS\
 Description: "assertion failed: self.cap().count_ones() == 1"\
 Location: src/fixed.rs

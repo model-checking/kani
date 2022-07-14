@@ -247,7 +247,7 @@ mod tests {
 
         let struct_type = Symbol::struct_type(
             "s",
-            None,
+            "s".into(),
             vec![
                 DatatypeComponent::field("a", Type::float()),
                 DatatypeComponent::padding("b", 4),
@@ -283,7 +283,7 @@ mod tests {
 
         let union_type = Symbol::union_type(
             "u",
-            crate::NO_PRETTY_NAME,
+            "u",
             vec![
                 DatatypeComponent::field("a", Type::float()),
                 DatatypeComponent::field("c", Type::double()),
@@ -330,7 +330,7 @@ mod tests {
                     &name,
                     Type::code_with_unnamed_parameters(vec![], Type::empty()),
                     Some(body),
-                    crate::NO_PRETTY_NAME,
+                    &name,
                     Location::none(),
                 ));
                 curr_var += 1;

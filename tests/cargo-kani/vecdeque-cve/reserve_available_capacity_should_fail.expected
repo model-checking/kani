@@ -1,4 +1,4 @@
-cve::VecDeque::<T, A>::handle_capacity_increase.assertion\
+cve::VecDeque::<u8>::handle_capacity_increase.assertion\
 - Status: FAILURE\
 - Description: "assertion failed: self.head < self.cap()"
 Location: src/cve.rs

@@ -11,6 +11,7 @@ use kani_metadata::HarnessMetadata;
 use rustc_ast::ast;
 use rustc_ast::{Attribute, LitKind};
 use rustc_middle::mir::{HasLocalDecls, Local};
+use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{self, Instance};
 use std::collections::BTreeMap;
 use std::convert::TryInto;
@@ -20,7 +21,11 @@ use tracing::{debug, info_span};
 /// Utility to skip functions that can't currently be successfully codgenned.
 impl<'tcx> GotocCtx<'tcx> {
     fn should_skip_current_fn(&self) -> bool {
-        match self.current_fn().readable_name() {
+        let current_fn_name =
+            with_no_trimmed_paths!(self.tcx.def_path_str(self.current_fn().instance().def_id()));
+        // We cannot use self.current_fn().readable_name() because it gives the monomorphized type, which is more difficult to match on.
+        // Ideally we should not rely on the pretty-printed name here. Tracked here: https://github.com/model-checking/kani/issues/1374
+        match current_fn_name.as_str() {
             // https://github.com/model-checking/kani/issues/202
             "fmt::ArgumentV1::<'a>::as_usize" => true,
             // https://github.com/model-checking/kani/issues/282
@@ -233,7 +238,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 fname,
                 ctx.fn_typ(),
                 None,
-                Some(ctx.current_fn().readable_name()),
+                ctx.current_fn().readable_name(),
                 ctx.codegen_span(&mir.span),
             )
         });

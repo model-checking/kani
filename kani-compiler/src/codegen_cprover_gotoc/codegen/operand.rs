@@ -4,7 +4,6 @@ use crate::codegen_cprover_gotoc::utils::slice_fat_ptr;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::unwrap_or_return_codegen_unimplemented;
 use cbmc::goto_program::{DatatypeComponent, Expr, Location, Stmt, Symbol, Type};
-use cbmc::NO_PRETTY_NAME;
 use rustc_ast::ast::Mutability;
 use rustc_middle::mir::interpret::{
     read_target_uint, AllocId, Allocation, ConstValue, GlobalAlloc, Scalar,
@@ -317,6 +316,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     fn codegen_direct_literal(&mut self, ty: Ty<'tcx>, init: Expr) -> Expr {
         let func_name = format!("gen-{}:direct", self.ty_mangled_name(ty));
+        let pretty_name = format!("init_direct::<{}>", self.ty_pretty_name(ty));
         let cgt = self.codegen_ty(ty);
         self.ensure(&func_name, |tcx, _| {
             let target_ty = init.typ().clone(); // N
@@ -333,7 +333,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 &func_name,
                 Type::code(vec![param.to_function_parameter()], cgt),
                 Some(Stmt::block(body, Location::none())),
-                NO_PRETTY_NAME,
+                pretty_name,
                 Location::none(),
             )
         });
@@ -500,28 +500,26 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Codegen alloc as a static global variable with initial value
     fn codegen_alloc_in_memory(&mut self, alloc: &'tcx Allocation, name: String) {
         debug!("codegen_alloc_in_memory name: {}", name);
+        let struct_name = &format!("{}::struct", name);
 
         // The declaration of a static variable may have one type and the constant initializer for
         // a static variable may have a different type. This is because Rust uses bit patterns for
         // initializers. For example, for a boolean static variable, the variable will have type
         // CBool and the initializer will be a single byte (a one-character array) representing the
         // bit pattern for the boolean value.
-        let alloc_typ_ref =
-            self.ensure_struct(&format!("{}::struct", name), NO_PRETTY_NAME, |ctx, _| {
-                ctx.codegen_allocation_data(alloc)
-                    .iter()
-                    .enumerate()
-                    .map(|(i, d)| match d {
-                        AllocData::Bytes(bytes) => DatatypeComponent::field(
-                            &i.to_string(),
-                            Type::unsigned_int(8).array_of(bytes.len()),
-                        ),
-                        AllocData::Expr(e) => {
-                            DatatypeComponent::field(&i.to_string(), e.typ().clone())
-                        }
-                    })
-                    .collect()
-            });
+        let alloc_typ_ref = self.ensure_struct(&struct_name, &struct_name, |ctx, _| {
+            ctx.codegen_allocation_data(alloc)
+                .iter()
+                .enumerate()
+                .map(|(i, d)| match d {
+                    AllocData::Bytes(bytes) => DatatypeComponent::field(
+                        &i.to_string(),
+                        Type::unsigned_int(8).array_of(bytes.len()),
+                    ),
+                    AllocData::Expr(e) => DatatypeComponent::field(&i.to_string(), e.typ().clone()),
+                })
+                .collect()
+        });
 
         // The global static variable may not be in the symbol table if we are dealing
         // with a literal that can be statically allocated.
@@ -606,6 +604,7 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_niche_literal(&mut self, ty: Ty<'tcx>, offset: usize, init: Expr) -> Expr {
         let cgt = self.codegen_ty(ty);
         let fname = self.codegen_niche_init_name(ty);
+        let pretty_name = format!("init_niche<{}>", self.ty_pretty_name(ty));
         self.ensure(&fname, |tcx, _| {
             let target_ty = init.typ().clone(); // N
             let param = tcx.gen_function_local_variable(1, &fname, target_ty.clone());
@@ -620,7 +619,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 &fname,
                 Type::code(vec![param.to_function_parameter()], cgt),
                 Some(Stmt::block(body, Location::none())),
-                NO_PRETTY_NAME,
+                pretty_name,
                 Location::none(),
             )
         });
@@ -642,7 +641,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 &func,
                 funct.clone(),
                 None,
-                Some(ctx.readable_instance_name(instance)),
+                ctx.readable_instance_name(instance),
                 Location::none(),
             )
             .with_is_extern(true)
