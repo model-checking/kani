@@ -35,15 +35,19 @@ class IncorrectUsageTest(unittest.TestCase):
     def test_missing_arguments(self):
         self.parse_with_error("cbmc_json_parser.py".split())
         self.parse_with_error("cbmc_json_parser.py input.json".split())
+        self.parse_with_error("cbmc_json_parser.py --read-cbmc-from-stream".split())
 
     def test_invalid_format(self):
         self.parse_with_error("cbmc_json_parser.py input.json dummy_format".split())
+        self.parse_with_error("cbmc_json_parser.py --read-cbmc-from-stream dummy_format".split())
 
     def test_invalid_flag(self):
         self.parse_with_error("cbmc_json_parser.py input.json terse --invalid-flag".split())
+        self.parse_with_error("cbmc_json_parser.py --read-cbmc-from-stream terse --invalid-flag".split())
 
     def test_too_many_args(self):
         self.parse_with_error("cbmc_json_parser.py input.json terse --extra-ptr-check --extra".split())
+        self.parse_with_error("cbmc_json_parser.py --read-cbmc-from-stream terse --extra-ptr-check --extra".split())
 
 
 class SourceLocationTest(unittest.TestCase):

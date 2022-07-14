@@ -29,6 +29,8 @@ from colorama import Fore, Style
 from enum import Enum
 from os import path
 
+from stat import S_ISFIFO
+
 # Enum to store the style of output that is given by the argument flags
 output_style_switcher = {
     'default': 'regular',
@@ -56,12 +58,14 @@ class GlobalMessages(str, Enum):
     CHECK_ID_RE = CHECK_ID + r"_.*_([0-9])*"
     UNSUPPORTED_CONSTRUCT_DESC = "is not currently supported by Kani"
     UNWINDING_ASSERT_DESC = "unwinding assertion loop"
-
+    READ_FROM_STREAM = "--read-cbmc-from-stream"
+    READ_FROM_FILE = "cbmc_output"
 
 def usage_error(msg):
     """ Prints an error message followed by the expected usage. Then exit process. """
     print(f"Error: {msg} Usage:")
-    print("cbmc_json_parser.py <cbmc_output.json> <format> [--extra-ptr-check]")
+    print(
+        "cbmc_json_parser.py {<cbmc_output.json>|--use-piped-output} <format> [--extra-ptr-check]\n")
     sys.exit(1)
 
 
@@ -70,6 +74,7 @@ def main(argv):
     Script main function.
     Usage:
       > cbmc_json_parser.py <cbmc_output.json> <format> [--extra-ptr-check]
+      > cbmc_json_parser.py --read-cbmc-from-stream <format> [--extra-ptr-check]
     """
     # We expect [3, 4] arguments.
     if len(argv) < 3:
@@ -83,22 +88,49 @@ def main(argv):
     if not output_style:
         usage_error(f"Invalid output format '{argv[2]}'.")
 
+    # Check the mode of the output
+    mode = os.fstat(sys.stdin.fileno()).st_mode
     extra_ptr_check = False
+
+    # The cbmc output can be either file mode (default) or stream mode (--read-cbmc-from-stream)
+    cbmc_output_mode = argv[1].split(".")[-1]
+    if not ((cbmc_output_mode == GlobalMessages.READ_FROM_FILE) or (
+            cbmc_output_mode == GlobalMessages.READ_FROM_STREAM)):
+        usage_error(f"CBMC output mode invalid\n")
+
     if len(argv) == 4:
         if argv[3] == "--extra-ptr-check":
             extra_ptr_check = True
         else:
             usage_error(f"Unexpected argument '{argv[3]}'.")
 
-    # parse the input json file
-    with open(argv[1]) as f:
-        sample_json_file_parsing = f.read()
+    if argv[1] == GlobalMessages.READ_FROM_STREAM:
+        # Print each streaming line live from cbmc without writing to file
+        # temporary output, will change to be parsed like the regular json objects
+        # that are written to a file
 
-    # the main function should take a json file as input
-    return_code = transform_cbmc_output(sample_json_file_parsing,
-                                        output_style, extra_ptr_check)
+        # Check if the stdin input comes from the pipe
+        if S_ISFIFO(mode):
+            try:
+                for line in sys.stdin:
+                    print(line)
+            except BaseException:
+                # Throw custom error & sys.exit(1)
+                print(f"Unable to complete parsing CBMC Output\n")
+                sys.exit(1)
+            return_code = 0
+        else:
+            usage_error(f"CBMC Output not piped to post-processing\n")
+    else:
+        # parse the input json file
+        with open(argv[1]) as f:
+            sample_json_file_parsing = f.read()
+
+        # the main function should take a json file as input
+        return_code = transform_cbmc_output(sample_json_file_parsing,
+                                            output_style, extra_ptr_check)
+
     sys.exit(return_code)
-
 
 class SourceLocation:
     def __init__(self, source_location={}):

@@ -148,13 +148,20 @@ pub struct KaniArgs {
     /// This option may impact the soundness of the analysis and may cause false proofs and/or counterexamples
     #[structopt(long, hidden_short_help(true), requires("enable-unstable"))]
     pub ignore_global_asm: bool,
+
+    /// This flag turns on streaming output as opposed to caching cbmc output.
+    /// This is an experimental feature and requires `--enable-unstable` to be used
+    /// TODO: Use the flag for non termination issue
+    /// https://github.com/model-checking/kani/issues/493
+    #[structopt(long, hidden = true, requires("enable-unstable"))]
+    pub use_piped_output: bool,
     /*
     The below is a "TODO list" of things not yet implemented from the kani_flags.py script.
 
         add_flag(group, "--gen-c-runnable", default=False, action=BooleanOptionalAction,
-                 help="Generate C file equivalent to inputted program; "
-                      "performs additional processing to produce valid C code "
-                      "at the cost of some readability")
+                help="Generate C file equivalent to inputted program; "
+                    "performs additional processing to produce valid C code "
+                    "at the cost of some readability")
         */
 }
 
