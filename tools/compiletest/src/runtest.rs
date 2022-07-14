@@ -11,7 +11,7 @@ use crate::common::{CargoKani, Expected, Kani, KaniFixme, Stub};
 use crate::common::{Config, TestPaths};
 use crate::header::TestProps;
 use crate::json;
-use crate::read2::read2_abbreviated;
+use crate::read2::read2;
 use crate::util::logv;
 use regex::Regex;
 
@@ -87,8 +87,7 @@ impl<'test> TestCx<'test> {
         let child = disable_error_reporting(|| command.spawn())
             .unwrap_or_else(|_| panic!("failed to exec `{:?}`", &command));
 
-        let Output { status, stdout, stderr } =
-            read2_abbreviated(child).expect("failed to read output");
+        let Output { status, stdout, stderr } = read2(child).expect("failed to read output");
 
         let result = ProcRes {
             status,

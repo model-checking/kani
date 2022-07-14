@@ -7,8 +7,8 @@ use super::super::MachineModel;
 use super::{Irep, IrepId};
 use crate::linear_map;
 use goto_program::{
-    BinaryOperand, CIntType, DatatypeComponent, Expr, ExprValue, Location, Parameter, SelfOperand,
-    Stmt, StmtBody, SwitchCase, SymbolValues, Type, UnaryOperand,
+    BinaryOperator, CIntType, DatatypeComponent, Expr, ExprValue, Location, Parameter,
+    SelfOperator, Stmt, StmtBody, SwitchCase, SymbolValues, Type, UnaryOperator,
 };
 
 pub trait ToIrep {
@@ -48,70 +48,70 @@ pub trait ToIrepId {
     fn to_irep_id(&self) -> IrepId;
 }
 
-impl ToIrepId for BinaryOperand {
+impl ToIrepId for BinaryOperator {
     fn to_irep_id(&self) -> IrepId {
         match self {
-            BinaryOperand::And => IrepId::And,
-            BinaryOperand::Ashr => IrepId::Ashr,
-            BinaryOperand::Bitand => IrepId::Bitand,
-            BinaryOperand::Bitnand => IrepId::Bitnand,
-            BinaryOperand::Bitor => IrepId::Bitor,
-            BinaryOperand::Bitxor => IrepId::Bitxor,
-            BinaryOperand::Div => IrepId::Div,
-            BinaryOperand::Equal => IrepId::Equal,
-            BinaryOperand::Ge => IrepId::Ge,
-            BinaryOperand::Gt => IrepId::Gt,
-            BinaryOperand::IeeeFloatEqual => IrepId::IeeeFloatEqual,
-            BinaryOperand::IeeeFloatNotequal => IrepId::IeeeFloatNotequal,
-            BinaryOperand::Implies => IrepId::Implies,
-            BinaryOperand::Le => IrepId::Le,
-            BinaryOperand::Lshr => IrepId::Lshr,
-            BinaryOperand::Lt => IrepId::Lt,
-            BinaryOperand::Minus => IrepId::Minus,
-            BinaryOperand::Mod => IrepId::Mod,
-            BinaryOperand::Mult => IrepId::Mult,
-            BinaryOperand::Notequal => IrepId::Notequal,
-            BinaryOperand::Or => IrepId::Or,
-            BinaryOperand::OverflowMinus => IrepId::OverflowMinus,
-            BinaryOperand::OverflowMult => IrepId::OverflowMult,
-            BinaryOperand::OverflowPlus => IrepId::OverflowPlus,
-            BinaryOperand::Plus => IrepId::Plus,
-            BinaryOperand::ROk => IrepId::ROk,
-            BinaryOperand::Rol => IrepId::Rol,
-            BinaryOperand::Ror => IrepId::Ror,
-            BinaryOperand::Shl => IrepId::Shl,
-            BinaryOperand::Xor => IrepId::Xor,
+            BinaryOperator::And => IrepId::And,
+            BinaryOperator::Ashr => IrepId::Ashr,
+            BinaryOperator::Bitand => IrepId::Bitand,
+            BinaryOperator::Bitnand => IrepId::Bitnand,
+            BinaryOperator::Bitor => IrepId::Bitor,
+            BinaryOperator::Bitxor => IrepId::Bitxor,
+            BinaryOperator::Div => IrepId::Div,
+            BinaryOperator::Equal => IrepId::Equal,
+            BinaryOperator::Ge => IrepId::Ge,
+            BinaryOperator::Gt => IrepId::Gt,
+            BinaryOperator::IeeeFloatEqual => IrepId::IeeeFloatEqual,
+            BinaryOperator::IeeeFloatNotequal => IrepId::IeeeFloatNotequal,
+            BinaryOperator::Implies => IrepId::Implies,
+            BinaryOperator::Le => IrepId::Le,
+            BinaryOperator::Lshr => IrepId::Lshr,
+            BinaryOperator::Lt => IrepId::Lt,
+            BinaryOperator::Minus => IrepId::Minus,
+            BinaryOperator::Mod => IrepId::Mod,
+            BinaryOperator::Mult => IrepId::Mult,
+            BinaryOperator::Notequal => IrepId::Notequal,
+            BinaryOperator::Or => IrepId::Or,
+            BinaryOperator::OverflowMinus => IrepId::OverflowMinus,
+            BinaryOperator::OverflowMult => IrepId::OverflowMult,
+            BinaryOperator::OverflowPlus => IrepId::OverflowPlus,
+            BinaryOperator::Plus => IrepId::Plus,
+            BinaryOperator::ROk => IrepId::ROk,
+            BinaryOperator::Rol => IrepId::Rol,
+            BinaryOperator::Ror => IrepId::Ror,
+            BinaryOperator::Shl => IrepId::Shl,
+            BinaryOperator::Xor => IrepId::Xor,
         }
     }
 }
 
-impl ToIrepId for SelfOperand {
+impl ToIrepId for SelfOperator {
     fn to_irep_id(&self) -> IrepId {
         match self {
-            SelfOperand::Postdecrement => IrepId::Postdecrement,
-            SelfOperand::Postincrement => IrepId::Postincrement,
-            SelfOperand::Predecrement => IrepId::Predecrement,
-            SelfOperand::Preincrement => IrepId::Preincrement,
+            SelfOperator::Postdecrement => IrepId::Postdecrement,
+            SelfOperator::Postincrement => IrepId::Postincrement,
+            SelfOperator::Predecrement => IrepId::Predecrement,
+            SelfOperator::Preincrement => IrepId::Preincrement,
         }
     }
 }
 
-impl ToIrepId for UnaryOperand {
+impl ToIrepId for UnaryOperator {
     fn to_irep_id(&self) -> IrepId {
         match self {
-            UnaryOperand::Bitnot => IrepId::Bitnot,
-            UnaryOperand::BitReverse => IrepId::BitReverse,
-            UnaryOperand::Bswap => IrepId::Bswap,
-            UnaryOperand::CountLeadingZeros { .. } => IrepId::CountLeadingZeros,
-            UnaryOperand::CountTrailingZeros { .. } => IrepId::CountTrailingZeros,
-            UnaryOperand::IsDynamicObject => IrepId::IsDynamicObject,
-            UnaryOperand::IsFinite => IrepId::IsFinite,
-            UnaryOperand::Not => IrepId::Not,
-            UnaryOperand::ObjectSize => IrepId::ObjectSize,
-            UnaryOperand::PointerObject => IrepId::PointerObject,
-            UnaryOperand::PointerOffset => IrepId::PointerOffset,
-            UnaryOperand::Popcount => IrepId::Popcount,
-            UnaryOperand::UnaryMinus => IrepId::UnaryMinus,
+            UnaryOperator::Bitnot => IrepId::Bitnot,
+            UnaryOperator::BitReverse => IrepId::BitReverse,
+            UnaryOperator::Bswap => IrepId::Bswap,
+            UnaryOperator::CountLeadingZeros { .. } => IrepId::CountLeadingZeros,
+            UnaryOperator::CountTrailingZeros { .. } => IrepId::CountTrailingZeros,
+            UnaryOperator::IsDynamicObject => IrepId::IsDynamicObject,
+            UnaryOperator::IsFinite => IrepId::IsFinite,
+            UnaryOperator::Not => IrepId::Not,
+            UnaryOperator::ObjectSize => IrepId::ObjectSize,
+            UnaryOperator::PointerObject => IrepId::PointerObject,
+            UnaryOperator::PointerOffset => IrepId::PointerOffset,
+            UnaryOperator::Popcount => IrepId::Popcount,
+            UnaryOperator::UnaryMinus => IrepId::UnaryMinus,
         }
     }
 }
@@ -300,15 +300,15 @@ impl ToIrep for ExprValue {
                     Irep::just_string_id(field.to_string()),
                 )],
             },
-            ExprValue::UnOp { op: UnaryOperand::Bswap, e } => Irep {
+            ExprValue::UnOp { op: UnaryOperator::Bswap, e } => Irep {
                 id: IrepId::Bswap,
                 sub: vec![e.to_irep(mm)],
                 named_sub: linear_map![(IrepId::BitsPerByte, Irep::just_int_id(8u8))],
             },
-            ExprValue::UnOp { op: UnaryOperand::BitReverse, e } => {
+            ExprValue::UnOp { op: UnaryOperator::BitReverse, e } => {
                 Irep { id: IrepId::BitReverse, sub: vec![e.to_irep(mm)], named_sub: linear_map![] }
             }
-            ExprValue::UnOp { op: UnaryOperand::CountLeadingZeros { allow_zero }, e } => Irep {
+            ExprValue::UnOp { op: UnaryOperator::CountLeadingZeros { allow_zero }, e } => Irep {
                 id: IrepId::CountLeadingZeros,
                 sub: vec![e.to_irep(mm)],
                 named_sub: linear_map![(
@@ -316,7 +316,7 @@ impl ToIrep for ExprValue {
                     if *allow_zero { Irep::zero() } else { Irep::one() }
                 )],
             },
-            ExprValue::UnOp { op: UnaryOperand::CountTrailingZeros { allow_zero }, e } => Irep {
+            ExprValue::UnOp { op: UnaryOperator::CountTrailingZeros { allow_zero }, e } => Irep {
                 id: IrepId::CountTrailingZeros,
                 sub: vec![e.to_irep(mm)],
                 named_sub: linear_map![(

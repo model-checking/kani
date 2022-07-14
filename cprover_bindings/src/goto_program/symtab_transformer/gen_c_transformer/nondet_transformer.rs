@@ -127,7 +127,7 @@ impl Transformer for NondetTransformer {
 
             // Add function to symbol table
             let func_sym =
-                Symbol::function(&identifier, typ, Some(body), Some(&identifier), Location::none());
+                Symbol::function(&identifier, typ, Some(body), &identifier, Location::none());
             self.mut_symbol_table().insert(func_sym);
         }
     }

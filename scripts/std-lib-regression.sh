@@ -16,6 +16,11 @@ then
   TARGET="x86_64-apple-darwin"
   # mac 'time' doesn't have -v
   WRAPPER=""
+elif [[ $PLATFORM == "Darwin arm" ]]
+then
+  TARGET="aarch64-apple-darwin"
+  # mac 'time' doesn't have -v
+  WRAPPER=""
 else
   echo
   echo "Std-Lib codegen regression only works on Linux or OSX x86 platforms, skipping..."
@@ -25,7 +30,7 @@ fi
 
 # Get Kani root
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
-KANI_DIR=$SCRIPT_DIR/..
+KANI_DIR=$(dirname "$SCRIPT_DIR")
 
 echo
 echo "Starting Kani codegen for the Rust standard library..."
@@ -38,6 +43,19 @@ then
 fi
 cargo new std_lib_test --lib
 cd std_lib_test
+
+# Add some content to the rust file including an std function that is non-generic.
+echo '
+#[kani::proof]
+fn check_format() {
+    assert!("2021".parse::<u32>().unwrap() == 2021);
+}
+' > src/lib.rs
+
+# Until we add support to this via our bundle, rebuild the kani library too.
+echo "
+kani = {path=\"${KANI_DIR}/library/kani\"}
+" >> Cargo.toml
 
 # Use same nightly toolchain used to build Kani
 cp ${KANI_DIR}/rust-toolchain.toml .

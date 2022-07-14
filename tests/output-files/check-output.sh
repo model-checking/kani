@@ -48,6 +48,37 @@ then
     echo "Error: demangled file singlefile.out.demangled.c did not contain expected demangled struct and function name."
     exit 1
 fi
+
+if ! grep -Fq "monomorphize::<usize>(" singlefile.out.demangled.c;
+then
+    echo "Error: demangled file singlefile.out.demangled.c did not contain monomorphized function name."
+    exit 1
+fi
+
+if ! grep -Fq "struct ()" singlefile.out.demangled.c;
+then
+    echo "Error: demangled file singlefile.out.demangled.c did not contain pretty-printed unit struct."
+    exit 1
+fi
+
+if ! grep -Fq "init_array_repeat<[bool; 2]>" singlefile.out.demangled.c;
+then
+    echo "Error: demangled file singlefile.out.demangled.c did not contain pretty-printed array initializer."
+    exit 1
+fi
+
+if ! grep -Fq "struct &str" singlefile.out.demangled.c;
+then
+    echo "Error: demangled file singlefile.out.demangled.c did not contain pretty-printed reference type."
+    exit 1
+fi
+
+if ! grep -Fq "TestEnum::Variant1" singlefile.out.demangled.c;
+then
+    echo "Error: demangled file singlefile.out.demangled.c did not contain pretty-printed variant."
+    exit 1
+fi
+
 echo "Finished single-file check successfully..."
 echo
 

@@ -5,7 +5,7 @@ use std::ops::{BitAnd, Shl, Shr};
 
 use super::super::Transformer;
 use crate::goto_program::{
-    BinaryOperand, CIntType, Expr, Location, Parameter, Stmt, Symbol, SymbolTable, SymbolValues,
+    BinaryOperator, CIntType, Expr, Location, Parameter, Stmt, Symbol, SymbolTable, SymbolValues,
     Type,
 };
 use crate::InternedString;
@@ -120,7 +120,7 @@ impl Transformer for ExprTransformer {
     fn transform_expr_bin_op(
         &mut self,
         _typ: &Type,
-        op: &BinaryOperand,
+        op: &BinaryOperator,
         lhs: &Expr,
         rhs: &Expr,
     ) -> Expr {
@@ -128,7 +128,7 @@ impl Transformer for ExprTransformer {
         let rhs = self.transform_expr(rhs);
 
         match op {
-            BinaryOperand::Implies => lhs.not().bitor(rhs).cast_to(Type::bool()),
+            BinaryOperator::Implies => lhs.not().bitor(rhs).cast_to(Type::bool()),
             _ => lhs.binop(*op, rhs),
         }
     }
@@ -255,7 +255,7 @@ impl Transformer for ExprTransformer {
             "main",
             Type::code(Vec::new(), Type::CInteger(CIntType::Int)),
             Some(Stmt::block(main_body, Location::none())),
-            Some("main"),
+            "main",
             Location::none(),
         );
 

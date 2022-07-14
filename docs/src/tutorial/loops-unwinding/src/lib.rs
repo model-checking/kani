@@ -17,8 +17,8 @@ fn initialize_prefix(length: usize, buffer: &mut [u8]) {
 // ANCHOR: kani
 #[cfg(kani)]
 #[kani::proof]
-#[kani::unwind(11)]
-fn main() {
+#[kani::unwind(1)] // deliberately too low
+fn check_initialize_prefix() {
     const LIMIT: usize = 10;
     let mut buffer: [u8; LIMIT] = [1; LIMIT];
 

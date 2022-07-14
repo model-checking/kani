@@ -5,9 +5,9 @@
 
 use crate::parser;
 use clap::ArgMatches;
-use std::lazy::SyncLazy;
 use std::panic;
 use std::str::FromStr;
+use std::sync::LazyLock;
 use tracing_subscriber::{filter::Directive, layer::SubscriberExt, EnvFilter, Registry};
 use tracing_tree::HierarchicalLayer;
 
@@ -19,8 +19,8 @@ const BUG_REPORT_URL: &str =
     "https://github.com/model-checking/kani/issues/new?labels=bug&template=bug_report.md";
 
 // Custom panic hook.
-static PANIC_HOOK: SyncLazy<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send + 'static>> =
-    SyncLazy::new(|| {
+static PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send + 'static>> =
+    LazyLock::new(|| {
         let hook = panic::take_hook();
         panic::set_hook(Box::new(|info| {
             // Print stack trace.
@@ -92,5 +92,5 @@ fn hier_logs(args: &ArgMatches, filter: EnvFilter) {
 
 fn init_panic_hook() {
     // Install panic hook
-    SyncLazy::force(&PANIC_HOOK); // Install ice hook
+    LazyLock::force(&PANIC_HOOK); // Install ice hook
 }

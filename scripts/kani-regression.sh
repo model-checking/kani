@@ -19,7 +19,7 @@ KANI_DIR=$SCRIPT_DIR/..
 export KANI_FAIL_ON_UNEXPECTED_DESCRIPTION="true"
 
 # Required dependencies
-check-cbmc-version.py --major 5 --minor 60
+check-cbmc-version.py --major 5 --minor 61
 check-cbmc-viewer-version.py --major 3 --minor 5
 
 # Formatting check
@@ -89,7 +89,7 @@ time "$SCRIPT_DIR"/codegen-firecracker.sh
 time "$KANI_DIR"/tests/kani-dependency-test/diamond-dependency/run-dependency-test.sh
 
 # Check that documentation compiles.
-cargo doc --workspace
+cargo doc --workspace --no-deps --exclude std
 
 echo
 echo "All Kani regression tests completed successfully."
