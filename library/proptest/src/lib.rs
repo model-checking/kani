@@ -156,10 +156,10 @@ macro_rules! proptest {
     )*) => {
         $(
             $(#[$meta])*
-            fn $test_name() {
+            fn $test_name() { //rule meta_strategy
                 let mut config = $config.clone();
                 config.test_name = Some(
-                    concat!(module_path!(), "::", stringify!($test_name)));
+                    concat!(module_path!(), "::meta_strategy::", stringify!($test_name)));
                 $crate::proptest_helper!(@_BODY config ($($parm in $strategy),+) [] $body);
             }
         )*
@@ -171,10 +171,10 @@ macro_rules! proptest {
     )*) => {
         $(
             $(#[$meta])*
-            fn $test_name() {
+            fn $test_name() { //rule meta_type
                 let mut config = $config.clone();
                 config.test_name = Some(
-                    concat!(module_path!(), "::", stringify!($test_name)));
+                    concat!(module_path!(), "::meta_type::", stringify!($test_name)));
                 $crate::proptest_helper!(@_BODY2 config ($($arg)+) [] $body);
             }
         )*
