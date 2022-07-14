@@ -61,6 +61,7 @@ kani = {path=\"${KANI_DIR}/library/kani\"}
 cp ${KANI_DIR}/rust-toolchain.toml .
 
 echo "Starting cargo build with Kani"
+export RUST_BACKTRACE=1
 export RUSTC_LOG=error
 export KANIFLAGS="--goto-c --ignore-global-asm"
 export RUSTFLAGS="--kani-flags"
