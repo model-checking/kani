@@ -6,6 +6,7 @@ use cbmc::goto_program::{DatatypeComponent, Expr, Location, Parameter, Symbol, S
 use cbmc::utils::aggr_tag;
 use cbmc::{InternString, InternedString};
 use rustc_ast::ast::Mutability;
+use rustc_hir::{LangItem, Unsafety};
 use rustc_index::vec::IndexVec;
 use rustc_middle::mir::{HasLocalDecls, Local, Operand, Place, Rvalue};
 use rustc_middle::ty::layout::LayoutOf;
@@ -13,10 +14,12 @@ use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::print::FmtPrinter;
 use rustc_middle::ty::subst::InternalSubsts;
 use rustc_middle::ty::{
-    self, AdtDef, FloatTy, Instance, IntTy, PolyFnSig, Ty, UintTy, VariantDef, VtblEntry,
+    self, AdtDef, FloatTy, GeneratorSubsts, Instance, IntTy, PolyFnSig, Ty, UintTy, VariantDef,
+    VtblEntry,
 };
 use rustc_middle::ty::{List, TypeFoldable};
 use rustc_span::def_id::DefId;
+use rustc_target::abi::TyAndLayout;
 use rustc_target::abi::{
     Abi::Vector, FieldsShape, Integer, Layout, Primitive, TagEncoding, VariantIdx, Variants,
 };
@@ -197,6 +200,47 @@ impl<'tcx> GotocCtx<'tcx> {
         self.sig_with_closure_untupled(sig)
     }
 
+    // Adapted from `fn_sig_for_fn_abi` in compiler/rustc_middle/src/ty/layout.rs
+    // Code duplication tracked here: https://github.com/model-checking/kani/issues/1365
+    fn generator_sig(
+        &self,
+        ty: Ty<'tcx>,
+        substs: ty::subst::SubstsRef<'tcx>,
+    ) -> ty::PolyFnSig<'tcx> {
+        let sig = substs.as_generator().poly_sig();
+
+        let bound_vars = self.tcx.mk_bound_variable_kinds(
+            sig.bound_vars().iter().chain(iter::once(ty::BoundVariableKind::Region(ty::BrEnv))),
+        );
+        let br = ty::BoundRegion {
+            var: ty::BoundVar::from_usize(bound_vars.len() - 1),
+            kind: ty::BoundRegionKind::BrEnv,
+        };
+        let env_region = ty::ReLateBound(ty::INNERMOST, br);
+        let env_ty = self.tcx.mk_mut_ref(self.tcx.mk_region(env_region), ty);
+
+        let pin_did = self.tcx.require_lang_item(LangItem::Pin, None);
+        let pin_adt_ref = self.tcx.adt_def(pin_did);
+        let pin_substs = self.tcx.intern_substs(&[env_ty.into()]);
+        let env_ty = self.tcx.mk_adt(pin_adt_ref, pin_substs);
+
+        let sig = sig.skip_binder();
+        let state_did = self.tcx.require_lang_item(LangItem::GeneratorState, None);
+        let state_adt_ref = self.tcx.adt_def(state_did);
+        let state_substs = self.tcx.intern_substs(&[sig.yield_ty.into(), sig.return_ty.into()]);
+        let ret_ty = self.tcx.mk_adt(state_adt_ref, state_substs);
+        ty::Binder::bind_with_vars(
+            self.tcx.mk_fn_sig(
+                [env_ty, sig.resume_ty].iter(),
+                &ret_ty,
+                false,
+                Unsafety::Normal,
+                rustc_target::spec::abi::Abi::Rust,
+            ),
+            bound_vars,
+        )
+    }
+
     pub fn fn_sig_of_instance(&self, instance: Instance<'tcx>) -> Option<ty::PolyFnSig<'tcx>> {
         let fntyp = instance.ty(self.tcx, ty::ParamEnv::reveal_all());
         self.monomorphize(match fntyp.kind() {
@@ -211,13 +255,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
                 Some(sig)
             }
-            ty::Generator(_def_id, _substs, _movability) => {
-                let error_msg = GotocCtx::unsupported_msg(
-                    "The `generators` feature",
-                    Some("https://github.com/model-checking/kani/issues/416"),
-                );
-                self.emit_error_and_exit(&error_msg)
-            }
+            ty::Generator(_def_id, substs, _movability) => Some(self.generator_sig(fntyp, substs)),
             _ => unreachable!("Can't get function signature of type: {:?}", fntyp),
         })
     }
@@ -620,7 +658,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             ty::FnPtr(sig) => self.codegen_function_sig(*sig).to_pointer(),
             ty::Closure(_, subst) => self.codegen_ty_closure(ty, subst),
-            ty::Generator(_, subst, _) => self.codegen_ty_generator(subst),
+            ty::Generator(..) => self.codegen_ty_generator(ty),
             ty::Never => self.ensure_struct(NEVER_TYPE_EMPTY_STRUCT_NAME, "!", |_, _| vec![]),
             ty::Tuple(ts) => {
                 if ts.is_empty() {
@@ -804,13 +842,129 @@ impl<'tcx> GotocCtx<'tcx> {
         })
     }
 
+    pub fn generator_variant_field_name(&self, var_idx: VariantIdx) -> String {
+        format!("generator_variant_{}", GeneratorSubsts::variant_name(var_idx))
+    }
+
     /// Preliminary support for the Generator type kind. The core functionality remains
     /// unimplemented, but this way we fail at verification time only if paths that
     /// rely on Generator types are used.
-    fn codegen_ty_generator(&mut self, substs: ty::subst::SubstsRef<'tcx>) -> Type {
-        let tys = substs.as_generator().upvar_tys().map(|t| self.codegen_ty(t)).collect();
-        let output = self.codegen_ty(substs.as_generator().return_ty());
-        Type::code_with_unnamed_parameters(tys, output)
+    /// TODO: there is some duplication with `codegen_enum`
+    fn codegen_ty_generator(&mut self, ty: Ty<'tcx>) -> Type {
+        let pretty_name = self.ty_pretty_name(ty);
+        let generator_struct =
+            self.ensure_struct(self.ty_mangled_name(ty), pretty_name, |ctx, name| {
+                let type_and_layout = ctx.layout_of(ty);
+                let variants = match &type_and_layout.variants {
+                    Variants::Multiple { tag_encoding, variants, .. } => {
+                        assert!(matches!(tag_encoding, TagEncoding::Direct));
+                        variants
+                    }
+                    Variants::Single { .. } => {
+                        unreachable!("generators cannot have a single variant")
+                    }
+                };
+                let discr_t = ctx.codegen_enum_discr_typ(ty);
+                let int = ctx.codegen_ty(discr_t);
+                let discr_offset = ctx.layout_of(discr_t).size.bits_usize();
+                let initial_offset = ctx.variant_min_offset(&variants).unwrap_or(discr_offset);
+                let mut fields = vec![DatatypeComponent::field("case", int)];
+                if let Some(padding) = ctx.codegen_struct_padding(discr_offset, initial_offset, 0) {
+                    fields.push(padding);
+                }
+                fields.push(DatatypeComponent::field(
+                    "cases",
+                    ctx.ensure_union(
+                        &format!("{}::GeneratorUnion", name),
+                        format!("{}::GeneratorUnion", pretty_name),
+                        |ctx, name| {
+                            // TODO: filter out zero-sized variants?
+                            variants
+                                .indices()
+                                .map(|var_idx| {
+                                    DatatypeComponent::field(
+                                        ctx.generator_variant_field_name(var_idx),
+                                        ctx.codegen_generator_variant(
+                                            name,
+                                            pretty_name,
+                                            type_and_layout.for_variant(ctx, var_idx),
+                                            var_idx,
+                                            initial_offset,
+                                        ),
+                                    )
+                                })
+                                .collect()
+                        },
+                    ),
+                ));
+                fields
+            });
+        generator_struct
+    }
+
+    pub fn generator_field_name(&self, idx: usize) -> String {
+        format!("generator_field_{idx}")
+    }
+
+    fn codegen_generator_variant(
+        &mut self,
+        name: InternedString,
+        pretty_name: InternedString,
+        type_and_layout: TyAndLayout<'tcx, Ty<'tcx>>,
+        variant_idx: VariantIdx,
+        initial_offset: usize,
+    ) -> Type {
+        let variant_name = GeneratorSubsts::variant_name(variant_idx);
+        let layout = type_and_layout.layout;
+        let case_name = format!("{}::{variant_name}", name);
+        let pretty_name = format!("{}::{variant_name}", pretty_name);
+        debug!("handling generator variant {}", variant_idx.index());
+        self.ensure_struct(&case_name, pretty_name, |cx, _| {
+            match &layout.fields() {
+                FieldsShape::Arbitrary { offsets, memory_index } => {
+                    assert_eq!(offsets.len(), memory_index.len());
+                    let mut final_fields = Vec::with_capacity(offsets.len());
+                    let mut offset: u64 = initial_offset.try_into().unwrap();
+                    for field_idx in layout.fields().index_by_increasing_offset() {
+                        let field_type_and_layout = type_and_layout.field(cx, field_idx);
+                        let field_offset = offsets[field_idx].bits();
+                        let field_ty = field_type_and_layout.ty;
+                        if let Some(padding) =
+                            cx.codegen_struct_padding(offset, field_offset, final_fields.len())
+                        {
+                            final_fields.push(padding)
+                        }
+                        // TODO: could create better names by doing something similar as `build_generator_variant_struct_type_di_node` in codegen-llvm
+                        final_fields.push(DatatypeComponent::field(
+                            cx.generator_field_name(field_idx),
+                            cx.codegen_ty(field_ty),
+                        ));
+                        let layout = field_type_and_layout.layout;
+                        // we compute the overall offset of the end of the current struct
+                        offset = field_offset + layout.size().bits();
+                    }
+
+                    // If we don't meet our expected alignment, pad until we do
+                    let align = type_and_layout.layout.align().abi.bits();
+                    let overhang = offset % align;
+                    if overhang != 0 {
+                        final_fields.push(
+                            cx.codegen_struct_padding(
+                                offset,
+                                offset + align - overhang,
+                                final_fields.len(),
+                            )
+                            .unwrap(),
+                        )
+                    }
+
+                    final_fields
+                }
+                // Primitives, such as NEVER, have no fields
+                FieldsShape::Primitive => vec![],
+                _ => unreachable!("{}\n{:?}", cx.current_fn().readable_name(), layout.fields()),
+            }
+        })
     }
 
     /// Codegen "fat pointers" to the given `pointee_type`. These are pointers with metadata.
@@ -887,6 +1041,7 @@ impl<'tcx> GotocCtx<'tcx> {
             | ty::Closure(..)
             | ty::Float(_)
             | ty::Foreign(_)
+            | ty::Generator(..)
             | ty::Int(_)
             | ty::RawPtr(_)
             | ty::Ref(..)
@@ -901,15 +1056,6 @@ impl<'tcx> GotocCtx<'tcx> {
             // These types were blocking stdlib. Doing the default thing to unblock.
             // https://github.com/model-checking/kani/issues/214
             ty::FnPtr(_) => self.codegen_ty(pointee_type).to_pointer(),
-
-            // Use the default for a reference to a generator. This is a
-            // temporary workaround to allow codegen to continue to a point
-            // where it either:
-            // 1. codegens unimplemented for the generator OR
-            // 2. errors out
-            // Adding full support for generators is tracked by:
-            // https://github.com/model-checking/kani/issues/416
-            ty::Generator(_, _, _) => self.codegen_ty(pointee_type).to_pointer(),
 
             // These types have no regression tests for them.
             // For soundness, hold off on generating them till we have test-cases.
@@ -953,9 +1099,6 @@ impl<'tcx> GotocCtx<'tcx> {
                         // Codegen type with thin pointer (E.g.: Box<dyn T> -> Box<data_ptr>).
                         Some(self.codegen_trait_receiver(*arg_type))
                     }
-                } else if self.ignore_var_ty(*arg_type) {
-                    debug!("Ignoring type {:?} in function signature", arg_type);
-                    None
                 } else {
                     debug!("Using type {:?} in function signature", arg_type);
                     Some(self.codegen_ty(*arg_type))
@@ -974,13 +1117,8 @@ impl<'tcx> GotocCtx<'tcx> {
             .inputs()
             .iter()
             .filter_map(|t| {
-                if self.ignore_var_ty(*t) {
-                    debug!("Ignoring type {:?} in function signature", t);
-                    None
-                } else {
-                    debug!("Using type {:?} in function signature", t);
-                    Some(self.codegen_ty(*t))
-                }
+                debug!("Using type {:?} in function signature", t);
+                Some(self.codegen_ty(*t))
             })
             .collect();
 
@@ -1349,28 +1487,24 @@ impl<'tcx> GotocCtx<'tcx> {
             .iter()
             .enumerate()
             .filter_map(|(i, t)| {
-                if self.ignore_var_ty(*t) {
-                    None
-                } else {
-                    let lc = Local::from_usize(i + 1);
-                    let mut ident = self.codegen_var_name(&lc);
+                let lc = Local::from_usize(i + 1);
+                let mut ident = self.codegen_var_name(&lc);
 
-                    // `spread_arg` indicates that the last argument is tupled
-                    // at the LLVM/codegen level, so we need to declare the indivual
-                    // components as parameters with a special naming convention
-                    // so that we can "retuple" them in the function prelude.
-                    // See: compiler/rustc_codegen_llvm/src/gotoc/mod.rs:codegen_function_prelude
-                    if let Some(spread) = self.current_fn().mir().spread_arg {
-                        if lc.index() >= spread.index() {
-                            let (name, _) = self.codegen_spread_arg_name(&lc);
-                            ident = name;
-                        }
+                // `spread_arg` indicates that the last argument is tupled
+                // at the LLVM/codegen level, so we need to declare the indivual
+                // components as parameters with a special naming convention
+                // so that we can "retuple" them in the function prelude.
+                // See: compiler/rustc_codegen_llvm/src/gotoc/mod.rs:codegen_function_prelude
+                if let Some(spread) = self.current_fn().mir().spread_arg {
+                    if lc.index() >= spread.index() {
+                        let (name, _) = self.codegen_spread_arg_name(&lc);
+                        ident = name;
                     }
-                    Some(
-                        self.codegen_ty(*t)
-                            .as_parameter(Some(ident.clone().into()), Some(ident.into())),
-                    )
                 }
+                Some(
+                    self.codegen_ty(*t)
+                        .as_parameter(Some(ident.clone().into()), Some(ident.into())),
+                )
             })
             .collect();
 
@@ -1390,17 +1524,6 @@ impl<'tcx> GotocCtx<'tcx> {
             Type::variadic_code(params, self.codegen_ty(sig.output()))
         } else {
             Type::code(params, self.codegen_ty(sig.output()))
-        }
-    }
-
-    /// Whether a variable of type ty should be ignored as a parameter to a function
-    pub fn ignore_var_ty(&self, ty: Ty<'tcx>) -> bool {
-        match ty.kind() {
-            // Ignore variables of the generator type until we add support for
-            // them:
-            // https://github.com/model-checking/kani/issues/416
-            ty::Generator(..) => true,
-            _ => false,
         }
     }
 

@@ -360,9 +360,7 @@ impl<'tcx> GotocCtx<'tcx> {
         args.iter()
             .filter_map(|o| {
                 let ot = self.operand_ty(o);
-                if self.ignore_var_ty(ot) {
-                    None
-                } else if ot.is_bool() {
+                if ot.is_bool() {
                     Some(self.codegen_operand(o).cast_to(Type::c_bool()))
                 } else {
                     Some(self.codegen_operand(o))
@@ -653,8 +651,6 @@ impl<'tcx> GotocCtx<'tcx> {
                 let layout = self.layout_of(dst_mir_ty);
                 if layout.is_zst() || dst_type.sizeof_in_bits(&self.symbol_table) == 0 {
                     // We ignore assignment for all zero size types
-                    // Ignore generators too for now:
-                    // https://github.com/model-checking/kani/issues/416
                     Stmt::skip(location)
                 } else {
                     unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place(place))
@@ -665,26 +661,13 @@ impl<'tcx> GotocCtx<'tcx> {
             StatementKind::SetDiscriminant { place, variant_index } => {
                 // this requires place points to an enum type.
                 let pt = self.place_ty(place);
-                let (def, _) = match pt.kind() {
-                    ty::Adt(def, substs) => (def, substs),
-                    ty::Generator(..) => {
-                        return self
-                            .codegen_unimplemented(
-                                "ty::Generator",
-                                Type::code(vec![], Type::empty()),
-                                location,
-                                "https://github.com/model-checking/kani/issues/416",
-                            )
-                            .as_stmt(location);
-                    }
-                    _ => unreachable!(),
-                };
                 let layout = self.layout_of(pt);
                 match &layout.variants {
                     Variants::Single { .. } => Stmt::skip(location),
                     Variants::Multiple { tag, tag_encoding, .. } => match tag_encoding {
                         TagEncoding::Direct => {
-                            let discr = def.discriminant_for_variant(self.tcx, *variant_index);
+                            let discr =
+                                pt.discriminant_for_variant(self.tcx, *variant_index).unwrap();
                             let discr_t = self.codegen_enum_discr_typ(pt);
                             // The constant created below may not fit into the type.
                             // https://github.com/model-checking/kani/issues/996
