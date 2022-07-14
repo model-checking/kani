@@ -7,7 +7,7 @@ With Kani, all the corner cases are covered from the start, and the new concern 
 Consider this first program (which can be found under [`first-steps-v1`](https://github.com/model-checking/kani/tree/main/docs/src/tutorial/first-steps-v1/)):
 
 ```rust
-{{#include tutorial/first-steps-v1/src/main.rs:code}}
+{{#include tutorial/first-steps-v1/src/lib.rs:code}}
 ```
 
 Think about the test harness you would need to write to test this function.
@@ -18,7 +18,7 @@ And if this function was more complicated—for example, if some of the branches
 We can try to property test a function like this, but if we're naive about it (and consider all possible `u32` inputs), then it's unlikely we'll ever find the bug.
 
 ```rust
-{{#include tutorial/first-steps-v1/src/main.rs:proptest}}
+{{#include tutorial/first-steps-v1/src/lib.rs:proptest}}
 ```
 
 ```
@@ -33,7 +33,7 @@ Let's write a Kani _proof harness_ for `estimate_size`.
 This is a lot like a test harness, but now we can use `kani::any()` to represent all possible `u32` values:
 
 ```rust
-{{#include tutorial/first-steps-v1/src/main.rs:kani}}
+{{#include tutorial/first-steps-v1/src/lib.rs:kani}}
 ```
 
 ```
@@ -159,7 +159,7 @@ Let's encode this fact about our function by asserting some reasonable upper bou
 (New code available under [`first-steps-v2`](https://github.com/model-checking/kani/tree/main/docs/src/tutorial/first-steps-v2/)):
 
 ```rust
-{{#include tutorial/first-steps-v2/src/main.rs:code}}
+{{#include tutorial/first-steps-v2/src/lib.rs:code}}
 ```
 
 Now we've explicitly stated our previously implicit expectation: this function should never be called with inputs that are too big.
@@ -190,7 +190,7 @@ Much like property testing (which would also fail in this assertion), we need to
 Here's a revised example of the proof harness, one that now succeeds:
 
 ```rust
-{{#include tutorial/first-steps-v2/src/main.rs:kani}}
+{{#include tutorial/first-steps-v2/src/lib.rs:kani}}
 ```
 
 But now we must wonder if we've really fully tested our function.
