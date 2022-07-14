@@ -49,7 +49,7 @@ mod tests {
 // ANCHOR: kani
 #[cfg(kani)]
 #[kani::proof]
-fn main() {
+fn check_estimate_size() {
     let x: u32 = kani::any();
     estimate_size(x);
 }

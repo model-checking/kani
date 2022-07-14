@@ -61,7 +61,7 @@ fn verify_success() {
 
 #[cfg(kani)]
 #[kani::proof]
-fn main() {
+fn will_fail() {
     let x: u32 = kani::any();
     let y = estimate_size(x);
 }
