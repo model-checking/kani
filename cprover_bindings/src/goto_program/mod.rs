@@ -8,6 +8,7 @@
 #![allow(clippy::match_like_matches_macro)]
 
 mod builtin;
+mod contract;
 mod expr;
 mod location;
 mod stmt;
@@ -16,6 +17,7 @@ mod symbol_table;
 mod typ;
 
 pub use builtin::BuiltinFn;
+pub use contract::{Contract, Spec};
 pub use expr::{
     arithmetic_overflow_result_type, ArithmeticOverflowResult, BinaryOperator, Expr, ExprValue,
     SelfOperator, UnaryOperator, ARITH_OVERFLOW_OVERFLOWED_FIELD, ARITH_OVERFLOW_RESULT_FIELD,

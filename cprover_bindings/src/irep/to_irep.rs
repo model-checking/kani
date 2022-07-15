@@ -8,7 +8,7 @@ use super::{Irep, IrepId};
 use crate::linear_map;
 use goto_program::{
     BinaryOperator, CIntType, DatatypeComponent, Expr, ExprValue, Location, Parameter,
-    SelfOperator, Stmt, StmtBody, SwitchCase, SymbolValues, Type, UnaryOperator,
+    SelfOperator, Spec, Stmt, StmtBody, SwitchCase, SymbolValues, Type, UnaryOperator,
 };
 
 pub trait ToIrep {
@@ -30,6 +30,23 @@ fn code_irep(kind: IrepId, ops: Vec<Irep>) -> Irep {
         named_sub: linear_map![(IrepId::Statement, Irep::just_id(kind))],
     }
 }
+/// Corresponds to the `lambda_exprt` in CBMC.
+fn lambda_irep(binding_variables: &[Expr], body: &Expr, mm: &MachineModel) -> Irep {
+    let typ = Type::MathematicalFunction {
+        domain: binding_variables.iter().map(|v| v.typ().clone()).collect::<Vec<_>>(),
+        codomain: Box::new(body.typ().clone()),
+    };
+    Irep {
+        id: IrepId::Lambda,
+        sub: vec![
+            tuple_irep(binding_variables, mm)
+                // For binding expressions (quantifies, let, lambda), the type of the `tuple_exprt` is set to just its ID in CBMC.
+                .with_named_sub(IrepId::Type, Irep::just_id(IrepId::Tuple)),
+            body.to_irep(mm),
+        ],
+        named_sub: linear_map![(IrepId::Type, typ.to_irep(mm))],
+    }
+}
 fn side_effect_irep(kind: IrepId, ops: Vec<Irep>) -> Irep {
     Irep {
         id: IrepId::SideEffect,
@@ -41,6 +58,14 @@ fn switch_default_irep(body: &Stmt, mm: &MachineModel) -> Irep {
     code_irep(IrepId::SwitchCase, vec![Irep::nil(), body.to_irep(mm)])
         .with_named_sub(IrepId::Default, Irep::one())
         .with_location(body.location(), mm)
+}
+/// Corresponds to the `tuple_exprt` in CBMC.
+fn tuple_irep(operands: &[Expr], mm: &MachineModel) -> Irep {
+    Irep {
+        id: IrepId::Tuple,
+        sub: operands.iter().map(|op| op.to_irep(mm)).collect(),
+        named_sub: linear_map![],
+    }
 }
 
 /// ID Converters
@@ -404,6 +429,12 @@ impl ToIrep for Parameter {
     }
 }
 
+impl ToIrep for Spec {
+    fn to_irep(&self, mm: &MachineModel) -> Irep {
+        lambda_irep(&self.temporary_symbols(), self.clause(), mm).with_location(self.location(), mm)
+    }
+}
+
 impl ToIrep for Stmt {
     fn to_irep(&self, mm: &MachineModel) -> Irep {
         self.body().to_irep(mm).with_location(self.location(), mm)
@@ -502,10 +533,17 @@ impl ToIrep for SwitchCase {
 impl goto_program::Symbol {
     pub fn to_irep(&self, mm: &MachineModel) -> super::Symbol {
         super::Symbol {
-            typ: self.typ.to_irep(mm),
+            /// CBMC stores a contract in the `type` field of the symbol.
+            /// In goto-program's symbol, the contract is stored under the `value` field up until this point.
+            /// For contract symbols, we now add the contract to the `type` field of the Irep and set the `value` field to be `nil`.
+            typ: match &self.value {
+                SymbolValues::Contract(c) => self.typ.to_irep(mm).with_contract(c, mm),
+                _ => self.typ.to_irep(mm),
+            },
             value: match &self.value {
                 SymbolValues::Expr(e) => e.to_irep(mm),
                 SymbolValues::Stmt(s) => s.to_irep(mm),
+                SymbolValues::Contract(_) => Irep::nil(),
                 SymbolValues::None => Irep::nil(),
             },
             location: self.location.to_irep(mm),
@@ -664,6 +702,14 @@ impl ToIrep for Type {
                     named_sub: linear_map![(IrepId::Size, infinity)],
                 }
             }
+            Type::MathematicalFunction { codomain, domain } => Irep {
+                id: IrepId::MathematicalFunction,
+                sub: vec![
+                    Irep::just_sub(domain.iter().map(|x| x.to_irep(mm)).collect()),
+                    codomain.to_irep(mm),
+                ],
+                named_sub: linear_map![],
+            },
             Type::Integer => Irep::just_id(IrepId::Integer),
             Type::Pointer { typ } => Irep {
                 id: IrepId::Pointer,

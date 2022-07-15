@@ -50,6 +50,8 @@ pub enum Type {
     Integer,
     /// CBMC specific. `typ x[__CPROVER_infinity()]`
     InfiniteArray { typ: Box<Type> },
+    /// Corresponds to `mathematical_function_typet` in CBMC. Used to represent type signatures.
+    MathematicalFunction { domain: Vec<Type>, codomain: Box<Type> },
     /// `typ*`
     Pointer { typ: Box<Type> },
     /// `int<width>_t`. e.g. `int32_t`
@@ -181,6 +183,7 @@ impl DatatypeComponent {
             | IncompleteStruct { .. }
             | IncompleteUnion { .. }
             | InfiniteArray { .. }
+            | MathematicalFunction { .. }
             | VariadicCode { .. } => false,
 
             TypeDef { .. } => unreachable!("typedefs should have been unwrapped"),
@@ -354,6 +357,9 @@ impl Type {
             IncompleteUnion { .. } => unreachable!("IncompleteUnion doesn't have a sizeof"),
             InfiniteArray { .. } => unreachable!("InfiniteArray doesn't have a sizeof"),
             Integer => unreachable!("Integer doesn't have a sizeof"),
+            MathematicalFunction { .. } => {
+                unreachable!("MathematicalFunction doesn't have a sizeof")
+            }
             Pointer { .. } => st.machine_model().pointer_width,
             Signedbv { width } => *width,
             Struct { components, .. } => {
@@ -569,6 +575,7 @@ impl Type {
             | IncompleteStruct { .. }
             | IncompleteUnion { .. }
             | InfiniteArray { .. }
+            | MathematicalFunction { .. }
             | VariadicCode { .. } => false,
 
             TypeDef { .. } => unreachable!("Expected concrete type only."),
@@ -619,6 +626,7 @@ impl Type {
             | IncompleteStruct { .. }
             | IncompleteUnion { .. }
             | InfiniteArray { .. }
+            | MathematicalFunction { .. }
             | Struct { .. }
             | StructTag(_)
             | Union { .. }
@@ -907,6 +915,7 @@ impl Type {
             | IncompleteStruct { .. }
             | IncompleteUnion { .. }
             | InfiniteArray { .. }
+            | MathematicalFunction { .. }
             | VariadicCode { .. } => false,
 
             TypeDef { .. } => unreachable!("typedefs should have been unwrapped"),
@@ -1387,6 +1396,18 @@ impl Type {
                 format!("infinite_array_of_{}", typ.to_identifier())
             }
             Type::Integer => "integer".to_string(),
+            Type::MathematicalFunction { domain, codomain } => {
+                let domain_string = domain
+                    .iter()
+                    .map(|domain| domain.to_identifier())
+                    .collect::<Vec<_>>()
+                    .join("_");
+                format!(
+                    "mathematical_functional_from_{}_to_{}",
+                    domain_string,
+                    codomain.to_identifier()
+                )
+            }
             Type::Pointer { typ } => format!("pointer_to_{}", typ.to_identifier()),
             Type::Signedbv { width } => format!("signed_bv_{width}"),
             Type::Struct { tag, .. } => format!("struct_{tag}"),
