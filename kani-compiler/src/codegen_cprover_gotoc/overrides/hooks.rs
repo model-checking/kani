@@ -163,11 +163,12 @@ impl<'tcx> GotocHook<'tcx> for Assert {
 
         // Since `cond` might have side effects, assign it to a temporary
         // variable so that it's evaluated once, then assert and assume it
-        let tmp = tcx.gen_temp_variable(cond.typ().clone(), caller_loc).to_expr();
+        let (tmp, decl) =
+            tcx.gen_and_decl_temp_variable(cond.typ().clone(), Some(cond), caller_loc);
         Stmt::block(
             vec![
                 reach_stmt,
-                Stmt::decl(tmp.clone(), Some(cond), caller_loc),
+                decl,
                 tcx.codegen_assert(tmp.clone(), PropertyClass::Assertion, &msg, caller_loc),
                 Stmt::assume(tmp, caller_loc),
                 Stmt::goto(tcx.current_fn().find_label(&target), caller_loc),

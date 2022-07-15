@@ -149,6 +149,19 @@ impl<'tcx> GotocCtx<'tcx> {
         let c = self.current_fn_mut().get_and_incr_counter();
         self.gen_stack_variable(c, &self.current_fn().name(), "temp", t, loc)
     }
+
+    /// Generate a new function local variable that can be used as a temporary
+    /// in Kani expressions and declare it with the specified (optional) value
+    pub fn gen_and_decl_temp_variable(
+        &mut self,
+        t: Type,
+        value: Option<Expr>,
+        loc: Location,
+    ) -> (Expr, Stmt) {
+        let var = self.gen_temp_variable(t, loc).to_expr();
+        let decl = Stmt::decl(var.clone(), value, loc);
+        (var, decl)
+    }
 }
 
 /// Symbol table related
