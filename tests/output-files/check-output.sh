@@ -43,41 +43,24 @@ then
     exit 1
 fi
 
-if ! grep -Fq "struct PrettyStruct pretty_function(struct PrettyStruct" singlefile.out.demangled.c;
-then
-    echo "Error: demangled file singlefile.out.demangled.c did not contain expected demangled struct and function name."
-    exit 1
-fi
+echo "Checking that demangling works as expected..."
 
-if ! grep -Fq "monomorphize::<usize>(" singlefile.out.demangled.c;
-then
-    echo "Error: demangled file singlefile.out.demangled.c did not contain monomorphized function name."
-    exit 1
-fi
+declare -a PATTERNS=(
+    'struct PrettyStruct pretty_function(struct PrettyStruct' # expected demangled struct and function name
+    'monomorphize::<usize>(' # monomorphized function name
+    'struct ()' # pretty-printed unit struct
+    'init_array_repeat<[bool; 2]>' # pretty-printed array initializer
+    'struct &str' # pretty-printed reference type
+    'TestEnum::Variant1' # pretty-printed variant
+)
 
-if ! grep -Fq "struct ()" singlefile.out.demangled.c;
-then
-    echo "Error: demangled file singlefile.out.demangled.c did not contain pretty-printed unit struct."
-    exit 1
-fi
-
-if ! grep -Fq "init_array_repeat<[bool; 2]>" singlefile.out.demangled.c;
-then
-    echo "Error: demangled file singlefile.out.demangled.c did not contain pretty-printed array initializer."
-    exit 1
-fi
-
-if ! grep -Fq "struct &str" singlefile.out.demangled.c;
-then
-    echo "Error: demangled file singlefile.out.demangled.c did not contain pretty-printed reference type."
-    exit 1
-fi
-
-if ! grep -Fq "TestEnum::Variant1" singlefile.out.demangled.c;
-then
-    echo "Error: demangled file singlefile.out.demangled.c did not contain pretty-printed variant."
-    exit 1
-fi
+for val in "${PATTERNS[@]}"; do
+    if ! grep -Fq "$val" singlefile.out.demangled.c;
+    then
+        echo "Error: demangled file singlefile.out.demangled.c did not contain expected pattern '$val'."
+        exit 1
+    fi
+done
 
 echo "Finished single-file check successfully..."
 echo
