@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use crate::goto_program::{
-    BinaryOperator, CIntType, DatatypeComponent, Expr, ExprValue, Location, Parameter,
-    SelfOperator, Stmt, StmtBody, SwitchCase, Symbol, SymbolTable, SymbolValues, Type,
+    BinaryOperator, CIntType, Contract, DatatypeComponent, Expr, ExprValue, Location, Parameter,
+    SelfOperator, Spec, Stmt, StmtBody, SwitchCase, Symbol, SymbolTable, SymbolValues, Type,
     UnaryOperator,
 };
 use crate::InternedString;
@@ -55,6 +55,9 @@ pub trait Transformer: Sized {
             Type::IncompleteStruct { tag } => self.transform_type_incomplete_struct(*tag),
             Type::IncompleteUnion { tag } => self.transform_type_incomplete_union(*tag),
             Type::InfiniteArray { typ } => self.transform_type_infinite_array(typ),
+            Type::MathematicalFunction { domain, codomain } => {
+                self.transform_type_mathematical_function(domain, codomain)
+            }
             Type::Pointer { typ } => self.transform_type_pointer(typ),
             Type::Signedbv { width } => self.transform_type_signedbv(width),
             Type::Struct { tag, components } => self.transform_type_struct(*tag, components),
@@ -154,6 +157,15 @@ pub trait Transformer: Sized {
         transformed_typ.infinite_array_of()
     }
 
+    fn transform_type_mathematical_function(&mut self, domain: &[Type], codomain: &Type) -> Type {
+        let transformed_domain = domain.iter().map(|x| self.transform_type(x)).collect();
+        let transformed_codomain = self.transform_type(codomain);
+        Type::MathematicalFunction {
+            domain: transformed_domain,
+            codomain: Box::new(transformed_codomain),
+        }
+    }
+
     /// Transforms a pointer type (`typ*`)
     fn transform_type_pointer(&mut self, typ: &Type) -> Type {
         let transformed_typ = self.transform_type(typ);
@@ -238,6 +250,30 @@ pub trait Transformer: Sized {
     fn transform_type_def(&mut self, tag: InternedString, typ: &Type) -> Type {
         let transformed_typ = self.transform_type(typ);
         transformed_typ.to_typedef(tag)
+    }
+
+    /// Transforms a contract data structure by recursively transforming its clauses.
+    fn transform_contract(&mut self, c: &Contract) -> Contract {
+        match c {
+            Contract::FunctionContract { ensures, requires } => {
+                let transformed_ensures =
+                    ensures.iter().map(|spec| self.transform_spec(spec)).collect();
+                let transformed_requires =
+                    requires.iter().map(|spec| self.transform_spec(spec)).collect();
+                Contract::FunctionContract {
+                    ensures: transformed_ensures,
+                    requires: transformed_requires,
+                }
+            }
+        }
+    }
+
+    /// Transforms a `Spec` data structure.
+    fn transform_spec(&mut self, spec: &Spec) -> Spec {
+        let transformed_symbols =
+            spec.temporary_symbols().iter().map(|s| self.transform_expr(s)).collect();
+        let transformed_clause = self.transform_expr(spec.clause());
+        Spec::new(transformed_symbols, transformed_clause, *spec.location())
     }
 
     /// Perform recursive descent on a `Expr` data structure.
@@ -704,6 +740,9 @@ pub trait Transformer: Sized {
     fn transform_value(&mut self, value: &SymbolValues) -> SymbolValues {
         match value {
             SymbolValues::None => SymbolValues::None,
+            SymbolValues::Contract(contract) => {
+                SymbolValues::Contract(self.transform_contract(contract))
+            }
             SymbolValues::Expr(expr) => SymbolValues::Expr(self.transform_expr(expr)),
             SymbolValues::Stmt(stmt) => SymbolValues::Stmt(self.transform_stmt(stmt)),
         }
