@@ -155,11 +155,12 @@ macro_rules! proptest {
        fn $test_name:ident($($parm:pat in $strategy:expr),+ $(,)?) $body:block
     )*) => {
         $(
+            #[kani::proof]
             $(#[$meta])*
             fn $test_name() { //rule meta_strategy
-                let mut config = $config.clone();
-                config.test_name = Some(
-                    concat!(module_path!(), "::meta_strategy::", stringify!($test_name)));
+                // let mut config = $config.clone();
+                // config.test_name = Some(
+                //     concat!(module_path!(), "::meta_strategy::", stringify!($test_name)));
                 $crate::proptest_helper!(@_BODY config ($($parm in $strategy),+) [] $body);
             }
         )*
@@ -170,11 +171,12 @@ macro_rules! proptest {
         fn $test_name:ident($($arg:tt)+) $body:block
     )*) => {
         $(
+            #[kani::proof]
             $(#[$meta])*
             fn $test_name() { //rule meta_type
-                let mut config = $config.clone();
-                config.test_name = Some(
-                    concat!(module_path!(), "::meta_type::", stringify!($test_name)));
+                // let mut config = $config.clone();
+                // config.test_name = Some(
+                //     concat!(module_path!(), "::meta_type::", stringify!($test_name)));
                 $crate::proptest_helper!(@_BODY2 config ($($arg)+) [] $body);
             }
         )*
@@ -965,23 +967,29 @@ macro_rules! proptest_helper {
     }};
     // build a property testing block that when executed, executes the full property test.
     (@_BODY2 $config:ident ($($arg:tt)+) [$($mod:tt)*] $body:expr) => {{
-        $config.source_file = Some(file!());
-        let mut runner2 = $crate::test_runner::TestRunner::new($config);
-        let names2 = $crate::proptest_helper!(@_EXT _STR ($($arg)*));
-        match runner2.run(
-            &$crate::strategy::Strategy::prop_map(
-                $crate::proptest_helper!(@_EXT _STRAT ($($arg)*)),
-                |values| $crate::sugar::NamedArguments(names2, values)),
-            $($mod)* |$crate::sugar::NamedArguments(
-                _, $crate::proptest_helper!(@_EXT _PAT ($($arg)*)))|
-            {
-                let _: () = $body;
-                Ok(())
-            })
-        {
-            Ok(_) => (),
-            Err(e) => panic!("{}\n{}", e, runner2),
-        }
+        // $config.source_file = Some(file!());
+        // let mut runner2 = $crate::test_runner::TestRunner::new($config);
+        // let names2 = $crate::proptest_helper!(@_EXT _STR ($($arg)*));
+        // match runner2.run(
+        //     &$crate::strategy::Strategy::prop_map(
+        //         $crate::proptest_helper!(@_EXT _STRAT ($($arg)*)),
+        //         |values| $crate::sugar::NamedArguments(names2, values)),
+        //     $($mod)* |$crate::sugar::NamedArguments(
+        //         _, $crate::proptest_helper!(@_EXT _PAT ($($arg)*)))|
+        //     {
+        //         let _: () = $body;
+        //         Ok(())
+        //     })
+        // {
+        //     Ok(_) => (),
+        //     Err(e) => panic!("{}\n{}", e, runner2),
+        // }
+        $crate::test_runner::TestRunner::run_kani(
+            $crate::proptest_helper!(@_EXT _STRAT ($($arg)*)),
+            |$crate::proptest_helper!(@_EXT _PAT ($($arg)*))| {
+                $body
+            }
+        );
     }};
 
     // The logic below helps support `pat: type` in the proptest! macro.
