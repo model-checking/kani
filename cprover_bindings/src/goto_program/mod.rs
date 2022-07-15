@@ -20,7 +20,7 @@ mod typ;
 pub use builtin::BuiltinFn;
 pub use contract::{Contract, Spec};
 pub use expr::{
-    ArithmeticOverflowResult, BinaryOperand, Expr, ExprValue, SelfOperand, UnaryOperand,
+    ArithmeticOverflowResult, BinaryOperator, Expr, ExprValue, SelfOperator, UnaryOperator,
 };
 pub use location::Location;
 pub use stmt::{Stmt, StmtBody, SwitchCase};

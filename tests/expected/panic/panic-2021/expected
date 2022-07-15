@@ -1,0 +1,5 @@
+Failed Checks: msg
+Failed Checks: explicit panic
+Failed Checks: Panic message
+Failed Checks: "Panic message with arg {}", "str"
+Failed Checks: "{}", msg
