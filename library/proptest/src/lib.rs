@@ -966,12 +966,12 @@ macro_rules! proptest_helper {
     // build a property testing block that when executed, executes the full property test.
     (@_BODY2 $config:ident ($($arg:tt)+) [$($mod:tt)*] $body:expr) => {{
         $config.source_file = Some(file!());
-        let mut runner = $crate::test_runner::TestRunner::new($config);
-        let names = $crate::proptest_helper!(@_EXT _STR ($($arg)*));
-        match runner.run(
+        let mut runner2 = $crate::test_runner::TestRunner::new($config);
+        let names2 = $crate::proptest_helper!(@_EXT _STR ($($arg)*));
+        match runner2.run(
             &$crate::strategy::Strategy::prop_map(
                 $crate::proptest_helper!(@_EXT _STRAT ($($arg)*)),
-                |values| $crate::sugar::NamedArguments(names, values)),
+                |values| $crate::sugar::NamedArguments(names2, values)),
             $($mod)* |$crate::sugar::NamedArguments(
                 _, $crate::proptest_helper!(@_EXT _PAT ($($arg)*)))|
             {
@@ -980,7 +980,7 @@ macro_rules! proptest_helper {
             })
         {
             Ok(_) => (),
-            Err(e) => panic!("{}\n{}", e, runner),
+            Err(e) => panic!("{}\n{}", e, runner2),
         }
     }};
 
