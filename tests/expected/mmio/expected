@@ -1,0 +1,26 @@
+Status: SUCCESS\
+Description: "offset: attempt to compute number in bytes which would overflow"
+
+Status: SUCCESS\
+Description: "attempt to compute offset which would overflow"
+
+Status: FAILURE\
+Description: "dereference failure: pointer NULL"
+
+Status: SUCCESS
+Description: "dereference failure: pointer invalid"
+
+Status: FAILURE\
+Description: "dereference failure: deallocated dynamic object"
+
+Status: FAILURE\
+Description: "dereference failure: dead object"
+
+Status: FAILURE\
+Description: "dereference failure: pointer outside object bounds"
+
+Status: FAILURE\
+Description: "dereference failure: invalid integer address"
+
+Status: FAILURE\
+Description: "dereference failure: invalid integer address"

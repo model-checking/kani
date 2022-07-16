@@ -73,3 +73,26 @@ pub fn unwind(attr: TokenStream, item: TokenStream) -> TokenStream {
     result.extend(item);
     result
 }
+
+#[cfg(not(kani))]
+#[proc_macro_attribute]
+pub fn mmio_region(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    // When the config is not kani, we should leave the function alone
+    item
+}
+
+/// Set Loop unwind limit for proof harnesses
+/// The attribute '#[kani::unwind(arg)]' can only be called alongside '#[kani::proof]'.
+/// arg - Takes in a integer value (u32) that represents the unwind value for the harness.
+#[cfg(kani)]
+#[proc_macro_attribute]
+pub fn mmio_region(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let mut result = TokenStream::new();
+
+    // Translate #[kani::unwind(arg)] to #[kanitool::unwind(arg)]
+    let insert_string = "#[kanitool::mmio_region(".to_owned() + &attr.clone().to_string() + ")]";
+    result.extend(insert_string.parse::<TokenStream>().unwrap());
+
+    result.extend(item);
+    result
+}
