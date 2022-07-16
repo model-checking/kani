@@ -519,7 +519,7 @@ impl<'tcx> GotocCtx<'tcx> {
             match fn_ptr.typ() {
                 Type::Pointer { typ: box Type::Code { parameters, .. } } => {
                     let param_typ = parameters.first().unwrap().typ();
-                    let (tmp, decl) = self.gen_and_decl_temp_variable(param_typ.clone(), None, loc);
+                    let (tmp, decl) = self.decl_temp_variable(param_typ.clone(), None, loc);
                     debug!(?tmp,
                         orig=?data_ptr.typ(),
                         "codegen_virtual_funcall");

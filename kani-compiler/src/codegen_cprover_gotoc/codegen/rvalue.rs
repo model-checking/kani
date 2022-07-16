@@ -915,7 +915,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // Insert a CBMC-time size check, roughly:
         //     <Ty> local_temp = nondet();
         //     assert(__CPROVER_OBJECT_SIZE(&local_temp) == vt_size);
-        let (temp_var, decl) = self.gen_and_decl_temp_variable(ty.clone(), None, Location::none());
+        let (temp_var, decl) = self.decl_temp_variable(ty.clone(), None, Location::none());
         let cbmc_size = if ty.is_empty() {
             // CBMC errors on passing a pointer to void to __CPROVER_OBJECT_SIZE.
             // In practice, we have seen this with the Never type, which has size 0:

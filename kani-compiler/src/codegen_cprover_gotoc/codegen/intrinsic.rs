@@ -350,7 +350,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let var1_ref = fargs.remove(0);
                 let var1 = var1_ref.dereference();
                 let (tmp, decl_stmt) =
-                    self.gen_and_decl_temp_variable(var1.typ().clone(), Some(var1.to_owned()), loc);
+                    self.decl_temp_variable(var1.typ().clone(), Some(var1.to_owned()), loc);
                 let var2 = fargs.remove(0);
                 let op_expr = (var1.clone()).$op(var2).with_location(loc);
                 let assign_stmt = (var1.clone()).assign(op_expr, loc);
@@ -838,7 +838,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let var1_ref = fargs.remove(0);
         let var1 = var1_ref.dereference().with_location(loc);
         let (tmp, decl_stmt) =
-            self.gen_and_decl_temp_variable(var1.typ().clone(), Some(var1.to_owned()), loc);
+            self.decl_temp_variable(var1.typ().clone(), Some(var1.to_owned()), loc);
         let var2 = fargs.remove(0).with_location(loc);
         let var3 = fargs.remove(0).with_location(loc);
         let eq_expr = (var1.clone()).eq(var2);
@@ -874,7 +874,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let var1_ref = fargs.remove(0);
         let var1 = var1_ref.dereference().with_location(loc);
         let (tmp, decl_stmt) =
-            self.gen_and_decl_temp_variable(var1.typ().clone(), Some(var1.to_owned()), loc);
+            self.decl_temp_variable(var1.typ().clone(), Some(var1.to_owned()), loc);
         let var2 = fargs.remove(0).with_location(loc);
         let assign_stmt = var1.assign(var2, loc);
         let res_stmt = self.codegen_expr_to_place(p, tmp);
@@ -1265,7 +1265,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let newval = fargs.remove(0);
         // Type checker should have ensured it's a vector type
         let elem_ty = cbmc_ret_ty.base_type().unwrap().clone();
-        let (tmp, decl) = self.gen_and_decl_temp_variable(cbmc_ret_ty, Some(vec), loc);
+        let (tmp, decl) = self.decl_temp_variable(cbmc_ret_ty, Some(vec), loc);
         Stmt::block(
             vec![
                 decl,
