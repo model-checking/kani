@@ -33,6 +33,10 @@ impl KaniSession {
 
         self.rewrite_back_edges(output)?;
 
+        if self.args.run_sanity_checks {
+            self.goto_sanity_check(output)?;
+        }
+
         if self.args.gen_c {
             let c_outfile = alter_extension(output, "c");
             // We don't put the C file into temporaries to be deleted.
@@ -123,6 +127,16 @@ impl KaniSession {
     fn rewrite_back_edges(&self, file: &Path) -> Result<()> {
         let args: Vec<OsString> = vec![
             "--ensure-one-backedge-per-target".into(),
+            file.to_owned().into_os_string(), // input
+            file.to_owned().into_os_string(), // output
+        ];
+
+        self.call_goto_instrument(args)
+    }
+
+    fn goto_sanity_check(&self, file: &Path) -> Result<()> {
+        let args: Vec<OsString> = vec![
+            "--validate-goto-model".into(),
             file.to_owned().into_os_string(), // input
             file.to_owned().into_os_string(), // output
         ];
