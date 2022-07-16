@@ -214,7 +214,7 @@ impl<'tcx> GotocCtx<'tcx> {
         self.ensure(&func_name, |tcx, _| {
             let paramt = tcx.codegen_ty(tcx.operand_ty(op));
             let res_t = tcx.codegen_ty(res_ty);
-            let inp = tcx.gen_function_local_variable(1, &func_name, paramt);
+            let inp = tcx.gen_function_parameter(1, &func_name, paramt);
             let res = tcx.gen_function_local_variable(2, &func_name, res_t.clone()).to_expr();
             let idx = tcx.gen_function_local_variable(3, &func_name, Type::size_t()).to_expr();
             let mut body = vec![

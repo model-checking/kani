@@ -320,7 +320,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let cgt = self.codegen_ty(ty);
         self.ensure(&func_name, |tcx, _| {
             let target_ty = init.typ().clone(); // N
-            let param = tcx.gen_function_local_variable(1, &func_name, target_ty);
+            let param = tcx.gen_function_parameter(1, &func_name, target_ty);
             let var = tcx.gen_function_local_variable(2, &func_name, cgt.clone()).to_expr();
             let body = vec![
                 Stmt::decl(var.clone(), None, Location::none()),
@@ -607,7 +607,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let pretty_name = format!("init_niche<{}>", self.ty_pretty_name(ty));
         self.ensure(&fname, |tcx, _| {
             let target_ty = init.typ().clone(); // N
-            let param = tcx.gen_function_local_variable(1, &fname, target_ty.clone());
+            let param = tcx.gen_function_parameter(1, &fname, target_ty.clone());
             let var = tcx.gen_function_local_variable(2, &fname, cgt.clone()).to_expr();
             let body = vec![
                 Stmt::decl(var.clone(), None, Location::none()),
