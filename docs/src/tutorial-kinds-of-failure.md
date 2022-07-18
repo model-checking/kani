@@ -126,11 +126,11 @@ In this case, where we just have a couple of `kani::any` values in our proof har
 In this trace we find (and the values you get may be different):
 
 ```
-Step 36: Function bound_check, File src/bounds_check.rs, Line 43
+Step 36: Function bound_check, File src/bounds_check.rs, Line 37
 let size: usize = kani::any();
 size = 2464ul
 
-Step 39: Function main, File src/bounds_check.rs, Line 45
+Step 39: Function bound_check, File src/bounds_check.rs, Line 39
 let index: usize = kani::any();
 index = 2463ul
 ```
