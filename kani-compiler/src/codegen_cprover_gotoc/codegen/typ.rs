@@ -1168,14 +1168,7 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_function_sig(&mut self, sig: PolyFnSig<'tcx>) -> Type {
         let sig = self.monomorphize(sig);
         let sig = self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig);
-        let params = sig
-            .inputs()
-            .iter()
-            .filter_map(|t| {
-                debug!("Using type {:?} in function signature", t);
-                Some(self.codegen_ty(*t))
-            })
-            .collect();
+        let params = sig.inputs().iter().map(|t| self.codegen_ty(*t)).collect();
 
         if sig.c_variadic {
             Type::variadic_code_with_unnamed_parameters(params, self.codegen_ty(sig.output()))
@@ -1546,7 +1539,7 @@ impl<'tcx> GotocCtx<'tcx> {
             .inputs()
             .iter()
             .enumerate()
-            .filter_map(|(i, t)| {
+            .map(|(i, t)| {
                 let lc = Local::from_usize(i + 1);
                 let mut ident = self.codegen_var_name(&lc);
 
@@ -1561,10 +1554,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         ident = name;
                     }
                 }
-                Some(
-                    self.codegen_ty(*t)
-                        .as_parameter(Some(ident.clone().into()), Some(ident.into())),
-                )
+                self.codegen_ty(*t).as_parameter(Some(ident.clone().into()), Some(ident.into()))
             })
             .collect();
 
