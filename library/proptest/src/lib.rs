@@ -16,7 +16,7 @@
 
 #![forbid(future_incompatible)]
 #![deny(missing_docs, bare_trait_objects)]
-#![no_std]
+// #![no_std]
 #![cfg_attr(feature = "cargo-clippy", allow(
     doc_markdown,
     // We have a lot of these lints for associated types... And we don't care.
@@ -32,7 +32,7 @@
 // // std_facade is used in a few macros, so it needs to be public.
 // #[macro_use]
 // #[doc(hidden)]
-// pub mod std_facade;
+pub mod std_facade;
 
 // #[cfg(any(feature = "std", test))]
 // #[macro_use]
@@ -86,8 +86,8 @@ pub mod sugar;
 // pub mod char;
 // pub mod collection;
 // pub mod num;
-// pub mod strategy;
-// pub mod test_runner;
+pub mod strategy;
+pub mod test_runner;
 // pub mod tuple;
 
 // pub mod option;
