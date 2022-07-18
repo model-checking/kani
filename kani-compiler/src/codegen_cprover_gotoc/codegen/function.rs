@@ -41,6 +41,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
 /// Codegen MIR functions into gotoc
 impl<'tcx> GotocCtx<'tcx> {
+    /// Get the number of parameters that the current function expects.
     fn get_params_size(&self) -> usize {
         let sig = self.current_fn().sig();
         let sig =
@@ -65,6 +66,7 @@ impl<'tcx> GotocCtx<'tcx> {
             let t = self.monomorphize(ldata.ty);
             let t = self.codegen_ty(t);
             let loc = self.codegen_span(&ldata.source_info.span);
+            // Indices [1, N] represent the function parameters where N is the number of parameters.
             let sym =
                 Symbol::variable(name, base_name, t, self.codegen_span(&ldata.source_info.span))
                     .with_is_hidden(!ldata.is_user_variable())

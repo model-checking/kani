@@ -866,14 +866,8 @@ impl<'tcx> GotocCtx<'tcx> {
                     .as_stmt(Location::none());
 
                 // Declare symbol for the single, self parameter
-                let param_name = format!("{}::1::var{:?}", drop_sym_name, 0);
-                let param_sym = Symbol::variable(
-                    param_name.clone(),
-                    param_name,
-                    ctx.codegen_ty(trait_ty).to_pointer(),
-                    Location::none(),
-                );
-                ctx.symbol_table.insert(param_sym.clone());
+                let param_typ = ctx.codegen_ty(trait_ty).to_pointer();
+                let param_sym = ctx.gen_function_parameter(0, &drop_sym_name, param_typ);
 
                 // Build and insert the function itself
                 Symbol::function(
