@@ -19,9 +19,9 @@ use rustc_middle::ty::{
 };
 use rustc_middle::ty::{List, TypeFoldable};
 use rustc_span::def_id::DefId;
-use rustc_target::abi::TyAndLayout;
 use rustc_target::abi::{
-    Abi::Vector, FieldsShape, Integer, Layout, Primitive, TagEncoding, VariantIdx, Variants,
+    Abi::Vector, FieldsShape, Integer, Layout, Primitive, Size, TagEncoding, TyAndLayout,
+    VariantIdx, Variants,
 };
 use rustc_target::spec::abi::Abi;
 use std::collections::BTreeMap;
@@ -719,16 +719,16 @@ impl<'tcx> GotocCtx<'tcx> {
 
     fn codegen_struct_padding<T>(
         &self,
-        current_offset: T,
-        next_offset: T,
+        current_offset_in_bits: T,
+        next_offset_in_bits: T,
         idx: usize,
     ) -> Option<DatatypeComponent>
     where
         T: TryInto<u64>,
         T::Error: Debug,
     {
-        let current_offset: u64 = current_offset.try_into().unwrap();
-        let next_offset: u64 = next_offset.try_into().unwrap();
+        let current_offset: u64 = current_offset_in_bits.try_into().unwrap();
+        let next_offset: u64 = next_offset_in_bits.try_into().unwrap();
         assert!(current_offset <= next_offset);
         if current_offset < next_offset {
             // We need to pad to the next offset
@@ -842,129 +842,184 @@ impl<'tcx> GotocCtx<'tcx> {
         })
     }
 
-    pub fn generator_variant_field_name(&self, var_idx: VariantIdx) -> String {
-        format!("generator_variant_{}", GeneratorSubsts::variant_name(var_idx))
+    /// Translate a generator type similarly to an enum with a variant for each suspend point.
+    ///
+    /// Consider the following generator:
+    /// ```
+    /// || {
+    ///     let a = true;
+    ///     let b = &a;
+    ///     yield;
+    ///     assert_eq!(b as *const _, &a as *const _);
+    ///     yield;
+    /// };
+    /// ```
+    ///
+    /// Rustc compiles this to something similar to the following enum (but there are differences, see below!):
+    ///
+    /// ```ignore
+    /// enum GeneratorEnum {
+    ///   Unresumed,                        // initial state of the generator
+    ///   Returned,                         // generator has returned
+    ///   Panicked,                         // generator has panicked
+    ///   Suspend0 { b: &bool, a: bool },   // state after suspending (`yield`ing) for the first time
+    ///   Suspend1,                         // state after suspending (`yield`ing) for the second time
+    /// }
+    /// ```
+    ///
+    /// However, its layout may differ from normal Rust enums in the following ways:
+    /// * Contrary to enums, the discriminant may not be at offset 0.
+    /// * Contrary to enums, there may be other fields than the discriminant "at the top level" (outside the variants).
+    ///
+    /// This means that we CANNOT use the enum translation, which would be roughly as follows:
+    ///
+    /// ```ignore
+    /// struct GeneratorEnum {
+    ///   int case; // discriminant
+    ///   union GeneratorEnum-union cases; // variant
+    /// }
+    ///
+    /// union GeneratorEnum-union {
+    ///   struct Unresumed variant0;
+    ///   struct Returned variant1;
+    ///   // ...
+    /// }
+    /// ```
+    ///
+    /// Instead, we use the following translation:
+    ///
+    /// ```ignore
+    /// union GeneratorEnum {
+    ///   struct Direct direct;
+    ///   struct Unresumed variant0;
+    ///   struct Returned variant1;
+    ///   // ...
+    /// }
+    ///
+    /// struct Direct {
+    ///   padding; // if necessary
+    ///   int case;
+    ///   padding; //if necessary
+    /// }
+    ///
+    /// struct Unresumed {
+    ///   padding; // if necessary
+    ///   int case;
+    ///   padding; // if necessary
+    /// }
+    ///
+    /// // ...
+    ///
+    /// struct Suspend0 {
+    ///   bool *b;
+    ///   int case;
+    ///   bool a;
+    /// }
+    /// ```
+    ///
+    /// Of course, if the generator has any other top-level/direct fields, they'd be included in the Direct struct as well.
+    fn codegen_ty_generator(&mut self, ty: Ty<'tcx>) -> Type {
+        let generator_name = self.ty_mangled_name(ty);
+        let pretty_name = self.ty_pretty_name(ty);
+        let generator_enum = self.ensure_union(self.ty_mangled_name(ty), pretty_name, |ctx, _| {
+            let type_and_layout = ctx.layout_of(ty);
+            let (discriminant_field, variants) = match &type_and_layout.variants {
+                Variants::Multiple { tag_encoding, tag_field, variants, .. } => {
+                    assert!(matches!(tag_encoding, TagEncoding::Direct));
+                    (tag_field, variants)
+                }
+                Variants::Single { .. } => {
+                    unreachable!("generators cannot have a single variant")
+                }
+            };
+            let mut fields = vec![];
+            // generate a struct for the direct fields of the layout (fields that don't occur in the variants)
+            fields.push(DatatypeComponent::Field {
+                name: "direct_fields".into(),
+                typ: ctx.codegen_generator_variant_struct(
+                    generator_name,
+                    pretty_name,
+                    type_and_layout,
+                    "DirectFields".into(),
+                    Some(*discriminant_field),
+                ),
+            });
+            for var_idx in variants.indices() {
+                let variant_name = GeneratorSubsts::variant_name(var_idx).into();
+                fields.push(DatatypeComponent::Field {
+                    name: ctx.generator_variant_name(var_idx),
+                    typ: ctx.codegen_generator_variant_struct(
+                        generator_name,
+                        pretty_name,
+                        type_and_layout.for_variant(ctx, var_idx),
+                        variant_name,
+                        None,
+                    ),
+                });
+            }
+            fields
+        });
+        generator_enum
     }
 
-    /// Preliminary support for the Generator type kind. The core functionality remains
-    /// unimplemented, but this way we fail at verification time only if paths that
-    /// rely on Generator types are used.
-    /// TODO: there is some duplication with `codegen_enum`
-    fn codegen_ty_generator(&mut self, ty: Ty<'tcx>) -> Type {
-        let pretty_name = self.ty_pretty_name(ty);
-        let generator_struct =
-            self.ensure_struct(self.ty_mangled_name(ty), pretty_name, |ctx, name| {
-                let type_and_layout = ctx.layout_of(ty);
-                let variants = match &type_and_layout.variants {
-                    Variants::Multiple { tag_encoding, variants, .. } => {
-                        assert!(matches!(tag_encoding, TagEncoding::Direct));
-                        variants
-                    }
-                    Variants::Single { .. } => {
-                        unreachable!("generators cannot have a single variant")
-                    }
+    fn codegen_generator_variant_struct(
+        &mut self,
+        generator_name: InternedString,
+        pretty_generator_name: InternedString,
+        type_and_layout: TyAndLayout<'tcx, Ty<'tcx>>,
+        variant_name: InternedString,
+        discriminant_field: Option<usize>,
+    ) -> Type {
+        let struct_name = format!("{generator_name}::{variant_name}");
+        let pretty_struct_name = format!("{pretty_generator_name}::{variant_name}");
+        debug!("codegen generator variant struct {}", pretty_struct_name);
+        self.ensure_struct(struct_name, pretty_struct_name, |ctx, _| {
+            let mut offset = Size::ZERO;
+            let mut fields = vec![];
+            for idx in type_and_layout.fields.index_by_increasing_offset() {
+                let field_name = if Some(idx) == discriminant_field {
+                    "case".into()
+                } else {
+                    ctx.generator_field_name(idx).into()
                 };
-                let discr_t = ctx.codegen_enum_discr_typ(ty);
-                let int = ctx.codegen_ty(discr_t);
-                let discr_offset = ctx.layout_of(discr_t).size.bits_usize();
-                let initial_offset = ctx.variant_min_offset(&variants).unwrap_or(discr_offset);
-                let mut fields = vec![DatatypeComponent::field("case", int)];
-                if let Some(padding) = ctx.codegen_struct_padding(discr_offset, initial_offset, 0) {
+                let field_ty = type_and_layout.field(ctx, idx).ty;
+                let field_offset = type_and_layout.fields.offset(idx);
+                let field_size = type_and_layout.field(ctx, idx).size;
+                if let Some(padding) =
+                    ctx.codegen_struct_padding(offset.bits(), field_offset.bits(), idx)
+                {
                     fields.push(padding);
                 }
-                fields.push(DatatypeComponent::field(
-                    "cases",
-                    ctx.ensure_union(
-                        &format!("{}::GeneratorUnion", name),
-                        format!("{}::GeneratorUnion", pretty_name),
-                        |ctx, name| {
-                            // TODO: filter out zero-sized variants?
-                            variants
-                                .indices()
-                                .map(|var_idx| {
-                                    DatatypeComponent::field(
-                                        ctx.generator_variant_field_name(var_idx),
-                                        ctx.codegen_generator_variant(
-                                            name,
-                                            pretty_name,
-                                            type_and_layout.for_variant(ctx, var_idx),
-                                            var_idx,
-                                            initial_offset,
-                                        ),
-                                    )
-                                })
-                                .collect()
-                        },
-                    ),
-                ));
-                fields
-            });
-        generator_struct
-    }
-
-    pub fn generator_field_name(&self, idx: usize) -> String {
-        format!("generator_field_{idx}")
-    }
-
-    fn codegen_generator_variant(
-        &mut self,
-        name: InternedString,
-        pretty_name: InternedString,
-        type_and_layout: TyAndLayout<'tcx, Ty<'tcx>>,
-        variant_idx: VariantIdx,
-        initial_offset: usize,
-    ) -> Type {
-        let variant_name = GeneratorSubsts::variant_name(variant_idx);
-        let layout = type_and_layout.layout;
-        let case_name = format!("{}::{variant_name}", name);
-        let pretty_name = format!("{}::{variant_name}", pretty_name);
-        debug!("handling generator variant {}", variant_idx.index());
-        self.ensure_struct(&case_name, pretty_name, |cx, _| {
-            match &layout.fields() {
-                FieldsShape::Arbitrary { offsets, memory_index } => {
-                    assert_eq!(offsets.len(), memory_index.len());
-                    let mut final_fields = Vec::with_capacity(offsets.len());
-                    let mut offset: u64 = initial_offset.try_into().unwrap();
-                    for field_idx in layout.fields().index_by_increasing_offset() {
-                        let field_type_and_layout = type_and_layout.field(cx, field_idx);
-                        let field_offset = offsets[field_idx].bits();
-                        let field_ty = field_type_and_layout.ty;
-                        if let Some(padding) =
-                            cx.codegen_struct_padding(offset, field_offset, final_fields.len())
-                        {
-                            final_fields.push(padding)
-                        }
-                        // TODO: could create better names by doing something similar as `build_generator_variant_struct_type_di_node` in codegen-llvm
-                        final_fields.push(DatatypeComponent::field(
-                            cx.generator_field_name(field_idx),
-                            cx.codegen_ty(field_ty),
-                        ));
-                        let layout = field_type_and_layout.layout;
-                        // we compute the overall offset of the end of the current struct
-                        offset = field_offset + layout.size().bits();
-                    }
-
-                    // If we don't meet our expected alignment, pad until we do
-                    let align = type_and_layout.layout.align().abi.bits();
-                    let overhang = offset % align;
-                    if overhang != 0 {
-                        final_fields.push(
-                            cx.codegen_struct_padding(
-                                offset,
-                                offset + align - overhang,
-                                final_fields.len(),
-                            )
-                            .unwrap(),
-                        )
-                    }
-
-                    final_fields
-                }
-                // Primitives, such as NEVER, have no fields
-                FieldsShape::Primitive => vec![],
-                _ => unreachable!("{}\n{:?}", cx.current_fn().readable_name(), layout.fields()),
+                fields.push(DatatypeComponent::Field {
+                    name: field_name,
+                    typ: ctx.codegen_ty(field_ty),
+                });
+                offset += field_size;
             }
+            // TODO: is this necessary? I don't see how padding at the end matters. But codegen_struct_fields does it too.
+            // If we don't meet our expected alignment, pad until we do
+            let align = type_and_layout.layout.align().abi.bits();
+            let overhang = offset.bits() % align;
+            if overhang != 0 {
+                fields.push(
+                    ctx.codegen_struct_padding(
+                        offset.bits(),
+                        offset.bits() + align - overhang,
+                        type_and_layout.fields.count(),
+                    )
+                    .unwrap(),
+                )
+            }
+            fields
         })
+    }
+
+    pub fn generator_variant_name(&self, var_idx: VariantIdx) -> InternedString {
+        format!("generator_variant_{}", GeneratorSubsts::variant_name(var_idx)).into()
+    }
+
+    pub fn generator_field_name(&self, field_idx: usize) -> InternedString {
+        format!("generator_field_{field_idx}").into()
     }
 
     /// Codegen "fat pointers" to the given `pointee_type`. These are pointers with metadata.
@@ -1237,8 +1292,9 @@ impl<'tcx> GotocCtx<'tcx> {
         self.ensure_struct(self.ty_mangled_name(ty), pretty_name, |ctx, name| {
             // variants appearing in source code (in source code order)
             let source_variants = &adtdef.variants();
+            let layout = ctx.layout_of(ty);
             // variants appearing in mir code
-            match &ctx.layout_of(ty).variants {
+            match &layout.variants {
                 Variants::Single { index } => {
                     match source_variants.get(*index) {
                         None => {
@@ -1252,7 +1308,11 @@ impl<'tcx> GotocCtx<'tcx> {
                         }
                     }
                 }
-                Variants::Multiple { tag_encoding, variants, .. } => {
+                Variants::Multiple { tag_encoding, variants, tag_field, .. } => {
+                    // Contrary to generators, currently enums have only one field (the discriminant), the rest are in the variants:
+                    assert!(layout.fields.count() <= 1);
+                    // Contrary to generators, the discriminant is the first (and only) field for enums:
+                    assert_eq!(*tag_field, 0);
                     match tag_encoding {
                         TagEncoding::Direct => {
                             // For direct encoding of tags, we generate a type with two fields:

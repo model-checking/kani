@@ -358,12 +358,12 @@ impl<'tcx> GotocCtx<'tcx> {
 
     pub fn codegen_funcall_args(&mut self, args: &[Operand<'tcx>]) -> Vec<Expr> {
         args.iter()
-            .filter_map(|o| {
+            .map(|o| {
                 let ot = self.operand_ty(o);
                 if ot.is_bool() {
-                    Some(self.codegen_operand(o).cast_to(Type::c_bool()))
+                    self.codegen_operand(o).cast_to(Type::c_bool())
                 } else {
-                    Some(self.codegen_operand(o))
+                    self.codegen_operand(o)
                 }
             })
             .collect()
@@ -682,13 +682,19 @@ impl<'tcx> GotocCtx<'tcx> {
                             // DISCRIMINANT - val:0 ty:i8
                             // DISCRIMINANT - val:1 ty:i8
                             let discr = Expr::int_constant(discr.val, self.codegen_ty(discr_t));
-                            unwrap_or_return_codegen_unimplemented_stmt!(
+                            let place_goto_expr = unwrap_or_return_codegen_unimplemented_stmt!(
                                 self,
                                 self.codegen_place(place)
                             )
-                            .goto_expr
-                            .member("case", &self.symbol_table)
-                            .assign(discr, location)
+                            .goto_expr;
+                            let place_goto_expr = if pt.is_generator() {
+                                place_goto_expr.member("direct_fields", &self.symbol_table)
+                            } else {
+                                place_goto_expr
+                            };
+                            place_goto_expr
+                                .member("case", &self.symbol_table)
+                                .assign(discr, location)
                         }
                         TagEncoding::Niche { dataful_variant, niche_variants, niche_start } => {
                             if dataful_variant != variant_index {

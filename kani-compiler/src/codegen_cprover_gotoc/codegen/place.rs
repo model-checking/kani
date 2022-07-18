@@ -276,9 +276,12 @@ impl<'tcx> GotocCtx<'tcx> {
                         Ok(res.member(&field.name.to_string(), &self.symbol_table))
                     }
                     ty::Closure(..) => Ok(res.member(&f.index().to_string(), &self.symbol_table)),
-                    ty::Generator(..) => unreachable!(
-                        "field access is only possible for generator variants, not the generator type"
-                    ),
+                    ty::Generator(..) => {
+                        let field_name = self.generator_field_name(f.index().into());
+                        Ok(res
+                            .member("direct_fields", &self.symbol_table)
+                            .member(field_name, &self.symbol_table))
+                    }
                     _ => unimplemented!(),
                 }
             }
@@ -287,7 +290,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let field = &v.fields[f.index()];
                 Ok(res.member(&field.name.to_string(), &self.symbol_table))
             }
-            TypeOrVariant::GeneratorVariant(_) => {
+            TypeOrVariant::GeneratorVariant(_var_idx) => {
                 let field_name = self.generator_field_name(f.index().into());
                 Ok(res.member(field_name, &self.symbol_table))
             }
@@ -509,24 +512,27 @@ impl<'tcx> GotocCtx<'tcx> {
                 let (case_name, type_or_variant) = match t.kind() {
                     ty::Adt(def, _) => {
                         let variant = def.variant(idx);
-                        (variant.name.to_string(), TypeOrVariant::Variant(variant))
+                        (variant.name.as_str().into(), TypeOrVariant::Variant(variant))
                     }
-                    ty::Generator(..) => (
-                        self.generator_variant_field_name(idx),
-                        TypeOrVariant::GeneratorVariant(idx),
-                    ),
+                    ty::Generator(..) => {
+                        (self.generator_variant_name(idx), TypeOrVariant::GeneratorVariant(idx))
+                    }
                     _ => unreachable!("it's a bug to reach here! {:?}", &t.kind()),
                 };
                 let layout = self.layout_of(t);
                 let expr = match &layout.variants {
                     Variants::Single { .. } => before.goto_expr,
                     Variants::Multiple { tag_encoding, .. } => match tag_encoding {
-                        TagEncoding::Direct => before
-                            .goto_expr
-                            .member("cases", &self.symbol_table)
-                            .member(&case_name, &self.symbol_table),
+                        TagEncoding::Direct => {
+                            let cases = if t.is_generator() {
+                                before.goto_expr
+                            } else {
+                                before.goto_expr.member("cases", &self.symbol_table)
+                            };
+                            cases.member(case_name, &self.symbol_table)
+                        }
                         TagEncoding::Niche { .. } => {
-                            before.goto_expr.member(&case_name, &self.symbol_table)
+                            before.goto_expr.member(case_name, &self.symbol_table)
                         }
                     },
                 };

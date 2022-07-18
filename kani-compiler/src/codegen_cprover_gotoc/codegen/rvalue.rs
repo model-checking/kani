@@ -510,6 +510,11 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             Variants::Multiple { tag, tag_encoding, .. } => match tag_encoding {
                 TagEncoding::Direct => {
+                    let e = if ty.is_generator() {
+                        e.member("direct_fields", &&self.symbol_table)
+                    } else {
+                        e
+                    };
                     e.member("case", &self.symbol_table).cast_to(self.codegen_ty(res_ty))
                 }
                 TagEncoding::Niche { dataful_variant, niche_variants, niche_start } => {
