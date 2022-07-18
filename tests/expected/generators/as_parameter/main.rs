@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 // Test that includes a generator as a parameter to a function
-// Codegen should succeed, but verification should fail (codegen_unimplemented)
+// from https://github.com/model-checking/kani/issues/1075
 
 #![feature(generators, generator_trait)]
 

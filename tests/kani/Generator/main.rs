@@ -20,6 +20,7 @@ fn maybe_call(call: bool) {
 }
 
 #[kani::proof]
+#[kani::unwind(2)]
 fn main() {
     maybe_call(false);
 }

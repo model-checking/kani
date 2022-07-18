@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 // Test contains a call to a generator via a Pin
-// This is currently not supported, so Kani should error out
+// from https://github.com/model-checking/kani/issues/416
 
 #![feature(generators, generator_trait)]
 
