@@ -71,6 +71,13 @@ impl Symbol {
         let name = name.into();
         let base_name = base_name.intern();
         let pretty_name = pretty_name.intern();
+        // See https://github.com/model-checking/kani/issues/1361#issuecomment-1181499683
+        assert!(
+            name.to_string().ends_with(&base_name.map_or(String::new(), |s| s.to_string())),
+            "Symbol's base_name must be the suffix of its name.\nName: {:?}\nBase name: {:?}",
+            name,
+            base_name
+        );
         Symbol {
             name,
             location,
