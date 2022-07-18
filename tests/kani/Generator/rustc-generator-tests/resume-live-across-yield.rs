@@ -1,7 +1,10 @@
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Kani Contributors
+// See GitHub history for details.
+
 // Copyright rustc Contributors
-// SPDX-License-Identifier: Apache OR MIT
 // Adapted from rustc: src/test/ui/generator/resume-live-across-yield.rs
-// Changes: copyright Kani contributors, Apache or MIT
 
 // run-pass
 

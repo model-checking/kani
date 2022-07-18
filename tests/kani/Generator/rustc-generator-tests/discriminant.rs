@@ -1,7 +1,10 @@
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Kani Contributors
+// See GitHub history for details.
+
 // Copyright rustc Contributors
-// SPDX-License-Identifier: Apache OR MIT
 // Adapted from rustc: src/test/ui/generator/discriminant.rs
-// Changes: copyright Kani contributors, Apache or MIT
 
 //! Tests that generator discriminant sizes and ranges are chosen optimally and that they are
 //! reflected in the output of `mem::discriminant`.
