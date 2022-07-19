@@ -49,7 +49,7 @@ impl<T: kani::Arbitrary + Clone + fmt::Debug> ValueTree for Just<T> {
     type Value = T;
     noshrink!();
     fn current(&self) -> T {
-        kani::any()
+        self.0.clone()
     }
 }
 
