@@ -241,21 +241,21 @@ impl<'tcx> GotocCtx<'tcx> {
         )
     }
 
-    pub fn fn_sig_of_instance(&self, instance: Instance<'tcx>) -> Option<ty::PolyFnSig<'tcx>> {
+    pub fn fn_sig_of_instance(&self, instance: Instance<'tcx>) -> ty::PolyFnSig<'tcx> {
         let fntyp = instance.ty(self.tcx, ty::ParamEnv::reveal_all());
         self.monomorphize(match fntyp.kind() {
-            ty::Closure(def_id, subst) => Some(self.closure_sig(*def_id, subst)),
+            ty::Closure(def_id, subst) => self.closure_sig(*def_id, subst),
             ty::FnPtr(..) | ty::FnDef(..) => {
                 let sig = fntyp.fn_sig(self.tcx);
                 // Some virtual calls through a vtable may actually be closures
                 // or shims that also need the arguments untupled, even though
                 // the kind of the trait type is not a ty::Closure.
                 if self.ty_needs_closure_untupled(fntyp) {
-                    return Some(self.sig_with_closure_untupled(sig));
+                    return self.sig_with_closure_untupled(sig);
                 }
-                Some(sig)
+                sig
             }
-            ty::Generator(_def_id, substs, _movability) => Some(self.generator_sig(fntyp, substs)),
+            ty::Generator(_def_id, substs, _movability) => self.generator_sig(fntyp, substs),
             _ => unreachable!("Can't get function signature of type: {:?}", fntyp),
         })
     }
@@ -337,7 +337,7 @@ impl<'tcx> GotocCtx<'tcx> {
         idx: usize,
     ) -> DatatypeComponent {
         // Gives a binder with function signature
-        let sig = self.fn_sig_of_instance(instance).unwrap();
+        let sig = self.fn_sig_of_instance(instance);
 
         // Gives an Irep Pointer object for the signature
         let fn_ty = self.codegen_dynamic_function_sig(sig);
@@ -1532,8 +1532,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// the function type of the current instance
     pub fn fn_typ(&mut self) -> Type {
         let sig = self.current_fn().sig();
-        let sig =
-            self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig.unwrap());
+        let sig = self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig);
         // we don't call [codegen_function_sig] because we want to get a bit more metainformation.
         let mut params: Vec<Parameter> = sig
             .inputs()

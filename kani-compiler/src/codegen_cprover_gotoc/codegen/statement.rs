@@ -60,7 +60,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 loc,
             ),
             TerminatorKind::Return => {
-                let rty = self.current_fn().sig().unwrap().skip_binder().output();
+                let rty = self.current_fn().sig().skip_binder().output();
                 if rty.is_unit() {
                     self.codegen_ret_unit()
                 } else {
