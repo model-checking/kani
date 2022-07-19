@@ -95,6 +95,11 @@ impl KaniSession {
             args.push(unwind_value.to_string().into());
         }
 
+        if self.args.run_sanity_checks {
+            args.push("--validate-goto-model".into());
+            args.push("--validate-ssa-equation".into());
+        }
+
         args.push("--slice-formula".into());
 
         args.extend(self.args.cbmc_args.iter().cloned());
