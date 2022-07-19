@@ -177,9 +177,9 @@ impl<'test> TestCx<'test> {
                 self.fatal_proc_rec("test failed: expected check failure, got success", &proc_res);
             }
         } else if !proc_res.status.success() {
-                self.fatal_proc_rec("test failed: expected check success, got failure", &proc_res);
-            }
+            self.fatal_proc_rec("test failed: expected check success, got failure", &proc_res);
         }
+    }
 
     /// Runs `kani-compiler` on the test file specified by `self.testpaths.file`. An
     /// error message is printed to stdout if the codegen result is not
@@ -202,7 +202,6 @@ impl<'test> TestCx<'test> {
             }
         } else if !proc_res.status.success() {
             self.fatal_proc_rec("test failed: expected codegen success, got failure", &proc_res);
-            }
         }
     }
 
@@ -242,10 +241,10 @@ impl<'test> TestCx<'test> {
                     );
                 }
             } else if !proc_res.status.success() {
-                    self.fatal_proc_rec(
-                        "test failed: expected verification success, got failure",
-                        &proc_res,
-                    );
+                self.fatal_proc_rec(
+                    "test failed: expected verification success, got failure",
+                    &proc_res,
+                );
             }
         }
     }
