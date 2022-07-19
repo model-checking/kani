@@ -214,7 +214,7 @@ impl<'tcx> GotocCtx<'tcx> {
         self.ensure(&func_name, |tcx, _| {
             let paramt = tcx.codegen_ty(tcx.operand_ty(op));
             let res_t = tcx.codegen_ty(res_ty);
-            let inp = tcx.gen_function_local_variable(1, &func_name, paramt);
+            let inp = tcx.gen_function_parameter(1, &func_name, paramt);
             let res = tcx.gen_function_local_variable(2, &func_name, res_t.clone()).to_expr();
             let idx = tcx.gen_function_local_variable(3, &func_name, Type::size_t()).to_expr();
             let mut body = vec![
@@ -866,14 +866,8 @@ impl<'tcx> GotocCtx<'tcx> {
                     .as_stmt(Location::none());
 
                 // Declare symbol for the single, self parameter
-                let param_name = format!("{}::1::var{:?}", drop_sym_name, 0);
-                let param_sym = Symbol::variable(
-                    param_name.clone(),
-                    param_name,
-                    ctx.codegen_ty(trait_ty).to_pointer(),
-                    Location::none(),
-                );
-                ctx.symbol_table.insert(param_sym.clone());
+                let param_typ = ctx.codegen_ty(trait_ty).to_pointer();
+                let param_sym = ctx.gen_function_parameter(0, &drop_sym_name, param_typ);
 
                 // Build and insert the function itself
                 Symbol::function(
@@ -915,8 +909,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // Insert a CBMC-time size check, roughly:
         //     <Ty> local_temp = nondet();
         //     assert(__CPROVER_OBJECT_SIZE(&local_temp) == vt_size);
-        let temp_var = self.gen_temp_variable(ty.clone(), Location::none()).to_expr();
-        let decl = Stmt::decl(temp_var.clone(), None, Location::none());
+        let (temp_var, decl) = self.decl_temp_variable(ty.clone(), None, Location::none());
         let cbmc_size = if ty.is_empty() {
             // CBMC errors on passing a pointer to void to __CPROVER_OBJECT_SIZE.
             // In practice, we have seen this with the Never type, which has size 0:

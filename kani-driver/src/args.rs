@@ -150,6 +150,10 @@ pub struct KaniArgs {
     /// This option may impact the soundness of the analysis and may cause false proofs and/or counterexamples
     #[structopt(long, hidden_short_help(true), requires("enable-unstable"))]
     pub ignore_global_asm: bool,
+
+    /// Execute CBMC's sanity checks to ensure the goto-program we generate is correct.
+    #[structopt(long, hidden_short_help(true), requires("enable-unstable"))]
+    pub run_sanity_checks: bool,
     /*
     The below is a "TODO list" of things not yet implemented from the kani_flags.py script.
 
