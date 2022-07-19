@@ -163,11 +163,11 @@ impl<'tcx> GotocHook<'tcx> for Assert {
 
         // Since `cond` might have side effects, assign it to a temporary
         // variable so that it's evaluated once, then assert and assume it
-        let tmp = tcx.gen_temp_variable(cond.typ().clone(), caller_loc).to_expr();
+        let (tmp, decl) = tcx.decl_temp_variable(cond.typ().clone(), Some(cond), caller_loc);
         Stmt::block(
             vec![
                 reach_stmt,
-                Stmt::decl(tmp.clone(), Some(cond), caller_loc),
+                decl,
                 tcx.codegen_assert(tmp.clone(), PropertyClass::Assertion, &msg, caller_loc),
                 Stmt::assume(tmp, caller_loc),
                 Stmt::goto(tcx.current_fn().find_label(&target), caller_loc),
@@ -229,6 +229,7 @@ impl<'tcx> GotocHook<'tcx> for Panic {
             || Some(def_id) == tcx.lang_items().panic_display()
             || Some(def_id) == tcx.lang_items().panic_fmt()
             || Some(def_id) == tcx.lang_items().begin_panic_fn()
+            || matches_function(tcx, instance, "KaniPanic")
     }
 
     fn handle(
@@ -241,77 +242,6 @@ impl<'tcx> GotocHook<'tcx> for Panic {
         span: Option<Span>,
     ) -> Stmt {
         tcx.codegen_panic(span, fargs)
-    }
-}
-
-struct PtrRead;
-
-impl<'tcx> GotocHook<'tcx> for PtrRead {
-    fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-        let name = with_no_trimmed_paths!(tcx.def_path_str(instance.def_id()));
-        name == "core::ptr::read"
-            || name == "core::ptr::read_unaligned"
-            || name == "core::ptr::read_volatile"
-            || name == "std::ptr::read"
-            || name == "std::ptr::read_unaligned"
-            || name == "std::ptr::read_volatile"
-    }
-
-    fn handle(
-        &self,
-        tcx: &mut GotocCtx<'tcx>,
-        _instance: Instance<'tcx>,
-        mut fargs: Vec<Expr>,
-        assign_to: Place<'tcx>,
-        target: Option<BasicBlock>,
-        span: Option<Span>,
-    ) -> Stmt {
-        let loc = tcx.codegen_span_option(span);
-        let target = target.unwrap();
-        let src = fargs.remove(0);
-        Stmt::block(
-            vec![
-                unwrap_or_return_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&assign_to))
-                    .goto_expr
-                    .assign(src.dereference().with_location(loc), loc),
-                Stmt::goto(tcx.current_fn().find_label(&target), loc),
-            ],
-            loc,
-        )
-    }
-}
-
-struct PtrWrite;
-
-impl<'tcx> GotocHook<'tcx> for PtrWrite {
-    fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-        let name = with_no_trimmed_paths!(tcx.def_path_str(instance.def_id()));
-        name == "core::ptr::write"
-            || name == "core::ptr::write_unaligned"
-            || name == "std::ptr::write"
-            || name == "std::ptr::write_unaligned"
-    }
-
-    fn handle(
-        &self,
-        tcx: &mut GotocCtx<'tcx>,
-        _instance: Instance<'tcx>,
-        mut fargs: Vec<Expr>,
-        _assign_to: Place<'tcx>,
-        target: Option<BasicBlock>,
-        span: Option<Span>,
-    ) -> Stmt {
-        let loc = tcx.codegen_span_option(span);
-        let target = target.unwrap();
-        let dst = fargs.remove(0);
-        let src = fargs.remove(0);
-        Stmt::block(
-            vec![
-                dst.dereference().assign(src, loc).with_location(loc),
-                Stmt::goto(tcx.current_fn().find_label(&target), loc),
-            ],
-            loc,
-        )
     }
 }
 
@@ -395,8 +325,6 @@ pub fn fn_hooks<'tcx>() -> GotocHooks<'tcx> {
             Rc::new(Assert),
             Rc::new(ExpectFail),
             Rc::new(Nondet),
-            Rc::new(PtrRead),
-            Rc::new(PtrWrite),
             Rc::new(RustAlloc),
             Rc::new(SliceFromRawPart),
         ],

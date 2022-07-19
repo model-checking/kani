@@ -8,7 +8,6 @@ use crate::unwrap_or_return_codegen_unimplemented;
 use cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
 use cbmc::utils::BUG_REPORT_URL;
 use cbmc::MachineModel;
-use cbmc::NO_PRETTY_NAME;
 use cbmc::{btree_string_map, InternString, InternedString};
 use num::bigint::BigInt;
 use rustc_middle::mir::{AggregateKind, BinOp, CastKind, NullOp, Operand, Place, Rvalue, UnOp};
@@ -211,10 +210,11 @@ impl<'tcx> GotocCtx<'tcx> {
         res_ty: Ty<'tcx>,
     ) -> Expr {
         let func_name = format!("gen-repeat<{}>", self.ty_mangled_name(res_ty));
+        let pretty_name = format!("init_array_repeat<{}>", self.ty_pretty_name(res_ty));
         self.ensure(&func_name, |tcx, _| {
             let paramt = tcx.codegen_ty(tcx.operand_ty(op));
             let res_t = tcx.codegen_ty(res_ty);
-            let inp = tcx.gen_function_local_variable(1, &func_name, paramt);
+            let inp = tcx.gen_function_parameter(1, &func_name, paramt);
             let res = tcx.gen_function_local_variable(2, &func_name, res_t.clone()).to_expr();
             let idx = tcx.gen_function_local_variable(3, &func_name, Type::size_t()).to_expr();
             let mut body = vec![
@@ -241,7 +241,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 &func_name,
                 Type::code(vec![inp.to_function_parameter()], res_t),
                 Some(Stmt::block(body, Location::none())),
-                NO_PRETTY_NAME,
+                &pretty_name,
                 Location::none(),
             )
         });
@@ -696,7 +696,18 @@ impl<'tcx> GotocCtx<'tcx> {
         t: Ty<'tcx>,
     ) -> Expr {
         match k {
-            PointerCast::ReifyFnPointer => self.codegen_operand(o).address_of(),
+            PointerCast::ReifyFnPointer => match self.operand_ty(o).kind() {
+                ty::FnDef(def_id, substs) => {
+                    let instance =
+                        Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), *def_id, substs)
+                            .unwrap()
+                            .unwrap();
+                    // We need to handle this case in a special way because `codegen_operand` compiles FnDefs to dummy structs.
+                    // (cf. the function documentation)
+                    self.codegen_func_expr(instance, None).address_of()
+                }
+                _ => unreachable!(),
+            },
             PointerCast::UnsafeFnPointer => self.codegen_operand(o),
             PointerCast::ClosureFnPointer(_) => {
                 let dest_typ = self.codegen_ty(t);
@@ -840,7 +851,9 @@ impl<'tcx> GotocCtx<'tcx> {
             // We skip an entire submodule of the standard library, so drop is missing
             // for it. Build and insert a function that just calls an unimplemented block
             // to maintain soundness.
-            let drop_sym_name = format!("{}_unimplemented", self.symbol_name(drop_instance));
+            let drop_sym_name = format!("drop_unimplemented_{}", self.symbol_name(drop_instance));
+            let pretty_name =
+                format!("drop_unimplemented<{}>", self.readable_instance_name(drop_instance));
             let drop_sym = self.ensure(&drop_sym_name, |ctx, name| {
                 // Function body
                 let unimplemented = ctx
@@ -853,21 +866,15 @@ impl<'tcx> GotocCtx<'tcx> {
                     .as_stmt(Location::none());
 
                 // Declare symbol for the single, self parameter
-                let param_name = format!("{}::1::var{:?}", drop_sym_name, 0);
-                let param_sym = Symbol::variable(
-                    param_name.clone(),
-                    param_name,
-                    ctx.codegen_ty(trait_ty).to_pointer(),
-                    Location::none(),
-                );
-                ctx.symbol_table.insert(param_sym.clone());
+                let param_typ = ctx.codegen_ty(trait_ty).to_pointer();
+                let param_sym = ctx.gen_function_parameter(0, &drop_sym_name, param_typ);
 
                 // Build and insert the function itself
                 Symbol::function(
                     name,
                     Type::code(vec![param_sym.to_function_parameter()], Type::empty()),
                     Some(Stmt::block(vec![unimplemented], Location::none())),
-                    NO_PRETTY_NAME,
+                    pretty_name,
                     Location::none(),
                 )
             });
@@ -902,8 +909,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // Insert a CBMC-time size check, roughly:
         //     <Ty> local_temp = nondet();
         //     assert(__CPROVER_OBJECT_SIZE(&local_temp) == vt_size);
-        let temp_var = self.gen_temp_variable(ty.clone(), Location::none()).to_expr();
-        let decl = Stmt::decl(temp_var.clone(), None, Location::none());
+        let (temp_var, decl) = self.decl_temp_variable(ty.clone(), None, Location::none());
         let cbmc_size = if ty.is_empty() {
             // CBMC errors on passing a pointer to void to __CPROVER_OBJECT_SIZE.
             // In practice, we have seen this with the Never type, which has size 0:

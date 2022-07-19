@@ -349,8 +349,8 @@ impl<'tcx> GotocCtx<'tcx> {
                 emit_concurrency_warning!(intrinsic, loc);
                 let var1_ref = fargs.remove(0);
                 let var1 = var1_ref.dereference();
-                let tmp = self.gen_temp_variable(var1.typ().clone(), loc).to_expr();
-                let decl_stmt = Stmt::decl(tmp.clone(), Some(var1.to_owned()), loc);
+                let (tmp, decl_stmt) =
+                    self.decl_temp_variable(var1.typ().clone(), Some(var1.to_owned()), loc);
                 let var2 = fargs.remove(0);
                 let op_expr = (var1.clone()).$op(var2).with_location(loc);
                 let assign_stmt = (var1.clone()).assign(op_expr, loc);
@@ -644,9 +644,7 @@ impl<'tcx> GotocCtx<'tcx> {
             "volatile_copy_nonoverlapping_memory" => {
                 unstable_codegen!(codegen_intrinsic_copy!(Memcpy))
             }
-            "volatile_load" => {
-                unstable_codegen!(self.codegen_expr_to_place(p, fargs.remove(0).dereference()))
-            }
+            "volatile_load" => self.codegen_volatile_load(fargs, farg_types, p, loc),
             "volatile_store" => {
                 assert!(self.place_ty(p).is_unit());
                 self.codegen_volatile_store(fargs, farg_types, loc)
@@ -839,8 +837,8 @@ impl<'tcx> GotocCtx<'tcx> {
         emit_concurrency_warning!(intrinsic, loc);
         let var1_ref = fargs.remove(0);
         let var1 = var1_ref.dereference().with_location(loc);
-        let tmp = self.gen_temp_variable(var1.typ().clone(), loc).to_expr();
-        let decl_stmt = Stmt::decl(tmp.clone(), Some(var1.to_owned()), loc);
+        let (tmp, decl_stmt) =
+            self.decl_temp_variable(var1.typ().clone(), Some(var1.to_owned()), loc);
         let var2 = fargs.remove(0).with_location(loc);
         let var3 = fargs.remove(0).with_location(loc);
         let eq_expr = (var1.clone()).eq(var2);
@@ -875,8 +873,8 @@ impl<'tcx> GotocCtx<'tcx> {
         emit_concurrency_warning!(intrinsic, loc);
         let var1_ref = fargs.remove(0);
         let var1 = var1_ref.dereference().with_location(loc);
-        let tmp = self.gen_temp_variable(var1.typ().clone(), loc).to_expr();
-        let decl_stmt = Stmt::decl(tmp.clone(), Some(var1.to_owned()), loc);
+        let (tmp, decl_stmt) =
+            self.decl_temp_variable(var1.typ().clone(), Some(var1.to_owned()), loc);
         let var2 = fargs.remove(0).with_location(loc);
         let assign_stmt = var1.assign(var2, loc);
         let res_stmt = self.codegen_expr_to_place(p, tmp);
@@ -1267,10 +1265,10 @@ impl<'tcx> GotocCtx<'tcx> {
         let newval = fargs.remove(0);
         // Type checker should have ensured it's a vector type
         let elem_ty = cbmc_ret_ty.base_type().unwrap().clone();
-        let tmp = self.gen_temp_variable(cbmc_ret_ty, loc).to_expr();
+        let (tmp, decl) = self.decl_temp_variable(cbmc_ret_ty, Some(vec), loc);
         Stmt::block(
             vec![
-                Stmt::decl(tmp.clone(), Some(vec), loc),
+                decl,
                 tmp.clone().index_array(index).assign(newval.cast_to(elem_ty), loc),
                 self.codegen_expr_to_place(p, tmp),
             ],
@@ -1319,6 +1317,37 @@ impl<'tcx> GotocCtx<'tcx> {
             })
             .collect();
         self.codegen_expr_to_place(p, Expr::vector_expr(cbmc_ret_ty, elems))
+    }
+
+    /// A volatile load of a memory location:
+    /// <https://doc.rust-lang.org/std/ptr/fn.read_volatile.html>
+    ///
+    /// Undefined behavior if any of these conditions are violated:
+    ///  * `src` must be valid for writes (done by `--pointer-check`)
+    ///  * `src` must be properly aligned (done by `align_check` below)
+    ///
+    /// TODO: Add a check for the condition:
+    ///  * `src` must point to a properly initialized value of type `T`
+    /// See <https://github.com/model-checking/kani/issues/920> for more details
+    fn codegen_volatile_load(
+        &mut self,
+        mut fargs: Vec<Expr>,
+        farg_types: &[Ty<'tcx>],
+        p: &Place<'tcx>,
+        loc: Location,
+    ) -> Stmt {
+        let src = fargs.remove(0);
+        let src_typ = farg_types[0];
+        let align = self.is_ptr_aligned(src_typ, src.clone());
+        let align_check = self.codegen_assert(
+            align,
+            PropertyClass::SafetyCheck,
+            "`src` must be properly aligned",
+            loc,
+        );
+        let expr = src.dereference();
+        let res_stmt = self.codegen_expr_to_place(p, expr);
+        Stmt::block(vec![align_check, res_stmt], loc)
     }
 
     /// A volatile write of a memory location:

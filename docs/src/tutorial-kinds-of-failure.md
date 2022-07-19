@@ -1,8 +1,8 @@
 # Failures that Kani can spot
 
-In the [last section](./tutorial-first-steps.md) we saw Kani spot two major kinds of failures: Assertions and panics.
+In the [last section](./tutorial-first-steps.md), we saw Kani spot two major kinds of failures: assertions and panics.
 If the proof harness allows some program execution that results in a panic, then Kani will report that as a failure.
-In addition, we saw very briefly a couple of other kinds of failures: Null pointer dereferences and overflows.
+In addition, we saw (very briefly) a couple of other kinds of failures: null pointer dereferences and overflows.
 In this section, we're going to expand on these additional checks, to give you an idea of what other problems Kani will find.
 
 ## Bounds checking and pointers
@@ -20,7 +20,7 @@ We can again write a simple property test against this code:
 {{#include tutorial/kinds-of-failure/src/bounds_check.rs:proptest}}
 ```
 
-This property test will immediately find the failing case because of this dynamic check.
+This property test will immediately find a failing case, thanks to Rust's built-in bounds checking.
 
 But what if we change this function to use unsafe Rust?
 
@@ -36,38 +36,52 @@ Now the error becomes invisible to this test:
 test bounds_check::tests::doesnt_crash ... ok
 ```
 
-But we're able to write a harness for this unsafe code:
+The property test still causes an out-of-bounds access, but this undefined behavior does not necessarily cause an immediate crash.
+(This is part of why undefined behavior is so difficult to debug.)
+Through the use of unsafe code, we removed the runtime check for an out of bounds access.
+It just turned out that none of the randomly generated tests triggered behavior that actually crashed.
+But if we write a Kani proof harness:
 
 ```rust
 {{#include tutorial/kinds-of-failure/src/bounds_check.rs:kani}}
 ```
 
-If we run it with Kani:
+And run this proof with:
+
 ```bash
-kani src/bounds_check.rs --harness bound_check
+cargo kani --harness bound_check
 ```
 
-One of the checks fails. Also, notice there were many checks in the verification output.
-This is a result of using the standard library `Vec` implementation, which means our harness actually used quite a bit of code, short as it looks.
-Kani is inserting a lot more checks than appear as asserts in our code, so the output can be large.
-Let's narrow that output down a bit:
+We still see a failure from Kani, even without Rust's runtime bounds checking.
+
+> Also, notice there were many checks in the verification output.
+> (At time of writing, 351.)
+> This is a result of using the standard library `Vec` implementation, which means our harness actually used quite a bit of code, short as it looks.
+> Kani is inserting a lot more checks than appear as asserts in our code, so the output can be large.
+
+We get the following summary at the end:
 
 ```
-# kani src/bounds_check.rs --harness bound_check | grep Failed
+SUMMARY: 
+ ** 1 of 351 failed
 Failed Checks: dereference failure: pointer outside object bounds
+ File: "./src/bounds_check.rs", line 11, in bounds_check::get_wrapped
+
+VERIFICATION:- FAILED
 ```
 
 Notice that, for Kani, this has gone from a simple bounds-checking problem to a pointer-checking problem.
 Kani will check operations on pointers to ensure they're not potentially invalid memory accesses.
-Any unsafe code that manipulates pointers will, as we see here, raise failures if its behavior is actually unsafe. 
+Any unsafe code that manipulates pointers will, as we see here, raise failures if its behavior is actually a problem.
 
 Consider trying a few more small exercises with this example:
 
-1. Exercise: Switch back to the normal/safe indexing operation and re-try Kani. What changes compared to the unsafe operation and why?
+1. Exercise: Switch back to the normal/safe indexing operation and re-try Kani.
+How does Kani's output change, compared to the unsafe operation?
 (Try predicting the answer, then seeing if you got it right.)
 2. Exercise: [Remember how to get a trace from Kani?](./tutorial-first-steps.md#getting-a-trace) Find out what inputs it failed on.
 3. Exercise: Fix the error, run Kani, and see a successful verification.
-4. Exercise: Try switching back to the unsafe code (now with the error fixed) and re-run Kani. It should still successfully verify.
+4. Exercise: Try switching back to the unsafe code (now with the error fixed) and re-run Kani. Does it still verify successfully?
 
 <details>
 <summary>Click to see explanation for exercise 1</summary>
@@ -75,58 +89,59 @@ Consider trying a few more small exercises with this example:
 Having switched back to the safe indexing operation, Kani reports two failures:
 
 ```
-# kani src/bounds_check.rs --harness bound_check | grep Failed
+SUMMARY: 
+ ** 2 of 350 failed
 Failed Checks: index out of bounds: the length is less than or equal to the given index
+ File: "./src/bounds_check.rs", line 11, in bounds_check::get_wrapped
 Failed Checks: dereference failure: pointer outside object bounds
+ File: "./src/bounds_check.rs", line 11, in bounds_check::get_wrapped
+
+VERIFICATION:- FAILED
 ```
 
-The first is Rust's implicit assertion for the safe indexing operation.
+The first is Rust's runtime bounds checking for the safe indexing operation.
 The second is Kani's check to ensure the pointer operation is actually safe.
-This pattern (two checks for similar issues in safe Rust code) is common, and we'll see it again in the next section.
+This pattern (two checks for similar issues in safe Rust code) is common to see, and we'll see it again in the next section.
+
+> **NOTE**: While Kani will always be checking for both properties, [in the future the output here may change](https://github.com/model-checking/kani/issues/1349).
+> You might have noticed that the bad pointer dereference can't happen, since the bounds check would panic first.
+> In the future, Kani's output may report only the bounds checking failure in this example.
 
 </details>
 
 <details>
 <summary>Click to see explanation for exercise 2</summary>
 
-Having run `kani --visualize` and clicked on one of the failures to see a trace, there are three things to immediately notice:
+Having run `cargo kani --harness bound_check --visualize` and clicked on one of the failures to see a trace, there are three things to immediately notice:
 
 1. This trace is huge. Because the standard library `Vec` is involved, there's a lot going on.
 2. The top of the trace file contains some "trace navigation tips" that might be helpful in navigating the trace.
 3. There's a lot of generated code and it's really hard to just read the trace itself.
 
-To navigate this trace to find the information you need, we recommend searching for things you expect to be somewhere in the trace:
+To navigate this trace to find the information you need, we again recommend searching for things you expect to be somewhere in the trace:
 
-1. Search the document for `kani::any` or `<variable_of_interest> =` such as `size =`.
+1. Search the page for `kani::any` or `<variable_of_interest> =` such as `size =` or `let size`.
 We can use this to find out what example values lead to a problem.
 In this case, where we just have a couple of `kani::any` values in our proof harness, we can learn a lot just by seeing what these are.
 In this trace we find (and the values you get may be different):
 
 ```
-Step 23: Function bound_check, File src/bounds_check.rs, Line 43
-let size: usize = kani::any();
-size = 0ul
-
-Step 27: Function bound_check, File src/bounds_check.rs, Line 45
-let index: usize = kani::any();
-index = 0ul
-
-Step 36: Function bound_check, File src/bounds_check.rs, Line 43
+Step 36: Function bound_check, File src/bounds_check.rs, Line 37
 let size: usize = kani::any();
 size = 2464ul
 
-Step 39: Function main, File src/bounds_check.rs, Line 45
+Step 39: Function bound_check, File src/bounds_check.rs, Line 39
 let index: usize = kani::any();
 index = 2463ul
 ```
 
-Try not to be fooled by the first assignments: we're seeing zero-initialization there.
-Their values are overwritten by the later assignments.
 You may see different values here, as it depends on the solver's behavior.
 
-2. Try searching for "failure:". This will be near the end of the document.
-Now you can try reverse-searching for assignments to the variables involved.
-For example, search upwards from the failure for `i =`.
+2. Try searching for `failure:`. This will be near the end of the page.
+You can now search upwards from a failure to see what values certain variables had.
+Sometimes it can be helpful to change the source code to add intermediate variables, so their value is visible in the trace.
+For instance, you might want to compute the index before indexing into the array.
+That way you'd see in the trace exactly what value is being used.
 
 These two techniques should help you find both the nondeterministic inputs, and the values that were involved in the failing assertion.
 
@@ -145,9 +160,10 @@ fn get_wrapped(i: usize, a: &[u32]) -> u32 {
 We've corrected the out-of-bounds access, but now we've omitted the "base case": what to return on an empty list.
 Kani will spot this not as a bound error, but as a mathematical error: on an empty list the modulus operator (`%`) will cause a division by zero.
 
-1. Exercise: Try to run Kani on the above, to see what this kind of failure looks like.
+1. Exercise: Try to run Kani on this version of `get_wrapped`, to see what this kind of failure looks like.
 
-Rust also performs runtime safety checks for integer overflows, much like it does for bounds checks.
+Rust can also perform runtime safety checks for integer overflows, much like it does for bounds checks.
+([Though Rust disables this by default in `--release` mode, it can be re-enabled.](https://doc.rust-lang.org/reference/expressions/operator-expr.html#overflow))
 Consider this code (available [here](https://github.com/model-checking/kani/blob/main/docs/src/tutorial/kinds-of-failure/src/overflow.rs)):
 
 ```rust
@@ -159,26 +175,31 @@ Kani will find these failures as well.
 Here's the output from Kani:
 
 ```
-# kani src/overflow.rs --harness add_overflow
+# cargo kani --harness add_overflow
 [...]
-RESULTS:
-Check 1: simple_addition.assertion.1
-         - Status: FAILURE
-         - Description: "attempt to add with overflow"
-[...]
+SUMMARY: 
+ ** 1 of 2 failed
+Failed Checks: attempt to add with overflow
+ File: "./src/overflow.rs", line 7, in overflow::simple_addition
+
 VERIFICATION:- FAILED
 ```
 
 This issue can be fixed using Rust's alternative mathematical functions with explicit overflow behavior.
-For instance, instead of `a + b` write `a.wrapping_add(b)`.
+For instance, if the wrapping behavior is intended, you can write `a.wrapping_add(b)` instead of `a + b`.
+Kani will then report no issues.
 
 ### Exercise: Classic overflow failure
 
-One of the classic subtle bugs that persisted in many implementations for a very long time is finding the midpoint in quick sort.
+A classic example of a subtle bug that persisted in many implementations for a very long time is "finding the midpoint" in quick sort.
 This often naively looks like this (code available [here](https://github.com/model-checking/kani/blob/main/docs/src/tutorial/kinds-of-failure/src/overflow_quicksort.rs)):
 
 ```rust
 {{#include tutorial/kinds-of-failure/src/overflow_quicksort.rs:code}}
+```
+
+```
+cargo kani --harness midpoint_overflow
 ```
 
 Kani immediately spots the bug in the above code.
@@ -198,24 +219,34 @@ return low + (high - low) / 2;
 ```
 
 But if you naively try this (try it!), you'll find a new underflow error: `high - low` might result in a negative number, but has type `u32`.
-Hence, the need to add an assumption that would make that impossible.
-(Adding an assumption, though, means there's a new way to "use it wrong." Perhaps we'd like to avoid that!)
+Hence, the need to add the assumption we suggested above, to make that impossible.
+(Adding an assumption, though, means there's a new way to "use it wrong." Perhaps we'd like to avoid that! Can you avoid the assumption?)
 
 After that, you might wonder how to "prove your new implementation correct."
 After all, what does "correct" even mean?
 Often we're using a good approximation of correct, such as the equivalence of two implementations (often one much "simpler" than the other somehow).
-Here's one possible assertion to make that obvious:
+Here's one possible assertion we could write in the proof harness:
 
 ```rust
 assert!(result as u64 == (a as u64 + b as u64) / 2);
 ```
 
-Since this implementation is just the original one, but cast to a wider unsigned integer type, it should have the same result but without overflowing.
-When Kani tells us both of these methods yield the same exact result, that gives us additional confidence that we haven't overlooked something.
+You might have even come up with this approach to avoiding the overflow issue in the first place!
+Having two different implementations, using different approaches, but proven to yield the same results, gives us greater confidence that we compute the correct result.
 
 </details>
 
 ## Failures that Kani cannot spot
 
-Check out [Limitations](./limitations.md) for information on the checks that
-Kani doesn't perform.
+Check out [Limitations](./limitations.md) for information on the checks that Kani does not perform.
+Notably, Kani is not prioritizing all Rust-specific notions of undefined behavior.
+
+## Summary
+
+In this section:
+
+1. We saw Kani spot out-of-bounds accesses.
+2. We saw Kani spot actually-unsafe dereferencing of a raw pointer to invalid memory.
+3. We got more experience reading the traces that Kani generates, to debug a failing proof harness.
+3. We saw Kani spot a division by zero error and an overflowing addition.
+5. As an exercise, we tried proving an assertion (finding the midpoint) that was not completely trivial.

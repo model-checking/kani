@@ -4,7 +4,6 @@ use crate::codegen_cprover_gotoc::utils::slice_fat_ptr;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::unwrap_or_return_codegen_unimplemented;
 use cbmc::goto_program::{DatatypeComponent, Expr, Location, Stmt, Symbol, Type};
-use cbmc::NO_PRETTY_NAME;
 use rustc_ast::ast::Mutability;
 use rustc_middle::mir::interpret::{
     read_target_uint, AllocId, Allocation, ConstValue, GlobalAlloc, Scalar,
@@ -317,10 +316,11 @@ impl<'tcx> GotocCtx<'tcx> {
 
     fn codegen_direct_literal(&mut self, ty: Ty<'tcx>, init: Expr) -> Expr {
         let func_name = format!("gen-{}:direct", self.ty_mangled_name(ty));
+        let pretty_name = format!("init_direct::<{}>", self.ty_pretty_name(ty));
         let cgt = self.codegen_ty(ty);
         self.ensure(&func_name, |tcx, _| {
             let target_ty = init.typ().clone(); // N
-            let param = tcx.gen_function_local_variable(1, &func_name, target_ty);
+            let param = tcx.gen_function_parameter(1, &func_name, target_ty);
             let var = tcx.gen_function_local_variable(2, &func_name, cgt.clone()).to_expr();
             let body = vec![
                 Stmt::decl(var.clone(), None, Location::none()),
@@ -333,7 +333,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 &func_name,
                 Type::code(vec![param.to_function_parameter()], cgt),
                 Some(Stmt::block(body, Location::none())),
-                NO_PRETTY_NAME,
+                pretty_name,
                 Location::none(),
             )
         });
@@ -349,7 +349,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> Expr {
         let instance =
             Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), d, substs).unwrap().unwrap();
-        self.codegen_func_expr(instance, span)
+        self.codegen_fn_item(instance, span)
     }
 
     fn codegen_alloc_pointer(
@@ -500,28 +500,26 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Codegen alloc as a static global variable with initial value
     fn codegen_alloc_in_memory(&mut self, alloc: &'tcx Allocation, name: String) {
         debug!("codegen_alloc_in_memory name: {}", name);
+        let struct_name = &format!("{}::struct", name);
 
         // The declaration of a static variable may have one type and the constant initializer for
         // a static variable may have a different type. This is because Rust uses bit patterns for
         // initializers. For example, for a boolean static variable, the variable will have type
         // CBool and the initializer will be a single byte (a one-character array) representing the
         // bit pattern for the boolean value.
-        let alloc_typ_ref =
-            self.ensure_struct(&format!("{}::struct", name), NO_PRETTY_NAME, |ctx, _| {
-                ctx.codegen_allocation_data(alloc)
-                    .iter()
-                    .enumerate()
-                    .map(|(i, d)| match d {
-                        AllocData::Bytes(bytes) => DatatypeComponent::field(
-                            &i.to_string(),
-                            Type::unsigned_int(8).array_of(bytes.len()),
-                        ),
-                        AllocData::Expr(e) => {
-                            DatatypeComponent::field(&i.to_string(), e.typ().clone())
-                        }
-                    })
-                    .collect()
-            });
+        let alloc_typ_ref = self.ensure_struct(&struct_name, &struct_name, |ctx, _| {
+            ctx.codegen_allocation_data(alloc)
+                .iter()
+                .enumerate()
+                .map(|(i, d)| match d {
+                    AllocData::Bytes(bytes) => DatatypeComponent::field(
+                        &i.to_string(),
+                        Type::unsigned_int(8).array_of(bytes.len()),
+                    ),
+                    AllocData::Expr(e) => DatatypeComponent::field(&i.to_string(), e.typ().clone()),
+                })
+                .collect()
+        });
 
         // The global static variable may not be in the symbol table if we are dealing
         // with a literal that can be statically allocated.
@@ -606,9 +604,10 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_niche_literal(&mut self, ty: Ty<'tcx>, offset: usize, init: Expr) -> Expr {
         let cgt = self.codegen_ty(ty);
         let fname = self.codegen_niche_init_name(ty);
+        let pretty_name = format!("init_niche<{}>", self.ty_pretty_name(ty));
         self.ensure(&fname, |tcx, _| {
             let target_ty = init.typ().clone(); // N
-            let param = tcx.gen_function_local_variable(1, &fname, target_ty.clone());
+            let param = tcx.gen_function_parameter(1, &fname, target_ty.clone());
             let var = tcx.gen_function_local_variable(2, &fname, cgt.clone()).to_expr();
             let body = vec![
                 Stmt::decl(var.clone(), None, Location::none()),
@@ -620,27 +619,67 @@ impl<'tcx> GotocCtx<'tcx> {
                 &fname,
                 Type::code(vec![param.to_function_parameter()], cgt),
                 Some(Stmt::block(body, Location::none())),
-                NO_PRETTY_NAME,
+                pretty_name,
                 Location::none(),
             )
         });
         self.find_function(&fname).unwrap().call(vec![init])
     }
 
-    pub fn codegen_func_expr(&mut self, instance: Instance<'tcx>, span: Option<&Span>) -> Expr {
+    /// Ensure that the given instance is in the symbol table, returning the symbol.
+    ///
+    /// FIXME: The function should not have to return the type of the function symbol as well
+    /// because the symbol should have the type. The problem is that the type in the symbol table
+    /// sometimes subtly differs from the type that codegen_function_sig returns.
+    /// This is tracked in <https://github.com/model-checking/kani/issues/1350>.
+    pub fn codegen_func_symbol(&mut self, instance: Instance<'tcx>) -> (&Symbol, Type) {
         let func = self.symbol_name(instance);
         let funct = self.codegen_function_sig(self.fn_sig_of_instance(instance).unwrap());
         // make sure the functions imported from other modules are in the symbol table
-        self.ensure(&func, |ctx, _| {
+        let sym = self.ensure(&func, |ctx, _| {
             Symbol::function(
                 &func,
                 funct.clone(),
                 None,
-                Some(ctx.readable_instance_name(instance)),
+                ctx.readable_instance_name(instance),
                 Location::none(),
             )
             .with_is_extern(true)
         });
-        Expr::symbol_expression(func, funct).with_location(self.codegen_span_option(span.cloned()))
+        (sym, funct)
+    }
+
+    /// For a given function instance, generates an expression for the function symbol of type `Code`.
+    ///
+    /// Note: use `codegen_func_expr_zst` in the general case because GotoC does not allow functions to be used in all contexts
+    /// (e.g. struct fields).
+    ///
+    /// For details, see <https://github.com/model-checking/kani/pull/1338>
+    pub fn codegen_func_expr(&mut self, instance: Instance<'tcx>, span: Option<&Span>) -> Expr {
+        let (func_symbol, func_typ) = self.codegen_func_symbol(instance);
+        Expr::symbol_expression(func_symbol.name, func_typ)
+            .with_location(self.codegen_span_option(span.cloned()))
+    }
+
+    /// For a given function instance, generates a zero-sized dummy symbol of type `Struct`.
+    ///
+    /// This is often necessary because GotoC does not allow functions to be used in all contexts (e.g. struct fields).
+    /// For details, see <https://github.com/model-checking/kani/pull/1338>
+    ///
+    /// Note: use `codegen_func_expr` instead if you want to call the function immediately.
+    fn codegen_fn_item(&mut self, instance: Instance<'tcx>, span: Option<&Span>) -> Expr {
+        let (func_symbol, _) = self.codegen_func_symbol(instance);
+        let func = func_symbol.name;
+        let fn_struct_ty = self.codegen_fndef_type(instance);
+        // This zero-sized object that a function name refers to in Rust is globally unique, so we create such a global object.
+        let fn_singleton_name = format!("{func}::FnDefSingleton");
+        let fn_singleton = self.ensure_global_var(
+            &fn_singleton_name,
+            false,
+            fn_struct_ty.clone(),
+            Location::none(),
+            |_, _| None, // zero-sized, so no initialization necessary
+        );
+        fn_singleton.with_location(self.codegen_span_option(span.cloned()))
     }
 }

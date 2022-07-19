@@ -3,8 +3,6 @@
 
 // ANCHOR: code
 fn estimate_size(x: u32) -> u32 {
-    assert!(x < 4096);
-
     if x < 256 {
         if x < 128 {
             return 1;
@@ -13,7 +11,7 @@ fn estimate_size(x: u32) -> u32 {
         }
     } else if x < 1024 {
         if x > 1022 {
-            return 4;
+            panic!("Oh no, a failing corner case!");
         } else {
             return 5;
         }
@@ -41,7 +39,7 @@ mod tests {
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(10000))]
         #[test]
-        fn doesnt_crash(x in 0..4095u32) {
+        fn doesnt_crash(x: u32) {
             estimate_size(x);
         }
     }
@@ -51,17 +49,8 @@ mod tests {
 // ANCHOR: kani
 #[cfg(kani)]
 #[kani::proof]
-fn verify_success() {
+fn check_estimate_size() {
     let x: u32 = kani::any();
-    kani::assume(x < 4096);
-    let y = estimate_size(x);
-    assert!(y < 10);
+    estimate_size(x);
 }
 // ANCHOR_END: kani
-
-#[cfg(kani)]
-#[kani::proof]
-fn main() {
-    let x: u32 = kani::any();
-    let y = estimate_size(x);
-}

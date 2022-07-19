@@ -11,6 +11,7 @@ use kani_metadata::HarnessMetadata;
 use rustc_ast::ast;
 use rustc_ast::{Attribute, LitKind};
 use rustc_middle::mir::{HasLocalDecls, Local};
+use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{self, Instance};
 use std::collections::BTreeMap;
 use std::convert::TryInto;
@@ -20,7 +21,11 @@ use tracing::{debug, info_span};
 /// Utility to skip functions that can't currently be successfully codgenned.
 impl<'tcx> GotocCtx<'tcx> {
     fn should_skip_current_fn(&self) -> bool {
-        match self.current_fn().readable_name() {
+        let current_fn_name =
+            with_no_trimmed_paths!(self.tcx.def_path_str(self.current_fn().instance().def_id()));
+        // We cannot use self.current_fn().readable_name() because it gives the monomorphized type, which is more difficult to match on.
+        // Ideally we should not rely on the pretty-printed name here. Tracked here: https://github.com/model-checking/kani/issues/1374
+        match current_fn_name.as_str() {
             // https://github.com/model-checking/kani/issues/202
             "fmt::ArgumentV1::<'a>::as_usize" => true,
             // https://github.com/model-checking/kani/issues/282
@@ -36,10 +41,24 @@ impl<'tcx> GotocCtx<'tcx> {
 
 /// Codegen MIR functions into gotoc
 impl<'tcx> GotocCtx<'tcx> {
+    /// Get the number of parameters that the current function expects.
+    fn get_params_size(&self) -> usize {
+        let sig = self.current_fn().sig();
+        let sig =
+            self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig.unwrap());
+        // we don't call [codegen_function_sig] because we want to get a bit more metainformation.
+        sig.inputs().len()
+    }
+
+    /// Declare variables according to their index.
+    /// - Index 0 represents the return value.
+    /// - Indices [1, N] represent the function parameters where N is the number of parameters.
+    /// - Indices that are greater than N represent local variables.
     fn codegen_declare_variables(&mut self) {
         let mir = self.current_fn().mir();
         let ldecls = mir.local_decls();
-        ldecls.indices().for_each(|lc| {
+        let num_args = self.get_params_size();
+        ldecls.indices().enumerate().for_each(|(idx, lc)| {
             if Some(lc) == mir.spread_arg {
                 // We have already added this local in the function prelude, so
                 // skip adding it again here.
@@ -51,9 +70,11 @@ impl<'tcx> GotocCtx<'tcx> {
             let t = self.monomorphize(ldata.ty);
             let t = self.codegen_ty(t);
             let loc = self.codegen_span(&ldata.source_info.span);
+            // Indices [1, N] represent the function parameters where N is the number of parameters.
             let sym =
                 Symbol::variable(name, base_name, t, self.codegen_span(&ldata.source_info.span))
-                    .with_is_hidden(!ldata.is_user_variable());
+                    .with_is_hidden(!ldata.is_user_variable())
+                    .with_is_parameter(idx > 0 && idx <= num_args);
             let sym_e = sym.to_expr();
             self.symbol_table.insert(sym);
 
@@ -76,6 +97,8 @@ impl<'tcx> GotocCtx<'tcx> {
             tracing::info!("Double codegen of {:?}", old_sym);
         } else if self.should_skip_current_fn() {
             debug!("Skipping function {}", self.current_fn().readable_name());
+            self.codegen_function_prelude();
+            self.codegen_declare_variables();
             let body = self.codegen_fatal_error(
                 PropertyClass::UnsupportedConstruct,
                 &GotocCtx::unsupported_msg(
@@ -199,7 +222,8 @@ impl<'tcx> GotocCtx<'tcx> {
                 let lc = Local::from_usize(arg_i + starting_idx);
                 let (name, base_name) = self.codegen_spread_arg_name(&lc);
                 let sym = Symbol::variable(name, base_name, self.codegen_ty(arg_t), loc)
-                    .with_is_hidden(false);
+                    .with_is_hidden(false)
+                    .with_is_parameter(true);
                 // The spread arguments are additional function paramaters that are patched in
                 // They are to the function signature added in the `fn_typ` function.
                 // But they were never added to the symbol table, which we currently do here.
@@ -233,7 +257,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 fname,
                 ctx.fn_typ(),
                 None,
-                Some(ctx.current_fn().readable_name()),
+                ctx.current_fn().readable_name(),
                 ctx.codegen_span(&mir.span),
             )
         });

@@ -431,7 +431,9 @@ impl<'tcx> GotocCtx<'tcx> {
                     | InstanceDef::ReifyShim(..)
                     | InstanceDef::ClosureOnceShim { .. }
                     | InstanceDef::CloneShim(..) => {
-                        let func_exp = self.codegen_operand(func);
+                        // We need to handle FnDef items in a special way because `codegen_operand` compiles them to dummy structs.
+                        // (cf. the function documentation)
+                        let func_exp = self.codegen_func_expr(instance, None);
                         vec![
                             self.codegen_expr_to_place(destination, func_exp.call(fargs))
                                 .with_location(loc),
@@ -517,11 +519,11 @@ impl<'tcx> GotocCtx<'tcx> {
             match fn_ptr.typ() {
                 Type::Pointer { typ: box Type::Code { parameters, .. } } => {
                     let param_typ = parameters.first().unwrap().typ();
-                    let tmp = self.gen_temp_variable(param_typ.clone(), loc).to_expr();
+                    let (tmp, decl) = self.decl_temp_variable(param_typ.clone(), None, loc);
                     debug!(?tmp,
                         orig=?data_ptr.typ(),
                         "codegen_virtual_funcall");
-                    ret_stmts.push(Stmt::decl(tmp.clone(), None, loc));
+                    ret_stmts.push(decl);
                     ret_stmts.push(Stmt::assign(
                         self.extract_ptr(tmp.clone(), self_ty),
                         data_ptr,

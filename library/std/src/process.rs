@@ -8,10 +8,10 @@ pub use std::process::*;
 
 #[inline(always)]
 pub fn abort() -> ! {
-    panic!("Function abort() was invoked")
+    kani::panic("Function abort() was invoked")
 }
 
 #[inline(always)]
 pub fn exit(_code: i32) -> ! {
-    panic!("Function exit() was invoked")
+    kani::panic("Function exit() was invoked")
 }
