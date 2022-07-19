@@ -50,6 +50,10 @@ impl<'tcx> GotocCtx<'tcx> {
         sig.inputs().len()
     }
 
+    /// Declare variables according to their index.
+    /// - Index 0 represents the return value.
+    /// - Indices [1, N] represent the function parameters where N is the number of parameters.
+    /// - Indices that are greater than N represent local variables.
     fn codegen_declare_variables(&mut self) {
         let mir = self.current_fn().mir();
         let ldecls = mir.local_decls();
