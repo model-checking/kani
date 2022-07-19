@@ -777,7 +777,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     offset = fld_offset + layout.size.bits();
                 }
 
-                // If we don't meet our expected alignment, pad until we do
+                // Add padding to ensure that the size of the struct is a multiple of the alignment
                 let align = layout.align().abi.bits();
                 let overhang = offset % align;
                 if overhang != 0 {
@@ -859,11 +859,11 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// ```ignore
     /// enum GeneratorEnum {
-    ///   Unresumed,                        // initial state of the generator
-    ///   Returned,                         // generator has returned
-    ///   Panicked,                         // generator has panicked
-    ///   Suspend0 { b: &bool, a: bool },   // state after suspending (`yield`ing) for the first time
-    ///   Suspend1,                         // state after suspending (`yield`ing) for the second time
+    ///     Unresumed,                        // initial state of the generator
+    ///     Returned,                         // generator has returned
+    ///     Panicked,                         // generator has panicked
+    ///     Suspend0 { b: &bool, a: bool },   // state after suspending (`yield`ing) for the first time
+    ///     Suspend1,                         // state after suspending (`yield`ing) for the second time
     /// }
     /// ```
     ///
@@ -875,14 +875,14 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// ```ignore
     /// struct GeneratorEnum {
-    ///   int case; // discriminant
-    ///   union GeneratorEnum-union cases; // variant
+    ///     int case; // discriminant
+    ///     union GeneratorEnum-union cases; // variant
     /// }
     ///
     /// union GeneratorEnum-union {
-    ///   struct Unresumed variant0;
-    ///   struct Returned variant1;
-    ///   // ...
+    ///     struct Unresumed variant0;
+    ///     struct Returned variant1;
+    ///     // ...
     /// }
     /// ```
     ///
@@ -890,34 +890,32 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// ```ignore
     /// union GeneratorEnum {
-    ///   struct Direct direct;
-    ///   struct Unresumed variant0;
-    ///   struct Returned variant1;
-    ///   // ...
+    ///     struct DirectFields direct_fields;
+    ///     struct Unresumed generator_variant_Unresumed;
+    ///     struct Returned generator_variant_Returned;
+    ///     // ...
     /// }
     ///
-    /// struct Direct {
-    ///   padding; // if necessary
-    ///   int case;
-    ///   padding; //if necessary
+    /// struct DirectFields {
+    ///     // padding (for bool *b in Suspend0 below)
+    ///     char case;
+    ///     // padding (for bool a in Suspend0 below)
     /// }
     ///
     /// struct Unresumed {
-    ///   padding; // if necessary
-    ///   int case;
-    ///   padding; // if necessary
+    ///     // padding (this variant has no fields)
     /// }
     ///
     /// // ...
     ///
     /// struct Suspend0 {
-    ///   bool *b;
-    ///   int case;
-    ///   bool a;
+    ///     bool *generator_field_0; // variable b in the generator code above
+    ///     // padding (for char case in DirectFields)
+    ///     bool generator_field_1; // variable a in the generator code above
     /// }
     /// ```
     ///
-    /// Of course, if the generator has any other top-level/direct fields, they'd be included in the Direct struct as well.
+    /// Of course, if the generator has any other top-level/direct fields, they'd be included in the `DirectFields` struct as well.
     fn codegen_ty_generator(&mut self, ty: Ty<'tcx>) -> Type {
         let generator_name = self.ty_mangled_name(ty);
         let pretty_name = self.ty_pretty_name(ty);
@@ -996,8 +994,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 });
                 offset += field_size;
             }
-            // TODO: is this necessary? I don't see how padding at the end matters. But codegen_struct_fields does it too.
-            // If we don't meet our expected alignment, pad until we do
+            // Add padding to ensure that the size of the struct is a multiple of the alignment
             let align = type_and_layout.layout.align().abi.bits();
             let overhang = offset.bits() % align;
             if overhang != 0 {
