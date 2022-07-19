@@ -287,6 +287,11 @@ impl Symbol {
         self
     }
 
+    pub fn with_is_parameter(mut self, v: bool) -> Symbol {
+        self.is_parameter = v;
+        self
+    }
+
     pub fn with_is_static_lifetime(mut self, v: bool) -> Symbol {
         self.is_static_lifetime = v;
         self
