@@ -269,12 +269,10 @@ impl<'test> TestCx<'test> {
     /// If the test file contains expected failures in some locations, ensure
     /// that verification does not succeed in those locations.
     fn verify_expect_fail(str: &str) -> Vec<usize> {
-        let re = Regex::new(r"line [0-9]+ EXPECTED FAIL: SUCCESS").unwrap();
+        let re = Regex::new(r"line ([0-9]+) EXPECTED FAIL: SUCCESS").unwrap();
         let mut lines = vec![];
-        for m in re.find_iter(str) {
-            let mut splits = m.as_str().split_ascii_whitespace();
-            let num_str = splits.nth(1).unwrap();
-            let num = num_str.parse().unwrap();
+        for m in re.captures_iter(str) {
+            let num = m.get(1).unwrap().as_str().parse().unwrap();
             lines.push(num);
         }
         lines
