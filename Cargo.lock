@@ -555,6 +555,9 @@ dependencies = [
 [[package]]
 name = "proptest"
 version = "0.1.0"
+dependencies = [
+ "kani",
+]
 
 [[package]]
 name = "pulldown-cmark"

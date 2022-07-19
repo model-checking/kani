@@ -79,13 +79,13 @@ pub mod std_facade;
 #[macro_use]
 pub mod sugar;
 
-// pub mod arbitrary;
+pub mod arbitrary;
 // pub mod array;
 // pub mod bits;
 // pub mod bool;
 // pub mod char;
 // pub mod collection;
-// pub mod num;
+pub mod num;
 pub mod strategy;
 pub mod test_runner;
 // pub mod tuple;

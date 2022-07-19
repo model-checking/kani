@@ -13,7 +13,7 @@
 // mod filter_map;
 // mod flatten;
 // mod fuse;
-// mod just;
+mod just;
 // mod lazy;
 // mod map;
 // mod recursive;
@@ -25,7 +25,7 @@ mod traits;
 // pub use self::filter_map::*;
 // pub use self::flatten::*;
 // pub use self::fuse::*;
-// pub use self::just::*;
+pub use self::just::*;
 // pub use self::lazy::*;
 // pub use self::lazy::*;
 // pub use self::map::*;
