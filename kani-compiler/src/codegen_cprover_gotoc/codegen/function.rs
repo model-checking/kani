@@ -81,6 +81,8 @@ impl<'tcx> GotocCtx<'tcx> {
             tracing::info!("Double codegen of {:?}", old_sym);
         } else if self.should_skip_current_fn() {
             debug!("Skipping function {}", self.current_fn().readable_name());
+            self.codegen_function_prelude();
+            self.codegen_declare_variables();
             let body = self.codegen_fatal_error(
                 PropertyClass::UnsupportedConstruct,
                 &GotocCtx::unsupported_msg(
