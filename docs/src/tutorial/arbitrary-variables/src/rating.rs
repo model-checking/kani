@@ -6,7 +6,7 @@
 enum Rating {
     One,
     Two,
-    Three
+    Three,
 }
 
 impl Rating {
