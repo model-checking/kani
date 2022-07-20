@@ -1,26 +1,23 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// Check that we can codegen code that has a Generator type present,
-// when the path is not dynamically used.
+// This tests that generators work, even with a non-() resume type.
+
 #![feature(generators, generator_trait)]
 
 use std::ops::{Generator, GeneratorState};
-
-// Separate function to force translation
-fn maybe_call(call: bool) {
-    if call {
-        let mut _generator = || {
-            yield 1;
-            return 2;
-        };
-    } else {
-        assert!(1 + 1 == 2);
-    }
-}
+use std::pin::Pin;
 
 #[kani::proof]
-#[kani::unwind(2)]
 fn main() {
-    maybe_call(false);
+    let mut add_one = |mut resume: u8| {
+        loop {
+            resume = yield resume.saturating_add(1);
+        }
+    };
+    for _ in 0..2 {
+        let val = kani::any();
+        let res = Pin::new(&mut add_one).resume(val);
+        assert_eq!(res, GeneratorState::Yielded(val.saturating_add(1)));
+    }
 }
