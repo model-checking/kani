@@ -4,7 +4,7 @@
 // See GitHub history for details.
 
 // Copyright rustc Contributors
-// Adapted from rustc: src/test/ui/generator/size-moved-locals.rs
+// Adapted from rustc: https://github.com/rust-lang/rust/tree/5f98537eb7b5f42c246a52c550813c3cff336069/src/test/ui/generator/size-moved-locals.rs
 
 // run-pass
 // Test that we don't duplicate storage for a variable that is moved to another
@@ -80,7 +80,7 @@ fn overlap_x_and_y() -> impl Generator<Yield = (), Return = ()> {
 #[kani::proof]
 fn main() {
     assert_eq!(1025, std::mem::size_of_val(&move_before_yield()));
-    // The following assertion fails for some reason.
+    // The following assertion fails for some reason (tracking issue: https://github.com/model-checking/kani/issues/1395).
     // But it also fails for WASM (https://github.com/rust-lang/rust/issues/62807),
     // so it is probably not a big problem:
     // assert_eq!(1026, std::mem::size_of_val(&move_before_yield_with_noop()));

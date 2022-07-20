@@ -255,7 +255,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
                 sig
             }
-            ty::Generator(_def_id, substs, _movability) => self.generator_sig(fntyp, substs),
+            ty::Generator(_, substs, _) => self.generator_sig(fntyp, substs),
             _ => unreachable!("Can't get function signature of type: {:?}", fntyp),
         })
     }
@@ -855,7 +855,8 @@ impl<'tcx> GotocCtx<'tcx> {
     /// };
     /// ```
     ///
-    /// Rustc compiles this to something similar to the following enum (but there are differences, see below!):
+    /// Rustc compiles this to something similar to the following enum (but there are differences, see below!),
+    /// as described at the top of https://github.com/rust-lang/rust/blob/master/compiler/rustc_mir_transform/src/generator.rs:
     ///
     /// ```ignore
     /// enum GeneratorEnum {
@@ -919,7 +920,8 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_ty_generator(&mut self, ty: Ty<'tcx>) -> Type {
         let generator_name = self.ty_mangled_name(ty);
         let pretty_name = self.ty_pretty_name(ty);
-        let generator_enum = self.ensure_union(self.ty_mangled_name(ty), pretty_name, |ctx, _| {
+        debug!(?pretty_name, "codeged_ty_generator");
+        self.ensure_union(self.ty_mangled_name(ty), pretty_name, |ctx, _| {
             let type_and_layout = ctx.layout_of(ty);
             let (discriminant_field, variants) = match &type_and_layout.variants {
                 Variants::Multiple { tag_encoding, tag_field, variants, .. } => {
@@ -930,9 +932,8 @@ impl<'tcx> GotocCtx<'tcx> {
                     unreachable!("generators cannot have a single variant")
                 }
             };
-            let mut fields = vec![];
             // generate a struct for the direct fields of the layout (fields that don't occur in the variants)
-            fields.push(DatatypeComponent::Field {
+            let direct_fields = DatatypeComponent::Field {
                 name: "direct_fields".into(),
                 typ: ctx.codegen_generator_variant_struct(
                     generator_name,
@@ -941,7 +942,8 @@ impl<'tcx> GotocCtx<'tcx> {
                     "DirectFields".into(),
                     Some(*discriminant_field),
                 ),
-            });
+            };
+            let mut fields = vec![direct_fields];
             for var_idx in variants.indices() {
                 let variant_name = GeneratorSubsts::variant_name(var_idx).into();
                 fields.push(DatatypeComponent::Field {
@@ -956,10 +958,12 @@ impl<'tcx> GotocCtx<'tcx> {
                 });
             }
             fields
-        });
-        generator_enum
+        })
     }
 
+    /// Generates a struct for a variant of the generator.
+    ///
+    /// The parameter `discriminant_field` may contain the index of a field that is the discriminant.
     fn codegen_generator_variant_struct(
         &mut self,
         generator_name: InternedString,
@@ -970,11 +974,12 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> Type {
         let struct_name = format!("{generator_name}::{variant_name}");
         let pretty_struct_name = format!("{pretty_generator_name}::{variant_name}");
-        debug!("codegen generator variant struct {}", pretty_struct_name);
+        debug!(?pretty_struct_name, "codeged_generator_variant_struct");
         self.ensure_struct(struct_name, pretty_struct_name, |ctx, _| {
             let mut offset = Size::ZERO;
             let mut fields = vec![];
             for idx in type_and_layout.fields.index_by_increasing_offset() {
+                // The discriminant field needs to have a special name to work with the rest of the code:
                 let field_name = if Some(idx) == discriminant_field {
                     "case".into()
                 } else {

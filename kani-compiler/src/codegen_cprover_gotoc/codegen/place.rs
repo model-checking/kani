@@ -521,7 +521,10 @@ impl<'tcx> GotocCtx<'tcx> {
                 };
                 let layout = self.layout_of(t);
                 let expr = match &layout.variants {
-                    Variants::Single { .. } => before.goto_expr,
+                    Variants::Single { .. } => {
+                        assert!(!t.is_generator());
+                        before.goto_expr
+                    }
                     Variants::Multiple { tag_encoding, .. } => match tag_encoding {
                         TagEncoding::Direct => {
                             let cases = if t.is_generator() {
@@ -532,6 +535,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             cases.member(case_name, &self.symbol_table)
                         }
                         TagEncoding::Niche { .. } => {
+                            assert!(!t.is_generator());
                             before.goto_expr.member(case_name, &self.symbol_table)
                         }
                     },

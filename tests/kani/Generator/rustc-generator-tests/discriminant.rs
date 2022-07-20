@@ -4,7 +4,10 @@
 // See GitHub history for details.
 
 // Copyright rustc Contributors
-// Adapted from rustc: src/test/ui/generator/discriminant.rs
+// Adapted from rustc: https://github.com/rust-lang/rust/tree/5f98537eb7b5f42c246a52c550813c3cff336069/src/test/ui/generator/discriminant.rs
+
+// This test creates some large generators with around 256 variants, some of them need a u16 discriminant instead of u8.
+// This test ensures that we use the right discriminant type.
 
 //! Tests that generator discriminant sizes and ranges are chosen optimally and that they are
 //! reflected in the output of `mem::discriminant`.

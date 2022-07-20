@@ -511,7 +511,7 @@ impl<'tcx> GotocCtx<'tcx> {
             Variants::Multiple { tag, tag_encoding, .. } => match tag_encoding {
                 TagEncoding::Direct => {
                     let e = if ty.is_generator() {
-                        e.member("direct_fields", &&self.symbol_table)
+                        e.member("direct_fields", &self.symbol_table)
                     } else {
                         e
                     };

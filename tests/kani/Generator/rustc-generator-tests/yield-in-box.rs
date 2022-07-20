@@ -4,7 +4,7 @@
 // See GitHub history for details.
 
 // Copyright rustc Contributors
-// Adapted from rustc: src/test/ui/generator/yield-in-box.rs
+// Adapted from rustc: https://github.com/rust-lang/rust/tree/5f98537eb7b5f42c246a52c550813c3cff336069/src/test/ui/generator/yield-in-box.rs
 
 // run-pass
 // Test that box-statements with yields in them work.

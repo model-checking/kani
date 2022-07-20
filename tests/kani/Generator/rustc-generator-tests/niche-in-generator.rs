@@ -4,7 +4,7 @@
 // See GitHub history for details.
 
 // Copyright rustc Contributors
-// Adapted from rustc: src/test/ui/generator/niche-in-generator.rs
+// Adapted from rustc: https://github.com/rust-lang/rust/tree/5f98537eb7b5f42c246a52c550813c3cff336069/src/test/ui/generator/niche-in-generator.rs
 
 // Test that niche finding works with captured generator upvars.
 

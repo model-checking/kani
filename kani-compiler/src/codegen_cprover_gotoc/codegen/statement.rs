@@ -359,8 +359,7 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_funcall_args(&mut self, args: &[Operand<'tcx>]) -> Vec<Expr> {
         args.iter()
             .map(|o| {
-                let ot = self.operand_ty(o);
-                if ot.is_bool() {
+                if self.operand_ty(o).is_bool() {
                     self.codegen_operand(o).cast_to(Type::c_bool())
                 } else {
                     self.codegen_operand(o)
