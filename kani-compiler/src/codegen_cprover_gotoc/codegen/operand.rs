@@ -25,7 +25,7 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_operand(&mut self, o: &Operand<'tcx>) -> Expr {
         match o {
             Operand::Copy(d) | Operand::Move(d) =>
-            // TODO: move shouldn't be the same as copy
+            // TODO: move is an opportunity to poison/nondet the original memory.
             {
                 let projection =
                     unwrap_or_return_codegen_unimplemented!(self, self.codegen_place(d));
