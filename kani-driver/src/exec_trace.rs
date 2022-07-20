@@ -1,7 +1,6 @@
 // Copyright Kani Contributors
-// SPDX-License-Identifier: Apache-2.0 OR MIT
+// SPDX-License-Identifier: Apache-2.0 OR MI&T
 
-use std::fs;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
@@ -14,14 +13,12 @@ use serde_json::Value;
 
 impl KaniSession {
     /// Extract deterministic values from a failing harness.
-    pub fn get_det_vals(&self, file: &Path, harness_metadata: &HarnessMetadata) -> Result<()> {
+    pub fn get_det_vals(&self, file: &Path, harness_metadata: &HarnessMetadata) -> Result<Vec<u8>> {
         let results_filename = alter_extension(file, "results.json");
-        let det_vals_filename = alter_extension(file, "det_vals.txt");
 
         {
             let mut temps = self.temporaries.borrow_mut();
             temps.push(results_filename.clone());
-            //temps.push(det_vals_filename.clone());
         }
 
         self.cbmc_variant(file, &["--trace", "--json-ui"], &results_filename, harness_metadata)?;
@@ -33,13 +30,8 @@ impl KaniSession {
 
         let cbmc_out = get_cbmc_out(results_filename);
         let det_vals = handle_cbmc_out(&cbmc_out);
-        let joined_det_vals = det_vals.join("\n");
-        if self.args.debug {
-            println!("Det vals:\n{}", joined_det_vals);
-        }
-        fs::write(det_vals_filename, joined_det_vals).unwrap();
 
-        Ok(())
+        Ok(det_vals)
     }
 }
 
@@ -47,11 +39,11 @@ fn get_cbmc_out(results_filename: PathBuf) -> Value {
     let results_file = File::open(results_filename).unwrap();
     let reader = BufReader::new(results_file);
     let cbmc_out: Value = serde_json::from_reader(reader).unwrap();
-    return cbmc_out;
+    cbmc_out
 }
 
-fn handle_cbmc_out(cbmc_out: &Value) -> Vec<String> {
-    let mut det_vals: Vec<String> = Vec::new();
+fn handle_cbmc_out(cbmc_out: &Value) -> Vec<u8> {
+    let mut det_vals: Vec<u8> = Vec::new();
     for general_msg in cbmc_out.as_array().unwrap() {
         let result_msg = &general_msg["result"];
         if !result_msg.is_null() {
@@ -61,11 +53,11 @@ fn handle_cbmc_out(cbmc_out: &Value) -> Vec<String> {
             }
         }
     }
-    return det_vals;
+    det_vals
 }
 
-fn handle_result(result_val: &Value) -> Vec<String> {
-    let mut det_vals: Vec<String> = Vec::new();
+fn handle_result(result_val: &Value) -> Vec<u8> {
+    let mut det_vals: Vec<u8> = Vec::new();
     let desc = result_val["description"].as_str().unwrap();
 
     if desc.contains("assertion failed") {
@@ -75,11 +67,11 @@ fn handle_result(result_val: &Value) -> Vec<String> {
         }
     }
 
-    return det_vals;
+    det_vals
 }
 
-fn handle_trace(trace_val: &Value) -> Vec<String> {
-    let mut det_vals: Vec<String> = Vec::new();
+fn handle_trace(trace_val: &Value) -> Vec<u8> {
+    let mut det_vals: Vec<u8> = Vec::new();
     let step_type = &trace_val["stepType"];
     if step_type != "assignment" {
         return det_vals;
@@ -101,8 +93,25 @@ fn handle_trace(trace_val: &Value) -> Vec<String> {
     for a_byte in byte_arr {
         let data = &a_byte["value"]["data"];
         let file_line = format!("{}", data);
-        det_vals.push(file_line);
+        let file_line_len = file_line.len();
+        let file_line_no_quotes = &file_line[1..file_line_len - 1];
+        let det_val_u8 = file_line_no_quotes.parse().unwrap();
+        det_vals.push(det_val_u8);
     }
 
-    return det_vals;
+    det_vals
+}
+
+pub fn format_unit_test(harness_name: &str, det_vals: &Vec<u8>) -> String {
+    format!(
+        "
+        #[test]
+        fn exec_trace_unit_test() {{
+            kani::DET_VALS.with(|det_vals| {{
+                *det_vals.borrow_mut() = vec!{:?};
+            }});
+            {}();
+        }}",
+        det_vals, harness_name
+    )
 }
