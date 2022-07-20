@@ -4,7 +4,7 @@
 
 set -eu
 
-# Source kani-dependencies to get the CBMC version
+# Source kani-dependencies to get CBMC_VERSION
 source kani-dependencies
 
 if [ -z "${CBMC_VERSION:-}" ]; then

@@ -6,7 +6,7 @@ set -eu
 
 # Install cbmc-viewer
 
-# Source kani-dependencies to get the CBMC viewer version
+# Source kani-dependencies to get CBMC_VIEWER_VERSION
 source kani-dependencies
 
 if [ -z "${CBMC_VIEWER_VERSION:-}" ]; then
