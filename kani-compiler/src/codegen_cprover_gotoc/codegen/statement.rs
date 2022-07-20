@@ -660,6 +660,7 @@ impl<'tcx> GotocCtx<'tcx> {
             StatementKind::SetDiscriminant { place, variant_index } => {
                 // this requires place points to an enum type.
                 let pt = self.place_ty(place);
+                self.check_generator_layout_assumptions(pt);
                 let layout = self.layout_of(pt);
                 match &layout.variants {
                     Variants::Single { .. } => Stmt::skip(location),
@@ -686,13 +687,7 @@ impl<'tcx> GotocCtx<'tcx> {
                                 self.codegen_place(place)
                             )
                             .goto_expr;
-                            let place_goto_expr = if pt.is_generator() {
-                                place_goto_expr.member("direct_fields", &self.symbol_table)
-                            } else {
-                                place_goto_expr
-                            };
-                            place_goto_expr
-                                .member("case", &self.symbol_table)
+                            self.codegen_discriminant_field(place_goto_expr, pt)
                                 .assign(discr, location)
                         }
                         TagEncoding::Niche { dataful_variant, niche_variants, niche_start } => {

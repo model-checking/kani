@@ -517,14 +517,14 @@ impl<'tcx> GotocCtx<'tcx> {
                     ty::Generator(..) => {
                         (self.generator_variant_name(idx), TypeOrVariant::GeneratorVariant(idx))
                     }
-                    _ => unreachable!("it's a bug to reach here! {:?}", &t.kind()),
+                    _ => unreachable!(
+                        "cannot downcast {:?} to a varian (only enums and generators can)",
+                        &t.kind()
+                    ),
                 };
                 let layout = self.layout_of(t);
                 let expr = match &layout.variants {
-                    Variants::Single { .. } => {
-                        assert!(!t.is_generator());
-                        before.goto_expr
-                    }
+                    Variants::Single { .. } => before.goto_expr,
                     Variants::Multiple { tag_encoding, .. } => match tag_encoding {
                         TagEncoding::Direct => {
                             let cases = if t.is_generator() {
@@ -535,7 +535,6 @@ impl<'tcx> GotocCtx<'tcx> {
                             cases.member(case_name, &self.symbol_table)
                         }
                         TagEncoding::Niche { .. } => {
-                            assert!(!t.is_generator());
                             before.goto_expr.member(case_name, &self.symbol_table)
                         }
                     },

@@ -324,8 +324,7 @@ impl<'tcx> GotocCtx<'tcx> {
             let var = tcx.gen_function_local_variable(2, &func_name, cgt.clone()).to_expr();
             let body = vec![
                 Stmt::decl(var.clone(), None, Location::none()),
-                var.clone()
-                    .member("case", &tcx.symbol_table)
+                tcx.codegen_discriminant_field(var.clone(), ty)
                     .assign(param.to_expr(), Location::none()),
                 var.ret(Location::none()),
             ];

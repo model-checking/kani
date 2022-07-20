@@ -740,6 +740,22 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
+    /// Adds padding to ensure that the size of the struct is a multiple of the alignment
+    fn codegen_alignment_padding(
+        &self,
+        size: Size,
+        layout: &Layout,
+        idx: usize,
+    ) -> Option<DatatypeComponent> {
+        let align = layout.align().abi.bits();
+        let overhang = size.bits() % align;
+        if overhang != 0 {
+            self.codegen_struct_padding(size.bits(), size.bits() + align - overhang, idx)
+        } else {
+            None
+        }
+    }
+
     /// generate a struct based on the layout
     /// the fields and types are determined by flds while their order is determined by layout.
     ///
@@ -776,21 +792,11 @@ impl<'tcx> GotocCtx<'tcx> {
                     // we compute the overall offset of the end of the current struct
                     offset = fld_offset + layout.size.bits();
                 }
-
-                // Add padding to ensure that the size of the struct is a multiple of the alignment
-                let align = layout.align().abi.bits();
-                let overhang = offset % align;
-                if overhang != 0 {
-                    final_fields.push(
-                        self.codegen_struct_padding(
-                            offset,
-                            offset + align - overhang,
-                            final_fields.len(),
-                        )
-                        .unwrap(),
-                    )
-                }
-
+                final_fields.extend(self.codegen_alignment_padding(
+                    Size::from_bits(offset),
+                    &layout,
+                    final_fields.len(),
+                ));
                 final_fields
             }
             // Primitives, such as NEVER, have no fields
@@ -922,6 +928,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let pretty_name = self.ty_pretty_name(ty);
         debug!(?pretty_name, "codeged_ty_generator");
         self.ensure_union(self.ty_mangled_name(ty), pretty_name, |ctx, _| {
+            ctx.check_generator_layout_assumptions(ty);
             let type_and_layout = ctx.layout_of(ty);
             let (discriminant_field, variants) = match &type_and_layout.variants {
                 Variants::Multiple { tag_encoding, tag_field, variants, .. } => {
@@ -961,9 +968,21 @@ impl<'tcx> GotocCtx<'tcx> {
         })
     }
 
+    pub fn check_generator_layout_assumptions(&self, ty: Ty<'tcx>) {
+        if ty.is_generator() {
+            // generators have more than one variant and use direct encoding
+            assert!(matches!(
+                &self.layout_of(ty).variants,
+                Variants::Multiple { tag_encoding: TagEncoding::Direct, .. }
+            ))
+        }
+    }
+
     /// Generates a struct for a variant of the generator.
     ///
-    /// The parameter `discriminant_field` may contain the index of a field that is the discriminant.
+    /// The field `discriminant_field` should be `Some(idx)` when generating the variant for the direct (top-[evel) fields of the generator.
+    /// Then the field with the index `idx` will be treated as the discriminant and will be given a special name to work with the rest of the code.
+    /// The field `discriminant_field` should be `None` when generating an actual variant of the generator because those don't contain the discriminant as a field.
     fn codegen_generator_variant_struct(
         &mut self,
         generator_name: InternedString,
@@ -979,7 +998,8 @@ impl<'tcx> GotocCtx<'tcx> {
             let mut offset = Size::ZERO;
             let mut fields = vec![];
             for idx in type_and_layout.fields.index_by_increasing_offset() {
-                // The discriminant field needs to have a special name to work with the rest of the code:
+                // The discriminant field needs to have a special name to work with the rest of the code.
+                // If discriminant_field is None, this variant does not have the discriminant as a field.
                 let field_name = if Some(idx) == discriminant_field {
                     "case".into()
                 } else {
@@ -999,19 +1019,11 @@ impl<'tcx> GotocCtx<'tcx> {
                 });
                 offset += field_size;
             }
-            // Add padding to ensure that the size of the struct is a multiple of the alignment
-            let align = type_and_layout.layout.align().abi.bits();
-            let overhang = offset.bits() % align;
-            if overhang != 0 {
-                fields.push(
-                    ctx.codegen_struct_padding(
-                        offset.bits(),
-                        offset.bits() + align - overhang,
-                        type_and_layout.fields.count(),
-                    )
-                    .unwrap(),
-                )
-            }
+            fields.extend(ctx.codegen_alignment_padding(
+                offset,
+                &type_and_layout.layout,
+                fields.len(),
+            ));
             fields
         })
     }
