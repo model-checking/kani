@@ -856,7 +856,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// ```
     ///
     /// Rustc compiles this to something similar to the following enum (but there are differences, see below!),
-    /// as described at the top of https://github.com/rust-lang/rust/blob/master/compiler/rustc_mir_transform/src/generator.rs:
+    /// as described at the top of <https://github.com/rust-lang/rust/blob/master/compiler/rustc_mir_transform/src/generator.rs>:
     ///
     /// ```ignore
     /// enum GeneratorEnum {
