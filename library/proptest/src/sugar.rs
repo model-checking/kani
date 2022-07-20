@@ -1000,7 +1000,8 @@ macro_rules! proptest_helper {
         // }
         // $crate::test_runner::TestRunner::run_kani(
         let $crate::proptest_helper!(@_EXT _PAT ($($arg)*)) =
-            strategy_to_kani($crate::proptest_helper!(@_EXT _STRAT ($($arg)*)));
+            kani::any();
+            // strategy_to_kani($crate::proptest_helper!(@_EXT _STRAT ($($arg)*)));
 
         $body
     }};
