@@ -153,7 +153,14 @@ macro_rules! proptest {
      $(
         $(#[$meta:meta])*
        fn $test_name:ident($($parm:pat in $strategy:expr),+ $(,)?) $body:block
-    )*) => {
+     )*) => {
+        fn strategy_to_kani<S,V>(_ : S) -> S::Value
+        where
+            V: kani::Invariant,
+            S: $crate::strategy::Strategy<Value = V>,
+        {
+            kani::any()
+        }
         $(
             #[kani::proof]
             $(#[$meta])*
@@ -169,7 +176,14 @@ macro_rules! proptest {
      $(
         $(#[$meta:meta])*
         fn $test_name:ident($($arg:tt)+) $body:block
-    )*) => {
+     )*) => {
+        fn strategy_to_kani<S,V>(_ : S) -> S::Value
+        where
+            V: kani::Invariant,
+            S: $crate::strategy::Strategy<Value = V>,
+        {
+            kani::any()
+        }
         $(
             #[kani::proof]
             $(#[$meta])*
@@ -952,7 +966,7 @@ macro_rules! proptest_helper {
         let names = $crate::proptest_helper!(@_WRAPSTR ($($parm),*));
         match runner.run(
             &$crate::strategy::Strategy::prop_map(
-                $crate::proptest_helper!(@_WRAP ($($strategy)*)),
+                strategy_to_kani($crate::proptest_helper!(@_WRAP ($($strategy)*))),
                 |values| $crate::sugar::NamedArguments(names, values)),
             $($mod)* |$crate::sugar::NamedArguments(
                 _, $crate::proptest_helper!(@_WRAPPAT ($($parm),*)))|
@@ -984,12 +998,11 @@ macro_rules! proptest_helper {
         //     Ok(_) => (),
         //     Err(e) => panic!("{}\n{}", e, runner2),
         // }
-        $crate::test_runner::TestRunner::run_kani(
-            $crate::proptest_helper!(@_EXT _STRAT ($($arg)*)),
-            |$crate::proptest_helper!(@_EXT _PAT ($($arg)*))| {
-                $body
-            }
-        );
+        // $crate::test_runner::TestRunner::run_kani(
+        let $crate::proptest_helper!(@_EXT _PAT ($($arg)*)) =
+            strategy_to_kani($crate::proptest_helper!(@_EXT _STRAT ($($arg)*)));
+
+        $body
     }};
 
     // The logic below helps support `pat: type` in the proptest! macro.
