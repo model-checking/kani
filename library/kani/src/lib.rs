@@ -12,9 +12,11 @@ pub mod vec;
 pub use arbitrary::Arbitrary;
 pub use invariant::Invariant;
 
-use std::env;
-use std::fs;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::cell::RefCell;
+// Don't need locking mechanism if using thread local
+thread_local! {
+    pub static DET_VALS: RefCell<Vec<u8>> = RefCell::new(vec![]);
+}
 
 /// Creates an assumption that will be valid after this statement run. Note that the assumption
 /// will only be applied for paths that follow the assumption. If the assumption doesn't hold, the
@@ -111,25 +113,16 @@ where
     non_det_var
 }
 
-static RAW_COUNT: AtomicUsize = AtomicUsize::new(0);
-
 #[rustc_diagnostic_item = "KaniAnyRaw"]
 #[inline(never)]
 unsafe fn any_raw_inner<const T: usize>() -> [u8; T] {
-    let det_vals_file = env::var("DET_VALS_FILE").unwrap();
-    let det_vals_err_msg = format!("Couldn't read {}", det_vals_file);
-    let contents_str = fs::read_to_string(det_vals_file).expect(&det_vals_err_msg);
-    let contents_vec: Vec<&str> = contents_str.split("\n").collect();
-    let raw_count = RAW_COUNT.fetch_add(T, Ordering::SeqCst);
     let mut bytes_t = [0; T];
-
-    for i in 0..T {
-        let a_byte_quotes = contents_vec[raw_count + i];
-        let a_byte_quotes_len = a_byte_quotes.len();
-        let a_byte_str = &a_byte_quotes[1..a_byte_quotes_len - 1];
-        let a_byte: u8 = a_byte_str.parse().unwrap();
-        bytes_t[i] = a_byte;
-    }
+    DET_VALS.with(|det_vals| {
+        let tmp_det_vals = &mut *det_vals.borrow_mut();
+        for i in 0..T {
+            bytes_t[i] = tmp_det_vals.pop().unwrap();
+        }
+    });
     bytes_t
 }
 

@@ -23,13 +23,13 @@ pub struct CargoOutputs {
 
 impl KaniSession {
     /// Calls `cargo_build` to generate `*.symtab.json` files in `target_dir`
-    pub fn cargo_build(&self, has_run_once: bool) -> Result<CargoOutputs> {
+    pub fn cargo_build(&self) -> Result<CargoOutputs> {
         let build_target = env!("TARGET"); // see build.rs
         let target_dir = self.args.target_dir.as_ref().unwrap_or(&PathBuf::from("target")).clone();
         let outdir = target_dir.join(build_target).join("debug/deps");
 
         let flag_env = {
-            let rustc_args = self.kani_rustc_flags(has_run_once);
+            let rustc_args = self.kani_rustc_flags();
             crate::util::join_osstring(&rustc_args, " ")
         };
 
