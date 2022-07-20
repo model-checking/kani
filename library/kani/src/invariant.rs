@@ -52,6 +52,30 @@ empty_invariant!(f64);
 
 empty_invariant!(());
 
+macro_rules! tuple_invariant {
+    ($($fld:tt : $typ:ident),*) => {
+        unsafe impl<$($typ : Invariant),*> Invariant for ($($typ,)*) {
+           #[inline(always)]
+            fn is_valid(&self) -> bool {
+                ($(self.$fld.is_valid() &&)* true)
+            }
+        }
+    }
+}
+
+tuple_invariant!(0: A);
+tuple_invariant!(0: A, 1: B);
+tuple_invariant!(0: A, 1: B, 2: C);
+tuple_invariant!(0: A, 1: B, 2: C, 3: D);
+tuple_invariant!(0: A, 1: B, 2: C, 3: D, 4: E);
+tuple_invariant!(0: A, 1: B, 2: C, 3: D, 4: E, 5: F);
+tuple_invariant!(0: A, 1: B, 2: C, 3: D, 4: E, 5: F, 6: G);
+tuple_invariant!(0: A, 1: B, 2: C, 3: D, 4: E, 5: F, 6: G, 7: H);
+tuple_invariant!(0: A, 1: B, 2: C, 3: D, 4: E, 5: F, 6: G, 7: H, 8: I);
+tuple_invariant!(0: A, 1: B, 2: C, 3: D, 4: E, 5: F, 6: G, 7: H, 8: I, 9: J);
+tuple_invariant!(0: A, 1: B, 2: C, 3: D, 4: E, 5: F, 6: G, 7: H, 8: I, 9: J, 10: K);
+tuple_invariant!(0: A, 1: B, 2: C, 3: D, 4: E, 5: F, 6: G, 7: H, 8: I, 9: J, 10: K, 11: L);
+
 unsafe impl Invariant for bool {
     #[inline(always)]
     fn is_valid(&self) -> bool {
