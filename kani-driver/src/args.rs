@@ -61,9 +61,11 @@ pub struct KaniArgs {
     pub enable_unstable: bool,
 
     // Hide this since it depends on function that is a hidden option.
-    /// Print commands instead of running them
-    #[structopt(long, requires("function"), hidden(true))]
+    /// Print commands instead of running them. This command uses "harness" as a place holder for
+    /// name of the target harness.
+    #[structopt(long, hidden(true), requires("enable-unstable"))]
     pub dry_run: bool,
+
     /// Generate C file equivalent to inputted program.
     /// This feature is unstable and it requires `--enable-unstable` to be used
     #[structopt(long, hidden_short_help(true), requires("enable-unstable"))]
@@ -83,7 +85,7 @@ pub struct KaniArgs {
 
     /// Entry point for verification (symbol name).
     /// This is an unstable feature. Consider using --harness instead
-    #[structopt(long, hidden = true, requires("enable-unstable"))]
+    #[structopt(long, hidden = true, requires("enable-unstable"), conflicts_with("dry-run"))]
     pub function: Option<String>,
     /// Entry point for verification (proof harness)
     // In a dry-run, we don't have kani-metadata.json to read, so we can't use this flag
@@ -148,6 +150,10 @@ pub struct KaniArgs {
     /// This option may impact the soundness of the analysis and may cause false proofs and/or counterexamples
     #[structopt(long, hidden_short_help(true), requires("enable-unstable"))]
     pub ignore_global_asm: bool,
+
+    /// Execute CBMC's sanity checks to ensure the goto-program we generate is correct.
+    #[structopt(long, hidden_short_help(true), requires("enable-unstable"))]
+    pub run_sanity_checks: bool,
     /*
     The below is a "TODO list" of things not yet implemented from the kani_flags.py script.
 
