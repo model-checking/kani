@@ -35,7 +35,7 @@ fn check_unconstrained_struct() {
 }
 
 /// Adapted from:
-/// https://github.com/rust-lang/rust/issues/96572#issuecomment-1125117692
+/// <https://github.com/rust-lang/rust/issues/96572#issuecomment-1125117692>
 #[kani::proof]
 fn check_unpack_option_tuple() {
     type T = impl Copy;
