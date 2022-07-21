@@ -4,8 +4,15 @@
 
 set -eu
 
+# Source kani-dependencies to get CBMC_VERSION
+source kani-dependencies
+
+if [ -z "${CBMC_VERSION:-}" ]; then
+  echo "$0: Error: CBMC_VERSION is not specified"
+  exit 1
+fi
+
 UBUNTU_VERSION=$(lsb_release -rs)
-CBMC_VERSION=5.61.0
 FILE="ubuntu-${UBUNTU_VERSION}-cbmc-${CBMC_VERSION}-Linux.deb"
 URL="https://github.com/diffblue/cbmc/releases/download/cbmc-${CBMC_VERSION}/$FILE"
 

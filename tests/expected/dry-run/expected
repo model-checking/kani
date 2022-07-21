@@ -1,6 +1,6 @@
 kani-compiler --goto-c
 symtab2gb
 goto-cc
---function main
+--function harness
 goto-instrument
 cbmc --bounds-check --pointer-check --div-by-zero-check --float-overflow-check --nan-check --undefined-shift-check --unwinding-assertions --object-bits 16
