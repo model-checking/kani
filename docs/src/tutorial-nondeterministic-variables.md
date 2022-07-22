@@ -6,7 +6,7 @@ Kani is a "bit-precise" model checker, which means that Kani considers all the p
 As a Rust developer, this sounds a lot like the `mem::transmute` operation, which is highly `unsafe`.
 And that's correct.
 But `kani::any()` is only implemented for a few types: those where we are able to safely enforce the type's invariants.
-
+(What if you want any value of a type Kani does not implement? [We'll answer that later in this tutorial.](#custom-nondeterministic-types))
 In other words, `kani::any()` should not produce values that are invalid for the type.
 
 ## Safe nondeterministic variables
@@ -71,15 +71,15 @@ For an enum, you can make use of a simple trick:
 
 All we're doing here is making use of a nondeterministic integer to decide which variant of `Rating` to return.
 
-> **NOTE**: If we thought of this code as generating a random value, this function looks sub-optimal.
-> We'd overwhelming generate a `Three` because it's matching "all other integers besides 1 and 2."
+> **NOTE**: If we thought of this code as generating a random value, this function looks heavily biased.
+> We'd overwhelmingly generate a `Three` because it's matching "all other integers besides 1 and 2."
 > But Kani just see 3 meaningful possibilities, each of which is not treated any differently from each other.
 > The "proportion" of integers does not matter.
 
 
 ## Exercise
 
-Try writing a function to generate a nondeterministic inventory (from the first example:)
+Try writing a function to generate a (bounded) nondeterministic inventory (from the first example:)
 
 ```rust
 fn any_inventory(bound: u32) -> Inventory {

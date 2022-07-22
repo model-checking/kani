@@ -26,7 +26,7 @@ mod verification {
 
     // ANCHOR: rating_invariant
     fn any_rating() -> Rating {
-        match kani::any() {
+        match kani::any::<u8>() {
             0 => Rating::One,
             1 => Rating::Two,
             _ => Rating::Three,
