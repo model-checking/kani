@@ -151,7 +151,7 @@ impl CodegenBackend for GotocCodegenBackend {
         let metadata = KaniMetadata { proof_harnesses: c.proof_harnesses };
 
         // No output should be generated if user selected no_codegen.
-        if !tcx.sess.opts.debugging_opts.no_codegen && tcx.sess.opts.output_types.should_codegen() {
+        if !tcx.sess.opts.unstable_opts.no_codegen && tcx.sess.opts.output_types.should_codegen() {
             let outputs = tcx.output_filenames(());
             let base_filename = outputs.output_path(OutputType::Object);
             let pretty = self.queries.get_output_pretty_json();

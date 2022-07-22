@@ -419,6 +419,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     pub fn codegen_rvalue(&mut self, rv: &Rvalue<'tcx>, loc: Location) -> Expr {
         let res_ty = self.rvalue_ty(rv);
+        debug!(?rv, "codegen_rvalue");
         match rv {
             Rvalue::Use(p) => self.codegen_operand(p),
             Rvalue::Repeat(op, sz) => self.codegen_rvalue_repeat(op, sz, res_ty),
@@ -492,6 +493,11 @@ impl<'tcx> GotocCtx<'tcx> {
                     Location::none(),
                     "https://github.com/model-checking/kani/issues/541",
                 )
+            }
+            // A CopyForDeref is equivalent to a read from a place at the codegen level.
+            // https://github.com/rust-lang/rust/blob/1673f1450eeaf4a5452e086db0fe2ae274a0144f/compiler/rustc_middle/src/mir/syntax.rs#L1055
+            Rvalue::CopyForDeref(place) => {
+                unwrap_or_return_codegen_unimplemented!(self, self.codegen_place(place)).goto_expr
             }
         }
     }
