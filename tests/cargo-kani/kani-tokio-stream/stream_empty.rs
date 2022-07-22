@@ -1,0 +1,16 @@
+// Copyright tokio Contributors
+// SPDX-License-Identifier: MIT
+// origin: tokio/tests/tokio/
+// Changes: copyright Kani contributors, Apache or MIT
+
+use tokio_stream::{self as stream, Stream, StreamExt};
+
+#[kani::proof]
+async fn basic_usage() {
+    let mut stream = stream::empty::<i32>();
+
+    for _ in 0..2 {
+        assert_eq!(stream.size_hint(), (0, Some(0)));
+        assert_eq!(None, stream.next().await);
+    }
+}
