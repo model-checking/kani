@@ -10,7 +10,7 @@ But `kani` is useful for small examples/tests.
 
 ## Usage on a package
 
-Kani is also integrated with `cargo` and can be invoked from a package as follows:
+Kani is integrated with `cargo` and can be invoked from a package as follows:
 
 ```bash
 cargo kani [OPTIONS]
