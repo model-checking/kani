@@ -14,7 +14,7 @@ use rustc_middle::ty::{self, Const, ConstKind, FloatTy, Instance, IntTy, Ty, Uin
 use rustc_span::def_id::DefId;
 use rustc_span::Span;
 use rustc_target::abi::{FieldsShape, Size, TagEncoding, Variants};
-use tracing::debug;
+use tracing::{debug, trace};
 
 enum AllocData<'a> {
     Bytes(&'a [u8]),
@@ -23,9 +23,10 @@ enum AllocData<'a> {
 
 impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_operand(&mut self, o: &Operand<'tcx>) -> Expr {
+        trace!(operand=?o, "codegen_operand");
         match o {
             Operand::Copy(d) | Operand::Move(d) =>
-            // TODO: move shouldn't be the same as copy
+            // TODO: move is an opportunity to poison/nondet the original memory.
             {
                 let projection =
                     unwrap_or_return_codegen_unimplemented!(self, self.codegen_place(d));
@@ -44,6 +45,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     fn codegen_constant(&mut self, c: &Constant<'tcx>) -> Expr {
+        trace!(constant=?c, "codegen_constant");
         let const_ = match self.monomorphize(c.literal) {
             ConstantKind::Ty(ct) => ct,
             ConstantKind::Val(val, ty) => return self.codegen_const_value(val, ty, Some(&c.span)),
@@ -145,6 +147,7 @@ impl<'tcx> GotocCtx<'tcx> {
         lit_ty: Ty<'tcx>,
         span: Option<&Span>,
     ) -> Expr {
+        trace!(val=?v, ?lit_ty, "codegen_const_value");
         match v {
             ConstValue::Scalar(s) => self.codegen_scalar(s, lit_ty, span),
             ConstValue::Slice { data, start, end } => {
@@ -160,11 +163,15 @@ impl<'tcx> GotocCtx<'tcx> {
                     .cast_to(self.codegen_ty(lit_ty).to_pointer())
                     .dereference()
             }
+            ConstValue::ZeroSized => match lit_ty.kind() {
+                ty::FnDef(d, substs) => self.codegen_fndef(*d, substs, span),
+                _ => unimplemented!(),
+            },
         }
     }
 
     fn codegen_scalar(&mut self, s: Scalar, ty: Ty<'tcx>, span: Option<&Span>) -> Expr {
-        debug! {"codegen_scalar\n{:?}\n{:?}\n{:?}\n{:?}",s, ty, span, &ty.kind()};
+        debug!(scalar=?s, ?ty, kind=?ty.kind(), ?span, "codegen_scalar");
         match (s, &ty.kind()) {
             (Scalar::Int(_), ty::Int(it)) => match it {
                 IntTy::I8 => Expr::int_constant(s.to_i8().unwrap(), Type::signed_int(8)),
@@ -199,9 +206,9 @@ impl<'tcx> GotocCtx<'tcx> {
                     FloatTy::F64 => Expr::double_constant_from_bitpattern(s.to_u64().unwrap()),
                 }
             }
-            (Scalar::Int(int), ty::FnDef(d, substs)) => {
-                assert_eq!(int.size(), Size::ZERO);
-                self.codegen_fndef(*d, substs, span)
+            (Scalar::Int(..), ty::FnDef(..)) => {
+                // This was removed here: https://github.com/rust-lang/rust/pull/98957.
+                unreachable!("ZST is no longer represented as a scalar")
             }
             (Scalar::Int(_), ty::RawPtr(tm)) => {
                 Expr::pointer_constant(s.to_u64().unwrap(), self.codegen_ty(tm.ty).to_pointer())
