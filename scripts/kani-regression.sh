@@ -26,7 +26,7 @@ check-cbmc-viewer-version.py --major 3 --minor 5
 ${SCRIPT_DIR}/kani-fmt.sh --check
 
 # Clippy: -A for permanently dismissed lints
-cargo clippy --all -- \
+cargo clippy --all -- -D warnings \
       -A "clippy::expect_fun_call" \
       -A "clippy::or_fun_call"
 
