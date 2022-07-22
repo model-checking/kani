@@ -26,6 +26,7 @@ DEPS=(
   wget
   zlib1g
   zlib1g-dev
+  jq
 )
 
 # Version specific dependencies.
