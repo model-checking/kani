@@ -6,6 +6,7 @@ At present, Kani can used in two ways:
  * [On a Cargo package](#usage-on-a-package) with the `cargo kani` command.
 
 If you plan to integrate Kani in your projects, the recommended approach is to use `cargo kani`.
+If you're already using cargo, this will handle dependencies automatically, and it can be configured (if needed) in `Cargo.toml`.
 But `kani` is useful for small examples/tests.
 
 ## Usage on a package
