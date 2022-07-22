@@ -10,7 +10,6 @@ use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{self, Ty};
 use rustc_middle::ty::{Instance, InstanceDef};
 use rustc_span::Span;
-use rustc_target::abi::InitKind;
 use tracing::{debug, warn};
 
 macro_rules! emit_concurrency_warning {
@@ -767,9 +766,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         // Then we check if the type allows "raw" initialization for the cases
         // where memory is zero-initialized or entirely uninitialized
-        if intrinsic == "assert_zero_valid"
-            && !layout.might_permit_raw_init(self, InitKind::Zero, false)
-        {
+        if intrinsic == "assert_zero_valid" && !self.tcx.permits_zero_init(layout) {
             return self.codegen_fatal_error(
                 PropertyClass::SafetyCheck,
                 &format!("attempted to zero-initialize type `{}`, which is invalid", ty),
@@ -777,9 +774,7 @@ impl<'tcx> GotocCtx<'tcx> {
             );
         }
 
-        if intrinsic == "assert_uninit_valid"
-            && !layout.might_permit_raw_init(self, InitKind::Uninit, false)
-        {
+        if intrinsic == "assert_uninit_valid" && !self.tcx.permits_uninit_init(layout) {
             return self.codegen_fatal_error(
                 PropertyClass::SafetyCheck,
                 &format!("attempted to leave type `{}` uninitialized, which is invalid", ty),

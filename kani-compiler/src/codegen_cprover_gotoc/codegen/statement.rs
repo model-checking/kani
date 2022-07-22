@@ -30,7 +30,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// See [GotocCtx::codegen_terminator] for those.
     pub fn codegen_statement(&mut self, stmt: &Statement<'tcx>) -> Stmt {
         let _trace_span = info_span!("CodegenStatement", statement = ?stmt).entered();
-        debug!("handling statement {:?}", stmt);
+        debug!(?stmt, kind=?stmt.kind, "handling_statement");
         let location = self.codegen_span(&stmt.source_info.span);
         match &stmt.kind {
             StatementKind::Assign(box (l, r)) => {
@@ -537,6 +537,7 @@ impl<'tcx> GotocCtx<'tcx> {
             .filter_map(|o| {
                 let ot = self.operand_ty(o);
                 if self.ignore_var_ty(ot) {
+                    trace!(operand=?o, typ=?ot, "codegen_funcall_args ignore");
                     None
                 } else if ot.is_bool() {
                     Some(self.codegen_operand(o).cast_to(Type::c_bool()))
