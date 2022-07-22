@@ -2,8 +2,8 @@
 
 At present, Kani can used in two ways:
 
- * [On a single crate](#usage-on-a-package) with the `kani` command.
- * [On a package](#usage-on-a-single-crate) with the `cargo kani` command.
+ * [On a single crate](#usage-on-a-single-crate) with the `kani` command.
+ * [On a Cargo package](#usage-on-a-package) with the `cargo kani` command.
 
 If you plan to integrate Kani in your projects, the recommended approach is to use `cargo kani`.
 But `kani` is useful for small examples/tests.
@@ -88,4 +88,6 @@ mod verification {
 
 This will ensure that a normal build of your code will be completely unaffected by anything Kani-related.
 
-Unfortunately, this is still required for code under `tests/` as this code might be built by `cargo test` normally and would still be unaware of the `kani` crate.
+This conditional compilation with `cfg(kani)` is still required for code under `tests/`.
+(Unlike normal test code, which can unconditinoally make use `dev-depenencies` under `tests/`.)
+When this code is built by `cargo test`, the `kani` crate is not available, and so it would otherwise cause build failures.
