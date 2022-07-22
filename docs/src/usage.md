@@ -60,7 +60,7 @@ For example, if you want to set a default loop unwinding bound (when it's not ot
 default-unwind = 1
 ```
 
-The options here are the same as on the command line (`cargo kani --help`), and flags (that is, command line arguments that don't take a value) are enable by setting them to `true`.
+The options here are the same as on the command line (`cargo kani --help`), and flags (that is, command line arguments that don't take a value) are enabled by setting them to `true`.
 
 ## The build process
 
