@@ -494,6 +494,8 @@ impl<'tcx> GotocCtx<'tcx> {
                     "https://github.com/model-checking/kani/issues/541",
                 )
             }
+            // A CopyForDeref is equivalent to a read from a place at the codegen level.
+            // https://github.com/rust-lang/rust/blob/1673f1450eeaf4a5452e086db0fe2ae274a0144f/compiler/rustc_middle/src/mir/syntax.rs#L1055
             Rvalue::CopyForDeref(place) => {
                 unwrap_or_return_codegen_unimplemented!(self, self.codegen_place(place)).goto_expr
             }

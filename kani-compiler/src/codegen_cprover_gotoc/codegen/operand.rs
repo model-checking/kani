@@ -207,6 +207,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
             }
             (Scalar::Int(..), ty::FnDef(..)) => {
+                // This was removed here: https://github.com/rust-lang/rust/pull/98957.
                 unreachable!("ZST is no longer represented as a scalar")
             }
             (Scalar::Int(_), ty::RawPtr(tm)) => {
