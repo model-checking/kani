@@ -56,6 +56,7 @@ In particular, the Kani testing suites are composed of:
                 Arguments can be specified in the `Cargo.toml` configuration file.
                 Similar to the `expected` suite, we look for `*.expected` files
                 for each harness in the package.
+* `cargo-ui`: Similar to `cargo-kani`, but focuses on the user interface like the `ui` test suite.
 
 We've extended
 [`compiletest`](https://rustc-dev-guide.rust-lang.org/tests/intro.html) (the
