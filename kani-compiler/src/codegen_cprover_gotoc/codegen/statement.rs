@@ -25,7 +25,7 @@ use tracing::{debug, info_span, trace, warn};
 impl<'tcx> GotocCtx<'tcx> {
     /// Generate Goto-C for MIR [Statement]s.
     /// This does not cover all possible "statements" because MIR distinguishes between ordinary
-    /// statements and [Terminator]s, which can exclusively appear the the end of a basic block.
+    /// statements and [Terminator]s, which can exclusively appear at the end of a basic block.
     ///
     /// See [GotocCtx::codegen_terminator] for those.
     pub fn codegen_statement(&mut self, stmt: &Statement<'tcx>) -> Stmt {
