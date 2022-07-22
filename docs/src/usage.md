@@ -89,5 +89,5 @@ mod verification {
 This will ensure that a normal build of your code will be completely unaffected by anything Kani-related.
 
 This conditional compilation with `cfg(kani)` is still required for code under `tests/`.
-(Unlike normal test code, which can unconditinoally make use `dev-depenencies` under `tests/`.)
+(Unlike normal test code, which can unconditionally make use of `dev-depenencies` under `tests/`.)
 When this code is built by `cargo test`, the `kani` crate is not available, and so it would otherwise cause build failures.
