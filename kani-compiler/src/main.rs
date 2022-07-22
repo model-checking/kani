@@ -7,6 +7,17 @@
 //! Like miri, clippy, and other tools developed on the top of rustc, we rely on the
 //! rustc_private feature and a specific version of rustc.
 #![deny(warnings)]
+
+// todo: fix clippy warnings
+#![allow(clippy::expect_fun_call, clippy::explicit_auto_deref,
+clippy::if_same_then_else, clippy::iter_nth_zero,
+clippy::let_and_return, clippy::manual_map, clippy::map_entry,
+clippy::match_like_matches_macro, clippy::module_inception,
+clippy::needless_arbitrary_self_type, clippy::needless_bool,
+clippy::needless_return, clippy::new_ret_no_self,
+clippy::new_without_default, clippy::or_fun_call,
+clippy::redundant_clone, clippy::type_complexity)]
+
 #![feature(extern_types)]
 #![recursion_limit = "256"]
 #![feature(box_patterns)]
