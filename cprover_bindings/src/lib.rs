@@ -29,6 +29,11 @@
 //! Speical [irep::Irep::id]s include:
 //! 1. [irep::IrepId::Empty] and [irep::IrepId::Nil] behaves like \[null\].
 
+// todo: Resolve the following clippy warnings.
+#![allow(clippy::needless_bool, clippy::let_and_return,
+clippy::manual_map, clippy::module_inception,
+clippy::new_without_default)]
+
 mod env;
 pub mod goto_program;
 pub mod irep;
