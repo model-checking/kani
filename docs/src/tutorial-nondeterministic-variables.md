@@ -89,10 +89,12 @@ fn any_inventory(bound: u32) -> Inventory {
 
 One thing you'll quickly find is that the bounds must be very small.
 Kani does not (yet!) scale well to nondeterministic-size data structures involving heap allocations.
-A proof harness like `safe_update` above, but starting with `any_inventory(2)` will probably take almost a minute to prove.
+A proof harness like `safe_update` above, but starting with `any_inventory(2)` will probably take a couple of minutes to prove.
 
 A hint for this exercise: you might choose two different behaviors, "size of exactly `bound`" or "size up to `bound`".
 Try both!
+
+A solution can be found in [`exercise_solution.rs`](https://github.com/model-checking/kani/blob/main/docs/src/tutorial/arbitrary-variables/src/exercise_solution.rs).
 
 ## Summary
 
