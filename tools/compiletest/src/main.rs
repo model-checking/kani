@@ -174,9 +174,9 @@ pub fn parse_config(args: Vec<String>) -> Config {
         match m.opt_str(nm) {
             Some(s) => PathBuf::from(&s),
             None => {
-                let mut root_folder = top_level().unwrap_or_else(|| {
-                    panic!("Cannot find root directory. Please provide --{} option.", nm)
-                });
+                let mut root_folder = top_level().expect(
+                    format!("Cannot find root directory. Please provide --{} option.", nm).as_str(),
+                );
                 default.iter().for_each(|f| root_folder.push(f));
                 root_folder
             }
