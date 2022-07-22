@@ -1,12 +1,16 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! This file contains functions related to codegenning MIR blocks into gotoc
-
 use crate::codegen_cprover_gotoc::GotocCtx;
 use rustc_middle::mir::{BasicBlock, BasicBlockData};
 
 impl<'tcx> GotocCtx<'tcx> {
+    /// Generates Goto-C for a basic block.
+    ///
+    /// A MIR basic block consists of 0 or more statements followed by a terminator.
+    ///
+    /// This function does not return a value, but mutates state with
+    /// `self.current_fn_mut().push_onto_block(...)`
     pub fn codegen_block(&mut self, bb: BasicBlock, bbd: &BasicBlockData<'tcx>) {
         self.current_fn_mut().set_current_bb(bb);
         let label: String = self.current_fn().find_label(&bb);
