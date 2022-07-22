@@ -5,11 +5,11 @@
 use std::num::NonZeroU32;
 use vector_map::VecMap;
 
-type ProductId = u32;
+pub type ProductId = u32;
 
 pub struct Inventory {
     /// Every product in inventory must have a non-zero quantity
-    inner: VecMap<ProductId, NonZeroU32>,
+    pub inner: VecMap<ProductId, NonZeroU32>,
 }
 
 impl Inventory {
@@ -40,7 +40,7 @@ mod verification {
         assert!(quantity.get() != 0, "NonZeroU32 is internally a u32 but it should never be 0.");
 
         // Update the inventory and check the result.
-        inventory.update(id.clone(), quantity);
+        inventory.update(id, quantity);
         assert!(inventory.get(&id).unwrap() == quantity);
     }
     // ANCHOR_END: safe_update
