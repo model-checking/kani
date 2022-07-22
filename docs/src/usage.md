@@ -16,7 +16,7 @@ Kani is integrated with `cargo` and can be invoked from a package as follows:
 cargo kani [OPTIONS]
 ```
 
-This works like `cargo test` except that it will run all proof harnesses instead of running all test harnesses.
+This works like `cargo test` except that it will analyze all proof harnesses instead of running all test harnesses.
 
 ## Common command line flags
 
