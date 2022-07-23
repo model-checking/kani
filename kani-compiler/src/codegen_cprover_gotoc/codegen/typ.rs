@@ -770,6 +770,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// A closure in Rust MIR takes two arguments:
+    ///
     ///    0. a struct representing the environment
     ///    1. a tuple containing the parameters
     ///
@@ -779,16 +780,22 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Checking whether the type's kind is a closure is insufficient, because
     /// a virtual method call through a vtable can have the trait's non-closure
     /// type. For example:
+    ///
+    /// ```
     ///         let p: &dyn Fn(i32) = &|x| assert!(x == 1);
     ///         p(1);
+    /// ```
     ///
-    /// Here, the call p(1) desugars to an MIR trait call Fn::call(&p, (1,)),
+    /// Here, the call `p(1)` desugars to an MIR trait call `Fn::call(&p, (1,))`,
     /// where the second argument is a tuple. The instance type kind for
-    /// Fn::call is not a closure, because dynamically, the pointer may be to
+    /// `Fn::call` is not a closure, because dynamically, the pointer may be to
     /// a function definition instead. We still need to untuple in this case,
     /// so we follow the example elsewhere in Rust to use the ABI call type.
-    /// See `make_call_args` in kani/compiler/rustc_mir/src/transform/inline.rs
+    ///
+    /// See `make_call_args` in `rustc_mir_transform/src/inline.rs`
     pub fn ty_needs_closure_untupled(&self, ty: Ty<'tcx>) -> bool {
+        // Note that [Abi::RustCall] is not [Abi::Rust].
+        // Documentation is sparse, but it does seem to correspond to the need for untupling.
         match ty.kind() {
             ty::FnDef(..) | ty::FnPtr(..) => ty.fn_sig(self.tcx).abi() == Abi::RustCall,
             _ => unreachable!("Can't treat type as a function: {:?}", ty),
