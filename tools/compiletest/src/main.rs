@@ -191,7 +191,7 @@ pub fn parse_config(args: Vec<String>) -> Config {
                 let mut root_folder = top_level().expect(
                     format!("Cannot find root directory. Please provide --{} option.", nm).as_str(),
                 );
-                default.into_iter().for_each(|f| root_folder.push(f));
+                default.iter().for_each(|f| root_folder.push(f));
                 root_folder
             }
         }
@@ -286,8 +286,7 @@ pub fn run_tests(config: Config) {
 
     let opts = test_opts(&config);
 
-    let mut configs = Vec::new();
-    configs.push(config.clone());
+    let configs = vec![config.clone()];
 
     let mut tests = Vec::new();
     for c in &configs {
