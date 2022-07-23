@@ -9,7 +9,7 @@
 //   RUSTFLAGS="-Zcrate-attr=feature(register_tool) -Zcrate-attr=register_tool(kanitool)"
 
 // todo: resolve clippy warnings
-#![allow(clippy::len_zero,clippy::redundant_clone)]
+#![allow(clippy::len_zero, clippy::redundant_clone)]
 
 // proc_macro::quote is nightly-only, so we'll cobble things together instead
 use proc_macro::TokenStream;

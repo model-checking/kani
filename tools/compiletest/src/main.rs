@@ -4,13 +4,19 @@
 // See GitHub history for details.
 
 // todo: Resolve the following clippy warnings.
-#![allow(clippy::collapsible_else_if,
-clippy::derive_partial_eq_without_eq, clippy::into_iter_on_ref,
-clippy::iter_skip_next, clippy::manual_strip, clippy::needless_borrow,
-clippy::needless_range_loop, clippy::new_without_default,
-clippy::ptr_arg, clippy::single_char_pattern,
-clippy::vec_init_then_push)]
-
+#![allow(
+    clippy::collapsible_else_if,
+    clippy::derive_partial_eq_without_eq,
+    clippy::into_iter_on_ref,
+    clippy::iter_skip_next,
+    clippy::manual_strip,
+    clippy::needless_borrow,
+    clippy::needless_range_loop,
+    clippy::new_without_default,
+    clippy::ptr_arg,
+    clippy::single_char_pattern,
+    clippy::vec_init_then_push
+)]
 #![crate_name = "compiletest"]
 // The `test` crate is the only unstable feature
 // allowed here, just to share similar code.
