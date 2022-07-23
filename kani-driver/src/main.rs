@@ -77,9 +77,10 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
 
             if ctx.args.gen_exec_trace {
                 let det_vals = ctx.get_det_vals(&specialized_obj, harness)?;
+                let unit_test = ctx.format_unit_test(&harness.mangled_name, &det_vals);
                 println!("Copy this unit test below your proof harness:\n");
-                let unit_test = exec_trace::format_unit_test("harness_name", &det_vals);
                 println!("{}", unit_test);
+                ctx.modify_src_code(harness, &unit_test);
             }
         }
     }
