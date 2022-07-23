@@ -3,6 +3,9 @@
 #![feature(rustc_attrs)] // Used for rustc_diagnostic_item.
 #![feature(min_specialization)] // Used for default implementation of Arbitrary.
 
+// todo: resolve clippy warnings.
+#![allow(clippy::manual_range_contains, clippy::missing_safety_doc)]
+
 pub mod arbitrary;
 pub mod invariant;
 pub mod slice;
