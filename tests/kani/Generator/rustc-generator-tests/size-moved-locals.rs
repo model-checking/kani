@@ -26,7 +26,7 @@
 use std::ops::{Generator, GeneratorState};
 use std::pin::Pin;
 
-const FOO_SIZE: usize = 1024;
+const FOO_SIZE: usize = 128;
 struct Foo([u8; FOO_SIZE]);
 
 impl Drop for Foo {
@@ -79,9 +79,9 @@ fn overlap_x_and_y() -> impl Generator<Yield = (), Return = ()> {
 }
 
 #[kani::proof]
+#[kani::unwind(129)]
 fn main() {
-    // FIXME: the following tests are very slow (did not terminate in a couple of minutes)
-    /* let mut generator = move_before_yield();
+    let mut generator = move_before_yield();
     assert_eq!(
         unsafe { Pin::new_unchecked(&mut generator) }.resume(()),
         GeneratorState::Yielded(())
@@ -131,6 +131,5 @@ fn main() {
     assert_eq!(
         unsafe { Pin::new_unchecked(&mut generator) }.resume(()),
         GeneratorState::Complete(())
-    ); */
-    assert!(false); // to make the test fail without taking forever
+    );
 }
