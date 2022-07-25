@@ -21,7 +21,7 @@ jobs:
             pip3 install --upgrade autopep8
             ./scripts/run-autopep8.sh
 
-  format-check:
+  clippy-check:
     runs-on: ubuntu-20.04
     steps:
       - name: Checkout Kani
