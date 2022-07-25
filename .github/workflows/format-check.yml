@@ -37,3 +37,9 @@ jobs:
           cargo clippy --all -- -D warnings \
           -A "clippy::expect_fun_call" \
           -A "clippy::or_fun_call"
+
+      - name: "Print Clippy Statistics"
+        run: |
+          (cargo clippy --all --message-format=json 2>/dev/null  | \
+          jq 'select(.message!=null) | .message.code.code' | grep -v '^null$' | \
+          sort | uniq -c) || true
