@@ -40,6 +40,7 @@ jobs:
 
       - name: "Print Clippy Statistics"
         run: |
+          rm .cargo/config.toml
           (cargo clippy --all --message-format=json 2>/dev/null  | \
           jq 'select(.message!=null) | .message.code.code' | grep -v '^null$' | \
           sort | uniq -c) || true
