@@ -21,9 +21,19 @@ jobs:
             pip3 install --upgrade autopep8
             ./scripts/run-autopep8.sh
 
+  format-check:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout Kani
+        uses: actions/checkout@v2
+
+      - name: Setup Kani Dependencies
+        uses: ./.github/actions/setup
+        with:
+            os: ubuntu-20.04
+
       - name: "Run Clippy"
         run: |
           cargo clippy --all -- -D warnings \
           -A "clippy::expect_fun_call" \
           -A "clippy::or_fun_call"
-
