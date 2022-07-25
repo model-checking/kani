@@ -1,18 +1,22 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// Test that includes a generator as a parameter to a function
-// Codegen should succeed, but verification should fail (codegen_unimplemented)
+// Test that a generator can be passed as a parameter.
+// (adapted from https://github.com/model-checking/kani/issues/1075)
 
 #![feature(generators, generator_trait)]
 
-use std::ops::Generator;
+use std::ops::{Generator, GeneratorState};
+use std::pin::Pin;
 
-fn foo<T>(g: T)
+fn foo<G: Generator<Yield = u8, Return = u8> + Unpin>(mut g: G)
 where
-    T: Generator,
+    <G as std::ops::Generator>::Return: std::cmp::PartialEq,
 {
-    let _ = g;
+    let res = Pin::new(&mut g).resume(());
+    assert_eq!(res, GeneratorState::Yielded(1));
+    let res2 = Pin::new(&mut g).resume(());
+    assert_eq!(res2, GeneratorState::Complete(2));
 }
 
 #[kani::proof]
