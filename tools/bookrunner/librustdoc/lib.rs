@@ -20,12 +20,7 @@
 #![feature(iter_intersperse)]
 #![recursion_limit = "256"]
 #![warn(rustc::internal)]
-#![allow(
-    clippy::collapsible_if,
-    clippy::collapsible_else_if,
-    clippy::derive_partial_eq_without_eq,
-    clippy::format_push_string
-)]
+#![allow(clippy::collapsible_if, clippy::collapsible_else_if)]
 
 #[macro_use]
 extern crate tracing;

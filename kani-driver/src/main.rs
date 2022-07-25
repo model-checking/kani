@@ -1,9 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// todo: resolve clippy warning.
-#![allow(clippy::unnecessary_lazy_evaluations)]
-
 use anyhow::Result;
 use args_toml::join_args;
 use call_cbmc::VerificationStatus;
