@@ -660,7 +660,6 @@ impl<'tcx> GotocCtx<'tcx> {
             StatementKind::SetDiscriminant { place, variant_index } => {
                 // this requires place points to an enum type.
                 let pt = self.place_ty(place);
-                self.check_generator_layout_assumptions(pt);
                 let layout = self.layout_of(pt);
                 match &layout.variants {
                     Variants::Single { .. } => Stmt::skip(location),

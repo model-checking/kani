@@ -519,7 +519,6 @@ impl<'tcx> GotocCtx<'tcx> {
     /// get the discriminant of e, of type res_ty
     pub fn codegen_get_discriminant(&mut self, e: Expr, ty: Ty<'tcx>, res_ty: Ty<'tcx>) -> Expr {
         let layout = self.layout_of(ty);
-        self.check_generator_layout_assumptions(ty);
         match &layout.variants {
             Variants::Single { index } => {
                 let discr_val = layout

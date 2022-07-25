@@ -518,7 +518,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         (self.generator_variant_name(idx), TypeOrVariant::GeneratorVariant(idx))
                     }
                     _ => unreachable!(
-                        "cannot downcast {:?} to a varian (only enums and generators can)",
+                        "cannot downcast {:?} to a variant (only enums and generators can)",
                         &t.kind()
                     ),
                 };

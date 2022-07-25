@@ -928,16 +928,15 @@ impl<'tcx> GotocCtx<'tcx> {
         let pretty_name = self.ty_pretty_name(ty);
         debug!(?pretty_name, "codeged_ty_generator");
         self.ensure_union(self.ty_mangled_name(ty), pretty_name, |ctx, _| {
-            ctx.check_generator_layout_assumptions(ty);
             let type_and_layout = ctx.layout_of(ty);
             let (discriminant_field, variants) = match &type_and_layout.variants {
-                Variants::Multiple { tag_encoding, tag_field, variants, .. } => {
-                    assert!(matches!(tag_encoding, TagEncoding::Direct));
-                    (tag_field, variants)
-                }
-                Variants::Single { .. } => {
-                    unreachable!("generators cannot have a single variant")
-                }
+                Variants::Multiple {
+                    tag_encoding: TagEncoding::Direct,
+                    tag_field,
+                    variants,
+                    ..
+                } => (tag_field, variants),
+                _ => unreachable!("Generators have more than one variant and use direct encoding"),
             };
             // generate a struct for the direct fields of the layout (fields that don't occur in the variants)
             let direct_fields = DatatypeComponent::Field {
@@ -966,16 +965,6 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             fields
         })
-    }
-
-    pub fn check_generator_layout_assumptions(&self, ty: Ty<'tcx>) {
-        if ty.is_generator() {
-            // generators have more than one variant and use direct encoding
-            assert!(matches!(
-                &self.layout_of(ty).variants,
-                Variants::Multiple { tag_encoding: TagEncoding::Direct, .. }
-            ))
-        }
     }
 
     /// Generates a struct for a variant of the generator.
