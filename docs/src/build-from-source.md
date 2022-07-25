@@ -37,15 +37,15 @@ source $HOME/.cargo/env
 
 ### Install dependencies on macOS
 
-Support is available for macOS 10.15+. You need to have [Homebrew](https://brew.sh/) installed already.
+Support is available for macOS 11. You need to have [Homebrew](https://brew.sh/) installed already.
 
 ```
 # git clone git@github.com:model-checking/kani.git
 git clone https://github.com/model-checking/kani.git
 cd kani
 git submodule update --init
-./scripts/setup/macos-10.15/install_deps.sh
-./scripts/setup/macos-10.15/install_cbmc.sh
+./scripts/setup/macos/install_deps.sh
+./scripts/setup/macos/install_cbmc.sh
 ./scripts/setup/install_viewer.sh
 # If you haven't already:
 ./scripts/setup/install_rustup.sh
