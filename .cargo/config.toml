@@ -33,4 +33,7 @@ rustflags = [ # Global lints/warnings. Need to use underscore instead of -.
     "-Aclippy::too_many_arguments",
     "-Aclippy::type_complexity",
     "-Aclippy::unnecessary_lazy_evaluations",
+    "-Aclippy::useless_conversion",
+    "-Aclippy::needless_borrow",
+    "-Aclippy::unnecessary_filter_map",
 ]
