@@ -44,9 +44,11 @@ pub struct KaniArgs {
     #[structopt(long)]
     pub visualize: bool,
     /// Generate executable trace
-    // TODO: Need to exclude other options with this
-    #[structopt(long)]
-    pub gen_exec_trace: bool,
+    #[structopt(long, requires("enable-unstable"))]
+    pub gen_exe_trace: bool,
+    /// Generate executable trace and add it to the source code.
+    #[structopt(long, requires("gen-exe-trace"))]
+    pub add_exe_trace_to_src: bool,
     /// Keep temporary files generated throughout Kani process
     #[structopt(long, hidden_short_help(true))]
     pub keep_temps: bool,

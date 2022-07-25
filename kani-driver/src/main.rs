@@ -21,7 +21,7 @@ mod call_goto_cc;
 mod call_goto_instrument;
 mod call_single_file;
 mod call_symtab;
-mod exec_trace;
+mod exe_trace;
 mod metadata;
 mod session;
 mod util;
@@ -75,16 +75,27 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
         if result == VerificationStatus::Failure {
             failed_harnesses.push(harness);
 
-            if ctx.args.gen_exec_trace {
-                let det_vals = ctx.get_det_vals(&specialized_obj, harness)?;
+            if ctx.args.gen_exe_trace {
+                let det_vals = ctx.get_det_vals(&specialized_obj)?;
                 let unit_test = ctx.format_unit_test(&harness.mangled_name, &det_vals);
-                println!("Copy this unit test below your proof harness:\n");
+
+                println!("Executable trace:\n");
                 println!("{}", unit_test);
-                let proof_harness_line: usize = harness
-                    .original_line
-                    .parse()
-                    .expect("Couldn't convert proof harness line from str to usize");
-                ctx.modify_src_code(&harness.original_file, proof_harness_line, &unit_test);
+
+                if ctx.args.add_exe_trace_to_src {
+                    if !ctx.args.quiet {
+                        println!("Now modifying the source code to include the executable trace.");
+                    }
+                    let proof_harness_line: usize = harness
+                        .original_line
+                        .parse()
+                        .expect("Couldn't convert proof harness line from str to usize");
+                    ctx.modify_src_code(&harness.original_file, proof_harness_line, &unit_test);
+                } else {
+                    println!(
+                        "To automatically add this executable trace to the src code, run Kani with `--add-exe-trace-to-src`."
+                    );
+                }
             }
         }
     }
