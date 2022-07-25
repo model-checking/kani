@@ -34,9 +34,7 @@ jobs:
 
       - name: "Run Clippy"
         run: |
-          cargo clippy --all -- -D warnings \
-          -A "clippy::expect_fun_call" \
-          -A "clippy::or_fun_call"
+          cargo clippy --all -- -D warnings
 
       - name: "Print Clippy Statistics"
         run: |
