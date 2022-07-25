@@ -10,7 +10,7 @@ set -eux
 #brew update
 
 # Install dependencies via `brew`
-brew install universal-ctags wget jq
+brew install universal-ctags wget
 
 # Add Python package dependencies
 PYTHON_DEPS=(
