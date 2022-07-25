@@ -3,9 +3,7 @@
 - [Getting started](./getting-started.md)
   - [Installation](./install-guide.md)
     - [Building from source](./build-from-source.md)
-  - [Usage](./usage.md)
-    - [On a single file](./kani-single-file.md)
-    - [On a package](./cargo-kani.md)
+  - [Using Kani](./usage.md)
   - [Verification results](./verification-results.md)
 
 - [Tutorial](./kani-tutorial.md)
