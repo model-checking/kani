@@ -74,29 +74,7 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
         let result = ctx.check_harness(&specialized_obj, &report_dir, harness)?;
         if result == VerificationStatus::Failure {
             failed_harnesses.push(harness);
-
-            if ctx.args.gen_exe_trace {
-                let det_vals = ctx.get_det_vals(&specialized_obj)?;
-                let unit_test = ctx.format_unit_test(&harness.mangled_name, &det_vals);
-
-                println!("Executable trace:\n");
-                println!("{}", unit_test);
-
-                if ctx.args.add_exe_trace_to_src {
-                    if !ctx.args.quiet {
-                        println!("Now modifying the source code to include the executable trace.");
-                    }
-                    let proof_harness_line: usize = harness
-                        .original_line
-                        .parse()
-                        .expect("Couldn't convert proof harness line from str to usize");
-                    ctx.modify_src_code(&harness.original_file, proof_harness_line, &unit_test);
-                } else {
-                    println!(
-                        "To automatically add this executable trace to the src code, run Kani with `--add-exe-trace-to-src`."
-                    );
-                }
-            }
+            ctx.exe_trace_main(&specialized_obj, harness);
         }
     }
 
