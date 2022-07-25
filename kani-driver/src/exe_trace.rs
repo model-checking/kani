@@ -10,9 +10,37 @@ use std::process::Command;
 use crate::session::KaniSession;
 use crate::util::append_path;
 use anyhow::Result;
+use kani_metadata::HarnessMetadata;
 use serde_json::Value;
 
 impl KaniSession {
+    pub fn exe_trace_main(&self, specialized_obj: &Path, harness: &HarnessMetadata) {
+        if self.args.gen_exe_trace {
+            let det_vals = self
+                .get_det_vals(specialized_obj)
+                .expect("Something went wrong in extracting determinstic values.");
+            let unit_test = self.format_unit_test(&harness.mangled_name, &det_vals);
+
+            println!("Executable trace:\n");
+            println!("{}", unit_test);
+
+            if self.args.add_exe_trace_to_src {
+                if !self.args.quiet {
+                    println!("Now modifying the source code to include the executable trace.");
+                }
+                let proof_harness_line: usize = harness
+                    .original_line
+                    .parse()
+                    .expect("Couldn't convert proof harness line from str to usize");
+                self.modify_src_code(&harness.original_file, proof_harness_line, &unit_test);
+            } else {
+                println!(
+                    "To automatically add this executable trace to the src code, run Kani with `--add-exe-trace-to-src`."
+                );
+            }
+        }
+    }
+
     /// Extract deterministic values from a failing harness.
     pub fn get_det_vals(&self, file: &Path) -> Result<Vec<u8>> {
         let output_filename = append_path(file, "cbmc_output");
