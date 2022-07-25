@@ -25,11 +25,6 @@ check-cbmc-viewer-version.py --major 3 --minor 5
 # Formatting check
 ${SCRIPT_DIR}/kani-fmt.sh --check
 
-# Clippy: -A for permanently dismissed lints
-cargo clippy --all -- -D warnings \
-      -A "clippy::expect_fun_call" \
-      -A "clippy::or_fun_call"
-
 # Parser tests
 PYTHONPATH=${SCRIPT_DIR} python3 -m unittest ${SCRIPT_DIR}/test_cbmc_json_parser.py
 

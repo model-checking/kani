@@ -20,3 +20,13 @@ jobs:
         run: |
             pip3 install --upgrade autopep8
             ./scripts/run-autopep8.sh
+
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Run Clippy"
+        run: |
+          cargo clippy --all -- -D warnings \
+          -A "clippy::expect_fun_call" \
+          -A "clippy::or_fun_call"
+
