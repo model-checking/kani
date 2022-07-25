@@ -50,48 +50,74 @@ impl KaniSession {
         )
     }
 
-    pub fn modify_src_code(&self, harness_meta: &HarnessMetadata, exec_trace: &str) {
-        let src = fs::read_to_string(&harness_meta.original_file)
-            .expect("Couldn't access proof harness source file");
-        let mut src_lines = src.split('\n').collect::<Vec<&str>>();
-        let start_idx = harness_meta.original_line.parse::<usize>().unwrap() - 2;
-        let mut src_right = src_lines.split_off(start_idx);
+    pub fn modify_src_code(
+        &self,
+        src_file_path: &str,
+        proof_harness_line: usize,
+        exec_trace: &str,
+    ) {
+        // Prep the source code and exec trace func.
+        let src_as_str =
+            fs::read_to_string(src_file_path).expect("Couldn't access proof harness source file");
+        let mut src_lines = src_as_str.split('\n').collect::<Vec<&str>>();
         let mut exec_trace_lines = exec_trace.split('\n').collect::<Vec<&str>>();
+
+        // Calc inserted indexes and line numbers into source code to rustfmt only those lines.
+        // TODO: Why -2?
+        let start_idx = proof_harness_line - 2;
         let start_line = start_idx + 1;
         // This excludes the final new line, since including that causes a rustfmt error.
         let end_line = start_line + exec_trace_lines.len() - 2;
 
+        // Splice the exec trace func into the proof harness source code.
+        let mut src_right = src_lines.split_off(start_idx);
         src_lines.append(&mut exec_trace_lines);
         src_lines.append(&mut src_right);
-
         let new_src = src_lines.join("\n");
+
         println!("Now modifying the proof harness source file");
-        fs::write(&harness_meta.original_file, new_src)
-            .expect("Couldn't write to proof harness source file");
+        fs::write(src_file_path, new_src).expect("Couldn't write to proof harness source file");
 
         // Run rustfmt on just the inserted lines.
-        let mut cmd = Command::new("rustfmt");
-
-        let source_path = Path::new(&harness_meta.original_file);
-        let parent_dir = source_path.parent().expect("Proof harness is not in a directory");
+        let source_path = Path::new(src_file_path);
+        let parent_dir = source_path
+            .parent()
+            .expect("Proof harness is not in a directory")
+            .to_str()
+            .expect("Couldn't convert proof harness directory from OsStr to str");
         let src_file = source_path
             .file_name()
             .expect("Couldn't get file name of source file")
             .to_str()
             .expect("Couldn't convert proof harness file name from OsStr to str");
+        self.run_rustfmt(src_file, Some(parent_dir), Some(start_line), Some(end_line));
+    }
+
+    pub fn run_rustfmt(
+        &self,
+        src_file: &str,
+        current_dir_opt: Option<&str>,
+        start_line_opt: Option<usize>,
+        end_line_opt: Option<usize>,
+    ) {
+        let mut cmd = Command::new("rustfmt");
 
         let mut args: Vec<OsString> = Vec::new();
-        // `--file-lines` is currently unstable
-        args.push("--unstable-features".into());
-        let file_line_arg =
-            format!("[{{\"file\":\"{}\",\"range\":[{},{}]}}]", src_file, start_line, end_line);
-        args.push("--file-lines".into());
-        args.push(file_line_arg.into());
+        if let (Some(start_line), Some(end_line)) = (start_line_opt, end_line_opt) {
+            // rustfmt `--file-lines` arg is currently unstable.
+            args.push("--unstable-features".into());
+
+            let file_line_arg =
+                format!("[{{\"file\":\"{}\",\"range\":[{},{}]}}]", src_file, start_line, end_line);
+            args.push("--file-lines".into());
+            args.push(file_line_arg.into());
+        }
         args.push(src_file.into());
         cmd.args(args);
 
-        // Run rustfmt from the source file directory so it picks up the user's rustfmt config file.
-        cmd.current_dir(parent_dir);
+        if let Some(current_dir) = current_dir_opt {
+            cmd.current_dir(current_dir);
+        }
 
         if self.args.quiet {
             self.run_suppress(cmd).expect("Couldn't rustfmt source file");

@@ -80,7 +80,11 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
                 let unit_test = ctx.format_unit_test(&harness.mangled_name, &det_vals);
                 println!("Copy this unit test below your proof harness:\n");
                 println!("{}", unit_test);
-                ctx.modify_src_code(harness, &unit_test);
+                let proof_harness_line: usize = harness
+                    .original_line
+                    .parse()
+                    .expect("Couldn't convert proof harness line from str to usize");
+                ctx.modify_src_code(&harness.original_file, proof_harness_line, &unit_test);
             }
         }
     }
