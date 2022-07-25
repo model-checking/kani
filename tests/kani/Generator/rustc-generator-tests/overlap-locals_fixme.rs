@@ -8,35 +8,33 @@
 
 // run-pass
 
-#![feature(generators, generator_trait)]
-
-use std::ops::{Generator, GeneratorState};
-use std::pin::Pin;
+#![feature(generators)]
 
 #[kani::proof]
 fn main() {
-    let mut a = || {
+    let a = || {
         {
             let w: i32 = 4;
             yield;
+            println!("{:?}", w);
         }
         {
             let x: i32 = 5;
             yield;
+            println!("{:?}", x);
         }
         {
             let y: i32 = 6;
             yield;
+            println!("{:?}", y);
         }
         {
             let z: i32 = 7;
             yield;
+            println!("{:?}", z);
         }
     };
 
-    assert_eq!(Pin::new(&mut a).resume(()), GeneratorState::Yielded(()));
-    assert_eq!(Pin::new(&mut a).resume(()), GeneratorState::Yielded(()));
-    assert_eq!(Pin::new(&mut a).resume(()), GeneratorState::Yielded(()));
-    assert_eq!(Pin::new(&mut a).resume(()), GeneratorState::Yielded(()));
-    assert_eq!(Pin::new(&mut a).resume(()), GeneratorState::Complete(()));
+    // FIXME: size of generators does not work reliably (https://github.com/model-checking/kani/issues/1395)
+    assert_eq!(8, std::mem::size_of_val(&a));
 }

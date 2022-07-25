@@ -24,5 +24,6 @@ fn main() {
         take(x);
     };
 
+    // FIXME: size of generators does not work reliably (https://github.com/model-checking/kani/issues/1395)
     assert_eq!(size_of_val(&gen1), size_of_val(&Some(gen1)));
 }

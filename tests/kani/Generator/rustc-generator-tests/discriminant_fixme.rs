@@ -136,6 +136,7 @@ fn main() {
         }
     };
 
+    // FIXME: size of generators does not work reliably (https://github.com/model-checking/kani/issues/1395)
     assert_eq!(size_of_val(&gen_u8_tiny_niche()), 1);
     assert_eq!(size_of_val(&Some(gen_u8_tiny_niche())), 1); // uses niche
     assert_eq!(size_of_val(&Some(Some(gen_u8_tiny_niche()))), 2); // cannot use niche anymore

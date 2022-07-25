@@ -32,6 +32,7 @@ fn main() {
 
     // Neither of these generators have the resume arg live across the `yield`, so they should be
     // 1 Byte in size (only storing the discriminant)
+    // FIXME: size of generators does not work reliably (https://github.com/model-checking/kani/issues/1395)
     assert_eq!(size_of_val(&gen_copy), 1);
     assert_eq!(size_of_val(&gen_move), 1);
 }

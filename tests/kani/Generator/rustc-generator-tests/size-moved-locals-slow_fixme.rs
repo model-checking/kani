@@ -23,7 +23,8 @@
 
 #![feature(generators, generator_trait)]
 
-use std::ops::Generator;
+use std::ops::{Generator, GeneratorState};
+use std::pin::Pin;
 
 const FOO_SIZE: usize = 1024;
 struct Foo([u8; FOO_SIZE]);
@@ -79,11 +80,57 @@ fn overlap_x_and_y() -> impl Generator<Yield = (), Return = ()> {
 
 #[kani::proof]
 fn main() {
-    assert_eq!(1025, std::mem::size_of_val(&move_before_yield()));
-    // The following assertion fails for some reason (tracking issue: https://github.com/model-checking/kani/issues/1395).
-    // But it also fails for WASM (https://github.com/rust-lang/rust/issues/62807),
-    // so it is probably not a big problem:
-    // assert_eq!(1026, std::mem::size_of_val(&move_before_yield_with_noop()));
-    assert_eq!(2051, std::mem::size_of_val(&overlap_move_points()));
-    assert_eq!(1026, std::mem::size_of_val(&overlap_x_and_y()));
+    // FIXME: the following tests are very slow (did not terminate in a couple of minutes)
+    /* let mut generator = move_before_yield();
+    assert_eq!(
+        unsafe { Pin::new_unchecked(&mut generator) }.resume(()),
+        GeneratorState::Yielded(())
+    );
+    assert_eq!(
+        unsafe { Pin::new_unchecked(&mut generator) }.resume(()),
+        GeneratorState::Complete(())
+    );
+
+    let mut generator = move_before_yield_with_noop();
+    assert_eq!(
+        unsafe { Pin::new_unchecked(&mut generator) }.resume(()),
+        GeneratorState::Yielded(())
+    );
+    assert_eq!(
+        unsafe { Pin::new_unchecked(&mut generator) }.resume(()),
+        GeneratorState::Complete(())
+    );
+
+    let mut generator = overlap_move_points();
+    assert_eq!(
+        unsafe { Pin::new_unchecked(&mut generator) }.resume(()),
+        GeneratorState::Yielded(())
+    );
+    assert_eq!(
+        unsafe { Pin::new_unchecked(&mut generator) }.resume(()),
+        GeneratorState::Yielded(())
+    );
+    assert_eq!(
+        unsafe { Pin::new_unchecked(&mut generator) }.resume(()),
+        GeneratorState::Yielded(())
+    );
+    assert_eq!(
+        unsafe { Pin::new_unchecked(&mut generator) }.resume(()),
+        GeneratorState::Complete(())
+    );
+
+    let mut generator = overlap_x_and_y();
+    assert_eq!(
+        unsafe { Pin::new_unchecked(&mut generator) }.resume(()),
+        GeneratorState::Yielded(())
+    );
+    assert_eq!(
+        unsafe { Pin::new_unchecked(&mut generator) }.resume(()),
+        GeneratorState::Yielded(())
+    );
+    assert_eq!(
+        unsafe { Pin::new_unchecked(&mut generator) }.resume(()),
+        GeneratorState::Complete(())
+    ); */
+    assert!(false); // to make the test fail without taking forever
 }
