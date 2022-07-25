@@ -20,6 +20,7 @@ use std::mem::size_of_val;
 fn take<T>(_: T) {}
 
 #[kani::proof]
+#[kani::unwind(2)]
 fn main() {
     let x = false;
     let mut gen1 = || {
@@ -27,9 +28,6 @@ fn main() {
         take(x);
     };
 
-    // FIXME: for some reason, these asserts are very hard for CBMC to figure out
-    // Kani didn't terminate within 5 minutes.
-    // assert_eq!(Pin::new(&mut gen1).resume(()), GeneratorState::Yielded(()));
-    // assert_eq!(Pin::new(&mut gen1).resume(()), GeneratorState::Complete(()));
-    assert!(false); // to make the test fail without taking forever
+    assert_eq!(Pin::new(&mut gen1).resume(()), GeneratorState::Yielded(()));
+    assert_eq!(Pin::new(&mut gen1).resume(()), GeneratorState::Complete(()));
 }
