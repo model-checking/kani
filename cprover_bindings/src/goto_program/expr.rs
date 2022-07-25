@@ -562,7 +562,14 @@ impl Expr {
         // For variadic functions, all named arguments must match the type of their formal param.
         // Extra arguments (e.g the ... args) can have any type.
         fn typecheck_named_args(parameters: &[Parameter], arguments: &[Expr]) -> bool {
-            parameters.iter().zip(arguments.iter()).all(|(p, a)| a.typ() == p.typ())
+            parameters.iter().zip(arguments.iter()).all(|(p, a)| {
+                if a.typ() == p.typ() {
+                    true
+                } else {
+                    tracing::error!(param=?p.typ(), arg=?a.typ(), "Argument doesn't check");
+                    false
+                }
+            })
         }
 
         if function.typ().is_code() {
