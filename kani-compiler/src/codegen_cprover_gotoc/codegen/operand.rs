@@ -331,8 +331,7 @@ impl<'tcx> GotocCtx<'tcx> {
             let var = tcx.gen_function_local_variable(2, &func_name, cgt.clone()).to_expr();
             let body = vec![
                 Stmt::decl(var.clone(), None, Location::none()),
-                var.clone()
-                    .member("case", &tcx.symbol_table)
+                tcx.codegen_discriminant_field(var.clone(), ty)
                     .assign(param.to_expr(), Location::none()),
                 var.ret(Location::none()),
             ];
@@ -641,7 +640,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// This is tracked in <https://github.com/model-checking/kani/issues/1350>.
     pub fn codegen_func_symbol(&mut self, instance: Instance<'tcx>) -> (&Symbol, Type) {
         let func = self.symbol_name(instance);
-        let funct = self.codegen_function_sig(self.fn_sig_of_instance(instance).unwrap());
+        let funct = self.codegen_function_sig(self.fn_sig_of_instance(instance));
         // make sure the functions imported from other modules are in the symbol table
         let sym = self.ensure(&func, |ctx, _| {
             Symbol::function(
