@@ -9,7 +9,22 @@ echo "Starting output file check..."
 echo
 
 # Test for platform
-TARGET=$(rustup default | cut -d' ' -f1 | cut -d'-' -f2-)
+PLATFORM=$(uname -sp)
+if [[ $PLATFORM == "Linux x86_64" ]]
+then
+  TARGET="x86_64-unknown-linux-gnu"
+elif [[ $PLATFORM == "Darwin i386" ]]
+then
+  TARGET="x86_64-apple-darwin"
+elif [[ $PLATFORM == "Darwin arm" ]]
+then
+  TARGET="aarch64-apple-darwin"
+else
+  echo
+  echo "Test only works on Linux or OSX platforms, skipping..."
+  echo
+  exit 0
+fi
 
 cd $(dirname $0)
 
