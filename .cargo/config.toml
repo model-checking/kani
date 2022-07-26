@@ -11,7 +11,6 @@ rustflags = [ # Global lints/warnings. Need to use underscore instead of -.
     # todo address the following lints.
     "-Aclippy::cargo_common_metadata",
     "-Aclippy::derive_partial_eq_without_eq",
-    "-Aclippy::expect_fun_call",
     "-Aclippy::explicit_auto_deref",
     "-Aclippy::if_same_then_else",
     "-Aclippy::iter_nth_zero",
@@ -28,7 +27,6 @@ rustflags = [ # Global lints/warnings. Need to use underscore instead of -.
     "-Aclippy::needless_return",
     "-Aclippy::new_ret_no_self",
     "-Aclippy::new_without_default",
-    "-Aclippy::or_fun_call",
     "-Aclippy::redundant_clone",
     "-Aclippy::too_many_arguments",
     "-Aclippy::type_complexity",
