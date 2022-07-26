@@ -164,43 +164,35 @@ fn handle_result(result_val: &Value) -> Vec<u8> {
     let desc = result_val["description"].as_str().unwrap();
 
     if desc.contains("assertion failed") {
-        for trace_val in result_val["trace"].as_array().unwrap() {
-            let mut det_vals_for_trace = handle_trace(trace_val);
-            det_vals.append(&mut det_vals_for_trace);
+        for trace_pt in result_val["trace"].as_array().unwrap() {
+            let det_val_opt = handle_trace_pt(trace_pt);
+            if let Some(det_val) = det_val_opt {
+                det_vals.push(det_val);
+            }
         }
     }
 
     det_vals
 }
 
-fn handle_trace(trace_val: &Value) -> Vec<u8> {
-    let mut det_vals: Vec<u8> = Vec::new();
-    let step_type = &trace_val["stepType"];
+fn handle_trace_pt(trace_pt: &Value) -> Option<u8> {
+    let step_type = &trace_pt["stepType"];
     if step_type != "assignment" {
-        return det_vals;
+        return None;
     }
 
-    let lhs = trace_val["lhs"].as_str().unwrap();
-    if lhs != "non_det_byte_arr" {
-        return det_vals;
+    let lhs = trace_pt["lhs"].as_str().unwrap();
+    if !lhs.contains("non_det_byte_arr") {
+        return None;
     }
 
-    let func = trace_val["sourceLocation"]["function"].as_str().unwrap();
-    if func != "kani::any_raw" {
-        return det_vals;
+    let func = trace_pt["sourceLocation"]["function"].as_str().unwrap();
+    if !func.contains("kani::any_raw") {
+        return None;
     }
 
-    let members_list = trace_val["value"]["members"].as_array().unwrap();
-    let byte_arr = members_list[0]["value"]["elements"].as_array().unwrap();
-
-    for a_byte in byte_arr {
-        let data = &a_byte["value"]["data"];
-        let file_line = format!("{}", data);
-        let file_line_len = file_line.len();
-        let file_line_no_quotes = &file_line[1..file_line_len - 1];
-        let det_val_u8 = file_line_no_quotes.parse().unwrap();
-        det_vals.push(det_val_u8);
-    }
-
-    det_vals
+    let det_val_with_quotes = trace_pt["value"]["data"].to_string();
+    let det_val_no_quotes = &det_val_with_quotes[1..det_val_with_quotes.len() - 1];
+    let det_val_u8: u8 = det_val_no_quotes.parse().expect("Couldn't parse the trace byte as a u8");
+    Some(det_val_u8)
 }
