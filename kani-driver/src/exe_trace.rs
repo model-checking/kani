@@ -182,12 +182,12 @@ fn handle_trace_pt(trace_pt: &Value) -> Option<u8> {
     }
 
     let lhs = trace_pt["lhs"].as_str().unwrap();
-    if !lhs.contains("non_det_byte_arr") {
+    if !lhs.starts_with("non_det_byte_arr") {
         return None;
     }
 
     let func = trace_pt["sourceLocation"]["function"].as_str().unwrap();
-    if !func.contains("kani::any_raw") {
+    if !func.starts_with("kani::any_raw") {
         return None;
     }
 
