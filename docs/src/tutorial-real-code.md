@@ -40,12 +40,12 @@ Sometimes the best place to start won't be your code, but the code that you depe
 If it's used by more projects that just yours, it will be valuable to more people, too!
 
 3. Find well-tested code.
-Code structure changes to make code more unit-testable will make it more provable, too.
+When you make changes to improve the unit-testability of code, that also makes it more amenable to proof, too.
 
 Here are some things to avoid, when starting out:
 
 1. Lots of loops, or at least nested loops.
-As we saw in the last section, right now we often need to put upper bounds on these to make more limited claims.
+As we saw in the [tutorial](./tutorial-loop-unwinding.md), right now we often need to put upper bounds on loops to make more limited claims.
 
 2. Inductive data structures.
 These are data structures with unbounded size (e.g., linked lists or trees.)
@@ -73,12 +73,21 @@ A first proof will likely start in the following form:
 
 Running Kani on this simple starting point will help figure out:
 
-1. What unexpected constraints might be needed on your inputs to avoid "expected" failures.
-2. Whether you're over-constrained. Check the coverage report using `--visualize`. Ideally you'd see 100% coverage, and if not, it's usually because now you've over-constrained the inputs.
+1. What unexpected constraints might be needed on your inputs (using `kani::assume`) to avoid "expected" failures.
+2. Whether you're over-constrained. Check the coverage report using `--visualize`. Ideally you'd see 100% coverage, and if not, it's usually because you've assumed too much (thus over-constraining the inputs).
 3. Whether Kani will support all the Rust features involved.
 4. Whether you've started with a tractable problem.
-(If the problem is initially intractable, try `--default-unwind 1` and see if you can follow the techniques in the previous section to put a bound on the problem.)
+(Remember to try setting `#[kani::unwind(1)]` to force early termination and work up from there.)
 
-Once you've got something working, the next step is to prove more interesting properties than what Kani covers by default.
+Once you've got something working, the next step is to prove more interesting properties than just what Kani covers by default.
 You accomplish this by adding new assertions (not just in your harness, but also to the code being run).
 Even if a proof harness has no post-conditions being asserted directly, the assertions encountered along the way can be meaningful proof results by themselves.
+
+
+## Examples of the use of Kani
+
+On the [Kani blog](https://model-checking.github.io/kani-verifier-blog/), we've documented worked examples of applying Kani:
+
+1. [The `Rectangle` example of the Rust Book](https://model-checking.github.io/kani-verifier-blog/2022/05/04/announcing-the-kani-rust-verifier-project.html)
+2. [A Rust standard library CVE](https://model-checking.github.io/kani-verifier-blog/2022/06/01/using-the-kani-rust-verifier-on-a-rust-standard-library-cve.html)
+3. [Verifying a part of Firecracker](https://model-checking.github.io/kani-verifier-blog/2022/07/13/using-the-kani-rust-verifier-on-a-firecracker-example.html)
