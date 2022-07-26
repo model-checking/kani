@@ -18,7 +18,7 @@ macro_rules! path_str {
 }
 
 /// Build the target library, and setup cargo to rerun them if the source has changed.
-fn setup_lib(target_dir: &str, out_dir: &str, lib: &str) {
+fn setup_lib(out_dir: &str, lib_out: &str, lib: &str) {
     let kani_lib = vec!["..", "library", lib];
     println!("cargo:rerun-if-changed={}", path_str!(kani_lib));
 
@@ -30,11 +30,9 @@ fn setup_lib(target_dir: &str, out_dir: &str, lib: &str) {
         &path_str!(kani_lib_toml),
         "-Z",
         "unstable-options",
-        // Generated artifacts go here
-        "--target-dir",
-        &target_dir,
-        // Copy final artifacts here
         "--out-dir",
+        lib_out,
+        "--target-dir",
         out_dir,
     ];
     let result = Command::new("cargo")
@@ -62,12 +60,10 @@ pub fn main() {
     println!("cargo:rustc-link-arg-bin=kani-compiler=-Wl,-rpath,{}/../toolchain/lib", origin);
 
     // Compile kani library and export KANI_LIB_PATH variable with its relative location.
-    let target_dir = env::var("OUT_DIR").unwrap();
-    let out_dir = path_str!([&target_dir, "lib"]);
-    let out_dir_kani = path_str!([&out_dir, "kani"]);
-    let out_dir_std = path_str!([&out_dir, "std"]);
-    setup_lib(&target_dir, &out_dir_kani, "kani");
-    setup_lib(&target_dir, &out_dir_kani, "kani_macros");
-    setup_lib(&target_dir, &out_dir_std, "std");
-    println!("cargo:rustc-env=KANI_LIB_PATH={}", out_dir);
+    let out_dir = env::var("OUT_DIR").unwrap();
+    let lib_out = path_str!([&out_dir, "lib"]);
+    setup_lib(&out_dir, &lib_out, "kani");
+    setup_lib(&out_dir, &lib_out, "kani_macros");
+    setup_lib(&out_dir, &lib_out, "std");
+    println!("cargo:rustc-env=KANI_LIB_PATH={}", lib_out);
 }
