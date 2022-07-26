@@ -7,6 +7,8 @@ name = "rustdoc"
 version = "0.0.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
+publish = false
+
 # From upstream librustdoc:
 # https://github.com/rust-lang/rust/tree/master/src/librustdoc
 # Upstream crate does not list license but Rust statues:

@@ -9,6 +9,7 @@ description = "Build a project with Kani and run all proof harnesses"
 license = "MIT OR Apache-2.0"
 homepage = "https://github.com/model-checking/kani"
 repository = "https://github.com/model-checking/kani"
+publish = false
 
 [dependencies]
 kani_metadata = { path = "../kani_metadata" }
