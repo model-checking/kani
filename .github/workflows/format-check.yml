@@ -32,6 +32,10 @@ jobs:
         with:
             os: ubuntu-20.04
 
+      - name: "Install jq for parsing."
+        run: |
+          sudo apt-get install -y jq
+
       - name: "Run Clippy"
         run: |
           cargo clippy --all -- -D warnings
