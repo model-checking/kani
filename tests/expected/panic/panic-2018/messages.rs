@@ -11,3 +11,8 @@ include! {"../test.rs"}
 fn check_panic_2018() {
     check_panic();
 }
+
+#[kani::proof]
+fn check_user_panic_macro() {
+    panic_oob!("try_insert", 5, 3);
+}
