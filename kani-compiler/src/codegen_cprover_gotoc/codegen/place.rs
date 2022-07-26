@@ -15,7 +15,7 @@ use rustc_middle::{
     mir::{Field, Local, Place, ProjectionElem},
     ty::{self, Ty, TypeAndMut, VariantDef},
 };
-use rustc_target::abi::{TagEncoding, Variants};
+use rustc_target::abi::{TagEncoding, VariantIdx, Variants};
 use tracing::{debug, trace, warn};
 
 /// A projection in Kani can either be to a type (the normal case),
@@ -24,6 +24,7 @@ use tracing::{debug, trace, warn};
 pub enum TypeOrVariant<'tcx> {
     Type(Ty<'tcx>),
     Variant(&'tcx VariantDef),
+    GeneratorVariant(VariantIdx),
 }
 
 /// A struct for storing the data for passing to `codegen_unimplemented`
@@ -129,7 +130,7 @@ impl<'tcx> ProjectedPlace<'tcx> {
                 }
             }
             // TODO: handle Variant https://github.com/model-checking/kani/issues/448
-            TypeOrVariant::Variant(_) => None,
+            TypeOrVariant::Variant(_) | TypeOrVariant::GeneratorVariant(_) => None,
         }
     }
 
@@ -197,7 +198,7 @@ impl<'tcx> TypeOrVariant<'tcx> {
     pub fn monomorphize(self, ctx: &GotocCtx<'tcx>) -> Self {
         match self {
             TypeOrVariant::Type(t) => TypeOrVariant::Type(ctx.monomorphize(t)),
-            TypeOrVariant::Variant(_) => self,
+            TypeOrVariant::Variant(_) | TypeOrVariant::GeneratorVariant(_) => self,
         }
     }
 }
@@ -207,6 +208,9 @@ impl<'tcx> TypeOrVariant<'tcx> {
         match self {
             TypeOrVariant::Type(t) => *t,
             TypeOrVariant::Variant(v) => panic!("expect a type but variant is found: {:?}", v),
+            TypeOrVariant::GeneratorVariant(v) => {
+                panic!("expect a type but generator variant is found: {:?}", v)
+            }
         }
     }
 
@@ -215,6 +219,9 @@ impl<'tcx> TypeOrVariant<'tcx> {
         match self {
             TypeOrVariant::Type(t) => panic!("expect a variant but type is found: {:?}", t),
             TypeOrVariant::Variant(v) => v,
+            TypeOrVariant::GeneratorVariant(v) => {
+                panic!("expect a variant but generator variant found {:?}", v)
+            }
         }
     }
 }
@@ -269,12 +276,12 @@ impl<'tcx> GotocCtx<'tcx> {
                         Ok(res.member(&field.name.to_string(), &self.symbol_table))
                     }
                     ty::Closure(..) => Ok(res.member(&f.index().to_string(), &self.symbol_table)),
-                    ty::Generator(..) => Err(UnimplementedData::new(
-                        "ty::Generator",
-                        "https://github.com/model-checking/kani/issues/416",
-                        Type::code(vec![], Type::empty()),
-                        *res.location(),
-                    )),
+                    ty::Generator(..) => {
+                        let field_name = self.generator_field_name(f.index().into());
+                        Ok(res
+                            .member("direct_fields", &self.symbol_table)
+                            .member(field_name, &self.symbol_table))
+                    }
                     _ => unimplemented!(),
                 }
             }
@@ -282,6 +289,10 @@ impl<'tcx> GotocCtx<'tcx> {
             TypeOrVariant::Variant(v) => {
                 let field = &v.fields[f.index()];
                 Ok(res.member(&field.name.to_string(), &self.symbol_table))
+            }
+            TypeOrVariant::GeneratorVariant(_var_idx) => {
+                let field_name = self.generator_field_name(f.index().into());
+                Ok(res.member(field_name, &self.symbol_table))
             }
         }
     }
@@ -498,34 +509,51 @@ impl<'tcx> GotocCtx<'tcx> {
             ProjectionElem::Downcast(_, idx) => {
                 // downcast converts a variable of an enum type to one of its discriminated cases
                 let t = before.mir_typ();
-                match t.kind() {
+                let (case_name, type_or_variant) = match t.kind() {
                     ty::Adt(def, _) => {
-                        let variant = def.variants().get(idx).unwrap();
-                        let case_name = variant.name.to_string();
-                        let typ = TypeOrVariant::Variant(variant);
-                        let expr = match &self.layout_of(t).variants {
-                            Variants::Single { .. } => before.goto_expr,
-                            Variants::Multiple { tag_encoding, .. } => match tag_encoding {
-                                TagEncoding::Direct => before
-                                    .goto_expr
-                                    .member("cases", &self.symbol_table)
-                                    .member(&case_name, &self.symbol_table),
-                                TagEncoding::Niche { .. } => {
-                                    before.goto_expr.member(&case_name, &self.symbol_table)
-                                }
-                            },
-                        };
-                        ProjectedPlace::try_new(
-                            expr,
-                            typ,
-                            before.fat_ptr_goto_expr,
-                            before.fat_ptr_mir_typ,
-                            self,
-                        )
+                        let variant = def.variant(idx);
+                        (variant.name.as_str().into(), TypeOrVariant::Variant(variant))
                     }
-                    _ => unreachable!("it's a bug to reach here!"),
-                }
+                    ty::Generator(..) => {
+                        (self.generator_variant_name(idx), TypeOrVariant::GeneratorVariant(idx))
+                    }
+                    _ => unreachable!(
+                        "cannot downcast {:?} to a variant (only enums and generators can)",
+                        &t.kind()
+                    ),
+                };
+                let layout = self.layout_of(t);
+                let expr = match &layout.variants {
+                    Variants::Single { .. } => before.goto_expr,
+                    Variants::Multiple { tag_encoding, .. } => match tag_encoding {
+                        TagEncoding::Direct => {
+                            let cases = if t.is_generator() {
+                                before.goto_expr
+                            } else {
+                                before.goto_expr.member("cases", &self.symbol_table)
+                            };
+                            cases.member(case_name, &self.symbol_table)
+                        }
+                        TagEncoding::Niche { .. } => {
+                            before.goto_expr.member(case_name, &self.symbol_table)
+                        }
+                    },
+                };
+                ProjectedPlace::try_new(
+                    expr,
+                    type_or_variant,
+                    before.fat_ptr_goto_expr,
+                    before.fat_ptr_mir_typ,
+                    self,
+                )
             }
+            ProjectionElem::OpaqueCast(ty) => ProjectedPlace::try_new(
+                before.goto_expr.cast_to(self.codegen_ty(ty)),
+                TypeOrVariant::Type(ty),
+                before.fat_ptr_goto_expr,
+                before.fat_ptr_mir_typ,
+                self,
+            ),
         }
     }
 

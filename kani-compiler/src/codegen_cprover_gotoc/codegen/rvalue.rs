@@ -419,6 +419,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     pub fn codegen_rvalue(&mut self, rv: &Rvalue<'tcx>, loc: Location) -> Expr {
         let res_ty = self.rvalue_ty(rv);
+        debug!(?rv, "codegen_rvalue");
         match rv {
             Rvalue::Use(p) => self.codegen_operand(p),
             Rvalue::Repeat(op, sz) => self.codegen_rvalue_repeat(op, sz, res_ty),
@@ -493,7 +494,31 @@ impl<'tcx> GotocCtx<'tcx> {
                     "https://github.com/model-checking/kani/issues/541",
                 )
             }
+            // A CopyForDeref is equivalent to a read from a place at the codegen level.
+            // https://github.com/rust-lang/rust/blob/1673f1450eeaf4a5452e086db0fe2ae274a0144f/compiler/rustc_middle/src/mir/syntax.rs#L1055
+            Rvalue::CopyForDeref(place) => {
+                unwrap_or_return_codegen_unimplemented!(self, self.codegen_place(place)).goto_expr
+            }
         }
+    }
+
+    pub fn codegen_discriminant_field(&self, place: Expr, ty: Ty<'tcx>) -> Expr {
+        let layout = self.layout_of(ty);
+        assert!(
+            matches!(
+                &layout.variants,
+                Variants::Multiple { tag_encoding: TagEncoding::Direct, .. }
+            ),
+            "discriminant field (`case`) only exists for multiple variants and direct encoding"
+        );
+        let expr = if ty.is_generator() {
+            // Generators are translated somewhat differently from enums (see [`GotoCtx::codegen_ty_generator`]).
+            // As a consequence, the discriminant is accessed as `.direct_fields.case` instead of just `.case`.
+            place.member("direct_fields", &self.symbol_table)
+        } else {
+            place
+        };
+        expr.member("case", &self.symbol_table)
     }
 
     /// e: ty
@@ -510,7 +535,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             Variants::Multiple { tag, tag_encoding, .. } => match tag_encoding {
                 TagEncoding::Direct => {
-                    e.member("case", &self.symbol_table).cast_to(self.codegen_ty(res_ty))
+                    self.codegen_discriminant_field(e, ty).cast_to(self.codegen_ty(res_ty))
                 }
                 TagEncoding::Niche { dataful_variant, niche_variants, niche_start } => {
                     // This code follows the logic in the cranelift codegen backend:

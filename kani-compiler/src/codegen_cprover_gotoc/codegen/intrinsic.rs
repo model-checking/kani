@@ -10,7 +10,6 @@ use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{self, Ty};
 use rustc_middle::ty::{Instance, InstanceDef};
 use rustc_span::Span;
-use rustc_target::abi::InitKind;
 use tracing::{debug, warn};
 
 macro_rules! emit_concurrency_warning {
@@ -314,9 +313,19 @@ impl<'tcx> GotocCtx<'tcx> {
         macro_rules! codegen_size_align {
             ($which: ident) => {{
                 let tp_ty = instance.substs.type_at(0);
-                let arg = fargs.remove(0);
-                let size_align = self.size_and_align_of_dst(tp_ty, arg);
-                self.codegen_expr_to_place(p, size_align.$which)
+                if tp_ty.is_generator() {
+                    let e = self.codegen_unimplemented(
+                        "size or alignment of a generator type",
+                        cbmc_ret_ty,
+                        loc,
+                        "https://github.com/model-checking/kani/issues/1395",
+                    );
+                    self.codegen_expr_to_place(p, e)
+                } else {
+                    let arg = fargs.remove(0);
+                    let size_align = self.size_and_align_of_dst(tp_ty, arg);
+                    self.codegen_expr_to_place(p, size_align.$which)
+                }
             }};
         }
 
@@ -767,9 +776,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         // Then we check if the type allows "raw" initialization for the cases
         // where memory is zero-initialized or entirely uninitialized
-        if intrinsic == "assert_zero_valid"
-            && !layout.might_permit_raw_init(self, InitKind::Zero, false)
-        {
+        if intrinsic == "assert_zero_valid" && !self.tcx.permits_zero_init(layout) {
             return self.codegen_fatal_error(
                 PropertyClass::SafetyCheck,
                 &format!("attempted to zero-initialize type `{}`, which is invalid", ty),
@@ -777,9 +784,7 @@ impl<'tcx> GotocCtx<'tcx> {
             );
         }
 
-        if intrinsic == "assert_uninit_valid"
-            && !layout.might_permit_raw_init(self, InitKind::Uninit, false)
-        {
+        if intrinsic == "assert_uninit_valid" && !self.tcx.permits_uninit_init(layout) {
             return self.codegen_fatal_error(
                 PropertyClass::SafetyCheck,
                 &format!("attempted to leave type `{}` uninitialized, which is invalid", ty),

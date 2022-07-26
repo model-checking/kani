@@ -91,7 +91,7 @@ unsafe impl Invariant for char {
     fn is_valid(&self) -> bool {
         // Kani translates char into i32.
         let val = *self as i32;
-        val <= 0xD7FF || (val >= 0xE000 && val <= 0x10FFFF)
+        val <= 0xD7FF || (0xE000..=0x10FFFF).contains(&val)
     }
 }
 

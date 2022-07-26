@@ -22,7 +22,7 @@ mod fixed;
 mod raw_vec;
 use abstract_vecdeque::*;
 
-const MAX_CAPACITY: usize = usize::MAX >> 1;
+const MAX_CAPACITY: usize = usize::MAX >> 2;
 
 /// This module uses a version of VecDeque that includes the CVE fix.
 mod fixed_proofs {
