@@ -6,7 +6,6 @@ use crate::codegen_cprover_gotoc::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use crate::unwrap_or_return_codegen_unimplemented;
 use cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
-use cbmc::utils::BUG_REPORT_URL;
 use cbmc::MachineModel;
 use cbmc::{btree_string_map, InternString, InternedString};
 use num::bigint::BigInt;
@@ -487,7 +486,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             Rvalue::ThreadLocalRef(_) => {
                 let typ = self.codegen_ty(res_ty);
-                self.codegen_unimplemented(
+                self.codegen_unimplemented_expr(
                     "Rvalue::ThreadLocalRef",
                     typ,
                     Location::none(),
@@ -736,7 +735,7 @@ impl<'tcx> GotocCtx<'tcx> {
             PointerCast::UnsafeFnPointer => self.codegen_operand(o),
             PointerCast::ClosureFnPointer(_) => {
                 let dest_typ = self.codegen_ty(t);
-                self.codegen_unimplemented(
+                self.codegen_unimplemented_expr(
                     "PointerCast::ClosureFnPointer",
                     dest_typ,
                     Location::none(),
@@ -881,14 +880,11 @@ impl<'tcx> GotocCtx<'tcx> {
                 format!("drop_unimplemented<{}>", self.readable_instance_name(drop_instance));
             let drop_sym = self.ensure(&drop_sym_name, |ctx, name| {
                 // Function body
-                let unimplemented = ctx
-                    .codegen_unimplemented(
-                        format!("drop_in_place for {}", drop_sym_name).as_str(),
-                        Type::empty(),
-                        Location::none(),
-                        "https://github.com/model-checking/kani/issues/281",
-                    )
-                    .as_stmt(Location::none());
+                let unimplemented = ctx.codegen_unimplemented_stmt(
+                    format!("drop_in_place for {}", drop_sym_name).as_str(),
+                    Location::none(),
+                    "https://github.com/model-checking/kani/issues/281",
+                );
 
                 // Declare symbol for the single, self parameter
                 let param_typ = ctx.codegen_ty(trait_ty).to_pointer();
@@ -951,8 +947,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let check = Expr::eq(cbmc_size, vt_size);
         let assert_msg =
             format!("Correct CBMC vtable size for {:?} (MIR type {:?})", ty, operand_type.kind());
-        let size_assert =
-            Stmt::assert_sanity_check(check, &assert_msg, BUG_REPORT_URL, Location::none());
+        let size_assert = self.codegen_sanity(check, &assert_msg, Location::none());
         Stmt::block(vec![decl, size_assert], Location::none())
     }
 

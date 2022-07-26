@@ -7,7 +7,6 @@ use crate::codegen_cprover_gotoc::codegen::typ::pointee_type;
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::{Expr, Location, Stmt, Type};
-use cbmc::utils::BUG_REPORT_URL;
 use kani_queries::UserInput;
 use rustc_hir::def_id::DefId;
 use rustc_middle::mir;
@@ -178,15 +177,19 @@ impl<'tcx> GotocCtx<'tcx> {
             TerminatorKind::SwitchInt { discr, switch_ty, targets } => {
                 self.codegen_switch_int(discr, *switch_ty, targets)
             }
-            TerminatorKind::Resume => self.codegen_assert_false(
-                PropertyClass::UnsupportedConstruct,
-                "resume instruction",
+            // The following two use `codegen_mimic_unimplemented`
+            // because we don't want to raise the warning during compilation.
+            // These operations will normally be codegen'd but normally be unreachable
+            // since we make use of `-C unwind=abort`.
+            TerminatorKind::Resume => self.codegen_mimic_unimplemented(
+                "TerminatorKind::Resume",
                 loc,
+                "https://github.com/model-checking/kani/issues/692",
             ),
-            TerminatorKind::Abort => self.codegen_assert_false(
-                PropertyClass::UnsupportedConstruct,
-                "abort instruction",
+            TerminatorKind::Abort => self.codegen_mimic_unimplemented(
+                "TerminatorKind::Abort",
                 loc,
+                "https://github.com/model-checking/kani/issues/692",
             ),
             TerminatorKind::Return => {
                 let rty = self.current_fn().sig().skip_binder().output();
@@ -245,12 +248,12 @@ impl<'tcx> GotocCtx<'tcx> {
                 Stmt::block(
                     vec![
                         reach_stmt,
-                        cond.cast_to(Type::bool()).if_then_else(
-                            Stmt::goto(self.current_fn().find_label(target), loc),
-                            None,
+                        self.codegen_assert_assume(
+                            cond.cast_to(Type::bool()),
+                            PropertyClass::Assertion,
+                            &msg_str,
                             loc,
                         ),
-                        self.codegen_assert_false(PropertyClass::Assertion, &msg_str, loc),
                         Stmt::goto(self.current_fn().find_label(target), loc),
                     ],
                     loc,
@@ -264,14 +267,11 @@ impl<'tcx> GotocCtx<'tcx> {
             TerminatorKind::Yield { .. } | TerminatorKind::GeneratorDrop => {
                 unreachable!("we should not hit these cases") // why?
             }
-            TerminatorKind::InlineAsm { .. } => self
-                .codegen_unimplemented(
-                    "InlineAsm",
-                    Type::empty(),
-                    loc,
-                    "https://github.com/model-checking/kani/issues/2",
-                )
-                .as_stmt(loc),
+            TerminatorKind::InlineAsm { .. } => self.codegen_unimplemented_stmt(
+                "TerminatorKind::InlineAsm",
+                loc,
+                "https://github.com/model-checking/kani/issues/2",
+            ),
         }
     }
 
@@ -328,15 +328,11 @@ impl<'tcx> GotocCtx<'tcx> {
                         if let Some(typ) = pointee_type(self.local_ty(place.local)) {
                             if !(typ.is_trait() || typ.is_box()) {
                                 warn!(self_type=?typ, "Unsupported drop of unsized");
-                                return self
-                                    .codegen_unimplemented(
-                                        format!("Unsupported drop unsized struct: {:?}", typ)
-                                            .as_str(),
-                                        Type::Empty,
-                                        Location::None,
-                                        "https://github.com/model-checking/kani/issues/1072",
-                                    )
-                                    .as_stmt(Location::None);
+                                return self.codegen_unimplemented_stmt(
+                                    format!("Unsupported drop unsized struct: {:?}", typ).as_str(),
+                                    Location::None,
+                                    "https://github.com/model-checking/kani/issues/1072",
+                                );
                             }
                         }
                         let self_data = trait_fat_ptr.to_owned().member("data", &self.symbol_table);
@@ -380,16 +376,14 @@ impl<'tcx> GotocCtx<'tcx> {
                         // https://github.com/model-checking/kani/issues/426
                         // Unblocks: https://github.com/model-checking/kani/issues/435
                         if Expr::typecheck_call(&func, &args) {
-                            func.call(args)
+                            func.call(args).as_stmt(Location::none())
                         } else {
-                            self.codegen_unimplemented(
+                            self.codegen_unimplemented_stmt(
                                 format!("drop_in_place call for {:?}", func).as_str(),
-                                func.typ().return_type().unwrap().clone(),
                                 Location::none(),
                                 "https://github.com/model-checking/kani/issues/426",
                             )
                         }
-                        .as_stmt(Location::none())
                     }
                 }
             }
@@ -503,12 +497,7 @@ impl<'tcx> GotocCtx<'tcx> {
         if let Some(next_bb) = target {
             Stmt::goto(self.current_fn().find_label(next_bb), loc)
         } else {
-            Stmt::assert_sanity_check(
-                Expr::bool_false(),
-                "Unexpected return from Never function",
-                BUG_REPORT_URL,
-                loc,
-            )
+            self.codegen_sanity(Expr::bool_false(), "Unexpected return from Never function", loc)
         }
     }
 
@@ -711,8 +700,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // could become unreachable.
         let call_is_nonnull = fn_ptr.clone().is_nonnull();
         let assert_msg = format!("Non-null virtual function call for {:?}", vtable_field_name);
-        let assert_nonnull =
-            self.codegen_assert(call_is_nonnull, PropertyClass::SanityCheck, &assert_msg, loc);
+        let assert_nonnull = self.codegen_sanity(call_is_nonnull, &assert_msg, loc);
 
         // Virtual function call and corresponding nonnull assertion.
         let call = fn_ptr.dereference().call(fargs.to_vec());

@@ -78,12 +78,10 @@ impl<'tcx> GotocHook<'tcx> for ExpectFail {
         let msg =
             format!("EXPECTED FAIL: {}", utils::extract_const_message(&fargs.remove(0)).unwrap());
 
-        let property_class = PropertyClass::ExpectFail;
-
         let loc = tcx.codegen_span_option(span);
         Stmt::block(
             vec![
-                tcx.codegen_assert(cond, property_class, &msg, loc),
+                tcx.codegen_assert(cond, PropertyClass::ExpectFail, &msg, loc),
                 Stmt::goto(tcx.current_fn().find_label(&target), loc),
             ],
             loc,
@@ -163,13 +161,13 @@ impl<'tcx> GotocHook<'tcx> for Assert {
 
         // Since `cond` might have side effects, assign it to a temporary
         // variable so that it's evaluated once, then assert and assume it
+        // TODO: I don't think `cond` can have side effects, this is MIR, it's going to be temps
         let (tmp, decl) = tcx.decl_temp_variable(cond.typ().clone(), Some(cond), caller_loc);
         Stmt::block(
             vec![
                 reach_stmt,
                 decl,
-                tcx.codegen_assert(tmp.clone(), PropertyClass::Assertion, &msg, caller_loc),
-                Stmt::assume(tmp, caller_loc),
+                tcx.codegen_assert_assume(tmp, PropertyClass::Assertion, &msg, caller_loc),
                 Stmt::goto(tcx.current_fn().find_label(&target), caller_loc),
             ],
             caller_loc,

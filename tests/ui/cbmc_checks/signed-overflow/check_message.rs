@@ -14,13 +14,14 @@ fn dummy(var: i32) {
 
 #[kani::proof]
 fn main() {
-    dummy(any::<i32>() + any::<i32>());
-    dummy(any::<i32>() - any::<i32>());
-    dummy(any::<i32>() * any::<i32>());
-    dummy(any::<i32>() / any::<i32>()); // This is not emitting CBMC check.
-    dummy(any::<i32>() % any::<i32>()); // This is not emitting CBMC check.
-    dummy(any::<i32>() << any::<i32>());
-    dummy(any::<i32>() >> any::<i32>());
-    dummy(-any::<i32>()); // This is not emitting CBMC check.
+    match kani::any() {
+        0 => dummy(any::<i32>() + any::<i32>()),
+        1 => dummy(any::<i32>() - any::<i32>()),
+        2 => dummy(any::<i32>() * any::<i32>()),
+        3 => dummy(any::<i32>() / any::<i32>()),
+        4 => dummy(any::<i32>() % any::<i32>()),
+        5 => dummy(any::<i32>() << any::<i32>()),
+        6 => dummy(any::<i32>() >> any::<i32>()),
+        _ => ()
+    }
 }
-

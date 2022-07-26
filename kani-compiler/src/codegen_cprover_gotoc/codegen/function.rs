@@ -3,7 +3,6 @@
 
 //! This file contains functions related to codegenning MIR functions into gotoc
 
-use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{Expr, Stmt, Symbol};
 use cbmc::InternString;
@@ -96,13 +95,14 @@ impl<'tcx> GotocCtx<'tcx> {
             debug!("Skipping function {}", self.current_fn().readable_name());
             self.codegen_function_prelude();
             self.codegen_declare_variables();
-            let body = self.codegen_fatal_error(
-                PropertyClass::UnsupportedConstruct,
-                &GotocCtx::unsupported_msg(
-                    &(String::from("The function ") + self.current_fn().readable_name()),
-                    None,
-                ),
-                Some(self.current_fn().mir().span),
+            let loc = self.codegen_span(&self.current_fn().mir().span);
+            let readable_name = format!("The function {}", self.current_fn().readable_name());
+            // We'll ideally just get rid of this eventually, but use "mimic" to avoid extra compilation warnings
+            let body = self.codegen_mimic_unimplemented(
+                &readable_name,
+                loc,
+                // There actually are links to specific issues in `should_skip_current_fn`...
+                "https://github.com/model-checking/kani/issues/new/choose",
             );
             self.symbol_table.update_fn_declaration_with_definition(&name, body);
         } else {

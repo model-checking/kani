@@ -14,12 +14,15 @@ fn dummy(var: u32) {
 
 #[kani::proof]
 fn main() {
-    dummy(any::<u32>() + any::<u32>());
-    dummy(any::<u32>() - any::<u32>());
-    dummy(any::<u32>() * any::<u32>());
-    dummy(any::<u32>() / any::<u32>());
-    dummy(any::<u32>() % any::<u32>());
-    dummy(any::<u32>() << any::<u32>());
-    dummy(any::<u32>() >> any::<u32>());
+    match kani::any() {
+        0 => dummy(any::<u32>() + any::<u32>()),
+        1 => dummy(any::<u32>() - any::<u32>()),
+        2 => dummy(any::<u32>() * any::<u32>()),
+        3 => dummy(any::<u32>() / any::<u32>()),
+        4 => dummy(any::<u32>() % any::<u32>()),
+        5 => dummy(any::<u32>() << any::<u32>()),
+        6 => dummy(any::<u32>() >> any::<u32>()),
+        _ => ()
+    }
 }
 
