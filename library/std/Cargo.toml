@@ -5,9 +5,10 @@
 # Note: this package is intentionally named std to make sure the names of
 # standard library symbols are preserved
 name = "std"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
+publish = false
 
 [dependencies]
 kani = {path="../kani"}

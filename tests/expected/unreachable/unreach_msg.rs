@@ -10,6 +10,7 @@ fn check_unreachable() {
         1 => unreachable!("Error message"),
         2 => unreachable!("Unreachable message with arg {}", "str"),
         3 => unreachable!("{}", msg),
+        4 => unreachable!(concat!("My", " error", " message")),
         _ => unreachable!(msg),
     }
 }

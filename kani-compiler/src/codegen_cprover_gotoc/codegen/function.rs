@@ -44,8 +44,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Get the number of parameters that the current function expects.
     fn get_params_size(&self) -> usize {
         let sig = self.current_fn().sig();
-        let sig =
-            self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig.unwrap());
+        let sig = self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig);
         // we don't call [codegen_function_sig] because we want to get a bit more metainformation.
         sig.inputs().len()
     }

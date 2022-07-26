@@ -6,7 +6,6 @@ use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{Expr, ExprValue, Location, Stmt, SymbolTable, Type};
 use cbmc::{btree_string_map, InternedString};
-use rustc_errors::FatalError;
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{Instance, Ty};
 use tracing::debug;
@@ -100,11 +99,6 @@ impl<'tcx> GotocCtx<'tcx> {
             s.push_str(url);
         }
         s
-    }
-
-    pub fn emit_error_and_exit(&self, error_msg: &str) -> ! {
-        self.tcx.sess.err(error_msg);
-        FatalError.raise()
     }
 }
 

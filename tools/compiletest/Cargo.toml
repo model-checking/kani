@@ -8,6 +8,7 @@ name = "compiletest"
 version = "0.0.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
+publish = false
 # From upstream compiletest:
 # https://github.com/rust-lang/rust/tree/master/src/tools/compiletest
 # Upstream crate does not list license but Rust statues:
