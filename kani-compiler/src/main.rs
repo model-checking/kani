@@ -39,9 +39,14 @@ use std::ffi::OsStr;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-/// This function generates all baseline args for running Kani code.
-fn base_kani_args() -> Vec<String> {
-    // TODO: We might not need all these flags for exec_trace
+/// This function generates all rustc configurations required by our goto-c codegen.
+fn rustc_gotoc_flags(lib_path: &str) -> Vec<String> {
+    // The option below provides a mechanism by which definitions in the
+    // standard library can be overriden. See
+    // https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp/topic/.E2.9C.94.20Globally.20override.20an.20std.20macro/near/268873354
+    // for more details.
+    let kani_std_rlib = PathBuf::from(lib_path).join("libstd.rlib");
+    let kani_std_wrapper = format!("noprelude:std={}", kani_std_rlib.to_str().unwrap());
     let args = vec![
         "-C",
         "overflow-checks=on",
@@ -60,41 +65,14 @@ fn base_kani_args() -> Vec<String> {
         "crate-attr=feature(register_tool)",
         "-Z",
         "crate-attr=register_tool(kanitool)",
-    ];
-    args.iter().map(|s| s.to_string()).collect()
-}
-
-/// This function adds Kani library args.
-fn kani_library_args(lib_path: &str) -> Vec<String> {
-    // The option below provides a mechanism by which definitions in the
-    // standard library can be overriden. See
-    // https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp/topic/.E2.9C.94.20Globally.20override.20an.20std.20macro/near/268873354
-    // for more details.
-    let mut base_args = base_kani_args();
-    let lib_path_kani: PathBuf = [lib_path, "kani"].iter().collect();
-    let kani_std_rlib: PathBuf = [lib_path, "std", "libstd.rlib"].iter().collect();
-    let kani_std_wrapper = format!("noprelude:std={}", kani_std_rlib.to_str().unwrap());
-    let args = vec![
         "-L",
-        lib_path_kani.to_str().unwrap(),
+        lib_path,
         "--extern",
         "kani",
         "--extern",
         kani_std_wrapper.as_str(),
     ];
-    let mut all_args: Vec<String> = args.iter().map(|s| s.to_string()).collect();
-    all_args.append(&mut base_args);
-    all_args
-}
-
-/// This function adds args for the Kani lib, but not the Kani std macros.
-fn exec_trace_args(lib_path: &str) -> Vec<String> {
-    let mut base_args = base_kani_args();
-    let lib_path_kani: PathBuf = [lib_path, "kani"].iter().collect();
-    let args = vec!["-L", lib_path_kani.to_str().unwrap(), "--extern", "kani"];
-    let mut all_args: Vec<String> = args.iter().map(|s| s.to_string()).collect();
-    all_args.append(&mut base_args);
-    all_args
+    args.iter().map(|s| s.to_string()).collect()
 }
 
 /// Main function. Configure arguments and run the compiler.
@@ -140,14 +118,10 @@ impl Callbacks for KaniCallbacks {}
 
 /// Generate the arguments to pass to rustc_driver.
 fn generate_rustc_args(args: &ArgMatches) -> Vec<String> {
-    // TODO: Re-order funcs inside this file
+    let mut gotoc_args =
+        rustc_gotoc_flags(args.value_of(parser::KANI_LIB).unwrap_or(std::env!("KANI_LIB_PATH")));
     let mut rustc_args = vec![String::from("rustc")];
-    let kani_lib_path = &args.value_of(parser::KANI_LIB).unwrap_or(std::env!("KANI_LIB_PATH"));
     if args.is_present(parser::GOTO_C) {
-        let mut gotoc_args = kani_library_args(kani_lib_path);
-        rustc_args.append(&mut gotoc_args);
-    } else if args.is_present(parser::EXEC_TRACE) {
-        let mut gotoc_args = exec_trace_args(kani_lib_path);
         rustc_args.append(&mut gotoc_args);
     }
 

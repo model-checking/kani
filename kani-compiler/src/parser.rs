@@ -13,9 +13,6 @@ pub const LOG_LEVEL: &str = "log-level";
 /// Option name used to enable goto-c compilation.
 pub const GOTO_C: &str = "goto-c";
 
-/// Option name to use exec trace version of libs
-pub const EXEC_TRACE: &'static str = "exec-trace";
-
 /// Option name used to override Kani library path.
 pub const KANI_LIB: &str = "kani-lib";
 
@@ -71,11 +68,6 @@ pub fn parser<'a, 'b>() -> App<'a, 'b> {
             Arg::with_name(GOTO_C)
                 .long("--goto-c")
                 .help("Enables compilation to goto-c intermediate representation."),
-        )
-        .arg(
-            Arg::with_name(EXEC_TRACE)
-                .long("--exec-trace")
-                .help("Compile with exec trace version of libs."),
         )
         .arg(
             Arg::with_name(SYM_TABLE_PASSES)
@@ -193,11 +185,9 @@ mod parser_test {
 
     #[test]
     fn test_kani_flags() {
-        let args = vec!["kani-compiler", "--goto-c", "--exec-trace", "--kani-lib", "some/path"];
+        let args = vec!["kani-compiler", "--goto-c", "--kani-lib", "some/path"];
         let matches = parser().get_matches_from(args);
         assert!(matches.is_present("goto-c"));
-        // TODO: Move to using global variables to test those.
-        assert!(matches.is_present("exec-trace"));
         assert_eq!(matches.value_of("kani-lib"), Some("some/path"));
     }
 
