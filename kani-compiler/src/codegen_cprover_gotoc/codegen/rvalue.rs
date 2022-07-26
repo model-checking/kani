@@ -502,6 +502,25 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
+    pub fn codegen_discriminant_field(&self, place: Expr, ty: Ty<'tcx>) -> Expr {
+        let layout = self.layout_of(ty);
+        assert!(
+            matches!(
+                &layout.variants,
+                Variants::Multiple { tag_encoding: TagEncoding::Direct, .. }
+            ),
+            "discriminant field (`case`) only exists for multiple variants and direct encoding"
+        );
+        let expr = if ty.is_generator() {
+            // Generators are translated somewhat differently from enums (see [`GotoCtx::codegen_ty_generator`]).
+            // As a consequence, the discriminant is accessed as `.direct_fields.case` instead of just `.case`.
+            place.member("direct_fields", &self.symbol_table)
+        } else {
+            place
+        };
+        expr.member("case", &self.symbol_table)
+    }
+
     /// e: ty
     /// get the discriminant of e, of type res_ty
     pub fn codegen_get_discriminant(&mut self, e: Expr, ty: Ty<'tcx>, res_ty: Ty<'tcx>) -> Expr {
@@ -516,7 +535,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             Variants::Multiple { tag, tag_encoding, .. } => match tag_encoding {
                 TagEncoding::Direct => {
-                    e.member("case", &self.symbol_table).cast_to(self.codegen_ty(res_ty))
+                    self.codegen_discriminant_field(e, ty).cast_to(self.codegen_ty(res_ty))
                 }
                 TagEncoding::Niche { dataful_variant, niche_variants, niche_start } => {
                     // This code follows the logic in the cranelift codegen backend:
