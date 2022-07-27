@@ -164,8 +164,10 @@ fn handle_cbmc_out(cbmc_out: &Value) -> Vec<u8> {
 fn handle_result(result_val: &Value) -> Vec<u8> {
     let mut det_vals: Vec<u8> = Vec::new();
     let desc = result_val["description"].as_str().unwrap();
+    let status = result_val["status"].as_str().unwrap();
 
-    if desc.contains("assertion failed") {
+    // TODO: Why do I need contains here?
+    if desc.contains("assertion failed") && status.contains("FAILURE") {
         for trace_pt in result_val["trace"].as_array().unwrap() {
             let det_val_opt = handle_trace_pt(trace_pt);
             if let Some(det_val) = det_val_opt {
