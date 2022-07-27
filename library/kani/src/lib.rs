@@ -12,7 +12,10 @@ pub mod vec;
 pub use arbitrary::Arbitrary;
 pub use invariant::Invariant;
 
+#[cfg(feature = "exe_trace")]
 use std::cell::RefCell;
+
+#[cfg(feature = "exe_trace")]
 // Don't need locking mechanism if using thread local
 thread_local! {
     pub static DET_VALS: RefCell<Vec<u8>> = RefCell::new(vec![]);
@@ -117,12 +120,15 @@ where
 #[inline(never)]
 unsafe fn any_raw_inner<const T: usize>() -> [u8; T] {
     let mut bytes_t = [0; T];
+
+    #[cfg(feature = "exe_trace")]
     DET_VALS.with(|det_vals| {
         let tmp_det_vals = &mut *det_vals.borrow_mut();
         for i in 0..T {
             bytes_t[i] = tmp_det_vals.pop().unwrap();
         }
     });
+
     bytes_t
 }
 

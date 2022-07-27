@@ -9,3 +9,6 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 kani_macros = { path = "../kani_macros" }
+
+[features]
+exe_trace = []
