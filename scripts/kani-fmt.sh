@@ -32,7 +32,7 @@ for suite in "${TESTS[@]}"; do
     set -f; IFS=$'\n'
     files=($(find "${suite}" -name "*.rs"))
     set +f; unset IFS
-    rustfmt --unstable-features "$@" "${files[@]}" || error=1
+    rustfmt --unstable-features "$@" "${files[@]}" --edition 2021 || error=1
 done
 
 exit $error
