@@ -156,6 +156,8 @@ fn handle_cbmc_out(cbmc_out: &Value) -> Vec<u8> {
             }
         }
     }
+    // Det vals are popped off the Vec, so need to reverse.
+    det_vals.reverse();
     det_vals
 }
 
