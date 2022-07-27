@@ -111,25 +111,26 @@ where
     [(); std::mem::size_of::<T>()]:,
 {
     let non_det_byte_arr = any_raw_inner::<{ std::mem::size_of::<T>() }>();
-    let non_det_var =
-        std::mem::transmute_copy::<[u8; std::mem::size_of::<T>()], T>(&non_det_byte_arr);
-    non_det_var
+    std::mem::transmute_copy::<[u8; std::mem::size_of::<T>()], T>(&non_det_byte_arr)
 }
 
 #[rustc_diagnostic_item = "KaniAnyRaw"]
 #[inline(never)]
 unsafe fn any_raw_inner<const T: usize>() -> [u8; T] {
-    let mut bytes_t = [0; T];
-
     #[cfg(feature = "exe_trace")]
-    DET_VALS.with(|det_vals| {
-        let tmp_det_vals = &mut *det_vals.borrow_mut();
-        for i in 0..T {
-            bytes_t[i] = tmp_det_vals.pop().unwrap();
-        }
-    });
+    {
+        let mut bytes_t = [0; T];
+        DET_VALS.with(|det_vals| {
+            let tmp_det_vals = &mut *det_vals.borrow_mut();
+            for i in 0..T {
+                bytes_t[i] = tmp_det_vals.pop().unwrap();
+            }
+        });
+        bytes_t
+    }
 
-    bytes_t
+    #[cfg(not(feature = "exe_trace"))]
+    unimplemented!("Kani any_raw_inner");
 }
 
 /// This function has been split into a safe and unsafe functions: `kani::any` and `kani::any_raw`.
