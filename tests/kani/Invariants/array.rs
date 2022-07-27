@@ -10,7 +10,7 @@ use kani::Invariant;
 #[kani::proof]
 #[kani::unwind(3)]
 fn main() {
-    let arr: [char; 2] = kani::any();
-    assert!(arr[0].is_valid());
-    assert!(arr[1].is_valid());
+    let arr: [bool; 2] = kani::any();
+    assert!((0..=1).contains(&(arr[0] as u8)));
+    assert!((0..=1).contains(&(arr[1] as u8)));
 }
