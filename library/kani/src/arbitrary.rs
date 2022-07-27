@@ -48,7 +48,7 @@ impl Arbitrary for bool {
     #[inline(always)]
     fn any() -> Self {
         let byte = u8::any();
-        return byte == 0;
+        byte == 0
     }
 }
 

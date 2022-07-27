@@ -9,6 +9,7 @@ pub mod slice;
 pub mod vec;
 
 pub use arbitrary::Arbitrary;
+#[allow(deprecated)]
 pub use invariant::Invariant;
 
 /// Creates an assumption that will be valid after this statement run. Note that the assumption

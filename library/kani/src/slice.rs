@@ -161,6 +161,7 @@ where
 ///
 /// This has been deprecated due to its limited value and high risk of generating undefined
 /// behavior.
+#[allow(deprecated)]
 #[deprecated(
     since = "0.8.0",
     note = "This function may return symbolic values that don't respects the language type invariants."

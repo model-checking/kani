@@ -33,6 +33,8 @@ pub unsafe trait Invariant {
     fn is_valid(&self) -> bool;
 }
 
+// We cannot apply #[deprecated] too trait impl so add this to ignore the deprecation warnings.
+#[allow(deprecated)]
 impl<T> Arbitrary for T
 where
     T: Invariant,
