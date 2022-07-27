@@ -46,7 +46,10 @@ thread_local! {
 /// ```
 #[inline(never)]
 #[rustc_diagnostic_item = "KaniAssume"]
-pub fn assume(_cond: bool) {}
+pub fn assume(_cond: bool) {
+    #[cfg(feature = "exe_trace")]
+    assert!(_cond);
+}
 
 /// Creates an assertion of the specified condition and message.
 ///
@@ -59,7 +62,10 @@ pub fn assume(_cond: bool) {}
 /// ```
 #[inline(never)]
 #[rustc_diagnostic_item = "KaniAssert"]
-pub fn assert(_cond: bool, _msg: &'static str) {}
+pub fn assert(_cond: bool, _msg: &'static str) {
+    #[cfg(feature = "exe_trace")]
+    assert!(_cond, "{}", _msg);
+}
 
 /// This creates an symbolic *valid* value of type `T`. You can assign the return value of this
 /// function to a variable that you want to make symbolic.
@@ -143,7 +149,10 @@ pub fn nondet<T: Arbitrary>() -> T {
 /// Function used in tests for cases where the condition is not always true.
 #[inline(never)]
 #[rustc_diagnostic_item = "KaniExpectFail"]
-pub fn expect_fail(_cond: bool, _message: &'static str) {}
+pub fn expect_fail(_cond: bool, _message: &'static str) {
+    #[cfg(feature = "exe_trace")]
+    assert!(!_cond, "{}", _message);
+}
 
 /// Function used to generate panic with a static message as this is the only one currently
 /// supported by Kani display.
