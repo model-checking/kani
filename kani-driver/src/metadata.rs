@@ -18,7 +18,8 @@ fn generate_mock_harness() -> HarnessMetadata {
         pretty_name: String::from("harness"),
         mangled_name: String::from("harness"),
         original_file: String::from("target_file.rs"),
-        original_line: String::from("0"),
+        original_start_line: String::from("0"),
+        original_end_line: String::from("0"),
         unwind_value: None,
     }
 }
@@ -155,7 +156,8 @@ pub fn mock_proof_harness(name: &str, unwind_value: Option<u32>) -> HarnessMetad
         pretty_name: name.into(),
         mangled_name: name.into(),
         original_file: "<unknown>".into(),
-        original_line: "<unknown>".into(),
+        original_start_line: "<unknown>".into(),
+        original_end_line: "<unknown>".into(),
         unwind_value,
     }
 }

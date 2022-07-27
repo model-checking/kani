@@ -13,7 +13,14 @@ pub enum Location {
     BuiltinFunction { function_name: InternedString, line: Option<u64> },
     /// Location in user code.
     /// `function` is `None` for global, `Some(function_name)` for function local.
-    Loc { file: InternedString, function: Option<InternedString>, line: u64, col: Option<u64> },
+    Loc {
+        file: InternedString,
+        function: Option<InternedString>,
+        start_line: u64,
+        start_col: Option<u64>,
+        end_line: u64,
+        end_col: Option<u64>,
+    },
     /// Location for Statements that use Property Class and Description - Assert, Assume, Cover etc.
     Property {
         file: InternedString,
@@ -50,9 +57,16 @@ impl Location {
         }
     }
 
-    pub fn line(&self) -> Option<u64> {
+    pub fn start_line(&self) -> Option<u64> {
         match self {
-            Location::Loc { line, .. } => Some(*line),
+            Location::Loc { start_line, .. } => Some(*start_line),
+            _ => None,
+        }
+    }
+
+    pub fn end_line(&self) -> Option<u64> {
+        match self {
+            Location::Loc { end_line, .. } => Some(*end_line),
             _ => None,
         }
     }
@@ -68,7 +82,7 @@ impl Location {
             Location::BuiltinFunction { function_name, line: None } => {
                 format!("<{}>", function_name)
             }
-            Location::Loc { file, line, .. } => format!("{}:{}", file, line),
+            Location::Loc { file, start_line: line, .. } => format!("{}:{}", file, line),
             Location::Property { file, line, .. } => {
                 format!("<{:?}>:{}", file, line)
             }
@@ -82,18 +96,22 @@ impl Location {
     pub fn new<T, U: Into<InternedString>, V: Into<InternedString>>(
         file: U,
         function: Option<V>,
-        line: T,
-        col: Option<T>,
+        start_line: T,
+        start_col: Option<T>,
+        end_line: T,
+        end_col: Option<T>,
     ) -> Location
     where
         T: TryInto<u64>,
         T::Error: Debug,
     {
         let file = file.into();
-        let line = line.try_into().unwrap();
-        let col = col.map(|x| x.try_into().unwrap());
+        let start_line = start_line.try_into().unwrap();
+        let start_col = start_col.map(|x| x.try_into().unwrap());
+        let end_line = end_line.try_into().unwrap();
+        let end_col = end_col.map(|x| x.try_into().unwrap());
         let function = function.intern();
-        Location::Loc { file, function, line, col }
+        Location::Loc { file, function, start_line, start_col, end_line, end_col }
     }
 
     /// Create a Property type Location
@@ -134,14 +152,16 @@ impl Location {
                 comment.into(),
                 property_name.into(),
             ),
-            Location::Loc { file, function, line, col } => Location::property_location(
-                file.into(),
-                function.intern(),
-                line,
-                col,
-                comment.into(),
-                property_name.into(),
-            ),
+            Location::Loc { file, function, start_line, start_col, end_line: _, end_col: _ } => {
+                Location::property_location(
+                    file.into(),
+                    function.intern(),
+                    start_line,
+                    start_col,
+                    comment.into(),
+                    property_name.into(),
+                )
+            }
             Location::Property { .. } => location,
             Location::PropertyUnknownLocation { .. } => location,
             // This converts None type Locations to PropertyUnknownLocation type which inserts Property Class and Description

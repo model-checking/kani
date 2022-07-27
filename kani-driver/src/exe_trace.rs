@@ -28,11 +28,15 @@ impl KaniSession {
                 if !self.args.quiet {
                     println!("Now modifying the source code to include the executable trace.");
                 }
-                let proof_harness_line: usize = harness
-                    .original_line
+                let proof_harness_start_line: usize = harness
+                    .original_start_line
                     .parse()
                     .expect("Couldn't convert proof harness line from str to usize");
-                self.modify_src_code(&harness.original_file, proof_harness_line, &unit_test);
+                let proof_harness_end_line: usize = harness
+                    .original_end_line
+                    .parse()
+                    .expect("Couldn't convert proof harness line from str to usize");
+                self.modify_src_code(&harness.original_file, proof_harness_start_line, &unit_test);
             } else {
                 println!(
                     "To automatically add this executable trace to the src code, run Kani with `--add-exe-trace-to-src`."
