@@ -166,8 +166,7 @@ fn handle_result(result_val: &Value) -> Vec<u8> {
     let desc = result_val["description"].as_str().unwrap();
     let status = result_val["status"].as_str().unwrap();
 
-    // TODO: Why do I need contains here?
-    if desc.contains("assertion failed") && status.contains("FAILURE") {
+    if desc.contains("assertion failed") && status == "FAILURE" {
         for trace_pt in result_val["trace"].as_array().unwrap() {
             let det_val_opt = handle_trace_pt(trace_pt);
             if let Some(det_val) = det_val_opt {
