@@ -107,9 +107,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         TagEncoding::Niche { dataful_variant, niche_variants, niche_start } => {
                             if dataful_variant != variant_index {
                                 let offset = match &layout.fields {
-                                    FieldsShape::Arbitrary { offsets, .. } => {
-                                        offsets[0].bytes_usize()
-                                    }
+                                    FieldsShape::Arbitrary { offsets, .. } => offsets[0],
                                     _ => unreachable!("niche encoding must have arbitrary fields"),
                                 };
                                 let discr_ty = self.codegen_enum_discr_typ(pt);
