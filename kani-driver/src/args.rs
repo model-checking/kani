@@ -178,7 +178,6 @@ impl KaniArgs {
 
     pub fn assertion_reach_checks(&self) -> bool {
         // Turn them off when visualizing an error trace.
-        // TODO: disable this for exec_trace flag?
         !self.no_assertion_reach_checks && !self.visualize
     }
 
