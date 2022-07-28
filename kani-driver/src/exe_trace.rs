@@ -16,10 +16,9 @@ use serde_json::Value;
 impl KaniSession {
     pub fn exe_trace_main(&self, specialized_obj: &Path, harness: &HarnessMetadata) {
         if self.args.gen_exe_trace {
-            let det_vals = self
-                .get_det_vals(specialized_obj)
+            let det_vals = get_det_vals(specialized_obj)
                 .expect("Something went wrong in extracting determinstic values.");
-            let unit_test = self.format_unit_test(&harness.mangled_name, &det_vals);
+            let unit_test = format_unit_test(&harness.mangled_name, &det_vals);
 
             println!("Executable trace:\n");
             println!("{}", unit_test);
@@ -41,51 +40,24 @@ impl KaniSession {
         }
     }
 
-    /// Extract deterministic values from a failing harness.
-    pub fn get_det_vals(&self, file: &Path) -> Result<Vec<u8>> {
-        let output_filename = append_path(file, "cbmc_output");
-        let cbmc_out = get_cbmc_out(output_filename);
-        let det_vals = handle_cbmc_out(&cbmc_out);
-        Ok(det_vals)
-    }
-
-    pub fn format_unit_test(&self, harness_name: &str, det_vals: &Vec<u8>) -> String {
-        format!(
-            "
-            #[test]
-            fn kani_autogen_{}_exe_trace() {{
-                kani::DET_VALS.with(|det_vals| {{
-                    *det_vals.borrow_mut() = vec!{:?};
-                }});
-                {}();
-            }}",
-            harness_name, det_vals, harness_name
-        )
-    }
-
-    pub fn modify_src_code(
-        &self,
-        src_file_path: &str,
-        proof_harness_end_line: usize,
-        exec_trace: &str,
-    ) {
+    fn modify_src_code(&self, src_file_path: &str, proof_harness_end_line: usize, exe_trace: &str) {
         // Prep the source code and exec trace func.
         let src_as_str =
             fs::read_to_string(src_file_path).expect("Couldn't access proof harness source file");
         let mut src_lines = src_as_str.split('\n').collect::<Vec<&str>>();
-        let mut exec_trace_lines = exec_trace.split('\n').collect::<Vec<&str>>();
+        let mut exe_trace_lines = exe_trace.split('\n').collect::<Vec<&str>>();
 
         // Calc inserted indexes and line numbers into source code to rustfmt only those lines.
         // Indexes are into the vector (0-idx), lines are into src file (1-idx).
         let start_line = proof_harness_end_line + 1;
         let start_idx = start_line - 1;
         // If start_line=2, exe_trace.len()=3, then inserted code ends at line 4 (start + len - 1).
-        let end_line = start_line + exec_trace_lines.len() - 1;
+        let end_line = start_line + exe_trace_lines.len() - 1;
 
         // Splice the exec trace func into the proof harness source code.
         // start_idx is at max len(src_lines), so no panic here, even if proof harness is at the end of src file.
         let mut src_right = src_lines.split_off(start_idx);
-        src_lines.append(&mut exec_trace_lines);
+        src_lines.append(&mut exe_trace_lines);
         src_lines.append(&mut src_right);
         let new_src = src_lines.join("\n");
         fs::write(src_file_path, new_src).expect("Couldn't write to proof harness source file");
@@ -105,7 +77,7 @@ impl KaniSession {
         self.run_rustfmt(src_file, Some(parent_dir), Some(start_line), Some(end_line));
     }
 
-    pub fn run_rustfmt(
+    fn run_rustfmt(
         &self,
         src_file: &str,
         current_dir_opt: Option<&str>,
@@ -137,6 +109,28 @@ impl KaniSession {
             self.run_terminal(cmd).expect("Couldn't rustfmt source file");
         }
     }
+}
+
+fn format_unit_test(harness_name: &str, det_vals: &Vec<u8>) -> String {
+    format!(
+        "
+        #[test]
+        fn kani_autogen_{}_exe_trace() {{
+            kani::DET_VALS.with(|det_vals| {{
+                *det_vals.borrow_mut() = vec!{:?};
+            }});
+            {}();
+        }}",
+        harness_name, det_vals, harness_name
+    )
+}
+
+/// Extract deterministic values from a failing harness.
+fn get_det_vals(file: &Path) -> Result<Vec<u8>> {
+    let output_filename = append_path(file, "cbmc_output");
+    let cbmc_out = get_cbmc_out(output_filename);
+    let det_vals = handle_cbmc_out(&cbmc_out);
+    Ok(det_vals)
 }
 
 fn get_cbmc_out(results_filename: PathBuf) -> Value {
