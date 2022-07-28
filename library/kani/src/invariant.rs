@@ -67,40 +67,7 @@ unsafe impl Invariant for char {
     fn is_valid(&self) -> bool {
         // Kani translates char into i32.
         let val = *self as i32;
-        val <= 0xD7FF || (val >= 0xE000 && val <= 0x10FFFF)
-    }
-}
-
-unsafe impl<T: Invariant, const N: usize> Invariant for [T; N] {
-    fn is_valid(&self) -> bool {
-        self.iter().all(|e| e.is_valid())
-    }
-}
-
-unsafe impl<T> Invariant for Option<T>
-where
-    T: Invariant,
-{
-    #[inline(always)]
-    fn is_valid(&self) -> bool {
-        if let Some(v) = self { v.is_valid() } else { matches!(*self, None) }
-    }
-}
-
-unsafe impl<T, E> Invariant for Result<T, E>
-where
-    T: Invariant,
-    E: Invariant,
-{
-    #[inline(always)]
-    fn is_valid(&self) -> bool {
-        if let Ok(v) = self {
-            v.is_valid()
-        } else if let Err(e) = self {
-            e.is_valid()
-        } else {
-            false
-        }
+        val <= 0xD7FF || (0xE000..=0x10FFFF).contains(&val)
     }
 }
 

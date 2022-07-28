@@ -20,3 +20,38 @@ where
         value
     }
 }
+
+impl<T, const N: usize> Arbitrary for [T; N]
+where
+    T: Arbitrary,
+{
+    fn any() -> Self {
+        // The "correct way" would be to MaybeUninit but there is performance penalty.
+        let mut data: [T; N] = unsafe { crate::any_raw() };
+
+        for elem in &mut data[..] {
+            *elem = T::any();
+        }
+
+        data
+    }
+}
+
+impl<T> Arbitrary for Option<T>
+where
+    T: Arbitrary,
+{
+    fn any() -> Self {
+        if bool::any() { Some(T::any()) } else { None }
+    }
+}
+
+impl<T, E> Arbitrary for Result<T, E>
+where
+    T: Arbitrary,
+    E: Arbitrary,
+{
+    fn any() -> Self {
+        if bool::any() { Ok(T::any()) } else { Err(E::any()) }
+    }
+}
