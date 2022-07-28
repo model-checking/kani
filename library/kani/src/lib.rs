@@ -11,6 +11,15 @@ pub mod vec;
 pub use arbitrary::Arbitrary;
 pub use invariant::Invariant;
 
+#[cfg(feature = "exe_trace")]
+use std::cell::RefCell;
+
+#[cfg(feature = "exe_trace")]
+// Don't need locking mechanism if using thread local
+thread_local! {
+    pub static DET_VALS: RefCell<Vec<u8>> = RefCell::new(vec![]);
+}
+
 /// Creates an assumption that will be valid after this statement run. Note that the assumption
 /// will only be applied for paths that follow the assumption. If the assumption doesn't hold, the
 /// program will exit successfully.
@@ -36,7 +45,10 @@ pub use invariant::Invariant;
 /// ```
 #[inline(never)]
 #[rustc_diagnostic_item = "KaniAssume"]
-pub fn assume(_cond: bool) {}
+pub fn assume(_cond: bool) {
+    #[cfg(feature = "exe_trace")]
+    assert!(_cond);
+}
 
 /// Creates an assertion of the specified condition and message.
 ///
@@ -49,7 +61,10 @@ pub fn assume(_cond: bool) {}
 /// ```
 #[inline(never)]
 #[rustc_diagnostic_item = "KaniAssert"]
-pub fn assert(_cond: bool, _msg: &'static str) {}
+pub fn assert(_cond: bool, _msg: &'static str) {
+    #[cfg(feature = "exe_trace")]
+    assert!(_cond, "{}", _msg);
+}
 
 /// This creates an symbolic *valid* value of type `T`. You can assign the return value of this
 /// function to a variable that you want to make symbolic.
@@ -95,10 +110,32 @@ pub fn any<T: Arbitrary>() -> T {
 /// kani::assume(char::from_u32(c as u32).is_ok());
 /// ```
 ///
-#[rustc_diagnostic_item = "KaniAnyRaw"]
 #[inline(never)]
 pub unsafe fn any_raw<T>() -> T {
-    unimplemented!("Kani any_raw")
+    any_raw_internal()
+}
+
+#[rustc_diagnostic_item = "KaniAnyRaw"]
+#[inline(never)]
+unsafe fn any_raw_internal<T>() -> T {
+    // Will have byte size of T from Vec<u8>.
+    // Represent that in a var and check if compiler allows.
+    let size_t = 5;
+    assert!(std::mem::size_of::<T>() == size_t);
+    #[cfg(feature = "exe_trace")]
+    {
+        let mut bytes_t = [0; T];
+        DET_VALS.with(|det_vals| {
+            let tmp_det_vals = &mut *det_vals.borrow_mut();
+            for i in 0..T {
+                bytes_t[i] = tmp_det_vals.pop().unwrap();
+            }
+        });
+        bytes_t
+    }
+
+    #[cfg(not(feature = "exe_trace"))]
+    unimplemented!("Kani any_raw_inner");
 }
 
 /// This function has been split into a safe and unsafe functions: `kani::any` and `kani::any_raw`.
@@ -111,7 +148,10 @@ pub fn nondet<T: Arbitrary>() -> T {
 /// Function used in tests for cases where the condition is not always true.
 #[inline(never)]
 #[rustc_diagnostic_item = "KaniExpectFail"]
-pub fn expect_fail(_cond: bool, _message: &'static str) {}
+pub fn expect_fail(_cond: bool, _message: &'static str) {
+    #[cfg(feature = "exe_trace")]
+    assert!(!_cond, "{}", _message);
+}
 
 /// Function used to generate panic with a static message as this is the only one currently
 /// supported by Kani display.

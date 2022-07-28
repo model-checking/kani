@@ -11,14 +11,7 @@
 // proc_macro::quote is nightly-only, so we'll cobble things together instead
 use proc_macro::TokenStream;
 
-#[cfg(all(not(kani), not(test)))]
-#[proc_macro_attribute]
-pub fn proof(_attr: TokenStream, _item: TokenStream) -> TokenStream {
-    // Not-Kani, Not-Test means this code shouldn't exist, return nothing.
-    TokenStream::new()
-}
-
-#[cfg(all(not(kani), test))]
+#[cfg(not(kani))]
 #[proc_macro_attribute]
 pub fn proof(_attr: TokenStream, item: TokenStream) -> TokenStream {
     // Leave the code intact, so it can be easily be edited in an IDE,

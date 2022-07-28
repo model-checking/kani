@@ -13,7 +13,9 @@ pub struct HarnessMetadata {
     /// The (currently full-) path to the file this proof harness was declared within
     pub original_file: String,
     /// The line in that file where the proof harness begins
-    pub original_line: String,
+    pub original_start_line: String,
+    /// The line in that file where the proof harness ends
+    pub original_end_line: String,
     /// Optional data to store unwind value
     pub unwind_value: Option<u32>,
 }

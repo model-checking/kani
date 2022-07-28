@@ -102,6 +102,10 @@ impl KaniSession {
 
         args.push("--slice-formula".into());
 
+        if self.args.add_exe_trace_to_src {
+            args.push("--trace".into());
+        }
+
         args.extend(self.args.cbmc_args.iter().cloned());
 
         args.push(file.to_owned().into_os_string());

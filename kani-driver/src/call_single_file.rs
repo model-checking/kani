@@ -96,7 +96,8 @@ impl KaniSession {
     /// These arguments are passed directly here for single file runs,
     /// but are also used by call_cargo to pass as the env var KANIFLAGS.
     pub fn kani_rustc_flags(&self) -> Vec<OsString> {
-        let mut flags = vec![OsString::from("--goto-c")];
+        let mut flags: Vec<OsString> = Vec::new();
+        flags.push("--goto-c".into());
 
         if let Some(rlib) = &self.kani_rlib {
             flags.push("--kani-lib".into());

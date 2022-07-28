@@ -21,6 +21,7 @@ mod call_goto_cc;
 mod call_goto_instrument;
 mod call_single_file;
 mod call_symtab;
+mod exe_trace;
 mod metadata;
 mod session;
 mod util;
@@ -73,6 +74,7 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
         let result = ctx.check_harness(&specialized_obj, &report_dir, harness)?;
         if result == VerificationStatus::Failure {
             failed_harnesses.push(harness);
+            ctx.exe_trace_main(&specialized_obj, harness);
         }
     }
 

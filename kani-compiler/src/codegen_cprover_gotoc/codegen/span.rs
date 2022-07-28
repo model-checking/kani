@@ -12,8 +12,11 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_span(&self, sp: &Span) -> Location {
         let smap = self.tcx.sess.source_map();
         let lo = smap.lookup_char_pos(sp.lo());
-        let line = lo.line;
-        let col = 1 + lo.col_display;
+        let start_line = lo.line;
+        let start_col = 1 + lo.col_display;
+        let hi = smap.lookup_char_pos(sp.hi());
+        let end_line = hi.line;
+        let end_col = 1 + hi.col_display;
         let filename0 = lo.file.name.prefer_local().to_string_lossy().to_string();
         let filename1 = match std::fs::canonicalize(filename0.clone()) {
             Ok(pathbuf) => pathbuf.to_str().unwrap().to_string(),
@@ -22,8 +25,10 @@ impl<'tcx> GotocCtx<'tcx> {
         Location::new(
             filename1,
             self.current_fn.as_ref().map(|x| x.readable_name().to_string()),
-            line,
-            Some(col),
+            start_line,
+            Some(start_col),
+            end_line,
+            Some(end_col),
         )
     }
 
