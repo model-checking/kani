@@ -3,15 +3,19 @@
 //
 // compile-flags: --edition 2018
 
+// Tests that the language constructs `async { .. .}` blocks, `async fn`, and `.await` work correctly.
+
 use std::{
     future::Future,
     pin::Pin,
     task::{Context, RawWaker, RawWakerVTable, Waker},
 };
 
+fn main() {}
+
 #[kani::proof]
 #[kani::unwind(10)]
-fn main() {
+fn test_async_await() {
     poll_loop(async {
         let async_block_result = async { 42 }.await;
         let async_fn_result = async_fn().await;
