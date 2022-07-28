@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 #![feature(rustc_attrs)] // Used for rustc_diagnostic_item.
 #![feature(min_specialization)] // Used for default implementation of Arbitrary.
-#![feature(generic_const_exprs)] // Used for getting size_of generic types
 
 pub mod arbitrary;
 pub mod invariant;
@@ -112,17 +111,17 @@ pub fn any<T: Arbitrary>() -> T {
 /// ```
 ///
 #[inline(never)]
-pub unsafe fn any_raw<T>() -> T
-where
-    [(); std::mem::size_of::<T>()]:,
-{
-    let non_det_byte_arr = any_raw_inner::<{ std::mem::size_of::<T>() }>();
-    std::mem::transmute_copy::<[u8; std::mem::size_of::<T>()], T>(&non_det_byte_arr)
+pub unsafe fn any_raw<T>() -> T {
+    any_raw_internal()
 }
 
 #[rustc_diagnostic_item = "KaniAnyRaw"]
 #[inline(never)]
-unsafe fn any_raw_inner<const T: usize>() -> [u8; T] {
+unsafe fn any_raw_internal<T>() -> T {
+    // Will have byte size of T from Vec<u8>.
+    // Represent that in a var and check if compiler allows.
+    let size_t = 5;
+    assert!(std::mem::size_of::<T>() == size_t);
     #[cfg(feature = "exe_trace")]
     {
         let mut bytes_t = [0; T];
