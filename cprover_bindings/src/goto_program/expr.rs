@@ -184,6 +184,9 @@ pub enum BinaryOperator {
     OverflowMinus,
     OverflowMult,
     OverflowPlus,
+    OverflowResultMinus,
+    OverflowResultMult,
+    OverflowResultPlus,
     Plus,
     ROk,
     Rol,
@@ -241,6 +244,28 @@ pub struct ArithmeticOverflowResult {
     pub result: Expr,
     /// Boolean: true if overflow occured, false otherwise.
     pub overflowed: Expr,
+}
+
+pub const ARITH_OVERFLOW_RESULT_FIELD: &'static str = "result";
+pub const ARITH_OVERFLOW_OVERFLOWED_FIELD: &'static str = "overflowed";
+
+/// For arithmetic-overflow-with-result operators, CBMC returns a struct whose
+/// first component is the result, and whose second component is whether the
+/// operation overflowed
+pub fn arithmetic_overflow_result_type(operand_type: Type) -> Type {
+    assert!(operand_type.is_integer());
+    // give the struct the name "overflow_result_<type>", e.g.
+    // "overflow_result_Unsignedbv"
+    let name: InternedString = format!("overflow_result_{:?}", operand_type).into();
+    //vec![DatatypeComponent::field(ARITH_OVERFLOW_RESULT_FIELD, operand_type),
+    //    DatatypeComponent::field(ARITH_OVERFLOW_OVERFLOWED_FIELD, Type::bool())];
+    Type::struct_type(
+        name,
+        vec![
+            DatatypeComponent::field(ARITH_OVERFLOW_RESULT_FIELD, operand_type),
+            DatatypeComponent::field(ARITH_OVERFLOW_OVERFLOWED_FIELD, Type::bool()),
+        ],
+    )
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -897,11 +922,11 @@ impl Expr {
             // Floating Point Equalities
             IeeeFloatEqual | IeeeFloatNotequal => lhs.typ == rhs.typ && lhs.typ.is_floating_point(),
             // Overflow flags
-            OverflowMinus => {
+            OverflowMinus | OverflowResultMinus => {
                 (lhs.typ == rhs.typ && (lhs.typ.is_pointer() || lhs.typ.is_numeric()))
                     || (lhs.typ.is_pointer() && rhs.typ.is_integer())
             }
-            OverflowMult | OverflowPlus => {
+            OverflowMult | OverflowPlus | OverflowResultMult | OverflowResultPlus => {
                 (lhs.typ == rhs.typ && lhs.typ.is_integer())
                     || (lhs.typ.is_pointer() && rhs.typ.is_integer())
             }
@@ -947,6 +972,10 @@ impl Expr {
             IeeeFloatEqual | IeeeFloatNotequal => Type::bool(),
             // Overflow flags
             OverflowMinus | OverflowMult | OverflowPlus => Type::bool(),
+            OverflowResultMinus | OverflowResultMult | OverflowResultPlus => {
+                let struct_type = arithmetic_overflow_result_type(lhs.typ.clone());
+                Type::struct_tag(struct_type.tag().unwrap())
+            }
             ROk => Type::bool(),
         }
     }
@@ -1296,6 +1325,12 @@ impl Expr {
         ArithmeticOverflowResult { result, overflowed }
     }
 
+    /// Uses CBMC's add-with-overflow operation that performs a single addition
+    /// operation
+    pub fn add_overflow_result(self, e: Expr) -> Expr {
+        self.binop(OverflowResultPlus, e)
+    }
+
     /// `&self[0]`. Converts arrays into pointers
     pub fn array_to_ptr(self) -> Self {
         assert!(self.typ().is_array_like());
@@ -1328,6 +1363,12 @@ impl Expr {
         ArithmeticOverflowResult { result, overflowed }
     }
 
+    /// Uses CBMC's multiply-with-overflow operation that performs a single
+    /// multiplication operation
+    pub fn mul_overflow_result(self, e: Expr) -> Expr {
+        self.binop(OverflowResultMult, e)
+    }
+
     /// Reinterpret the bits of `self` as being of type `t`.
     /// Note that this differs from standard casts, which may convert values.
     /// in C++ syntax: `(uint32_t)(1.0) == 1`, while `reinterpret_cast<uin32_t>(1.0) == 0x3f800000`
@@ -1349,6 +1390,12 @@ impl Expr {
         let result = self.clone().sub(e.clone());
         let overflowed = self.sub_overflow_p(e);
         ArithmeticOverflowResult { result, overflowed }
+    }
+
+    /// Uses CBMC's subtract-with-overflow operation that performs a single
+    /// subtraction operation
+    pub fn sub_overflow_result(self, e: Expr) -> Expr {
+        self.binop(OverflowResultMinus, e)
     }
 
     /// `__CPROVER_same_object(self, e)`
