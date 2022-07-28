@@ -79,10 +79,7 @@ impl<T, const MAX_SLICE_LENGTH: usize> AnySlice<T, MAX_SLICE_LENGTH> {
         any_slice
     }
 
-    fn new_raw() -> Self
-    where
-        [(); std::mem::size_of::<T>()]:,
-    {
+    fn new_raw() -> Self {
         let any_slice = AnySlice::<T, MAX_SLICE_LENGTH>::alloc_slice();
         unsafe {
             let mut i = 0;
@@ -152,9 +149,6 @@ where
     AnySlice::<T, MAX_SLICE_LENGTH>::new()
 }
 
-pub unsafe fn any_raw_slice<T, const MAX_SLICE_LENGTH: usize>() -> AnySlice<T, MAX_SLICE_LENGTH>
-where
-    [(); std::mem::size_of::<T>()]:,
-{
+pub unsafe fn any_raw_slice<T, const MAX_SLICE_LENGTH: usize>() -> AnySlice<T, MAX_SLICE_LENGTH> {
     AnySlice::<T, MAX_SLICE_LENGTH>::new_raw()
 }
