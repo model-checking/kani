@@ -84,7 +84,7 @@ impl KaniSession {
         Ok(())
     }
 
-    pub fn cbmc_variant(
+    fn cbmc_variant(
         &self,
         file: &Path,
         extra_args: &[&str],
