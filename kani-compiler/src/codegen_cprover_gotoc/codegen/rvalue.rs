@@ -541,7 +541,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     // This code follows the logic in the cranelift codegen backend:
                     // https://github.com/rust-lang/rust/blob/05d22212e89588e7c443cc6b9bc0e4e02fdfbc8d/compiler/rustc_codegen_cranelift/src/discriminant.rs#L116
                     let offset = match &layout.fields {
-                        FieldsShape::Arbitrary { offsets, .. } => offsets[0].bytes_usize(),
+                        FieldsShape::Arbitrary { offsets, .. } => offsets[0],
                         _ => unreachable!("niche encoding must have arbitrary fields"),
                     };
 
