@@ -41,13 +41,11 @@ cargo kani --harness safe_update
 For `NonZeroU32`, this means we never return a `0` value.
 The assertion we wrote in this harness was just an extra check we added to demonstrate this fact.
 
-## Other kinds of nondeterministic variables
+## Bounding nondeterministic variables
 
-There's nothing special about `kani::any()` except that Kani ships with implementations for a few types where we can guarantee safety.
-
-Note that there is no implementation for `Vec<T>`, however.
+There is no implementation of `kani::any()` for more complex data structures like `Vec`, however.
 The trouble with a nondeterministic vector is that you usually need to _bound_ the size of the vector, for the reasons we investigated in the [last chapter](./tutorial-loop-unwinding.md).
-There are no arguments provided to `kani::any()` to indicate an upper bound.
+The `kani::any()` function does not have any arguments, and so cannot be given an upper bound.
 
 You can use `kani::any()` for `[T; N]` (if implemented for `T`).
 But this the type of an exactly-sized array.
@@ -59,8 +57,19 @@ Our example proof harness above constructs a nondeterministic `Inventory` of siz
 
 ## Custom nondeterministic types
 
-When you need nondeterministic variables of types that `kani::any()` cannot construct, our current recommendation is to simply write a function.
+There's nothing special about `kani::any()` except that Kani ships with implementations for a few types where we can guarantee safety.
+When you need nondeterministic variables of types that `kani::any()` cannot construct, you have two options:
 
+1. Implement `kani::Arbitrary` for your type, so you can use `kani::any()`.
+2. Just write a function.
+
+The advantage of the first approach is that it's simple and conventional.
+It also means that in addition to being able to use `kani::any()` with your type, you can also use it with `Option<MyType>` (for example).
+
+The advantage of the second approach is that you're able to pass in parameters, like bounds on the size of the data structure.
+This approach is also necessary when you are unable to implement a trait (like `Arbitrary`) on a type you're importing from another crate.
+
+Either way, inside this function you would simply return an arbitrary value by generating arbitrary values for its components.
 To generate a nondeterministic struct, you would just generate nondeterministic values for each of its fields.
 For complex data structures, you can start with an empty one and add a (bounded) nondeterministic number of entries.
 For an enum, you can make use of a simple trick:
@@ -101,5 +110,5 @@ A solution can be found in [`exercise_solution.rs`](https://github.com/model-che
 In this section:
 
 1. We saw how `kani::any()` will return "safe" values for each of the types Kani implements it for.
-2. We did an exercise to generate nondeterministic values of bounded size for `Inventory`.
-3. We saw a trick for how to safely generate a nondeterministic `enum`.
+2. We saw how to implement `kani::Arbitrary` or just write a function to create nondeterministic values for other types.
+3. We did an exercise to generate nondeterministic values of bounded size for `Inventory`.
