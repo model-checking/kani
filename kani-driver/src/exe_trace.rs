@@ -28,15 +28,11 @@ impl KaniSession {
                 if !self.args.quiet {
                     println!("Now modifying the source code to include the executable trace.");
                 }
-                let proof_harness_start_line: usize = harness
-                    .original_start_line
-                    .parse()
-                    .expect("Couldn't convert proof harness line from str to usize");
                 let proof_harness_end_line: usize = harness
                     .original_end_line
                     .parse()
                     .expect("Couldn't convert proof harness line from str to usize");
-                self.modify_src_code(&harness.original_file, proof_harness_start_line, &unit_test);
+                self.modify_src_code(&harness.original_file, proof_harness_end_line, &unit_test);
             } else {
                 println!(
                     "To automatically add this executable trace to the src code, run Kani with `--add-exe-trace-to-src`."
@@ -62,7 +58,7 @@ impl KaniSession {
                     *det_vals.borrow_mut() = vec!{:?};
                 }});
                 {}();
-            }}\n",
+            }}",
             harness_name, det_vals, harness_name
         )
     }
@@ -70,7 +66,7 @@ impl KaniSession {
     pub fn modify_src_code(
         &self,
         src_file_path: &str,
-        proof_harness_line: usize,
+        proof_harness_end_line: usize,
         exec_trace: &str,
     ) {
         // Prep the source code and exec trace func.
@@ -80,13 +76,14 @@ impl KaniSession {
         let mut exec_trace_lines = exec_trace.split('\n').collect::<Vec<&str>>();
 
         // Calc inserted indexes and line numbers into source code to rustfmt only those lines.
-        // TODO: Why -2?
-        let start_idx = proof_harness_line - 2;
-        let start_line = start_idx + 1;
-        // This excludes the final new line, since including that causes a rustfmt error.
-        let end_line = start_line + exec_trace_lines.len() - 2;
+        // Indexes are into the vector (0-idx), lines are into src file (1-idx).
+        let start_line = proof_harness_end_line + 1;
+        let start_idx = start_line - 1;
+        // If start_line=2, exe_trace.len()=3, then inserted code ends at line 4 (start + len - 1).
+        let end_line = start_line + exec_trace_lines.len() - 1;
 
         // Splice the exec trace func into the proof harness source code.
+        // start_idx is at max len(src_lines), so no panic here, even if proof harness is at the end of src file.
         let mut src_right = src_lines.split_off(start_idx);
         src_lines.append(&mut exec_trace_lines);
         src_lines.append(&mut src_right);
