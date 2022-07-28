@@ -197,7 +197,6 @@ impl InstallType {
     }
 
     pub fn kani_rlib(&self) -> Result<Option<PathBuf>> {
-        // TODO: Our changed lib paths won't work for release builds.
         match self {
             Self::DevRepo(_repo) => {
                 // Awkwardly, there is not an easy way to determine the location of these outputs
