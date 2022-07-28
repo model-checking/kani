@@ -81,7 +81,8 @@ fn rustc_gotoc_flags(lib_path: &str) -> Vec<String> {
         "--extern",
         kani_std_wrapper.as_str(),
         "--extern",
-        "proptest=/Users/ytakashl/Desktop/kani/target/debug/build/kani-compiler-913e19dc97ff67d3/out/lib/libproptest.rlib",
+        "proptest=/Users/ytakashl/Desktop/bin-proptest/aarch64-apple-darwin/debug/deps/libproptest-4eedccdf5f7f3c3f.rlib",
+        // "proptest=/Users/ytakashl/Desktop/kani/target/debug/build/kani-compiler-913e19dc97ff67d3/out/lib/libproptest.rlib",
         // todo! why does this need to be hard-coded???
         // kani_proptest_wrapper.as_str(), //Why is the other one off?
     ];
