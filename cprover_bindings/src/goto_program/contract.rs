@@ -12,7 +12,7 @@ use std::fmt::Debug;
 /// Represents a contract on a function, loop, etc.
 #[derive(Clone, Debug)]
 pub enum Contract {
-    FunctionContract { ensures: Vec<Spec>, requires: Vec<Spec> },
+    FunctionContract { ensures: Vec<Spec>, requires: Vec<Spec>, assigns: Vec<Spec> },
 }
 
 /// A `Spec` is a struct for representing the `requires`, `ensures`, and `assigns` clauses in a function contract.

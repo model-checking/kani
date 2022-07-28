@@ -255,14 +255,17 @@ pub trait Transformer: Sized {
     /// Transforms a contract data structure by recursively transforming its clauses.
     fn transform_contract(&mut self, c: &Contract) -> Contract {
         match c {
-            Contract::FunctionContract { ensures, requires } => {
+            Contract::FunctionContract { ensures, requires, assigns } => {
                 let transformed_ensures =
                     ensures.iter().map(|spec| self.transform_spec(spec)).collect();
                 let transformed_requires =
                     requires.iter().map(|spec| self.transform_spec(spec)).collect();
+                let transformed_assigns =
+                    assigns.iter().map(|spec| self.transform_spec(spec)).collect();
                 Contract::FunctionContract {
                     ensures: transformed_ensures,
                     requires: transformed_requires,
+                    assigns: transformed_assigns,
                 }
             }
         }
