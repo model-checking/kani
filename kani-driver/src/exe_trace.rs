@@ -3,21 +3,16 @@
 
 use std::ffi::OsString;
 use std::fs;
-use std::io::BufReader;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 
 use crate::session::KaniSession;
-use crate::util::append_path;
-use anyhow::Result;
 use kani_metadata::HarnessMetadata;
-use serde_json::Value;
 
 impl KaniSession {
     pub fn exe_trace_main(&self, specialized_obj: &Path, harness: &HarnessMetadata) {
         if self.args.gen_exe_trace {
-            let det_vals = get_det_vals(specialized_obj)
-                .expect("Something went wrong in extracting determinstic values.");
+            let det_vals = parser::get_det_vals(specialized_obj);
             let unit_test = format_unit_test(&harness.mangled_name, &det_vals);
 
             println!("Executable trace:\n");
@@ -125,72 +120,80 @@ fn format_unit_test(harness_name: &str, det_vals: &Vec<u8>) -> String {
     )
 }
 
-/// Extract deterministic values from a failing harness.
-fn get_det_vals(file: &Path) -> Result<Vec<u8>> {
-    let output_filename = append_path(file, "cbmc_output");
-    let cbmc_out = get_cbmc_out(output_filename);
-    let det_vals = handle_cbmc_out(&cbmc_out);
-    Ok(det_vals)
-}
+mod parser {
+    use crate::util::append_path;
+    use serde_json::Value;
+    use std::fs::File;
+    use std::io::BufReader;
+    use std::path::Path;
 
-fn get_cbmc_out(results_filename: PathBuf) -> Value {
-    let results_file = fs::File::open(results_filename).unwrap();
-    let reader = BufReader::new(results_file);
-    let cbmc_out: Value = serde_json::from_reader(reader).unwrap();
-    cbmc_out
-}
+    /// Extract deterministic values from a failing harness.
+    pub fn get_det_vals(file: &Path) -> Vec<u8> {
+        let output_filename = append_path(file, "cbmc_output");
+        let cbmc_out = get_cbmc_out(&output_filename);
+        handle_cbmc_out(&cbmc_out)
+    }
 
-fn handle_cbmc_out(cbmc_out: &Value) -> Vec<u8> {
-    let mut det_vals: Vec<u8> = Vec::new();
-    for general_msg in cbmc_out.as_array().unwrap() {
-        let result_msg = &general_msg["result"];
-        if !result_msg.is_null() {
-            for result_val in result_msg.as_array().unwrap() {
-                let mut det_vals_for_result = handle_result(result_val);
-                det_vals.append(&mut det_vals_for_result);
+    fn get_cbmc_out(results_filename: &Path) -> Value {
+        let results_file = File::open(results_filename).unwrap();
+        let reader = BufReader::new(results_file);
+        let cbmc_out: Value = serde_json::from_reader(reader).unwrap();
+        cbmc_out
+    }
+
+    fn handle_cbmc_out(cbmc_out: &Value) -> Vec<u8> {
+        let mut det_vals: Vec<u8> = Vec::new();
+        for general_msg in cbmc_out.as_array().unwrap() {
+            let result_msg = &general_msg["result"];
+            if !result_msg.is_null() {
+                for result_val in result_msg.as_array().unwrap() {
+                    let mut det_vals_for_result = handle_result(result_val);
+                    det_vals.append(&mut det_vals_for_result);
+                }
             }
         }
+        // Det vals are popped off the Vec, so need to reverse.
+        det_vals.reverse();
+        det_vals
     }
-    // Det vals are popped off the Vec, so need to reverse.
-    det_vals.reverse();
-    det_vals
-}
 
-fn handle_result(result_val: &Value) -> Vec<u8> {
-    let mut det_vals: Vec<u8> = Vec::new();
-    let desc = result_val["description"].as_str().unwrap();
-    let status = result_val["status"].as_str().unwrap();
+    fn handle_result(result_val: &Value) -> Vec<u8> {
+        let mut det_vals: Vec<u8> = Vec::new();
+        let desc = result_val["description"].as_str().unwrap();
+        let status = result_val["status"].as_str().unwrap();
 
-    if desc.contains("assertion failed") && status == "FAILURE" {
-        for trace_pt in result_val["trace"].as_array().unwrap() {
-            let det_val_opt = handle_trace_pt(trace_pt);
-            if let Some(det_val) = det_val_opt {
-                det_vals.push(det_val);
+        if desc.contains("assertion failed") && status == "FAILURE" {
+            for trace_pt in result_val["trace"].as_array().unwrap() {
+                let det_val_opt = handle_trace_pt(trace_pt);
+                if let Some(det_val) = det_val_opt {
+                    det_vals.push(det_val);
+                }
             }
         }
+
+        det_vals
     }
 
-    det_vals
-}
+    fn handle_trace_pt(trace_pt: &Value) -> Option<u8> {
+        let step_type = &trace_pt["stepType"];
+        if step_type != "assignment" {
+            return None;
+        }
 
-fn handle_trace_pt(trace_pt: &Value) -> Option<u8> {
-    let step_type = &trace_pt["stepType"];
-    if step_type != "assignment" {
-        return None;
+        let lhs = trace_pt["lhs"].as_str().unwrap();
+        if !lhs.starts_with("non_det_byte_arr") {
+            return None;
+        }
+
+        let func = trace_pt["sourceLocation"]["function"].as_str().unwrap();
+        if !func.starts_with("kani::any_raw") {
+            return None;
+        }
+
+        let det_val_with_quotes = trace_pt["value"]["data"].to_string();
+        let det_val_no_quotes = &det_val_with_quotes[1..det_val_with_quotes.len() - 1];
+        let det_val_u8: u8 =
+            det_val_no_quotes.parse().expect("Couldn't parse the trace byte as a u8");
+        Some(det_val_u8)
     }
-
-    let lhs = trace_pt["lhs"].as_str().unwrap();
-    if !lhs.starts_with("non_det_byte_arr") {
-        return None;
-    }
-
-    let func = trace_pt["sourceLocation"]["function"].as_str().unwrap();
-    if !func.starts_with("kani::any_raw") {
-        return None;
-    }
-
-    let det_val_with_quotes = trace_pt["value"]["data"].to_string();
-    let det_val_no_quotes = &det_val_with_quotes[1..det_val_with_quotes.len() - 1];
-    let det_val_u8: u8 = det_val_no_quotes.parse().expect("Couldn't parse the trace byte as a u8");
-    Some(det_val_u8)
 }
