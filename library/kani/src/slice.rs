@@ -152,6 +152,10 @@ where
     AnySlice::<T, MAX_SLICE_LENGTH>::new()
 }
 
+/// # Safety
+///
+/// TODO: Safety of any_raw_slice is a complex matter. See
+/// https://github.com/model-checking/kani/issues/1394
 pub unsafe fn any_raw_slice<T, const MAX_SLICE_LENGTH: usize>() -> AnySlice<T, MAX_SLICE_LENGTH>
 where
     [(); std::mem::size_of::<T>()]:,
