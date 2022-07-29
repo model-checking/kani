@@ -182,7 +182,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> Expr {
         let body = vec![
             self.codegen_unimplemented_stmt(operation_name, loc, url),
-            t.nondet().as_stmt(loc).with_location(loc),
+            t.nondet().as_stmt(loc),
         ];
 
         Expr::statement_expression(body, t).with_location(loc)
