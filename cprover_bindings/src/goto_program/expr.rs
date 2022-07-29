@@ -246,8 +246,8 @@ pub struct ArithmeticOverflowResult {
     pub overflowed: Expr,
 }
 
-pub const ARITH_OVERFLOW_RESULT_FIELD: &'static str = "result";
-pub const ARITH_OVERFLOW_OVERFLOWED_FIELD: &'static str = "overflowed";
+pub const ARITH_OVERFLOW_RESULT_FIELD: &str = "result";
+pub const ARITH_OVERFLOW_OVERFLOWED_FIELD: &str = "overflowed";
 
 /// For arithmetic-overflow-with-result operators, CBMC returns a struct whose
 /// first component is the result, and whose second component is whether the
