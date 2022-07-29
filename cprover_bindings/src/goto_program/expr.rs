@@ -257,8 +257,6 @@ pub fn arithmetic_overflow_result_type(operand_type: Type) -> Type {
     // give the struct the name "overflow_result_<type>", e.g.
     // "overflow_result_Unsignedbv"
     let name: InternedString = format!("overflow_result_{:?}", operand_type).into();
-    //vec![DatatypeComponent::field(ARITH_OVERFLOW_RESULT_FIELD, operand_type),
-    //    DatatypeComponent::field(ARITH_OVERFLOW_OVERFLOWED_FIELD, Type::bool())];
     Type::struct_type(
         name,
         vec![
@@ -1327,6 +1325,18 @@ impl Expr {
 
     /// Uses CBMC's add-with-overflow operation that performs a single addition
     /// operation
+    /// `struct (T, bool) overflow(+, self, e)` where `T` is the type of `self`
+    /// Pseudocode:
+    /// ```
+    /// struct overflow_result_t {
+    ///   T    result;
+    ///   bool overflowed;
+    /// } overflow_result;
+    /// raw_result = (cast to wider type) self + (cast to wider type) e;
+    /// overflow_result.result = (cast to T) raw_result;
+    /// overflow_result.overflowed = raw_result > maximum value of T;
+    /// return overflow_result;
+    /// ```
     pub fn add_overflow_result(self, e: Expr) -> Expr {
         self.binop(OverflowResultPlus, e)
     }
@@ -1365,6 +1375,8 @@ impl Expr {
 
     /// Uses CBMC's multiply-with-overflow operation that performs a single
     /// multiplication operation
+    /// `struct (T, bool) overflow(*, self, e)` where `T` is the type of `self`
+    /// See pseudocode in `add_overflow_result`
     pub fn mul_overflow_result(self, e: Expr) -> Expr {
         self.binop(OverflowResultMult, e)
     }
@@ -1394,6 +1406,8 @@ impl Expr {
 
     /// Uses CBMC's subtract-with-overflow operation that performs a single
     /// subtraction operation
+    /// See pseudocode in `add_overflow_result`
+    /// `struct (T, bool) overflow(-, self, e)` where `T` is the type of `self`
     pub fn sub_overflow_result(self, e: Expr) -> Expr {
         self.binop(OverflowResultMinus, e)
     }
