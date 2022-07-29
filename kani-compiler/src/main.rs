@@ -47,10 +47,12 @@ fn rustc_gotoc_flags(lib_path: &str) -> Vec<String> {
     // for more details.
     let kani_std_rlib = PathBuf::from(lib_path).join("libstd.rlib");
     let kani_std_wrapper = format!("noprelude:std={}", kani_std_rlib.to_str().unwrap());
-    let kani_proptest_rlib = PathBuf::from(lib_path).join("libproptest.rlib");
-    let _kani_proptest_wrapper =
-        format!("noprelude:proptest={}", kani_proptest_rlib.to_str().unwrap());
-    // println!("kani_std wrapper is: {}", &kani_std_wrapper.as_str());
+
+    let build_target = env!("TARGET"); // see build.rs
+    let kani_extern_lib_path =
+        PathBuf::from(lib_path)
+        .join(format!("../../../../../{}/debug/deps", build_target));
+
     let args = vec![
         "-C",
         "overflow-checks=on",
@@ -80,11 +82,10 @@ fn rustc_gotoc_flags(lib_path: &str) -> Vec<String> {
         "kani",
         "--extern",
         kani_std_wrapper.as_str(),
+        "-L",
+        kani_extern_lib_path.to_str().unwrap(),
         "--extern",
-        "proptest=/Users/ytakashl/Desktop/bin-proptest/aarch64-apple-darwin/debug/deps/libproptest-4eedccdf5f7f3c3f.rlib",
-        // "proptest=/Users/ytakashl/Desktop/kani/target/debug/build/kani-compiler-913e19dc97ff67d3/out/lib/libproptest.rlib",
-        // todo! why does this need to be hard-coded???
-        // kani_proptest_wrapper.as_str(), //Why is the other one off?
+        "proptest",
     ];
     args.iter().map(|s| s.to_string()).collect()
 }

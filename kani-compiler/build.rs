@@ -66,4 +66,5 @@ pub fn main() {
     setup_lib(&out_dir, &lib_out, "kani_macros");
     setup_lib(&out_dir, &lib_out, "std");
     println!("cargo:rustc-env=KANI_LIB_PATH={}", lib_out);
+    println!("cargo:rustc-env=TARGET={}", env::var("TARGET").unwrap());
 }
