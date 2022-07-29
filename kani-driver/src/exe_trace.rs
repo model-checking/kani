@@ -3,8 +3,10 @@
 
 use crate::session::KaniSession;
 use kani_metadata::HarnessMetadata;
+use std::collections::hash_map::DefaultHasher;
 use std::ffi::OsString;
 use std::fs;
+use std::hash::{Hash, Hasher};
 use std::path::Path;
 use std::process::Command;
 
@@ -12,11 +14,11 @@ impl KaniSession {
     pub fn exe_trace_main(&self, specialized_obj: &Path, harness: &HarnessMetadata) {
         if self.args.gen_exe_trace {
             let (det_vals, interp_det_vals) = parser::get_det_vals(specialized_obj);
-            let unit_test =
+            let (exe_trace, exe_trace_func_name) =
                 format_unit_test(&harness.mangled_name, &det_vals[..], &interp_det_vals[..]);
 
             println!("Executable trace:\n");
-            println!("{}", unit_test);
+            println!("{}", exe_trace);
 
             if self.args.add_exe_trace_to_src {
                 if !self.args.quiet {
@@ -26,7 +28,12 @@ impl KaniSession {
                     .original_end_line
                     .parse()
                     .expect("Couldn't convert proof harness line from str to usize");
-                self.modify_src_code(&harness.original_file, proof_harness_end_line, &unit_test);
+                self.modify_src_code(
+                    &harness.original_file,
+                    proof_harness_end_line,
+                    &exe_trace,
+                    &exe_trace_func_name,
+                );
             } else {
                 println!(
                     "To automatically add this executable trace to the src code, run Kani with `--add-exe-trace-to-src`."
@@ -35,12 +42,26 @@ impl KaniSession {
         }
     }
 
-    fn modify_src_code(&self, src_file_path: &str, proof_harness_end_line: usize, exe_trace: &str) {
+    fn modify_src_code(
+        &self,
+        src_file_path: &str,
+        proof_harness_end_line: usize,
+        exe_trace: &str,
+        exe_trace_func_name: &str,
+    ) {
         // Prep the source code and exec trace func.
         let src_as_str =
             fs::read_to_string(src_file_path).expect("Couldn't access proof harness source file");
         let mut src_lines = src_as_str.split('\n').collect::<Vec<&str>>();
         let mut exe_trace_lines = exe_trace.split('\n').collect::<Vec<&str>>();
+
+        // Short circuit if exe trace already in source code.
+        if src_as_str.contains(exe_trace_func_name) {
+            if !self.args.quiet {
+                println!("Exe trace already found in source code, so skipping modification.");
+            }
+            return;
+        }
 
         // Calc inserted indexes and line numbers into source code to rustfmt only those lines.
         // Indexes are into the vector (0-idx), lines are into src file (1-idx).
@@ -110,17 +131,24 @@ fn format_unit_test(
     harness_name: &str,
     det_vals: &[Vec<u8>],
     interp_det_vals: &[String],
-) -> String {
+) -> (String, String) {
     let vecs_as_str = det_vals
         .iter()
         .zip(interp_det_vals.iter())
         .map(|(det_val, interp_det_val)| format!("// {}\nvec!{:?}", interp_det_val, det_val))
         .collect::<Vec<String>>()
         .join(",\n");
-    format!(
+
+    let mut hasher = DefaultHasher::new();
+    harness_name.hash(&mut hasher);
+    vecs_as_str.hash(&mut hasher);
+    let hash = hasher.finish();
+    let exe_trace_func_name = format!("kani_exe_trace_{}_{}", harness_name, hash);
+
+    let exe_trace = format!(
         "
         #[test]
-        fn kani_autogen_{}_exe_trace() {{
+        fn {}() {{
             let mut det_vals: Vec<Vec<u8>> = vec![{}];
             kani::DET_VALS.with(|glob_det_vals| {{
                 det_vals.reverse();
@@ -129,8 +157,10 @@ fn format_unit_test(
             }});
             {}();
         }}",
-        harness_name, vecs_as_str, harness_name
-    )
+        exe_trace_func_name, vecs_as_str, harness_name
+    );
+
+    (exe_trace, exe_trace_func_name)
 }
 
 mod parser {
