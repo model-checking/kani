@@ -57,7 +57,7 @@ impl Arbitrary for bool {
 impl Arbitrary for char {
     #[inline(always)]
     fn any() -> Self {
-        // Kani translates char into i32.
+        // Generate an arbitrary u32 and constrain it to make it a valid representation of char.
         let val = u32::any();
         crate::assume(val <= 0xD7FF || (0xE000..=0x10FFFF).contains(&val));
         unsafe { char::from_u32_unchecked(val) }

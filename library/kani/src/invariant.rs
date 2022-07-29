@@ -24,8 +24,8 @@ use crate::Arbitrary;
 /// could lead to UB in our analysis.
 #[deprecated(
     since = "0.8.0",
-    note = "With `kani::Invariant`, Kani cannot guarantee that the type respects the language type invariants which may trigger UB. Use `kani::Arbitrary` instead. \
-    trigger UB"
+    note = "With `kani::Invariant`, Kani cannot guarantee that the type respects the language \
+    type invariants which may trigger UB. Use `kani::Arbitrary` instead."
 )]
 pub unsafe trait Invariant {
     /// Check if `&self` holds a valid value that respect the type invariant.

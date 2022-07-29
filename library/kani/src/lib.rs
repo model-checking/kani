@@ -90,6 +90,7 @@ pub fn any<T: Arbitrary>() -> T {
     since = "0.8.0",
     note = "This function may return symbolic values that don't respects the language type invariants."
 )]
+#[doc(hidden)]
 pub unsafe fn any_raw<T>() -> T {
     any_raw_internal()
 }
