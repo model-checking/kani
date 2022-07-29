@@ -11,8 +11,9 @@ use std::process::Command;
 impl KaniSession {
     pub fn exe_trace_main(&self, specialized_obj: &Path, harness: &HarnessMetadata) {
         if self.args.gen_exe_trace {
-            let det_vals = parser::get_det_vals(specialized_obj);
-            let unit_test = format_unit_test(&harness.mangled_name, &det_vals[..]);
+            let (det_vals, interp_det_vals) = parser::get_det_vals(specialized_obj);
+            let unit_test =
+                format_unit_test(&harness.mangled_name, &det_vals[..], &interp_det_vals[..]);
 
             println!("Executable trace:\n");
             println!("{}", unit_test);
@@ -105,9 +106,17 @@ impl KaniSession {
     }
 }
 
-fn format_unit_test(harness_name: &str, det_vals: &[Vec<u8>]) -> String {
-    let vecs: Vec<String> = det_vals.iter().map(|v| format!("vec!{:?}", v)).collect();
-    let vecs_as_str = vecs.join(", ");
+fn format_unit_test(
+    harness_name: &str,
+    det_vals: &[Vec<u8>],
+    interp_det_vals: &[String],
+) -> String {
+    let vecs: Vec<String> = det_vals
+        .iter()
+        .zip(interp_det_vals.iter())
+        .map(|(det_val, interp_det_val)| format!("// {}\nvec!{:?}", interp_det_val, det_val))
+        .collect();
+    let vecs_as_str = vecs.join(",\n");
     format!(
         "
         #[test]
@@ -132,7 +141,7 @@ mod parser {
     use std::path::Path;
 
     /// Extract deterministic values from a failing harness.
-    pub fn get_det_vals(file: &Path) -> Vec<Vec<u8>> {
+    pub fn get_det_vals(file: &Path) -> (Vec<Vec<u8>>, Vec<String>) {
         let output_filename = append_path(file, "cbmc_output");
         let cbmc_out = get_cbmc_out(&output_filename);
         handle_cbmc_out(&cbmc_out)
@@ -144,37 +153,46 @@ mod parser {
         serde_json::from_reader(reader).unwrap()
     }
 
-    fn handle_cbmc_out(cbmc_out: &Value) -> Vec<Vec<u8>> {
+    fn handle_cbmc_out(cbmc_out: &Value) -> (Vec<Vec<u8>>, Vec<String>) {
         let mut det_vals: Vec<Vec<u8>> = Vec::new();
+        let mut interp_det_vals: Vec<String> = Vec::new();
         for general_msg in cbmc_out.as_array().unwrap() {
             let result_msg = &general_msg["result"];
             if !result_msg.is_null() {
                 for result_val in result_msg.as_array().unwrap() {
-                    handle_result(result_val, &mut det_vals);
+                    handle_result(result_val, &mut det_vals, &mut interp_det_vals);
                 }
             }
         }
-        det_vals
+        (det_vals, interp_det_vals)
     }
 
-    fn handle_result(result_val: &Value, det_vals: &mut Vec<Vec<u8>>) {
+    fn handle_result(
+        result_val: &Value,
+        det_vals: &mut Vec<Vec<u8>>,
+        interp_det_vals: &mut Vec<String>,
+    ) {
         let desc = result_val["description"].to_string();
         let status = result_val["status"].to_string();
 
         if desc.contains("assertion failed") && status == "\"FAILURE\"" {
             for trace_pt in result_val["trace"].as_array().unwrap() {
-                handle_trace_pt(trace_pt, det_vals);
+                handle_trace_pt(trace_pt, det_vals, interp_det_vals);
             }
         }
     }
 
-    fn handle_trace_pt(trace_pt: &Value, det_vals: &mut Vec<Vec<u8>>) {
+    fn handle_trace_pt(
+        trace_pt: &Value,
+        det_vals: &mut Vec<Vec<u8>>,
+        interp_det_vals: &mut Vec<String>,
+    ) {
         if let (
             Some(step_type),
             Some(lhs),
             Some(func),
             Some(bit_det_val),
-            Some(_interp_det_val),
+            Some(interp_det_val),
             Some(width_u64),
         ) = (
             trace_pt["stepType"].as_str(),
@@ -197,7 +215,7 @@ mod parser {
             }
 
             det_vals.push(next_num);
-            // TODO: add in additional interpreted value
+            interp_det_vals.push(interp_det_val.to_string());
         }
     }
 }
