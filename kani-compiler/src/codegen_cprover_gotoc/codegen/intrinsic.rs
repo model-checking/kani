@@ -604,6 +604,8 @@ impl<'tcx> GotocCtx<'tcx> {
             "simd_rem" => unstable_codegen!(codegen_intrinsic_binop!(rem)),
             "simd_shl" => unstable_codegen!(codegen_intrinsic_binop!(shl)),
             "simd_shr" => {
+                // Remove this attribute once unstable_codegen! is removed.
+                #[allow(clippy::if_same_then_else)]
                 if fargs[0].typ().base_type().unwrap().is_signed(self.symbol_table.machine_model())
                 {
                     unstable_codegen!(codegen_intrinsic_binop!(ashr))

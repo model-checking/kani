@@ -16,8 +16,7 @@ pub fn do_passes(mut symtab: SymbolTable, pass_names: &[String]) -> SymbolTable 
                 // the other two identifiers
                 let symtab = ExprTransformer::transform(&symtab);
                 let symtab = NondetTransformer::transform(&symtab);
-                let symtab = NameTransformer::transform(&symtab);
-                symtab
+                NameTransformer::transform(&symtab)
             }
             "identity" => IdentityTransformer::transform(&symtab),
             _ => panic!("Invalid symbol table transformation: {}", pass_name),

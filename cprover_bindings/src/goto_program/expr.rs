@@ -345,10 +345,8 @@ impl Expr {
             source.is_numeric()
         } else if target.is_pointer() {
             source.is_integer() || source.is_pointer()
-        } else if target.is_empty() {
-            true
         } else {
-            false
+            target.is_empty()
         }
     }
 

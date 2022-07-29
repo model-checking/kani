@@ -66,7 +66,7 @@ impl KaniSession {
                 outdir: outdir.clone(),
                 symtabs: vec![outdir.join("*.symtab.json")],
                 metadata: vec![outdir.join("*.kani-metadata.json")],
-                restrictions: self.args.restrict_vtable().then(|| outdir),
+                restrictions: self.args.restrict_vtable().then_some(outdir),
             });
         }
 
@@ -74,7 +74,7 @@ impl KaniSession {
             outdir: outdir.clone(),
             symtabs: glob(&outdir.join("*.symtab.json"))?,
             metadata: glob(&outdir.join("*.kani-metadata.json"))?,
-            restrictions: self.args.restrict_vtable().then(|| outdir),
+            restrictions: self.args.restrict_vtable().then_some(outdir),
         })
     }
 }

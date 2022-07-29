@@ -667,7 +667,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     self.ensure_struct(
                         self.ty_mangled_name(ty),
                         self.ty_pretty_name(ty),
-                        |tcx, _| tcx.codegen_ty_tuple_fields(ty, *ts),
+                        |tcx, _| tcx.codegen_ty_tuple_fields(ty, ts),
                     )
                 }
             }
@@ -786,7 +786,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
                 final_fields.extend(self.codegen_alignment_padding(
                     offset,
-                    &layout,
+                    layout,
                     final_fields.len(),
                 ));
                 final_fields
@@ -991,7 +991,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let field_name = if Some(idx) == discriminant_field {
                     "case".into()
                 } else {
-                    ctx.generator_field_name(idx).into()
+                    ctx.generator_field_name(idx)
                 };
                 let field_ty = type_and_layout.field(ctx, idx).ty;
                 let field_offset = type_and_layout.fields.offset(idx);
@@ -1139,24 +1139,24 @@ impl<'tcx> GotocCtx<'tcx> {
         let params = sig
             .inputs()
             .iter()
-            .filter_map(|arg_type| {
+            .map(|arg_type| {
                 if is_first {
                     is_first = false;
                     debug!(self_type=?arg_type, fn_signature=?sig, "codegen_dynamic_function_sig");
                     if arg_type.is_ref() {
                         // Convert fat pointer to thin pointer to data portion.
                         let first_ty = pointee_type(*arg_type).unwrap();
-                        Some(self.codegen_trait_data_pointer(first_ty))
+                        self.codegen_trait_data_pointer(first_ty)
                     } else if arg_type.is_trait() {
                         // Convert dyn T to thin pointer.
-                        Some(self.codegen_trait_data_pointer(*arg_type))
+                        self.codegen_trait_data_pointer(*arg_type)
                     } else {
                         // Codegen type with thin pointer (E.g.: Box<dyn T> -> Box<data_ptr>).
-                        Some(self.codegen_trait_receiver(*arg_type))
+                        self.codegen_trait_receiver(*arg_type)
                     }
                 } else {
                     debug!("Using type {:?} in function signature", arg_type);
-                    Some(self.codegen_ty(*arg_type))
+                    self.codegen_ty(*arg_type)
                 }
             })
             .collect();
@@ -1404,7 +1404,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     // fields.
                     Some(
                         lo.fields()
-                            .offset(lo.fields().index_by_increasing_offset().nth(0).unwrap()),
+                            .offset(lo.fields().index_by_increasing_offset().next().unwrap()),
                     )
                 }
             })
@@ -1700,7 +1700,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Pre-condition: The argument must be a valid receiver for dispatchable trait functions.
     /// See <https://doc.rust-lang.org/reference/items/traits.html#object-safety> for more details.
     pub fn receiver_data_path<'a>(
-        self: &'a Self,
+        &'a self,
         typ: Ty<'tcx>,
     ) -> impl Iterator<Item = (String, Ty<'tcx>)> + 'a {
         struct ReceiverIter<'tcx, 'a> {
