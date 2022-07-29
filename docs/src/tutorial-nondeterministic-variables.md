@@ -1,13 +1,11 @@
 # Nondeterministic variables
 
-Kani is able to reason about programs and their execution paths by allowing users to assign nondeterministic (also called symbolic) values to certain variables using `kani::any()`.
-Kani is a "bit-precise" model checker, which means that Kani considers all the possible bit-value combinations that could be assigned to the variable's memory contents.
+Kani is able to reason about programs and their execution paths by allowing users to create nondeterministic (also called symbolic) values using `kani::any()`.
+Kani is a "bit-precise" model checker, which means that Kani considers all the possible bit-value combinations _that would be valid_ if assigned to a variable's memory contents.
+In other words, `kani::any()` should not produce values that are invalid for the type (which would lead to Rust undefined behavior).
 
-As a Rust developer, this sounds a lot like the `mem::transmute` operation, which is highly `unsafe`.
-And that's correct.
-But `kani::any()` is only implemented for a few types: those where we are able to safely enforce the type's invariants.
-(What if you want any value of a type Kani does not implement? [We'll answer that later in this tutorial.](#custom-nondeterministic-types))
-In other words, `kani::any()` should not produce values that are invalid for the type.
+Out of the box, Kani includes `kani::any()` implementations for most primitive and some `std` types.
+In this tutorial, we will show how to use `kani::any()` to create symbolic values for other types. 
 
 ## Safe nondeterministic variables
 
@@ -39,34 +37,21 @@ cargo kani --harness safe_update
 
 `kani::any()` is safe Rust, and so Kani only implements it for types where type invariants are enforced.
 For `NonZeroU32`, this means we never return a `0` value.
-The assertion we wrote in this harness was just an extra check we added to demonstrate this fact.
-
-## Bounding nondeterministic variables
-
-There is no implementation of `kani::any()` for more complex data structures like `Vec`, however.
-The trouble with a nondeterministic vector is that you usually need to _bound_ the size of the vector, for the reasons we investigated in the [last chapter](./tutorial-loop-unwinding.md).
-The `kani::any()` function does not have any arguments, and so cannot be given an upper bound.
-
-You can use `kani::any()` for `[T; N]` (if implemented for `T`).
-But this the type of an exactly-sized array.
-Again, `kani::any()` does not have an implementation for an unsized slice (like `[T]`).
-
-This does not mean you cannot have a nondeterministic vector.
-It just means you have to construct one.
-Our example proof harness above constructs a nondeterministic `Inventory` of size `1`, simply by starting with the empty `Inventory` and inserting a nondeterministic entry.
+The assertion we wrote in this harness was just an extra check we added to demonstrate this fact, not an essential part of the proof.
 
 ## Custom nondeterministic types
 
-There's nothing special about `kani::any()` except that Kani ships with implementations for a few types where we can guarantee safety.
+While `kani::any()` is the only method Kani provides to inject non-determinism into a proof harness, Kani only ships with implementations for a few types where we can guarantee safety.
 When you need nondeterministic variables of types that `kani::any()` cannot construct, you have two options:
 
-1. Implement `kani::Arbitrary` for your type, so you can use `kani::any()`.
+1. Implement the `kani::Arbitrary` trait for your type, so you can use `kani::any()`.
 2. Just write a function.
 
 The advantage of the first approach is that it's simple and conventional.
 It also means that in addition to being able to use `kani::any()` with your type, you can also use it with `Option<MyType>` (for example).
 
 The advantage of the second approach is that you're able to pass in parameters, like bounds on the size of the data structure.
+(Which we'll discuss more in the next section.)
 This approach is also necessary when you are unable to implement a trait (like `Arbitrary`) on a type you're importing from another crate.
 
 Either way, inside this function you would simply return an arbitrary value by generating arbitrary values for its components.
@@ -85,8 +70,20 @@ All we're doing here is making use of a nondeterministic integer to decide which
 > But Kani just see 3 meaningful possibilities, each of which is not treated any differently from each other.
 > The "proportion" of integers does not matter.
 
+## Bounding nondeterministic variables
 
-## Exercise
+You can use `kani::any()` for `[T; N]` (if implemented for `T`) because this array type has an exact and constant size.
+But if you wanted a slice (`[T]`) up to size `N`, you can no longer use `kani::any()` for that.
+Likewise, there is no implementation of `kani::any()` for more complex data structures like `Vec`.
+
+The trouble with a nondeterministic vector is that you usually need to _bound_ the size of the vector, for the reasons we investigated in the [last chapter](./tutorial-loop-unwinding.md).
+The `kani::any()` function does not have any arguments, and so cannot be given an upper bound.
+
+This does not mean you cannot have a nondeterministic vector.
+It just means you have to construct one.
+Our example proof harness above constructs a nondeterministic `Inventory` of size `1`, simply by starting with the empty `Inventory` and inserting a nondeterministic entry.
+
+### Exercise
 
 Try writing a function to generate a (bounded) nondeterministic inventory (from the first example:)
 
@@ -111,4 +108,5 @@ In this section:
 
 1. We saw how `kani::any()` will return "safe" values for each of the types Kani implements it for.
 2. We saw how to implement `kani::Arbitrary` or just write a function to create nondeterministic values for other types.
-3. We did an exercise to generate nondeterministic values of bounded size for `Inventory`.
+3. We noted that some types cannot implement `kani::any()` as they need a bound on their size.
+4. We did an exercise to generate nondeterministic values of bounded size for `Inventory`.
