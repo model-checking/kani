@@ -111,12 +111,12 @@ fn format_unit_test(
     det_vals: &[Vec<u8>],
     interp_det_vals: &[String],
 ) -> String {
-    let vecs: Vec<String> = det_vals
+    let vecs_as_str = det_vals
         .iter()
         .zip(interp_det_vals.iter())
         .map(|(det_val, interp_det_val)| format!("// {}\nvec!{:?}", interp_det_val, det_val))
-        .collect();
-    let vecs_as_str = vecs.join(",\n");
+        .collect::<Vec<String>>()
+        .join(",\n");
     format!(
         "
         #[test]
