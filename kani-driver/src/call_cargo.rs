@@ -22,6 +22,7 @@ pub struct CargoOutputs {
     pub metadata: Vec<PathBuf>,
 }
 
+/// Finds the "target" directory while considering workspaces,
 fn find_target_dir() -> PathBuf {
     fn maybe_get_target() -> Option<PathBuf> {
         let raw_metadata = Command::new("cargo").arg("metadata").output().ok()?;
