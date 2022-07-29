@@ -56,7 +56,7 @@ This approach is also necessary when you are unable to implement a trait (like `
 
 Either way, inside this function you would simply return an arbitrary value by generating arbitrary values for its components.
 To generate a nondeterministic struct, you would just generate nondeterministic values for each of its fields.
-For complex data structures, you can start with an empty one and add a (bounded) nondeterministic number of entries.
+For complex data structures like vectors or other containers, you can start with an empty one and add a (bounded) nondeterministic number of entries.
 For an enum, you can make use of a simple trick:
 
 ```rust
