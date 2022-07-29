@@ -40,12 +40,12 @@ pub async fn async_fn() -> i32 {
 }
 
 /// A very simple executor that just polls the future in a loop
-pub fn block_on<F: Future>(mut fut: F) -> <F as Future>::Output {
+pub fn block_on<T>(mut fut: impl Future<Output = T>) -> T {
     let waker = unsafe { Waker::from_raw(NOOP_RAW_WAKER) };
     let cx = &mut Context::from_waker(&waker);
+    let mut fut = unsafe { Pin::new_unchecked(&mut fut) };
     loop {
-        let pinned = unsafe { Pin::new_unchecked(&mut fut) };
-        match pinned.poll(cx) {
+        match fut.as_mut().poll(cx) {
             std::task::Poll::Ready(res) => return res,
             std::task::Poll::Pending => continue,
         }

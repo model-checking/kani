@@ -10,12 +10,14 @@ use std::{
 /// Polls the future in a loop until completion (a very simple executor)
 ///
 /// This is intended as a drop-in replacement for `futures::block_on`, which Kani cannot handle.
-pub fn block_on<F: Future>(mut fut: F) -> <F as Future>::Output {
+pub fn block_on<T>(mut fut: impl Future<Output = T>) -> T {
     let waker = unsafe { Waker::from_raw(NOOP_RAW_WAKER) };
     let cx = &mut Context::from_waker(&waker);
+    // SAFETY: we shadow the original binding, so it cannot be accessed again for the rest of the scope.
+    // This is the same as what the pin_mut! macro in the futures crate does.
+    let mut fut = unsafe { Pin::new_unchecked(&mut fut) };
     loop {
-        let pinned = unsafe { Pin::new_unchecked(&mut fut) };
-        match pinned.poll(cx) {
+        match fut.as_mut().poll(cx) {
             std::task::Poll::Ready(res) => return res,
             std::task::Poll::Pending => continue,
         }
