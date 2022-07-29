@@ -1,0 +1,2150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>
+    Pipeline tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs
+  </title>
+<style>
+#title{
+  background-color: #ec407a;
+  color: white;
+  padding: 2em;
+}
+h1 {
+  margin-bottom: 0em;
+}
+#subtitle {
+  font-variant: small-caps;
+  text-transform: lowercase;
+  letter-spacing: 0.2em;
+}
+.run-info ul {
+  list-style: none;
+}
+.run-info ul li {
+  display: inline;
+  margin-right: 6em;
+  margin-left: -3em;
+  text-transform: uppercase;
+  font-size: small;
+  color: #ec407a;
+}
+#content {
+  max-width: 800px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-top: 2em;
+  color: #263238;
+  font-family: Helvetica, sans-serif;
+}
+p {
+  margin: 0;
+}
+.command-table {
+  background-color: #eceff1;
+  padding: 0.3em;
+  border-radius: 0.3em;
+  margin-bottom: 4em;
+}
+.command-table .fail-ignored {
+  background-color: #e65100cc;
+  padding: 0.3em;
+  border-radius: 0.3em;
+}
+.command-table .success {
+  background-color: #1a237ecc;
+  padding: 0.3em;
+  border-radius: 0.3em;
+}
+.command-table .in-progress {
+  background-color: black;
+  padding: 0.3em;
+  border-radius: 0.3em;
+}
+.command-table .non-started {
+  background-color: #26323844;
+  padding: 0.3em;
+  border-radius: 0.3em;
+}
+.command-table .fail {
+  background-color: #f44336cc;
+  padding: 0.3em;
+  border-radius: 0.3em;
+}
+.command-content {
+  background-color: #eceff1;
+  padding: 1em;
+}
+.command-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 1em;
+}
+.command-id-link{
+  flex-grow: 0;
+}
+.command-id-link a {
+  font-size: xx-large;
+  text-align: center;
+  font-weight: bold;
+  text-shadow: 1px  1px 0px #000000bb,
+              -1px -1px 0px #ffffffbb;
+  text-decoration: none;
+  margin-left: 0.2em;
+}
+.command-id-link a:link {
+  text-shadow: 1px  1px 0px #000000bb,
+              -1px -1px 0px #ffffffbb;
+}
+.command-id-link a:visited {
+  text-shadow: 1px  1px 0px #000000bb,
+              -1px -1px 0px #ffffffbb;
+}
+.command-id-link a:visited:hover {
+  color: #ec407a;
+  background-color: #00000000;
+  text-shadow: 1px  1px 0px #000000bb,
+              -1px -1px 0px #ffffffbb,
+               0px 0px 10px #fff,
+               0px 0px 5px #ec407a,
+               0px 0px 5px #ec407a;
+}
+.command-id-link a:hover {
+  color: #ec407a;
+  background-color: #00000000;
+  text-shadow: 1px  1px 0px #000000bb,
+              -1px -1px 0px #ffffffbb
+               0px 0px 10px #fff,
+               0px 0px 5px #ec407a,
+               0px 0px 5px #ec407a;
+}
+.command-id-link a:active {
+  color: #ffeb3b;
+  background-color: #00000000;
+  text-shadow: 1px  1px 0px #000000bb,
+              -1px -1px 0px #ffffffbb,
+                 0px 0px 10px #fff,
+                 0px 0px 5px #ffeb3b,
+                 0px 0px 5px #ffeb3b;
+}
+.command-id-link a:visited:active {
+  color: #ffeb3b;
+  background-color: #00000000;
+  text-shadow: 1px  1px 0px #000000bb,
+              -1px -1px 0px #ffffffbb,
+                 0px 0px 10px #fff,
+                 0px 0px 5px #ffeb3b,
+                 0px 0px 5px #ffeb3b;
+}
+.command-description {
+  color: #26323899;
+  font-size: smaller;
+  text-align: center;
+  font-weight: bold;
+  flex-grow: 1;
+}
+
+.command-invocation {
+  padding: 1em;
+  color: #fff;
+  background-color: #005662;
+  font-size: small;
+  font-family: monospace;
+  border-radius: 0.5em;
+  text-shadow: 0 0 2px #ffccbccc;
+}
+.command-stats-table {
+  margin-top: 0.2em;
+  border-radius: 0.5em;
+  padding: 0.2em;
+  padding-top: 0.4em;
+  display: flex;
+  flex-direction: column;
+  background-color: #eae3998a;
+  color: #263238cc;
+  margin-bottom: 0.2em;
+}
+.command-stats-row {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-evenly;
+  margin-top: 0.4em;
+  margin-bottom: 0.4em;
+  font-size: small;
+  text-transform: uppercase;
+}
+.command-stats-row p .value {
+  color: #00251aaa;
+  text-shadow: 0 0 2px #82ada944;
+  font-weight: bold;
+}
+.literal-stdout {
+  margin-top: 0.4em;
+  margin-bottom: 0.2em;
+  padding: 1em;
+  border-radius: 0.5em;
+  overflow-x: auto;
+  overflow-y: auto;
+}
+.output-box {
+  margin-top: 0.4em;
+  margin-bottom: 0.2em;
+  padding: 1em;
+  color: #000a12;
+  background-color: #cfd8dc;
+  font-size: small;
+  font-family: monospace;
+  border-radius: 0.5em;
+  max-height: 20em;
+  overflow-x: auto;
+  overflow-y: auto;
+}
+.output-box xmp{
+  white-space: pre;
+}
+.stage-name p {
+  margin-left: 0.5em;
+  color: #546e7a;
+  text-shadow:  -1px  0px 0px #fff
+               ,-2px  0px 0px #ffffff99
+               ,-1px  1px 0px #ffffff99
+               ;
+  font-size: 48pt;
+  font-variant: small-caps;
+  text-transform: lowercase;
+  font-weight: bold;
+  font-style: italic;
+}
+.stage-name .underline {
+  width: 100%;
+  height: 1.1em;
+  background-color: #546e7a;
+  margin-top: -1.6em;
+}
+.stage-name {
+  margin-top: 6em;
+  margin-bottom: 3em;
+}
+
+.outcome-table-info-box {
+  margin-top: 0.4em;
+  margin-bottom: 0.2em;
+  padding: 1em;
+  color: #000a12;
+  background-color: #ffee58;
+  border-radius: 0.5em;
+}
+.outcome-table-info-box .outcome{
+  font-weight: bold;
+}
+#toc {
+  margin-bottom: 6em;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 1;
+  margin-right: 3em;
+}
+.toc-title {
+  text-align: center;
+  font-variant: small-caps;
+  text-transform: lowercase;
+  margin-bottom: -1em;
+}
+.toc-section{
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+  text-transform: capitalize;
+}
+.toc-row {
+  display: flex;
+  flex-direction: row;
+  justify-content: flex-start;
+  align-items: center;
+}
+.toc-row-icon {
+  padding-right: 8px;
+}
+.status-icon-cross {
+  fill: #f44336;
+    width: 16px;
+    height: 16px;
+}
+.status-icon-tick {
+  fill: #3f51b5;
+  stroke: #ffffff77;
+  stroke-width: 1px;
+  width: 16px;
+  height: 16px;
+}
+
+.status-icon-in-progress {
+  fill: #333;
+  width: 16px;
+  height: 16px;
+}
+
+.status-icon-in-progress circle {
+  stroke: #333;
+  stroke-width: 2px;
+  fill: none
+}
+a:link {
+  color: #1e88e5;
+}
+a:visited {
+  color: #1e88e5;
+}
+a:visited:hover {
+  background-color: #1e88e5;
+  color: #fff;
+  text-decoration: none;
+}
+a:hover {
+  background-color: #1e88e5;
+  color: #fff;
+  text-decoration: none;
+}
+a:active {
+  background-color: #ec407a;
+  color: #fff;
+  text-decoration: none;
+}
+a:visited:active {
+  background-color: #ec407a;
+  color: #fff;
+  text-decoration: none;
+}
+
+#contents-container {
+  margin-top: 6em;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  align-content: flex-start;
+}
+
+#depgraph {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  align-content: flex-start;
+  flex-shrink: 7;
+}
+
+#depgraph-title p {
+  text-align: center;
+  font-variant: small-caps;
+  text-transform: lowercase;
+}
+
+#depgraph-preview img {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+#depgraph-preview {
+  padding: 1em;
+}
+
+.memory-box {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5em;
+  align-items: center;
+}
+.memory-preview {
+  width: 75%;
+}
+.memory-preview svg {
+  margin-left: -1em;
+  margin-right: -2em;
+}
+.memory-table {
+}
+.memory-title {
+  text-align: center;
+  font-style: bold;
+}
+.memory-subtitle {
+  text-transform: lowercase;
+  font-variant: small-caps;
+  text-align: center;
+  opacity: 0.8;
+}
+.memory-pad {
+  width: 1.5em;
+}
+.memory-value {
+  text-align: center;
+  margin-right: 2em;
+}
+.rss {
+  color: #ab47bc;
+}
+.vsz {
+  color: #4caf50;
+}
+
+
+@media (prefers-color-scheme: dark){
+  a:link {
+    color: #29b6f6;
+  }
+  a:visited {
+    color: #29b6f6;
+  }
+  a:visited:hover {
+    color: #263238;
+    background-color: #29b6f6;
+  }
+  a:hover {
+    color: #263238;
+    background-color: #29b6f6;
+  }
+  a:active {
+    color: #263238;
+    background-color: #ec407a;
+  }
+  a:visited:active {
+    color: #263238;
+    background-color: #ec407a;
+  }
+  .command-id-link a:link {
+    text-shadow: 1px  1px 0px #000000bb,
+                -1px -1px 0px #ffffffbb;
+  }
+  .command-id-link a:visited {
+    text-shadow: 1px  1px 0px #000000bb,
+                -1px -1px 0px #ffffffbb;
+  }
+  .command-id-link a:visited:hover {
+    color: #ec407a;
+    background-color: #00000000;
+    text-shadow: 1px  1px 0px #000000bb,
+                -1px -1px 0px #ffffffbb.
+                 0px 0px 10px #fff,
+                 0px 0px 5px #ec407a,
+                 0px 0px 5px #ec407a;
+  }
+  .command-id-link a:hover {
+    color: #ec407a;
+    background-color: #00000000;
+    text-shadow: 1px  1px 0px #000000bb,
+                -1px -1px 0px #ffffffbb,
+                 0px 0px 10px #fff,
+                 0px 0px 5px #ec407a,
+                 0px 0px 5px #ec407a;
+  }
+  .command-id-link a:active {
+    color: #ffeb3b;
+    background-color: #00000000;
+    text-shadow: 1px  1px 0px #000000bb,
+                -1px -1px 0px #ffffffbb,
+                 0px 0px 10px #fff,
+                 0px 0px 5px #ffeb3b,
+                 0px 0px 5px #ffeb3b;
+  }
+  .command-id-link a:visited:active {
+    color: #ffeb3b;
+    background-color: #00000000;
+    text-shadow: 1px  1px 0px #000000bb,
+                -1px -1px 0px #ffffffbb,
+                 0px 0px 10px #fff,
+                 0px 0px 5px #ffeb3b,
+                 0px 0px 5px #ffeb3b;
+  }
+  body {
+    color: #babdbe;
+    background-color: #263238;
+  }
+  .outcome-table-info-box p{
+    color: #000a12;
+  }
+  p {
+    color: #babdbe;
+  }
+  #subtitle {
+    color: #fff;
+  }
+  .command-table {
+    background-color: #37474f;
+  }
+  .command-content {
+    background-color: #37474f;
+  }
+  .command-invocation p {
+    color: #fff;
+  }
+  .command-stats-table {
+    background-color: #eae399d0;
+    color: #263238;
+  }
+  .command-stats-table p {
+    color: #263238;
+  }
+  .output-box {
+    color: #cfd8dccc;
+    background-color: #102027;
+  }
+  .stage-name p {
+    text-shadow: -1px  0px 0px #263238,
+                 -2px  0px 0px #26323899,
+                 -1px  1px 0px #26323899;
+  }
+  .status-icon-in-progress { fill: #ddd; }
+  .status-icon-in-progress circle { stroke: #ddd; }
+
+  /* SVG graphs */
+  g text {
+    fill: #eceff1;
+    stroke: #fff0;
+  }
+}
+</style>
+</head>
+<body>
+<div id="content">
+
+  <div id="title">
+    <h1>
+      Book Runner pipeline &lsquo;tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs&rsquo;
+    </h1>
+    <p id="subtitle">
+      Litani CI Dashboard
+    </p>
+  </div><!-- id="title" -->
+
+  <div class=run-info>
+    <ul>
+      <li>Pipeline status: success</li>
+      <li>2022-07-29T18:04:52Z</li>
+      <li>1af687ee-0ec8-4d2f-a429-ce2493472c50</li>
+    </ul>
+  </div><!-- class=run-info -->
+
+  <div id="contents-container">
+
+    <div id="toc">
+      <div class="toc-title">
+        <p>Summary of jobs for this pipeline</p>
+      </div><!-- class="toc-title" -->
+
+      
+        <div class="toc-section">
+          <p>check</p>
+        </div><!-- class="toc-section" -->
+        
+          <div class="toc-row">
+
+            <div class="toc-row-icon">
+              
+                <svg height="16px" width="16px" class="status-icon-tick">
+                  <polygon points="1,11 6,15 15,3 13,1 6,12 3,8"></polygon>
+                </svg>
+              
+            </div><!-- class="toc-row-icon" -->
+
+            <div class="toc-row-job-name">
+              <p>
+              <a href="#job-18da4b45-fdde-4e99-b187-90db37965e9c">
+              
+              Is this valid Rust code?
+              
+              </a>
+              </p>
+            </div><!-- class="toc-row-job-name" -->
+
+          </div><!-- class="toc-row" -->
+
+        
+      
+        <div class="toc-section">
+          <p>codegen</p>
+        </div><!-- class="toc-section" -->
+        
+          <div class="toc-row">
+
+            <div class="toc-row-icon">
+              
+                <svg height="16px" width="16px" class="status-icon-tick">
+                  <polygon points="1,11 6,15 15,3 13,1 6,12 3,8"></polygon>
+                </svg>
+              
+            </div><!-- class="toc-row-icon" -->
+
+            <div class="toc-row-job-name">
+              <p>
+              <a href="#job-f55bec90-57fb-414a-bd73-d4b564211f62">
+              
+              Does Kani support all the Rust features used in it?
+              
+              </a>
+              </p>
+            </div><!-- class="toc-row-job-name" -->
+
+          </div><!-- class="toc-row" -->
+
+        
+      
+        <div class="toc-section">
+          <p>verification</p>
+        </div><!-- class="toc-section" -->
+        
+          <div class="toc-row">
+
+            <div class="toc-row-icon">
+              
+                <svg height="16px" width="16px" class="status-icon-tick">
+                  <polygon points="1,11 6,15 15,3 13,1 6,12 3,8"></polygon>
+                </svg>
+              
+            </div><!-- class="toc-row-icon" -->
+
+            <div class="toc-row-job-name">
+              <p>
+              <a href="#job-5b70ad7d-a30f-4855-9d79-337178b61868">
+              
+              Can Kani reason about it?
+              
+              </a>
+              </p>
+            </div><!-- class="toc-row-job-name" -->
+
+          </div><!-- class="toc-row" -->
+
+        
+      
+    </div><!-- id="toc" -->
+
+
+    
+
+  </div><!-- id="contents-container" -->
+
+
+  
+  <div class="stage">
+    <div class="stage-name">
+      <p>check</p>
+      <div class="underline"></div>
+    </div><!-- class="stage-name" -->
+
+    
+    <div class="command-table" id="job-18da4b45-fdde-4e99-b187-90db37965e9c">
+      
+      <div class="success">
+      
+        <div class="command-content">
+          <div class="command-header">
+            <div class="command-id-link">
+              <p>
+                <a href="#job-18da4b45-fdde-4e99-b187-90db37965e9c">#</a>
+              </p>
+            </div><!-- class="command-id-link" -->
+            <div class="command-description">
+              
+              <p>
+                Is this valid Rust code?
+              </p>
+              
+            </div><!-- class="command-description" -->
+          </div><!-- class="command-header" -->
+          <div class="command-invocation">
+            <p>
+            "kani-compiler" "--edition" "2015" "-Z" "no-codegen" "tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs"
+            </p>
+          </div><!-- class="command-invocation" -->
+
+          
+          <div class="command-stats-table">
+            
+            <div class="command-stats-row">
+              <p>Command return code:
+              <span class="value">
+                0
+              </span></p>
+              <p>OK returns:
+              <span class="value">
+                ['0']
+              </span></p>
+              <p>Ignored returns:
+              <span class="value">
+                None
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+            <div class="command-stats-row">
+              <p>Timeout:
+              <span class="value">
+                5
+              </span></p>
+              <p>Timeout ok:
+              <span class="value">
+                False
+              </span></p>
+              <p>Timeout ignored:
+              <span class="value">
+                False
+              </span></p>
+              <p>Timeout reached:
+              <span class="value">
+                False
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+            <div class="command-stats-row">
+              <p>Start time:
+              <span class="value">
+                2022-07-29T18:10:37Z
+              </span></p>
+              <p>Duration:
+              <span class="value">
+                00s
+              </span></p>
+              <p>End time:
+              <span class="value">
+                2022-07-29T18:10:37Z
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+            <div class="command-stats-row">
+              <p>Command successful:
+              <span class="value">
+              
+              yes
+              
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+             
+          </div><!-- class="command-stats-table" -->
+          
+
+          
+
+
+          
+
+
+          
+
+          
+
+        </div><!-- class="command-content" -->
+      </div><!-- class="fail" -->
+    </div><!-- id="command-table" -->
+    
+
+  </div><!-- class="stage" -->
+  
+  <div class="stage">
+    <div class="stage-name">
+      <p>codegen</p>
+      <div class="underline"></div>
+    </div><!-- class="stage-name" -->
+
+    
+    <div class="command-table" id="job-f55bec90-57fb-414a-bd73-d4b564211f62">
+      
+      <div class="success">
+      
+        <div class="command-content">
+          <div class="command-header">
+            <div class="command-id-link">
+              <p>
+                <a href="#job-f55bec90-57fb-414a-bd73-d4b564211f62">#</a>
+              </p>
+            </div><!-- class="command-id-link" -->
+            <div class="command-description">
+              
+              <p>
+                Does Kani support all the Rust features used in it?
+              </p>
+              
+            </div><!-- class="command-description" -->
+          </div><!-- class="command-header" -->
+          <div class="command-invocation">
+            <p>
+            "kani-compiler" "--edition" "2015" "--out-dir" "build/tmp" "tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs"
+            </p>
+          </div><!-- class="command-invocation" -->
+
+          
+          <div class="command-stats-table">
+            
+            <div class="command-stats-row">
+              <p>Command return code:
+              <span class="value">
+                0
+              </span></p>
+              <p>OK returns:
+              <span class="value">
+                ['0']
+              </span></p>
+              <p>Ignored returns:
+              <span class="value">
+                None
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+            <div class="command-stats-row">
+              <p>Timeout:
+              <span class="value">
+                10
+              </span></p>
+              <p>Timeout ok:
+              <span class="value">
+                False
+              </span></p>
+              <p>Timeout ignored:
+              <span class="value">
+                False
+              </span></p>
+              <p>Timeout reached:
+              <span class="value">
+                False
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+            <div class="command-stats-row">
+              <p>Start time:
+              <span class="value">
+                2022-07-29T18:13:23Z
+              </span></p>
+              <p>Duration:
+              <span class="value">
+                01s
+              </span></p>
+              <p>End time:
+              <span class="value">
+                2022-07-29T18:13:24Z
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+            <div class="command-stats-row">
+              <p>Command successful:
+              <span class="value">
+              
+              yes
+              
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+             
+          </div><!-- class="command-stats-table" -->
+          
+
+          
+
+
+          
+
+
+          
+
+          
+
+        </div><!-- class="command-content" -->
+      </div><!-- class="fail" -->
+    </div><!-- id="command-table" -->
+    
+
+  </div><!-- class="stage" -->
+  
+  <div class="stage">
+    <div class="stage-name">
+      <p>verification</p>
+      <div class="underline"></div>
+    </div><!-- class="stage-name" -->
+
+    
+    <div class="command-table" id="job-5b70ad7d-a30f-4855-9d79-337178b61868">
+      
+      <div class="success">
+      
+        <div class="command-content">
+          <div class="command-header">
+            <div class="command-id-link">
+              <p>
+                <a href="#job-5b70ad7d-a30f-4855-9d79-337178b61868">#</a>
+              </p>
+            </div><!-- class="command-id-link" -->
+            <div class="command-description">
+              
+              <p>
+                Can Kani reason about it?
+              </p>
+              
+            </div><!-- class="command-description" -->
+          </div><!-- class="command-header" -->
+          <div class="command-invocation">
+            <p>
+            RUSTFLAGS="--edition 2015" "kani" "tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs" "--enable-unstable" "--function" "main" "--enable-unstable" "--cbmc-args" "--unwind" "5"
+            </p>
+          </div><!-- class="command-invocation" -->
+
+          
+          <div class="command-stats-table">
+            
+            <div class="command-stats-row">
+              <p>Command return code:
+              <span class="value">
+                0
+              </span></p>
+              <p>OK returns:
+              <span class="value">
+                ['0']
+              </span></p>
+              <p>Ignored returns:
+              <span class="value">
+                None
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+            <div class="command-stats-row">
+              <p>Timeout:
+              <span class="value">
+                60
+              </span></p>
+              <p>Timeout ok:
+              <span class="value">
+                False
+              </span></p>
+              <p>Timeout ignored:
+              <span class="value">
+                False
+              </span></p>
+              <p>Timeout reached:
+              <span class="value">
+                False
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+            <div class="command-stats-row">
+              <p>Start time:
+              <span class="value">
+                2022-07-29T18:13:24Z
+              </span></p>
+              <p>Duration:
+              <span class="value">
+                02s
+              </span></p>
+              <p>End time:
+              <span class="value">
+                2022-07-29T18:13:26Z
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+            <div class="command-stats-row">
+              <p>Command successful:
+              <span class="value">
+              
+              yes
+              
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+             
+          </div><!-- class="command-stats-table" -->
+          
+
+          
+
+
+          
+
+
+          
+            
+            <div class="output-box"><xmp>stdout:
+              
+Checking harness main...
+CBMC 5.62.0 (cbmc-5.62.0)
+CBMC version 5.62.0 (cbmc-5.62.0) 64-bit x86_64 linux
+Reading GOTO program from file tests/bookrunner/books/Rust by Example/Traits/Iterators/12.out.for-main
+Generating GOTO Program
+Adding CPROVER library (x86_64)
+Removal of function pointers and virtual functions
+Generic Property Instrumentation
+Running with 16 object bits, 48 offset bits (user-specified)
+Starting Bounded Model Checking
+Unwinding loop main.0 iteration 1 file /home/runner/work/kani/kani/tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs line 51 column 5 function main thread 0
+Unwinding loop main.0 iteration 2 file /home/runner/work/kani/kani/tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs line 51 column 5 function main thread 0
+Unwinding loop main.0 iteration 3 file /home/runner/work/kani/kani/tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs line 51 column 5 function main thread 0
+Unwinding loop main.1 iteration 1 file /home/runner/work/kani/kani/tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs line 57 column 5 function main thread 0
+Unwinding loop main.1 iteration 2 file /home/runner/work/kani/kani/tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs line 57 column 5 function main thread 0
+Unwinding loop main.1 iteration 3 file /home/runner/work/kani/kani/tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs line 57 column 5 function main thread 0
+Unwinding loop main.1 iteration 4 file /home/runner/work/kani/kani/tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs line 57 column 5 function main thread 0
+Unwinding loop _RNvYNtCs2ZsWgfZlDor_2_129FibonacciNtNtNtNtCshBEb14mhtvp_4core4iter6traits8iterator8Iterator10advance_byB4_.2 iteration 1  thread 0
+Unwinding loop _RINvMNtCshBEb14mhtvp_4core6optionINtB3_6OptionmE5ok_orjECs2ZsWgfZlDor_2_12.1 iteration 1  thread 0
+Unwinding loop _RINvMNtCshBEb14mhtvp_4core6optionINtB3_6OptionmE5ok_orjECs2ZsWgfZlDor_2_12.0 iteration 1  thread 0
+Unwinding loop _RNvYNtCs2ZsWgfZlDor_2_129FibonacciNtNtNtNtCshBEb14mhtvp_4core4iter6traits8iterator8Iterator10advance_byB4_.0 iteration 1 file /home/runner/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/iterator.rs line 329 column 9 function <Fibonacci as std::iter::Iterator>::advance_by thread 0
+Unwinding loop _RNvYNtCs2ZsWgfZlDor_2_129FibonacciNtNtNtNtCshBEb14mhtvp_4core4iter6traits8iterator8Iterator10advance_byB4_.2 iteration 2  thread 0
+Unwinding loop _RINvMNtCshBEb14mhtvp_4core6optionINtB3_6OptionmE5ok_orjECs2ZsWgfZlDor_2_12.1 iteration 1  thread 0
+Unwinding loop _RINvMNtCshBEb14mhtvp_4core6optionINtB3_6OptionmE5ok_orjECs2ZsWgfZlDor_2_12.0 iteration 1  thread 0
+Unwinding loop _RNvYNtCs2ZsWgfZlDor_2_129FibonacciNtNtNtNtCshBEb14mhtvp_4core4iter6traits8iterator8Iterator10advance_byB4_.0 iteration 2 file /home/runner/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/iterator.rs line 329 column 9 function <Fibonacci as std::iter::Iterator>::advance_by thread 0
+Unwinding loop _RNvYNtCs2ZsWgfZlDor_2_129FibonacciNtNtNtNtCshBEb14mhtvp_4core4iter6traits8iterator8Iterator10advance_byB4_.2 iteration 3  thread 0
+Unwinding loop _RINvMNtCshBEb14mhtvp_4core6optionINtB3_6OptionmE5ok_orjECs2ZsWgfZlDor_2_12.1 iteration 1  thread 0
+Unwinding loop _RINvMNtCshBEb14mhtvp_4core6optionINtB3_6OptionmE5ok_orjECs2ZsWgfZlDor_2_12.0 iteration 1  thread 0
+Unwinding loop _RNvYNtCs2ZsWgfZlDor_2_129FibonacciNtNtNtNtCshBEb14mhtvp_4core4iter6traits8iterator8Iterator10advance_byB4_.0 iteration 3 file /home/runner/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/iterator.rs line 329 column 9 function <Fibonacci as std::iter::Iterator>::advance_by thread 0
+Unwinding loop _RNvYNtCs2ZsWgfZlDor_2_129FibonacciNtNtNtNtCshBEb14mhtvp_4core4iter6traits8iterator8Iterator10advance_byB4_.1 iteration 1  thread 0
+Unwinding loop _RNvYNtCs2ZsWgfZlDor_2_129FibonacciNtNtNtNtCshBEb14mhtvp_4core4iter6traits8iterator8Iterator3nthB4_.0 iteration 1 file /home/runner/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/result.rs line 642 column 28 function <Fibonacci as std::iter::Iterator>::nth thread 0
+Unwinding loop _RNvYNtCs2ZsWgfZlDor_2_129FibonacciNtNtNtNtCshBEb14mhtvp_4core4iter6traits8iterator8Iterator3nthB4_.1 iteration 1 file /home/runner/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs line 2295 column 5 function <Fibonacci as std::iter::Iterator>::nth thread 0
+Unwinding loop _RNvXs_NtNtNtCshBEb14mhtvp_4core4iter8adapters4skipINtB4_4SkipNtCs2ZsWgfZlDor_2_129FibonacciENtNtNtB8_6traits8iterator8Iterator4nextBZ_.0 iteration 1 file /home/runner/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/skip.rs line 36 column 13 function <std::iter::Skip<Fibonacci> as std::iter::Iterator>::next thread 0
+Unwinding loop main.2 iteration 1 file /home/runner/work/kani/kani/tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs line 63 column 5 function main thread 0
+Unwinding loop main.2 iteration 2 file /home/runner/work/kani/kani/tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs line 63 column 5 function main thread 0
+Unwinding loop main.2 iteration 3 file /home/runner/work/kani/kani/tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs line 63 column 5 function main thread 0
+Unwinding loop main.2 iteration 4 file /home/runner/work/kani/kani/tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs line 63 column 5 function main thread 0
+Unwinding loop _RNvMs3_NtNtCshBEb14mhtvp_4core5slice4iterINtB5_4ItermE3newCs2ZsWgfZlDor_2_12.0 iteration 1 file /home/runner/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter.rs line 92 column 13 function std::slice::Iter::<u32>::new thread 0
+Unwinding loop _RNvMs3_NtNtCshBEb14mhtvp_4core5slice4iterINtB5_4ItermE3newCs2ZsWgfZlDor_2_12.1 iteration 1 file /home/runner/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter.rs line 94 column 23 function std::slice::Iter::<u32>::new thread 0
+Unwinding loop _RNvXs2L_NtNtCshBEb14mhtvp_4core5slice4iterINtB6_4ItermENtNtNtNtBa_4iter6traits8iterator8Iterator4nextCs2ZsWgfZlDor_2_12.0 iteration 1 file /home/runner/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 142 column 21 function <std::slice::Iter<u32> as std::iter::Iterator>::next thread 0
+Unwinding loop _RNvXs2L_NtNtCshBEb14mhtvp_4core5slice4iterINtB6_4ItermENtNtNtNtBa_4iter6traits8iterator8Iterator4nextCs2ZsWgfZlDor_2_12.1 iteration 1 file /home/runner/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 144 column 25 function <std::slice::Iter<u32> as std::iter::Iterator>::next thread 0
+Unwinding loop _RNvXs2L_NtNtCshBEb14mhtvp_4core5slice4iterINtB6_4ItermENtNtNtNtBa_4iter6traits8iterator8Iterator4nextCs2ZsWgfZlDor_2_12.3 iteration 1 file /home/runner/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 86 column 17 function <std::slice::Iter<u32> as std::iter::Iterator>::next thread 0
+Unwinding loop _RNvXs2L_NtNtCshBEb14mhtvp_4core5slice4iterINtB6_4ItermENtNtNtNtBa_4iter6traits8iterator8Iterator4nextCs2ZsWgfZlDor_2_12.2 iteration 1 file /home/runner/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 146 column 21 function <std::slice::Iter<u32> as std::iter::Iterator>::next thread 0
+Unwinding loop main.3 iteration 1 file /home/runner/work/kani/kani/tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs line 71 column 5 function main thread 0
+Unwinding loop _RNvXs2L_NtNtCshBEb14mhtvp_4core5slice4iterINtB6_4ItermENtNtNtNtBa_4iter6traits8iterator8Iterator4nextCs2ZsWgfZlDor_2_12.0 iteration 1 file /home/runner/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 142 column 21 function <std::slice::Iter<u32> as std::iter::Iterator>::next thread 0
+Unwinding loop _RNvXs2L_NtNtCshBEb14mhtvp_4core5slice4iterINtB6_4ItermENtNtNtNtBa_4iter6traits8iterator8Iterator4nextCs2ZsWgfZlDor_2_12.1 iteration 1 file /home/runner/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 144 column 25 function <std::slice::Iter<u32> as std::iter::Iterator>::next thread 0
+Unwinding loop _RNvXs2L_NtNtCshBEb14mhtvp_4core5slice4iterINtB6_4ItermENtNtNtNtBa_4iter6traits8iterator8Iterator4nextCs2ZsWgfZlDor_2_12.3 iteration 1 file /home/runner/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 86 column 17 function <std::slice::Iter<u32> as std::iter::Iterator>::next thread 0
+Unwinding loop _RNvXs2L_NtNtCshBEb14mhtvp_4core5slice4iterINtB6_4ItermENtNtNtNtBa_4iter6traits8iterator8Iterator4nextCs2ZsWgfZlDor_2_12.2 iteration 1 file /home/runner/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 146 column 21 function <std::slice::Iter<u32> as std::iter::Iterator>::next thread 0
+Unwinding loop main.3 iteration 2 file /home/runner/work/kani/kani/tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs line 71 column 5 function main thread 0
+Unwinding loop _RNvXs2L_NtNtCshBEb14mhtvp_4core5slice4iterINtB6_4ItermENtNtNtNtBa_4iter6traits8iterator8Iterator4nextCs2ZsWgfZlDor_2_12.0 iteration 1 file /home/runner/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 142 column 21 function <std::slice::Iter<u32> as std::iter::Iterator>::next thread 0
+Unwinding loop _RNvXs2L_NtNtCshBEb14mhtvp_4core5slice4iterINtB6_4ItermENtNtNtNtBa_4iter6traits8iterator8Iterator4nextCs2ZsWgfZlDor_2_12.1 iteration 1 file /home/runner/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 144 column 25 function <std::slice::Iter<u32> as std::iter::Iterator>::next thread 0
+Unwinding loop _RNvXs2L_NtNtCshBEb14mhtvp_4core5slice4iterINtB6_4ItermENtNtNtNtBa_4iter6traits8iterator8Iterator4nextCs2ZsWgfZlDor_2_12.3 iteration 1 file /home/runner/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 86 column 17 function <std::slice::Iter<u32> as std::iter::Iterator>::next thread 0
+Unwinding loop _RNvXs2L_NtNtCshBEb14mhtvp_4core5slice4iterINtB6_4ItermENtNtNtNtBa_4iter6traits8iterator8Iterator4nextCs2ZsWgfZlDor_2_12.2 iteration 1 file /home/runner/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 146 column 21 function <std::slice::Iter<u32> as std::iter::Iterator>::next thread 0
+Unwinding loop main.3 iteration 3 file /home/runner/work/kani/kani/tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs line 71 column 5 function main thread 0
+Unwinding loop _RNvXs2L_NtNtCshBEb14mhtvp_4core5slice4iterINtB6_4ItermENtNtNtNtBa_4iter6traits8iterator8Iterator4nextCs2ZsWgfZlDor_2_12.0 iteration 1 file /home/runner/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 142 column 21 function <std::slice::Iter<u32> as std::iter::Iterator>::next thread 0
+Unwinding loop _RNvXs2L_NtNtCshBEb14mhtvp_4core5slice4iterINtB6_4ItermENtNtNtNtBa_4iter6traits8iterator8Iterator4nextCs2ZsWgfZlDor_2_12.1 iteration 1 file /home/runner/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 144 column 25 function <std::slice::Iter<u32> as std::iter::Iterator>::next thread 0
+Unwinding loop _RNvXs2L_NtNtCshBEb14mhtvp_4core5slice4iterINtB6_4ItermENtNtNtNtBa_4iter6traits8iterator8Iterator4nextCs2ZsWgfZlDor_2_12.3 iteration 1 file /home/runner/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 86 column 17 function <std::slice::Iter<u32> as std::iter::Iterator>::next thread 0
+Unwinding loop _RNvXs2L_NtNtCshBEb14mhtvp_4core5slice4iterINtB6_4ItermENtNtNtNtBa_4iter6traits8iterator8Iterator4nextCs2ZsWgfZlDor_2_12.2 iteration 1 file /home/runner/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 146 column 21 function <std::slice::Iter<u32> as std::iter::Iterator>::next thread 0
+Unwinding loop main.3 iteration 4 file /home/runner/work/kani/kani/tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs line 71 column 5 function main thread 0
+Unwinding loop _RNvXs2L_NtNtCshBEb14mhtvp_4core5slice4iterINtB6_4ItermENtNtNtNtBa_4iter6traits8iterator8Iterator4nextCs2ZsWgfZlDor_2_12.0 iteration 1 file /home/runner/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 142 column 21 function <std::slice::Iter<u32> as std::iter::Iterator>::next thread 0
+Unwinding loop _RNvXs2L_NtNtCshBEb14mhtvp_4core5slice4iterINtB6_4ItermENtNtNtNtBa_4iter6traits8iterator8Iterator4nextCs2ZsWgfZlDor_2_12.1 iteration 1 file /home/runner/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 144 column 25 function <std::slice::Iter<u32> as std::iter::Iterator>::next thread 0
+Unwinding loop _RNvXs2L_NtNtCshBEb14mhtvp_4core5slice4iterINtB6_4ItermENtNtNtNtBa_4iter6traits8iterator8Iterator4nextCs2ZsWgfZlDor_2_12.3 iteration 1 file /home/runner/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 86 column 17 function <std::slice::Iter<u32> as std::iter::Iterator>::next thread 0
+Unwinding loop _RNvXs2L_NtNtCshBEb14mhtvp_4core5slice4iterINtB6_4ItermENtNtNtNtBa_4iter6traits8iterator8Iterator4nextCs2ZsWgfZlDor_2_12.2 iteration 1 file /home/runner/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 146 column 21 function <std::slice::Iter<u32> as std::iter::Iterator>::next thread 0
+Not unwinding loop main.3 iteration 5 file /home/runner/work/kani/kani/tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs line 71 column 5 function main thread 0
+aborting path on assume(false) at file /home/runner/work/kani/kani/tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs line 71 column 14 function main thread 0
+Runtime Symex: 0.318671s
+size of program expression: 4957 steps
+slicing removed 3339 assignments
+Generated 1639 VCC(s), 276 remaining after simplification
+Runtime Postprocess Equation: 0.00176299s
+Passing problem to propositional reduction
+converting SSA
+Runtime Convert SSA: 0.0295476s
+Running propositional reduction
+Post-processing
+Runtime Post-process: 8.8e-06s
+Solving with MiniSAT 2.2.1 with simplifier
+19561 variables, 38886 clauses
+SAT checker: instance is SATISFIABLE
+Runtime Solver: 0.0165847s
+Runtime decision procedure: 0.0466127s
+
+RESULTS:
+Check 1: main.unreachable.1
+- Status: SUCCESS
+- Description: "unreachable code"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:51:14 in function main
+
+Check 2: main.unreachable.2
+- Status: SUCCESS
+- Description: "unreachable code"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:57:14 in function main
+
+Check 3: main.unreachable.3
+- Status: SUCCESS
+- Description: "unreachable code"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:63:14 in function main
+
+Check 4: main.unreachable.4
+- Status: SUCCESS
+- Description: "unreachable code"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:71:14 in function main
+
+Check 5: <Fibonacci as std::iter::Iterator>::advance_by.unreachable.1
+- Status: SUCCESS
+- Description: "unreachable code"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/iterator.rs:329:18 in function <Fibonacci as std::iter::Iterator>::advance_by
+
+Check 6: <Fibonacci as std::iter::Iterator>::advance_by.unreachable.2
+- Status: SUCCESS
+- Description: "unreachable code"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/iterator.rs:330:13 in function <Fibonacci as std::iter::Iterator>::advance_by
+
+Check 7: <Fibonacci as std::iter::Iterator>::next.assertion.1
+- Status: SUCCESS
+- Description: "attempt to add with overflow"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:22:24 in function <Fibonacci as std::iter::Iterator>::next
+
+Check 8: <std::result::Result<u32, usize> as std::ops::Try>::branch.unreachable.1
+- Status: SUCCESS
+- Description: "unreachable code"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/result.rs:2109:15 in function <std::result::Result<u32, usize> as std::ops::Try>::branch
+
+Check 9: std::option::Option::<u32>::ok_or::<usize>.unreachable.1
+- Status: SUCCESS
+- Description: "unreachable code"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:1055:15 in function std::option::Option::<u32>::ok_or::<usize>
+
+Check 10: std::slice::Iter::<u32>::new.arithmetic_overflow.1
+- Status: SUCCESS
+- Description: "arith_offset: attempt to compute number in bytes which would overflow"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/const_ptr.rs:539:18 in function std::slice::Iter::<u32>::new
+
+Check 11: std::slice::Iter::<u32>::new.arithmetic_overflow.2
+- Status: SUCCESS
+- Description: "attempt to compute offset which would overflow"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/const_ptr.rs:539:18 in function std::slice::Iter::<u32>::new
+
+Check 12: std::slice::Iter::<u32>::new.arithmetic_overflow.3
+- Status: SUCCESS
+- Description: "offset: attempt to compute number in bytes which would overflow"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/const_ptr.rs:457:18 in function std::slice::Iter::<u32>::new
+
+Check 13: std::slice::Iter::<u32>::new.arithmetic_overflow.4
+- Status: SUCCESS
+- Description: "attempt to compute offset which would overflow"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/const_ptr.rs:457:18 in function std::slice::Iter::<u32>::new
+
+Check 14: std::slice::Iter::<u32>::new.assume.1
+- Status: SUCCESS
+- Description: "assumption failed"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter.rs:92:13 in function std::slice::Iter::<u32>::new
+
+Check 15: <std::slice::Iter<u32> as std::iter::Iterator>::next.assume.1
+- Status: SUCCESS
+- Description: "assumption failed"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:142:21 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 16: <std::slice::Iter<u32> as std::iter::Iterator>::next.assume.2
+- Status: SUCCESS
+- Description: "assumption failed"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:144:25 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 17: <std::slice::Iter<u32> as std::iter::Iterator>::next.arithmetic_overflow.1
+- Status: SUCCESS
+- Description: "arith_offset: attempt to compute number in bytes which would overflow"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/const_ptr.rs:539:18 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 18: <std::slice::Iter<u32> as std::iter::Iterator>::next.arithmetic_overflow.2
+- Status: SUCCESS
+- Description: "attempt to compute offset which would overflow"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/const_ptr.rs:539:18 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 19: <std::slice::Iter<u32> as std::iter::Iterator>::next.arithmetic_overflow.3
+- Status: SUCCESS
+- Description: "offset: attempt to compute number in bytes which would overflow"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mut_ptr.rs:469:18 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 20: <std::slice::Iter<u32> as std::iter::Iterator>::next.arithmetic_overflow.4
+- Status: SUCCESS
+- Description: "attempt to compute offset which would overflow"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mut_ptr.rs:469:18 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 21: <i32 as std::iter::Step>::forward_unchecked.arithmetic_overflow.1
+- Status: SUCCESS
+- Description: "attempt to compute unchecked_add which would overflow"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/num/int_macros.rs:455:22 in function <i32 as std::iter::Step>::forward_unchecked
+
+Check 22: <Fibonacci as std::iter::Iterator>::nth.unreachable.1
+- Status: SUCCESS
+- Description: "unreachable code"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/iterator.rs:377:9 in function <Fibonacci as std::iter::Iterator>::nth
+
+Check 23: <Fibonacci as std::iter::Iterator>::nth.unreachable.2
+- Status: SUCCESS
+- Description: "unreachable code"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/result.rs:641:15 in function <Fibonacci as std::iter::Iterator>::nth
+
+Check 24: <Fibonacci as std::iter::Iterator>::nth.unreachable.3
+- Status: SUCCESS
+- Description: "unreachable code"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:2291:15 in function <Fibonacci as std::iter::Iterator>::nth
+
+Check 25: std::mem::replace::<i32>.safety_check.1
+- Status: SUCCESS
+- Description: "`src` must be properly aligned"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1114:9 in function std::mem::replace::<i32>
+
+Check 26: std::mem::replace::<i32>.safety_check.2
+- Status: SUCCESS
+- Description: "`dst` must be properly aligned"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1114:9 in function std::mem::replace::<i32>
+
+Check 27: std::mem::replace::<i32>.arithmetic_overflow.1
+- Status: SUCCESS
+- Description: "copy_nonoverlapping: attempt to compute number in bytes which would overflow"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1114:9 in function std::mem::replace::<i32>
+
+Check 28: std::mem::replace::<i32>.unsupported_construct.1
+- Status: SUCCESS
+- Description: "resume instruction"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/mem/mod.rs:899:1 in function std::mem::replace::<i32>
+
+Check 29: std::mem::replace::<i32>.safety_check.3
+- Status: SUCCESS
+- Description: "`src` must be properly aligned"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1305:9 in function std::mem::replace::<i32>
+
+Check 30: std::mem::replace::<i32>.safety_check.4
+- Status: SUCCESS
+- Description: "`dst` must be properly aligned"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1305:9 in function std::mem::replace::<i32>
+
+Check 31: std::mem::replace::<i32>.arithmetic_overflow.2
+- Status: SUCCESS
+- Description: "copy_nonoverlapping: attempt to compute number in bytes which would overflow"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1305:9 in function std::mem::replace::<i32>
+
+Check 32: <usize as std::iter::Step>::forward_unchecked.arithmetic_overflow.1
+- Status: SUCCESS
+- Description: "attempt to compute unchecked_add which would overflow"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/num/uint_macros.rs:465:22 in function <usize as std::iter::Step>::forward_unchecked
+
+Check 33: std::mem::replace::<usize>.safety_check.1
+- Status: SUCCESS
+- Description: "`src` must be properly aligned"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1114:9 in function std::mem::replace::<usize>
+
+Check 34: std::mem::replace::<usize>.safety_check.2
+- Status: SUCCESS
+- Description: "`dst` must be properly aligned"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1114:9 in function std::mem::replace::<usize>
+
+Check 35: std::mem::replace::<usize>.arithmetic_overflow.1
+- Status: SUCCESS
+- Description: "copy_nonoverlapping: attempt to compute number in bytes which would overflow"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1114:9 in function std::mem::replace::<usize>
+
+Check 36: std::mem::replace::<usize>.unsupported_construct.1
+- Status: SUCCESS
+- Description: "resume instruction"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/mem/mod.rs:899:1 in function std::mem::replace::<usize>
+
+Check 37: std::mem::replace::<usize>.safety_check.3
+- Status: SUCCESS
+- Description: "`src` must be properly aligned"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1305:9 in function std::mem::replace::<usize>
+
+Check 38: std::mem::replace::<usize>.safety_check.4
+- Status: SUCCESS
+- Description: "`dst` must be properly aligned"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1305:9 in function std::mem::replace::<usize>
+
+Check 39: std::mem::replace::<usize>.arithmetic_overflow.2
+- Status: SUCCESS
+- Description: "copy_nonoverlapping: attempt to compute number in bytes which would overflow"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1305:9 in function std::mem::replace::<usize>
+
+Check 40: main.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:71:14 in function main
+
+Check 41: std::clone::impls::<impl std::clone::Clone for usize>::clone.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/clone.rs:190:25 in function std::clone::impls::<impl std::clone::Clone for usize>::clone
+
+Check 42: std::clone::impls::<impl std::clone::Clone for usize>::clone.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/clone.rs:190:25 in function std::clone::impls::<impl std::clone::Clone for usize>::clone
+
+Check 43: std::clone::impls::<impl std::clone::Clone for usize>::clone.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/clone.rs:190:25 in function std::clone::impls::<impl std::clone::Clone for usize>::clone
+
+Check 44: std::clone::impls::<impl std::clone::Clone for usize>::clone.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/clone.rs:190:25 in function std::clone::impls::<impl std::clone::Clone for usize>::clone
+
+Check 45: std::clone::impls::<impl std::clone::Clone for usize>::clone.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/clone.rs:190:25 in function std::clone::impls::<impl std::clone::Clone for usize>::clone
+
+Check 46: std::clone::impls::<impl std::clone::Clone for usize>::clone.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/clone.rs:190:25 in function std::clone::impls::<impl std::clone::Clone for usize>::clone
+
+Check 47: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:142:29 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 48: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:142:29 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 49: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:142:29 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 50: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:142:29 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 51: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:142:29 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 52: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:142:29 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 53: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.7
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:144:33 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 54: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.8
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:144:33 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 55: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.9
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:144:33 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 56: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.10
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:144:33 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 57: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.11
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:144:33 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 58: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.12
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:144:33 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 59: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.13
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:8:9 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 60: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.14
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:8:9 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 61: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.15
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:8:9 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 62: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.16
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:8:9 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 63: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.17
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:8:9 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 64: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.18
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:8:9 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 65: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.19
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:8:43 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 66: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.20
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:8:43 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 67: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.21
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:8:43 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 68: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.22
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:8:43 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 69: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.23
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:8:43 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 70: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.24
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:8:43 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 71: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.25
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:147:25 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 72: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.26
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:67:30 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 73: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.27
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:67:30 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 74: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.28
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:67:30 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 75: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.29
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:67:30 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 76: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.30
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:67:30 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 77: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.31
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:67:30 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 78: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.32
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:90:31 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 79: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.33
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:90:31 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 80: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.34
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:90:31 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 81: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.35
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:90:31 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 82: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.36
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:90:31 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 83: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.37
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:90:31 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 84: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.38
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:67:17 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 85: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.39
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:67:17 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 86: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.40
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:67:17 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 87: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.41
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:67:17 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 88: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.42
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:67:17 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 89: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.43
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:67:17 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 90: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.44
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:88:21 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 91: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.45
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:88:21 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 92: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.46
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:88:21 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 93: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.47
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:88:21 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 94: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.48
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:88:21 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 95: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.49
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:88:21 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 96: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.50
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:93:21 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 97: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.51
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:93:21 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 98: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.52
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:93:21 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 99: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.53
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:93:21 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 100: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.54
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:93:21 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 101: <std::slice::Iter<u32> as std::iter::Iterator>::next.pointer_dereference.55
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:93:21 in function <std::slice::Iter<u32> as std::iter::Iterator>::next
+
+Check 102: std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1393:52 in function std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt
+
+Check 103: std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1393:52 in function std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt
+
+Check 104: std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1393:52 in function std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt
+
+Check 105: std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1393:52 in function std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt
+
+Check 106: std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1393:52 in function std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt
+
+Check 107: std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1393:52 in function std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt
+
+Check 108: std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt.pointer_dereference.7
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1393:62 in function std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt
+
+Check 109: std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt.pointer_dereference.8
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1393:62 in function std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt
+
+Check 110: std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt.pointer_dereference.9
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1393:62 in function std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt
+
+Check 111: std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt.pointer_dereference.10
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1393:62 in function std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt
+
+Check 112: std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt.pointer_dereference.11
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1393:62 in function std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt
+
+Check 113: std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt.pointer_dereference.12
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1393:62 in function std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt
+
+Check 114: <std::iter::Skip<Fibonacci> as std::iter::Iterator>::next.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/skip.rs:35:21 in function <std::iter::Skip<Fibonacci> as std::iter::Iterator>::next
+
+Check 115: <std::iter::Skip<Fibonacci> as std::iter::Iterator>::next.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/skip.rs:35:21 in function <std::iter::Skip<Fibonacci> as std::iter::Iterator>::next
+
+Check 116: <std::iter::Skip<Fibonacci> as std::iter::Iterator>::next.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/skip.rs:35:21 in function <std::iter::Skip<Fibonacci> as std::iter::Iterator>::next
+
+Check 117: <std::iter::Skip<Fibonacci> as std::iter::Iterator>::next.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/skip.rs:35:21 in function <std::iter::Skip<Fibonacci> as std::iter::Iterator>::next
+
+Check 118: <std::iter::Skip<Fibonacci> as std::iter::Iterator>::next.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/skip.rs:35:21 in function <std::iter::Skip<Fibonacci> as std::iter::Iterator>::next
+
+Check 119: <std::iter::Skip<Fibonacci> as std::iter::Iterator>::next.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/skip.rs:35:21 in function <std::iter::Skip<Fibonacci> as std::iter::Iterator>::next
+
+Check 120: memcpy.pointer.1
+- Status: SUCCESS
+- Description: "same object violation"
+- Location: <builtin-library-memcpy>:33 in function memcpy
+
+Check 121: memcpy.pointer.2
+- Status: SUCCESS
+- Description: "same object violation"
+- Location: <builtin-library-memcpy>:34 in function memcpy
+
+Check 122: std::mem::replace::<usize>.precondition_instance.1
+- Status: SUCCESS
+- Description: "memcpy src/dst overlap"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1114:9 in function std::mem::replace::<usize>
+
+Check 123: std::mem::replace::<usize>.precondition_instance.2
+- Status: SUCCESS
+- Description: "memcpy source region readable"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1114:9 in function std::mem::replace::<usize>
+
+Check 124: std::mem::replace::<usize>.precondition_instance.3
+- Status: SUCCESS
+- Description: "memcpy destination region writeable"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1114:9 in function std::mem::replace::<usize>
+
+Check 125: memcpy.pointer.3
+- Status: SUCCESS
+- Description: "same object violation"
+- Location: <builtin-library-memcpy>:33 in function memcpy
+
+Check 126: memcpy.pointer.4
+- Status: SUCCESS
+- Description: "same object violation"
+- Location: <builtin-library-memcpy>:34 in function memcpy
+
+Check 127: std::mem::replace::<usize>.precondition_instance.4
+- Status: SUCCESS
+- Description: "memcpy src/dst overlap"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1305:9 in function std::mem::replace::<usize>
+
+Check 128: std::mem::replace::<usize>.precondition_instance.5
+- Status: SUCCESS
+- Description: "memcpy source region readable"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1305:9 in function std::mem::replace::<usize>
+
+Check 129: std::mem::replace::<usize>.precondition_instance.6
+- Status: SUCCESS
+- Description: "memcpy destination region writeable"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1305:9 in function std::mem::replace::<usize>
+
+Check 130: <std::iter::Take<Fibonacci> as std::iter::Iterator>::next.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/take.rs:35:12 in function <std::iter::Take<Fibonacci> as std::iter::Iterator>::next
+
+Check 131: <std::iter::Take<Fibonacci> as std::iter::Iterator>::next.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/take.rs:35:12 in function <std::iter::Take<Fibonacci> as std::iter::Iterator>::next
+
+Check 132: <std::iter::Take<Fibonacci> as std::iter::Iterator>::next.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/take.rs:35:12 in function <std::iter::Take<Fibonacci> as std::iter::Iterator>::next
+
+Check 133: <std::iter::Take<Fibonacci> as std::iter::Iterator>::next.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/take.rs:35:12 in function <std::iter::Take<Fibonacci> as std::iter::Iterator>::next
+
+Check 134: <std::iter::Take<Fibonacci> as std::iter::Iterator>::next.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/take.rs:35:12 in function <std::iter::Take<Fibonacci> as std::iter::Iterator>::next
+
+Check 135: <std::iter::Take<Fibonacci> as std::iter::Iterator>::next.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/take.rs:35:12 in function <std::iter::Take<Fibonacci> as std::iter::Iterator>::next
+
+Check 136: <std::iter::Take<Fibonacci> as std::iter::Iterator>::next.pointer_dereference.7
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/take.rs:36:13 in function <std::iter::Take<Fibonacci> as std::iter::Iterator>::next
+
+Check 137: <std::iter::Take<Fibonacci> as std::iter::Iterator>::next.pointer_dereference.8
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/take.rs:36:13 in function <std::iter::Take<Fibonacci> as std::iter::Iterator>::next
+
+Check 138: <std::iter::Take<Fibonacci> as std::iter::Iterator>::next.pointer_dereference.9
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/take.rs:36:13 in function <std::iter::Take<Fibonacci> as std::iter::Iterator>::next
+
+Check 139: <std::iter::Take<Fibonacci> as std::iter::Iterator>::next.pointer_dereference.10
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/take.rs:36:13 in function <std::iter::Take<Fibonacci> as std::iter::Iterator>::next
+
+Check 140: <std::iter::Take<Fibonacci> as std::iter::Iterator>::next.pointer_dereference.11
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/take.rs:36:13 in function <std::iter::Take<Fibonacci> as std::iter::Iterator>::next
+
+Check 141: <std::iter::Take<Fibonacci> as std::iter::Iterator>::next.pointer_dereference.12
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/take.rs:36:13 in function <std::iter::Take<Fibonacci> as std::iter::Iterator>::next
+
+Check 142: <std::iter::Take<std::iter::Skip<Fibonacci>> as std::iter::Iterator>::next.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/take.rs:35:12 in function <std::iter::Take<std::iter::Skip<Fibonacci>> as std::iter::Iterator>::next
+
+Check 143: <std::iter::Take<std::iter::Skip<Fibonacci>> as std::iter::Iterator>::next.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/take.rs:35:12 in function <std::iter::Take<std::iter::Skip<Fibonacci>> as std::iter::Iterator>::next
+
+Check 144: <std::iter::Take<std::iter::Skip<Fibonacci>> as std::iter::Iterator>::next.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/take.rs:35:12 in function <std::iter::Take<std::iter::Skip<Fibonacci>> as std::iter::Iterator>::next
+
+Check 145: <std::iter::Take<std::iter::Skip<Fibonacci>> as std::iter::Iterator>::next.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/take.rs:35:12 in function <std::iter::Take<std::iter::Skip<Fibonacci>> as std::iter::Iterator>::next
+
+Check 146: <std::iter::Take<std::iter::Skip<Fibonacci>> as std::iter::Iterator>::next.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/take.rs:35:12 in function <std::iter::Take<std::iter::Skip<Fibonacci>> as std::iter::Iterator>::next
+
+Check 147: <std::iter::Take<std::iter::Skip<Fibonacci>> as std::iter::Iterator>::next.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/take.rs:35:12 in function <std::iter::Take<std::iter::Skip<Fibonacci>> as std::iter::Iterator>::next
+
+Check 148: <std::iter::Take<std::iter::Skip<Fibonacci>> as std::iter::Iterator>::next.pointer_dereference.7
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/take.rs:36:13 in function <std::iter::Take<std::iter::Skip<Fibonacci>> as std::iter::Iterator>::next
+
+Check 149: <std::iter::Take<std::iter::Skip<Fibonacci>> as std::iter::Iterator>::next.pointer_dereference.8
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/take.rs:36:13 in function <std::iter::Take<std::iter::Skip<Fibonacci>> as std::iter::Iterator>::next
+
+Check 150: <std::iter::Take<std::iter::Skip<Fibonacci>> as std::iter::Iterator>::next.pointer_dereference.9
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/take.rs:36:13 in function <std::iter::Take<std::iter::Skip<Fibonacci>> as std::iter::Iterator>::next
+
+Check 151: <std::iter::Take<std::iter::Skip<Fibonacci>> as std::iter::Iterator>::next.pointer_dereference.10
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/take.rs:36:13 in function <std::iter::Take<std::iter::Skip<Fibonacci>> as std::iter::Iterator>::next
+
+Check 152: <std::iter::Take<std::iter::Skip<Fibonacci>> as std::iter::Iterator>::next.pointer_dereference.11
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/take.rs:36:13 in function <std::iter::Take<std::iter::Skip<Fibonacci>> as std::iter::Iterator>::next
+
+Check 153: <std::iter::Take<std::iter::Skip<Fibonacci>> as std::iter::Iterator>::next.pointer_dereference.12
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/take.rs:36:13 in function <std::iter::Take<std::iter::Skip<Fibonacci>> as std::iter::Iterator>::next
+
+Check 154: std::clone::impls::<impl std::clone::Clone for i32>::clone.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/clone.rs:190:25 in function std::clone::impls::<impl std::clone::Clone for i32>::clone
+
+Check 155: std::clone::impls::<impl std::clone::Clone for i32>::clone.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/clone.rs:190:25 in function std::clone::impls::<impl std::clone::Clone for i32>::clone
+
+Check 156: std::clone::impls::<impl std::clone::Clone for i32>::clone.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/clone.rs:190:25 in function std::clone::impls::<impl std::clone::Clone for i32>::clone
+
+Check 157: std::clone::impls::<impl std::clone::Clone for i32>::clone.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/clone.rs:190:25 in function std::clone::impls::<impl std::clone::Clone for i32>::clone
+
+Check 158: std::clone::impls::<impl std::clone::Clone for i32>::clone.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/clone.rs:190:25 in function std::clone::impls::<impl std::clone::Clone for i32>::clone
+
+Check 159: std::clone::impls::<impl std::clone::Clone for i32>::clone.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/clone.rs:190:25 in function std::clone::impls::<impl std::clone::Clone for i32>::clone
+
+Check 160: <Fibonacci as std::iter::Iterator>::next.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:22:24 in function <Fibonacci as std::iter::Iterator>::next
+
+Check 161: <Fibonacci as std::iter::Iterator>::next.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:22:24 in function <Fibonacci as std::iter::Iterator>::next
+
+Check 162: <Fibonacci as std::iter::Iterator>::next.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:22:24 in function <Fibonacci as std::iter::Iterator>::next
+
+Check 163: <Fibonacci as std::iter::Iterator>::next.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:22:24 in function <Fibonacci as std::iter::Iterator>::next
+
+Check 164: <Fibonacci as std::iter::Iterator>::next.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:22:24 in function <Fibonacci as std::iter::Iterator>::next
+
+Check 165: <Fibonacci as std::iter::Iterator>::next.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:22:24 in function <Fibonacci as std::iter::Iterator>::next
+
+Check 166: <Fibonacci as std::iter::Iterator>::next.pointer_dereference.7
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:22:36 in function <Fibonacci as std::iter::Iterator>::next
+
+Check 167: <Fibonacci as std::iter::Iterator>::next.pointer_dereference.8
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:22:36 in function <Fibonacci as std::iter::Iterator>::next
+
+Check 168: <Fibonacci as std::iter::Iterator>::next.pointer_dereference.9
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:22:36 in function <Fibonacci as std::iter::Iterator>::next
+
+Check 169: <Fibonacci as std::iter::Iterator>::next.pointer_dereference.10
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:22:36 in function <Fibonacci as std::iter::Iterator>::next
+
+Check 170: <Fibonacci as std::iter::Iterator>::next.pointer_dereference.11
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:22:36 in function <Fibonacci as std::iter::Iterator>::next
+
+Check 171: <Fibonacci as std::iter::Iterator>::next.pointer_dereference.12
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:22:36 in function <Fibonacci as std::iter::Iterator>::next
+
+Check 172: <Fibonacci as std::iter::Iterator>::next.pointer_dereference.13
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:24:21 in function <Fibonacci as std::iter::Iterator>::next
+
+Check 173: <Fibonacci as std::iter::Iterator>::next.pointer_dereference.14
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:24:21 in function <Fibonacci as std::iter::Iterator>::next
+
+Check 174: <Fibonacci as std::iter::Iterator>::next.pointer_dereference.15
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:24:21 in function <Fibonacci as std::iter::Iterator>::next
+
+Check 175: <Fibonacci as std::iter::Iterator>::next.pointer_dereference.16
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:24:21 in function <Fibonacci as std::iter::Iterator>::next
+
+Check 176: <Fibonacci as std::iter::Iterator>::next.pointer_dereference.17
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:24:21 in function <Fibonacci as std::iter::Iterator>::next
+
+Check 177: <Fibonacci as std::iter::Iterator>::next.pointer_dereference.18
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:24:21 in function <Fibonacci as std::iter::Iterator>::next
+
+Check 178: <Fibonacci as std::iter::Iterator>::next.pointer_dereference.19
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:24:9 in function <Fibonacci as std::iter::Iterator>::next
+
+Check 179: <Fibonacci as std::iter::Iterator>::next.pointer_dereference.20
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:24:9 in function <Fibonacci as std::iter::Iterator>::next
+
+Check 180: <Fibonacci as std::iter::Iterator>::next.pointer_dereference.21
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:24:9 in function <Fibonacci as std::iter::Iterator>::next
+
+Check 181: <Fibonacci as std::iter::Iterator>::next.pointer_dereference.22
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:24:9 in function <Fibonacci as std::iter::Iterator>::next
+
+Check 182: <Fibonacci as std::iter::Iterator>::next.pointer_dereference.23
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:24:9 in function <Fibonacci as std::iter::Iterator>::next
+
+Check 183: <Fibonacci as std::iter::Iterator>::next.pointer_dereference.24
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:24:9 in function <Fibonacci as std::iter::Iterator>::next
+
+Check 184: <Fibonacci as std::iter::Iterator>::next.pointer_dereference.25
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:25:9 in function <Fibonacci as std::iter::Iterator>::next
+
+Check 185: <Fibonacci as std::iter::Iterator>::next.pointer_dereference.26
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:25:9 in function <Fibonacci as std::iter::Iterator>::next
+
+Check 186: <Fibonacci as std::iter::Iterator>::next.pointer_dereference.27
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:25:9 in function <Fibonacci as std::iter::Iterator>::next
+
+Check 187: <Fibonacci as std::iter::Iterator>::next.pointer_dereference.28
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:25:9 in function <Fibonacci as std::iter::Iterator>::next
+
+Check 188: <Fibonacci as std::iter::Iterator>::next.pointer_dereference.29
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:25:9 in function <Fibonacci as std::iter::Iterator>::next
+
+Check 189: <Fibonacci as std::iter::Iterator>::next.pointer_dereference.30
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:25:9 in function <Fibonacci as std::iter::Iterator>::next
+
+Check 190: <Fibonacci as std::iter::Iterator>::next.pointer_dereference.31
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:29:14 in function <Fibonacci as std::iter::Iterator>::next
+
+Check 191: <Fibonacci as std::iter::Iterator>::next.pointer_dereference.32
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:29:14 in function <Fibonacci as std::iter::Iterator>::next
+
+Check 192: <Fibonacci as std::iter::Iterator>::next.pointer_dereference.33
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:29:14 in function <Fibonacci as std::iter::Iterator>::next
+
+Check 193: <Fibonacci as std::iter::Iterator>::next.pointer_dereference.34
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:29:14 in function <Fibonacci as std::iter::Iterator>::next
+
+Check 194: <Fibonacci as std::iter::Iterator>::next.pointer_dereference.35
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:29:14 in function <Fibonacci as std::iter::Iterator>::next
+
+Check 195: <Fibonacci as std::iter::Iterator>::next.pointer_dereference.36
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:29:14 in function <Fibonacci as std::iter::Iterator>::next
+
+Check 196: memcpy.pointer.5
+- Status: SUCCESS
+- Description: "same object violation"
+- Location: <builtin-library-memcpy>:33 in function memcpy
+
+Check 197: memcpy.pointer.6
+- Status: SUCCESS
+- Description: "same object violation"
+- Location: <builtin-library-memcpy>:34 in function memcpy
+
+Check 198: std::mem::replace::<i32>.precondition_instance.1
+- Status: SUCCESS
+- Description: "memcpy src/dst overlap"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1114:9 in function std::mem::replace::<i32>
+
+Check 199: std::mem::replace::<i32>.precondition_instance.2
+- Status: SUCCESS
+- Description: "memcpy source region readable"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1114:9 in function std::mem::replace::<i32>
+
+Check 200: std::mem::replace::<i32>.precondition_instance.3
+- Status: SUCCESS
+- Description: "memcpy destination region writeable"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1114:9 in function std::mem::replace::<i32>
+
+Check 201: memcpy.pointer.7
+- Status: SUCCESS
+- Description: "same object violation"
+- Location: <builtin-library-memcpy>:33 in function memcpy
+
+Check 202: memcpy.pointer.8
+- Status: SUCCESS
+- Description: "same object violation"
+- Location: <builtin-library-memcpy>:34 in function memcpy
+
+Check 203: std::mem::replace::<i32>.precondition_instance.4
+- Status: SUCCESS
+- Description: "memcpy src/dst overlap"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1305:9 in function std::mem::replace::<i32>
+
+Check 204: std::mem::replace::<i32>.precondition_instance.5
+- Status: SUCCESS
+- Description: "memcpy source region readable"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1305:9 in function std::mem::replace::<i32>
+
+Check 205: std::mem::replace::<i32>.precondition_instance.6
+- Status: SUCCESS
+- Description: "memcpy destination region writeable"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1305:9 in function std::mem::replace::<i32>
+
+Check 206: std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1393:52 in function std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt
+
+Check 207: std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1393:52 in function std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt
+
+Check 208: std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1393:52 in function std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt
+
+Check 209: std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1393:52 in function std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt
+
+Check 210: std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1393:52 in function std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt
+
+Check 211: std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1393:52 in function std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt
+
+Check 212: std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt.pointer_dereference.7
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1393:62 in function std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt
+
+Check 213: std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt.pointer_dereference.8
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1393:62 in function std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt
+
+Check 214: std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt.pointer_dereference.9
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1393:62 in function std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt
+
+Check 215: std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt.pointer_dereference.10
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1393:62 in function std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt
+
+Check 216: std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt.pointer_dereference.11
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1393:62 in function std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt
+
+Check 217: std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt.pointer_dereference.12
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1393:62 in function std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt
+
+Check 218: main.unwind.3
+- Status: SUCCESS
+- Description: "unwinding assertion loop 3"
+- Location: tests/bookrunner/books/Rust by Example/Traits/Iterators/12.rs:71:5 in function main
+
+
+SUMMARY:
+** 0 of 218 failed
+
+VERIFICATION:- SUCCESSFUL
+
+
+Verification Time: 0.53086674s
+              </xmp>
+            </div><!-- class="output-box" -->
+            
+          
+
+          
+
+        </div><!-- class="command-content" -->
+      </div><!-- class="fail" -->
+    </div><!-- id="command-table" -->
+    
+
+  </div><!-- class="stage" -->
+  
+
+
+</div><!-- id="content" -->
+</body>
+</html>

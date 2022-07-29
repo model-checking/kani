@@ -1,0 +1,1721 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>
+    Pipeline tests/bookrunner/books/The Rust Reference/Items/Traits/225.rs
+  </title>
+<style>
+#title{
+  background-color: #ec407a;
+  color: white;
+  padding: 2em;
+}
+h1 {
+  margin-bottom: 0em;
+}
+#subtitle {
+  font-variant: small-caps;
+  text-transform: lowercase;
+  letter-spacing: 0.2em;
+}
+.run-info ul {
+  list-style: none;
+}
+.run-info ul li {
+  display: inline;
+  margin-right: 6em;
+  margin-left: -3em;
+  text-transform: uppercase;
+  font-size: small;
+  color: #ec407a;
+}
+#content {
+  max-width: 800px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-top: 2em;
+  color: #263238;
+  font-family: Helvetica, sans-serif;
+}
+p {
+  margin: 0;
+}
+.command-table {
+  background-color: #eceff1;
+  padding: 0.3em;
+  border-radius: 0.3em;
+  margin-bottom: 4em;
+}
+.command-table .fail-ignored {
+  background-color: #e65100cc;
+  padding: 0.3em;
+  border-radius: 0.3em;
+}
+.command-table .success {
+  background-color: #1a237ecc;
+  padding: 0.3em;
+  border-radius: 0.3em;
+}
+.command-table .in-progress {
+  background-color: black;
+  padding: 0.3em;
+  border-radius: 0.3em;
+}
+.command-table .non-started {
+  background-color: #26323844;
+  padding: 0.3em;
+  border-radius: 0.3em;
+}
+.command-table .fail {
+  background-color: #f44336cc;
+  padding: 0.3em;
+  border-radius: 0.3em;
+}
+.command-content {
+  background-color: #eceff1;
+  padding: 1em;
+}
+.command-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 1em;
+}
+.command-id-link{
+  flex-grow: 0;
+}
+.command-id-link a {
+  font-size: xx-large;
+  text-align: center;
+  font-weight: bold;
+  text-shadow: 1px  1px 0px #000000bb,
+              -1px -1px 0px #ffffffbb;
+  text-decoration: none;
+  margin-left: 0.2em;
+}
+.command-id-link a:link {
+  text-shadow: 1px  1px 0px #000000bb,
+              -1px -1px 0px #ffffffbb;
+}
+.command-id-link a:visited {
+  text-shadow: 1px  1px 0px #000000bb,
+              -1px -1px 0px #ffffffbb;
+}
+.command-id-link a:visited:hover {
+  color: #ec407a;
+  background-color: #00000000;
+  text-shadow: 1px  1px 0px #000000bb,
+              -1px -1px 0px #ffffffbb,
+               0px 0px 10px #fff,
+               0px 0px 5px #ec407a,
+               0px 0px 5px #ec407a;
+}
+.command-id-link a:hover {
+  color: #ec407a;
+  background-color: #00000000;
+  text-shadow: 1px  1px 0px #000000bb,
+              -1px -1px 0px #ffffffbb
+               0px 0px 10px #fff,
+               0px 0px 5px #ec407a,
+               0px 0px 5px #ec407a;
+}
+.command-id-link a:active {
+  color: #ffeb3b;
+  background-color: #00000000;
+  text-shadow: 1px  1px 0px #000000bb,
+              -1px -1px 0px #ffffffbb,
+                 0px 0px 10px #fff,
+                 0px 0px 5px #ffeb3b,
+                 0px 0px 5px #ffeb3b;
+}
+.command-id-link a:visited:active {
+  color: #ffeb3b;
+  background-color: #00000000;
+  text-shadow: 1px  1px 0px #000000bb,
+              -1px -1px 0px #ffffffbb,
+                 0px 0px 10px #fff,
+                 0px 0px 5px #ffeb3b,
+                 0px 0px 5px #ffeb3b;
+}
+.command-description {
+  color: #26323899;
+  font-size: smaller;
+  text-align: center;
+  font-weight: bold;
+  flex-grow: 1;
+}
+
+.command-invocation {
+  padding: 1em;
+  color: #fff;
+  background-color: #005662;
+  font-size: small;
+  font-family: monospace;
+  border-radius: 0.5em;
+  text-shadow: 0 0 2px #ffccbccc;
+}
+.command-stats-table {
+  margin-top: 0.2em;
+  border-radius: 0.5em;
+  padding: 0.2em;
+  padding-top: 0.4em;
+  display: flex;
+  flex-direction: column;
+  background-color: #eae3998a;
+  color: #263238cc;
+  margin-bottom: 0.2em;
+}
+.command-stats-row {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-evenly;
+  margin-top: 0.4em;
+  margin-bottom: 0.4em;
+  font-size: small;
+  text-transform: uppercase;
+}
+.command-stats-row p .value {
+  color: #00251aaa;
+  text-shadow: 0 0 2px #82ada944;
+  font-weight: bold;
+}
+.literal-stdout {
+  margin-top: 0.4em;
+  margin-bottom: 0.2em;
+  padding: 1em;
+  border-radius: 0.5em;
+  overflow-x: auto;
+  overflow-y: auto;
+}
+.output-box {
+  margin-top: 0.4em;
+  margin-bottom: 0.2em;
+  padding: 1em;
+  color: #000a12;
+  background-color: #cfd8dc;
+  font-size: small;
+  font-family: monospace;
+  border-radius: 0.5em;
+  max-height: 20em;
+  overflow-x: auto;
+  overflow-y: auto;
+}
+.output-box xmp{
+  white-space: pre;
+}
+.stage-name p {
+  margin-left: 0.5em;
+  color: #546e7a;
+  text-shadow:  -1px  0px 0px #fff
+               ,-2px  0px 0px #ffffff99
+               ,-1px  1px 0px #ffffff99
+               ;
+  font-size: 48pt;
+  font-variant: small-caps;
+  text-transform: lowercase;
+  font-weight: bold;
+  font-style: italic;
+}
+.stage-name .underline {
+  width: 100%;
+  height: 1.1em;
+  background-color: #546e7a;
+  margin-top: -1.6em;
+}
+.stage-name {
+  margin-top: 6em;
+  margin-bottom: 3em;
+}
+
+.outcome-table-info-box {
+  margin-top: 0.4em;
+  margin-bottom: 0.2em;
+  padding: 1em;
+  color: #000a12;
+  background-color: #ffee58;
+  border-radius: 0.5em;
+}
+.outcome-table-info-box .outcome{
+  font-weight: bold;
+}
+#toc {
+  margin-bottom: 6em;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 1;
+  margin-right: 3em;
+}
+.toc-title {
+  text-align: center;
+  font-variant: small-caps;
+  text-transform: lowercase;
+  margin-bottom: -1em;
+}
+.toc-section{
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+  text-transform: capitalize;
+}
+.toc-row {
+  display: flex;
+  flex-direction: row;
+  justify-content: flex-start;
+  align-items: center;
+}
+.toc-row-icon {
+  padding-right: 8px;
+}
+.status-icon-cross {
+  fill: #f44336;
+    width: 16px;
+    height: 16px;
+}
+.status-icon-tick {
+  fill: #3f51b5;
+  stroke: #ffffff77;
+  stroke-width: 1px;
+  width: 16px;
+  height: 16px;
+}
+
+.status-icon-in-progress {
+  fill: #333;
+  width: 16px;
+  height: 16px;
+}
+
+.status-icon-in-progress circle {
+  stroke: #333;
+  stroke-width: 2px;
+  fill: none
+}
+a:link {
+  color: #1e88e5;
+}
+a:visited {
+  color: #1e88e5;
+}
+a:visited:hover {
+  background-color: #1e88e5;
+  color: #fff;
+  text-decoration: none;
+}
+a:hover {
+  background-color: #1e88e5;
+  color: #fff;
+  text-decoration: none;
+}
+a:active {
+  background-color: #ec407a;
+  color: #fff;
+  text-decoration: none;
+}
+a:visited:active {
+  background-color: #ec407a;
+  color: #fff;
+  text-decoration: none;
+}
+
+#contents-container {
+  margin-top: 6em;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  align-content: flex-start;
+}
+
+#depgraph {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  align-content: flex-start;
+  flex-shrink: 7;
+}
+
+#depgraph-title p {
+  text-align: center;
+  font-variant: small-caps;
+  text-transform: lowercase;
+}
+
+#depgraph-preview img {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+#depgraph-preview {
+  padding: 1em;
+}
+
+.memory-box {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5em;
+  align-items: center;
+}
+.memory-preview {
+  width: 75%;
+}
+.memory-preview svg {
+  margin-left: -1em;
+  margin-right: -2em;
+}
+.memory-table {
+}
+.memory-title {
+  text-align: center;
+  font-style: bold;
+}
+.memory-subtitle {
+  text-transform: lowercase;
+  font-variant: small-caps;
+  text-align: center;
+  opacity: 0.8;
+}
+.memory-pad {
+  width: 1.5em;
+}
+.memory-value {
+  text-align: center;
+  margin-right: 2em;
+}
+.rss {
+  color: #ab47bc;
+}
+.vsz {
+  color: #4caf50;
+}
+
+
+@media (prefers-color-scheme: dark){
+  a:link {
+    color: #29b6f6;
+  }
+  a:visited {
+    color: #29b6f6;
+  }
+  a:visited:hover {
+    color: #263238;
+    background-color: #29b6f6;
+  }
+  a:hover {
+    color: #263238;
+    background-color: #29b6f6;
+  }
+  a:active {
+    color: #263238;
+    background-color: #ec407a;
+  }
+  a:visited:active {
+    color: #263238;
+    background-color: #ec407a;
+  }
+  .command-id-link a:link {
+    text-shadow: 1px  1px 0px #000000bb,
+                -1px -1px 0px #ffffffbb;
+  }
+  .command-id-link a:visited {
+    text-shadow: 1px  1px 0px #000000bb,
+                -1px -1px 0px #ffffffbb;
+  }
+  .command-id-link a:visited:hover {
+    color: #ec407a;
+    background-color: #00000000;
+    text-shadow: 1px  1px 0px #000000bb,
+                -1px -1px 0px #ffffffbb.
+                 0px 0px 10px #fff,
+                 0px 0px 5px #ec407a,
+                 0px 0px 5px #ec407a;
+  }
+  .command-id-link a:hover {
+    color: #ec407a;
+    background-color: #00000000;
+    text-shadow: 1px  1px 0px #000000bb,
+                -1px -1px 0px #ffffffbb,
+                 0px 0px 10px #fff,
+                 0px 0px 5px #ec407a,
+                 0px 0px 5px #ec407a;
+  }
+  .command-id-link a:active {
+    color: #ffeb3b;
+    background-color: #00000000;
+    text-shadow: 1px  1px 0px #000000bb,
+                -1px -1px 0px #ffffffbb,
+                 0px 0px 10px #fff,
+                 0px 0px 5px #ffeb3b,
+                 0px 0px 5px #ffeb3b;
+  }
+  .command-id-link a:visited:active {
+    color: #ffeb3b;
+    background-color: #00000000;
+    text-shadow: 1px  1px 0px #000000bb,
+                -1px -1px 0px #ffffffbb,
+                 0px 0px 10px #fff,
+                 0px 0px 5px #ffeb3b,
+                 0px 0px 5px #ffeb3b;
+  }
+  body {
+    color: #babdbe;
+    background-color: #263238;
+  }
+  .outcome-table-info-box p{
+    color: #000a12;
+  }
+  p {
+    color: #babdbe;
+  }
+  #subtitle {
+    color: #fff;
+  }
+  .command-table {
+    background-color: #37474f;
+  }
+  .command-content {
+    background-color: #37474f;
+  }
+  .command-invocation p {
+    color: #fff;
+  }
+  .command-stats-table {
+    background-color: #eae399d0;
+    color: #263238;
+  }
+  .command-stats-table p {
+    color: #263238;
+  }
+  .output-box {
+    color: #cfd8dccc;
+    background-color: #102027;
+  }
+  .stage-name p {
+    text-shadow: -1px  0px 0px #263238,
+                 -2px  0px 0px #26323899,
+                 -1px  1px 0px #26323899;
+  }
+  .status-icon-in-progress { fill: #ddd; }
+  .status-icon-in-progress circle { stroke: #ddd; }
+
+  /* SVG graphs */
+  g text {
+    fill: #eceff1;
+    stroke: #fff0;
+  }
+}
+</style>
+</head>
+<body>
+<div id="content">
+
+  <div id="title">
+    <h1>
+      Book Runner pipeline &lsquo;tests/bookrunner/books/The Rust Reference/Items/Traits/225.rs&rsquo;
+    </h1>
+    <p id="subtitle">
+      Litani CI Dashboard
+    </p>
+  </div><!-- id="title" -->
+
+  <div class=run-info>
+    <ul>
+      <li>Pipeline status: success</li>
+      <li>2022-07-29T18:04:52Z</li>
+      <li>1af687ee-0ec8-4d2f-a429-ce2493472c50</li>
+    </ul>
+  </div><!-- class=run-info -->
+
+  <div id="contents-container">
+
+    <div id="toc">
+      <div class="toc-title">
+        <p>Summary of jobs for this pipeline</p>
+      </div><!-- class="toc-title" -->
+
+      
+        <div class="toc-section">
+          <p>check</p>
+        </div><!-- class="toc-section" -->
+        
+          <div class="toc-row">
+
+            <div class="toc-row-icon">
+              
+                <svg height="16px" width="16px" class="status-icon-tick">
+                  <polygon points="1,11 6,15 15,3 13,1 6,12 3,8"></polygon>
+                </svg>
+              
+            </div><!-- class="toc-row-icon" -->
+
+            <div class="toc-row-job-name">
+              <p>
+              <a href="#job-7f875284-6a39-4c04-81e7-a8bd5f4420e1">
+              
+              Is this valid Rust code?
+              
+              </a>
+              </p>
+            </div><!-- class="toc-row-job-name" -->
+
+          </div><!-- class="toc-row" -->
+
+        
+      
+        <div class="toc-section">
+          <p>codegen</p>
+        </div><!-- class="toc-section" -->
+        
+          <div class="toc-row">
+
+            <div class="toc-row-icon">
+              
+                <svg height="16px" width="16px" class="status-icon-tick">
+                  <polygon points="1,11 6,15 15,3 13,1 6,12 3,8"></polygon>
+                </svg>
+              
+            </div><!-- class="toc-row-icon" -->
+
+            <div class="toc-row-job-name">
+              <p>
+              <a href="#job-7043f635-cb4e-493e-884e-a2624288459d">
+              
+              Does Kani support all the Rust features used in it?
+              
+              </a>
+              </p>
+            </div><!-- class="toc-row-job-name" -->
+
+          </div><!-- class="toc-row" -->
+
+        
+      
+        <div class="toc-section">
+          <p>verification</p>
+        </div><!-- class="toc-section" -->
+        
+          <div class="toc-row">
+
+            <div class="toc-row-icon">
+              
+                <svg height="16px" width="16px" class="status-icon-tick">
+                  <polygon points="1,11 6,15 15,3 13,1 6,12 3,8"></polygon>
+                </svg>
+              
+            </div><!-- class="toc-row-icon" -->
+
+            <div class="toc-row-job-name">
+              <p>
+              <a href="#job-3a8c45aa-6c1f-40a4-9d7b-b02e92bf996e">
+              
+              Can Kani reason about it?
+              
+              </a>
+              </p>
+            </div><!-- class="toc-row-job-name" -->
+
+          </div><!-- class="toc-row" -->
+
+        
+      
+    </div><!-- id="toc" -->
+
+
+    
+
+  </div><!-- id="contents-container" -->
+
+
+  
+  <div class="stage">
+    <div class="stage-name">
+      <p>check</p>
+      <div class="underline"></div>
+    </div><!-- class="stage-name" -->
+
+    
+    <div class="command-table" id="job-7f875284-6a39-4c04-81e7-a8bd5f4420e1">
+      
+      <div class="success">
+      
+        <div class="command-content">
+          <div class="command-header">
+            <div class="command-id-link">
+              <p>
+                <a href="#job-7f875284-6a39-4c04-81e7-a8bd5f4420e1">#</a>
+              </p>
+            </div><!-- class="command-id-link" -->
+            <div class="command-description">
+              
+              <p>
+                Is this valid Rust code?
+              </p>
+              
+            </div><!-- class="command-description" -->
+          </div><!-- class="command-header" -->
+          <div class="command-invocation">
+            <p>
+            "kani-compiler" "--edition" "2021" "-Z" "no-codegen" "tests/bookrunner/books/The Rust Reference/Items/Traits/225.rs"
+            </p>
+          </div><!-- class="command-invocation" -->
+
+          
+          <div class="command-stats-table">
+            
+            <div class="command-stats-row">
+              <p>Command return code:
+              <span class="value">
+                0
+              </span></p>
+              <p>OK returns:
+              <span class="value">
+                ['0']
+              </span></p>
+              <p>Ignored returns:
+              <span class="value">
+                None
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+            <div class="command-stats-row">
+              <p>Timeout:
+              <span class="value">
+                5
+              </span></p>
+              <p>Timeout ok:
+              <span class="value">
+                False
+              </span></p>
+              <p>Timeout ignored:
+              <span class="value">
+                False
+              </span></p>
+              <p>Timeout reached:
+              <span class="value">
+                False
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+            <div class="command-stats-row">
+              <p>Start time:
+              <span class="value">
+                2022-07-29T18:09:39Z
+              </span></p>
+              <p>Duration:
+              <span class="value">
+                00s
+              </span></p>
+              <p>End time:
+              <span class="value">
+                2022-07-29T18:09:39Z
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+            <div class="command-stats-row">
+              <p>Command successful:
+              <span class="value">
+              
+              yes
+              
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+             
+          </div><!-- class="command-stats-table" -->
+          
+
+          
+
+
+          
+
+
+          
+
+          
+
+        </div><!-- class="command-content" -->
+      </div><!-- class="fail" -->
+    </div><!-- id="command-table" -->
+    
+
+  </div><!-- class="stage" -->
+  
+  <div class="stage">
+    <div class="stage-name">
+      <p>codegen</p>
+      <div class="underline"></div>
+    </div><!-- class="stage-name" -->
+
+    
+    <div class="command-table" id="job-7043f635-cb4e-493e-884e-a2624288459d">
+      
+      <div class="success">
+      
+        <div class="command-content">
+          <div class="command-header">
+            <div class="command-id-link">
+              <p>
+                <a href="#job-7043f635-cb4e-493e-884e-a2624288459d">#</a>
+              </p>
+            </div><!-- class="command-id-link" -->
+            <div class="command-description">
+              
+              <p>
+                Does Kani support all the Rust features used in it?
+              </p>
+              
+            </div><!-- class="command-description" -->
+          </div><!-- class="command-header" -->
+          <div class="command-invocation">
+            <p>
+            "kani-compiler" "--edition" "2021" "--out-dir" "build/tmp" "tests/bookrunner/books/The Rust Reference/Items/Traits/225.rs"
+            </p>
+          </div><!-- class="command-invocation" -->
+
+          
+          <div class="command-stats-table">
+            
+            <div class="command-stats-row">
+              <p>Command return code:
+              <span class="value">
+                0
+              </span></p>
+              <p>OK returns:
+              <span class="value">
+                ['0']
+              </span></p>
+              <p>Ignored returns:
+              <span class="value">
+                None
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+            <div class="command-stats-row">
+              <p>Timeout:
+              <span class="value">
+                10
+              </span></p>
+              <p>Timeout ok:
+              <span class="value">
+                False
+              </span></p>
+              <p>Timeout ignored:
+              <span class="value">
+                False
+              </span></p>
+              <p>Timeout reached:
+              <span class="value">
+                False
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+            <div class="command-stats-row">
+              <p>Start time:
+              <span class="value">
+                2022-07-29T18:09:39Z
+              </span></p>
+              <p>Duration:
+              <span class="value">
+                01s
+              </span></p>
+              <p>End time:
+              <span class="value">
+                2022-07-29T18:09:40Z
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+            <div class="command-stats-row">
+              <p>Command successful:
+              <span class="value">
+              
+              yes
+              
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+             
+          </div><!-- class="command-stats-table" -->
+          
+
+          
+
+
+          
+
+
+          
+
+          
+
+        </div><!-- class="command-content" -->
+      </div><!-- class="fail" -->
+    </div><!-- id="command-table" -->
+    
+
+  </div><!-- class="stage" -->
+  
+  <div class="stage">
+    <div class="stage-name">
+      <p>verification</p>
+      <div class="underline"></div>
+    </div><!-- class="stage-name" -->
+
+    
+    <div class="command-table" id="job-3a8c45aa-6c1f-40a4-9d7b-b02e92bf996e">
+      
+      <div class="success">
+      
+        <div class="command-content">
+          <div class="command-header">
+            <div class="command-id-link">
+              <p>
+                <a href="#job-3a8c45aa-6c1f-40a4-9d7b-b02e92bf996e">#</a>
+              </p>
+            </div><!-- class="command-id-link" -->
+            <div class="command-description">
+              
+              <p>
+                Can Kani reason about it?
+              </p>
+              
+            </div><!-- class="command-description" -->
+          </div><!-- class="command-header" -->
+          <div class="command-invocation">
+            <p>
+            RUSTFLAGS="--edition 2021" "kani" "tests/bookrunner/books/The Rust Reference/Items/Traits/225.rs" "--enable-unstable" "--function" "main"
+            </p>
+          </div><!-- class="command-invocation" -->
+
+          
+          <div class="command-stats-table">
+            
+            <div class="command-stats-row">
+              <p>Command return code:
+              <span class="value">
+                0
+              </span></p>
+              <p>OK returns:
+              <span class="value">
+                ['0']
+              </span></p>
+              <p>Ignored returns:
+              <span class="value">
+                None
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+            <div class="command-stats-row">
+              <p>Timeout:
+              <span class="value">
+                60
+              </span></p>
+              <p>Timeout ok:
+              <span class="value">
+                False
+              </span></p>
+              <p>Timeout ignored:
+              <span class="value">
+                False
+              </span></p>
+              <p>Timeout reached:
+              <span class="value">
+                False
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+            <div class="command-stats-row">
+              <p>Start time:
+              <span class="value">
+                2022-07-29T18:09:40Z
+              </span></p>
+              <p>Duration:
+              <span class="value">
+                01s
+              </span></p>
+              <p>End time:
+              <span class="value">
+                2022-07-29T18:09:41Z
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+            <div class="command-stats-row">
+              <p>Command successful:
+              <span class="value">
+              
+              yes
+              
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+             
+          </div><!-- class="command-stats-table" -->
+          
+
+          
+
+
+          
+
+
+          
+            
+            <div class="output-box"><xmp>stdout:
+              
+Checking harness main...
+CBMC 5.62.0 (cbmc-5.62.0)
+CBMC version 5.62.0 (cbmc-5.62.0) 64-bit x86_64 linux
+Reading GOTO program from file tests/bookrunner/books/The Rust Reference/Items/Traits/225.out.for-main
+Generating GOTO Program
+Adding CPROVER library (x86_64)
+Removal of function pointers and virtual functions
+Generic Property Instrumentation
+Running with 16 object bits, 48 offset bits (user-specified)
+Starting Bounded Model Checking
+Unwinding loop _RINvNtCs1sNmSfgoAm4_5alloc5alloc8box_freeDNtNvCs6kTxR73xoD_3_2254main6CircleEL_NtB2_6GlobalEBI_.0 iteration 1 file /home/runner/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs line 345 column 9 function alloc::alloc::box_free::<dyn main::Circle, std::alloc::Global> thread 0
+Unwinding loop _RINvNtCshBEb14mhtvp_4core3ptr13drop_in_placeINtNtCs1sNmSfgoAm4_5alloc5boxed3BoxDNtNvCs6kTxR73xoD_3_2254main6CircleEL_EEB1k_.0 iteration 1 file /home/runner/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs line 487 column 1 function std::ptr::drop_in_place::<std::boxed::Box<dyn main::Circle>> thread 0
+Runtime Symex: 0.0403505s
+size of program expression: 407 steps
+slicing removed 289 assignments
+Generated 92 VCC(s), 15 remaining after simplification
+Runtime Postprocess Equation: 0.000105799s
+Passing problem to propositional reduction
+converting SSA
+Runtime Convert SSA: 0.000718196s
+Running propositional reduction
+Post-processing
+Runtime Post-process: 7.1e-06s
+Solving with MiniSAT 2.2.1 with simplifier
+653 variables, 651 clauses
+SAT checker inconsistent: instance is UNSATISFIABLE
+Runtime Solver: 3.34e-05s
+Runtime decision procedure: 0.000826296s
+VERIFICATION SUCCESSFUL
+
+RESULTS:
+Check 1: main.1
+- Status: SUCCESS
+- Description: "assertion"
+- Location: Unknown File in function main
+
+Check 2: main.2
+- Status: SUCCESS
+- Description: "assertion"
+- Location: Unknown File in function main
+
+Check 3: malloc.assertion.1
+- Status: SUCCESS
+- Description: "max allocation size exceeded"
+- Location: <builtin-library-malloc>:28 in function malloc
+
+Check 4: malloc.assertion.2
+- Status: SUCCESS
+- Description: "max allocation may fail"
+- Location: <builtin-library-malloc>:33 in function malloc
+
+Check 5: __rust_dealloc.assertion.1
+- Status: SUCCESS
+- Description: "Alignment is power of two"
+- Location: library/kani/kani_lib.c:74 in function __rust_dealloc
+
+Check 6: __rust_dealloc.assertion.2
+- Status: SUCCESS
+- Description: "rust_dealloc must be called on an object whose allocated size matches its layout"
+- Location: library/kani/kani_lib.c:76 in function __rust_dealloc
+
+Check 7: _RINvNtCshBEb14mhtvp_4core3ptr13drop_in_placeINtNtCs1sNmSfgoAm4_5alloc5boxed3BoxDNtNvCs6kTxR73xoD_3_2254main6CircleEL_EEB1k_.1
+- Status: SUCCESS
+- Description: "assertion"
+- Location: Unknown File in function _RINvNtCshBEb14mhtvp_4core3ptr13drop_in_placeINtNtCs1sNmSfgoAm4_5alloc5boxed3BoxDNtNvCs6kTxR73xoD_3_2254main6CircleEL_EEB1k_
+
+Check 8: std::boxed::Box::<main::UnitCircle>::new.unsupported_construct.1
+- Status: SUCCESS
+- Description: "resume instruction"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:213:5 in function std::boxed::Box::<main::UnitCircle>::new
+
+Check 9: std::sys_common::backtrace::__rust_begin_short_backtrace::<fn(), ()>.unsupported_construct.1
+- Status: SUCCESS
+- Description: "resume instruction"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys_common/backtrace.rs:118:1 in function std::sys_common::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+
+Check 10: alloc::alloc::box_free::<dyn main::Circle, std::alloc::Global>.unsupported_construct.1
+- Status: SUCCESS
+- Description: "resume instruction"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:337:1 in function alloc::alloc::box_free::<dyn main::Circle, std::alloc::Global>
+
+Check 11: _RNvYFEuINtNtNtCshBEb14mhtvp_4core3ops8function6FnOnceuE9call_onceCs6kTxR73xoD_3_225.1
+- Status: SUCCESS
+- Description: "assertion"
+- Location: Unknown File in function _RNvYFEuINtNtNtCshBEb14mhtvp_4core3ops8function6FnOnceuE9call_onceCs6kTxR73xoD_3_225
+
+Check 12: main.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: tests/bookrunner/books/The Rust Reference/Items/Traits/225.rs:11:16 in function main
+
+Check 13: main.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: tests/bookrunner/books/The Rust Reference/Items/Traits/225.rs:11:16 in function main
+
+Check 14: main.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: tests/bookrunner/books/The Rust Reference/Items/Traits/225.rs:11:16 in function main
+
+Check 15: main.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: tests/bookrunner/books/The Rust Reference/Items/Traits/225.rs:11:16 in function main
+
+Check 16: main.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: tests/bookrunner/books/The Rust Reference/Items/Traits/225.rs:11:16 in function main
+
+Check 17: main.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: tests/bookrunner/books/The Rust Reference/Items/Traits/225.rs:11:16 in function main
+
+Check 18: pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+
+Check 19: pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+
+Check 20: pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+
+Check 21: pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+
+Check 22: pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+
+Check 23: pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+
+Check 24: main.pointer_dereference.7
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: tests/bookrunner/books/The Rust Reference/Items/Traits/225.rs:11:34 in function main
+
+Check 25: main.pointer_dereference.8
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: tests/bookrunner/books/The Rust Reference/Items/Traits/225.rs:11:34 in function main
+
+Check 26: main.pointer_dereference.9
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: tests/bookrunner/books/The Rust Reference/Items/Traits/225.rs:11:34 in function main
+
+Check 27: main.pointer_dereference.10
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: tests/bookrunner/books/The Rust Reference/Items/Traits/225.rs:11:34 in function main
+
+Check 28: main.pointer_dereference.11
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: tests/bookrunner/books/The Rust Reference/Items/Traits/225.rs:11:34 in function main
+
+Check 29: main.pointer_dereference.12
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: tests/bookrunner/books/The Rust Reference/Items/Traits/225.rs:11:34 in function main
+
+Check 30: pointer_dereference.7
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+
+Check 31: pointer_dereference.8
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+
+Check 32: pointer_dereference.9
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+
+Check 33: pointer_dereference.10
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+
+Check 34: pointer_dereference.11
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+
+Check 35: pointer_dereference.12
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+
+Check 36: main.NaN.1
+- Status: SUCCESS
+- Description: "NaN on multiplication"
+- Location: tests/bookrunner/books/The Rust Reference/Items/Traits/225.rs:11:16 in function main
+
+Check 37: main.overflow.1
+- Status: SUCCESS
+- Description: "arithmetic overflow on floating-point multiplication"
+- Location: tests/bookrunner/books/The Rust Reference/Items/Traits/225.rs:11:16 in function main
+
+Check 38: pointer_dereference.13
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+
+Check 39: pointer_dereference.14
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+
+Check 40: pointer_dereference.15
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+
+Check 41: pointer_dereference.16
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+
+Check 42: pointer_dereference.17
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+
+Check 43: pointer_dereference.18
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+
+Check 44: pointer_dereference.19
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+
+Check 45: pointer_dereference.20
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+
+Check 46: pointer_dereference.21
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+
+Check 47: pointer_dereference.22
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+
+Check 48: pointer_dereference.23
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+
+Check 49: pointer_dereference.24
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+
+Check 50: __rust_dealloc.precondition_instance.1
+- Status: SUCCESS
+- Description: "free argument must be NULL or valid pointer"
+- Location: library/kani/kani_lib.c:78 in function __rust_dealloc
+
+Check 51: __rust_dealloc.precondition_instance.2
+- Status: SUCCESS
+- Description: "free argument must be dynamic object"
+- Location: library/kani/kani_lib.c:78 in function __rust_dealloc
+
+Check 52: __rust_dealloc.precondition_instance.3
+- Status: SUCCESS
+- Description: "free argument has offset zero"
+- Location: library/kani/kani_lib.c:78 in function __rust_dealloc
+
+Check 53: __rust_dealloc.precondition_instance.4
+- Status: SUCCESS
+- Description: "double free"
+- Location: library/kani/kani_lib.c:78 in function __rust_dealloc
+
+Check 54: __rust_dealloc.precondition_instance.5
+- Status: SUCCESS
+- Description: "free called for new[] object"
+- Location: library/kani/kani_lib.c:78 in function __rust_dealloc
+
+Check 55: __rust_dealloc.precondition_instance.6
+- Status: SUCCESS
+- Description: "free called for stack-allocated object"
+- Location: library/kani/kani_lib.c:78 in function __rust_dealloc
+
+Check 56: pointer_dereference.25
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+
+Check 57: pointer_dereference.26
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+
+Check 58: pointer_dereference.27
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+
+Check 59: pointer_dereference.28
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+
+Check 60: pointer_dereference.29
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+
+Check 61: pointer_dereference.30
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+
+Check 62: pointer_dereference.31
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+
+Check 63: pointer_dereference.32
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+
+Check 64: pointer_dereference.33
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+
+Check 65: pointer_dereference.34
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+
+Check 66: pointer_dereference.35
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+
+Check 67: pointer_dereference.36
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+
+Check 68: pointer_dereference.37
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+
+Check 69: pointer_dereference.38
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+
+Check 70: pointer_dereference.39
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+
+Check 71: pointer_dereference.40
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+
+Check 72: pointer_dereference.41
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+
+Check 73: pointer_dereference.42
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+
+Check 74: pointer_dereference.43
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+
+Check 75: pointer_dereference.44
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+
+Check 76: pointer_dereference.45
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+
+Check 77: pointer_dereference.46
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+
+Check 78: pointer_dereference.47
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+
+Check 79: pointer_dereference.48
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+
+Check 80: pointer_dereference.49
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+
+Check 81: pointer_dereference.50
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+
+Check 82: pointer_dereference.51
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+
+Check 83: pointer_dereference.52
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+
+Check 84: pointer_dereference.53
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+
+Check 85: pointer_dereference.54
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+
+Check 86: pointer_dereference.55
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+
+Check 87: pointer_dereference.56
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+
+Check 88: pointer_dereference.57
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+
+Check 89: pointer_dereference.58
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+
+Check 90: pointer_dereference.59
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+
+Check 91: pointer_dereference.60
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+
+Check 92: pointer_dereference.61
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+
+Check 93: pointer_dereference.62
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+
+Check 94: pointer_dereference.63
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+
+Check 95: pointer_dereference.64
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+
+Check 96: pointer_dereference.65
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+
+Check 97: pointer_dereference.66
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+
+Check 98: pointer_dereference.67
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+
+Check 99: pointer_dereference.68
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+
+Check 100: pointer_dereference.69
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+
+Check 101: pointer_dereference.70
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+
+Check 102: pointer_dereference.71
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+
+Check 103: pointer_dereference.72
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+
+Check 104: pointer_dereference.73
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+
+Check 105: pointer_dereference.74
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+
+Check 106: pointer_dereference.75
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+
+Check 107: pointer_dereference.76
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+
+Check 108: pointer_dereference.77
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+
+Check 109: pointer_dereference.78
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+
+Check 110: pointer_dereference.79
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+
+Check 111: pointer_dereference.80
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+
+Check 112: pointer_dereference.81
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+
+Check 113: pointer_dereference.82
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+
+Check 114: pointer_dereference.83
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+
+Check 115: pointer_dereference.84
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+
+Check 116: pointer_dereference.85
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+
+Check 117: pointer_dereference.86
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+
+Check 118: pointer_dereference.87
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+
+Check 119: pointer_dereference.88
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+
+Check 120: pointer_dereference.89
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+
+Check 121: pointer_dereference.90
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+
+Check 122: <std::alloc::Global as std::alloc::Allocator>::deallocate.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:121:9 in function <std::alloc::Global as std::alloc::Allocator>::deallocate
+
+Check 123: <std::alloc::Global as std::alloc::Allocator>::deallocate.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:121:9 in function <std::alloc::Global as std::alloc::Allocator>::deallocate
+
+Check 124: <std::alloc::Global as std::alloc::Allocator>::deallocate.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:121:9 in function <std::alloc::Global as std::alloc::Allocator>::deallocate
+
+Check 125: <std::alloc::Global as std::alloc::Allocator>::deallocate.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:121:9 in function <std::alloc::Global as std::alloc::Allocator>::deallocate
+
+Check 126: <std::alloc::Global as std::alloc::Allocator>::deallocate.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:131:9 in function <std::alloc::Global as std::alloc::Allocator>::deallocate
+
+Check 127: <std::alloc::Global as std::alloc::Allocator>::deallocate.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:131:9 in function <std::alloc::Global as std::alloc::Allocator>::deallocate
+
+Check 128: alloc::alloc::box_free::<dyn main::Circle, std::alloc::Global>.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:381:20 in function alloc::alloc::box_free::<dyn main::Circle, std::alloc::Global>
+
+Check 129: alloc::alloc::box_free::<dyn main::Circle, std::alloc::Global>.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:381:20 in function alloc::alloc::box_free::<dyn main::Circle, std::alloc::Global>
+
+Check 130: alloc::alloc::box_free::<dyn main::Circle, std::alloc::Global>.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:381:20 in function alloc::alloc::box_free::<dyn main::Circle, std::alloc::Global>
+
+Check 131: alloc::alloc::box_free::<dyn main::Circle, std::alloc::Global>.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:381:20 in function alloc::alloc::box_free::<dyn main::Circle, std::alloc::Global>
+
+Check 132: alloc::alloc::box_free::<dyn main::Circle, std::alloc::Global>.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:381:20 in function alloc::alloc::box_free::<dyn main::Circle, std::alloc::Global>
+
+Check 133: alloc::alloc::box_free::<dyn main::Circle, std::alloc::Global>.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:381:20 in function alloc::alloc::box_free::<dyn main::Circle, std::alloc::Global>
+
+Check 134: pointer_dereference.91
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+
+Check 135: pointer_dereference.92
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+
+Check 136: pointer_dereference.93
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+
+Check 137: pointer_dereference.94
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+
+Check 138: pointer_dereference.95
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+
+Check 139: pointer_dereference.96
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+
+Check 140: alloc::alloc::box_free::<dyn main::Circle, std::alloc::Global>.pointer_dereference.7
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:381:20 in function alloc::alloc::box_free::<dyn main::Circle, std::alloc::Global>
+
+Check 141: alloc::alloc::box_free::<dyn main::Circle, std::alloc::Global>.pointer_dereference.8
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:381:20 in function alloc::alloc::box_free::<dyn main::Circle, std::alloc::Global>
+
+Check 142: alloc::alloc::box_free::<dyn main::Circle, std::alloc::Global>.pointer_dereference.9
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:381:20 in function alloc::alloc::box_free::<dyn main::Circle, std::alloc::Global>
+
+Check 143: alloc::alloc::box_free::<dyn main::Circle, std::alloc::Global>.pointer_dereference.10
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:381:20 in function alloc::alloc::box_free::<dyn main::Circle, std::alloc::Global>
+
+Check 144: alloc::alloc::box_free::<dyn main::Circle, std::alloc::Global>.pointer_dereference.11
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:381:20 in function alloc::alloc::box_free::<dyn main::Circle, std::alloc::Global>
+
+Check 145: alloc::alloc::box_free::<dyn main::Circle, std::alloc::Global>.pointer_dereference.12
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:381:20 in function alloc::alloc::box_free::<dyn main::Circle, std::alloc::Global>
+
+Check 146: pointer_dereference.97
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+
+Check 147: pointer_dereference.98
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+
+Check 148: pointer_dereference.99
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+
+Check 149: pointer_dereference.100
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+
+Check 150: pointer_dereference.101
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+
+Check 151: pointer_dereference.102
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+
+Check 152: std::rt::lang_start::<()>::{closure#0}.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:145:77 in function std::rt::lang_start::<()>::{closure#0}
+
+Check 153: std::rt::lang_start::<()>::{closure#0}.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:145:77 in function std::rt::lang_start::<()>::{closure#0}
+
+Check 154: std::rt::lang_start::<()>::{closure#0}.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:145:77 in function std::rt::lang_start::<()>::{closure#0}
+
+Check 155: std::rt::lang_start::<()>::{closure#0}.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:145:77 in function std::rt::lang_start::<()>::{closure#0}
+
+Check 156: std::rt::lang_start::<()>::{closure#0}.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:145:77 in function std::rt::lang_start::<()>::{closure#0}
+
+Check 157: std::rt::lang_start::<()>::{closure#0}.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:145:77 in function std::rt::lang_start::<()>::{closure#0}
+
+Check 158: std::rt::lang_start::<()>::{closure#0}.pointer_dereference.7
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/unix/process/process_common.rs:486:9 in function std::rt::lang_start::<()>::{closure#0}
+
+Check 159: std::rt::lang_start::<()>::{closure#0}.pointer_dereference.8
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/unix/process/process_common.rs:486:9 in function std::rt::lang_start::<()>::{closure#0}
+
+Check 160: std::rt::lang_start::<()>::{closure#0}.pointer_dereference.9
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/unix/process/process_common.rs:486:9 in function std::rt::lang_start::<()>::{closure#0}
+
+Check 161: std::rt::lang_start::<()>::{closure#0}.pointer_dereference.10
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/unix/process/process_common.rs:486:9 in function std::rt::lang_start::<()>::{closure#0}
+
+Check 162: std::rt::lang_start::<()>::{closure#0}.pointer_dereference.11
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/unix/process/process_common.rs:486:9 in function std::rt::lang_start::<()>::{closure#0}
+
+Check 163: std::rt::lang_start::<()>::{closure#0}.pointer_dereference.12
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ~/.rustup/toolchains/nightly-2022-07-19-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/unix/process/process_common.rs:486:9 in function std::rt::lang_start::<()>::{closure#0}
+
+
+SUMMARY:
+** 0 of 163 failed
+
+VERIFICATION:- SUCCESSFUL
+
+
+Verification Time: 0.10695178s
+              </xmp>
+            </div><!-- class="output-box" -->
+            
+          
+
+          
+
+        </div><!-- class="command-content" -->
+      </div><!-- class="fail" -->
+    </div><!-- id="command-table" -->
+    
+
+  </div><!-- class="stage" -->
+  
+
+
+</div><!-- id="content" -->
+</body>
+</html>

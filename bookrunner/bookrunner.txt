@@ -1,0 +1,332 @@
+# of tests: 678	✔️ 599	❌ 79
+bookrunner ✔️ 599 ❌ 79
+  books ✔️ 599 ❌ 79
+    Rust by Example ✔️ 137 ❌ 41
+      Attributes ✔️ 2 ❌ 1
+        Crates ❌ 1
+        cfg ✔️ 1
+        dead_code ✔️ 1
+      Conversion ✔️ 4 ❌ 2
+        To and from Strings ❌ 2
+        From and Into ✔️ 3
+        TryFrom and TryInto ✔️ 1
+      Custom Types ✔️ 6 ❌ 1
+        Enums ✔️ 5 ❌ 1
+          Testcase: linked-list ❌ 1
+          C-like ✔️ 1
+          use ✔️ 1
+        Structures ✔️ 1
+      Error handling ✔️ 5 ❌ 18
+        Iterating over Results ❌ 5
+        Multiple error types ❌ 6
+          Boxing errors ❌ 1
+          Defining an error type ❌ 1
+          Other uses of ? ❌ 1
+          Pulling Results out of Options ❌ 2
+          Wrapping errors ❌ 1
+        Result ✔️ 1 ❌ 7
+          Early returns ❌ 1
+          Introducing ? ❌ 2
+          aliases for Result ❌ 1
+          map for Result ❌ 2
+        Option & unwrap ✔️ 4
+          Combinators: and_then ✔️ 1
+          Combinators: map ✔️ 1
+          Unpacking options with ? ✔️ 2
+      Generics ✔️ 15 ❌ 1
+        Phantom type parameters ✔️ 1 ❌ 1
+          Testcase: unit clarification ❌ 1
+        Associated items ✔️ 3
+          Associated types ✔️ 2
+          The Problem ✔️ 1
+        Bounds ✔️ 2
+          Testcase: empty bounds ✔️ 1
+        Functions ✔️ 1
+        Implementation ✔️ 2
+        Multiple bounds ✔️ 1
+        New Type Idiom ✔️ 2
+        Traits ✔️ 1
+        Where clauses ✔️ 1
+      Hello World ✔️ 7 ❌ 2
+        Formatted print ✔️ 5 ❌ 2
+          Debug ✔️ 2 ❌ 1
+          Display ✔️ 2 ❌ 1
+            Testcase: List ✔️ 1
+          Formatting ✔️ 1
+        Comments ✔️ 1
+      Scoping rules ✔️ 17 ❌ 1
+        RAII ✔️ 1 ❌ 1
+        Borrowing ✔️ 2
+          Aliasing ✔️ 1
+          The ref pattern ✔️ 1
+        Lifetimes ✔️ 11
+          Bounds ✔️ 1
+          Coercion ✔️ 1
+          Elision ✔️ 1
+          Functions ✔️ 1
+          Methods ✔️ 1
+          Static ✔️ 3
+          Structs ✔️ 1
+          Traits ✔️ 1
+        Ownership and moves ✔️ 3
+          Mutability ✔️ 1
+          Partial moves ✔️ 1
+      Std library types ✔️ 4 ❌ 5
+        Arc ❌ 1
+        HashMap ❌ 2
+          Alternate_custom key types ❌ 1
+        Strings ✔️ 2 ❌ 2
+        Box, stack and heap ✔️ 1
+        Rc ✔️ 1
+      Std misc ❌ 7
+        Channels ❌ 1
+        File I_O ❌ 1
+          read lines ❌ 1
+        Path ❌ 1
+        Program arguments ❌ 2
+          Argument parsing ❌ 1
+        Threads ❌ 2
+          Testcase: map-reduce ❌ 1
+      Traits ✔️ 11 ❌ 3
+        Disambiguating overlapping traits ❌ 1
+        impl Trait ✔️ 3 ❌ 2
+        Clone ✔️ 1
+        Derive ✔️ 1
+        Drop ✔️ 1
+        Iterators ✔️ 1
+        Operator Overloading ✔️ 1
+        Returning Traits with dyn ✔️ 1
+        Supertraits ✔️ 1
+      Cargo ✔️ 1
+        Tests ✔️ 1
+      Expressions ✔️ 3
+      Flow of Control ✔️ 23
+        for and range ✔️ 4
+        if let ✔️ 3
+        if_else ✔️ 1
+        loop ✔️ 3
+          Nesting and labels ✔️ 1
+          Returning from loops ✔️ 1
+        match ✔️ 9
+          Binding ✔️ 2
+          Destructuring ✔️ 4
+            enums ✔️ 1
+            pointers_ref ✔️ 1
+            structs ✔️ 1
+            tuples ✔️ 1
+          Guards ✔️ 2
+        while let ✔️ 2
+        while ✔️ 1
+      Functions ✔️ 17
+        Closures ✔️ 11
+          As input parameters ✔️ 1
+          As output parameters ✔️ 1
+          Capturing ✔️ 2
+          Examples in std ✔️ 3
+            Iterator::any ✔️ 1
+            Searching through iterators ✔️ 2
+          Input functions ✔️ 1
+          Type anonymity ✔️ 2
+        Diverging functions ✔️ 3
+        Higher Order Functions ✔️ 1
+        Methods ✔️ 1
+      Meta ✔️ 1
+        Playpen ✔️ 1
+      Modules ✔️ 4
+        Struct visibility ✔️ 1
+        The use declaration ✔️ 1
+        Visibility ✔️ 1
+        super and self ✔️ 1
+      Primitives ✔️ 2
+        Literals and operators ✔️ 1
+        Tuples ✔️ 1
+      Testing ✔️ 2
+        Unit testing ✔️ 2
+      Types ✔️ 3
+        Aliasing ✔️ 1
+        Inference ✔️ 1
+        Literals ✔️ 1
+      Unsafe Operations ✔️ 2
+      Variable Bindings ✔️ 1
+      macro_rules! ✔️ 7
+        DRY _Don_t Repeat Yourself_ ✔️ 1
+        DSL _Domain Specific Languages_ ✔️ 1
+        Syntax ✔️ 3
+          Designators ✔️ 1
+          Overload ✔️ 1
+          Repeat ✔️ 1
+        Variadics ✔️ 1
+    The Rust Reference ✔️ 307 ❌ 17
+      Appendices ✔️ 1 ❌ 1
+        Glossary ❌ 1
+        Macro Follow-Set Ambiguity Formal Specification ✔️ 1
+      Attributes ✔️ 27 ❌ 2
+        Limits ✔️ 2 ❌ 1
+        Code generation ✔️ 5
+        Derive ✔️ 2
+        Diagnostics ✔️ 13
+        Testing ✔️ 3
+        Type System ✔️ 1
+      Crates and source files ❌ 2
+      Inline assembly ❌ 1
+      Items ✔️ 95 ❌ 2
+        Implementations ✔️ 6 ❌ 1
+        Use declarations ✔️ 6 ❌ 1
+        Associated Items ✔️ 11
+        Constant items ✔️ 4
+        Enumerations ✔️ 8
+        External blocks ✔️ 3
+        Functions ✔️ 16
+        Generic parameters ✔️ 9
+        Modules ✔️ 1
+        Static items ✔️ 2
+        Structs ✔️ 4
+        Traits ✔️ 15
+        Type aliases ✔️ 2
+        Unions ✔️ 8
+      Linkage ✔️ 1 ❌ 1
+      Patterns ✔️ 21 ❌ 1
+      Statements and expressions ✔️ 61 ❌ 4
+        Expressions ✔️ 58 ❌ 4
+          Array and index expressions ✔️ 1 ❌ 1
+          Grouped expressions ✔️ 1 ❌ 1
+          Method call expressions ✔️ 1 ❌ 1
+          Operator expressions ✔️ 14 ❌ 1
+          Block expressions ✔️ 5
+          Call expressions ✔️ 2
+          Closure expressions ✔️ 1
+          Field access expressions ✔️ 2
+          If and if let expressions ✔️ 4
+          Literal expressions ✔️ 1
+          Loop expressions ✔️ 8
+          Match expressions ✔️ 4
+          Path expressions ✔️ 1
+          Range expressions ✔️ 3
+          Return expressions ✔️ 1
+          Struct expressions ✔️ 6
+          Tuple and index expressions ✔️ 1
+        Statements ✔️ 3
+      Type system ✔️ 53 ❌ 3
+        Types ✔️ 15 ❌ 3
+          Closure types ✔️ 3 ❌ 1
+          Trait object types ❌ 1
+          Array types ✔️ 1
+          Boolean type ✔️ 1
+          Function item types ✔️ 2
+          Function pointer types ✔️ 1
+          Impl trait type ✔️ 3
+          Inferred type ✔️ 1
+          Slice types ✔️ 1
+          Type parameters ✔️ 1
+        Destructors ✔️ 8
+        Lifetime elision ✔️ 8
+        Subtyping and Variance ✔️ 3
+        Trait and lifetime bounds ✔️ 6
+        Type coercions ✔️ 6
+        Type layout ✔️ 7
+      Application Binary Interface ✔️ 3
+      Conditional compilation ✔️ 2
+      Introduction ✔️ 1
+      Lexical structure ✔️ 10
+        Comments ✔️ 1
+        Keywords ✔️ 1
+        Tokens ✔️ 8
+      Macros ✔️ 11
+        Macros By Example ✔️ 10
+      Memory model ✔️ 1
+        Variables ✔️ 1
+      Names ✔️ 19
+        Namespaces ✔️ 1
+        Paths ✔️ 13
+        Preludes ✔️ 1
+        Visibility and privacy ✔️ 4
+      The Rust runtime ✔️ 1
+    The Rustonomicon ✔️ 98 ❌ 9
+      Concurrency ✔️ 8 ❌ 3
+        Atomics ❌ 1
+        Races ❌ 2
+        Send and Sync ✔️ 8
+      Data Layout ✔️ 12 ❌ 1
+        Exotically Sized Types ✔️ 4 ❌ 1
+        Other reprs ✔️ 1
+        repr_Rust_ ✔️ 7
+      FFI ✔️ 5 ❌ 3
+      Implementing Vec ✔️ 1 ❌ 1
+        Final Code ❌ 1
+        Layout ✔️ 1
+      Uninitialized Memory ✔️ 13 ❌ 1
+        Unchecked ✔️ 1 ❌ 1
+        Checked ✔️ 7
+        Drop Flags ✔️ 5
+      Implementing Arc and Mutex ✔️ 5
+        Arc ✔️ 5
+          Cloning ✔️ 1
+          Dropping ✔️ 1
+          Final Code ✔️ 1
+          Layout ✔️ 2
+      Meet Safe and Unsafe ✔️ 4
+        How Safe and Unsafe Interact ✔️ 1
+        Working with Unsafe ✔️ 3
+      Ownership Based Resource Management ✔️ 6
+        Constructors ✔️ 1
+        Destructors ✔️ 5
+      Ownership ✔️ 40
+        Aliasing ✔️ 3
+        Drop Check ✔️ 8
+        Higher-Rank Trait Bounds ✔️ 1
+        Lifetimes ✔️ 9
+        Limits of Lifetimes ✔️ 2
+        PhantomData ✔️ 4
+        Splitting Borrows ✔️ 7
+        Subtyping and Variance ✔️ 4
+      Type Conversions ✔️ 4
+        Coercions ✔️ 1
+        The Dot Operator ✔️ 2
+    The Unstable Book ✔️ 57 ❌ 12
+      Compiler Flags ✔️ 3 ❌ 5
+        emit_stack_sizes ✔️ 1 ❌ 1
+        sanitizer ✔️ 2 ❌ 4
+      Language Features ✔️ 44 ❌ 7
+        crate_visibility_modifier ❌ 1
+        try_blocks ❌ 1
+        unsized_locals ✔️ 2 ❌ 4
+        unsized_tuple_coercion ❌ 1
+        arbitrary_enum_discriminant ✔️ 1
+        auto_traits ✔️ 3
+        box_patterns ✔️ 1
+        box_syntax ✔️ 1
+        c_variadic ✔️ 1
+        cfg_panic ✔️ 1
+        cfg_sanitize ✔️ 1
+        cfg_version ✔️ 1
+        custom_test_frameworks ✔️ 1
+        doc_cfg ✔️ 1
+        doc_notable_trait ✔️ 1
+        exclusive_range_pattern ✔️ 1
+        explicit_generic_args_with_impl_trait ✔️ 2
+        generators ✔️ 6
+        half_open_range_patterns ✔️ 1
+        inline_const ✔️ 2
+        inline_const_pat ✔️ 1
+        intra_doc_pointers ✔️ 1
+        intrinsics ✔️ 1
+        marker_trait_attr ✔️ 1
+        more_qualified_paths ✔️ 1
+        negative_impls ✔️ 1
+        no_coverage ✔️ 1
+        no_sanitize ✔️ 1
+        repr_128 ✔️ 1
+        rustc_attrs ✔️ 1
+        trait_alias ✔️ 1
+        trait_upcasting ✔️ 1
+        transparent_unions ✔️ 3
+        type_changing_struct_update ✔️ 1
+        unboxed_closures ✔️ 1
+      Library Features ✔️ 9
+        c_variadic ✔️ 1
+        concat_idents ✔️ 1
+        default_free_fn ✔️ 1
+        fn_traits ✔️ 1
+        test ✔️ 4
+        trace_macros ✔️ 1
+      the_unstable_book ✔️ 1
