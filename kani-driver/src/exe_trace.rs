@@ -1,19 +1,18 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MI&T
 
+use crate::session::KaniSession;
+use kani_metadata::HarnessMetadata;
 use std::ffi::OsString;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-use crate::session::KaniSession;
-use kani_metadata::HarnessMetadata;
-
 impl KaniSession {
     pub fn exe_trace_main(&self, specialized_obj: &Path, harness: &HarnessMetadata) {
         if self.args.gen_exe_trace {
             let det_vals = parser::get_det_vals(specialized_obj);
-            let unit_test = format_unit_test(&harness.mangled_name, &det_vals);
+            let unit_test = format_unit_test(&harness.mangled_name, &det_vals[..]);
 
             println!("Executable trace:\n");
             println!("{}", unit_test);
@@ -106,17 +105,22 @@ impl KaniSession {
     }
 }
 
-fn format_unit_test(harness_name: &str, det_vals: &Vec<u8>) -> String {
+fn format_unit_test(harness_name: &str, det_vals: &[Vec<u8>]) -> String {
+    let vecs: Vec<String> = det_vals.iter().map(|v| format!("vec!{:?}", v)).collect();
+    let vecs_as_str = vecs.join(", ");
     format!(
         "
         #[test]
         fn kani_autogen_{}_exe_trace() {{
-            kani::DET_VALS.with(|det_vals| {{
-                *det_vals.borrow_mut() = vec!{:?};
+            let mut det_vals: Vec<Vec<u8>> = vec![{}];
+            kani::DET_VALS.with(|glob_det_vals| {{
+                det_vals.reverse();
+                let tmp_glob_det_vals = &mut *glob_det_vals.borrow_mut();
+                *tmp_glob_det_vals = det_vals;
             }});
             {}();
         }}",
-        harness_name, det_vals, harness_name
+        harness_name, vecs_as_str, harness_name
     )
 }
 
@@ -128,7 +132,7 @@ mod parser {
     use std::path::Path;
 
     /// Extract deterministic values from a failing harness.
-    pub fn get_det_vals(file: &Path) -> Vec<u8> {
+    pub fn get_det_vals(file: &Path) -> Vec<Vec<u8>> {
         let output_filename = append_path(file, "cbmc_output");
         let cbmc_out = get_cbmc_out(&output_filename);
         handle_cbmc_out(&cbmc_out)
@@ -137,63 +141,63 @@ mod parser {
     fn get_cbmc_out(results_filename: &Path) -> Value {
         let results_file = File::open(results_filename).unwrap();
         let reader = BufReader::new(results_file);
-        let cbmc_out: Value = serde_json::from_reader(reader).unwrap();
-        cbmc_out
+        serde_json::from_reader(reader).unwrap()
     }
 
-    fn handle_cbmc_out(cbmc_out: &Value) -> Vec<u8> {
-        let mut det_vals: Vec<u8> = Vec::new();
+    fn handle_cbmc_out(cbmc_out: &Value) -> Vec<Vec<u8>> {
+        let mut det_vals: Vec<Vec<u8>> = Vec::new();
         for general_msg in cbmc_out.as_array().unwrap() {
             let result_msg = &general_msg["result"];
             if !result_msg.is_null() {
                 for result_val in result_msg.as_array().unwrap() {
-                    let mut det_vals_for_result = handle_result(result_val);
-                    det_vals.append(&mut det_vals_for_result);
+                    handle_result(result_val, &mut det_vals);
                 }
             }
         }
-        // Det vals are popped off the Vec, so need to reverse.
-        det_vals.reverse();
         det_vals
     }
 
-    fn handle_result(result_val: &Value) -> Vec<u8> {
-        let mut det_vals: Vec<u8> = Vec::new();
-        let desc = result_val["description"].as_str().unwrap();
-        let status = result_val["status"].as_str().unwrap();
+    fn handle_result(result_val: &Value, det_vals: &mut Vec<Vec<u8>>) {
+        let desc = result_val["description"].to_string();
+        let status = result_val["status"].to_string();
 
-        if desc.contains("assertion failed") && status == "FAILURE" {
+        if desc.contains("assertion failed") && status == "\"FAILURE\"" {
             for trace_pt in result_val["trace"].as_array().unwrap() {
-                let det_val_opt = handle_trace_pt(trace_pt);
-                if let Some(det_val) = det_val_opt {
-                    det_vals.push(det_val);
-                }
+                handle_trace_pt(trace_pt, det_vals);
             }
         }
-
-        det_vals
     }
 
-    fn handle_trace_pt(trace_pt: &Value) -> Option<u8> {
-        let step_type = &trace_pt["stepType"];
-        if step_type != "assignment" {
-            return None;
-        }
+    fn handle_trace_pt(trace_pt: &Value, det_vals: &mut Vec<Vec<u8>>) {
+        if let (
+            Some(step_type),
+            Some(lhs),
+            Some(func),
+            Some(bit_det_val),
+            Some(_interp_det_val),
+            Some(width_u64),
+        ) = (
+            trace_pt["stepType"].as_str(),
+            trace_pt["lhs"].as_str(),
+            trace_pt["sourceLocation"]["function"].as_str(),
+            trace_pt["value"]["binary"].as_str(),
+            trace_pt["value"]["data"].as_str(),
+            trace_pt["value"]["width"].as_u64(),
+        ) && step_type == "assignment" && lhs == "var_0" && func.starts_with("kani::any_raw") {
+            // TODO: Change all these unwrap panics to send their errors up.
+            let width = width_u64 as usize;
+            assert_eq!(width, bit_det_val.len(), "Declared width wasn't same as width found in bit string");
+            let mut next_num: Vec<u8> = Vec::new();
 
-        let lhs = trace_pt["lhs"].as_str().unwrap();
-        if !lhs.starts_with("non_det_byte_arr") {
-            return None;
-        }
+            // Reverse because of endianess of CBMC trace.
+            for i in (0..width).step_by(8).rev() {
+                let str_chunk = &bit_det_val[i..i+8];
+                let next_byte = u8::from_str_radix(str_chunk, 2).unwrap();
+                next_num.push(next_byte);
+            }
 
-        let func = trace_pt["sourceLocation"]["function"].as_str().unwrap();
-        if !func.starts_with("kani::any_raw") {
-            return None;
+            det_vals.push(next_num);
+            // TODO: add in additional interpreted value
         }
-
-        let det_val_with_quotes = trace_pt["value"]["data"].to_string();
-        let det_val_no_quotes = &det_val_with_quotes[1..det_val_with_quotes.len() - 1];
-        let det_val_u8: u8 =
-            det_val_no_quotes.parse().expect("Couldn't parse the trace byte as a u8");
-        Some(det_val_u8)
     }
 }

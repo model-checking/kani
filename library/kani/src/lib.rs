@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 #![feature(rustc_attrs)] // Used for rustc_diagnostic_item.
 #![feature(min_specialization)] // Used for default implementation of Arbitrary.
+#![feature(generic_const_exprs)] // Used for getting size_of generic types
 
 pub mod arbitrary;
 pub mod invariant;
@@ -17,7 +18,7 @@ use std::cell::RefCell;
 #[cfg(feature = "exe_trace")]
 // Don't need locking mechanism if using thread local
 thread_local! {
-    pub static DET_VALS: RefCell<Vec<u8>> = RefCell::new(vec![]);
+    pub static DET_VALS: RefCell<Vec<Vec<u8>>> = RefCell::new(Vec::new());
 }
 
 /// Creates an assumption that will be valid after this statement run. Note that the assumption
@@ -111,27 +112,28 @@ pub fn any<T: Arbitrary>() -> T {
 /// ```
 ///
 #[inline(never)]
-pub unsafe fn any_raw<T>() -> T {
-    any_raw_internal()
+pub unsafe fn any_raw<T>() -> T
+where
+    [(); std::mem::size_of::<T>()]:,
+{
+    any_raw_internal::<T, { std::mem::size_of::<T>() }>()
 }
 
 #[rustc_diagnostic_item = "KaniAnyRaw"]
 #[inline(never)]
-unsafe fn any_raw_internal<T>() -> T {
-    // Will have byte size of T from Vec<u8>.
-    // Represent that in a var and check if compiler allows.
-    let size_t = 5;
-    assert!(std::mem::size_of::<T>() == size_t);
+unsafe fn any_raw_internal<T, const SIZE_T: usize>() -> T {
     #[cfg(feature = "exe_trace")]
     {
-        let mut bytes_t = [0; T];
+        let mut bytes_t = [0; SIZE_T];
         DET_VALS.with(|det_vals| {
             let tmp_det_vals = &mut *det_vals.borrow_mut();
-            for i in 0..T {
-                bytes_t[i] = tmp_det_vals.pop().unwrap();
+            let next_num = tmp_det_vals.pop().expect("Not enough det vals found");
+            assert_eq!(next_num.len(), SIZE_T, "Mismatch in num bytes in det val");
+            for i in 0..SIZE_T {
+                bytes_t[i] = next_num[i];
             }
         });
-        bytes_t
+        return std::mem::transmute_copy::<[u8; SIZE_T], T>(&bytes_t);
     }
 
     #[cfg(not(feature = "exe_trace"))]
