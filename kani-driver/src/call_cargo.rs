@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use anyhow::{Context, Result};
+use serde_json::Value;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -21,11 +22,23 @@ pub struct CargoOutputs {
     pub metadata: Vec<PathBuf>,
 }
 
+fn find_target_dir() -> PathBuf {
+    fn maybe_get_target() -> Option<PathBuf> {
+        let raw_metadata = Command::new("cargo").arg("metadata").output().ok()?;
+
+        let parsed_metadata: Value = serde_json::from_reader(&raw_metadata.stdout[..]).ok()?;
+
+        Some(parsed_metadata.as_object()?.get("target_directory")?.as_str()?.into())
+    }
+
+    maybe_get_target().unwrap_or(PathBuf::from("target"))
+}
+
 impl KaniSession {
     /// Calls `cargo_build` to generate `*.symtab.json` files in `target_dir`
     pub fn cargo_build(&self) -> Result<CargoOutputs> {
         let build_target = env!("TARGET"); // see build.rs
-        let target_dir = self.args.target_dir.as_ref().unwrap_or(&PathBuf::from("target")).clone();
+        let target_dir = self.args.target_dir.as_ref().unwrap_or(&find_target_dir()).clone();
         let outdir = target_dir.join(build_target).join("debug/deps");
 
         let flag_env = {
