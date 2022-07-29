@@ -5,8 +5,8 @@
 
 macro_rules! verify_no_overflow {
     ($cf: ident, $uf: tt) => {{
-        let a: u8 = kani::nondet();
-        let b: u8 = kani::nondet();
+        let a: u8 = kani::any();
+        let b: u8 = kani::any();
         let checked = a.$cf(b);
         kani::assume(checked.is_some());
         let unchecked = unsafe { a $uf b };

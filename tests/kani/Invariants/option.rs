@@ -8,12 +8,12 @@ extern crate kani;
 use kani::Invariant;
 
 struct MyType {
-    pub val: char,
+    pub val: u8,
 }
 
 unsafe impl kani::Invariant for MyType {
     fn is_valid(&self) -> bool {
-        self.val.is_valid()
+        self.val < 100
     }
 }
 
@@ -21,7 +21,7 @@ unsafe impl kani::Invariant for MyType {
 fn main() {
     let option: Option<MyType> = kani::any();
     match option {
-        Some(v) => assert!(v.is_valid() && v.val <= char::MAX),
+        Some(v) => assert!(v.is_valid()),
         None => (),
     }
 }

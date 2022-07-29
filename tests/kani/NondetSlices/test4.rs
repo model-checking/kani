@@ -13,7 +13,8 @@ use kani::Invariant;
 #[kani::proof]
 fn check_any_slice_valid() {
     let s: AnySlice<char, 3> = any_slice();
-    for i in s.get_slice() {
-        assert!(i.is_valid());
+    for c in s.get_slice() {
+        kani::assume(*c != char::MAX);
+        assert!(*c < char::MAX);
     }
 }
