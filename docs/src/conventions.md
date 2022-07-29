@@ -5,13 +5,13 @@
 We automate most of our formatting preferences. Our CI will run format checkers for PRs and pushes.
 These checks are required for merging any PR.
 
-For rust, we use [rustfmt](https://github.com/rust-lang/rustfmt)
-which is configured via [rustfmt.toml](https://github.com/model-checking/kani/blob/main/rustfmt.toml) file.
-We are also in the process of enabling clippy.
+For Rust, we use [rustfmt](https://github.com/rust-lang/rustfmt)
+which is configured via the [rustfmt.toml](https://github.com/model-checking/kani/blob/main/rustfmt.toml) file.
+We are also in the process of enabling `clippy`.
 Because of that, we still have a couple of lints disabled (see [.cargo/config](https://github.com/model-checking/kani/blob/main/.cargo/config.toml) for the updated list).
 
-We also have a bit of C code and python in our repository.
-For C we use clang-format and for python scripts we use autopep8.
+We also have a bit of C and Python code in our repository.
+For C we use `clang-format` and for Python scripts we use `autopep8`.
 See [.clang-format](https://githubcom/model-checking/kani/blob/main/.clang-format)
 and [pyproject.toml](https://github.com/model-checking/kani/blob/main/scripts/pyproject.toml)
 for their configuration.
@@ -42,7 +42,7 @@ When modifying a file from another project, please keep their headers as is and 
 ```
 
 We also have automated checks for the copyright notice.
-There are a few file types where this rules doesn't apply.
+There are a few file types where this rule doesn't apply.
 You can see that list in the [copyright-exclude](
 https://github.com/model-checking/kani/blob/main/scripts/ci/copyright-exclude) file.
 
@@ -51,7 +51,7 @@ https://github.com/model-checking/kani/blob/main/scripts/ci/copyright-exclude) f
 
 We are developing Kani to provide assurance that critical Rust components are verifiably free of certain classes of
 security and correctness issues.
-Thus, it is critical that we provide a verification tool is sound.
+Thus, it is critical that we provide a verification tool that is sound.
 For the class of errors that Kani can verify, we should not produce a “No Error” result if there was in fact an
 error in the code being verified, i.e., it has no
 “False Negatives”.
