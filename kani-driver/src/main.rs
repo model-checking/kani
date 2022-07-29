@@ -126,6 +126,7 @@ fn standalone_main() -> Result<()> {
         let result = ctx.check_harness(&specialized_obj, &report_dir, harness)?;
         if result == VerificationStatus::Failure {
             failed_harnesses.push(harness);
+            ctx.exe_trace_main(&specialized_obj, harness);
         }
     }
 
