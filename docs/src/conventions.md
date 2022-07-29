@@ -41,6 +41,9 @@ When modifying a file from another project, please keep their headers as is and 
 // See GitHub history for details.
 ```
 
+Note: The comment escape characters will depend on the type of file you are working with. E.g.: For rust start the 
+header with `//`, but for python start with `#`.
+
 We also have automated checks for the copyright notice.
 There are a few file types where this rule doesn't apply.
 You can see that list in the [copyright-exclude](
@@ -56,7 +59,7 @@ For the class of errors that Kani can verify, we should not produce a “No Erro
 error in the code being verified, i.e., it has no
 “False Negatives”.
 
-Because of that, we caution on the side of correctness.
+Because of that, we bias on the side of correctness.
 Any incorrect modeling
 that may trigger an unsound analysis that cannot be fixed in the short term should be mitigated.
 Here are a few ways how we do that.
@@ -73,8 +76,8 @@ Even though this doesn't provide users the best experience, you are encouraged t
 assumptions you make during development.
 Those check can be on the form of `assert!()` or `unreachable!()`
 statement.
-Please provide a meaningful message to help user understand why something failed, and also help us figure out what
-went wrong.
+Please provide a meaningful message to help user understand why something failed, and try to explain, at least with 
+a comment, why this is the case.
 
 We don't formally use any specific formal representation of [function contract](https://en.wikipedia.org/wiki/Design_by_contract),
 but whenever possible we do instrument the code with assertions that may represent the function pre- and
@@ -85,11 +88,13 @@ post-conditions to ensure we are modeling the user code correctly.
 In cases where Kani fails to model a certain instruction or local construct that doesn't have a global effect,
 we encode this failure as a verification error.
 I.e., we generate an assertion failure instead of the construct we are modeling using
-[`codegen_unimplemented()`](https://github.com/model-checking/kani/blob/f719b565968568335d9be03ef27c5d05bb8fd0b7/kani-compiler/src/codegen_cprover_gotoc/utils/utils.rs#L50).
+[`codegen_unimplemented()`](https://github.com/model-checking/kani/blob/f719b565968568335d9be03ef27c5d05bb8fd0b7/kani-compiler/src/codegen_cprover_gotoc/utils/utils.rs#L50),
+which blocks the execution whenever this construct is reached.
 
 This will allow users to verify their crate successfully as long as
 that construct is not reachable in any harness. If a harness has at least one possible execution path that reaches
-such construct, Kani will fail the verification and it will mark all checks with `UNDETERMINED` status.
+such construct, Kani will fail the verification, and it will mark all checks, other than failed checks, with 
+`UNDETERMINED` status.
 
 ### Create detailed issues for "TODO" tasks
 
@@ -112,5 +117,7 @@ Avoid compromising the code quality if the performance gain is not significant.
 
 Here are few tips that can help the readability of your code:
 
-- Sort match arms alphabetically.
-- Use concise but meaningful names.
+- Sort match arms, enum variants, and struct fields alphabetically.
+- Prefer concise but meaningful names.
+- Prefer exhaustive matches.
+- Prefer declarative over imperative programming.
