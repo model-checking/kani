@@ -149,12 +149,8 @@ fn format_unit_test(
         "
         #[test]
         fn {}() {{
-            let mut det_vals: Vec<Vec<u8>> = vec![{}];
-            kani::DET_VALS.with(|glob_det_vals| {{
-                det_vals.reverse();
-                let tmp_glob_det_vals = &mut *glob_det_vals.borrow_mut();
-                *tmp_glob_det_vals = det_vals;
-            }});
+            let det_vals: Vec<Vec<u8>> = vec![{}];
+            kani::exe_trace_init(det_vals);
             {}();
         }}",
         exe_trace_func_name, vecs_as_str, harness_name

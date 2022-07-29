@@ -140,6 +140,15 @@ unsafe fn any_raw_internal<T, const SIZE_T: usize>() -> T {
     unimplemented!("Kani any_raw_inner");
 }
 
+#[cfg(feature = "exe_trace")]
+pub fn exe_trace_init(mut det_vals: Vec<Vec<u8>>) {
+    DET_VALS.with(|glob_det_vals| {
+        det_vals.reverse();
+        let tmp_glob_det_vals = &mut *glob_det_vals.borrow_mut();
+        *tmp_glob_det_vals = det_vals;
+    });
+}
+
 /// This function has been split into a safe and unsafe functions: `kani::any` and `kani::any_raw`.
 #[deprecated]
 #[inline(never)]
