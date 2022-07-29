@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use anyhow::{Context, Result};
-use serde_json::Value;
+use cargo_metadata::MetadataCommand;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -25,11 +25,7 @@ pub struct CargoOutputs {
 /// Finds the "target" directory while considering workspaces,
 fn find_target_dir() -> PathBuf {
     fn maybe_get_target() -> Option<PathBuf> {
-        let raw_metadata = Command::new("cargo").arg("metadata").output().ok()?;
-
-        let parsed_metadata: Value = serde_json::from_reader(&raw_metadata.stdout[..]).ok()?;
-
-        Some(parsed_metadata.as_object()?.get("target_directory")?.as_str()?.into())
+        Some(MetadataCommand::new().exec().ok()?.target_directory.into())
     }
 
     maybe_get_target().unwrap_or(PathBuf::from("target"))
