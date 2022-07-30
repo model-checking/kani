@@ -12,7 +12,7 @@ if [ -z "${CBMC_VERSION:-}" ]; then
   exit 1
 fi
 
-# Install CBMC for macOS 10.15 from CBMC tap
+# Install CBMC for macOS from CBMC tap
 # https://github.com/diffblue/cbmc/blob/develop/doc/ADR/homebrew_tap.md
 brew tap diffblue/cbmc
 brew install diffblue/cbmc/cbmc@${CBMC_VERSION}

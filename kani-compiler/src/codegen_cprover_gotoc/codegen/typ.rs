@@ -25,8 +25,6 @@ use rustc_target::abi::{
 };
 use rustc_target::spec::abi::Abi;
 use std::collections::BTreeMap;
-use std::convert::TryInto;
-use std::fmt::Debug;
 use std::iter;
 use std::iter::FromIterator;
 use tracing::{debug, trace, warn};
@@ -717,24 +715,18 @@ impl<'tcx> GotocCtx<'tcx> {
         self.codegen_ty_tuple_like(t, tys.to_vec())
     }
 
-    fn codegen_struct_padding<T>(
+    fn codegen_struct_padding(
         &self,
-        current_offset_in_bits: T,
-        next_offset_in_bits: T,
+        current_offset: Size,
+        next_offset: Size,
         idx: usize,
-    ) -> Option<DatatypeComponent>
-    where
-        T: TryInto<u64>,
-        T::Error: Debug,
-    {
-        let current_offset: u64 = current_offset_in_bits.try_into().unwrap();
-        let next_offset: u64 = next_offset_in_bits.try_into().unwrap();
+    ) -> Option<DatatypeComponent> {
         assert!(current_offset <= next_offset);
         if current_offset < next_offset {
             // We need to pad to the next offset
-            let bits = next_offset - current_offset;
+            let padding_size = next_offset - current_offset;
             let name = format!("$pad{}", idx);
-            Some(DatatypeComponent::padding(&name, bits))
+            Some(DatatypeComponent::padding(&name, padding_size.bits()))
         } else {
             None
         }
@@ -747,10 +739,10 @@ impl<'tcx> GotocCtx<'tcx> {
         layout: &Layout,
         idx: usize,
     ) -> Option<DatatypeComponent> {
-        let align = layout.align().abi.bits();
-        let overhang = size.bits() % align;
-        if overhang != 0 {
-            self.codegen_struct_padding(size.bits(), size.bits() + align - overhang, idx)
+        let align = Size::from_bits(layout.align().abi.bits());
+        let overhang = Size::from_bits(size.bits() % align.bits());
+        if overhang != Size::ZERO {
+            self.codegen_struct_padding(size, size + align - overhang, idx)
         } else {
             None
         }
@@ -770,16 +762,16 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         flds: Vec<(String, Ty<'tcx>)>,
         layout: &Layout,
-        initial_offset: usize,
+        initial_offset: Size,
     ) -> Vec<DatatypeComponent> {
         match &layout.fields() {
             FieldsShape::Arbitrary { offsets, memory_index } => {
                 assert_eq!(flds.len(), offsets.len());
                 assert_eq!(offsets.len(), memory_index.len());
                 let mut final_fields = Vec::with_capacity(flds.len());
-                let mut offset: u64 = initial_offset.try_into().unwrap();
+                let mut offset = initial_offset;
                 for idx in layout.fields().index_by_increasing_offset() {
-                    let fld_offset = offsets[idx].bits();
+                    let fld_offset = offsets[idx];
                     let (fld_name, fld_ty) = &flds[idx];
                     if let Some(padding) =
                         self.codegen_struct_padding(offset, fld_offset, final_fields.len())
@@ -790,10 +782,10 @@ impl<'tcx> GotocCtx<'tcx> {
                     final_fields.push(DatatypeComponent::field(fld_name, self.codegen_ty(*fld_ty)));
                     let layout = self.layout_of(*fld_ty);
                     // we compute the overall offset of the end of the current struct
-                    offset = fld_offset + layout.size.bits();
+                    offset = fld_offset + layout.size;
                 }
                 final_fields.extend(self.codegen_alignment_padding(
-                    Size::from_bits(offset),
+                    offset,
                     &layout,
                     final_fields.len(),
                 ));
@@ -810,7 +802,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let flds: Vec<_> =
             tys.iter().enumerate().map(|(i, t)| (GotocCtx::tuple_fld_name(i), *t)).collect();
         // tuple cannot have other initial offset
-        self.codegen_struct_fields(flds, &layout.layout, 0)
+        self.codegen_struct_fields(flds, &layout.layout, Size::ZERO)
     }
 
     /// A closure in Rust MIR takes two arguments:
@@ -1004,9 +996,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let field_ty = type_and_layout.field(ctx, idx).ty;
                 let field_offset = type_and_layout.fields.offset(idx);
                 let field_size = type_and_layout.field(ctx, idx).size;
-                if let Some(padding) =
-                    ctx.codegen_struct_padding(offset.bits(), field_offset.bits(), idx)
-                {
+                if let Some(padding) = ctx.codegen_struct_padding(offset, field_offset, idx) {
                     fields.push(padding);
                 }
                 fields.push(DatatypeComponent::Field {
@@ -1215,7 +1205,7 @@ impl<'tcx> GotocCtx<'tcx> {
         self.ensure_struct(self.ty_mangled_name(ty), self.ty_pretty_name(ty), |ctx, _| {
             let variant = &def.variants().raw[0];
             let layout = ctx.layout_of(ty);
-            ctx.codegen_variant_struct_fields(variant, subst, &layout.layout, 0)
+            ctx.codegen_variant_struct_fields(variant, subst, &layout.layout, Size::ZERO)
         })
     }
 
@@ -1225,7 +1215,7 @@ impl<'tcx> GotocCtx<'tcx> {
         variant: &VariantDef,
         subst: &'tcx InternalSubsts<'tcx>,
         layout: &Layout,
-        initial_offset: usize,
+        initial_offset: Size,
     ) -> Vec<DatatypeComponent> {
         let flds: Vec<_> =
             variant.fields.iter().map(|f| (f.name.to_string(), f.ty(self.tcx, subst))).collect();
@@ -1307,7 +1297,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         Some(variant) => {
                             // a single enum is pretty much like a struct
                             let layout = ctx.layout_of(ty).layout;
-                            ctx.codegen_variant_struct_fields(variant, subst, &layout, 0)
+                            ctx.codegen_variant_struct_fields(variant, subst, &layout, Size::ZERO)
                         }
                     }
                 }
@@ -1331,7 +1321,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             // of each union field is the name of the corresponding discriminant.
                             let discr_t = ctx.codegen_enum_discr_typ(ty);
                             let int = ctx.codegen_ty(discr_t);
-                            let discr_offset = ctx.layout_of(discr_t).size.bits_usize();
+                            let discr_offset = ctx.layout_of(discr_t).size;
                             let initial_offset =
                                 ctx.variant_min_offset(variants).unwrap_or(discr_offset);
                             let mut fields = vec![DatatypeComponent::field("case", int)];
@@ -1382,7 +1372,14 @@ impl<'tcx> GotocCtx<'tcx> {
                                 ?subst,
                                 "codegen_enum: Niche"
                             );
-                            ctx.codegen_enum_cases(name, pretty_name, adtdef, subst, variants, 0)
+                            ctx.codegen_enum_cases(
+                                name,
+                                pretty_name,
+                                adtdef,
+                                subst,
+                                variants,
+                                Size::ZERO,
+                            )
                         }
                     }
                 }
@@ -1393,7 +1390,7 @@ impl<'tcx> GotocCtx<'tcx> {
     pub(crate) fn variant_min_offset(
         &self,
         variants: &IndexVec<VariantIdx, Layout>,
-    ) -> Option<usize> {
+    ) -> Option<Size> {
         variants
             .iter()
             .filter_map(|lo| {
@@ -1407,8 +1404,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     // fields.
                     Some(
                         lo.fields()
-                            .offset(lo.fields().index_by_increasing_offset().nth(0).unwrap())
-                            .bits_usize(),
+                            .offset(lo.fields().index_by_increasing_offset().nth(0).unwrap()),
                     )
                 }
             })
@@ -1481,7 +1477,7 @@ impl<'tcx> GotocCtx<'tcx> {
         def: &'tcx AdtDef,
         subst: &'tcx InternalSubsts<'tcx>,
         layouts: &IndexVec<VariantIdx, Layout>,
-        initial_offset: usize,
+        initial_offset: Size,
     ) -> Vec<DatatypeComponent> {
         def.variants()
             .iter_enumerated()
@@ -1513,7 +1509,7 @@ impl<'tcx> GotocCtx<'tcx> {
         case: &VariantDef,
         subst: &'tcx InternalSubsts<'tcx>,
         variant: &Layout,
-        initial_offset: usize,
+        initial_offset: Size,
     ) -> Type {
         let case_name = format!("{}::{}", name, case.name);
         let pretty_name = format!("{}::{}", pretty_name, case.name);

@@ -90,6 +90,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "camino"
+version = "1.0.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "869119e97797867fd90f5e22af7d0bd274bd4635ebb9eb68c04f3f513ae6c412"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "cargo-platform"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cbdb825da8a5df079a43676dbe042702f1707b1109f713a01420fbb4cc71fa27"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "cargo_metadata"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3abb7553d5b9b8421c6de7cb02606ff15e0c6eea7d8eadd75ef013fd636bec36"
+dependencies = [
+ "camino",
+ "cargo-platform",
+ "semver",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -127,7 +158,7 @@ dependencies = [
 
 [[package]]
 name = "cprover_bindings"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "lazy_static",
  "linear-map",
@@ -249,14 +280,14 @@ checksum = "112c678d4050afce233f4f2852bb2eb519230b3cf12f33585275537d7e41578d"
 
 [[package]]
 name = "kani"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "kani_macros",
 ]
 
 [[package]]
 name = "kani-compiler"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "ar",
  "atty",
@@ -282,9 +313,10 @@ dependencies = [
 
 [[package]]
 name = "kani-driver"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "anyhow",
+ "cargo_metadata",
  "clap",
  "glob",
  "kani_metadata",
@@ -296,7 +328,7 @@ dependencies = [
 
 [[package]]
 name = "kani-verifier"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "home",
@@ -305,11 +337,11 @@ dependencies = [
 
 [[package]]
 name = "kani_macros"
-version = "0.6.0"
+version = "0.7.0"
 
 [[package]]
 name = "kani_metadata"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "cprover_bindings",
  "serde",
@@ -317,7 +349,7 @@ dependencies = [
 
 [[package]]
 name = "kani_queries"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "tracing",
 ]
@@ -655,6 +687,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d29ab0c6d3fc0ee92fe66e2d99f700eab17a8d57d1c1d3b748380fb20baa78cd"
 
 [[package]]
+name = "semver"
+version = "1.0.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2333e6df6d6598f2b1974829f853c2b4c5f4a6e503c10af918081aa6f8564e1"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "serde"
 version = "1.0.138"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -717,7 +758,7 @@ checksum = "2fd0db749597d91ff862fd1d55ea87f7855a744a8425a64695b6fca237d1dad1"
 
 [[package]]
 name = "std"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "kani",
 ]

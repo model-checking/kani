@@ -3,7 +3,7 @@
 
 [package]
 name = "kani-driver"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2021"
 description = "Build a project with Kani and run all proof harnesses"
 license = "MIT OR Apache-2.0"
@@ -13,6 +13,7 @@ publish = false
 
 [dependencies]
 kani_metadata = { path = "../kani_metadata" }
+cargo_metadata = "0.15.0"
 anyhow = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

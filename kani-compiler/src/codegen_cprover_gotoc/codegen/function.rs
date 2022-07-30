@@ -30,8 +30,6 @@ impl<'tcx> GotocCtx<'tcx> {
             "fmt::ArgumentV1::<'a>::as_usize" => true,
             // https://github.com/model-checking/kani/issues/282
             "bridge::closure::Closure::<'a, A, R>::call" => true,
-            // Generators
-            name if name.starts_with("<std::future::from_generator::GenFuture<T>") => true,
             name if name.contains("reusable_box::ReusableBoxFuture") => true,
             "tokio::sync::Semaphore::acquire_owned::{closure#0}" => true,
             _ => false,
