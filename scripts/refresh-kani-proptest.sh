@@ -27,4 +27,4 @@ if [ ! -f "$PROPTEST_SYMTAB_PATH" ] || [[ "$PROPTEST_SYMTAB_PATH" -ot "$KANI_BIN
 fi
 
 # delete the normal rlib to avoid confusion.
-rm $(find $KANI_REPO_ROOT/target/debug -name '*libproptest*.rlib') || true
+rm $(find $KANI_REPO_ROOT/target/debug -name '*libproptest*.rlib') 2> /dev/null || true
