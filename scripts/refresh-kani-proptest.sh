@@ -19,10 +19,6 @@ if [ ! -f "$PROPTEST_SYMTAB_PATH" ] || [[ "$PROPTEST_SYMTAB_PATH" -ot "$KANI_BIN
     (
         cd $KANI_REPO_ROOT/library/proptest;
         cargo kani --only-codegen;
-
-        # TODO: not needed after workspace PR #1421 merges.
-        cp -r ./target $KANI_REPO_ROOT;
-        rm -rf ./target
     )
 fi
 
