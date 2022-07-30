@@ -9,5 +9,9 @@ fn main() {
     // https://doc.rust-lang.org/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-crates
     // https://doc.rust-lang.org/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-build-scripts
     // So "repeat" the info from build script (here) to our crate's build environment.
-    println!("cargo:rustc-env=TARGET={}", var("TARGET").unwrap());
+
+    let target = var("TARGET").unwrap();
+    let out_dir = var("OUT_DIR").unwrap();
+    println!("cargo:rustc-env=KANI_EXTERN_DIR={}/../../../../{}/debug/deps", out_dir, target);
+    println!("cargo:rustc-env=TARGET={}", target);
 }
