@@ -19,6 +19,7 @@ then
 fi
 KANI_PATH=${KANI_CANDIDATES[0]}
 
+$SCRIPT_DIR/refresh-kani-proptest.sh
 CARGO_TOML_SAVE_FILE='.save-cargo.toml'
 if [[ "${PROPTEST+x}" == "1" ]]; then
     cp Cargo.toml $CARGO_TOML_SAVE_FILE
