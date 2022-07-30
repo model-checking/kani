@@ -1,5 +1,1 @@
-SUCCESS\
-assertion failed: rating.get() <= 5
-SUCCESS\
-assertion failed: Rating::from(rating.get()).is_some()
 VERIFICATION:- SUCCESSFUL

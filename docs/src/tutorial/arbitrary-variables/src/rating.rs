@@ -3,20 +3,21 @@
 
 // ANCHOR: rating_struct
 #[derive(Copy, Clone)]
-pub struct Rating {
-    value: u8,
+enum Rating {
+    One,
+    Two,
+    Three,
 }
 
 impl Rating {
-    pub fn from(value: u8) -> Option<Rating> {
-        if value <= 5 { Some(Rating { value }) } else { None }
-    }
-
-    pub fn get(&self) -> u8 {
-        self.value
+    fn as_int(&self) -> u8 {
+        match self {
+            Rating::One => 1,
+            Rating::Two => 2,
+            Rating::Three => 3,
+        }
     }
 }
-
 // ANCHOR_END: rating_struct
 
 #[cfg(kani)]
@@ -24,9 +25,13 @@ mod verification {
     use super::*;
 
     // ANCHOR: rating_invariant
-    unsafe impl kani::Invariant for Rating {
-        fn is_valid(&self) -> bool {
-            self.value <= 5
+    impl kani::Arbitrary for Rating {
+        fn any() -> Self {
+            match kani::any::<u8>() {
+                0 => Rating::One,
+                1 => Rating::Two,
+                _ => Rating::Three,
+            }
         }
     }
     // ANCHOR_END: rating_invariant
@@ -34,9 +39,8 @@ mod verification {
     // ANCHOR: verify_rating
     #[kani::proof]
     pub fn check_rating() {
-        let rating = kani::any::<Rating>();
-        assert!(rating.get() <= 5);
-        assert!(Rating::from(rating.get()).is_some());
+        let rating: Rating = kani::any();
+        assert!((1..=3).contains(&rating.as_int()));
     }
     // ANCHOR_END: verify_rating
 }
