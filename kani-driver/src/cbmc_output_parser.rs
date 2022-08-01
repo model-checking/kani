@@ -585,7 +585,7 @@ fn format_result(properties: &Vec<Property>, show_checks: bool) -> String {
 
         if show_checks {
             // TODO: Add color to status if printing to terminal.
-            // <TODO_URL>
+            // <https://github.com/model-checking/kani/issues/1431>
             let check_id = format!("Check {}: {}\n", index, name);
             let status_msg = format!("\t - Status: {}\n", status);
             let descrition_msg = format!("\t - Description: \"{}\"\n", description);
@@ -641,7 +641,7 @@ fn format_result(properties: &Vec<Property>, show_checks: bool) -> String {
     // Ideally, we should generate two `ParserItem::Message` and push them
     // into the parser iterator so they are the next messages to be processed.
     // However, we haven't figured out the best way to do this for now.
-    // <TODO_URL>
+    // <https://github.com/model-checking/kani/issues/1432>
     if has_check_failure(&properties, UNSUPPORTED_CONSTRUCT_DESC) {
         result_str.push_str(
             "** WARNING: A Rust construct that is not currently supported \
