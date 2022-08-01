@@ -710,29 +710,22 @@ pub fn postprocess_result(
     let has_reachable_unsupported_constructs =
         has_check_failure(&properties, UNSUPPORTED_CONSTRUCT_DESC);
     let has_failed_unwinding_asserts = has_check_failure(&properties, UNWINDING_ASSERT_DESC);
-    // println!("properties: {:?}\n", properties);
     // Then, determine if there are reachable undefined functions, and change
     // their description to highlight this fact
     let (properties_with_undefined, has_reachable_undefined_functions) =
         modify_undefined_function_checks(properties);
-    // println!("properties_with_undefined: {:?}\n", properties_with_undefined);
     // Split all properties into two groups: Regular properties and reachability checks
     let (properties_without_reachs, reach_checks) = filter_reach_checks(properties_with_undefined);
-    // println!("properties_without_reachs: {:?}\n", properties_without_reachs);
-    // println!("reach_checks: {:?}\n", reach_checks);
     // Filter out successful sanity checks introduced during compilation
     let properties_without_sanity_checks = filter_sanity_checks(properties_without_reachs);
-    // println!("properties_without_sanity_checks: {:?}\n", properties_without_sanity_checks);
     // Annotate properties with the results from reachability checks
     let properties_annotated =
         annotate_properties_with_reach_results(properties_without_sanity_checks, reach_checks);
-    // println!("properties_annotated: {:?}\n", properties_annotated);
     // Remove reachability check IDs from regular property descriptions
     let properties_without_ids = remove_check_ids_from_description(properties_annotated);
-    // println!("properties_without_ids: {:?}\n", properties_without_ids);
 
     // Filter out extra pointer checks if needed
-    let new_properties = if !extra_ptr_checks {
+    let properties_filtered = if !extra_ptr_checks {
         filter_ptr_checks(properties_without_ids)
     } else {
         properties_without_ids
@@ -741,11 +734,11 @@ pub fn postprocess_result(
         || has_failed_unwinding_asserts
         || has_reachable_undefined_functions;
     // Update the status of properties according to reachability checks, among other things
-    let updated_properties =
-        update_properties_with_reach_status(new_properties, has_fundamental_failures);
+    let properties_updated =
+        update_properties_with_reach_status(properties_filtered, has_fundamental_failures);
 
-    let overall_result = determine_verification_result(&updated_properties);
-    (updated_properties, overall_result)
+    let overall_result = determine_verification_result(&properties_updated);
+    (properties_updated, overall_result)
 }
 
 /// Determines if there is property with status `FAILURE` and the given description
