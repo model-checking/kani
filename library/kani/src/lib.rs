@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 #![feature(rustc_attrs)] // Used for rustc_diagnostic_item.
 #![feature(min_specialization)] // Used for default implementation of Arbitrary.
+#![allow(incomplete_features)]
 #![feature(generic_const_exprs)] // Used for getting size_of generic types
 
 pub mod arbitrary;

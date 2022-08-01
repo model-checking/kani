@@ -1,5 +1,5 @@
 // Copyright Kani Contributors
-// SPDX-License-Identifier: Apache-2.0 OR MI&T
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use crate::session::KaniSession;
 use kani_metadata::HarnessMetadata;
