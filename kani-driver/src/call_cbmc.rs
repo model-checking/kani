@@ -45,7 +45,7 @@ impl KaniSession {
         } else {
             // Spawn the CBMC process and process its output below
             let cbmc_process = self.run_piped(cmd)?;
-            if cbmc_process.is_some() {
+            if let Some(..) = cbmc_process {
                 // The introduction of reachability checks forces us to decide
                 // the verification result based on the postprocessing of CBMC results.
                 let processed_result = process_cbmc_output(

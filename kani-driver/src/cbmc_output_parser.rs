@@ -259,7 +259,7 @@ impl std::fmt::Display for SourceLocation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut fmt_str = String::new();
         if self.file.is_some() {
-            let file_str = format!("{}", filepath(self.file.clone().unwrap()));
+            let file_str = filepath(self.file.clone().unwrap()).to_string();
             fmt_str.push_str(file_str.as_str());
             if self.line.is_some() {
                 let line_str = format!(":{}", self.line.clone().unwrap());
@@ -287,7 +287,7 @@ fn filepath(file: String) -> String {
     let cur_dir = env::current_dir().unwrap();
 
     let diff_path = diff_paths(file_path, cur_dir);
-    if diff_path.is_some() {
+    if let Some(..) = diff_path {
         diff_path.unwrap().into_os_string().into_string().unwrap()
     } else {
         file
@@ -353,7 +353,7 @@ struct Parser<'a, 'b> {
 
 impl<'a, 'b> Parser<'a, 'b> {
     pub fn new(buffer: &'a mut BufReader<&'b mut ChildStdout>) -> Self {
-        Parser { input_so_far: String::new(), buffer: buffer }
+        Parser { input_so_far: String::new(), buffer }
     }
 
     /// Triggers an action based on the input:
@@ -362,7 +362,7 @@ impl<'a, 'b> Parser<'a, 'b> {
     ///  * Curly closing bracket ('}') preceded by two spaces will trigger the
     ///    `ProcessItem` action.
     fn triggers_action(&self, input: String) -> Option<Action> {
-        if input.starts_with("[") || input.starts_with("]") {
+        if input.starts_with('[') || input.starts_with(']') {
             return Some(Action::ClearInput);
         }
         if input.starts_with("  }") {
@@ -403,7 +403,7 @@ impl<'a, 'b> Parser<'a, 'b> {
     fn parse_item(&self) -> ParserItem {
         let string_without_delimiter = &self.input_so_far.as_str()[0..self.input_so_far.len() - 2];
         let block: Result<ParserItem, _> = serde_json::from_str(string_without_delimiter);
-        if block.is_ok() {
+        if let Ok(..) = block {
             return block.unwrap();
         }
         let complete_string = &self.input_so_far.as_str()[0..self.input_so_far.len()];
@@ -417,8 +417,7 @@ impl<'a, 'b> Parser<'a, 'b> {
     pub fn process_line(&mut self, input: String) -> Option<ParserItem> {
         self.add_to_input(input.clone());
         let action_required = self.triggers_action(input.clone());
-        if action_required.is_some() {
-            let action = action_required.unwrap();
+        if let Some(action) = action_required {
             let possible_item = self.do_action(action);
             return possible_item;
         }
@@ -532,8 +531,8 @@ fn format_item(item: &ParserItem, output_format: &OutputFormat) -> Option<String
 /// Formats an item using the regular output format
 fn format_item_regular(item: &ParserItem) -> Option<String> {
     match item {
-        ParserItem::Program { program } => Some(format!("{}", program)),
-        ParserItem::Message { message_text, .. } => Some(format!("{}", message_text)),
+        ParserItem::Program { program } => Some(program.to_string()),
+        ParserItem::Message { message_text, .. } => Some(message_text.to_string()),
         ParserItem::Result { result } => Some(format_result(result, true)),
         _ => None,
     }
@@ -598,7 +597,7 @@ fn format_result(properties: &Vec<Property>, show_checks: bool) -> String {
                 let location_msg = format!("\t - Location: {}\n", location);
                 result_str.push_str(location_msg.as_str());
             }
-            result_str.push_str("\n");
+            result_str.push('\n');
         }
 
         index += 1;
@@ -622,12 +621,12 @@ fn format_result(properties: &Vec<Property>, show_checks: bool) -> String {
         let unreachable_str = format!("{} unreachable", number_tests_unreachable);
         other_status.push(unreachable_str);
     }
-    if other_status.len() > 0 {
+    if !other_status.is_empty() {
         result_str.push_str(" (");
         result_str.push_str(&other_status.join(","));
-        result_str.push_str(")");
+        result_str.push(')');
     }
-    result_str.push_str("\n");
+    result_str.push('\n');
 
     for prop in failed_tests {
         let failure_message = build_failure_message(prop.description.clone(), &prop.trace.clone());
@@ -797,8 +796,7 @@ fn get_readable_description(property: &Property) -> String {
     let class_id = extract_property_class(property).unwrap();
 
     let description_alternatives = CBMC_ALT_DESCRIPTIONS.get(class_id);
-    if description_alternatives.is_some() {
-        let alt_descriptions = description_alternatives.unwrap();
+    if let Some(alt_descriptions) = description_alternatives {
         for (desc_to_match, opt_desc_to_replace) in alt_descriptions {
             if original.contains(desc_to_match) {
                 if opt_desc_to_replace.is_some() {
@@ -866,7 +864,7 @@ fn remove_check_ids_from_description(mut properties: Vec<Property>) -> Vec<Prope
 ///
 /// Property strings have the format `([<function>.]<property_class_id>.<counter>)`
 fn extract_property_class(property: &Property) -> Option<&str> {
-    let property_class: Vec<&str> = property.property.rsplitn(3, ".").collect();
+    let property_class: Vec<&str> = property.property.rsplitn(3, '.').collect();
     if property_class.len() > 1 { Some(property_class[1]) } else { None }
 }
 
@@ -965,10 +963,10 @@ fn annotate_properties_with_reach_results(
             let prop_match_id =
                 check_marker_pat.captures(description.as_str()).unwrap().get(0).unwrap().as_str();
             // Get the status associated to the ID we captured
-            let reach_status = reach_map.get(&prop_match_id.to_string());
+            let reach_status_opt = reach_map.get(&prop_match_id.to_string());
             // Update the reachability status of the property
-            if reach_status.is_some() {
-                prop.reach = Some(*reach_status.unwrap());
+            if let Some(reach_status) = reach_status_opt {
+                prop.reach = Some(*reach_status);
             }
         }
     }
@@ -976,7 +974,7 @@ fn annotate_properties_with_reach_results(
 }
 
 /// Gets the overall verification result (i.e., failure if any properties show failure)
-fn determine_verification_result(properties: &Vec<Property>) -> bool {
+fn determine_verification_result(properties: &[Property]) -> bool {
     let number_failed_properties =
         properties.iter().filter(|prop| prop.status == CheckStatus::Failure).count();
     number_failed_properties == 0
