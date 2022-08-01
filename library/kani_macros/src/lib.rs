@@ -44,7 +44,7 @@ pub fn proof(_attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn proof(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut result = TokenStream::new();
 
-    assert!(attr.to_string().is_empty(), "#[kani::proof] does not take any arguments");
+    assert!(attr.is_empty(), "#[kani::proof] does not take any arguments");
     result.extend("#[kanitool::proof]".parse::<TokenStream>().unwrap());
     // no_mangle is a temporary hack to make the function "public" so it gets codegen'd
     result.extend("#[no_mangle]".parse::<TokenStream>().unwrap());
@@ -58,14 +58,32 @@ pub fn proof(attr: TokenStream, item: TokenStream) -> TokenStream {
 
 #[cfg(not(kani))]
 #[proc_macro_attribute]
+/// Treats #[kani::async_proof] like a normal #[kani::proof] if Kani is not active
 pub fn async_proof(attr: TokenStream, item: TokenStream) -> TokenStream {
-    proof(attr, item) // Treat like a normal #[kani::proof] if Kani is not active
+    proof(attr, item)
 }
 
 #[cfg(kani)]
 #[proc_macro_attribute]
+/// Translates #[kani::async_proof] to a #[kani::proof] harness that calls `kani::block_on`, if Kani is active
+///
+/// Specifically, it translates
+/// ```ignore
+/// #[kani::async_proof]
+/// #[attribute]
+/// pub async fn harness() { ... }
+/// ```
+/// to
+/// ```ignore
+/// #[kani::proof]
+/// #[attribute]
+/// pub fn harness() {
+///   async fn harness() { ... }
+///   kani::block_on(harness())
+/// }
+/// ```
 pub fn async_proof(attr: TokenStream, item: TokenStream) -> TokenStream {
-    assert!(attr.to_string().is_empty(), "#[kani::async_proof] does not take any arguments");
+    assert!(attr.is_empty(), "#[kani::async_proof] does not take any arguments for now");
     let fn_item = parse_macro_input!(item as ItemFn);
     let attrs = fn_item.attrs;
     let vis = fn_item.vis;
