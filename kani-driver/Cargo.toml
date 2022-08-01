@@ -21,6 +21,8 @@ structopt = "0.3"
 clap = "2.34"
 glob = "0.3"
 toml = "0.5"
+regex = "1.6"
+pathdiff = "0.2.1"
 
 # A good set of suggested dependencies can be found in rustup:
 # https://github.com/rust-lang/rustup/blob/master/Cargo.toml
