@@ -286,9 +286,9 @@ fn filepath(file: String) -> String {
     let file_path = PathBuf::from(file.clone());
     let cur_dir = env::current_dir().unwrap();
 
-    let diff_path = diff_paths(file_path, cur_dir);
-    if let Some(..) = diff_path {
-        diff_path.unwrap().into_os_string().into_string().unwrap()
+    let diff_path_opt = diff_paths(file_path, cur_dir);
+    if let Some(diff_path) = diff_path_opt {
+        diff_path.into_os_string().into_string().unwrap()
     } else {
         file
     }
@@ -402,14 +402,14 @@ impl<'a, 'b> Parser<'a, 'b> {
     // that fails, then we parse the item using the whole input.
     fn parse_item(&self) -> ParserItem {
         let string_without_delimiter = &self.input_so_far.as_str()[0..self.input_so_far.len() - 2];
-        let block: Result<ParserItem, _> = serde_json::from_str(string_without_delimiter);
-        if let Ok(..) = block {
-            return block.unwrap();
+        let result_item: Result<ParserItem, _> = serde_json::from_str(string_without_delimiter);
+        if let Ok(item) = result_item {
+            return item;
         }
         let complete_string = &self.input_so_far.as_str()[0..self.input_so_far.len()];
-        let block: Result<ParserItem, _> = serde_json::from_str(complete_string);
-        assert!(block.is_ok());
-        block.unwrap()
+        let result_item: Result<ParserItem, _> = serde_json::from_str(complete_string);
+        assert!(result_item.is_ok());
+        result_item.unwrap()
     }
 
     /// Processes a line to determine if an action must be triggered.
