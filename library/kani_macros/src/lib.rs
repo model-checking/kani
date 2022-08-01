@@ -10,8 +10,11 @@
 
 // proc_macro::quote is nightly-only, so we'll cobble things together instead
 use proc_macro::TokenStream;
-use quote::quote;
-use syn::{parse_macro_input, ItemFn};
+#[cfg(kani)]
+use {
+    quote::quote,
+    syn::{parse_macro_input, ItemFn},
+};
 
 #[cfg(all(not(kani), not(test)))]
 #[proc_macro_attribute]
