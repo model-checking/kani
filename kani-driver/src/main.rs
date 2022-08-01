@@ -21,6 +21,7 @@ mod call_goto_cc;
 mod call_goto_instrument;
 mod call_single_file;
 mod call_symtab;
+mod cbmc_output_parser;
 mod metadata;
 mod session;
 mod util;

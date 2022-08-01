@@ -7,7 +7,7 @@ use anyhow::{bail, Context, Result};
 use std::cell::RefCell;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitStatus};
+use std::process::{Child, Command, ExitStatus, Stdio};
 
 /// Contains information about the execution environment and arguments that affect operations
 pub struct KaniSession {
@@ -139,6 +139,26 @@ impl KaniSession {
         cmd.stdout(output_file);
 
         cmd.status().context(format!("Failed to invoke {}", cmd.get_program().to_string_lossy()))
+    }
+
+    /// Run a job and pipe its output to this process.
+    /// Returns an error if the process could not be spawned
+    pub fn run_piped(&self, mut cmd: Command) -> Result<Option<Child>> {
+        if self.args.verbose || self.args.dry_run {
+            println!("{}", render_command(&cmd).to_string_lossy());
+            if self.args.dry_run {
+                return Ok(None);
+            }
+        }
+        // Run the process as a child process
+        let process = cmd.stdout(Stdio::piped()).spawn();
+
+        // Render the command if the process could not be spawned
+        if process.is_err() {
+            bail!("Could not spawn process `{}`", render_command(&cmd).to_string_lossy());
+        }
+        // Return the child process handle
+        Ok(Some(process.unwrap()))
     }
 }
 
