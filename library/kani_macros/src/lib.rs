@@ -10,6 +10,8 @@
 
 // proc_macro::quote is nightly-only, so we'll cobble things together instead
 use proc_macro::TokenStream;
+use quote::quote;
+use syn::{parse_macro_input, ItemFn};
 
 #[cfg(all(not(kani), not(test)))]
 #[proc_macro_attribute]
@@ -49,6 +51,40 @@ pub fn proof(attr: TokenStream, item: TokenStream) -> TokenStream {
     //     #[kanitool::proof]
     //     $item
     // )
+}
+
+#[cfg(not(kani))]
+#[proc_macro_attribute]
+pub fn async_proof(attr: TokenStream, item: TokenStream) -> TokenStream {
+    proof(attr, item) // Treat like a normal #[kani::proof] if Kani is not active
+}
+
+#[cfg(kani)]
+#[proc_macro_attribute]
+pub fn async_proof(attr: TokenStream, item: TokenStream) -> TokenStream {
+    assert!(attr.to_string().is_empty(), "#[kani::async_proof] does not take any arguments");
+    let fn_item = parse_macro_input!(item as ItemFn);
+    let attrs = fn_item.attrs;
+    let vis = fn_item.vis;
+    let sig = fn_item.sig;
+    assert!(sig.asyncness.is_some(), "#[kani::async_proof] can only be applied to async functions");
+    assert!(
+        sig.inputs.is_empty(),
+        "#[kani::async_proof] can only be applied to functions without inputs"
+    );
+    let mut modified_sig = sig.clone();
+    modified_sig.asyncness = None;
+    let body = fn_item.block;
+    let fn_name = &sig.ident;
+    quote!(
+        #[kani::proof]
+        #(#attrs)*
+        #vis #modified_sig {
+            #sig #body
+            kani::block_on(#fn_name())
+        }
+    )
+    .into()
 }
 
 #[cfg(not(kani))]
