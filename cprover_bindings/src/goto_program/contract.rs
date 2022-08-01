@@ -73,7 +73,10 @@ impl Spec {
 
 impl Contract {
     pub fn function_contract(ensures: Vec<Spec>, requires: Vec<Spec>, assigns: Vec<Spec>) -> Self {
-        assert!(assigns.iter().all(|x| x.clause().is_symbol()), "Assigns clause must contain symbols");
+        assert!(
+            assigns.iter().all(|x| x.clause().is_symbol()),
+            "Assigns clause must contain symbols"
+        );
         Contract(ContractValue::FunctionContract { ensures, requires, assigns })
     }
 }
