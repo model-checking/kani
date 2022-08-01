@@ -38,7 +38,7 @@ pub const PRETTY_OUTPUT_FILES: &str = "pretty-json-files";
 pub const IGNORE_GLOBAL_ASM: &str = "ignore-global-asm";
 
 /// Option used for zero initilizing variables.
-pub const ZERO_INIT_VARS: &'static str = "zero-init-vars";
+pub const ZERO_INIT_VARS: &str = "zero-init-vars";
 
 /// Option name used to override the sysroot.
 pub const SYSROOT: &str = "sysroot";
