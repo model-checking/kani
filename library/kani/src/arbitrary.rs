@@ -25,6 +25,7 @@ where
 impl<T, const N: usize> Arbitrary for [T; N]
 where
     T: Arbitrary,
+    [(); std::mem::size_of::<[T; N]>()]:,
 {
     fn any() -> Self {
         // The "correct way" would be to MaybeUninit but there is performance penalty.

@@ -1,12 +1,12 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-use crate::{any, assume, Invariant};
+use crate::{any, assume, Arbitrary, Invariant};
 
 /// Generates an arbitrary vector whose length is at most MAX_LENGTH.
 pub fn any_vec<T, const MAX_LENGTH: usize>() -> Vec<T>
 where
     T: Invariant,
-    [(); std::mem::size_of::<[T; MAX_LENGTH]>()]:,
+    [T; MAX_LENGTH]: Arbitrary,
 {
     let mut v = exact_vec::<T, MAX_LENGTH>();
     let real_length: usize = any();
@@ -20,7 +20,7 @@ where
 pub fn exact_vec<T, const EXACT_LENGTH: usize>() -> Vec<T>
 where
     T: Invariant,
-    [(); std::mem::size_of::<[T; EXACT_LENGTH]>()]:,
+    [T; EXACT_LENGTH]: Arbitrary,
 {
     let boxed_array: Box<[T; EXACT_LENGTH]> = Box::new(any());
     <[T]>::into_vec(boxed_array)
