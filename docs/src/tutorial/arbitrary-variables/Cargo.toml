@@ -9,6 +9,3 @@ edition = "2018"
 vector-map = "1.0.1"
 
 [workspace]
-
-[workspace.metadata.kani]
-flags = { unwind = "3" }
