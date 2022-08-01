@@ -1273,7 +1273,6 @@ impl Type {
             Struct { components, .. } => {
                 let values: Vec<Expr> =
                     components.iter().map(|c| c.typ().zero_initializer(st)).collect();
-                let values = values.into_iter().collect();
                 Expr::struct_expr_from_padded_values(self.clone(), values, st)
             }
             StructTag(tag) => st.lookup(*tag).unwrap().typ.zero_initializer(st),
