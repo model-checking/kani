@@ -10,6 +10,9 @@ use std::hash::{Hash, Hasher};
 use std::path::Path;
 use std::process::Command;
 
+/// Module for parsing deterministic values from CBMC output traces,
+/// generating executable traces, and adding them to the user's source code.
+
 impl KaniSession {
     /// The main driver for generating executable traces and adding them to source code.
     pub fn exe_trace_main(&self, specialized_obj: &Path, harness: &HarnessMetadata) {
@@ -136,11 +139,13 @@ fn format_unit_test(
     det_vals: &[Vec<u8>],
     interp_det_vals: &[String],
 ) -> (String, String) {
-    // Given a number of byte vectors, format them as:
-    // // interp_det_val_1
-    // vec![det_val_1],
-    // // interp_det_val_2
-    // vec![det_val_2], ...
+    /*
+    Given a number of byte vectors, format them as:
+    // interp_det_val_1
+    vec![det_val_1],
+    // interp_det_val_2
+    vec![det_val_2], ...
+    */
     let vecs_as_str = det_vals
         .iter()
         .zip(interp_det_vals.iter())
@@ -169,6 +174,7 @@ fn format_unit_test(
     (exe_trace, exe_trace_func_name)
 }
 
+/// Read the CBMC output, parse it as a JSON object, and extract the deterministic values.
 mod parser {
     use crate::util::append_path;
     use serde_json::Value;
