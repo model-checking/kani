@@ -2,11 +2,6 @@
 # Copyright Kani Contributors
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
-if [[ $# -ne 1 ]]; then
-  echo "$0: Error: Missing input file."
-  exit 1
-fi
-
 # Print a table from a file with data about unsupported features.
 # We capture the data in unsupported constructs expressions of the
 # form " - <construct> (<instances>)". For example:
@@ -22,6 +17,12 @@ fi
 #     (i.e., the number of instances according to the captured value)
 #
 # The data is sorted in descending order by the number of crates impacted.
+
+if [[ $# -ne 1 ]]; then
+  echo "$0: Error: Missing input file."
+  exit 1
+fi
+
 echo "SUMMARY - UNSUPPORTED FEATURES"
 echo "========================================================="
 echo "Unsupported feature | Crates impacted | Instances of use"
