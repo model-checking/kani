@@ -11,9 +11,14 @@ use std::fmt::Debug;
 
 /// Represents a contract on a function, loop, etc.
 #[derive(Clone, Debug)]
-pub enum Contract {
-    FunctionContract { ensures: Vec<Spec>, requires: Vec<Spec> },
+pub enum ContractValue {
+    FunctionContract { ensures: Vec<Spec>, requires: Vec<Spec>, assigns: Vec<Spec> },
 }
+
+/// The fields of `Contract` are kept private, and there are no getters that return mutable references.
+/// This means that the only way to create and update `Contract`s is using the constructors and setters.
+#[derive(Clone, Debug)]
+pub struct Contract(ContractValue);
 
 /// A `Spec` is a struct for representing the `requires`, `ensures`, and `assigns` clauses in a function contract.
 /// Every expression inside a function contract clause is wrapped into a lambda expression on the CBMC side.
@@ -44,6 +49,12 @@ impl Spec {
     }
 }
 
+impl Contract {
+    pub fn value(&self) -> &ContractValue {
+        &self.0
+    }
+}
+
 /// Setters
 impl Spec {
     pub fn with_location(mut self, loc: Location) -> Self {
@@ -57,5 +68,15 @@ impl Spec {
     pub fn new(temporary_symbols: Vec<Expr>, clause: Expr, location: Location) -> Self {
         assert!(temporary_symbols.iter().all(|x| x.is_symbol()), "Variables must be symbols");
         Spec { temporary_symbols, clause, location }
+    }
+}
+
+impl Contract {
+    pub fn function_contract(ensures: Vec<Spec>, requires: Vec<Spec>, assigns: Vec<Spec>) -> Self {
+        assert!(
+            assigns.iter().all(|x| x.clause().is_symbol()),
+            "Assigns clause must contain symbols"
+        );
+        Contract(ContractValue::FunctionContract { ensures, requires, assigns })
     }
 }

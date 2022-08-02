@@ -18,7 +18,7 @@ pub mod symtab_transformer;
 mod typ;
 
 pub use builtin::BuiltinFn;
-pub use contract::{Contract, Spec};
+pub use contract::{Contract, ContractValue, Spec};
 pub use expr::{
     ArithmeticOverflowResult, BinaryOperator, Expr, ExprValue, SelfOperator, UnaryOperator,
 };

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! The actual `Irep` structure, and associated constructors, getters, and setters.
 
-use super::super::goto_program::{Contract, Location, Type};
+use super::super::goto_program::{Contract, ContractValue, Location, Type};
 use super::super::MachineModel;
 use super::{IrepId, ToIrep};
 use crate::cbmc_string::InternedString;
@@ -37,8 +37,8 @@ impl Irep {
 /// Fluent Builders
 impl Irep {
     pub fn with_contract(self, contract: &Contract, mm: &MachineModel) -> Self {
-        match contract {
-            Contract::FunctionContract { requires, ensures } => self
+        match contract.value() {
+            ContractValue::FunctionContract { requires, ensures, assigns } => self
                 .with_named_sub(
                     IrepId::CSpecEnsures,
                     Irep::just_sub(ensures.iter().map(|spec| spec.to_irep(mm)).collect()),
@@ -46,6 +46,10 @@ impl Irep {
                 .with_named_sub(
                     IrepId::CSpecRequires,
                     Irep::just_sub(requires.iter().map(|spec| spec.to_irep(mm)).collect()),
+                )
+                .with_named_sub(
+                    IrepId::CSpecAssigns,
+                    Irep::just_sub(assigns.iter().map(|spec| spec.to_irep(mm)).collect()),
                 ),
         }
     }

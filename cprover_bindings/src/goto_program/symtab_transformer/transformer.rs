@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use crate::goto_program::{
-    BinaryOperator, CIntType, Contract, DatatypeComponent, Expr, ExprValue, Location, Parameter,
-    SelfOperator, Spec, Stmt, StmtBody, SwitchCase, Symbol, SymbolTable, SymbolValues, Type,
-    UnaryOperator,
+    BinaryOperator, CIntType, Contract, ContractValue, DatatypeComponent, Expr, ExprValue,
+    Location, Parameter, SelfOperator, Spec, Stmt, StmtBody, SwitchCase, Symbol, SymbolTable,
+    SymbolValues, Type, UnaryOperator,
 };
 use crate::InternedString;
 use num::bigint::BigInt;
@@ -254,16 +254,19 @@ pub trait Transformer: Sized {
 
     /// Transforms a contract data structure by recursively transforming its clauses.
     fn transform_contract(&mut self, c: &Contract) -> Contract {
-        match c {
-            Contract::FunctionContract { ensures, requires } => {
+        match c.value() {
+            ContractValue::FunctionContract { ensures, requires, assigns } => {
                 let transformed_ensures =
                     ensures.iter().map(|spec| self.transform_spec(spec)).collect();
                 let transformed_requires =
                     requires.iter().map(|spec| self.transform_spec(spec)).collect();
-                Contract::FunctionContract {
-                    ensures: transformed_ensures,
-                    requires: transformed_requires,
-                }
+                let transformed_assigns =
+                    assigns.iter().map(|spec| self.transform_spec(spec)).collect();
+                Contract::function_contract(
+                    transformed_ensures,
+                    transformed_requires,
+                    transformed_assigns,
+                )
             }
         }
     }
