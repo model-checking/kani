@@ -36,7 +36,6 @@ def match_somewhere(regexes, lines):
         matches = [regex.search(lines[match_head_index + index]) for index, regex in enumerate(regexes)]
         return all(matches)
     else:
-        print('error return')
         return False
 
 def result_into_bool(result):
