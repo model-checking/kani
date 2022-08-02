@@ -17,7 +17,7 @@ mod symbol_table;
 mod typ;
 
 pub use builtin::BuiltinFn;
-pub use contract::{Contract, Spec};
+pub use contract::{Contract, ContractValue, Spec};
 pub use expr::{
     arithmetic_overflow_result_type, ArithmeticOverflowResult, BinaryOperator, Expr, ExprValue,
     SelfOperator, UnaryOperator, ARITH_OVERFLOW_OVERFLOWED_FIELD, ARITH_OVERFLOW_RESULT_FIELD,
