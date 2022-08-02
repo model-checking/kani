@@ -9,13 +9,13 @@
 
 //! Arbitrary implementations for primitive types.
 
-// use crate::bool;
+use crate::bool;
 // use crate::char;
 use crate::num::{ i16, i32, i64, i8, isize, u16, u32, u64, u8, usize, f32, f64,};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::num::{i128, u128};
 
-arbitrary!(i8, i16, i32, i64, isize, u8, u16, u32, u64, usize); //todo bool,
+arbitrary!(i8, i16, i32, i64, isize, u8, u16, u32, u64, usize, bool);
 
 #[cfg(not(target_arch = "wasm32"))]
 arbitrary!(i128, u128);

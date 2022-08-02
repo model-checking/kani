@@ -83,7 +83,7 @@ pub mod sugar;
 pub mod arbitrary;
 // pub mod array;
 // pub mod bits;
-// pub mod bool;
+pub mod bool;
 // pub mod char;
 // pub mod collection;
 pub mod num;
