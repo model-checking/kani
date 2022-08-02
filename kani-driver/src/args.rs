@@ -84,7 +84,10 @@ pub struct KaniArgs {
     pub checks: CheckArgs,
 
     /// Zero initilize variables.
-    /// This is an unstable feature.
+    /// This is useful for experiments to see whether assigning constant values produces better 
+    /// performance by allowing CBMC to do more constant propegation.
+    /// Unfortunatly, it is unsafe to use for production code, since it may unsoundly hide bugs.
+    /// Marked as `unstable` to prevent use outside of experimental contexts.
     #[structopt(long, hidden = true, requires("enable-unstable"))]
     pub zero_init_vars: bool,
 
