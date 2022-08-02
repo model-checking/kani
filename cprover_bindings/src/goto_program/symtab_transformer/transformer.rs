@@ -364,7 +364,7 @@ pub trait Transformer: Sized {
 
     /// Transforms an empty union expr (`{}`)
     fn transform_expr_empty_union(&mut self, typ: &Type) -> Expr {
-        Expr::empty_union(typ.clone(), &self.symbol_table())
+        Expr::empty_union(typ.clone(), self.symbol_table())
     }
 
     /// Transforms a float constant expr (`1.0f`)

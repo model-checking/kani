@@ -1219,9 +1219,7 @@ impl Type {
     }
 
     pub fn one(&self) -> Expr {
-        if self.is_integer() {
-            Expr::int_constant(1, self.clone())
-        } else if self.is_bitfield() {
+        if self.is_integer() || self.is_bitfield() {
             Expr::int_constant(1, self.clone())
         } else if self.is_c_bool() {
             Expr::c_true()
@@ -1235,9 +1233,7 @@ impl Type {
     }
 
     pub fn zero(&self) -> Expr {
-        if self.is_integer() {
-            Expr::int_constant(0, self.clone())
-        } else if self.is_bitfield() {
+        if self.is_integer() || self.is_bitfield() {
             Expr::int_constant(0, self.clone())
         } else if self.is_bool() {
             Expr::bool_false()
