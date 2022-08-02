@@ -28,7 +28,9 @@ def get_header(has_shebang, regexes):
     indices = range(init_idx, init_idx + len(regexes))
     return zip(regexes, indices)
 
-
+# Matches all MODIFIED_HEADER patterns within the file. This is used
+# when the license is not at the top header, and there are licenses of
+# external libraries.
 def match_somewhere(regexes, lines):
     maybe_match_head_index = [index for index, line in enumerate(lines) if regexes[0].search(line)][:1]
     if maybe_match_head_index and maybe_match_head_index[0] + len(regexes) <= len(lines):
