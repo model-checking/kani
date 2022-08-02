@@ -4,11 +4,13 @@
 #![feature(min_specialization)] // Used for default implementation of Arbitrary.
 
 pub mod arbitrary;
+pub mod futures;
 pub mod invariant;
 pub mod slice;
 pub mod vec;
 
 pub use arbitrary::Arbitrary;
+pub use futures::block_on;
 pub use invariant::Invariant;
 
 /// Creates an assumption that will be valid after this statement run. Note that the assumption
