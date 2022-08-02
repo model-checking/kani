@@ -18,6 +18,7 @@ if [ ! -f "$PROPTEST_SYMTAB_PATH" ] || [[ "$PROPTEST_SYMTAB_PATH" -ot "$KANI_BIN
     echo 'Proptest symtab not found or too old. (Re)compiling proptest..'
     (
         cd $KANI_REPO_ROOT/library/proptest;
+        export CARGO_KANI_IS_CHILD=1
         cargo kani --only-codegen;
     )
 fi

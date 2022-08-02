@@ -19,7 +19,11 @@ then
 fi
 KANI_PATH=${KANI_CANDIDATES[0]}
 
-$SCRIPT_DIR/refresh-kani-proptest.sh
+if [ -z "${CARGO_KANI_IS_CHILD+x}" ]; then
+    # avoid infinite recursion as below script also calls `cargo kani`
+    $SCRIPT_DIR/refresh-kani-proptest.sh
+fi
+
 CARGO_TOML_SAVE_FILE='.save-cargo.toml'
 if [[ "${PROPTEST+x}" == "1" ]]; then
     cp Cargo.toml $CARGO_TOML_SAVE_FILE
