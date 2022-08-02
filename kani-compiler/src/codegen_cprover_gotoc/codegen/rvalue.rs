@@ -689,12 +689,10 @@ impl<'tcx> GotocCtx<'tcx> {
                                 .tcx
                                 .normalize_erasing_regions(ty::ParamEnv::reveal_all(), src_subt);
                             match src_subt.kind() {
-                                ty::Slice(_) | ty::Str | ty::Dynamic(..) => {
-                                    return self
-                                        .codegen_operand(src)
-                                        .member("data", &self.symbol_table)
-                                        .cast_to(self.codegen_ty(dst_t));
-                                }
+                                ty::Slice(_) | ty::Str | ty::Dynamic(..) => self
+                                    .codegen_operand(src)
+                                    .member("data", &self.symbol_table)
+                                    .cast_to(self.codegen_ty(dst_t)),
                                 _ => self.codegen_operand(src).cast_to(self.codegen_ty(dst_t)),
                             }
                         }

@@ -338,6 +338,10 @@ dependencies = [
 [[package]]
 name = "kani_macros"
 version = "0.7.0"
+dependencies = [
+ "quote",
+ "syn",
+]
 
 [[package]]
 name = "kani_metadata"

@@ -1,0 +1,8 @@
+error: custom attribute panicked
+#[kani::async_proof] does not take any arguments for now
+
+error: custom attribute panicked
+#[kani::async_proof] can only be applied to async functions
+
+error: custom attribute panicked
+#[kani::async_proof] can only be applied to functions without inputs
