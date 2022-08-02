@@ -1490,6 +1490,14 @@ impl<'tcx> GotocCtx<'tcx> {
         (size_of_count_elems.result, assert_stmt)
     }
 
+    /// Codegens the struct type that CBMC produces for its arithmetic with overflow operators:
+    /// ```
+    /// struct overflow_result_<operand_type> {
+    ///     operand_type result;     // the result of the operation
+    ///     bool         overflowed; // whether the operation overflowed
+    /// }
+    /// ```
+    /// and adds the type to the symbol table
     fn codegen_arithmetic_overflow_result_type(&mut self, operand_type: Type) -> Type {
         let res_type = arithmetic_overflow_result_type(operand_type);
         self.ensure_struct(res_type.tag().unwrap(), res_type.tag().unwrap(), |_, _| {
