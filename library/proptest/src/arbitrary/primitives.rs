@@ -11,11 +11,11 @@
 
 // use crate::bool;
 // use crate::char;
-use crate::num::{ i16, i32, i64, i8, isize, u16, u32, u64, u8, usize}; //todo: implement f32, f64,
+use crate::num::{ i16, i32, i64, i8, isize, u16, u32, u64, u8, usize, f32, f64,};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::num::{i128, u128};
 
-arbitrary!(i8, i16, i32, i64, isize, u8, u16, u32, u64, usize); //bool,
+arbitrary!(i8, i16, i32, i64, isize, u8, u16, u32, u64, usize); //todo bool,
 
 #[cfg(not(target_arch = "wasm32"))]
 arbitrary!(i128, u128);
@@ -23,14 +23,12 @@ arbitrary!(i128, u128);
 // Note that for floating point types we limit the space since a lot of code
 // isn't prepared for (and is not intended to be) things like NaN and infinity.
 
-//todo: implement f32, f64,
-
-// arbitrary!(f32, f32::Any; {
-//     f32::POSITIVE | f32::NEGATIVE | f32::ZERO | f32::SUBNORMAL | f32::NORMAL
-// });
-// arbitrary!(f64, f64::Any; {
-//     f64::POSITIVE | f64::NEGATIVE | f64::ZERO | f64::SUBNORMAL | f64::NORMAL
-// });
+arbitrary!(f32, f32::Any; {
+    f32::POSITIVE | f32::NEGATIVE | f32::ZERO | f32::SUBNORMAL | f32::NORMAL
+});
+arbitrary!(f64, f64::Any; {
+    f64::POSITIVE | f64::NEGATIVE | f64::ZERO | f64::SUBNORMAL | f64::NORMAL
+});
 
 // arbitrary!(char, char::CharStrategy<'static>; char::any());
 
