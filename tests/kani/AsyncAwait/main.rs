@@ -3,7 +3,7 @@
 //
 // compile-flags: --edition 2018
 
-// Tests that the language constructs `async { .. .}` blocks, `async fn`, and `.await` work correctly.
+// Tests that the language constructs `async { ... }` blocks, `async fn`, and `.await` work correctly.
 
 use std::{
     future::Future,
@@ -12,6 +12,22 @@ use std::{
 };
 
 fn main() {}
+
+#[kani::async_proof]
+#[kani::unwind(2)]
+async fn test_async_proof_harness() {
+    let async_block_result = async { 42 }.await;
+    let async_fn_result = async_fn().await;
+    assert_eq!(async_block_result, async_fn_result);
+}
+
+#[kani::async_proof]
+#[kani::unwind(2)]
+pub async fn test_async_proof_harness_pub() {
+    let async_block_result = async { 42 }.await;
+    let async_fn_result = async_fn().await;
+    assert_eq!(async_block_result, async_fn_result);
+}
 
 #[kani::proof]
 #[kani::unwind(2)]
