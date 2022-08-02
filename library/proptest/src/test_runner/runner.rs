@@ -23,7 +23,7 @@ impl TestRunner {
     pub fn default() -> Self { Self {} }
 
     /// Run the test function with a Kani symbolic value given a test function that takes that type.
-    pub fn run_kani<S: Strategy>(strategy: S, test_fn: impl Fn(S::Value) -> ()) {
+    pub fn run_kani<S: Strategy>(strategy: S, test_fn: impl Fn(S::Value)) {
         let mut runner = Self::new(Config::default());
         let tree = strategy.new_tree(&mut runner).unwrap();
         test_fn(tree.current());

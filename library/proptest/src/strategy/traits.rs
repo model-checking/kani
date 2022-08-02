@@ -822,7 +822,7 @@ where
         } }
     }
 
-    let options = options.unwrap_or_else(CheckStrategySanityOptions::default);
+    let options: CheckStrategySanityOptions = options.unwrap_or_default();
     let mut config = Config::default();
     if options.error_on_local_rejects {
         config.max_local_rejects = 0;

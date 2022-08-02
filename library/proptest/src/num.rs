@@ -18,14 +18,14 @@ use core::ops::Range;
 // Below 2 functions are the source of Kani symbolic variables.
 
 /// Produce an symbolic value from a range.
-pub(crate) fn sample_uniform<X: kani::Arbitrary + PartialOrd>(run: &mut TestRunner, range: Range<X>) -> X {
+pub(crate) fn sample_uniform<X: kani::Arbitrary + PartialOrd>(_: &mut TestRunner, range: Range<X>) -> X {
     let value: X = kani::any();
     kani::assume(range.contains(&value));
     value
 }
 
 /// Produce an symbolic value start and end values. End is inclusive.
-pub(crate) fn sample_uniform_incl<X: kani::Arbitrary + PartialOrd>(run: &mut TestRunner, start: X, end: X) -> X {
+pub(crate) fn sample_uniform_incl<X: kani::Arbitrary + PartialOrd>(_: &mut TestRunner, start: X, end: X) -> X {
     let value: X = kani::any();
     kani::assume(value <= end);
     kani::assume(value >= start);
@@ -46,7 +46,7 @@ macro_rules! int_any {
             type Tree = BinarySearch;
             type Value = $typ;
 
-            fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
+            fn new_tree(&self, _: &mut TestRunner) -> NewTree<Self> {
                 Ok(BinarySearch::new(kani::any::<$typ>()))
             }
         }
@@ -136,25 +136,19 @@ macro_rules! signed_integer_bin_search {
             /// boundary points.
             #[derive(Clone, Copy, Debug)]
             pub struct BinarySearch {
-                lo: $typ, // todo: these are not necessary, purge.
                 curr: $typ,
-                hi: $typ, // todo: these are not necessary, purge.
             }
             impl BinarySearch {
                 /// Creates a new binary searcher starting at the given value.
                 pub fn new(start: $typ) -> Self {
-                    BinarySearch { lo: 0, curr: start, hi: start }
+                    BinarySearch { curr: start, }
                 }
 
                 /// Creates a new binary searcher which will not produce values
                 /// on the other side of `lo` or `hi` from `start`. `lo` is
                 /// inclusive, `hi` is exclusive.
-                fn new_clamped(lo: $typ, start: $typ, hi: $typ) -> Self {
-                    use core::cmp::{max, min};
-
+                fn new_clamped(_: $typ, start: $typ, _: $typ) -> Self {
                     BinarySearch {
-                        lo: if start < 0 { min(0, hi - 1) } else { max(0, lo) },
-                        hi: start,
                         curr: start,
                     }
                 }
@@ -194,20 +188,18 @@ macro_rules! unsigned_integer_bin_search {
             /// boundary points.
             #[derive(Clone, Copy, Debug)]
             pub struct BinarySearch {
-                lo: $typ, // todo: these are not necessary, purge.
                 curr: $typ,
-                hi: $typ, // todo: these are not necessary, purge.
             }
             impl BinarySearch {
                 /// Creates a new binary searcher starting at the given value.
                 pub fn new(start: $typ) -> Self {
-                    BinarySearch { lo: 0, curr: start, hi: start }
+                    BinarySearch { curr: start, }
                 }
 
                 /// Creates a new binary searcher which will not search below
                 /// the given `lo` value.
-                fn new_clamped(lo: $typ, start: $typ, _hi: $typ) -> Self {
-                    BinarySearch { lo: lo, curr: start, hi: start }
+                fn new_clamped(_: $typ, start: $typ, _: $typ) -> Self {
+                    BinarySearch { curr: start, }
                 }
 
                 /// Creates a new binary searcher which will not search below
@@ -288,10 +280,6 @@ impl FloatTypes {
     fn contains(&self , other: Self) -> bool {
         let intersection = self.0 & other.0;
         intersection == other.0
-    }
-
-    fn all() -> Self {
-        Self::ANY
     }
 
     fn normalise(mut self) -> Self {
@@ -507,7 +495,7 @@ macro_rules! float_any {
             type Tree = BinarySearch;
             type Value = $typ;
 
-            fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
+            fn new_tree(&self, _: &mut TestRunner) -> NewTree<Self> {
                 let flags = self.0.normalise();
                 let sign_mask = if flags.contains(FloatTypes::NEGATIVE) {
                     $typ::SIGN_MASK

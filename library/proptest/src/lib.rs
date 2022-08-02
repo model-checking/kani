@@ -18,9 +18,10 @@
 #![deny(missing_docs, bare_trait_objects)]
 // #![no_std]
 #![cfg_attr(feature = "cargo-clippy", allow(
-    doc_markdown,
+    clippy::doc_markdown,
     // We have a lot of these lints for associated types... And we don't care.
-    type_complexity
+    clippy::type_complexity,
+    clippy::needless_doctest_main
 ))]
 #![cfg_attr(
     feature = "unstable",
