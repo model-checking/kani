@@ -27,7 +27,7 @@ impl Reason {
     /// The message is intended for human consumption, and is not guaranteed to
     /// have any format in particular.
     pub fn message(&self) -> &str {
-        &*self.0
+        self.0.as_ref()
     }
 }
 
