@@ -96,14 +96,7 @@ where
     T: Arbitrary,
 {
     fn any() -> Self {
-        // The "correct way" would be to MaybeUninit but there is performance penalty.
-        let mut data: [T; N] = unsafe { crate::any_raw_internal() };
-
-        for elem in &mut data[..] {
-            *elem = T::any();
-        }
-
-        data
+        [(); N].map(|_| T::any())
     }
 }
 
