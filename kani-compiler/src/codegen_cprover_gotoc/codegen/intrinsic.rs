@@ -187,11 +187,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let op_type = a.typ().clone();
                 let res = a.$f(b);
                 // add to symbol table
-                let res_type = arithmetic_overflow_result_type(op_type.clone());
-                let struct_tag =
-                    self.ensure_struct(res_type.tag().unwrap(), res_type.tag().unwrap(), |_, _| {
-                        res_type.components().unwrap().clone()
-                    });
+                let struct_tag = self.codegen_arithmetic_overflow_result_type(op_type.clone());
                 assert_eq!(*res.typ(), struct_tag);
 
                 // store the result in a temporary variable
@@ -221,11 +217,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let op_type = a.typ().clone();
                 let res = a.$f(b);
                 // add to symbol table
-                let res_type = arithmetic_overflow_result_type(op_type.clone());
-                let struct_tag =
-                    self.ensure_struct(res_type.tag().unwrap(), res_type.tag().unwrap(), |_, _| {
-                        res_type.components().unwrap().clone()
-                    });
+                let struct_tag = self.codegen_arithmetic_overflow_result_type(op_type.clone());
                 assert_eq!(*res.typ(), struct_tag);
 
                 // store the result in a temporary variable
@@ -1494,5 +1486,12 @@ impl<'tcx> GotocCtx<'tcx> {
             loc,
         );
         (size_of_count_elems.result, assert_stmt)
+    }
+
+    fn codegen_arithmetic_overflow_result_type(&mut self, operand_type: Type) -> Type {
+        let res_type = arithmetic_overflow_result_type(operand_type);
+        self.ensure_struct(res_type.tag().unwrap(), res_type.tag().unwrap(), |_, _| {
+            res_type.components().unwrap().clone()
+        })
     }
 }
