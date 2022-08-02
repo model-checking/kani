@@ -273,9 +273,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         Variants::Multiple { tag_encoding, .. } => match tag_encoding {
                             TagEncoding::Niche { .. } => {
                                 let offset = match &layout.fields {
-                                    FieldsShape::Arbitrary { offsets, .. } => {
-                                        offsets[0].bytes_usize()
-                                    }
+                                    FieldsShape::Arbitrary { offsets, .. } => offsets[0],
                                     _ => unreachable!("niche encoding must have arbitrary fields"),
                                 };
                                 let discr_ty = self.codegen_enum_discr_typ(ty);
@@ -454,19 +452,20 @@ impl<'tcx> GotocCtx<'tcx> {
 
     fn codegen_allocation_data(&mut self, alloc: &'tcx Allocation) -> Vec<AllocData<'tcx>> {
         let mut alloc_vals = Vec::with_capacity(alloc.relocations().len() + 1);
-        let pointer_size = self.symbol_table.machine_model().pointer_width_in_bytes();
+        let pointer_size =
+            Size::from_bytes(self.symbol_table.machine_model().pointer_width_in_bytes());
 
-        let mut next_offset = 0;
+        let mut next_offset = Size::ZERO;
         for &(offset, alloc_id) in alloc.relocations().iter() {
-            let offset = offset.bytes_usize();
             if offset > next_offset {
-                let bytes =
-                    alloc.inspect_with_uninit_and_ptr_outside_interpreter(next_offset..offset);
+                let bytes = alloc.inspect_with_uninit_and_ptr_outside_interpreter(
+                    next_offset.bytes_usize()..offset.bytes_usize(),
+                );
                 alloc_vals.push(AllocData::Bytes(bytes));
             }
             let ptr_offset = {
                 let bytes = alloc.inspect_with_uninit_and_ptr_outside_interpreter(
-                    offset..(offset + pointer_size),
+                    offset.bytes_usize()..(offset + pointer_size).bytes_usize(),
                 );
                 read_target_uint(self.tcx.sess.target.options.endian, bytes)
             }
@@ -480,8 +479,8 @@ impl<'tcx> GotocCtx<'tcx> {
 
             next_offset = offset + pointer_size;
         }
-        if alloc.len() >= next_offset {
-            let range = next_offset..alloc.len();
+        if alloc.len() >= next_offset.bytes_usize() {
+            let range = next_offset.bytes_usize()..alloc.len();
             let bytes = alloc.inspect_with_uninit_and_ptr_outside_interpreter(range);
             alloc_vals.push(AllocData::Bytes(bytes));
         }
@@ -598,16 +597,16 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// fetch the niche value (as both left and right value)
-    pub fn codegen_get_niche(&self, v: Expr, offset: usize, niche_ty: Type) -> Expr {
+    pub fn codegen_get_niche(&self, v: Expr, offset: Size, niche_ty: Type) -> Expr {
         v // t: T
             .address_of() // &t: T*
             .cast_to(Type::unsigned_int(8).to_pointer()) // (u8 *)&t: u8 *
-            .plus(Expr::int_constant(offset, Type::size_t())) // ((u8 *)&t) + offset: u8 *
+            .plus(Expr::int_constant(offset.bytes_usize(), Type::size_t())) // ((u8 *)&t) + offset: u8 *
             .cast_to(niche_ty.to_pointer()) // (N *)(((u8 *)&t) + offset): N *
             .dereference() // *(N *)(((u8 *)&t) + offset): N
     }
 
-    fn codegen_niche_literal(&mut self, ty: Ty<'tcx>, offset: usize, init: Expr) -> Expr {
+    fn codegen_niche_literal(&mut self, ty: Ty<'tcx>, offset: Size, init: Expr) -> Expr {
         let cgt = self.codegen_ty(ty);
         let fname = self.codegen_niche_init_name(ty);
         let pretty_name = format!("init_niche<{}>", self.ty_pretty_name(ty));
@@ -682,7 +681,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let fn_singleton = self.ensure_global_var(
             &fn_singleton_name,
             false,
-            fn_struct_ty.clone(),
+            fn_struct_ty,
             Location::none(),
             |_, _| None, // zero-sized, so no initialization necessary
         );

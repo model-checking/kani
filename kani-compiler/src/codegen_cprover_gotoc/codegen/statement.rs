@@ -107,9 +107,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         TagEncoding::Niche { dataful_variant, niche_variants, niche_start } => {
                             if dataful_variant != variant_index {
                                 let offset = match &layout.fields {
-                                    FieldsShape::Arbitrary { offsets, .. } => {
-                                        offsets[0].bytes_usize()
-                                    }
+                                    FieldsShape::Arbitrary { offsets, .. } => offsets[0],
                                     _ => unreachable!("niche encoding must have arbitrary fields"),
                                 };
                                 let discr_ty = self.codegen_enum_discr_typ(pt);
@@ -611,23 +609,23 @@ impl<'tcx> GotocCtx<'tcx> {
                     }
                 };
                 stmts.push(self.codegen_end_call(target.as_ref(), loc));
-                return Stmt::block(stmts, loc);
+                Stmt::block(stmts, loc)
             }
             // Function call through a pointer
             ty::FnPtr(_) => {
                 let func_expr = self.codegen_operand(func).dereference();
                 // Actually generate the function call and return.
-                return Stmt::block(
+                Stmt::block(
                     vec![
                         self.codegen_expr_to_place(destination, func_expr.call(fargs))
                             .with_location(loc),
                         Stmt::goto(self.current_fn().find_label(&target.unwrap()), loc),
                     ],
                     loc,
-                );
+                )
             }
             x => unreachable!("Function call where the function was of unexpected type: {:?}", x),
-        };
+        }
     }
 
     /// Extract a reference to self for virtual method calls.

@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
 # Run rustfmt with this config (it should be picked up automatically).
+edition = "2021"
 version = "Two"
 use_small_heuristics = "Max"
 merge_derives = false
