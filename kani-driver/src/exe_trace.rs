@@ -114,7 +114,7 @@ impl KaniSession {
             args.push("--unstable-features".into());
 
             let file_line_arg =
-                format!("[{{\"file\":\"{}\",\"range\":[{},{}]}}]", src_file, start_line, end_line);
+                format!("[{{\"file\":\"{src_file}\",\"range\":[{start_line},{end_line}]}}]");
             args.push("--file-lines".into());
             args.push(file_line_arg.into());
         }
@@ -149,7 +149,7 @@ fn format_unit_test(
     let vecs_as_str = det_vals
         .iter()
         .zip(interp_det_vals.iter())
-        .map(|(det_val, interp_det_val)| format!("// {}\nvec!{:?}", interp_det_val, det_val))
+        .map(|(det_val, interp_det_val)| format!("// {interp_det_val}\nvec!{:?}", det_val))
         .collect::<Vec<String>>()
         .join(",\n");
 
@@ -159,16 +159,15 @@ fn format_unit_test(
     vecs_as_str.hash(&mut hasher);
     let hash = hasher.finish();
 
-    let exe_trace_func_name = format!("kani_exe_trace_{}_{}", harness_name, hash);
+    let exe_trace_func_name = format!("kani_exe_trace_{harness_name}_{hash}");
     let exe_trace = format!(
         "
         #[test]
-        fn {}() {{
-            let det_vals: Vec<Vec<u8>> = vec![{}];
+        fn {exe_trace_func_name}() {{
+            let det_vals: Vec<Vec<u8>> = vec![{vecs_as_str}];
             kani::exe_trace_init(det_vals);
-            {}();
-        }}",
-        exe_trace_func_name, vecs_as_str, harness_name
+            {harness_name}();
+        }}"
     );
 
     (exe_trace, exe_trace_func_name)
