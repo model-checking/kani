@@ -115,8 +115,8 @@ fn iter_header<R: Read>(testfile: &Path, rdr: R, it: &mut dyn FnMut(Option<&str>
         let ln = ln.trim();
         if ln.starts_with("fn") || ln.starts_with("mod") {
             return;
-        } else if ln.starts_with(comment) {
-            it(None, ln[comment.len()..].trim_start());
+        } else if let Some(rest) = ln.strip_prefix(comment) {
+            it(None, rest.trim_start());
         }
     }
 }

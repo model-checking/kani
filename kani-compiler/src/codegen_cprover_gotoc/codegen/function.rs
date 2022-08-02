@@ -335,7 +335,6 @@ impl<'tcx> GotocCtx<'tcx> {
                 self.tcx
                     .sess
                     .span_err(attr.span, "Exactly one Unwind Argument as Integer accepted");
-                return;
             }
             Some(unwind_integer_value) => {
                 let val: Result<u32, _> = unwind_integer_value.try_into();
