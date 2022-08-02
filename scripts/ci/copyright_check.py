@@ -28,6 +28,17 @@ def get_header(has_shebang, regexes):
     indices = range(init_idx, init_idx + len(regexes))
     return zip(regexes, indices)
 
+
+def match_somewhere(regexes, lines):
+    maybe_match_head_index = [index for index, line in enumerate(lines) if regexes[0].search(line)][:1]
+    if maybe_match_head_index and maybe_match_head_index[0] + len(regexes) <= len(lines):
+        match_head_index = maybe_match_head_index[0]
+        matches = [regex.search(lines[match_head_index + index]) for index, regex in enumerate(regexes)]
+        return all(matches)
+    else:
+        print('error return')
+        return False
+
 def result_into_bool(result):
     if result == CheckResult.FAIL:
         return False
@@ -81,9 +92,7 @@ def copyright_check(filename):
     regexes.append(re.compile(MODIFIED_HEADER_PATTERN_3))
     regexes.append(re.compile(MODIFIED_HEADER_PATTERN_4))
 
-    header = get_header(has_shebang, regexes)
-
-    if matches_header_lines(header, lines):
+    if match_somewhere(regexes, lines):
         return CheckResult.PASS_MODIFIED
 
     # We fail if there were no matches
