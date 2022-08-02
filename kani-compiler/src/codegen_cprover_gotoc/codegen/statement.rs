@@ -67,9 +67,17 @@ impl<'tcx> GotocCtx<'tcx> {
                     // We ignore assignment for all zero size types
                     Stmt::skip(location)
                 } else {
-                    unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place(place))
-                        .goto_expr
-                        .assign(dst_type.nondet(), location)
+                    let lval = unwrap_or_return_codegen_unimplemented_stmt!(
+                        self,
+                        self.codegen_place(place)
+                    )
+                    .goto_expr;
+                    // Write `0` bytes instead of `nondet` if the `get_zero_init_vars` flag is set.
+                    // This allows us to experiment to see the cost of `nondet` on the constant
+                    // propegator.
+                    let rval =
+                        self.codegen_default_initializer(&lval).unwrap_or(lval.typ().nondet());
+                    lval.assign(rval, location)
                 }
             }
             StatementKind::SetDiscriminant { place, variant_index } => {
