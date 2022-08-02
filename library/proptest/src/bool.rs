@@ -68,7 +68,7 @@ pub struct BoolValueTree {
 
 impl BoolValueTree {
     fn new(current: bool) -> Self {
-        BoolValueTree { current,  }
+        BoolValueTree { current }
     }
 }
 
@@ -85,4 +85,3 @@ impl ValueTree for BoolValueTree {
         false
     }
 }
-

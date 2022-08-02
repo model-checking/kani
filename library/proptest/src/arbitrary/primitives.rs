@@ -13,7 +13,7 @@
 
 use crate::bool;
 // use crate::char;
-use crate::num::{ i16, i32, i64, i8, isize, u16, u32, u64, u8, usize, f32, f64,};
+use crate::num::{f32, f64, i16, i32, i64, i8, isize, u16, u32, u64, u8, usize};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::num::{i128, u128};
 

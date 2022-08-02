@@ -12,7 +12,6 @@
 //! This file defines the strategy trait, which replaces
 //! proptest::strategy::Strategy
 
-
 use crate::std_facade::{fmt, Arc, Box, Rc};
 
 use core::cmp;
@@ -1031,4 +1030,3 @@ where
         }
     }
 }
-

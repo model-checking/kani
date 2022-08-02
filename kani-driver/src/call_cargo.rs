@@ -38,8 +38,7 @@ impl KaniSession {
         let target_dir = self.args.target_dir.as_ref().unwrap_or(&find_target_dir()).clone();
         let outdir = target_dir.join(build_target).join("debug/deps");
 
-        let kani_extern_lib_path =
-            PathBuf::from(std::env!("KANI_EXTERN_DIR"));
+        let kani_extern_lib_path = PathBuf::from(std::env!("KANI_EXTERN_DIR"));
 
         let flag_env = {
             let rustc_args = self.kani_rustc_flags();
@@ -87,15 +86,11 @@ impl KaniSession {
             outdir: outdir.clone(),
             symtabs: glob(&outdir.join("*.symtab.json"))?
                 .into_iter()
-                .chain(
-                    glob(&kani_extern_lib_path.join("*.symtab.json"))?
-                )
+                .chain(glob(&kani_extern_lib_path.join("*.symtab.json"))?)
                 .collect(),
             metadata: glob(&outdir.join("*.kani-metadata.json"))?
                 .into_iter()
-                .chain(
-                    glob(&kani_extern_lib_path.join("*.kani-metadata.json"))?
-                )
+                .chain(glob(&kani_extern_lib_path.join("*.kani-metadata.json"))?)
                 .collect(),
             restrictions: self.args.restrict_vtable().then(|| outdir),
         })

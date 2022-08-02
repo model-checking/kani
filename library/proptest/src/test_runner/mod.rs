@@ -10,8 +10,6 @@ mod runner;
 // See GitHub history for details
 mod config;
 
-
+pub use config::*;
 pub use reason::*;
 pub use runner::*;
-pub use config::*;
-

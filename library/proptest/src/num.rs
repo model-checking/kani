@@ -20,14 +20,21 @@ use core::ops::Range;
 // Below 2 functions are the source of Kani symbolic variables.
 
 /// Produce an symbolic value from a range.
-pub(crate) fn sample_uniform<X: kani::Arbitrary + PartialOrd>(_: &mut TestRunner, range: Range<X>) -> X {
+pub(crate) fn sample_uniform<X: kani::Arbitrary + PartialOrd>(
+    _: &mut TestRunner,
+    range: Range<X>,
+) -> X {
     let value: X = kani::any();
     kani::assume(range.contains(&value));
     value
 }
 
 /// Produce an symbolic value start and end values. End is inclusive.
-pub(crate) fn sample_uniform_incl<X: kani::Arbitrary + PartialOrd>(_: &mut TestRunner, start: X, end: X) -> X {
+pub(crate) fn sample_uniform_incl<X: kani::Arbitrary + PartialOrd>(
+    _: &mut TestRunner,
+    start: X,
+    end: X,
+) -> X {
     let value: X = kani::any();
     kani::assume(value <= end);
     kani::assume(value >= start);
@@ -143,16 +150,14 @@ macro_rules! signed_integer_bin_search {
             impl BinarySearch {
                 /// Creates a new binary searcher starting at the given value.
                 pub fn new(start: $typ) -> Self {
-                    BinarySearch { curr: start, }
+                    BinarySearch { curr: start }
                 }
 
                 /// Creates a new binary searcher which will not produce values
                 /// on the other side of `lo` or `hi` from `start`. `lo` is
                 /// inclusive, `hi` is exclusive.
                 fn new_clamped(_: $typ, start: $typ, _: $typ) -> Self {
-                    BinarySearch {
-                        curr: start,
-                    }
+                    BinarySearch { curr: start }
                 }
             }
             impl ValueTree for BinarySearch {
@@ -195,13 +200,13 @@ macro_rules! unsigned_integer_bin_search {
             impl BinarySearch {
                 /// Creates a new binary searcher starting at the given value.
                 pub fn new(start: $typ) -> Self {
-                    BinarySearch { curr: start, }
+                    BinarySearch { curr: start }
                 }
 
                 /// Creates a new binary searcher which will not search below
                 /// the given `lo` value.
                 fn new_clamped(_: $typ, start: $typ, _: $typ) -> Self {
-                    BinarySearch { curr: start, }
+                    BinarySearch { curr: start }
                 }
 
                 /// Creates a new binary searcher which will not search below
@@ -247,7 +252,7 @@ unsigned_integer_bin_search!(u128);
 unsigned_integer_bin_search!(usize);
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct  FloatTypes(u32);
+pub(crate) struct FloatTypes(u32);
 
 impl std::ops::BitOr for FloatTypes {
     type Output = Self;
@@ -264,22 +269,22 @@ impl std::ops::BitOrAssign for FloatTypes {
 }
 
 impl FloatTypes {
-    const POSITIVE       : FloatTypes = FloatTypes(0b0000_0001);
-    const NEGATIVE       : FloatTypes = FloatTypes(0b0000_0010);
-    const NORMAL         : FloatTypes = FloatTypes(0b0000_0100);
-    const SUBNORMAL      : FloatTypes = FloatTypes(0b0000_1000);
-    const ZERO           : FloatTypes = FloatTypes(0b0001_0000);
-    const INFINITE       : FloatTypes = FloatTypes(0b0010_0000);
-    const QUIET_NAN      : FloatTypes = FloatTypes(0b0100_0000);
-    const SIGNALING_NAN  : FloatTypes = FloatTypes(0b1000_0000);
-    const ANY            : FloatTypes = FloatTypes(0b1111_1111);
+    const POSITIVE: FloatTypes = FloatTypes(0b0000_0001);
+    const NEGATIVE: FloatTypes = FloatTypes(0b0000_0010);
+    const NORMAL: FloatTypes = FloatTypes(0b0000_0100);
+    const SUBNORMAL: FloatTypes = FloatTypes(0b0000_1000);
+    const ZERO: FloatTypes = FloatTypes(0b0001_0000);
+    const INFINITE: FloatTypes = FloatTypes(0b0010_0000);
+    const QUIET_NAN: FloatTypes = FloatTypes(0b0100_0000);
+    const SIGNALING_NAN: FloatTypes = FloatTypes(0b1000_0000);
+    const ANY: FloatTypes = FloatTypes(0b1111_1111);
 
-    fn intersects(&self , other: Self) -> bool {
+    fn intersects(&self, other: Self) -> bool {
         let intersection = self.0 & other.0;
         intersection != 0
     }
 
-    fn contains(&self , other: Self) -> bool {
+    fn contains(&self, other: Self) -> bool {
         let intersection = self.0 & other.0;
         intersection == other.0
     }
@@ -303,8 +308,7 @@ impl FloatTypes {
     }
 }
 
-trait FloatLayout
-{
+trait FloatLayout {
     type Bits: Copy;
 
     const SIGN_MASK: Self::Bits;
@@ -592,10 +596,10 @@ macro_rules! float_bin_search {
     ($typ:ident) => {
         #[allow(missing_docs)]
         pub mod $typ {
-            use core::ops;
             use super::{FloatLayout, FloatTypes};
             use crate::strategy::*;
             use crate::test_runner::TestRunner;
+            use core::ops;
 
             float_any!($typ);
 
@@ -610,20 +614,18 @@ macro_rules! float_bin_search {
             impl BinarySearch {
                 /// Creates a new binary searcher starting at the given value.
                 pub fn new(start: $typ) -> Self {
-                    BinarySearch { curr: start, }
+                    BinarySearch { curr: start }
                 }
 
                 fn new_with_types(start: $typ, _: FloatTypes) -> Self {
-                    BinarySearch { curr: start, }
+                    BinarySearch { curr: start }
                 }
 
                 /// Creates a new binary searcher which will not produce values
                 /// on the other side of `lo` or `hi` from `start`. `lo` is
                 /// inclusive, `hi` is exclusive.
                 fn new_clamped(_: $typ, start: $typ, _: $typ) -> Self {
-                    BinarySearch {
-                        curr: start,
-                    }
+                    BinarySearch { curr: start }
                 }
             }
 

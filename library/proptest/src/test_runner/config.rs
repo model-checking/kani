@@ -46,7 +46,6 @@ const TIMEOUT: &str = "PROPTEST_TIMEOUT";
 #[cfg(feature = "std")]
 const VERBOSE: &str = "PROPTEST_VERBOSE";
 
-
 #[cfg(feature = "std")]
 fn contextualize_config(mut result: Config) -> Config {
     fn parse_or_warn<T: FromStr + fmt::Display>(src: &OsString, dst: &mut T, typ: &str, var: &str) {
@@ -286,7 +285,6 @@ pub struct Config {
     // Caching incurs its own overhead, and may very well make your test run
     // more slowly.
     // pub result_cache: fn() -> Box<dyn ResultCache>,
-
     /// Set to non-zero values to cause proptest to emit human-targeted
     /// messages to stderr as it runs.
     ///

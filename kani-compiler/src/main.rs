@@ -50,8 +50,7 @@ fn rustc_gotoc_flags(lib_path: &str) -> Vec<String> {
 
     let build_target = env!("TARGET"); // see build.rs
     let kani_extern_lib_path =
-        PathBuf::from(lib_path)
-        .join(format!("../../../../../{}/debug/deps", build_target));
+        PathBuf::from(lib_path).join(format!("../../../../../{}/debug/deps", build_target));
 
     let args = vec![
         "-C",
@@ -71,11 +70,9 @@ fn rustc_gotoc_flags(lib_path: &str) -> Vec<String> {
         "crate-attr=feature(register_tool)",
         "-Z",
         "crate-attr=register_tool(kanitool)",
-
         // Prints expanded macro. For proptest devops only, remove after done
         // "-Z",
         // "unpretty=expanded",
-
         "-L",
         lib_path,
         "--extern",
