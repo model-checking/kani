@@ -11,6 +11,7 @@ use std::path::Path;
 use std::process::Command;
 
 impl KaniSession {
+    /// The main driver for generating executable traces and adding them to source code.
     pub fn exe_trace_main(&self, specialized_obj: &Path, harness: &HarnessMetadata) {
         if self.args.gen_exe_trace {
             let (det_vals, interp_det_vals) = parser::get_det_vals(specialized_obj);
@@ -42,6 +43,7 @@ impl KaniSession {
         }
     }
 
+    /// Add the exe trace to the user's source code, format it, and short circuit if code already present.
     fn modify_src_code(
         &self,
         src_file_path: &str,
@@ -93,6 +95,7 @@ impl KaniSession {
         self.run_rustfmt(src_file, Some(parent_dir), Some(start_line), Some(end_line));
     }
 
+    /// Run rustfmt on the given src file, and optionally on only the specific lines.
     fn run_rustfmt(
         &self,
         src_file: &str,
@@ -104,7 +107,7 @@ impl KaniSession {
 
         let mut args: Vec<OsString> = Vec::new();
         if let (Some(start_line), Some(end_line)) = (start_line_opt, end_line_opt) {
-            // rustfmt `--file-lines` arg is currently unstable.
+            // `--file-lines` arg is currently unstable.
             args.push("--unstable-features".into());
 
             let file_line_arg =
@@ -127,11 +130,17 @@ impl KaniSession {
     }
 }
 
+/// Generate a unit test from a list of det vals.
 fn format_unit_test(
     harness_name: &str,
     det_vals: &[Vec<u8>],
     interp_det_vals: &[String],
 ) -> (String, String) {
+    // Given a number of byte vectors, format them as:
+    // // interp_det_val_1
+    // vec![det_val_1],
+    // // interp_det_val_2
+    // vec![det_val_2], ...
     let vecs_as_str = det_vals
         .iter()
         .zip(interp_det_vals.iter())
@@ -139,12 +148,13 @@ fn format_unit_test(
         .collect::<Vec<String>>()
         .join(",\n");
 
+    // Hash the generated det val string along with the proof harness name.
     let mut hasher = DefaultHasher::new();
     harness_name.hash(&mut hasher);
     vecs_as_str.hash(&mut hasher);
     let hash = hasher.finish();
-    let exe_trace_func_name = format!("kani_exe_trace_{}_{}", harness_name, hash);
 
+    let exe_trace_func_name = format!("kani_exe_trace_{}_{}", harness_name, hash);
     let exe_trace = format!(
         "
         #[test]
@@ -173,12 +183,14 @@ mod parser {
         handle_cbmc_out(&cbmc_out)
     }
 
+    /// Read in the CBMC results file and deserialize it to a JSON object.
     fn get_cbmc_out(results_filename: &Path) -> Value {
         let results_file = File::open(results_filename).unwrap();
         let reader = BufReader::new(results_file);
         serde_json::from_reader(reader).unwrap()
     }
 
+    /// The first-level JSON object parser. This extracts the result message.
     fn handle_cbmc_out(cbmc_out: &Value) -> (Vec<Vec<u8>>, Vec<String>) {
         let mut det_vals: Vec<Vec<u8>> = Vec::new();
         let mut interp_det_vals: Vec<String> = Vec::new();
@@ -193,6 +205,7 @@ mod parser {
         (det_vals, interp_det_vals)
     }
 
+    /// The second-level JSON object parser. This extracts the traces of failing assertions.
     fn handle_result(
         result_val: &Value,
         det_vals: &mut Vec<Vec<u8>>,
@@ -208,6 +221,7 @@ mod parser {
         }
     }
 
+    /// The third-level of JSON object parser. This extracts individual bytes from kani::any_raw calls.
     fn handle_trace_pt(
         trace_pt: &Value,
         det_vals: &mut Vec<Vec<u8>>,
