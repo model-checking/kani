@@ -3,7 +3,7 @@
 
 // kani-flags: --harness harness --enable-unstable --gen-exe-trace
 
-/// Note: This test case uses a line-by-line style of coding to make debugging easier.
+/// Note: This test case uses a line-by-line coding style to make debugging easier.
 
 struct MyStruct {
     // Unsigned types
