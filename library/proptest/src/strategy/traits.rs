@@ -1,11 +1,20 @@
-// Copyright Kani Contributors, the proptest developers
-// SPDX-License-Identifier: Apache-2.0 OR MIT
+//-
+// Copyright 2017, 2018 The proptest developers
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+// Modifications Copyright Kani Contributors
+// See GitHub history for details
 
 //! This file defines the strategy trait, which replaces
 //! proptest::strategy::Strategy
 
 
 use crate::std_facade::{fmt, Arc, Box, Rc};
+
 use core::cmp;
 
 // use crate::strategy::*;
