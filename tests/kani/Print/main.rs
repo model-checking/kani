@@ -13,4 +13,6 @@ fn main() {
     eprintln!("Bye, world!");
     let s = "bar";
     eprint!("s is {:?}", s);
+    println!();
+    eprintln!();
 }
