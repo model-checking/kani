@@ -14,7 +14,7 @@ fn is_sorted(s: &[i32]) -> bool {
 }
 
 #[kani::proof]
-#[kani::unwind(6)]
+#[kani::unwind(7)]
 fn check_sorted() {
     let mut arr: [i32; 5] = kani::any();
     arr.sort();
