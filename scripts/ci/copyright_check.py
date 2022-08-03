@@ -5,12 +5,16 @@ import re
 import sys
 import os.path as path
 from enum import Enum
+from itertools import chain
+
+
+COMMENT_OR_EMPTY_PATTERN = '^(//.*$|#.*$|\\s*$)'
 
 STANDARD_HEADER_PATTERN_1 = '(//|#) Copyright Kani Contributors'
 STANDARD_HEADER_PATTERN_2 = '(//|#) SPDX-License-Identifier: Apache-2.0 OR MIT'
 
 MODIFIED_HEADER_PATTERN_1 = '(//|#) SPDX-License-Identifier: Apache-2.0 OR MIT'
-MODIFIED_HEADER_PATTERN_2 = '(//|#)'
+MODIFIED_HEADER_PATTERN_2 = COMMENT_OR_EMPTY_PATTERN
 MODIFIED_HEADER_PATTERN_3 = '(//|#) Modifications Copyright Kani Contributors'
 MODIFIED_HEADER_PATTERN_4 = '(//|#) See GitHub history for details.'
 
@@ -27,6 +31,19 @@ def get_header(has_shebang, regexes):
     init_idx = 0 if not has_shebang else 1
     indices = range(init_idx, init_idx + len(regexes))
     return zip(regexes, indices)
+
+def match_somewhere(regexes, lines, empty_or_comment_regex):
+    """ Matches all MODIFIED_HEADER patterns within the file. This is used
+    when the license is not at the top header, and there are licenses of
+    external libraries. """
+    maybe_match_head_index = [index for index, line in enumerate(lines) if regexes[0].search(line)][:1]
+    if maybe_match_head_index and maybe_match_head_index[0] + len(regexes) <= len(lines):
+        match_head_index = maybe_match_head_index[0]
+        matches_pre_license = (empty_or_comment_regex.search(lines[index]) for index in range(match_head_index))
+        matches_license = (regex.search(lines[match_head_index + index]) for index, regex in enumerate(regexes))
+        return all(chain(matches_license, matches_pre_license))
+    else:
+        return False
 
 def result_into_bool(result):
     if result == CheckResult.FAIL:
@@ -81,9 +98,7 @@ def copyright_check(filename):
     regexes.append(re.compile(MODIFIED_HEADER_PATTERN_3))
     regexes.append(re.compile(MODIFIED_HEADER_PATTERN_4))
 
-    header = get_header(has_shebang, regexes)
-
-    if matches_header_lines(header, lines):
+    if match_somewhere(regexes, lines, re.compile(COMMENT_OR_EMPTY_PATTERN)):
         return CheckResult.PASS_MODIFIED
 
     # We fail if there were no matches
