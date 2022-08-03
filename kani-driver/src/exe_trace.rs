@@ -18,8 +18,11 @@ impl KaniSession {
     pub fn exe_trace_main(&self, specialized_obj: &Path, harness: &HarnessMetadata) {
         if self.args.gen_exe_trace {
             let (det_vals, interp_det_vals) = parser::get_det_vals(specialized_obj);
-            let (exe_trace, exe_trace_func_name) =
-                format_unit_test(&harness.mangled_name, &det_vals[..], &interp_det_vals[..]);
+            let (exe_trace, exe_trace_func_name) = format_unit_test(
+                &harness.mangled_name,
+                det_vals.as_slice(),
+                interp_det_vals.as_slice(),
+            );
 
             println!("Executable trace:\n");
             println!("{}", exe_trace);
@@ -95,30 +98,40 @@ impl KaniSession {
             .expect("Couldn't get file name of source file")
             .to_str()
             .expect("Couldn't convert proof harness file name from OsStr to str");
-        self.run_rustfmt(src_file, Some(parent_dir), Some(start_line), Some(end_line));
+        let file_line_ranges = vec![FileLineRange {
+            file: src_file.to_string(),
+            line_range: Some((start_line, end_line)),
+        }];
+        self.run_rustfmt(file_line_ranges.as_slice(), Some(parent_dir));
     }
 
     /// Run rustfmt on the given src file, and optionally on only the specific lines.
-    fn run_rustfmt(
-        &self,
-        src_file: &str,
-        current_dir_opt: Option<&str>,
-        start_line_opt: Option<usize>,
-        end_line_opt: Option<usize>,
-    ) {
+    fn run_rustfmt(&self, file_line_ranges: &[FileLineRange], current_dir_opt: Option<&str>) {
         let mut cmd = Command::new("rustfmt");
-
         let mut args: Vec<OsString> = Vec::new();
-        if let (Some(start_line), Some(end_line)) = (start_line_opt, end_line_opt) {
+
+        // Deal with file line ranges.
+        let mut line_range_dicts: Vec<String> = Vec::new();
+        for file_line_range in file_line_ranges {
+            if let Some((start_line, end_line)) = file_line_range.line_range {
+                let src_file = &file_line_range.file;
+                let line_range_dict =
+                    format!("{{\"file\":\"{src_file}\",\"range\":[{start_line},{end_line}]}}");
+                line_range_dicts.push(line_range_dict);
+            }
+        }
+        if !line_range_dicts.is_empty() {
             // `--file-lines` arg is currently unstable.
             args.push("--unstable-features".into());
-
-            let file_line_arg =
-                format!("[{{\"file\":\"{src_file}\",\"range\":[{start_line},{end_line}]}}]");
             args.push("--file-lines".into());
-            args.push(file_line_arg.into());
+            let line_range_dicts_combined = format!("[{}]", line_range_dicts.join(","));
+            args.push(line_range_dicts_combined.into());
         }
-        args.push(src_file.into());
+
+        for file_line_range in file_line_ranges {
+            args.push((&file_line_range.file).into());
+        }
+
         cmd.args(args);
 
         if let Some(current_dir) = current_dir_opt {
@@ -171,6 +184,10 @@ fn format_unit_test(
     );
 
     (exe_trace, exe_trace_func_name)
+}
+struct FileLineRange {
+    file: String,
+    line_range: Option<(usize, usize)>,
 }
 
 /// Read the CBMC output, parse it as a JSON object, and extract the deterministic values.
