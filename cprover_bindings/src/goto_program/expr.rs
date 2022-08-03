@@ -330,6 +330,7 @@ impl Expr {
     pub fn can_cast_from(source: &Type, target: &Type) -> bool {
         let source = source.unwrap_typedef();
         let target = target.unwrap_typedef();
+        #[allow(clippy::needless_bool)]
         if source == target {
             true
         } else if target.is_bool() {

@@ -681,7 +681,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let fn_singleton = self.ensure_global_var(
             &fn_singleton_name,
             false,
-            fn_struct_ty.clone(),
+            fn_struct_ty,
             Location::none(),
             |_, _| None, // zero-sized, so no initialization necessary
         );

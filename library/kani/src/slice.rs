@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-use crate::{any, any_raw, assume, Arbitrary};
+use crate::{any, any_raw_internal, assume, Arbitrary};
 use std::alloc::{alloc, dealloc, Layout};
 use std::ops::{Deref, DerefMut};
 
@@ -39,8 +39,7 @@ fn any_range<const LENGTH: usize>() -> (usize, usize) {
 /// between `0..=MAX_SLICE_LENGTH` and with non-deterministic content.  This is
 /// useful in situations where one wants to verify that all slices with any
 /// content and with a length up to `MAX_SLICE_LENGTH` satisfy a certain
-/// property. Use `any_slice` or `any_raw_slice` to create an instance of this
-/// struct.
+/// property. Use `any_slice` to create an instance of this struct.
 ///
 /// # Example:
 ///
@@ -79,6 +78,10 @@ impl<T, const MAX_SLICE_LENGTH: usize> AnySlice<T, MAX_SLICE_LENGTH> {
         any_slice
     }
 
+    #[deprecated(
+        since = "0.8.0",
+        note = "This function may return symbolic values that don't respects the language type invariants."
+    )]
     fn new_raw() -> Self
     where
         [(); std::mem::size_of::<T>()]:,
@@ -88,7 +91,7 @@ impl<T, const MAX_SLICE_LENGTH: usize> AnySlice<T, MAX_SLICE_LENGTH> {
             let mut i = 0;
             // See note on `MAX_SLICE_LENGTH` in `new` method above
             while i < any_slice.slice_len && i < MAX_SLICE_LENGTH {
-                *any_slice.ptr.add(i) = any_raw();
+                *any_slice.ptr.add(i) = any_raw_internal();
                 i += 1;
             }
         }
@@ -154,8 +157,18 @@ where
 
 /// # Safety
 ///
-/// TODO: Safety of any_raw_slice is a complex matter. See
-/// https://github.com/model-checking/kani/issues/1394
+/// Users must guarantee that an unconstrained symbolic value for type T only represents valid
+/// values.
+///
+/// # Deprecated
+///
+/// This has been deprecated due to its limited value and high risk of generating undefined
+/// behavior.
+#[allow(deprecated)]
+#[deprecated(
+    since = "0.8.0",
+    note = "This function may return symbolic values that don't respects the language type invariants."
+)]
 pub unsafe fn any_raw_slice<T, const MAX_SLICE_LENGTH: usize>() -> AnySlice<T, MAX_SLICE_LENGTH>
 where
     [(); std::mem::size_of::<T>()]:,

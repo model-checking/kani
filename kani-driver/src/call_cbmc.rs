@@ -54,6 +54,7 @@ impl KaniSession {
                 // the best possible fix is port to rust instead of using python, or getting more
                 // feedback than just exit status (or using a particular magic exit code?)
             }
+            // TODO: We should print this even the verification fails but not if it crashes.
             println!("Verification Time: {}s", elapsed);
         }
 
