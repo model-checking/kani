@@ -30,7 +30,7 @@ def get_header(has_shebang, regexes):
     indices = range(init_idx, init_idx + len(regexes))
     return zip(regexes, indices)
 
-def match_somewhere(regexes, lines):
+def match_somewhere(regexes, lines, empty_or_comment_regex):
     """ Matches all MODIFIED_HEADER patterns within the file. This is used
     when the license is not at the top header, and there are licenses of
     external libraries. """
