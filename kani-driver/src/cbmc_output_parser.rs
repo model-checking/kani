@@ -498,12 +498,20 @@ fn postprocess_error_message(message: ParserItem) -> ParserItem {
     }
 }
 
+/// The main function to process CBMC's output.
+///
+/// First, we create a reader on CBMC's `stdout`, which is required for the
+/// parser. Then, we iterate over all the items coming from the parser. In
+/// general, items are first processed (this may or may not transform the item),
+/// then formatted (according to the output format) and printed. The
+/// verification status (i.e., the returned value) depends on processing the
+/// verification results.
 pub fn process_cbmc_output(
-    mut cmd: Child,
+    mut process: Child,
     extra_ptr_checks: bool,
     output_format: &OutputFormat,
 ) -> VerificationStatus {
-    let stdout = cmd.stdout.as_mut().unwrap();
+    let stdout = process.stdout.as_mut().unwrap();
     let mut stdout_reader = BufReader::new(stdout);
     let parser = Parser::new(&mut stdout_reader);
     let mut result = false;
