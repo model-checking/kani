@@ -80,18 +80,18 @@ pub mod std_facade;
 
 #[doc(hidden)]
 #[macro_use]
-pub mod sugar;
+// pub mod sugar;
 
-pub mod arbitrary;
+// pub mod arbitrary;
 // pub mod array;
 // pub mod bits;
-pub mod bool;
+// pub mod bool;
 // pub mod char;
 // pub mod collection;
-pub mod num;
+// pub mod num;
 pub mod strategy;
 pub mod test_runner;
-pub mod tuple;
+// pub mod tuple;
 
 // pub mod option;
 // pub mod result;
@@ -99,4 +99,4 @@ pub mod tuple;
 // #[cfg(feature = "std")]
 // pub mod string;
 
-pub mod prelude;
+// pub mod prelude;
