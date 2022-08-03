@@ -211,8 +211,7 @@ enum ParserItem {
 impl ParserItem {
     /// Determines if an item must be skipped or not.
     fn must_be_skipped(&self) -> bool {
-        matches!(&self, ParserItem::Message { message_text, .. } if message_text.starts_with("Building error trace"))
-            || matches!(&self, ParserItem::Message { message_text, .. } if message_text.starts_with("VERIFICATION"))
+        matches!(&self, ParserItem::Message { message_text, .. } if message_text.starts_with("Building error trace") || message_text.starts_with("VERIFICATION"))
     }
 }
 
@@ -255,25 +254,34 @@ impl SourceLocation {
 /// This is used to format source locations for individual checks. But source
 /// locations may be printed in a different way in other places (e.g., in the
 /// "Failed Checks" summary at the end).
+///
+/// Source locations formatted this way will look like:
+/// `<file>:<line>:<column> in function <function>`
+/// if all attributes were specified. Otherwise, we:
+///  * Omit `in function <function>` if the function isn't specified.
+///  * Use `Unknown file` instead of `<file>:<line>:<column>` if the file isn't
+///    specified.
+///  * Lines and columns are only formatted if they were specified and preceding
+///    attribute was formatted.
 impl std::fmt::Display for SourceLocation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut fmt_str = String::new();
-        if self.file.is_some() {
-            let file_str = filepath(self.file.clone().unwrap()).to_string();
+        if let Some(file) = self.file.clone() {
+            let file_str = filepath(file).to_string();
             fmt_str.push_str(file_str.as_str());
-            if self.line.is_some() {
-                let line_str = format!(":{}", self.line.clone().unwrap());
+            if let Some(line) = self.line.clone() {
+                let line_str = format!(":{}", line);
                 fmt_str.push_str(line_str.as_str());
-                if self.column.is_some() {
-                    let column_str = format!(":{}", self.column.clone().unwrap());
+                if let Some(column) = self.column.clone() {
+                    let column_str = format!(":{}", column);
                     fmt_str.push_str(column_str.as_str());
                 }
             }
         } else {
-            fmt_str.push_str("Unknown File");
+            fmt_str.push_str("Unknown file");
         }
-        if self.function.is_some() {
-            let fun_str = format!(" in function {}", self.function.clone().unwrap());
+        if let Some(function) = self.function.clone() {
+            let fun_str = format!(" in function {}", function);
             fmt_str.push_str(fun_str.as_str());
         }
 
