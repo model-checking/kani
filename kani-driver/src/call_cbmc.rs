@@ -25,7 +25,7 @@ impl KaniSession {
 
         {
             let mut temps = self.temporaries.borrow_mut();
-            temps.push(output_filename.clone());
+            temps.push(output_filename);
         }
 
         let args: Vec<OsString> = self.cbmc_flags(file, harness)?;

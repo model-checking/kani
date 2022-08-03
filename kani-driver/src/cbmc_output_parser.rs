@@ -267,7 +267,7 @@ impl std::fmt::Display for SourceLocation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut fmt_str = String::new();
         if let Some(file) = self.file.clone() {
-            let file_str = filepath(file).to_string();
+            let file_str = filepath(file);
             fmt_str.push_str(file_str.as_str());
             if let Some(line) = self.line.clone() {
                 let line_str = format!(":{}", line);
@@ -424,7 +424,7 @@ impl<'a, 'b> Parser<'a, 'b> {
     /// The action may result in a `ParserItem`, which is then returned.
     pub fn process_line(&mut self, input: String) -> Option<ParserItem> {
         self.add_to_input(input.clone());
-        let action_required = self.triggers_action(input.clone());
+        let action_required = self.triggers_action(input);
         if let Some(action) = action_required {
             let possible_item = self.do_action(action);
             return possible_item;
@@ -525,7 +525,7 @@ pub fn process_cbmc_output(
         let processed_item = process_item(item, extra_ptr_checks, &mut result);
         // Both formatting and printing could be handled by objects which
         // implement a trait `Printer`.
-        let formatted_item = format_item(&processed_item, &output_format);
+        let formatted_item = format_item(&processed_item, output_format);
         if formatted_item.is_some() {
             println!("{}", formatted_item.unwrap())
         };
@@ -587,7 +587,7 @@ fn format_result(properties: &Vec<Property>, show_checks: bool) -> String {
         match status {
             CheckStatus::Failure => {
                 number_tests_failed += 1;
-                failed_tests.push(&prop);
+                failed_tests.push(prop);
             }
             CheckStatus::Undetermined => {
                 number_tests_undetermined += 1;
@@ -657,14 +657,14 @@ fn format_result(properties: &Vec<Property>, show_checks: bool) -> String {
     // into the parser iterator so they are the next messages to be processed.
     // However, we haven't figured out the best way to do this for now.
     // <https://github.com/model-checking/kani/issues/1432>
-    if has_check_failure(&properties, UNSUPPORTED_CONSTRUCT_DESC) {
+    if has_check_failure(properties, UNSUPPORTED_CONSTRUCT_DESC) {
         result_str.push_str(
             "** WARNING: A Rust construct that is not currently supported \
         by Kani was found to be reachable. Check the results for \
         more details.",
         );
     }
-    if has_check_failure(&properties, UNWINDING_ASSERT_DESC) {
+    if has_check_failure(properties, UNWINDING_ASSERT_DESC) {
         result_str.push_str("[Kani] info: Verification output shows one or more unwinding failures.\n\
         [Kani] tip: Consider increasing the unwinding value or disabling `--unwinding-assertions`.\n");
     }
@@ -775,7 +775,7 @@ fn modify_undefined_function_checks(mut properties: Vec<Property>) -> (Vec<Prope
     let mut has_unknown_location_checks = false;
     for mut prop in &mut properties {
         if prop.description.contains(ASSERTION_FALSE)
-            && extract_property_class(&prop).unwrap() == DEFAULT_ASSERTION
+            && extract_property_class(prop).unwrap() == DEFAULT_ASSERTION
             && prop.source_location.file.is_none()
         {
             prop.description = "Function with missing definition is unreachable".to_string();
@@ -832,7 +832,7 @@ fn update_properties_with_reach_status(
     has_fundamental_failures: bool,
 ) -> Vec<Property> {
     for prop in properties.iter_mut() {
-        prop.description = get_readable_description(&prop);
+        prop.description = get_readable_description(prop);
         if has_fundamental_failures {
             if prop.status == CheckStatus::Success {
                 prop.status = CheckStatus::Undetermined;
@@ -914,14 +914,13 @@ fn filter_sanity_checks(properties: Vec<Property>) -> Vec<Property> {
 /// Our support for primitives and overflow pointer checks is unstable and
 /// can result in lots of spurious failures. By default, we filter them out.
 fn filter_ptr_checks(properties: Vec<Property>) -> Vec<Property> {
-    let props = properties
+    properties
         .into_iter()
         .filter(|prop| {
             !extract_property_class(prop).unwrap().contains("pointer_arithmetic")
                 && !extract_property_class(prop).unwrap().contains("pointer_primitives")
         })
-        .collect();
-    props
+        .collect()
 }
 
 /// When assertion reachability checks are turned on, Kani prefixes each
