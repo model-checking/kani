@@ -21,7 +21,7 @@
 
 use crate::{args::OutputFormat, call_cbmc::VerificationStatus};
 use anyhow::Result;
-use colored::Colorize;
+use console::style;
 use pathdiff::diff_paths;
 use regex::Regex;
 use serde::Deserialize;
@@ -327,10 +327,10 @@ pub enum CheckStatus {
 impl std::fmt::Display for CheckStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let check_str = match self {
-            CheckStatus::Success => "SUCCESS".green(),
-            CheckStatus::Failure => "FAILURE".red(),
-            CheckStatus::Unreachable => "UNREACHABLE".yellow(),
-            CheckStatus::Undetermined => "UNDETERMINED".yellow(),
+            CheckStatus::Success => style("SUCCESS").green(),
+            CheckStatus::Failure => style("FAILURE").red(),
+            CheckStatus::Unreachable => style("UNREACHABLE").yellow(),
+            CheckStatus::Undetermined => style("UNDETERMINED").yellow(),
         };
         write! {f, "{}", check_str}
     }
@@ -651,7 +651,7 @@ fn format_result(properties: &Vec<Property>, show_checks: bool) -> String {
     }
 
     let verification_result =
-        if number_tests_failed == 0 { "SUCCESSFUL".green() } else { "FAILED".red() };
+        if number_tests_failed == 0 { style("SUCCESSFUL").green() } else { style("FAILED").red() };
     let overall_result = format!("\nVERIFICATION:- {}\n", verification_result);
     result_str.push_str(overall_result.as_str());
 
