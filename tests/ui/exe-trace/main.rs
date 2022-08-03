@@ -3,7 +3,8 @@
 
 // kani-flags: --harness harness --enable-unstable --gen-exe-trace
 
-//! Note: This test case uses a line-by-line coding style to make debugging easier.
+//! This test checks that the correct deterministic values are read and formatted into an executable trace unit test case.
+//! Note: it uses a line-by-line coding style to make debugging easier.
 
 struct MyStruct {
     // Unsigned types
