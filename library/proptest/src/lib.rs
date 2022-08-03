@@ -6,8 +6,11 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
+
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
 // Modifications Copyright Kani Contributors
-// See GitHub history for details
+// See GitHub history for details.
 
 //! # Proptest Reference Documentation
 //!
@@ -32,7 +35,10 @@
 #![cfg_attr(all(feature = "std", feature = "unstable"), feature(ip))]
 #![cfg_attr(all(feature = "alloc", not(feature = "std")), feature(core_intrinsics))]
 
-// // std_facade is used in a few macros, so it needs to be public.
+// TODO: Implement support for more features. They are commented out
+// for now.
+
+// std_facade is used in a few macros, so it needs to be public.
 // #[macro_use]
 // #[doc(hidden)]
 pub mod std_facade;

@@ -6,8 +6,11 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
+
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
 // Modifications Copyright Kani Contributors
-// See GitHub history for details
+// See GitHub history for details.
 
 //! This file defines the strategy trait, which replaces
 //! proptest::strategy::Strategy
@@ -64,6 +67,8 @@ pub trait Strategy: fmt::Debug {
     /// persistence since it is implemented by simply saving the seed used to
     /// generate the test case.
     fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self>;
+
+    // TODO: Implement more complex strategy compositions.
 
     // /// Returns a strategy which produces values transformed by the function
     // /// `fun`.
