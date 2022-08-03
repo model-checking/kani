@@ -6,7 +6,7 @@
 use proptest::test_runner::Config;
 
 // check if the proptest library is linked and macro is working.
-proptest::proptest!{
+proptest::proptest! {
     fn successfully_linked_proptest(_ in proptest::strategy::Just(()) ) {
         let config = Config::default();
         assert_eq!(
