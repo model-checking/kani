@@ -6,7 +6,7 @@ import sys
 import os.path as path
 from enum import Enum
 
-COMMENT_OR_EMPTY_PATTERN = '^(//.*$|#.*$|\s*$)'
+COMMENT_OR_EMPTY_PATTERN = '^(//.*$|#.*$|\\s*$)'
 
 STANDARD_HEADER_PATTERN_1 = '(//|#) Copyright Kani Contributors'
 STANDARD_HEADER_PATTERN_2 = '(//|#) SPDX-License-Identifier: Apache-2.0 OR MIT'
