@@ -5,6 +5,8 @@ import re
 import sys
 import os.path as path
 from enum import Enum
+from itertools import chain
+
 
 COMMENT_OR_EMPTY_PATTERN = '^(//.*$|#.*$|\\s*$)'
 
@@ -37,9 +39,9 @@ def match_somewhere(regexes, lines, empty_or_comment_regex):
     maybe_match_head_index = [index for index, line in enumerate(lines) if regexes[0].search(line)][:1]
     if maybe_match_head_index and maybe_match_head_index[0] + len(regexes) <= len(lines):
         match_head_index = maybe_match_head_index[0]
-        matches_pre_license = [empty_or_comment_regex.search(lines[index]) for index in range(match_head_index)]
-        matches_license = [regex.search(lines[match_head_index + index]) for index, regex in enumerate(regexes)]
-        return all(matches_license + matches_pre_license)
+        matches_pre_license = (empty_or_comment_regex.search(lines[index]) for index in range(match_head_index))
+        matches_license = (regex.search(lines[match_head_index + index]) for index, regex in enumerate(regexes))
+        return all(chain(matches_license, matches_pre_license))
     else:
         return False
 
