@@ -57,7 +57,6 @@ impl KaniSession {
             } else {
                 Ok(VerificationStatus::Failure)
             }
-            
         };
         // TODO: We should print this even the verification fails but not if it crashes.
         if !self.args.dry_run {
