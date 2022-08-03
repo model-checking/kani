@@ -8,7 +8,7 @@ extern crate kani;
 use kani::Invariant;
 
 #[kani::proof]
-#[kani::unwind(3)]
+#[kani::unwind(4)]
 fn main() {
     let arr: [bool; 2] = kani::any();
     assert!((0..=1).contains(&(arr[0] as u8)));
