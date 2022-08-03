@@ -86,7 +86,7 @@ pub mod std_facade;
 
 #[doc(hidden)]
 #[macro_use]
-// pub mod sugar;
+pub mod sugar;
 
 // pub mod arbitrary;
 // pub mod array;
