@@ -9,7 +9,7 @@
 // kani-flags: --output-format old --no-assertion-reach-checks
 
 fn any_bool() -> bool {
-    kani::nondet()
+    kani::any()
 }
 
 #[kani::proof]
