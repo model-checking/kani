@@ -6,8 +6,8 @@
 
 #[kani::proof]
 fn main() {
-    let a: u8 = kani::nondet();
-    let b: u8 = kani::nondet();
+    let a: u8 = kani::any();
+    let b: u8 = kani::any();
     let sum0 = core::intrinsics::wrapping_add(a, b);
     let sum1 = a.wrapping_add(b);
     let sum2 = a.checked_add(b);
