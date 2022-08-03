@@ -6,6 +6,8 @@ import sys
 import os.path as path
 from enum import Enum
 
+COMMENT_OR_EMPTY_PATTERN = '^(//.*$|#.*$|\s*$)'
+
 STANDARD_HEADER_PATTERN_1 = '(//|#) Copyright Kani Contributors'
 STANDARD_HEADER_PATTERN_2 = '(//|#) SPDX-License-Identifier: Apache-2.0 OR MIT'
 
@@ -31,12 +33,13 @@ def get_header(has_shebang, regexes):
 # Matches all MODIFIED_HEADER patterns within the file. This is used
 # when the license is not at the top header, and there are licenses of
 # external libraries.
-def match_somewhere(regexes, lines):
+def match_somewhere(regexes, lines, empty_or_comment_regex):
     maybe_match_head_index = [index for index, line in enumerate(lines) if regexes[0].search(line)][:1]
     if maybe_match_head_index and maybe_match_head_index[0] + len(regexes) <= len(lines):
         match_head_index = maybe_match_head_index[0]
-        matches = [regex.search(lines[match_head_index + index]) for index, regex in enumerate(regexes)]
-        return all(matches)
+        matches_pre_license = [empty_or_comment_regex.search(lines[index]) for index in range(match_head_index)]
+        matches_license = [regex.search(lines[match_head_index + index]) for index, regex in enumerate(regexes)]
+        return all(matches_license + matches_pre_license)
     else:
         return False
 
@@ -93,7 +96,7 @@ def copyright_check(filename):
     regexes.append(re.compile(MODIFIED_HEADER_PATTERN_3))
     regexes.append(re.compile(MODIFIED_HEADER_PATTERN_4))
 
-    if match_somewhere(regexes, lines):
+    if match_somewhere(regexes, lines, re.compile(COMMENT_OR_EMPTY_PATTERN)):
         return CheckResult.PASS_MODIFIED
 
     # We fail if there were no matches
