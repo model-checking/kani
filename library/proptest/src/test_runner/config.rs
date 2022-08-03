@@ -12,103 +12,7 @@
 // Modifications Copyright Kani Contributors
 // See GitHub history for details.
 
-// use crate::std_facade::Box;
 use core::u32;
-
-#[cfg(feature = "std")]
-use std::env;
-#[cfg(feature = "std")]
-use std::ffi::OsString;
-#[cfg(feature = "std")]
-use std::fmt;
-#[cfg(feature = "std")]
-use std::str::FromStr;
-
-// use crate::test_runner::result_cache::{noop_result_cache, ResultCache};
-// use crate::test_runner::rng::RngAlgorithm;
-// use crate::test_runner::FailurePersistence;
-#[cfg(feature = "std")]
-use crate::test_runner::FileFailurePersistence;
-
-#[cfg(feature = "std")]
-const CASES: &str = "PROPTEST_CASES";
-#[cfg(feature = "std")]
-const MAX_LOCAL_REJECTS: &str = "PROPTEST_MAX_LOCAL_REJECTS";
-#[cfg(feature = "std")]
-const MAX_GLOBAL_REJECTS: &str = "PROPTEST_MAX_GLOBAL_REJECTS";
-#[cfg(feature = "std")]
-const MAX_FLAT_MAP_REGENS: &str = "PROPTEST_MAX_FLAT_MAP_REGENS";
-#[cfg(feature = "std")]
-const MAX_SHRINK_TIME: &str = "PROPTEST_MAX_SHRINK_TIME";
-#[cfg(feature = "std")]
-const MAX_SHRINK_ITERS: &str = "PROPTEST_MAX_SHRINK_ITERS";
-#[cfg(feature = "fork")]
-const FORK: &str = "PROPTEST_FORK";
-#[cfg(feature = "timeout")]
-const TIMEOUT: &str = "PROPTEST_TIMEOUT";
-#[cfg(feature = "std")]
-const VERBOSE: &str = "PROPTEST_VERBOSE";
-
-#[cfg(feature = "std")]
-fn contextualize_config(mut result: Config) -> Config {
-    fn parse_or_warn<T: FromStr + fmt::Display>(src: &OsString, dst: &mut T, typ: &str, var: &str) {
-        if let Some(src) = src.to_str() {
-            if let Ok(value) = src.parse() {
-                *dst = value;
-            } else {
-                eprintln!(
-                    "proptest: The env-var {}={} can't be parsed as {}, \
-                     using default of {}.",
-                    var, src, typ, *dst
-                );
-            }
-        } else {
-            eprintln!(
-                "proptest: The env-var {} is not valid, using \
-                 default of {}.",
-                var, *dst
-            );
-        }
-    }
-
-    result.failure_persistence = Some(Box::new(FileFailurePersistence::default()));
-    for (var, value) in env::vars_os().filter_map(|(k, v)| k.into_string().ok().map(|k| (k, v))) {
-        match var.as_str() {
-            CASES => parse_or_warn(&value, &mut result.cases, "u32", CASES),
-            MAX_LOCAL_REJECTS => {
-                parse_or_warn(&value, &mut result.max_local_rejects, "u32", MAX_LOCAL_REJECTS)
-            }
-            MAX_GLOBAL_REJECTS => {
-                parse_or_warn(&value, &mut result.max_global_rejects, "u32", MAX_GLOBAL_REJECTS)
-            }
-            MAX_FLAT_MAP_REGENS => {
-                parse_or_warn(&value, &mut result.max_flat_map_regens, "u32", MAX_FLAT_MAP_REGENS)
-            }
-            #[cfg(feature = "fork")]
-            FORK => parse_or_warn(&value, &mut result.fork, "bool", FORK),
-            #[cfg(feature = "timeout")]
-            TIMEOUT => parse_or_warn(&value, &mut result.timeout, "timeout", TIMEOUT),
-            MAX_SHRINK_TIME => {
-                parse_or_warn(&value, &mut result.max_shrink_time, "u32", MAX_SHRINK_TIME)
-            }
-            MAX_SHRINK_ITERS => {
-                parse_or_warn(&value, &mut result.max_shrink_iters, "u32", MAX_SHRINK_ITERS)
-            }
-            VERBOSE => parse_or_warn(&value, &mut result.verbose, "u32", VERBOSE),
-            RNG_ALGORITHM => {
-                parse_or_warn(&value, &mut result.rng_algorithm, "RngAlgorithm", RNG_ALGORITHM)
-            }
-
-            _ => {
-                if var.starts_with("PROPTEST_") {
-                    eprintln!("proptest: Ignoring unknown env-var {}.", var);
-                }
-            }
-        }
-    }
-
-    result
-}
 
 fn default_default_config() -> Config {
     Config {
@@ -116,30 +20,15 @@ fn default_default_config() -> Config {
         max_local_rejects: 65_536,
         max_global_rejects: 1024,
         max_flat_map_regens: 1_000_000,
-        // failure_persistence: None,
         source_file: None,
         test_name: None,
-        #[cfg(feature = "fork")]
-        fork: false,
-        #[cfg(feature = "timeout")]
-        timeout: 0,
-        #[cfg(feature = "std")]
-        max_shrink_time: 0,
         max_shrink_iters: u32::MAX,
-        // result_cache: noop_result_cache,
-        #[cfg(feature = "std")]
-        verbose: 0,
-        // rng_algorithm: RngAlgorithm::default(),
         _non_exhaustive: (),
     }
 }
 
 // The default config, computed by combining environment variables and
 // defaults.
-#[cfg(feature = "std")]
-lazy_static! {
-    static ref DEFAULT_CONFIG: Config = contextualize_config(default_default_config());
-}
 
 /// Configuration for how a proptest test should be run.
 #[derive(Clone, Debug, PartialEq)]
@@ -174,19 +63,6 @@ pub struct Config {
     /// The default is 1_000_000, which can be overridden by setting the
     /// `PROPTEST_MAX_FLAT_MAP_REGENS` environment variable.
     pub max_flat_map_regens: u32,
-
-    /// Indicates whether and how to persist failed test results.
-    ///
-    /// When compiling with "std" feature (i.e. the standard library is available), the default
-    /// is `Some(Box::new(FileFailurePersistence::SourceParallel("proptest-regressions")))`.
-    ///
-    /// Without the standard library, the default is `None`, and no persistence occurs.
-    ///
-    /// See the docs of [`FileFailurePersistence`](enum.FileFailurePersistence.html)
-    /// and [`MapFailurePersistence`](struct.MapFailurePersistence.html) for more information.
-    ///
-    /// The default cannot currently be overridden by an environment variable.
-    // pub failure_persistence: Option<Box<dyn FailurePersistence>>,
 
     /// File location of the current test, relevant for persistence
     /// and debugging.
@@ -271,23 +147,6 @@ pub struct Config {
     /// `PROPTEST_MAX_SHRINK_ITERS` environment variable.
     pub max_shrink_iters: u32,
 
-    // A function to create new result caches.
-
-    // The default is to do no caching. The easiest way to enable caching is
-    // to set this field to `basic_result_cache` (though that is currently
-    // only available with the `std` feature).
-
-    // This is useful for strategies which have a tendency to produce
-    // duplicate values, or for tests where shrinking can take a very long
-    // time due to exploring the same output multiple times.
-
-    // When caching is enabled, generated values themselves are not stored, so
-    // this does not pose a risk of memory exhaustion for large test inputs
-    // unless using extraordinarily large test case counts.
-
-    // Caching incurs its own overhead, and may very well make your test run
-    // more slowly.
-    // pub result_cache: fn() -> Box<dyn ResultCache>,
     /// Set to non-zero values to cause proptest to emit human-targeted
     /// messages to stderr as it runs.
     ///
@@ -305,15 +164,6 @@ pub struct Config {
     /// `PROPTEST_VERBOSE` environment variable.
     #[cfg(feature = "std")]
     pub verbose: u32,
-
-    // The RNG algorithm to use when not using a user-provided RNG.
-
-    // The default is `RngAlgorithm::default()`, which can be overridden by
-    // setting the `PROPTEST_RNG_ALGORITHM` environment variable to one of the following:
-
-    // - `xs` — `RngAlgorithm::XorShift`
-    // - `cc` — `RngAlgorithm::ChaCha`
-    // pub rng_algorithm: RngAlgorithm,
 
     // Needs to be public so FRU syntax can be used.
     #[doc(hidden)]
@@ -436,14 +286,6 @@ impl Config {
     }
 }
 
-#[cfg(feature = "std")]
-impl Default for Config {
-    fn default() -> Self {
-        DEFAULT_CONFIG.clone()
-    }
-}
-
-#[cfg(not(feature = "std"))]
 impl Default for Config {
     fn default() -> Self {
         default_default_config()

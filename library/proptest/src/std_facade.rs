@@ -14,66 +14,31 @@
 
 //! This module provides #[cfg(..)]ed type aliases over features.
 
-macro_rules! multiplex_alloc {
-    ($($alloc: path, $std: path),*) => {
-        $(
-            // #[cfg(all(feature = "alloc", not(feature = "std")))]
-            // pub use $alloc;
-            // #[cfg(feature = "std")]
-            pub use $std;
-        )*
-    };
-}
+pub use ::std::borrow::Cow;
+pub use ::std::borrow::ToOwned;
+pub use ::std::boxed::Box;
+pub use ::std::collections::binary_heap;
+pub use ::std::collections::btree_map;
+pub use ::std::collections::btree_set;
+pub use ::std::collections::linked_list;
+pub use ::std::collections::vec_deque;
+pub use ::std::collections::BTreeMap;
+pub use ::std::collections::BTreeSet;
+pub use ::std::collections::BinaryHeap;
+pub use ::std::collections::LinkedList;
+pub use ::std::collections::VecDeque;
+pub use ::std::rc::Rc;
+pub use ::std::string;
+pub use ::std::string::String;
+pub use ::std::sync::Arc;
+pub use ::std::vec;
+pub use ::std::vec::Vec;
 
-macro_rules! multiplex_core {
-    ($($core: path, $std: path),*) => {
-        $(
-            // #[cfg(not(feature = "std"))]
-            // pub use $core;
-            // #[cfg(feature = "std")]
-            pub use $std;
-        )*
-    };
-}
+pub use ::std::collections::HashMap;
+pub use ::std::collections::HashSet;
 
-multiplex_alloc! {
-    alloc::borrow::Cow, ::std::borrow::Cow,
-    alloc::borrow::ToOwned, ::std::borrow::ToOwned,
-    alloc::boxed::Box, ::std::boxed::Box,
-    alloc::string::String, ::std::string::String,
-    alloc::string, ::std::string,
-    alloc::sync::Arc, ::std::sync::Arc,
-    alloc::rc::Rc, ::std::rc::Rc,
-    alloc::vec::Vec, ::std::vec::Vec,
-    alloc::vec, ::std::vec,
-    alloc::collections::VecDeque, std::collections::VecDeque,
-    alloc::collections::vec_deque, std::collections::vec_deque,
-    alloc::collections::BinaryHeap, ::std::collections::BinaryHeap,
-    alloc::collections::binary_heap, ::std::collections::binary_heap,
-    alloc::collections::LinkedList, ::std::collections::LinkedList,
-    alloc::collections::linked_list, ::std::collections::linked_list,
-    alloc::collections::BTreeSet, ::std::collections::BTreeSet,
-    alloc::collections::BTreeMap, ::std::collections::BTreeMap,
-    alloc::collections::btree_map, ::std::collections::btree_map,
-    alloc::collections::btree_set, ::std::collections::btree_set
-}
-
-#[cfg(feature = "std")]
-multiplex_alloc! {
-    hashmap_core::HashMap, ::std::collections::HashMap,
-    hashmap_core::HashSet, ::std::collections::HashSet
-}
-
-//#[cfg(not(feature = "std"))]
-//pub(crate) use hashmap_core::map as hash_map;
-#[cfg(feature = "std")]
 pub use ::std::collections::hash_map;
-//#[cfg(not(feature = "std"))]
-//pub(crate) use hashmap_core::set as hash_set;
-#[cfg(feature = "std")]
 pub use ::std::collections::hash_set;
 
-multiplex_core! {
-    core::fmt, ::std::fmt,
-    core::cell::Cell, ::std::cell::Cell
-}
+pub use ::std::cell::Cell;
+pub use ::std::fmt;
