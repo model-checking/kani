@@ -14,6 +14,8 @@
 
 //! Defines the core traits used by Proptest.
 
+// TODO: support more strategy operations.
+
 // mod filter;
 // mod filter_map;
 // mod flatten;
