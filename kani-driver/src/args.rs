@@ -46,7 +46,7 @@ pub struct KaniArgs {
     /// Generate executable trace
     #[structopt(long, requires("enable-unstable"))]
     pub gen_exe_trace: bool,
-    /// Generate executable trace and add it to the source code.
+    /// Add executable trace to the source code
     #[structopt(long, requires("gen-exe-trace"))]
     pub add_exe_trace_to_src: bool,
     /// Keep temporary files generated throughout Kani process
