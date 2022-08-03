@@ -818,6 +818,10 @@ impl Default for CheckStrategySanityOptions {
 ///
 /// This can work with fallible strategies, but limits how many times it will
 /// retry failures.
+///
+/// We allow unused variables because we need to compile with this with
+/// kani. Kani's library hacks cause unused variables around panic!
+#[allow(unused_variables)]
 pub fn check_strategy_sanity<S: Strategy>(strategy: S, options: Option<CheckStrategySanityOptions>)
 where
     S::Tree: Clone + fmt::Debug,
