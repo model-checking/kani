@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 // Check that `sinf64` returns the expected results.
-// Note: The CBMC model for this function is an over-approximation that returns:
-//  * A nondet. value between -1 and 1
+//
+// The CBMC model for `sinf64` is an overapproximation that returns:
 //  * 0.0 if the argument is 0.0
+//  * A symbolic value between -1.0 and 1.0 otherwise
 #![feature(core_intrinsics)]
 
 fn fp_equals(value: f64, expected: f64) -> bool {

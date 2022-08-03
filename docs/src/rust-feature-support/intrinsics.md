@@ -16,7 +16,7 @@ Name | Support | Notes |
 --- | --- | --- |
 abort | Yes | |
 add_with_overflow | Yes | |
-arith_offset | No | |
+arith_offset | Yes | |
 assert_inhabited | Yes | |
 assert_uninit_valid | Yes | |
 assert_zero_valid | Yes | |
@@ -52,16 +52,16 @@ atomic_load | Partial | See [Atomics](#atomics) |
 atomic_load_acq | Partial | See [Atomics](#atomics) |
 atomic_load_relaxed | Partial | See [Atomics](#atomics) |
 atomic_load_unordered | Partial | See [Atomics](#atomics) |
-atomic_max | No | See [Atomics](#atomics) |
-atomic_max_acq | No | See [Atomics](#atomics) |
-atomic_max_acqrel | No | See [Atomics](#atomics) |
-atomic_max_rel | No | See [Atomics](#atomics) |
-atomic_max_relaxed | No | See [Atomics](#atomics) |
-atomic_min | No | See [Atomics](#atomics) |
-atomic_min_acq | No | See [Atomics](#atomics) |
-atomic_min_acqrel | No | See [Atomics](#atomics) |
-atomic_min_rel | No | See [Atomics](#atomics) |
-atomic_min_relaxed | No | See [Atomics](#atomics) |
+atomic_max | Partial | See [Atomics](#atomics) |
+atomic_max_acq | Partial | See [Atomics](#atomics) |
+atomic_max_acqrel | Partial | See [Atomics](#atomics) |
+atomic_max_rel | Partial | See [Atomics](#atomics) |
+atomic_max_relaxed | Partial | See [Atomics](#atomics) |
+atomic_min | Partial | See [Atomics](#atomics) |
+atomic_min_acq | Partial | See [Atomics](#atomics) |
+atomic_min_acqrel | Partial | See [Atomics](#atomics) |
+atomic_min_rel | Partial | See [Atomics](#atomics) |
+atomic_min_relaxed | Partial | See [Atomics](#atomics) |
 atomic_nand | Partial | See [Atomics](#atomics) |
 atomic_nand_acq | Partial | See [Atomics](#atomics) |
 atomic_nand_acqrel | Partial | See [Atomics](#atomics) |
@@ -80,16 +80,16 @@ atomic_store | Partial | See [Atomics](#atomics) |
 atomic_store_rel | Partial | See [Atomics](#atomics) |
 atomic_store_relaxed | Partial | See [Atomics](#atomics) |
 atomic_store_unordered | Partial | See [Atomics](#atomics) |
-atomic_umax | No | See [Atomics](#atomics) |
-atomic_umax_acq | No | See [Atomics](#atomics) |
-atomic_umax_acqrel | No | See [Atomics](#atomics) |
-atomic_umax_rel | No | See [Atomics](#atomics) |
-atomic_umax_relaxed | No | See [Atomics](#atomics) |
-atomic_umin | No | See [Atomics](#atomics) |
-atomic_umin_acq | No | See [Atomics](#atomics) |
-atomic_umin_acqrel | No | See [Atomics](#atomics) |
-atomic_umin_rel | No | See [Atomics](#atomics) |
-atomic_umin_relaxed | No | See [Atomics](#atomics) |
+atomic_umax | Partial | See [Atomics](#atomics) |
+atomic_umax_acq | Partial | See [Atomics](#atomics) |
+atomic_umax_acqrel | Partial | See [Atomics](#atomics) |
+atomic_umax_rel | Partial | See [Atomics](#atomics) |
+atomic_umax_relaxed | Partial | See [Atomics](#atomics) |
+atomic_umin | Partial | See [Atomics](#atomics) |
+atomic_umin_acq | Partial | See [Atomics](#atomics) |
+atomic_umin_acqrel | Partial | See [Atomics](#atomics) |
+atomic_umin_rel | Partial | See [Atomics](#atomics) |
+atomic_umin_relaxed | Partial | See [Atomics](#atomics) |
 atomic_xadd | Partial | See [Atomics](#atomics) |
 atomic_xadd_acq | Partial | See [Atomics](#atomics) |
 atomic_xadd_acqrel | Partial | See [Atomics](#atomics) |
@@ -115,14 +115,14 @@ bitreverse | Yes | |
 breakpoint | Yes | |
 bswap | Yes | |
 caller_location | No | |
-ceilf32 | No | |
-ceilf64 | No | |
-copy | No | |
-copy_nonoverlapping | No | |
-copysignf32 | No | |
-copysignf64 | No | |
-cosf32 | Yes | |
-cosf64 | Yes | |
+ceilf32 | Yes | |
+ceilf64 | Yes | |
+copy | Yes | |
+copy_nonoverlapping | Yes | |
+copysignf32 | Yes | |
+copysignf64 | Yes | |
+cosf32 | Partial | Results are overapproximated; [this test](https://github.com/model-checking/kani/blob/main/tests/kani/Intrinsics/Math/Trigonometry/cosf32.rs) explains how |
+cosf64 | Partial | Results are overapproximated; [this test](https://github.com/model-checking/kani/blob/main/tests/kani/Intrinsics/Math/Trigonometry/cosf64.rs) explains how |
 ctlz | Yes | |
 ctlz_nonzero | Yes | |
 ctpop | Yes | |
@@ -140,8 +140,8 @@ fabsf64 | Yes | |
 fadd_fast | Yes | |
 fdiv_fast | Partial | [#809](https://github.com/model-checking/kani/issues/809) |
 float_to_int_unchecked | No | |
-floorf32 | No | |
-floorf64 | No | |
+floorf32 | Yes | |
+floorf64 | Yes | |
 fmaf32 | No | |
 fmaf64 | No | |
 fmul_fast | Partial | [#809](https://github.com/model-checking/kani/issues/809) |
@@ -155,16 +155,16 @@ log2f32 | No | |
 log2f64 | No | |
 logf32 | No | |
 logf64 | No | |
-maxnumf32 | No | |
-maxnumf64 | No | |
+maxnumf32 | Yes | |
+maxnumf64 | Yes | |
 min_align_of | Yes | |
 min_align_of_val | Yes | |
-minnumf32 | No | |
-minnumf64 | No | |
+minnumf32 | Yes | |
+minnumf64 | Yes | |
 move_val_init | No | |
 mul_with_overflow | Yes | |
-nearbyintf32 | No | |
-nearbyintf64 | No | |
+nearbyintf32 | Yes | |
+nearbyintf64 | Yes | |
 needs_drop | Yes | |
 nontemporal_store | No | |
 offset | Partial | Doesn't check [all UB conditions](https://doc.rust-lang.org/std/primitive.pointer.html#safety-2) |
@@ -181,25 +181,25 @@ ptr_guaranteed_eq | Yes | |
 ptr_guaranteed_ne | Yes | |
 ptr_offset_from | Partial | Doesn't check [all UB conditions](https://doc.rust-lang.org/std/primitive.pointer.html#safety-4) |
 raw_eq | Partial | Cannot detect [uninitialized memory](#uninitialized-memory) |
-rintf32 | No | |
-rintf64 | No | |
+rintf32 | Yes | |
+rintf64 | Yes | |
 rotate_left | Yes | |
 rotate_right | Yes | |
-roundf32 | No | |
-roundf64 | No | |
+roundf32 | Yes | |
+roundf64 | Yes | |
 rustc_peek | No | |
 saturating_add | Yes | |
 saturating_sub | Yes | |
-sinf32 | Yes | |
-sinf64 | Yes | |
+sinf32 | Partial | Results are overapproximated; [this test](https://github.com/model-checking/kani/blob/main/tests/kani/Intrinsics/Math/Trigonometry/sinf32.rs) explains how |
+sinf64 | Partial | Results are overapproximated; [this test](https://github.com/model-checking/kani/blob/main/tests/kani/Intrinsics/Math/Trigonometry/sinf64.rs) explains how |
 size_of | Yes | |
 size_of_val | Yes | |
 sqrtf32 | No | |
 sqrtf64 | No | |
 sub_with_overflow | Yes | |
 transmute | Partial | Doesn't check [all UB conditions](https://doc.rust-lang.org/nomicon/transmutes.html) |
-truncf32 | No | |
-truncf64 | No | |
+truncf32 | Yes | |
+truncf64 | Yes | |
 try | No | [#267](https://github.com/model-checking/kani/issues/267) |
 type_id | Yes | |
 type_name | Yes | |
@@ -217,7 +217,7 @@ unreachable | Yes | |
 variant_count | No | |
 volatile_copy_memory | No | See [Notes - Concurrency](#concurrency) |
 volatile_copy_nonoverlapping_memory | No | See [Notes - Concurrency](#concurrency) |
-volatile_load | No | See [Notes - Concurrency](#concurrency) |
+volatile_load | Partial | See [Notes - Concurrency](#concurrency) |
 volatile_set_memory | No | See [Notes - Concurrency](#concurrency) |
 volatile_store | Partial | See [Notes - Concurrency](#concurrency) |
 wrapping_add | Yes | |
