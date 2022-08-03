@@ -38,9 +38,10 @@ pub unsafe trait Invariant {
 impl<T> Arbitrary for T
 where
     T: Invariant,
+    [(); std::mem::size_of::<T>()]:,
 {
     default fn any() -> Self {
-        let value = unsafe { crate::any_raw_internal::<T>() };
+        let value = unsafe { crate::any_raw_internal::<T, { std::mem::size_of::<T>() }>() };
         crate::assume(value.is_valid());
         value
     }

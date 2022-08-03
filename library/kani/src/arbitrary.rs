@@ -17,7 +17,7 @@ macro_rules! trivial_arbitrary {
         impl Arbitrary for $type {
             #[inline(always)]
             fn any() -> Self {
-                unsafe { crate::any_raw_internal::<$type>() }
+                unsafe { crate::any_raw_internal::<$type, { std::mem::size_of::<$type>() }>() }
             }
         }
     };

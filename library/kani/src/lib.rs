@@ -110,7 +110,7 @@ pub fn any<T: Arbitrary>() -> T {
     note = "This function may return symbolic values that don't respects the language type invariants."
 )]
 #[doc(hidden)]
-pub unsafe fn any_raw<T>() -> T {
+pub unsafe fn any_raw<T>() -> T
 where
     [(); std::mem::size_of::<T>()]:,
 {
@@ -121,7 +121,7 @@ where
 /// internally when we can guarantee that it will not trigger any undefined behavior.
 #[rustc_diagnostic_item = "KaniAnyRaw"]
 #[inline(never)]
-pub(crate) unsafe fn any_raw_internal<T, const SIZE_T>() -> T {
+pub(crate) unsafe fn any_raw_internal<T, const SIZE_T: usize>() -> T {
     #[cfg(feature = "exe_trace")]
     {
         let mut bytes_t = [0; SIZE_T];

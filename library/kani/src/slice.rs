@@ -91,7 +91,7 @@ impl<T, const MAX_SLICE_LENGTH: usize> AnySlice<T, MAX_SLICE_LENGTH> {
             let mut i = 0;
             // See note on `MAX_SLICE_LENGTH` in `new` method above
             while i < any_slice.slice_len && i < MAX_SLICE_LENGTH {
-                *any_slice.ptr.add(i) = any_raw_internal();
+                *any_slice.ptr.add(i) = any_raw_internal::<T, { std::mem::size_of::<T>() }>();
                 i += 1;
             }
         }
