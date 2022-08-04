@@ -23,4 +23,5 @@ pub fn harness() {
             && f32_7 == f32::MAX
             && f32_8 == f32::INFINITY)
     );
+    // Note: Don't include NaN because there are multiple possible NaN values.
 }

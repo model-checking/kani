@@ -23,4 +23,5 @@ pub fn harness() {
             && f64_7 == f64::MAX
             && f64_8 == f64::INFINITY)
     );
+    // Note: Don't include NaN because there are multiple possible NaN values.
 }
