@@ -24,8 +24,10 @@ impl KaniSession {
                 interp_det_vals.as_slice(),
             );
 
-            println!("Executable trace:\n");
+            println!("Executable trace:");
+            println!("```");
             println!("{}", exe_trace);
+            println!("```");
 
             if self.args.add_exe_trace_to_src {
                 if !self.args.quiet {
@@ -162,7 +164,9 @@ fn format_unit_test(
     let vecs_as_str = det_vals
         .iter()
         .zip(interp_det_vals.iter())
-        .map(|(det_val, interp_det_val)| format!("// {interp_det_val}\nvec!{:?}", det_val))
+        .map(|(det_val, interp_det_val)| {
+            format!("        // {interp_det_val}\n        vec!{:?}", det_val)
+        })
         .collect::<Vec<String>>()
         .join(",\n");
 
@@ -173,14 +177,16 @@ fn format_unit_test(
     let hash = hasher.finish();
 
     let exe_trace_func_name = format!("kani_exe_trace_{harness_name}_{hash}");
+    #[rustfmt::skip]
     let exe_trace = format!(
-        "
-        #[test]
-        fn {exe_trace_func_name}() {{
-            let det_vals: Vec<Vec<u8>> = vec![{vecs_as_str}];
-            kani::exe_trace_init(det_vals);
-            {harness_name}();
-        }}"
+"#[test]
+fn {exe_trace_func_name}() {{
+    let det_vals: Vec<Vec<u8>> = vec![
+{vecs_as_str}
+    ];
+    kani::exe_trace_init(det_vals);
+    {harness_name}();
+}}"
     );
 
     (exe_trace, exe_trace_func_name)
