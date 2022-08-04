@@ -368,38 +368,10 @@ impl<'tcx> GotocCtx<'tcx> {
                 // here we have a function pointer
                 self.codegen_func_expr(instance, span).address_of()
             }
-            GlobalAlloc::Static(def_id) => {
-                // here we have a potentially unevaluated static
-                let instance = Instance::mono(self.tcx, def_id);
-
-                let sym = self.ensure(&self.symbol_name(instance), |ctx, name| {
-                    // check if this static is extern
-                    let rlinkage = ctx.tcx.codegen_fn_attrs(def_id).linkage;
-
-                    // we believe rlinkage being `Some` means the static not extern
-                    // based on compiler/rustc_codegen_cranelift/src/linkage.rs#L21
-                    // see https://github.com/model-checking/kani/issues/388
-                    //
-                    // Update: The assertion below may fail in similar environments.
-                    // We are disabling it until we find out the root cause, see
-                    // https://github.com/model-checking/kani/issues/400
-                    //
-                    // assert!(rlinkage.is_none());
-
-                    let span = ctx.tcx.def_span(def_id);
-                    Symbol::static_variable(
-                        name.to_string(),
-                        name.to_string(),
-                        ctx.codegen_ty(instance.ty(ctx.tcx, ty::ParamEnv::reveal_all())),
-                        ctx.codegen_span(&span),
-                    )
-                    .with_is_extern(rlinkage.is_none())
-                });
-                sym.clone().to_expr().address_of()
-            }
+            GlobalAlloc::Static(def_id) => self.codegen_static_pointer(def_id),
             GlobalAlloc::Memory(alloc) => {
                 // Full (mangled) crate name added so that allocations from different
-                // crates do not conflict. The name alone is insufficient becase Rust
+                // crates do not conflict. The name alone is insufficient because Rust
                 // allows different versions of the same crate to be used.
                 let name = format!("{}::{:?}", self.full_crate_name(), alloc_id);
                 self.codegen_allocation(alloc.inner(), |_| name.clone(), Some(name.clone()))
@@ -421,6 +393,36 @@ impl<'tcx> GotocCtx<'tcx> {
             assert!(res_t.is_pointer());
             offset_addr.cast_to(res_t)
         }
+    }
+
+    pub fn codegen_static_pointer(&mut self, def_id: DefId) -> Expr {
+        // here we have a potentially unevaluated static
+        let instance = Instance::mono(self.tcx, def_id);
+
+        let sym = self.ensure(&self.symbol_name(instance), |ctx, name| {
+            // check if this static is extern
+            let rlinkage = ctx.tcx.codegen_fn_attrs(def_id).linkage;
+
+            // we believe rlinkage being `Some` means the static not extern
+            // based on compiler/rustc_codegen_cranelift/src/linkage.rs#L21
+            // see https://github.com/model-checking/kani/issues/388
+            //
+            // Update: The assertion below may fail in similar environments.
+            // We are disabling it until we find out the root cause, see
+            // https://github.com/model-checking/kani/issues/400
+            //
+            // assert!(rlinkage.is_none());
+
+            let span = ctx.tcx.def_span(def_id);
+            Symbol::static_variable(
+                name.to_string(),
+                name.to_string(),
+                ctx.codegen_ty(instance.ty(ctx.tcx, ty::ParamEnv::reveal_all())),
+                ctx.codegen_span(&span),
+            )
+            .with_is_extern(rlinkage.is_none())
+        });
+        sym.clone().to_expr().address_of()
     }
 
     pub fn codegen_allocation_auto_imm_name<F: FnOnce(&mut GotocCtx<'tcx>) -> String>(

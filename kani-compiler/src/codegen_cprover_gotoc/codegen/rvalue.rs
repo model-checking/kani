@@ -485,14 +485,9 @@ impl<'tcx> GotocCtx<'tcx> {
             Rvalue::Aggregate(ref k, operands) => {
                 self.codegen_rvalue_aggregate(k, operands, res_ty)
             }
-            Rvalue::ThreadLocalRef(_) => {
-                let typ = self.codegen_ty(res_ty);
-                self.codegen_unimplemented(
-                    "Rvalue::ThreadLocalRef",
-                    typ,
-                    Location::none(),
-                    "https://github.com/model-checking/kani/issues/541",
-                )
+            Rvalue::ThreadLocalRef(def_id) => {
+                // Since Kani is single-threaded, we treat a thread local like a static variable:
+                self.codegen_static_pointer(*def_id)
             }
             // A CopyForDeref is equivalent to a read from a place at the codegen level.
             // https://github.com/rust-lang/rust/blob/1673f1450eeaf4a5452e086db0fe2ae274a0144f/compiler/rustc_middle/src/mir/syntax.rs#L1055

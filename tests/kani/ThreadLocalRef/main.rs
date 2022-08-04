@@ -9,9 +9,8 @@ thread_local! {
 
 #[kani::proof]
 fn main() {
-    COND.with(|&b|{
+    COND.with(|&b| {
         kani::assume(b);
         assert!(b, "This should fail because we do not support thread local");
     });
 }
-
