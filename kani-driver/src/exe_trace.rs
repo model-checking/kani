@@ -208,7 +208,7 @@ mod parser {
     pub fn get_det_vals(file: &Path) -> (Vec<Vec<u8>>, Vec<String>) {
         let output_filename = append_path(file, "cbmc_output");
         let cbmc_out = get_cbmc_out(&output_filename);
-        handle_cbmc_out(&cbmc_out)
+        parse_cbmc_out(&cbmc_out)
     }
 
     /// Read in the CBMC results file and deserialize it to a JSON object.
@@ -218,23 +218,23 @@ mod parser {
         serde_json::from_reader(reader).unwrap()
     }
 
-    /// The first-level JSON object parser. This extracts the result message.
-    fn handle_cbmc_out(cbmc_out: &Value) -> (Vec<Vec<u8>>, Vec<String>) {
+    /// The first-level CBMC output parser. This extracts the result message.
+    fn parse_cbmc_out(cbmc_out: &Value) -> (Vec<Vec<u8>>, Vec<String>) {
         let mut det_vals: Vec<Vec<u8>> = Vec::new();
         let mut interp_det_vals: Vec<String> = Vec::new();
         for general_msg in cbmc_out.as_array().unwrap() {
             let result_msg = &general_msg["result"];
             if !result_msg.is_null() {
                 for result_val in result_msg.as_array().unwrap() {
-                    handle_result(result_val, &mut det_vals, &mut interp_det_vals);
+                    parse_result(result_val, &mut det_vals, &mut interp_det_vals);
                 }
             }
         }
         (det_vals, interp_det_vals)
     }
 
-    /// The second-level JSON object parser. This extracts the traces of failing assertions.
-    fn handle_result(
+    /// The second-level CBMC output parser. This extracts the trace entries of failing assertions.
+    fn parse_result(
         result_val: &Value,
         det_vals: &mut Vec<Vec<u8>>,
         interp_det_vals: &mut Vec<String>,
@@ -243,15 +243,15 @@ mod parser {
         let status = result_val["status"].to_string();
 
         if desc.contains("assertion failed") && status == "\"FAILURE\"" {
-            for trace_pt in result_val["trace"].as_array().unwrap() {
-                handle_trace_pt(trace_pt, det_vals, interp_det_vals);
+            for trace_entry in result_val["trace"].as_array().unwrap() {
+                parse_trace_entry(trace_entry, det_vals, interp_det_vals);
             }
         }
     }
 
-    /// The third-level of JSON object parser. This extracts individual bytes from kani::any_raw calls.
-    fn handle_trace_pt(
-        trace_pt: &Value,
+    /// The third-level CBMC output parser. This extracts individual bytes from kani::any_raw calls.
+    fn parse_trace_entry(
+        trace_entry: &Value,
         det_vals: &mut Vec<Vec<u8>>,
         interp_det_vals: &mut Vec<String>,
     ) {
@@ -263,12 +263,12 @@ mod parser {
             Some(interp_det_val),
             Some(width_u64),
         ) = (
-            trace_pt["stepType"].as_str(),
-            trace_pt["lhs"].as_str(),
-            trace_pt["sourceLocation"]["function"].as_str(),
-            trace_pt["value"]["binary"].as_str(),
-            trace_pt["value"]["data"].as_str(),
-            trace_pt["value"]["width"].as_u64(),
+            trace_entry["stepType"].as_str(),
+            trace_entry["lhs"].as_str(),
+            trace_entry["sourceLocation"]["function"].as_str(),
+            trace_entry["value"]["binary"].as_str(),
+            trace_entry["value"]["data"].as_str(),
+            trace_entry["value"]["width"].as_u64(),
         ) && step_type == "assignment" && lhs == "var_0" && func.starts_with("kani::any_raw_internal") {
             let width = width_u64 as usize;
             assert_eq!(width, bit_det_val.len(), "Declared width wasn't same as width found in bit string");
