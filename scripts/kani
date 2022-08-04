@@ -19,6 +19,4 @@ then
 fi
 KANI_PATH=${KANI_CANDIDATES[0]}
 
-$SCRIPT_DIR/refresh-kani-proptest.sh
-
 exec -a kani "${KANI_PATH}" "$@"
