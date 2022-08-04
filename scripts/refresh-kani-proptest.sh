@@ -12,9 +12,9 @@ SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 KANI_REPO_ROOT="$SCRIPT_DIR/.."
 
 PROPTEST_SYMTAB_PATH="$(find $KANI_REPO_ROOT/target -name '*symtab.json' | head -1)"
-KANI_TARGET="$KANI_REPO_ROOT/target/debug/libproptest.d"
+PROPTEST_RLIB_PATH="$KANI_REPO_ROOT/target/debug/libproptest.rlib"
 
-if [ ! -f "$PROPTEST_SYMTAB_PATH" ] || [[ "$PROPTEST_SYMTAB_PATH" -ot "$KANI_TARGET" ]]; then
+if [ ! -f "$PROPTEST_SYMTAB_PATH" ] || [[ "$PROPTEST_SYMTAB_PATH" -ot "$PROPTEST_RLIB_PATH" ]]; then
     echo 'Proptest symtab not found or too old. (Re)compiling proptest..'
     (
         cd $KANI_REPO_ROOT/library/proptest;
