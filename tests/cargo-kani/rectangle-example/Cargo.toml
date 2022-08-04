@@ -8,5 +8,7 @@ edition = "2018"
 
 [dependencies]
 
-[dev-dependencies]
-proptest = "1.0.0"
+# Turned off while proptest integration is merging. The first PR will
+# not support any integers, which crashes this test case.
+# [dev-dependencies]
+# proptest = "1.0.0"
