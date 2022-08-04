@@ -84,6 +84,7 @@ impl<T, const MAX_SLICE_LENGTH: usize> AnySlice<T, MAX_SLICE_LENGTH> {
     )]
     fn new_raw() -> Self
     where
+        // This generic_const_exprs feature lets Rust know the size of generic T.
         [(); std::mem::size_of::<T>()]:,
     {
         let any_slice = AnySlice::<T, MAX_SLICE_LENGTH>::alloc_slice();
@@ -171,6 +172,7 @@ where
 )]
 pub unsafe fn any_raw_slice<T, const MAX_SLICE_LENGTH: usize>() -> AnySlice<T, MAX_SLICE_LENGTH>
 where
+    // This generic_const_exprs feature lets Rust know the size of generic T.
     [(); std::mem::size_of::<T>()]:,
 {
     AnySlice::<T, MAX_SLICE_LENGTH>::new_raw()

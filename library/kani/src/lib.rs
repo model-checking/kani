@@ -3,7 +3,11 @@
 #![feature(rustc_attrs)] // Used for rustc_diagnostic_item.
 #![feature(min_specialization)] // Used for default implementation of Arbitrary.
 #![allow(incomplete_features)]
-#![feature(generic_const_exprs)] // Used for getting size_of generic types
+// Used for getting the size of generic types.
+// See this issue for more details: https://github.com/rust-lang/rust/issues/44580.
+// Note: We can remove this feature after we remove the following deprecated functions:
+// kani::any_raw, slice::AnySlice::new_raw(), slice::any_raw_slice(), (T: Invariant)::any().
+#![feature(generic_const_exprs)]
 
 pub mod arbitrary;
 pub mod futures;
@@ -112,6 +116,7 @@ pub fn any<T: Arbitrary>() -> T {
 #[doc(hidden)]
 pub unsafe fn any_raw<T>() -> T
 where
+    // This generic_const_exprs feature lets Rust know the size of generic T.
     [(); std::mem::size_of::<T>()]:,
 {
     any_raw_internal::<T, { std::mem::size_of::<T>() }>()

@@ -38,6 +38,7 @@ pub unsafe trait Invariant {
 impl<T> Arbitrary for T
 where
     T: Invariant,
+    // This generic_const_exprs feature lets Rust know the size of generic T.
     [(); std::mem::size_of::<T>()]:,
 {
     default fn any() -> Self {
