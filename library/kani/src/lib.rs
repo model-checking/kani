@@ -20,14 +20,11 @@ pub use futures::block_on;
 #[allow(deprecated)]
 pub use invariant::Invariant;
 
+/// This global variable is used to store values for the deterministic playback of kani::any calls.
+/// Safety of this static mut only holds if you do not run your deterministic playback unit tests in parallel.
+/// TODO: add a lock here.
 #[cfg(feature = "exe_trace")]
-use std::cell::RefCell;
-
-#[cfg(feature = "exe_trace")]
-// Don't need locking mechanism if using thread local
-thread_local! {
-    pub static DET_VALS: RefCell<Vec<Vec<u8>>> = RefCell::new(Vec::new());
-}
+static mut DET_VALS: Vec<Vec<u8>> = Vec::new();
 
 /// Creates an assumption that will be valid after this statement run. Note that the assumption
 /// will only be applied for paths that follow the assumption. If the assumption doesn't hold, the
@@ -129,36 +126,35 @@ where
 pub(crate) unsafe fn any_raw_internal<T, const SIZE_T: usize>() -> T {
     #[cfg(feature = "exe_trace")]
     {
-        let mut bytes_t = [0; SIZE_T];
-        DET_VALS.with(|det_vals| {
-            let tmp_det_vals = &mut *det_vals.borrow_mut();
-            let next_num = tmp_det_vals.pop().expect("Not enough det vals found");
-            assert_eq!(next_num.len(), SIZE_T, "Mismatch in num bytes in det val");
-            for i in 0..SIZE_T {
-                bytes_t[i] = next_num[i];
-            }
-        });
+        let next_det_val = DET_VALS.pop().expect("Not enough det vals found");
+        let next_det_val_len = next_det_val.len();
+        let bytes_t: [u8; SIZE_T] = next_det_val.try_into().expect(&format!(
+            "Expected {SIZE_T} bytes instead of {next_det_val_len} bytes in the following det vals vec"
+        ));
         return std::mem::transmute_copy::<[u8; SIZE_T], T>(&bytes_t);
     }
 
     #[cfg(not(feature = "exe_trace"))]
+    #[allow(unreachable_code)]
     any_raw_inner::<T>()
 }
 
 /// This low-level function returns nondet bytes of size T.
 #[rustc_diagnostic_item = "KaniAnyRaw"]
 #[inline(never)]
+#[allow(dead_code)]
 fn any_raw_inner<T>() -> T {
     unimplemented!("Kani any_raw_inner");
 }
 
+/// This function sets the values used in the deterministic playback of kani::any calls.
 #[cfg(feature = "exe_trace")]
-pub fn exe_trace_init(mut det_vals: Vec<Vec<u8>>) {
-    DET_VALS.with(|glob_det_vals| {
-        det_vals.reverse();
-        let tmp_glob_det_vals = &mut *glob_det_vals.borrow_mut();
-        *tmp_glob_det_vals = det_vals;
-    });
+pub unsafe fn exe_trace_init(mut det_vals: Vec<Vec<u8>>) {
+    // Det vals in the user test case should be in the same order as the order of kani::any() calls.
+    // We need to reverse this order because det vals are popped off of the outer Vec,
+    // so the chronological first det val should come last.
+    det_vals.reverse();
+    DET_VALS = det_vals;
 }
 
 /// Function used in tests for cases where the condition is not always true.
