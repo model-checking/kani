@@ -368,7 +368,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // here we have a function pointer
                 self.codegen_func_expr(instance, span).address_of()
             }
-            GlobalAlloc::Static(def_id) => self.codegen_static_pointer(def_id),
+            GlobalAlloc::Static(def_id) => self.codegen_static_pointer(def_id, false),
             GlobalAlloc::Memory(alloc) => {
                 // Full (mangled) crate name added so that allocations from different
                 // crates do not conflict. The name alone is insufficient because Rust
@@ -395,7 +395,7 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    pub fn codegen_static_pointer(&mut self, def_id: DefId) -> Expr {
+    pub fn codegen_static_pointer(&mut self, def_id: DefId, is_thread_local: bool) -> Expr {
         // here we have a potentially unevaluated static
         let instance = Instance::mono(self.tcx, def_id);
 
@@ -421,6 +421,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 ctx.codegen_span(&span),
             )
             .with_is_extern(rlinkage.is_none())
+            .with_is_thread_local(is_thread_local)
         });
         sym.clone().to_expr().address_of()
     }
