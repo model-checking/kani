@@ -35,7 +35,7 @@ export SELF_SCRIPT=$0
 export SELF_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 NPROC=$(nproc 2> /dev/null || sysctl -n hw.ncpu 2> /dev/null || echo 4)  # Linux or Mac or hard-coded default of 4
 export WORK_DIRECTORY_PREFIX="$SELF_DIR/../../target/remote-repos"
-
+export TMP_UNSUPPORTED_FEATURES_DATA="/tmp/unsupported_features_data.txt"
 
 export STDOUT_SUFFIX='stdout.cargo-kani'
 export STDERR_SUFFIX='stderr.cargo-kani'
@@ -74,9 +74,9 @@ function print_errors_for_each_repo_result {
         IS_FAIL='1'
     fi
 
-    STDERR_GREP=$(grep -A3 -n $TARGET_ERROR_REGEX $DIRECTORY/$STDERR_SUFFIX 2> /dev/null && echo 'STDERR has warnings')
-    if [[ "$STDERR_GREP" =~ [a-zA-Z0-9] ]]; then
-        echo -e "STDERR Warnings (Plus 3 lines after) $DIRECTORY/$STDERR_SUFFIX -----\n$STDERR_GREP"
+    STDERR_GREP=$(./scripts/exps/kani-repos-utils/filter_unsupported_constructs.sh $DIRECTORY/$STDERR_SUFFIX 2> /dev/null)
+    if [[ -n "$STDERR_GREP" ]]; then
+        echo -e "STDERR Warnings $DIRECTORY/$STDERR_SUFFIX -----\n$STDERR_GREP" | tee -a $TMP_UNSUPPORTED_FEATURES_DATA
         IS_FAIL='1'
     fi
 
@@ -105,6 +105,10 @@ elif [ "$#" -eq "1" ]; then
         exit -1
     fi
 
+    # Generate a file to save data about unsupported features
+    rm -f $TMP_UNSUPPORTED_FEATURES_DATA
+    touch $TMP_UNSUPPORTED_FEATURES_DATA
+
     mkdir -p $WORK_DIRECTORY_PREFIX
     echo -e "$LIST_OF_CRATE_GIT_URLS" | \
         awk -F '\n' 'BEGIN{ a=0 }{ print a++ "," $1  }' | \
@@ -132,6 +136,8 @@ elif [ "$#" -eq "1" ]; then
     echo -e '\n--- OVERALL STATS ---'
     echo "$num_failed crates failed to compile"
     echo "$num_with_warning crates had warning(s)"
+    echo ""
+    ./scripts/exps/kani-repos-utils/produce_unsupported_summary.sh $TMP_UNSUPPORTED_FEATURES_DATA
 else
     echo -e 'Needs exactly 1 argument path/to/url-list.\n'
     echo -e "$DOCUMENTATION"
