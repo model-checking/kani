@@ -82,17 +82,19 @@ impl KaniSession {
             });
         }
 
+        let mut symtabs = glob(&outdir.join("*.symtab.json"))?;
+        let mut metadata = glob(&outdir.join("*.kani-metadata.json"))?;
+        if std::env::var("IS_KANI_PROPTEST").is_ok() {
+            // if the "proptests is precent" flag is enabled by cargo-kani
+            symtabs.extend(glob(&kani_extern_lib_path.join("*.symtab.json"))?);
+            metadata.extend(glob(&outdir.join("*.kani-metadata.json"))?);
+        }
+
         Ok(CargoOutputs {
             outdir: outdir.clone(),
-            symtabs: glob(&outdir.join("*.symtab.json"))?
-                .into_iter()
-                .chain(glob(&kani_extern_lib_path.join("*.symtab.json"))?)
-                .collect(),
-            metadata: glob(&outdir.join("*.kani-metadata.json"))?
-                .into_iter()
-                .chain(glob(&kani_extern_lib_path.join("*.kani-metadata.json"))?)
-                .collect(),
-            restrictions: self.args.restrict_vtable().then(|| outdir),
+            symtabs,
+            metadata,
+            restrictions: self.args.restrict_vtable().then_some(outdir),
         })
     }
 }
