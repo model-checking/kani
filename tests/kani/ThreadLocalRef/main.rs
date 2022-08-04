@@ -4,13 +4,12 @@
 // Checks for failures due to unsupported features related to threads.
 
 thread_local! {
-    static COND : bool = kani::any();
+    static COND : bool = true;
 }
 
 #[kani::proof]
 fn main() {
     COND.with(|&b| {
-        kani::assume(b);
-        assert!(b, "This should fail because we do not support thread local");
+        assert!(b);
     });
 }
