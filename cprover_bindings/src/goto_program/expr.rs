@@ -392,7 +392,7 @@ impl Expr {
 
     /// `typ x[width] = >>> {elem} <<<`
     pub fn array_constant(self, width: u64) -> Self {
-        assert!(self.is_int_constant());
+        // assert!(self.is_int_constant());
         expr!(ArrayOf { elem: self }, self.typ.clone().array_of(width))
     }
 
