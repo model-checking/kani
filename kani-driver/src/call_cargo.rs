@@ -38,7 +38,7 @@ impl KaniSession {
         let target_dir = self.args.target_dir.as_ref().unwrap_or(&find_target_dir()).clone();
         let outdir = target_dir.join(build_target).join("debug/deps");
 
-        let kani_extern_lib_path = PathBuf::from(std::env!("KANI_EXTERN_OUT_DIR"));
+        let kani_extern_lib_path = PathBuf::from(env!("KANI_EXTERN_OUT_DIR"));
 
         let flag_env = {
             let rustc_args = self.kani_rustc_flags();

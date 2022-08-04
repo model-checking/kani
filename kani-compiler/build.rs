@@ -62,9 +62,15 @@ pub fn main() {
     // Compile kani library and export KANI_LIB_PATH variable with its relative location.
     let out_dir = env::var("OUT_DIR").unwrap();
     let lib_out = path_str!([&out_dir, "lib"]);
+    let target = env::var("TARGET").unwrap();
     setup_lib(&out_dir, &lib_out, "kani");
     setup_lib(&out_dir, &lib_out, "kani_macros");
     setup_lib(&out_dir, &lib_out, "std");
     println!("cargo:rustc-env=KANI_LIB_PATH={}", lib_out);
-    println!("cargo:rustc-env=TARGET={}", env::var("TARGET").unwrap());
+    println!("cargo:rustc-env=TARGET={}", target);
+    println!(
+        "cargo:rustc-env=KANI_EXTERN_OUT_DIR={}/target/{}/debug/deps",
+        env::var("CARGO_WORKSPACE_DIR").unwrap(),
+        target
+    );
 }
