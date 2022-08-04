@@ -208,44 +208,30 @@ impl<'tcx> GotocCtx<'tcx> {
         op: &Operand<'tcx>,
         sz: &ty::Const<'tcx>,
         res_ty: Ty<'tcx>,
+        loc: Location,
     ) -> Expr {
-        let func_name = format!("gen-repeat<{}>", self.ty_mangled_name(res_ty));
-        let pretty_name = format!("init_array_repeat<{}>", self.ty_pretty_name(res_ty));
-        self.ensure(&func_name, |tcx, _| {
-            let paramt = tcx.codegen_ty(tcx.operand_ty(op));
-            let res_t = tcx.codegen_ty(res_ty);
-            let inp = tcx.gen_function_parameter(1, &func_name, paramt);
-            let res = tcx.gen_function_local_variable(2, &func_name, res_t.clone()).to_expr();
-            let idx = tcx.gen_function_local_variable(3, &func_name, Type::size_t()).to_expr();
-            let mut body = vec![
-                Stmt::decl(res.clone(), None, Location::none()),
-                Stmt::decl(idx.clone(), Some(Type::size_t().zero()), Location::none()),
-            ];
+        let paramt = self.codegen_ty(self.operand_ty(op));
+        let res_t = self.codegen_ty(res_ty);
+        let op_expr = self.codegen_operand(op);
+        let (inp, inp_decl) = self.decl_temp_variable(paramt, Some(op_expr), loc);
+        let (res, res_decl) = self.decl_temp_variable(res_t.clone(), None, loc);
+        let (idx, idx_decl) =
+            self.decl_temp_variable(Type::size_t(), Some(Type::size_t().zero()), loc);
 
-            let lbody = Stmt::block(
-                vec![
-                    tcx.codegen_idx_array(res.clone(), idx.clone())
-                        .assign(inp.to_expr(), Location::none()),
-                ],
-                Location::none(),
-            );
-            body.push(Stmt::for_loop(
-                Stmt::skip(Location::none()),
-                idx.clone().lt(tcx.codegen_const(*sz, None)),
-                idx.postincr().as_stmt(Location::none()),
-                lbody,
-                Location::none(),
-            ));
-            body.push(res.ret(Location::none()));
-            Symbol::function(
-                &func_name,
-                Type::code(vec![inp.to_function_parameter()], res_t),
-                Some(Stmt::block(body, Location::none())),
-                &pretty_name,
-                Location::none(),
-            )
-        });
-        self.find_function(&func_name).unwrap().call(vec![self.codegen_operand(op)])
+        let body = vec![
+            inp_decl,
+            res_decl,
+            idx_decl,
+            Stmt::for_loop(
+                Stmt::skip(loc),
+                idx.clone().lt(self.codegen_const(*sz, None)),
+                idx.clone().postincr().as_stmt(loc),
+                self.codegen_idx_array(res.clone(), idx.clone()).assign(inp, loc),
+                loc,
+            ),
+            res.as_stmt(loc),
+        ];
+        Expr::statement_expression(body, res_t)
     }
 
     pub fn codegen_rvalue_len(&mut self, p: &Place<'tcx>) -> Expr {
@@ -422,7 +408,7 @@ impl<'tcx> GotocCtx<'tcx> {
         debug!(?rv, "codegen_rvalue");
         match rv {
             Rvalue::Use(p) => self.codegen_operand(p),
-            Rvalue::Repeat(op, sz) => self.codegen_rvalue_repeat(op, sz, res_ty),
+            Rvalue::Repeat(op, sz) => self.codegen_rvalue_repeat(op, sz, res_ty, loc),
             Rvalue::Ref(_, _, p) | Rvalue::AddressOf(_, p) => self.codegen_rvalue_ref(p, res_ty),
             Rvalue::Len(p) => self.codegen_rvalue_len(p),
             // Rust has begun distinguishing "ptr -> num" and "num -> ptr" (providence-relevant casts) but we do not yet:
