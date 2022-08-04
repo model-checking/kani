@@ -19,21 +19,19 @@ then
 fi
 KANI_PATH=${KANI_CANDIDATES[0]}
 
-if [ -z "${CARGO_KANI_IS_CHILD+x}" ]; then
-    # avoid infinite recursion as below script also calls `cargo kani`
-    true # $SCRIPT_DIR/refresh-kani-proptest.sh
-fi
-
-CARGO_TOML_SAVE_FILE='.save-cargo.toml'
-if [[ "${PROPTEST+x}" == "1" ]]; then
-    cp Cargo.toml $CARGO_TOML_SAVE_FILE
-    cat Cargo.toml |  sed 's/^\s*proptest.*$//g' | tee Cargo.toml 1>/dev/null
-
+# if the crate uses proptest, get ready to run that. Make sure local
+# proptest import and kani's proptest does not clash.
+if grep '^proptest\s*=' Cargo.toml > /dev/null; then
+    if grep -F "[target.'cfg(not(kani))'.dependencies]" Cargo.toml > /dev/null \
+            && [ -z "${CARGO_KANI_IS_CHILD+x}" ]; then
+        $SCRIPT_DIR/refresh-kani-proptest.sh
+        export IS_KANI_PROPTEST=1
+    else
+        echo "Clashing import of proptest. Stopping cargo kani."
+        echo "Please put your proptest import under [target.'cfg(not(kani))'.dependencies]"
+        exit 1
+    fi
 fi
 
 exec -a cargo-kani "${KANI_PATH}" "$@"
 EXIT_CODE="$?"
-
-# todo! Somehow, this is not running. Exits fro cargo kani error.
-cat $CARGO_TOML_SAVE_FILE > Cargo.toml
-exit $EXIT_CODE
