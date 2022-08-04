@@ -119,7 +119,7 @@ where
 
 /// This function will replace `any_raw` that has been deprecated and it should only be used
 /// internally when we can guarantee that it will not trigger any undefined behavior.
-#[rustc_diagnostic_item = "KaniAnyRaw"]
+/// This function is also used to find deterministic bytes in the CBMC output trace.
 #[inline(never)]
 pub(crate) unsafe fn any_raw_internal<T, const SIZE_T: usize>() -> T {
     #[cfg(feature = "exe_trace")]
@@ -137,6 +137,13 @@ pub(crate) unsafe fn any_raw_internal<T, const SIZE_T: usize>() -> T {
     }
 
     #[cfg(not(feature = "exe_trace"))]
+    any_raw_inner::<T>()
+}
+
+/// This low-level function returns nondet bytes of size T.
+#[rustc_diagnostic_item = "KaniAnyRaw"]
+#[inline(never)]
+fn any_raw_inner<T>() -> T {
     unimplemented!("Kani any_raw_inner");
 }
 

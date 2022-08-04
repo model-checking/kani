@@ -26,10 +26,6 @@ struct MyStruct {
     // Float types
     f32_field: f32,
     f64_field: f64,
-
-    // Special types
-    bool_field: bool,
-    // TODO: Add array, nonzero_u8, char, option, result
 }
 
 impl MyStruct {
@@ -51,8 +47,6 @@ impl MyStruct {
 
             f32_field: 0.0,
             f64_field: 0.0,
-
-            bool_field: false,
         }
     }
 
@@ -73,8 +67,6 @@ impl MyStruct {
 
         self.f32_field = kani::any();
         self.f64_field = kani::any();
-
-        self.bool_field = kani::any();
     }
 
     fn verif_cond(&self) -> bool {
@@ -95,8 +87,6 @@ impl MyStruct {
 
         result = result && self.f32_field == 0.1;
         result = result && self.f64_field == 0.2;
-
-        result = result && self.bool_field;
         result
     }
 }
@@ -105,5 +95,8 @@ impl MyStruct {
 pub fn harness() {
     let mut my_struct = MyStruct::deterministic_default();
     my_struct.replace_with_kani_any();
-    assert!(my_struct.verif_cond());
+    // Semantics:
+    // my_struct.verif_cond(): iff all fields equal, return true.
+    // below assertion: negate the output -> iff all fields equal, return false.
+    assert!(!my_struct.verif_cond());
 }

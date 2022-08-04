@@ -251,18 +251,19 @@ mod parser {
     ) {
         if let (
             Some(step_type),
+            Some(lhs),
             Some(func),
             Some(bit_det_val),
             Some(interp_det_val),
             Some(width_u64),
         ) = (
             trace_pt["stepType"].as_str(),
+            trace_pt["lhs"].as_str(),
             trace_pt["sourceLocation"]["function"].as_str(),
             trace_pt["value"]["binary"].as_str(),
             trace_pt["value"]["data"].as_str(),
             trace_pt["value"]["width"].as_u64(),
-        ) && step_type == "assignment" && func.starts_with("kani::any") {
-            // TODO: Change all these unwrap panics to send their errors up.
+        ) && step_type == "assignment" && lhs == "var_0" && func.starts_with("kani::any_raw_internal") {
             let width = width_u64 as usize;
             assert_eq!(width, bit_det_val.len(), "Declared width wasn't same as width found in bit string");
             let mut next_num: Vec<u8> = Vec::new();
