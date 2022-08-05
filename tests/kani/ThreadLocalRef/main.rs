@@ -11,8 +11,6 @@ thread_local! {
     static COMPLEX_DATA: RefCell<&'static str> = RefCell::new("before");
 }
 
-pub fn main() {}
-
 #[kani::proof]
 fn test_bool() {
     COND.with(|&b| {

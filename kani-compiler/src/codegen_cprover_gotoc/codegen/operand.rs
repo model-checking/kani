@@ -395,6 +395,7 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
+    /// Generates a pointer to a static or thread-local variable.
     pub fn codegen_static_pointer(&mut self, def_id: DefId, is_thread_local: bool) -> Expr {
         // here we have a potentially unevaluated static
         let instance = Instance::mono(self.tcx, def_id);
