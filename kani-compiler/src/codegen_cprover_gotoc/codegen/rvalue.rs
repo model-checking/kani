@@ -203,6 +203,7 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
+    /// Codegens expressions of the type `let a  = [4u8; 6];`
     fn codegen_rvalue_repeat(
         &mut self,
         op: &Operand<'tcx>,
@@ -213,20 +214,23 @@ impl<'tcx> GotocCtx<'tcx> {
         let paramt = self.codegen_ty(self.operand_ty(op));
         let res_t = self.codegen_ty(res_ty);
         let op_expr = self.codegen_operand(op);
-        let (inp, inp_decl) = self.decl_temp_variable(paramt, Some(op_expr), loc);
+        // The value that will be inserted into each element the array
+        let (val, val_decl) = self.decl_temp_variable(paramt, Some(op_expr), loc);
+        // The actual array itself, declared on the stack.
+        // We leave it uninitilized, since it will be initilized by the loop.
         let (res, res_decl) = self.decl_temp_variable(res_t.clone(), None, loc);
         let (idx, idx_decl) =
             self.decl_temp_variable(Type::size_t(), Some(Type::size_t().zero()), loc);
 
         let body = vec![
-            inp_decl,
+            val_decl,
             res_decl,
             idx_decl,
             Stmt::for_loop(
                 Stmt::skip(loc),
                 idx.clone().lt(self.codegen_const(*sz, None)),
                 idx.clone().postincr().as_stmt(loc),
-                self.codegen_idx_array(res.clone(), idx.clone()).assign(inp, loc),
+                self.codegen_idx_array(res.clone(), idx.clone()).assign(val, loc),
                 loc,
             ),
             res.as_stmt(loc),
