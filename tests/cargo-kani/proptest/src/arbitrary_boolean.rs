@@ -2,13 +2,13 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! arbitrary boolean proptest
+//! A proptest that uses arbitrary "any" function
 
 use proptest::bool;
-use proptest::strategy::Just;
+use proptest::arbitrary::any;
 
 proptest::proptest! {
-    fn arbitrary_boolean((_, (a,b)) in (Just(()), (bool::ANY, bool::ANY)) ) {
-        assert!(a && b || true, "true shortcut");
+    fn arbitrary_boolean((_, (a,b)) in (any::<()>(), any::<(bool, bool)>()) ) {
+        assert!( (a && b) || true, "true shortcut");
     }
 }
