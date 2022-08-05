@@ -3,6 +3,8 @@
 
 //! cargo-kani test crate for proptest.
 
+mod arbitrary_boolean;
+
 use proptest::test_runner::Config;
 
 // check if the proptest library is linked and macro is working.
