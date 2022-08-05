@@ -47,7 +47,6 @@ fn init_array_of_non_copystruct() {
     assert_eq!(a[i].c, Some(3));
 }
 
-#[repr(C)]
 #[derive(Copy, Clone)]
 struct Copyable {
     a: u8,
@@ -64,4 +63,30 @@ fn init_array_of_struct() {
     assert_eq!(a[i].a, 1);
     assert_eq!(a[i].b, 2);
     assert_eq!(a[i].c, Some(3));
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct ReprC {
+    a: u8,
+    b: u32,
+    c: Option<u16>,
+}
+
+#[kani::proof]
+fn init_array_of_repr_c_struct() {
+    let v = ReprC { a: 1, b: 2, c: Some(3) };
+    let a = [v; 6];
+    let i: usize = kani::any();
+    kani::assume(i < 6);
+    assert_eq!(a[i].a, 1);
+    assert_eq!(a[i].b, 2);
+    assert_eq!(a[i].c, Some(3));
+}
+
+#[kani::proof]
+fn mutate_array() {
+    let mut a = [4u8; 6];
+    a[2] = 1;
+    assert_eq!(a[2], 1);
 }

@@ -38,7 +38,7 @@ cargo test -p kani-driver
 
 # Check output files (--gen-c option)
 echo "Check GotoC output file generation"
-#time "$KANI_DIR"/tests/output-files/check-output.sh
+time "$KANI_DIR"/tests/output-files/check-output.sh
 
 # Declare testing suite information (suite and mode)
 TESTS=(

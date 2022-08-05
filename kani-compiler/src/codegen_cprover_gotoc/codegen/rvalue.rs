@@ -209,7 +209,7 @@ impl<'tcx> GotocCtx<'tcx> {
         op: &Operand<'tcx>,
         sz: &ty::Const<'tcx>,
         res_ty: Ty<'tcx>,
-        _loc: Location,
+        loc: Location,
     ) -> Expr {
         let res_t = self.codegen_ty(res_ty);
         let op_expr = self.codegen_operand(op);
@@ -219,6 +219,7 @@ impl<'tcx> GotocCtx<'tcx> {
             btree_string_map![("0", op_expr.array_constant(width))],
             &self.symbol_table,
         )
+        .with_location(loc)
     }
 
     pub fn codegen_rvalue_len(&mut self, p: &Place<'tcx>) -> Expr {
