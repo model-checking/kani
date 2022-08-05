@@ -582,10 +582,10 @@ impl<'tcx> GotocCtx<'tcx> {
         let normalized = self.tcx.normalize_erasing_regions(ty::ParamEnv::reveal_all(), ty);
         let goto_typ = self.codegen_ty_inner(normalized);
         if let Some(tag) = goto_typ.tag() {
-            if !self.type_map.contains_key(&tag) {
+            self.type_map.entry(tag).or_insert_with(|| {
                 debug!(mir_type=?normalized, gotoc_name=?tag, ?goto_typ,  "codegen_ty: new type");
-                self.type_map.insert(tag, normalized);
-            }
+                normalized
+            });
         }
         goto_typ
     }
