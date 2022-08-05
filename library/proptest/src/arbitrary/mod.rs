@@ -36,9 +36,9 @@ mod macros;
 
 // TODO: implement the following, they correspond to ../strategy/traits.rs
 // mod arrays;
-// mod primitives;
+mod primitives;
 // mod sample;
-// mod tuples;
+mod tuples;
 
 // mod _core;
 
