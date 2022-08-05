@@ -851,7 +851,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // Function body
                 let unimplemented = ctx
                     .codegen_unimplemented(
-                        format!("drop_in_place for {}", drop_sym_name).as_str(),
+                        &format!("drop_in_place for missing type {}", ty),
                         Type::empty(),
                         Location::none(),
                         "https://github.com/model-checking/kani/issues/281",

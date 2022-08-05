@@ -372,24 +372,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         // The only argument should be a self reference
                         let args = vec![arg];
 
-                        // We have a known issue where nested Arc and Mutex objects result in
-                        // drop_in_place call implementations that fail to typecheck. Skipping
-                        // drop entirely causes unsound verification results in common cases
-                        // like vector extend, so for now, add a sound special case workaround
-                        // for calls that fail the typecheck.
-                        // https://github.com/model-checking/kani/issues/426
-                        // Unblocks: https://github.com/model-checking/kani/issues/435
-                        if Expr::typecheck_call(&func, &args) {
-                            func.call(args)
-                        } else {
-                            self.codegen_unimplemented(
-                                format!("drop_in_place call for {:?}", func).as_str(),
-                                func.typ().return_type().unwrap().clone(),
-                                Location::none(),
-                                "https://github.com/model-checking/kani/issues/426",
-                            )
-                        }
-                        .as_stmt(Location::none())
+                        func.call(args).as_stmt(Location::none())
                     }
                 }
             }
