@@ -12,12 +12,17 @@ use rustc_middle::ty::{Instance, InstanceDef};
 use rustc_span::Span;
 use tracing::{debug, warn};
 
+#[macro_export]
 macro_rules! emit_concurrency_warning {
     ($intrinsic: expr, $loc: expr) => {{
+        emit_concurrency_warning!($intrinsic, $loc, "a sequential operation");
+    }};
+    ($intrinsic: expr, $loc: expr, $treated_as: expr) => {{
         warn!(
-            "Kani does not support concurrency for now. `{}` in {} treated as a sequential operation.",
+            "Kani does not support concurrency for now. `{}` in {} treated as {}.",
             $intrinsic,
-            $loc.short_string()
+            $loc.short_string(),
+            $treated_as,
         );
     }};
 }
