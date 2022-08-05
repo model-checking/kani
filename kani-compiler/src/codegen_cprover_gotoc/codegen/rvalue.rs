@@ -4,7 +4,7 @@ use super::typ::{is_pointer, pointee_type, TypeExt};
 use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::codegen_cprover_gotoc::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
-use crate::unwrap_or_return_codegen_unimplemented;
+use crate::{emit_concurrency_warning, unwrap_or_return_codegen_unimplemented};
 use cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
 use cbmc::utils::BUG_REPORT_URL;
 use cbmc::MachineModel;
@@ -485,14 +485,10 @@ impl<'tcx> GotocCtx<'tcx> {
             Rvalue::Aggregate(ref k, operands) => {
                 self.codegen_rvalue_aggregate(k, operands, res_ty)
             }
-            Rvalue::ThreadLocalRef(_) => {
-                let typ = self.codegen_ty(res_ty);
-                self.codegen_unimplemented(
-                    "Rvalue::ThreadLocalRef",
-                    typ,
-                    Location::none(),
-                    "https://github.com/model-checking/kani/issues/541",
-                )
+            Rvalue::ThreadLocalRef(def_id) => {
+                // Since Kani is single-threaded, we treat a thread local like a static variable:
+                emit_concurrency_warning!("thread local", loc, "a static variable");
+                self.codegen_static_pointer(*def_id, true)
             }
             // A CopyForDeref is equivalent to a read from a place at the codegen level.
             // https://github.com/rust-lang/rust/blob/1673f1450eeaf4a5452e086db0fe2ae274a0144f/compiler/rustc_middle/src/mir/syntax.rs#L1055
@@ -689,12 +685,10 @@ impl<'tcx> GotocCtx<'tcx> {
                                 .tcx
                                 .normalize_erasing_regions(ty::ParamEnv::reveal_all(), src_subt);
                             match src_subt.kind() {
-                                ty::Slice(_) | ty::Str | ty::Dynamic(..) => {
-                                    return self
-                                        .codegen_operand(src)
-                                        .member("data", &self.symbol_table)
-                                        .cast_to(self.codegen_ty(dst_t));
-                                }
+                                ty::Slice(_) | ty::Str | ty::Dynamic(..) => self
+                                    .codegen_operand(src)
+                                    .member("data", &self.symbol_table)
+                                    .cast_to(self.codegen_ty(dst_t)),
                                 _ => self.codegen_operand(src).cast_to(self.codegen_ty(dst_t)),
                             }
                         }

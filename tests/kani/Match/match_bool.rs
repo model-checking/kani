@@ -3,7 +3,7 @@
 
 #[kani::proof]
 pub fn match_bool() {
-    let arg: bool = kani::nondet();
+    let arg: bool = kani::any();
     let var = match arg {
         true => !arg,
         _ => arg,
