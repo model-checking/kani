@@ -23,7 +23,10 @@ TESTS=("tests/kani"
     "tests/prusti"
     "tests/smack"
     "tests/expected"
+    "tests/perf"
+    "tests/ui"
     "tests/cargo-kani"
+    "tests/cargo-ui"
     "docs/src/tutorial")
 
 for suite in "${TESTS[@]}"; do

@@ -22,7 +22,7 @@ fn check_any_char() {
 #[kani::proof]
 #[kani::unwind(101)]
 fn check_any_char_array() {
-    let arr : [char; 100] = kani::any();
+    let arr: [char; 100] = kani::any();
     for i in 0..100 {
         let c = arr[i];
         let n = c as u32;
@@ -33,7 +33,7 @@ fn check_any_char_array() {
 #[kani::proof]
 #[kani::unwind(101)]
 fn check_any_usize_array() {
-    let arr : [usize; 100] = kani::any();
+    let arr: [usize; 100] = kani::any();
     for i in 0..100 {
         let us = arr[i];
         kani::assume(us < 100);
@@ -46,7 +46,7 @@ fn check_any_usize_option() {
     let mut all_none = true;
     let mut all_some = true;
     for _ in 0..100 {
-        let us : Option::<usize> = kani::any();
+        let us: Option<usize> = kani::any();
         all_none &= us.is_none();
         all_some &= us.is_some();
     }
@@ -59,7 +59,7 @@ fn check_any_usize_result() {
     let mut all_ok = true;
     let mut all_err = true;
     for _ in 0..100 {
-        let us : Result::<usize, isize> = kani::any();
+        let us: Result<usize, isize> = kani::any();
         all_ok &= us.is_ok();
         all_err &= us.is_err();
     }
@@ -72,7 +72,7 @@ fn check_any_bool() {
     let mut all_true = true;
     let mut all_false = true;
     for _ in 0..100 {
-        let val : bool = kani::any();
+        let val: bool = kani::any();
         all_true &= val;
         all_false &= !val;
     }

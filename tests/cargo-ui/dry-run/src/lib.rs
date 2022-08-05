@@ -7,5 +7,5 @@
 
 #[kani::proof]
 pub fn broken_harness() {
-    let invalid: Nope = Nope{};
+    let invalid: Nope = Nope {};
 }
