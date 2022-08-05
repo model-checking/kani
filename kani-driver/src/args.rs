@@ -43,10 +43,10 @@ pub struct KaniArgs {
     /// Generate visualizer report to <target-dir>/report/html/index.html
     #[structopt(long)]
     pub visualize: bool,
-    /// Generate executable trace
+    /// Generate executable trace test case and print it to stdout
     #[structopt(long, requires("enable-unstable"))]
     pub gen_exe_trace: bool,
-    /// Add executable trace to the source code
+    /// Additionally add executable trace test case to the source code
     #[structopt(long, requires("gen-exe-trace"))]
     pub add_exe_trace_to_src: bool,
     /// Keep temporary files generated throughout Kani process

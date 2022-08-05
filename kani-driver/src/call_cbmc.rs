@@ -103,7 +103,7 @@ impl KaniSession {
 
         args.push("--slice-formula".into());
 
-        if self.args.add_exe_trace_to_src {
+        if self.args.gen_exe_trace {
             args.push("--trace".into());
         }
 

@@ -105,13 +105,20 @@ impl Location {
         T: TryInto<u64>,
         T::Error: Debug,
     {
-        let file = file.into();
-        let start_line = start_line.try_into().unwrap();
-        let start_col = start_col.map(|x| x.try_into().unwrap());
-        let end_line = end_line.try_into().unwrap();
-        let end_col = end_col.map(|x| x.try_into().unwrap());
-        let function = function.intern();
-        Location::Loc { file, function, start_line, start_col, end_line, end_col }
+        let file_into = file.into();
+        let start_line_into = start_line.try_into().unwrap();
+        let start_col_into = start_col.map(|x| x.try_into().unwrap());
+        let end_line_into = end_line.try_into().unwrap();
+        let end_col_into = end_col.map(|x| x.try_into().unwrap());
+        let function_into = function.intern();
+        Location::Loc {
+            file: file_into,
+            function: function_into,
+            start_line: start_line_into,
+            start_col: start_col_into,
+            end_line: end_line_into,
+            end_col: end_col_into,
+        }
     }
 
     /// Create a Property type Location
