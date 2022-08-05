@@ -287,6 +287,18 @@ impl<'tcx> GotocCtx<'tcx> {
                                 let discr_ty = self.codegen_enum_discr_typ(ty);
                                 let init = self.codegen_scalar(s, discr_ty, span);
                                 let cgt = self.codegen_ty(ty);
+                                let fields =
+                                    cgt.get_non_empty_components(&self.symbol_table).unwrap();
+                                assert_eq!(
+                                    fields.len(),
+                                    1,
+                                    "TagEncoding::Direct encountered for enum with non-empty variants"
+                                );
+                                assert_eq!(
+                                    fields[0].name().to_string(),
+                                    "case",
+                                    "Unexpected field in enum/generator. Please report your failing case at https://github.com/model-checking/kani/issues/1465"
+                                );
                                 Expr::struct_expr_with_nondet_fields(
                                     cgt,
                                     btree_string_map![("case", init)],
