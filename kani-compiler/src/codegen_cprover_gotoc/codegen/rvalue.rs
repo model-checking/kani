@@ -230,7 +230,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 Stmt::skip(loc),
                 idx.clone().lt(self.codegen_const(*sz, None)),
                 idx.clone().postincr().as_stmt(loc),
-                self.codegen_idx_array(res.clone(), idx.clone()).assign(val, loc),
+                self.codegen_idx_array(res.clone(), idx).assign(val, loc),
                 loc,
             ),
             res.as_stmt(loc),
