@@ -20,9 +20,13 @@ pub use futures::block_on;
 #[allow(deprecated)]
 pub use invariant::Invariant;
 
-/// This global variable is used to store values for the deterministic playback of kani::any calls.
-/// Safety of this static mut only holds if you do not run your deterministic playback unit tests in parallel.
-/// TODO: add a lock here.
+#[cfg(feature = "exe_trace")]
+use std::sync::Mutex;
+/// DET_VALS_LOCK is used by each playback test case to ensure that only a single thread is modifying DET_VALS at once.
+/// We need to separate the lock from the data because there's no other way to pass the data from
+/// kani::exe_trace_run() to kani::any_raw_internal() while still holding the lock.
+#[cfg(feature = "exe_trace")]
+static DET_VALS_LOCK: Mutex<()> = Mutex::new(());
 #[cfg(feature = "exe_trace")]
 static mut DET_VALS: Vec<Vec<u8>> = Vec::new();
 
@@ -126,6 +130,7 @@ where
 pub(crate) unsafe fn any_raw_internal<T, const SIZE_T: usize>() -> T {
     #[cfg(feature = "exe_trace")]
     {
+        // This code will only run when our thread's exe_trace_run() fn holds the lock.
         let next_det_val = DET_VALS.pop().expect("Not enough det vals found");
         let next_det_val_len = next_det_val.len();
         let bytes_t: [u8; SIZE_T] = next_det_val.try_into().expect(&format!(
@@ -147,14 +152,23 @@ fn any_raw_inner<T>() -> T {
     unimplemented!("Kani any_raw_inner");
 }
 
-/// This function sets the values used in the deterministic playback of kani::any calls.
+/// This function sets deterministic values and plays back the user's proof harness.
 #[cfg(feature = "exe_trace")]
-pub unsafe fn exe_trace_init(mut det_vals: Vec<Vec<u8>>) {
+pub fn exe_trace_run<F: Fn()>(mut det_vals: Vec<Vec<u8>>, proof_harness: F) {
     // Det vals in the user test case should be in the same order as the order of kani::any() calls.
-    // We need to reverse this order because det vals are popped off of the outer Vec,
+    // Here, we need to reverse this order because det vals are popped off of the outer Vec,
     // so the chronological first det val should come last.
     det_vals.reverse();
-    DET_VALS = det_vals;
+    // If another thread panicked while holding the lock (e.g., because they hit an expected assertion failure), we still want to continue.
+    let _guard = match DET_VALS_LOCK.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    unsafe {
+        DET_VALS = det_vals;
+    }
+    // Since F is a type argument, there should be a direct, static call to proof_harness().
+    proof_harness();
 }
 
 /// Function used in tests for cases where the condition is not always true.

@@ -184,10 +184,7 @@ fn {exe_trace_func_name}() {{
     let det_vals: Vec<Vec<u8>> = vec![
 {vecs_as_str}
     ];
-    unsafe {{
-        kani::exe_trace_init(det_vals);
-    }}
-    {harness_name}();
+    kani::exe_trace_run(det_vals, {harness_name});
 }}"
     );
 

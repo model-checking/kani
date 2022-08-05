@@ -16,7 +16,6 @@ fn kani_exe_trace_harness
         // 127
         vec![127]
     ];
-    kani::exe_trace_init(det_vals);
-    harness();
+    kani::exe_trace_run(det_vals, harness);
 }
 ```
