@@ -34,7 +34,7 @@ mod traits;
 #[macro_use]
 mod macros;
 
-// TODO: implement the following
+// TODO: implement the following, they correspond to ../strategy/traits.rs
 // mod arrays;
 // mod primitives;
 // mod sample;
