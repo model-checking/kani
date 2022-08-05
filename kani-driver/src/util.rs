@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use std::ffi::OsString;
-use std::path::Path;
-use std::path::PathBuf;
+use std::fs::File;
+use std::io::{self, BufRead, BufReader, BufWriter, Write};
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 /// Replace an extension with another one, in a new PathBuf. (See tests for examples)
@@ -84,6 +85,28 @@ pub fn render_command(cmd: &Command) -> OsString {
     }
 
     str
+}
+
+/// Read a file into a string vector and return any IO errors.
+pub fn read_lines_from_file<P: AsRef<Path>>(file_name: P) -> io::Result<Vec<String>> {
+    BufReader::new(File::open(file_name)?).lines().collect()
+}
+
+/// Write a slice of string slices to a file and return any write errors.
+pub fn write_lines_to_file<P, S>(file_name: P, slice_slice_line: &[&[S]]) -> io::Result<()>
+where
+    P: AsRef<Path>,
+    S: AsRef<str>,
+{
+    let mut buf_writer = BufWriter::new(File::create(file_name)?);
+    for slice_line in slice_slice_line.iter() {
+        for line in slice_line.iter() {
+            buf_writer.write_all(line.as_ref().as_bytes())?;
+            buf_writer.write_all("\n".as_bytes())?;
+        }
+    }
+    buf_writer.flush()?;
+    Ok(())
 }
 
 #[cfg(test)]

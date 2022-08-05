@@ -1,17 +1,18 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+//! Module for parsing deterministic values from CBMC output traces,
+//! generating executable trace unit tests, and adding them to the user's source code.
+
 use crate::session::KaniSession;
 use kani_metadata::HarnessMetadata;
 use std::collections::hash_map::DefaultHasher;
 use std::ffi::OsString;
-use std::fs;
+use std::fs::{self, File};
 use std::hash::{Hash, Hasher};
+use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::process::Command;
-
-/// Module for parsing deterministic values from CBMC output traces,
-/// generating executable traces, and adding them to the user's source code.
 
 impl KaniSession {
     /// The main driver for generating executable traces and adding them to source code.
@@ -26,7 +27,7 @@ impl KaniSession {
 
             println!("Executable trace:");
             println!("```");
-            println!("{}", exe_trace);
+            println!("{}", &exe_trace);
             println!("```");
 
             if self.args.add_exe_trace_to_src {
@@ -60,13 +61,18 @@ impl KaniSession {
         exe_trace_func_name: &str,
     ) {
         // Prep the source code and exec trace func.
-        let src_as_str =
-            fs::read_to_string(src_file_path).expect("Couldn't access proof harness source file");
-        let mut src_lines = src_as_str.split('\n').collect::<Vec<&str>>();
-        let mut exe_trace_lines = exe_trace.split('\n').collect::<Vec<&str>>();
+        let src_lines = crate::util::read_lines_from_file(src_file_path)
+            .expect("Couldn't read proof harness source file");
+        let src_lines_str: Vec<&str> = src_lines.iter().map(String::as_str).collect();
+        let exe_trace_lines = exe_trace.split('\n').collect::<Vec<&str>>();
 
         // Short circuit if exe trace already in source code.
-        if src_as_str.contains(exe_trace_func_name) {
+        let unit_test_already_in_src = src_lines
+            .iter()
+            .map(|line| line.contains(exe_trace_func_name))
+            .reduce(|accum, item| accum && item)
+            .expect("Proof harness source file is empty");
+        if unit_test_already_in_src {
             if !self.args.quiet {
                 println!("Exe trace already found in source code, so skipping modification.");
             }
@@ -75,18 +81,26 @@ impl KaniSession {
 
         // Calc inserted indexes and line numbers into source code to rustfmt only those lines.
         // Indexes are into the vector (0-idx), lines are into src file (1-idx).
-        let start_line = proof_harness_end_line + 1;
-        let start_idx = start_line - 1;
-        // If start_line=2, exe_trace.len()=3, then inserted code ends at line 4 (start + len - 1).
-        let end_line = start_line + exe_trace_lines.len() - 1;
+        let unit_test_start_line = proof_harness_end_line + 1;
+        let unit_test_start_idx = unit_test_start_line - 1;
+        // If unit_test_start_line=2, exe_trace.len()=3, then unit test ends at line 4 (start + len - 1).
+        let unit_test_end_line = unit_test_start_line + exe_trace_lines.len() - 1;
 
-        // Splice the exec trace func into the proof harness source code.
-        // start_idx is at max len(src_lines), so no panic here, even if proof harness is at the end of src file.
-        let mut src_right = src_lines.split_off(start_idx);
-        src_lines.append(&mut exe_trace_lines);
-        src_lines.append(&mut src_right);
-        let new_src = src_lines.join("\n");
-        fs::write(src_file_path, new_src).expect("Couldn't write to proof harness source file");
+        // Write new source lines to a tmp file, and then copy it over.
+        // That way, if our process crashes, we don't corrupt the user's source file.
+        let tmp_src_file_path = "foo.txt";
+        crate::util::write_lines_to_file(
+            tmp_src_file_path,
+            &[
+                &src_lines_str[0..unit_test_start_idx],
+                exe_trace_lines.as_slice(),
+                &src_lines_str[unit_test_start_idx..],
+            ],
+        )
+        .expect("Couldn't write to tmp src file");
+
+        fs::copy(tmp_src_file_path, src_file_path)
+            .expect("Couldn't copy tmp src file to actual src file");
 
         // Run rustfmt on just the inserted lines.
         let source_path = Path::new(src_file_path);
@@ -102,7 +116,7 @@ impl KaniSession {
             .expect("Couldn't convert proof harness file name from OsStr to str");
         let file_line_ranges = vec![FileLineRange {
             file: src_file.to_string(),
-            line_range: Some((start_line, end_line)),
+            line_range: Some((unit_test_start_line, unit_test_end_line)),
         }];
         self.run_rustfmt(file_line_ranges.as_slice(), Some(parent_dir));
     }
