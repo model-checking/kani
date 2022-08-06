@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 // Check that `sinf32` returns the expected results.
-// Note: The CBMC model for this function is an over-approximation that returns:
-//  * A nondet. value between -1 and 1
+
+//
+// The CBMC model for `sinf32` is an overapproximation that returns:
 //  * 0.0 if the argument is 0.0
+//  * A symbolic value between -1.0 and 1.0 otherwise
 #![feature(core_intrinsics)]
 
 fn fp_equals(value: f32, expected: f32) -> bool {
