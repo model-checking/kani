@@ -619,7 +619,7 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_statement(&mut self, stmt: &Statement<'tcx>) -> Stmt {
         let _trace_span = info_span!("CodegenStatement", statement = ?stmt).entered();
         debug!("handling statement {:?}", stmt);
-        let location = self.codegen_span(&stmt.source_info.span);
+        let mut location = self.codegen_span(&stmt.source_info.span);
         match &stmt.kind {
             StatementKind::Assign(box (l, r)) => {
                 let lty = self.place_ty(l);
@@ -657,6 +657,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     // https://github.com/model-checking/kani/issues/416
                     Stmt::skip(location)
                 } else {
+                    location.set_loc_comment("deinit".into());
                     unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place(place))
                         .goto_expr
                         .assign(dst_type.nondet(), location)
@@ -763,6 +764,6 @@ impl<'tcx> GotocCtx<'tcx> {
             | StatementKind::Nop
             | StatementKind::Coverage { .. } => Stmt::skip(location),
         }
-        .with_location(self.codegen_span(&stmt.source_info.span))
+        .with_location(location)
     }
 }
