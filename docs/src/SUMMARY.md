@@ -17,7 +17,7 @@
   - [Where to start on real code](./tutorial-real-code.md)
 
 - [Developer documentation](dev-documentation.md)
-  - [Coding Conventions](./conventions.md)
+  - [Coding conventions](./conventions.md)
   - [Working with CBMC](./cbmc-hacks.md)
   - [Working with `rustc`](./rustc-hacks.md)
   - [Command cheat sheets](./cheat-sheets.md)

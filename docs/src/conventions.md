@@ -1,4 +1,4 @@
-# Coding Conventions
+# Coding conventions
 
 ## Formatting
 
@@ -67,7 +67,7 @@ Here are a few ways how we do that.
 ### Compilation errors
 
 Make sure to add user-friendly errors for constructs that we can't handle.
-For example, Kani cannot handle panic unwind strategy, and it will fail compilation if the crate uses this
+For example, Kani cannot handle the panic unwind strategy, and it will fail compilation if the crate uses this
 configuration.
 
 ### Internal compiler errors
