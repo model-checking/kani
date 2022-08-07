@@ -10,7 +10,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::ffi::OsString;
 use std::fs::{self, File};
 use std::hash::{Hash, Hasher};
-use std::io::{BufWriter, Write};
+use std::io::{Read, Write};
 use std::path::Path;
 use std::process::Command;
 
@@ -55,55 +55,46 @@ impl KaniSession {
     /// Add the exe trace to the user's source code, format it, and short circuit if code already present.
     fn modify_src_code(
         &self,
-        src_file_path: &str,
+        src_path: &str,
         proof_harness_end_line: usize,
         exe_trace: &str,
         exe_trace_func_name: &str,
     ) {
-        // Prep the source code and exec trace func.
-        let src_lines = crate::util::read_lines_from_file(src_file_path)
-            .expect("Couldn't read proof harness source file");
-        let src_lines_str: Vec<&str> = src_lines.iter().map(String::as_str).collect();
-        let exe_trace_lines = exe_trace.split('\n').collect::<Vec<&str>>();
+        let mut src_file = File::open(src_path).expect("Couldn't open source file");
+        let mut src_as_str = String::new();
+        src_file.read_to_string(&mut src_as_str).expect("Couldn't read source file");
 
         // Short circuit if exe trace already in source code.
-        let unit_test_already_in_src = src_lines
-            .iter()
-            .map(|line| line.contains(exe_trace_func_name))
-            .reduce(|accum, item| accum && item)
-            .expect("Proof harness source file is empty");
-        if unit_test_already_in_src {
+        if src_as_str.contains(exe_trace_func_name) {
             if !self.args.quiet {
                 println!("Exe trace already found in source code, so skipping modification.");
             }
             return;
         }
 
-        // Calc inserted indexes and line numbers into source code to rustfmt only those lines.
-        // Indexes are into the vector (0-idx), lines are into src file (1-idx).
-        let unit_test_start_line = proof_harness_end_line + 1;
-        let unit_test_start_idx = unit_test_start_line - 1;
-        // If unit_test_start_line=2, exe_trace.len()=3, then unit test ends at line 4 (start + len - 1).
-        let unit_test_end_line = unit_test_start_line + exe_trace_lines.len() - 1;
+        // Split the code into two different parts around the insertion point.
+        let src_newline_matches: Vec<_> = src_as_str.match_indices('\n').collect();
+        // If the proof harness ends on the last line of source code, there won't be a newline.
+        let insertion_pt = if proof_harness_end_line == src_newline_matches.len() + 1 {
+            src_as_str.len()
+        } else {
+            // Existing newline goes with 2nd src half. We also manually add newline before exe trace.
+            src_newline_matches[proof_harness_end_line - 1].0
+        };
+        let src_before_exe_trace = &src_as_str[..insertion_pt];
+        let src_after_exe_trace = &src_as_str[insertion_pt..];
 
-        // Write new source lines to a tmp file, and then copy it over.
-        // That way, if our process crashes, we don't corrupt the user's source file.
-        let tmp_src_file_path = "foo.txt";
-        crate::util::write_lines_to_file(
-            tmp_src_file_path,
-            &[
-                &src_lines_str[0..unit_test_start_idx],
-                exe_trace_lines.as_slice(),
-                &src_lines_str[unit_test_start_idx..],
-            ],
-        )
-        .expect("Couldn't write to tmp src file");
-
-        fs::copy(tmp_src_file_path, src_file_path)
-            .expect("Couldn't copy tmp src file to actual src file");
+        // Write new source lines to a tmp file, and then rename it to the actual user's source file.
+        // Renames are usually automic, so we won't corrupt the user's source file during a crash.
+        let tmp_src_path = src_path.to_string() + ".exe_trace_overwrite";
+        let mut tmp_src_file = File::create(&tmp_src_path).unwrap();
+        write!(tmp_src_file, "{}\n{}{}", src_before_exe_trace, exe_trace, src_after_exe_trace)
+            .expect("Couldn't write into tmp src file");
+        fs::rename(&tmp_src_path, src_path)
+            .expect("Couldn't rename tmp src file to actual src file");
 
         // Run rustfmt on just the inserted lines.
-        let source_path = Path::new(src_file_path);
+        let source_path = Path::new(src_path);
         let parent_dir = source_path
             .parent()
             .expect("Proof harness is not in a directory")
@@ -114,6 +105,10 @@ impl KaniSession {
             .expect("Couldn't get file name of source file")
             .to_str()
             .expect("Couldn't convert proof harness file name from OsStr to str");
+
+        let exe_trace_num_lines = exe_trace.matches('\n').count() + 1;
+        let unit_test_start_line = proof_harness_end_line + 1;
+        let unit_test_end_line = unit_test_start_line + exe_trace_num_lines - 1;
         let file_line_ranges = vec![FileLineRange {
             file: src_file.to_string(),
             line_range: Some((unit_test_start_line, unit_test_end_line)),
