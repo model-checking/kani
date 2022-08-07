@@ -16,12 +16,12 @@ use std::process::Command;
 
 impl KaniSession {
     /// The main driver for generating executable traces and adding them to source code.
-    pub fn exe_trace_main(&self, specialized_obj: &Path, harness: &HarnessMetadata) {
+    pub fn exe_trace_main(&self, output_filename: &Path, harness: &HarnessMetadata) {
         if !self.args.gen_exe_trace {
             return;
         }
 
-        let (det_vals, interp_det_vals) = parser::get_det_vals(specialized_obj);
+        let (det_vals, interp_det_vals) = parser::get_det_vals(output_filename);
         let (exe_trace, exe_trace_func_name) = format_unit_test(
             &harness.mangled_name,
             det_vals.as_slice(),
@@ -45,7 +45,7 @@ impl KaniSession {
             let proof_harness_end_line: usize = harness
                 .original_end_line
                 .parse()
-                .expect("Couldn't convert proof harness line from str to usize");
+                .expect(&format!("Invalid proof harness end line: {}", harness.original_end_line));
             self.modify_src_code(
                 &harness.original_file,
                 proof_harness_end_line,
@@ -70,7 +70,10 @@ impl KaniSession {
         // Short circuit if exe trace already in source code.
         if src_as_str.contains(exe_trace_func_name) {
             if !self.args.quiet {
-                println!("Exe trace already found in source code, so skipping modification.");
+                println!(
+                    "Exe trace `{}` already found in source code, so skipping modification.",
+                    exe_trace_func_name
+                );
             }
             return;
         }
@@ -209,16 +212,14 @@ struct FileLineRange {
 
 /// Read the CBMC output, parse it as a JSON object, and extract the deterministic values.
 mod parser {
-    use crate::util::append_path;
     use serde_json::Value;
     use std::fs::File;
     use std::io::BufReader;
     use std::path::Path;
 
     /// Extract deterministic values from a failing harness.
-    pub fn get_det_vals(file: &Path) -> (Vec<Vec<u8>>, Vec<String>) {
-        let output_filename = append_path(file, "cbmc_output");
-        let cbmc_out = get_cbmc_out(&output_filename);
+    pub fn get_det_vals(output_filename: &Path) -> (Vec<Vec<u8>>, Vec<String>) {
+        let cbmc_out = get_cbmc_out(output_filename);
         parse_cbmc_out(&cbmc_out)
     }
 

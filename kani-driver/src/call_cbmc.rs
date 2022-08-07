@@ -19,12 +19,15 @@ pub enum VerificationStatus {
 
 impl KaniSession {
     /// Verify a goto binary that's been prepared with goto-instrument
-    pub fn run_cbmc(&self, file: &Path, harness: &HarnessMetadata) -> Result<VerificationStatus> {
-        let output_filename = crate::util::append_path(file, "cbmc_output");
-
+    pub fn run_cbmc(
+        &self,
+        file: &Path,
+        output_filename: &Path,
+        harness: &HarnessMetadata,
+    ) -> Result<VerificationStatus> {
         {
             let mut temps = self.temporaries.borrow_mut();
-            temps.push(output_filename.clone());
+            temps.push(output_filename.to_path_buf());
         }
 
         let args: Vec<OsString> = self.cbmc_flags(file, harness)?;

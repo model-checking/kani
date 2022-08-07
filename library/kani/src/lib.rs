@@ -1,12 +1,16 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-#![feature(rustc_attrs)] // Used for rustc_diagnostic_item.
-#![feature(min_specialization)] // Used for default implementation of Arbitrary.
-#![allow(incomplete_features)]
-// Used for getting the size of generic types.
+
+// Used for rustc_diagnostic_item.
+#![feature(rustc_attrs)]
+// Used for default implementation of Arbitrary.
+#![feature(min_specialization)]
+// generic_const_exprs is used for getting the size of generic types.
+// incomplete_features is used to suppress warnings for using generic_const_exprs.
 // See this issue for more details: https://github.com/rust-lang/rust/issues/44580.
-// Note: We can remove this feature after we remove the following deprecated functions:
+// Note: We can remove both features after we remove the following deprecated functions:
 // kani::any_raw, slice::AnySlice::new_raw(), slice::any_raw_slice(), (T: Invariant)::any().
+#![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
 
 pub mod arbitrary;
@@ -126,6 +130,7 @@ where
 /// This function will replace `any_raw` that has been deprecated and it should only be used
 /// internally when we can guarantee that it will not trigger any undefined behavior.
 /// This function is also used to find deterministic bytes in the CBMC output trace.
+/// Note: the semantics of this function require SIZE_T to be the size of type T.
 #[inline(never)]
 pub(crate) unsafe fn any_raw_internal<T, const SIZE_T: usize>() -> T {
     #[cfg(feature = "exe_trace")]
