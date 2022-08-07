@@ -17,38 +17,41 @@ use std::process::Command;
 impl KaniSession {
     /// The main driver for generating executable traces and adding them to source code.
     pub fn exe_trace_main(&self, specialized_obj: &Path, harness: &HarnessMetadata) {
-        if self.args.gen_exe_trace {
-            let (det_vals, interp_det_vals) = parser::get_det_vals(specialized_obj);
-            let (exe_trace, exe_trace_func_name) = format_unit_test(
-                &harness.mangled_name,
-                det_vals.as_slice(),
-                interp_det_vals.as_slice(),
+        if !self.args.gen_exe_trace {
+            return;
+        }
+
+        let (det_vals, interp_det_vals) = parser::get_det_vals(specialized_obj);
+        let (exe_trace, exe_trace_func_name) = format_unit_test(
+            &harness.mangled_name,
+            det_vals.as_slice(),
+            interp_det_vals.as_slice(),
+        );
+
+        if !self.args.add_exe_trace_to_src && !self.args.quiet {
+            println!("Executable trace for {}:\n```\n{}\n```", &harness.mangled_name, &exe_trace);
+            println!(
+                "To automatically add this executable trace to the src code, run Kani with `--add-exe-trace-to-src`."
             );
+        }
 
-            println!("Executable trace:");
-            println!("```");
-            println!("{}", &exe_trace);
-            println!("```");
-
-            if self.args.add_exe_trace_to_src {
-                if !self.args.quiet {
-                    println!("Now modifying the source code to include the executable trace.");
-                }
-                let proof_harness_end_line: usize = harness
-                    .original_end_line
-                    .parse()
-                    .expect("Couldn't convert proof harness line from str to usize");
-                self.modify_src_code(
-                    &harness.original_file,
-                    proof_harness_end_line,
-                    &exe_trace,
-                    &exe_trace_func_name,
-                );
-            } else {
+        if self.args.add_exe_trace_to_src {
+            if !self.args.quiet {
                 println!(
-                    "To automatically add this executable trace to the src code, run Kani with `--add-exe-trace-to-src`."
+                    "Now modifying the source code to include the unit test: {}.",
+                    &exe_trace_func_name
                 );
             }
+            let proof_harness_end_line: usize = harness
+                .original_end_line
+                .parse()
+                .expect("Couldn't convert proof harness line from str to usize");
+            self.modify_src_code(
+                &harness.original_file,
+                proof_harness_end_line,
+                &exe_trace,
+                &exe_trace_func_name,
+            );
         }
     }
 

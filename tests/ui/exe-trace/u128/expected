@@ -1,6 +1,6 @@
 VERIFICATION:- FAILED
 
-Executable trace:
+Executable trace
 ```
 #[test]
 fn kani_exe_trace_harness
