@@ -21,15 +21,14 @@ impl KaniSession {
             return;
         }
 
-        let (det_vals, interp_det_vals) = parser::get_det_vals(output_filename);
-        let (exe_trace, exe_trace_func_name) = format_unit_test(
-            &harness.mangled_name,
-            det_vals.as_slice(),
-            interp_det_vals.as_slice(),
-        );
+        let det_vals = parser::get_det_vals(output_filename);
+        let exe_trace = format_unit_test(&harness.mangled_name, det_vals.as_slice());
 
         if !self.args.add_exe_trace_to_src && !self.args.quiet {
-            println!("Executable trace for {}:\n```\n{}\n```", &harness.mangled_name, &exe_trace);
+            println!(
+                "Executable trace for {}:\n```\n{}\n```",
+                &harness.mangled_name, &exe_trace.unit_test_name
+            );
             println!(
                 "To automatically add this executable trace to the src code, run Kani with `--add-exe-trace-to-src`."
             );
@@ -39,40 +38,29 @@ impl KaniSession {
             if !self.args.quiet {
                 println!(
                     "Now modifying the source code to include the unit test: {}.",
-                    &exe_trace_func_name
+                    &exe_trace.unit_test_name
                 );
             }
             let proof_harness_end_line: usize = harness
                 .original_end_line
                 .parse()
                 .expect(&format!("Invalid proof harness end line: {}", harness.original_end_line));
-            self.modify_src_code(
-                &harness.original_file,
-                proof_harness_end_line,
-                &exe_trace,
-                &exe_trace_func_name,
-            );
+            self.modify_src_code(&harness.original_file, proof_harness_end_line, &exe_trace);
         }
     }
 
     /// Add the exe trace to the user's source code, format it, and short circuit if code already present.
-    fn modify_src_code(
-        &self,
-        src_path: &str,
-        proof_harness_end_line: usize,
-        exe_trace: &str,
-        exe_trace_func_name: &str,
-    ) {
+    fn modify_src_code(&self, src_path: &str, proof_harness_end_line: usize, exe_trace: &ExeTrace) {
         let mut src_file = File::open(src_path).expect("Couldn't open source file");
         let mut src_as_str = String::new();
         src_file.read_to_string(&mut src_as_str).expect("Couldn't read source file");
 
         // Short circuit if exe trace already in source code.
-        if src_as_str.contains(exe_trace_func_name) {
+        if src_as_str.contains(&exe_trace.unit_test_name) {
             if !self.args.quiet {
                 println!(
                     "Exe trace `{}` already found in source code, so skipping modification.",
-                    exe_trace_func_name
+                    exe_trace.unit_test_name,
                 );
             }
             return;
@@ -94,8 +82,12 @@ impl KaniSession {
         // Renames are usually automic, so we won't corrupt the user's source file during a crash.
         let tmp_src_path = src_path.to_string() + ".exe_trace_overwrite";
         let mut tmp_src_file = File::create(&tmp_src_path).unwrap();
-        write!(tmp_src_file, "{}\n{}{}", src_before_exe_trace, exe_trace, src_after_exe_trace)
-            .expect("Couldn't write into tmp src file");
+        write!(
+            tmp_src_file,
+            "{}\n{}{}",
+            src_before_exe_trace, exe_trace.unit_test_str, src_after_exe_trace
+        )
+        .expect("Couldn't write into tmp src file");
         fs::rename(&tmp_src_path, src_path)
             .expect("Couldn't rename tmp src file to actual src file");
 
@@ -112,7 +104,7 @@ impl KaniSession {
             .to_str()
             .expect("Couldn't convert proof harness file name from OsStr to str");
 
-        let exe_trace_num_lines = exe_trace.matches('\n').count() + 1;
+        let exe_trace_num_lines = exe_trace.unit_test_str.matches('\n').count() + 1;
         let unit_test_start_line = proof_harness_end_line + 1;
         let unit_test_end_line = unit_test_start_line + exe_trace_num_lines - 1;
         let file_line_ranges = vec![FileLineRange {
@@ -164,11 +156,7 @@ impl KaniSession {
 }
 
 /// Generate a unit test from a list of det vals.
-fn format_unit_test(
-    harness_name: &str,
-    det_vals: &[Vec<u8>],
-    interp_det_vals: &[String],
-) -> (String, String) {
+fn format_unit_test(harness_name: &str, det_vals: &[parser::DetVal]) -> ExeTrace {
     /*
     Given a number of byte vectors, format them as:
     // interp_det_val_1
@@ -179,9 +167,11 @@ fn format_unit_test(
     let vec_whitespace = " ".repeat(8);
     let vecs_as_str = det_vals
         .iter()
-        .zip(interp_det_vals.iter())
-        .map(|(det_val, interp_det_val)| {
-            format!("{vec_whitespace}// {interp_det_val}\n{vec_whitespace}vec!{:?}", det_val)
+        .map(|det_val| {
+            format!(
+                "{vec_whitespace}// {}\n{vec_whitespace}vec!{:?}",
+                det_val.interp_val, det_val.byte_arr
+            )
         })
         .collect::<Vec<String>>()
         .join(",\n");
@@ -204,11 +194,17 @@ fn {exe_trace_func_name}() {{
 }}"
     );
 
-    (exe_trace, exe_trace_func_name)
+    ExeTrace { unit_test_str: exe_trace, unit_test_name: exe_trace_func_name }
 }
+
 struct FileLineRange {
     file: String,
     line_range: Option<(usize, usize)>,
+}
+
+struct ExeTrace {
+    unit_test_str: String,
+    unit_test_name: String,
 }
 
 /// Read the CBMC output, parse it as a JSON object, and extract the deterministic values.
@@ -218,8 +214,13 @@ mod parser {
     use std::io::BufReader;
     use std::path::Path;
 
+    pub struct DetVal {
+        pub byte_arr: Vec<u8>,
+        pub interp_val: String,
+    }
+
     /// Extract deterministic values from a failing harness.
-    pub fn get_det_vals(output_filename: &Path) -> (Vec<Vec<u8>>, Vec<String>) {
+    pub fn get_det_vals(output_filename: &Path) -> Vec<DetVal> {
         let cbmc_out = get_cbmc_out(output_filename);
         parse_cbmc_out(&cbmc_out)
     }
@@ -232,42 +233,33 @@ mod parser {
     }
 
     /// The first-level CBMC output parser. This extracts the result message.
-    fn parse_cbmc_out(cbmc_out: &Value) -> (Vec<Vec<u8>>, Vec<String>) {
-        let mut det_vals: Vec<Vec<u8>> = Vec::new();
-        let mut interp_det_vals: Vec<String> = Vec::new();
+    fn parse_cbmc_out(cbmc_out: &Value) -> Vec<DetVal> {
+        let mut det_vals: Vec<DetVal> = Vec::new();
         for general_msg in cbmc_out.as_array().unwrap() {
             let result_msg = &general_msg["result"];
             if !result_msg.is_null() {
                 for result_val in result_msg.as_array().unwrap() {
-                    parse_result(result_val, &mut det_vals, &mut interp_det_vals);
+                    parse_result(result_val, &mut det_vals);
                 }
             }
         }
-        (det_vals, interp_det_vals)
+        det_vals
     }
 
     /// The second-level CBMC output parser. This extracts the trace entries of failing assertions.
-    fn parse_result(
-        result_val: &Value,
-        det_vals: &mut Vec<Vec<u8>>,
-        interp_det_vals: &mut Vec<String>,
-    ) {
+    fn parse_result(result_val: &Value, det_vals: &mut Vec<DetVal>) {
         let desc = result_val["description"].to_string();
         let status = result_val["status"].to_string();
 
         if desc.contains("assertion failed") && status == "\"FAILURE\"" {
             for trace_entry in result_val["trace"].as_array().unwrap() {
-                parse_trace_entry(trace_entry, det_vals, interp_det_vals);
+                parse_trace_entry(trace_entry, det_vals);
             }
         }
     }
 
     /// The third-level CBMC output parser. This extracts individual bytes from kani::any_raw calls.
-    fn parse_trace_entry(
-        trace_entry: &Value,
-        det_vals: &mut Vec<Vec<u8>>,
-        interp_det_vals: &mut Vec<String>,
-    ) {
+    fn parse_trace_entry(trace_entry: &Value, det_vals: &mut Vec<DetVal>) {
         if let (
             Some(step_type),
             Some(lhs),
@@ -294,8 +286,7 @@ mod parser {
                 next_num.push(next_byte);
             }
 
-            det_vals.push(next_num);
-            interp_det_vals.push(interp_det_val.to_string());
+            det_vals.push(DetVal { byte_arr: next_num, interp_val: interp_det_val.to_string() });
         }
     }
 }
