@@ -19,15 +19,11 @@ pub enum VerificationStatus {
 
 impl KaniSession {
     /// Verify a goto binary that's been prepared with goto-instrument
-    pub fn run_cbmc(
-        &self,
-        file: &Path,
-        output_filename: &Path,
-        harness: &HarnessMetadata,
-    ) -> Result<VerificationStatus> {
+    pub fn run_cbmc(&self, file: &Path, harness: &HarnessMetadata) -> Result<VerificationStatus> {
+        let output_filename = crate::util::append_path(file, "cbmc_output");
         {
             let mut temps = self.temporaries.borrow_mut();
-            temps.push(output_filename.to_path_buf());
+            temps.push(output_filename.clone());
         }
 
         let args: Vec<OsString> = self.cbmc_flags(file, harness)?;
@@ -50,6 +46,7 @@ impl KaniSession {
             let format_result = self.format_cbmc_output(&output_filename);
 
             if format_result.is_err() {
+                self.exe_trace_main(&output_filename, harness);
                 // Because of things like --assertion-reach-checks and other future features,
                 // we now decide if we fail or not based solely on the output of the formatter.
                 return Ok(VerificationStatus::Failure);

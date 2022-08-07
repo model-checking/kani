@@ -64,7 +64,6 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
         let harness_filename = harness.pretty_name.replace("::", "-");
         let report_dir = report_base.join(format!("report-{}", harness_filename));
         let specialized_obj = outputs.outdir.join(format!("cbmc-for-{}.out", harness_filename));
-        let output_filename = crate::util::append_path(&specialized_obj, "cbmc_output");
         ctx.run_goto_instrument(
             &linked_obj,
             &specialized_obj,
@@ -72,10 +71,9 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
             &harness.mangled_name,
         )?;
 
-        let result = ctx.check_harness(&specialized_obj, &output_filename, &report_dir, harness)?;
+        let result = ctx.check_harness(&specialized_obj, &report_dir, harness)?;
         if result == VerificationStatus::Failure {
             failed_harnesses.push(harness);
-            ctx.exe_trace_main(&output_filename, harness);
         }
     }
 
@@ -113,7 +111,6 @@ fn standalone_main() -> Result<()> {
         let harness_filename = harness.pretty_name.replace("::", "-");
         let report_dir = report_base.join(format!("report-{}", harness_filename));
         let specialized_obj = append_path(&linked_obj, &format!("for-{}", harness_filename));
-        let output_filename = crate::util::append_path(&specialized_obj, "cbmc_output");
         {
             let mut temps = ctx.temporaries.borrow_mut();
             temps.push(specialized_obj.to_owned());
@@ -125,10 +122,9 @@ fn standalone_main() -> Result<()> {
             &harness.mangled_name,
         )?;
 
-        let result = ctx.check_harness(&specialized_obj, &output_filename, &report_dir, harness)?;
+        let result = ctx.check_harness(&specialized_obj, &report_dir, harness)?;
         if result == VerificationStatus::Failure {
             failed_harnesses.push(harness);
-            ctx.exe_trace_main(&output_filename, harness);
         }
     }
 
@@ -139,7 +135,6 @@ impl KaniSession {
     fn check_harness(
         &self,
         binary: &Path,
-        output_filename: &Path,
         report_dir: &Path,
         harness: &HarnessMetadata,
     ) -> Result<VerificationStatus> {
@@ -152,7 +147,7 @@ impl KaniSession {
             // Strictly speaking, we're faking success here. This is more "no error"
             Ok(VerificationStatus::Success)
         } else {
-            self.run_cbmc(binary, output_filename, harness)
+            self.run_cbmc(binary, harness)
         }
     }
 
