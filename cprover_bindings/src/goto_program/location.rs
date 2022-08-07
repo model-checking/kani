@@ -13,13 +13,7 @@ pub enum Location {
     BuiltinFunction { function_name: InternedString, line: Option<u64> },
     /// Location in user code.
     /// `function` is `None` for global, `Some(function_name)` for function local.
-    Loc {
-        file: InternedString,
-        function: Option<InternedString>,
-        line: u64,
-        col: Option<u64>,
-        comment: Option<InternedString>,
-    },
+    Loc { file: InternedString, function: Option<InternedString>, line: u64, col: Option<u64> },
     /// Location for Statements that use Property Class and Description - Assert, Assume, Cover etc.
     Property {
         file: InternedString,
@@ -99,8 +93,7 @@ impl Location {
         let line = line.try_into().unwrap();
         let col = col.map(|x| x.try_into().unwrap());
         let function = function.intern();
-        let comment = None;
-        Location::Loc { file, function, line, col, comment }
+        Location::Loc { file, function, line, col }
     }
 
     /// Create a Property type Location
@@ -141,7 +134,7 @@ impl Location {
                 comment.into(),
                 property_name.into(),
             ),
-            Location::Loc { file, function, line, col, comment: _ } => Location::property_location(
+            Location::Loc { file, function, line, col } => Location::property_location(
                 file.into(),
                 function.intern(),
                 line,
@@ -157,12 +150,6 @@ impl Location {
                 comment: comment.into(),
                 property_class: property_name.into(),
             },
-        }
-    }
-
-    pub fn set_loc_comment(&mut self, comment: InternedString) {
-        if let Location::Loc { comment: c, .. } = self {
-            *c = Some(comment);
         }
     }
 

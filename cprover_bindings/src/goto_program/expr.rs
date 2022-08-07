@@ -111,6 +111,9 @@ pub enum ExprValue {
     },
     /// `__nondet()`
     Nondet,
+    /// Poison comes from the Deinit statement of Rust
+    /// CBMC doesn't model it (as of now)
+    Poison,
     /// `NULL`
     PointerConstant(u64),
     // `op++` etc
@@ -614,6 +617,10 @@ impl Expr {
     /// `__nondet_typ()`
     pub fn nondet(typ: Type) -> Self {
         expr!(Nondet, typ)
+    }
+
+    pub fn poison(typ: Type) -> Self {
+        expr!(Poison, typ)
     }
 
     /// `e.g. NULL`

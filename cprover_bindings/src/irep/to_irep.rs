@@ -253,6 +253,11 @@ impl ToIrep for ExprValue {
                 ],
             },
             ExprValue::Nondet => side_effect_irep(IrepId::Nondet, vec![]),
+            ExprValue::Poison => {
+                // For  now, Poison is lowered to Nondet with a comment.
+                // In the future, CBMC might handle poison expressions directly
+                side_effect_irep(IrepId::Nondet, vec![]).with_comment("deinit")
+            }
             ExprValue::PointerConstant(0) => Irep {
                 id: IrepId::Constant,
                 sub: vec![],
@@ -348,15 +353,12 @@ impl ToIrep for Location {
                 (IrepId::Function, Irep::just_string_id(function_name.to_string())),
             ])
             .with_named_sub_option(IrepId::Line, line.map(Irep::just_int_id)),
-            Location::Loc { file, function, line, col, comment } => {
-                Irep::just_named_sub(linear_map![
-                    (IrepId::File, Irep::just_string_id(file.to_string())),
-                    (IrepId::Line, Irep::just_int_id(*line)),
-                ])
-                .with_named_sub_option(IrepId::Column, col.map(Irep::just_int_id))
-                .with_named_sub_option(IrepId::Function, function.map(Irep::just_string_id))
-                .with_named_sub_option(IrepId::Comment, comment.map(Irep::just_string_id))
-            }
+            Location::Loc { file, function, line, col } => Irep::just_named_sub(linear_map![
+                (IrepId::File, Irep::just_string_id(file.to_string())),
+                (IrepId::Line, Irep::just_int_id(*line)),
+            ])
+            .with_named_sub_option(IrepId::Column, col.map(Irep::just_int_id))
+            .with_named_sub_option(IrepId::Function, function.map(Irep::just_string_id)),
             Location::Property { file, function, line, col, property_class, comment } => {
                 Irep::just_named_sub(linear_map![
                     (IrepId::File, Irep::just_string_id(file.to_string())),

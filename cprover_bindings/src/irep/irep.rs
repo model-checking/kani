@@ -44,6 +44,11 @@ impl Irep {
         }
     }
 
+    pub fn with_comment<T: Into<InternedString>>(self, c: T) -> Self {
+        // Using Irep::
+        self.with_named_sub(IrepId::Comment, Irep::just_string_id(c))
+    }
+
     pub fn with_named_sub(mut self, key: IrepId, value: Irep) -> Self {
         if !value.is_nil() {
             self.named_sub.insert(key, value);

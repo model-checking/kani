@@ -9,6 +9,7 @@ use std::collections::HashMap;
 pub struct NondetTransformer {
     new_symbol_table: SymbolTable,
     nondet_types: HashMap<String, Type>,
+    poison_types: HashMap<String, Type>,
 }
 
 impl NondetTransformer {
@@ -16,12 +17,20 @@ impl NondetTransformer {
     /// perform other clean-up operations to make valid C code.
     pub fn transform(original_symbol_table: &SymbolTable) -> SymbolTable {
         let new_symbol_table = SymbolTable::new(original_symbol_table.machine_model().clone());
-        NondetTransformer { new_symbol_table, nondet_types: HashMap::default() }
-            .transform_symbol_table(original_symbol_table)
+        NondetTransformer {
+            new_symbol_table,
+            nondet_types: HashMap::default(),
+            poison_types: HashMap::default(),
+        }
+        .transform_symbol_table(original_symbol_table)
     }
 
     /// Extract `nondet_types` map for final processing.
     pub fn nondet_types_owned(&mut self) -> HashMap<String, Type> {
+        std::mem::take(&mut self.nondet_types)
+    }
+
+    pub fn poison_types_owned(&mut self) -> HashMap<String, Type> {
         std::mem::take(&mut self.nondet_types)
     }
 }
@@ -65,6 +74,16 @@ impl Transformer for NondetTransformer {
         Expr::symbol_expression(identifier, function_type).call(vec![])
     }
 
+    fn transform_expr_poison(&mut self, typ: &Type) -> Expr {
+        let transformed_type = self.transform_type(typ);
+        let identifier = format!("poison_{}", transformed_type.to_identifier());
+        let function_type = Type::code(vec![], transformed_type);
+
+        self.poison_types.insert(identifier.clone(), function_type.clone());
+
+        Expr::symbol_expression(identifier, function_type).call(vec![])
+    }
+
     /// Don't transform padding fields so that they are ignored by CBMC --dump-c.
     /// If we don't ignore padding fields, we get code that looks like
     /// ```
@@ -104,7 +123,9 @@ impl Transformer for NondetTransformer {
 
     /// Create non_det functions which return default value for type.
     fn postprocess(&mut self) {
-        for (identifier, typ) in self.nondet_types_owned() {
+        for (identifier, typ) in
+            self.nondet_types_owned().into_iter().chain(self.poison_types_owned().into_iter())
+        {
             // Create function body which initializes variable and returns it
             let ret_type = typ.return_type().unwrap();
             assert!(!ret_type.is_empty(), "Cannot generate nondet of type `void`.");

@@ -267,6 +267,7 @@ pub trait Transformer: Sized {
             ExprValue::IntConstant(value) => self.transform_expr_int_constant(typ, value),
             ExprValue::Member { lhs, field } => self.transform_expr_member(typ, lhs, *field),
             ExprValue::Nondet => self.transform_expr_nondet(typ),
+            ExprValue::Poison => self.transform_expr_poison(typ),
             ExprValue::PointerConstant(value) => self.transform_expr_pointer_constant(typ, value),
             ExprValue::SelfOp { op, e } => self.transform_expr_self_op(typ, op, e),
             ExprValue::StatementExpression { statements } => {
@@ -406,8 +407,13 @@ pub trait Transformer: Sized {
         transformed_lhs.member(field, self.symbol_table())
     }
 
-    /// Transforms a CPROVER nondet call (`__nondet()`)
     fn transform_expr_nondet(&mut self, typ: &Type) -> Expr {
+        let transformed_typ = self.transform_type(typ);
+        Expr::poison(transformed_typ)
+    }
+
+    /// Transforms a CPROVER nondet call (`__nondet()`)
+    fn transform_expr_poison(&mut self, typ: &Type) -> Expr {
         let transformed_typ = self.transform_type(typ);
         Expr::nondet(transformed_typ)
     }
