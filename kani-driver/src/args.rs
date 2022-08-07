@@ -43,8 +43,13 @@ pub struct KaniArgs {
     /// Generate visualizer report to <target-dir>/report/html/index.html
     #[structopt(long)]
     pub visualize: bool,
-    /// Generate executable trace test case and print it to stdout
-    #[structopt(long, requires("enable-unstable"))]
+    /// Generate executable trace test case and print it to stdout.
+    /// This option does not work with `--output-format old`.
+    #[structopt(
+        long,
+        requires("enable-unstable"),
+        conflicts_with_all(&["visualize", "dry-run"]),
+    )]
     pub gen_exe_trace: bool,
     /// Additionally add executable trace test case to the source code
     #[structopt(long, requires("gen-exe-trace"))]
