@@ -61,7 +61,7 @@ static mut DET_VALS: Vec<Vec<u8>> = Vec::new();
 #[rustc_diagnostic_item = "KaniAssume"]
 pub fn assume(_cond: bool) {
     #[cfg(feature = "exe_trace")]
-    assert!(_cond);
+    assert!(_cond, "kani::assume should always hold");
 }
 
 /// Creates an assertion of the specified condition and message.
@@ -181,7 +181,7 @@ pub fn exe_trace_run<F: Fn()>(mut det_vals: Vec<Vec<u8>>, proof_harness: F) {
 #[rustc_diagnostic_item = "KaniExpectFail"]
 pub fn expect_fail(_cond: bool, _message: &'static str) {
     #[cfg(feature = "exe_trace")]
-    assert!(!_cond, "{}", _message);
+    assert!(!_cond, "kani::expect_fail does not hold: {}", _message);
 }
 
 /// Function used to generate panic with a static message as this is the only one currently
