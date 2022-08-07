@@ -176,11 +176,12 @@ fn format_unit_test(
     // interp_det_val_2
     vec![det_val_2], ...
     */
+    let vec_whitespace = " ".repeat(8);
     let vecs_as_str = det_vals
         .iter()
         .zip(interp_det_vals.iter())
         .map(|(det_val, interp_det_val)| {
-            format!("        // {interp_det_val}\n        vec!{:?}", det_val)
+            format!("{vec_whitespace}// {interp_det_val}\n{vec_whitespace}vec!{:?}", det_val)
         })
         .collect::<Vec<String>>()
         .join(",\n");
