@@ -128,15 +128,7 @@ where
 #[inline(never)]
 pub(crate) unsafe fn any_raw_internal<T, const SIZE_T: usize>() -> T {
     #[cfg(feature = "exe_trace")]
-    {
-        // This code will only run when our thread's exe_trace_run() fn holds the lock.
-        let next_det_val = exe_trace::DET_VALS.pop().expect("Not enough det vals found");
-        let next_det_val_len = next_det_val.len();
-        let bytes_t: [u8; SIZE_T] = next_det_val.try_into().expect(&format!(
-            "Expected {SIZE_T} bytes instead of {next_det_val_len} bytes in the following det vals vec"
-        ));
-        return std::mem::transmute_copy::<[u8; SIZE_T], T>(&bytes_t);
-    }
+    return exe_trace::any_raw_internal::<T, SIZE_T>();
 
     #[cfg(not(feature = "exe_trace"))]
     #[allow(unreachable_code)]
