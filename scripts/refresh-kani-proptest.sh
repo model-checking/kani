@@ -11,7 +11,7 @@
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 KANI_REPO_ROOT="$SCRIPT_DIR/.."
 
-PROPTEST_SYMTAB_PATH="$(find $KANI_REPO_ROOT/target -name '*symtab.json' | head -1)"
+PROPTEST_SYMTAB_PATH="$(find $KANI_REPO_ROOT/target -name 'proptest-*symtab.json' | head -1)"
 PROPTEST_RLIB_PATH="$KANI_REPO_ROOT/target/debug/libproptest.rlib"
 
 if [ ! -f "$PROPTEST_SYMTAB_PATH" ] || [[ "$PROPTEST_SYMTAB_PATH" -ot "$PROPTEST_RLIB_PATH" ]]; then
