@@ -39,27 +39,9 @@ pub fn proof(_attr: TokenStream, item: TokenStream) -> TokenStream {
     // )
 }
 
-/// Handles #[kani::proof] if #[cfg(kani)] is active
+/// Marks a Kani proof harness
 ///
-/// For synchronous functions, it becomes a Kani-internal attribute.
-///
-/// For async functions, it translates to a synchronous function that calls `kani::block_on`.
-/// Specifically, it translates
-/// ```ignore
-/// #[kani::proof]
-/// #[attribute]
-/// pub async fn harness() { ... }
-/// ```
-/// to
-/// ```ignore
-/// #[kani::proof]
-/// #[attribute]
-/// pub fn harness() {
-///   async fn harness() { ... }
-///   kani::block_on(harness())
-/// }
-/// ```
-/// which is then translated again as a asynchronous function.
+/// For async harnesses, this will call [`kani::block_on`] (see its documentation for more information).
 #[cfg(kani)]
 #[proc_macro_attribute]
 pub fn proof(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -69,17 +51,39 @@ pub fn proof(attr: TokenStream, item: TokenStream) -> TokenStream {
     let sig = fn_item.sig;
     let body = fn_item.block;
 
+    let kani_attributes = quote!(
+        #[kanitool::proof]
+        // no_mangle is a temporary hack to make the function "public" so it gets codegen'd
+        #[no_mangle]
+    );
+
     assert!(attr.is_empty(), "#[kani::proof] does not take any arguments for now");
 
     if sig.asyncness.is_none() {
+        // Adds `#[kanitool::proof]` and other attributes
         quote!(
-            #[kanitool::proof]
-            #[no_mangle]
+            #kani_attributes
             #(#attrs)*
             #vis #sig #body
         )
         .into()
     } else {
+        // For async functions, it translates to a synchronous function that calls `kani::block_on`.
+        // Specifically, it translates
+        // ```ignore
+        // #[kani::async_proof]
+        // #[attribute]
+        // pub async fn harness() { ... }
+        // ```
+        // to
+        // ```ignore
+        // #[kani::proof]
+        // #[attribute]
+        // pub fn harness() {
+        //   async fn harness() { ... }
+        //   kani::block_on(harness())
+        // }
+        // ```
         assert!(
             sig.inputs.is_empty(),
             "#[kani::proof] cannot be applied to async functions that take inputs for now"
@@ -88,7 +92,7 @@ pub fn proof(attr: TokenStream, item: TokenStream) -> TokenStream {
         modified_sig.asyncness = None;
         let fn_name = &sig.ident;
         quote!(
-            #[kani::proof]
+            #kani_attributes
             #(#attrs)*
             #vis #modified_sig {
                 #sig #body
