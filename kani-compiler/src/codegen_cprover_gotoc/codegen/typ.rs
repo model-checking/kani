@@ -1697,7 +1697,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // For vtable shims, we need to modify fn(self, ...) to fn(self: *mut Self, ...),
         // since the vtable functions expect a pointer as the first argument. See the comment
         // and similar code in compiler/rustc_mir/src/shim.rs.
-        if let ty::InstanceDef::VtableShim(..) = self.current_fn().instance().def {
+        if let ty::InstanceDef::VTableShim(..) = self.current_fn().instance().def {
             if let Some(self_param) = params.first() {
                 let ident = self_param.identifier();
                 let ty = self_param.typ().clone();

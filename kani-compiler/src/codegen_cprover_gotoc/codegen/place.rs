@@ -380,7 +380,9 @@ impl<'tcx> GotocCtx<'tcx> {
                 if let Some(fat_ptr) = fat_ptr_goto_expr.clone() {
                     assert!(
                         fat_ptr.typ().is_rust_trait_fat_ptr(&self.symbol_table)
-                            || fat_ptr.typ().is_rust_slice_fat_ptr(&self.symbol_table)
+                            || fat_ptr.typ().is_rust_slice_fat_ptr(&self.symbol_table),
+                        "Unexpected type: {:?}",
+                        fat_ptr.typ()
                     );
                 };
 
@@ -547,13 +549,6 @@ impl<'tcx> GotocCtx<'tcx> {
                     self,
                 )
             }
-            ProjectionElem::OpaqueCast(ty) => ProjectedPlace::try_new(
-                before.goto_expr.cast_to(self.codegen_ty(ty)),
-                TypeOrVariant::Type(ty),
-                before.fat_ptr_goto_expr,
-                before.fat_ptr_mir_typ,
-                self,
-            ),
         }
     }
 
