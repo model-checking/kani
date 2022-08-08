@@ -8,16 +8,14 @@ use_small_heuristics = "Max"
 merge_derives = false
 
 ignore = [
-    "/build/",
-    "/*-build/",
-    "/build-*/",
-    "/vendor/",
-    "/target/",
+    "**/build/",
+    "**/target/",
 
-    # do not format submodules
-    "firecracker",
-    "tests/perf/s2n-quic",
-    "tools/bookrunner/rust-doc/nomicon",
-    "tools/bookrunner/rust-doc/reference",
-    "tools/bookrunner/rust-doc/rust-by-example"
+    # Do not format submodules
+    # For some reason, this is not working without the directory wildcard.
+    "**/firecracker",
+    "**/tests/perf/s2n-quic/",
+    "**/tools/bookrunner/rust-doc/nomicon",
+    "**/tools/bookrunner/rust-doc/reference",
+    "**/tools/bookrunner/rust-doc/rust-by-example",
 ]

@@ -29,7 +29,9 @@ for suite in "${TESTS[@]}"; do
     set -f; IFS=$'\n'
     files=($(find "${suite}" -name "*.rs"))
     set +f; unset IFS
-    rustfmt --unstable-features "$@" "${files[@]}" || error=1
+    # Note: We set the configuration file here because some submodules have
+    # their own configuration file.
+    rustfmt --unstable-features "$@" --config-path rustfmt.toml "${files[@]}" || error=1
 done
 
 exit $error
