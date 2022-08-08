@@ -22,7 +22,7 @@ impl KaniSession {
         }
 
         let det_vals = parser::extract_det_vals(output_filename);
-        let exe_trace = format_unit_test(&harness.mangled_name, det_vals.as_slice());
+        let exe_trace = format_unit_test(&harness.mangled_name, &det_vals);
 
         if !self.args.add_exe_trace_to_src && !self.args.quiet {
             println!(
@@ -111,7 +111,7 @@ impl KaniSession {
             file: src_file.to_string(),
             line_range: Some((unit_test_start_line, unit_test_end_line)),
         }];
-        self.run_rustfmt(file_line_ranges.as_slice(), Some(parent_dir));
+        self.run_rustfmt(&file_line_ranges, Some(parent_dir));
     }
 
     /// Run rustfmt on the given src file, and optionally on only the specific lines.
