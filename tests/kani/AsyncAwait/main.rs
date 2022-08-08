@@ -13,7 +13,7 @@ use std::{
 
 fn main() {}
 
-#[kani::async_proof]
+#[kani::proof]
 #[kani::unwind(2)]
 async fn test_async_proof_harness() {
     let async_block_result = async { 42 }.await;
@@ -21,7 +21,7 @@ async fn test_async_proof_harness() {
     assert_eq!(async_block_result, async_fn_result);
 }
 
-#[kani::async_proof]
+#[kani::proof]
 #[kani::unwind(2)]
 pub async fn test_async_proof_harness_pub() {
     let async_block_result = async { 42 }.await;
