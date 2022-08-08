@@ -954,8 +954,7 @@ fn annotate_properties_with_reach_results(
     for reach_check in reach_checks {
         let description = reach_check.description;
         // Capture the ID in the reachability check
-        let check_id =
-            reach_desc_pat.captures(&description).unwrap().get(0).unwrap().as_str();
+        let check_id = reach_desc_pat.captures(&description).unwrap().get(0).unwrap().as_str();
         let check_id_str = format!("[{}]", check_id);
         // Get the status and insert into `reach_map`
         let status = reach_check.status;
