@@ -222,6 +222,7 @@ struct ExeTrace {
 ///     ..., ] }
 /// ```
 mod parser {
+    use anyhow::{ensure, Context, Result};
     use serde_json::Value;
     use std::fs::File;
     use std::io::BufReader;
@@ -234,45 +235,67 @@ mod parser {
 
     /// Extract deterministic values from a failing harness.
     pub fn extract_det_vals(output_filename: &Path) -> Vec<DetVal> {
-        let cbmc_out = read_cbmc_out(output_filename);
+        let cbmc_out = read_cbmc_out(output_filename)
+            .expect(&format!("Invalid CBMC output trace file: {}", output_filename.display()));
         parse_cbmc_out(&cbmc_out)
+            .expect("Failed to parse the CBMC output trace JSON to get det vals")
     }
 
     /// Read in the CBMC results file and deserialize it to a JSON object.
-    fn read_cbmc_out(results_filename: &Path) -> Value {
-        let results_file = File::open(results_filename).unwrap();
+    fn read_cbmc_out(results_filename: &Path) -> Result<Value> {
+        let results_file =
+            File::open(results_filename).context("Failed to open CBMC output trace file")?;
         let reader = BufReader::new(results_file);
-        serde_json::from_reader(reader).unwrap()
+        let json_val = serde_json::from_reader(reader)
+            .context("Could not convert CBMC output trace file into valid JSON")?;
+        Ok(json_val)
     }
 
     /// The first-level CBMC output parser. This extracts the result message.
-    fn parse_cbmc_out(cbmc_out: &Value) -> Vec<DetVal> {
+    fn parse_cbmc_out(cbmc_out: &Value) -> Result<Vec<DetVal>> {
         let mut det_vals: Vec<DetVal> = Vec::new();
-        for general_msg in cbmc_out.as_array().unwrap() {
+        let cbmc_out_arr = cbmc_out.as_array().with_context(|| {
+            format!("Expected this CBMC output to be an array: {}", cbmc_out.to_string())
+        })?;
+        for general_msg in cbmc_out_arr {
             let result_msg = &general_msg["result"];
             if !result_msg.is_null() {
-                for result_val in result_msg.as_array().unwrap() {
-                    parse_result(result_val, &mut det_vals);
+                let result_arr = result_msg.as_array().with_context(|| {
+                    format!(
+                        "Expected this CBMC result object to be an array: {}",
+                        result_msg.to_string()
+                    )
+                })?;
+                for result_val in result_arr {
+                    parse_result(result_val, &mut det_vals)?;
                 }
             }
         }
-        det_vals
+        Ok(det_vals)
     }
 
     /// The second-level CBMC output parser. This extracts the trace entries of failing assertions.
-    fn parse_result(result_val: &Value, det_vals: &mut Vec<DetVal>) {
+    fn parse_result(result_val: &Value, det_vals: &mut Vec<DetVal>) -> Result<()> {
         let desc = result_val["description"].to_string();
         let status = result_val["status"].to_string();
 
         if desc.contains("assertion failed") && status == "\"FAILURE\"" {
-            for trace_entry in result_val["trace"].as_array().unwrap() {
-                parse_trace_entry(trace_entry, det_vals);
+            let trace_arr = result_val["trace"].as_array().with_context(|| {
+                format!(
+                    "Expected this CBMC result trace to be an array: {}",
+                    result_val["trace"].to_string()
+                )
+            })?;
+            for trace_entry in trace_arr {
+                parse_trace_entry(trace_entry, det_vals)
+                    .context("Failure in trace assignment expression:")?;
             }
         }
+        Ok(())
     }
 
     /// The third-level CBMC output parser. This extracts individual bytes from kani::any_raw calls.
-    fn parse_trace_entry(trace_entry: &Value, det_vals: &mut Vec<DetVal>) {
+    fn parse_trace_entry(trace_entry: &Value, det_vals: &mut Vec<DetVal>) -> Result<()> {
         if let (
             Some(step_type),
             Some(lhs),
@@ -292,18 +315,29 @@ mod parser {
                 && lhs == "var_0"
                 && func.starts_with("kani::any_raw_internal")
             {
-                let width = width_u64 as usize;
-                assert_eq!(
-                    width,
-                    bit_det_val.len(),
-                    "Declared width wasn't same as width found in bit string"
+                let declared_width = width_u64 as usize;
+                let actual_width = bit_det_val.len();
+                ensure!(
+                    declared_width == actual_width,
+                    format!(
+                        "Declared width of {declared_width} doesn't equal actual width of {actual_width}"
+                    )
                 );
                 let mut next_num: Vec<u8> = Vec::new();
 
                 // Reverse because of endianess of CBMC trace.
-                for i in (0..width).step_by(8).rev() {
+                for i in (0..declared_width).step_by(8).rev() {
                     let str_chunk = &bit_det_val[i..i + 8];
-                    let next_byte = u8::from_str_radix(str_chunk, 2).unwrap();
+                    let str_chunk_len = str_chunk.len();
+                    ensure!(
+                        str_chunk_len == 8,
+                        format!(
+                            "Tried to read a chunk of 8 bits of actually read {str_chunk_len} bits"
+                        )
+                    );
+                    let next_byte = u8::from_str_radix(str_chunk, 2).with_context(|| {
+                        format!("Couldn't convert the string chunk `{str_chunk}` to u8")
+                    })?;
                     next_num.push(next_byte);
                 }
 
@@ -311,5 +345,6 @@ mod parser {
                     .push(DetVal { byte_arr: next_num, interp_val: interp_det_val.to_string() });
             }
         }
+        Ok(())
     }
 }
