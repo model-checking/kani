@@ -55,9 +55,9 @@ https://github.com/model-checking/kani/blob/main/scripts/ci/copyright-exclude) f
 We are developing Kani to provide assurance that critical Rust components are verifiably free of certain classes of
 security and correctness issues.
 Thus, it is critical that we provide a verification tool that is sound.
-For the class of errors that Kani can verify, we should not produce a “No Error” result if there was in fact an
+For the class of errors that Kani can verify, we should not produce a "No Error" result if there was in fact an
 error in the code being verified, i.e., it has no
-“False Negatives”.
+"False Negatives".
 
 Because of that, we bias on the side of correctness.
 Any incorrect modeling
