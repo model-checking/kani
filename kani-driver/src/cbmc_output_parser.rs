@@ -400,7 +400,7 @@ impl<'a, 'b> Parser<'a, 'b> {
 
     // Adds a string to the input accumulated so far
     fn add_to_input(&mut self, input: String) {
-        self.input_so_far.push_str(input.as_str());
+        self.input_so_far.push_str(&input);
     }
 
     // Returns a `ParserItem` from the input we have accumulated so far. Since
@@ -408,12 +408,12 @@ impl<'a, 'b> Parser<'a, 'b> {
     // to parse the item without the delimiter (i.e., the last character). If
     // that fails, then we parse the item using the whole input.
     fn parse_item(&self) -> ParserItem {
-        let string_without_delimiter = &self.input_so_far.as_str()[0..self.input_so_far.len() - 2];
+        let string_without_delimiter = &self.input_so_far[0..self.input_so_far.len() - 2];
         let result_item: Result<ParserItem, _> = serde_json::from_str(string_without_delimiter);
         if let Ok(item) = result_item {
             return item;
         }
-        let complete_string = &self.input_so_far.as_str()[0..self.input_so_far.len()];
+        let complete_string = &self.input_so_far[0..self.input_so_far.len()];
         let result_item: Result<ParserItem, _> = serde_json::from_str(complete_string);
         assert!(result_item.is_ok());
         result_item.unwrap()
@@ -602,15 +602,15 @@ fn format_result(properties: &Vec<Property>, show_checks: bool) -> String {
             // <https://github.com/model-checking/kani/issues/1431>
             let check_id = format!("Check {}: {}\n", index, name);
             let status_msg = format!("\t - Status: {}\n", status);
-            let descrition_msg = format!("\t - Description: \"{}\"\n", description);
+            let description_msg = format!("\t - Description: \"{}\"\n", description);
 
-            result_str.push_str(check_id.as_str());
-            result_str.push_str(status_msg.as_str());
-            result_str.push_str(descrition_msg.as_str());
+            result_str.push_str(&check_id);
+            result_str.push_str(&status_msg);
+            result_str.push_str(&description_msg);
 
             if !location.is_missing() {
                 let location_msg = format!("\t - Location: {}\n", location);
-                result_str.push_str(location_msg.as_str());
+                result_str.push_str(&location_msg);
             }
             result_str.push('\n');
         }
@@ -625,7 +625,7 @@ fn format_result(properties: &Vec<Property>, show_checks: bool) -> String {
     }
 
     let summary = format!("\n ** {} of {} failed", number_tests_failed, properties.len());
-    result_str.push_str(summary.as_str());
+    result_str.push_str(&summary);
 
     let mut other_status = Vec::<String>::new();
     if number_tests_undetermined > 0 {
@@ -645,13 +645,13 @@ fn format_result(properties: &Vec<Property>, show_checks: bool) -> String {
 
     for prop in failed_tests {
         let failure_message = build_failure_message(prop.description.clone(), &prop.trace.clone());
-        result_str.push_str(failure_message.as_str());
+        result_str.push_str(&failure_message);
     }
 
     let verification_result =
         if number_tests_failed == 0 { style("SUCCESSFUL").green() } else { style("FAILED").red() };
     let overall_result = format!("\nVERIFICATION:- {}\n", verification_result);
-    result_str.push_str(overall_result.as_str());
+    result_str.push_str(&overall_result);
 
     // Ideally, we should generate two `ParserItem::Message` and push them
     // into the parser iterator so they are the next messages to be processed.
@@ -864,7 +864,7 @@ fn update_properties_with_reach_status(
 fn remove_check_ids_from_description(mut properties: Vec<Property>) -> Vec<Property> {
     let check_id_pat = Regex::new(r"\[KANI_CHECK_ID_([^\]]*)\] ").unwrap();
     for prop in properties.iter_mut() {
-        prop.description = check_id_pat.replace(prop.description.as_str(), "").to_string();
+        prop.description = check_id_pat.replace(&prop.description, "").to_string();
     }
     properties
 }
@@ -955,7 +955,7 @@ fn annotate_properties_with_reach_results(
         let description = reach_check.description;
         // Capture the ID in the reachability check
         let check_id =
-            reach_desc_pat.captures(description.as_str()).unwrap().get(0).unwrap().as_str();
+            reach_desc_pat.captures(&description).unwrap().get(0).unwrap().as_str();
         let check_id_str = format!("[{}]", check_id);
         // Get the status and insert into `reach_map`
         let status = reach_check.status;
@@ -969,7 +969,7 @@ fn annotate_properties_with_reach_results(
         if check_marker_pat.is_match(description) {
             // Capture the ID in the property
             let prop_match_id =
-                check_marker_pat.captures(description.as_str()).unwrap().get(0).unwrap().as_str();
+                check_marker_pat.captures(&description).unwrap().get(0).unwrap().as_str();
             // Get the status associated to the ID we captured
             let reach_status_opt = reach_map.get(&prop_match_id.to_string());
             // Update the reachability status of the property
