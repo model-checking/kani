@@ -954,7 +954,8 @@ fn annotate_properties_with_reach_results(
     for reach_check in reach_checks {
         let description = reach_check.description;
         // Capture the ID in the reachability check
-        let check_id = reach_desc_pat.captures(&description).unwrap().get(0).unwrap().as_str();
+        let check_id =
+            reach_desc_pat.captures(description.as_str()).unwrap().get(0).unwrap().as_str();
         let check_id_str = format!("[{}]", check_id);
         // Get the status and insert into `reach_map`
         let status = reach_check.status;
@@ -968,7 +969,7 @@ fn annotate_properties_with_reach_results(
         if check_marker_pat.is_match(description) {
             // Capture the ID in the property
             let prop_match_id =
-                check_marker_pat.captures(&description).unwrap().get(0).unwrap().as_str();
+                check_marker_pat.captures(description.as_str()).unwrap().get(0).unwrap().as_str();
             // Get the status associated to the ID we captured
             let reach_status_opt = reach_map.get(&prop_match_id.to_string());
             // Update the reachability status of the property
