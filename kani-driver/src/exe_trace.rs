@@ -5,6 +5,7 @@
 //! generating executable trace unit tests, and adding them to the user's source code.
 
 use crate::session::KaniSession;
+use anyhow::{Context, Result};
 use kani_metadata::HarnessMetadata;
 use std::collections::hash_map::DefaultHasher;
 use std::ffi::OsString;
@@ -21,23 +22,25 @@ impl KaniSession {
             return;
         }
 
-        let det_vals = parser::extract_det_vals(output_filename);
+        let det_vals = parser::extract_det_vals(output_filename)
+            .expect("Something went wrong when trying to get det vals from the CBMC output file");
         let exe_trace = format_unit_test(&harness.mangled_name, &det_vals);
 
         if !self.args.add_exe_trace_to_src && !self.args.quiet {
             println!(
-                "Executable trace for {}:\n```\n{}\n```",
+                "Executable trace for `{}`:\n```\n{}\n```",
                 &harness.mangled_name, &exe_trace.unit_test_str
             );
             println!(
-                "To automatically add this executable trace to the src code, run Kani with `--add-exe-trace-to-src`."
+                "To automatically add the executable trace `{}` to the src code, run Kani with `--add-exe-trace-to-src`.",
+                &exe_trace.unit_test_name
             );
         }
 
         if self.args.add_exe_trace_to_src {
             if !self.args.quiet {
                 println!(
-                    "Now modifying the source code to include the unit test: {}.",
+                    "Now modifying the source code to include the unit test `{}`.",
                     &exe_trace.unit_test_name
                 );
             }
@@ -45,15 +48,24 @@ impl KaniSession {
                 .original_end_line
                 .parse()
                 .expect(&format!("Invalid proof harness end line: {}", harness.original_end_line));
-            self.modify_src_code(&harness.original_file, proof_harness_end_line, &exe_trace);
+            self.modify_src_code(&harness.original_file, proof_harness_end_line, &exe_trace)
+                .expect("Failed to modify source code");
         }
     }
 
     /// Add the exe trace to the user's source code, format it, and short circuit if code already present.
-    fn modify_src_code(&self, src_path: &str, proof_harness_end_line: usize, exe_trace: &ExeTrace) {
-        let mut src_file = File::open(src_path).expect("Couldn't open source file");
+    fn modify_src_code(
+        &self,
+        src_path: &str,
+        proof_harness_end_line: usize,
+        exe_trace: &ExeTrace,
+    ) -> Result<()> {
+        let mut src_file = File::open(src_path)
+            .with_context(|| format!("Couldn't open user's source code file `{src_path}`"))?;
         let mut src_as_str = String::new();
-        src_file.read_to_string(&mut src_as_str).expect("Couldn't read source file");
+        src_file.read_to_string(&mut src_as_str).with_context(|| {
+            format!("Couldn't read user's source code file `{src_path}` as a string")
+        })?;
 
         // Short circuit if exe trace already in source code.
         if src_as_str.contains(&exe_trace.unit_test_name) {
@@ -63,7 +75,7 @@ impl KaniSession {
                     src_path, exe_trace.unit_test_name,
                 );
             }
-            return;
+            return Ok(());
         }
 
         // Split the code into two different parts around the insertion point.
@@ -81,41 +93,55 @@ impl KaniSession {
         // Write new source lines to a tmp file, and then rename it to the actual user's source file.
         // Renames are usually automic, so we won't corrupt the user's source file during a crash.
         let tmp_src_path = src_path.to_string() + ".exe_trace_overwrite";
-        let mut tmp_src_file = File::create(&tmp_src_path).unwrap();
-        write!(
-            tmp_src_file,
-            "{}\n{}{}",
-            src_before_exe_trace, exe_trace.unit_test_str, src_after_exe_trace
-        )
-        .expect("Couldn't write into tmp src file");
-        fs::rename(&tmp_src_path, src_path)
-            .expect("Couldn't rename tmp src file to actual src file");
+        let mut tmp_src_file = File::create(&tmp_src_path)
+            .with_context(|| format!("Couldn't create tmp source code file `{}`", tmp_src_path))?;
+        let new_src_str =
+            format!("{}\n{}{}", src_before_exe_trace, exe_trace.unit_test_str, src_after_exe_trace);
+        write!(tmp_src_file, "{}", new_src_str).with_context(|| {
+            format!("Couldn't write new src str `{new_src_str}` into tmp src file `{tmp_src_path}`")
+        })?;
+        fs::rename(&tmp_src_path, src_path).with_context(|| {
+            format!("Couldn't rename tmp src file `{tmp_src_path}` to actual src file `{src_path}`")
+        })?;
 
         // Run rustfmt on just the inserted lines.
         let source_path = Path::new(src_path);
-        let parent_dir = source_path
-            .parent()
-            .expect("Proof harness is not in a directory")
-            .to_str()
-            .expect("Couldn't convert proof harness directory from OsStr to str");
-        let src_file = source_path
-            .file_name()
-            .expect("Couldn't get file name of source file")
-            .to_str()
-            .expect("Couldn't convert proof harness file name from OsStr to str");
+        let parent_dir_as_path = source_path.parent().with_context(|| {
+            format!("Expected source file `{}` to be in a directory", source_path.display())
+        })?;
+        let parent_dir_as_str = parent_dir_as_path.to_str().with_context(|| {
+            format!(
+                "Couldn't convert source file parent directory `{}` from  str",
+                parent_dir_as_path.display()
+            )
+        })?;
+        let src_file_name_as_osstr = source_path.file_name().with_context(|| {
+            format!("Couldn't get the file name from the source file `{}`", source_path.display())
+        })?;
+        let src_file_name_as_str = src_file_name_as_osstr.to_str().with_context(|| {
+            format!(
+                "Couldn't convert source code file name `{:?}` from OsStr to str",
+                src_file_name_as_osstr
+            )
+        })?;
 
         let exe_trace_num_lines = exe_trace.unit_test_str.matches('\n').count() + 1;
         let unit_test_start_line = proof_harness_end_line + 1;
         let unit_test_end_line = unit_test_start_line + exe_trace_num_lines - 1;
         let file_line_ranges = vec![FileLineRange {
-            file: src_file.to_string(),
+            file: src_file_name_as_str.to_string(),
             line_range: Some((unit_test_start_line, unit_test_end_line)),
         }];
-        self.run_rustfmt(&file_line_ranges, Some(parent_dir));
+        self.run_rustfmt(&file_line_ranges, Some(parent_dir_as_str))?;
+        Ok(())
     }
 
     /// Run rustfmt on the given src file, and optionally on only the specific lines.
-    fn run_rustfmt(&self, file_line_ranges: &[FileLineRange], current_dir_opt: Option<&str>) {
+    fn run_rustfmt(
+        &self,
+        file_line_ranges: &[FileLineRange],
+        current_dir_opt: Option<&str>,
+    ) -> Result<()> {
         let mut cmd = Command::new("rustfmt");
         let mut args: Vec<OsString> = Vec::new();
 
@@ -148,10 +174,11 @@ impl KaniSession {
         }
 
         if self.args.quiet {
-            self.run_suppress(cmd).expect("Couldn't rustfmt source file");
+            self.run_suppress(cmd).context("Failed to rustfmt modified source code.")?;
         } else {
-            self.run_terminal(cmd).expect("Couldn't rustfmt source file");
+            self.run_terminal(cmd).context("Failed to rustfmt modified source code")?;
         }
+        Ok(())
     }
 }
 
@@ -234,11 +261,13 @@ mod parser {
     }
 
     /// Extract deterministic values from a failing harness.
-    pub fn extract_det_vals(output_filename: &Path) -> Vec<DetVal> {
-        let cbmc_out = read_cbmc_out(output_filename)
-            .expect(&format!("Invalid CBMC output trace file: {}", output_filename.display()));
-        parse_cbmc_out(&cbmc_out)
-            .expect("Failed to parse the CBMC output trace JSON to get det vals")
+    pub fn extract_det_vals(output_filename: &Path) -> Result<Vec<DetVal>> {
+        let cbmc_out = read_cbmc_out(output_filename).with_context(|| {
+            format!("Invalid CBMC output trace file: {}", output_filename.display())
+        })?;
+        let det_vals = parse_cbmc_out(&cbmc_out)
+            .context("Failed to parse the CBMC output trace JSON to get det vals")?;
+        Ok(det_vals)
     }
 
     /// Read in the CBMC results file and deserialize it to a JSON object.
