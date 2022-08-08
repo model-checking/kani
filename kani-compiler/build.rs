@@ -69,8 +69,13 @@ pub fn main() {
     println!("cargo:rustc-env=KANI_LIB_PATH={}", lib_out);
     println!("cargo:rustc-env=TARGET={}", target);
     println!(
-        "cargo:rustc-env=KANI_EXTERN_OUT_DIR={}/target/{}/debug/deps",
-        env::var("CARGO_WORKSPACE_DIR").unwrap(),
-        target
+        "cargo:rustc-env=KANI_EXTERN_OUT_DIR={}",
+        path_str!([
+            env::var("CARGO_WORKSPACE_DIR").unwrap().as_ref(),
+            "target",
+            target.as_ref(),
+            "debug",
+            "deps"
+        ]),
     );
 }
