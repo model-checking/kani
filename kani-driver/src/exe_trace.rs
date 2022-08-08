@@ -283,17 +283,14 @@ mod parser {
     /// The first-level CBMC output parser. This extracts the result message.
     fn parse_cbmc_out(cbmc_out: &Value) -> Result<Vec<DetVal>> {
         let mut det_vals: Vec<DetVal> = Vec::new();
-        let cbmc_out_arr = cbmc_out.as_array().with_context(|| {
-            format!("Expected this CBMC output to be an array: {}", cbmc_out.to_string())
-        })?;
+        let cbmc_out_arr = cbmc_out
+            .as_array()
+            .with_context(|| format!("Expected this CBMC output to be an array: {}", cbmc_out))?;
         for general_msg in cbmc_out_arr {
             let result_msg = &general_msg["result"];
             if !result_msg.is_null() {
                 let result_arr = result_msg.as_array().with_context(|| {
-                    format!(
-                        "Expected this CBMC result object to be an array: {}",
-                        result_msg.to_string()
-                    )
+                    format!("Expected this CBMC result object to be an array: {}", result_msg)
                 })?;
                 for result_val in result_arr {
                     parse_result(result_val, &mut det_vals)?;
@@ -310,10 +307,7 @@ mod parser {
 
         if desc.contains("assertion failed") && status == "\"FAILURE\"" {
             let trace_arr = result_val["trace"].as_array().with_context(|| {
-                format!(
-                    "Expected this CBMC result trace to be an array: {}",
-                    result_val["trace"].to_string()
-                )
+                format!("Expected this CBMC result trace to be an array: {}", result_val["trace"])
             })?;
             for trace_entry in trace_arr {
                 parse_trace_entry(trace_entry, det_vals)
