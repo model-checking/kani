@@ -287,19 +287,29 @@ mod parser {
             trace_entry["value"]["binary"].as_str(),
             trace_entry["value"]["data"].as_str(),
             trace_entry["value"]["width"].as_u64(),
-        ) && step_type == "assignment" && lhs == "var_0" && func.starts_with("kani::any_raw_internal") {
-            let width = width_u64 as usize;
-            assert_eq!(width, bit_det_val.len(), "Declared width wasn't same as width found in bit string");
-            let mut next_num: Vec<u8> = Vec::new();
+        ) {
+            if step_type == "assignment"
+                && lhs == "var_0"
+                && func.starts_with("kani::any_raw_internal")
+            {
+                let width = width_u64 as usize;
+                assert_eq!(
+                    width,
+                    bit_det_val.len(),
+                    "Declared width wasn't same as width found in bit string"
+                );
+                let mut next_num: Vec<u8> = Vec::new();
 
-            // Reverse because of endianess of CBMC trace.
-            for i in (0..width).step_by(8).rev() {
-                let str_chunk = &bit_det_val[i..i+8];
-                let next_byte = u8::from_str_radix(str_chunk, 2).unwrap();
-                next_num.push(next_byte);
+                // Reverse because of endianess of CBMC trace.
+                for i in (0..width).step_by(8).rev() {
+                    let str_chunk = &bit_det_val[i..i + 8];
+                    let next_byte = u8::from_str_radix(str_chunk, 2).unwrap();
+                    next_num.push(next_byte);
+                }
+
+                det_vals
+                    .push(DetVal { byte_arr: next_num, interp_val: interp_det_val.to_string() });
             }
-
-            det_vals.push(DetVal { byte_arr: next_num, interp_val: interp_det_val.to_string() });
         }
     }
 }
