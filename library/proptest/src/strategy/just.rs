@@ -126,8 +126,6 @@ impl<T, F: Fn() -> T> fmt::Debug for LazyJust<T, F> {
 // Any `fn () -> T` is a Strategy
 //==============================================================================
 
-// TODO: try 'F: Fn () -> T' instead when we've got specialization.
-
 impl<T: fmt::Debug> Strategy for fn() -> T {
     type Tree = Self;
     type Value = T;

@@ -22,8 +22,7 @@ rustflags = [ # Global lints/warnings. Need to use underscore instead of -.
 ]
 
 [env]
-# This is a hack to get the root of the workspace. TODO: This should be
-# removed when cargo implements this. See
-# https://github.com/rust-lang/cargo/issues/3946#issuecomment-973132993
-# for details.
+# This is a hack to get the root of the workspace. TODO: This should
+# be removed when cargo implements this. See Kani-side tracking issue
+# is https://github.com/model-checking/kani/issues/1472 for details.
 CARGO_WORKSPACE_DIR = { value = "", relative = true }

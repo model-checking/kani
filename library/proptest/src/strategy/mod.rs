@@ -14,7 +14,9 @@
 
 //! Defines the core traits used by Proptest.
 
-// TODO: support more strategy operations.
+// TODO: support more strategy operations. See
+// https://github.com/model-checking/kani/issues/1473 for more
+// details.
 
 // mod filter;
 // mod filter_map;

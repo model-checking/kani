@@ -36,7 +36,8 @@
 #![cfg_attr(all(feature = "alloc", not(feature = "std")), feature(core_intrinsics))]
 
 // TODO: Implement support for more features. They are commented out
-// for now.
+// for now. See https://github.com/model-checking/kani/issues/1473 for
+// more details.
 
 // std_facade is used in a few macros, so it needs to be public.
 // #[macro_use]

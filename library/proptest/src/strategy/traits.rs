@@ -68,7 +68,9 @@ pub trait Strategy: fmt::Debug {
     /// generate the test case.
     fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self>;
 
-    // TODO: Implement more complex strategy compositions.
+    // TODO: Implement more complex strategy compositions. See
+    // https://github.com/model-checking/kani/issues/1473 for more
+    // details.
 
     // /// Returns a strategy which produces values transformed by the function
     // /// `fun`.

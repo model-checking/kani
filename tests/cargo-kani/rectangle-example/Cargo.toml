@@ -9,6 +9,7 @@ edition = "2018"
 [dependencies]
 
 # Turned off while proptest integration is merging. The first PR will
-# not support any integers, which crashes this test case.
+# not support any integers, which crashes this test case. See
+# https://github.com/model-checking/kani/issues/1473 for details.
 # [dev-dependencies]
 # proptest = "1.0.0"
