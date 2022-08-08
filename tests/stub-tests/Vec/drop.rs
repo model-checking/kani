@@ -5,7 +5,7 @@
 static mut GLOB: i32 = 1;
 
 struct Test {
-    _marker: u32
+    _marker: u32,
 }
 
 impl Drop for Test {

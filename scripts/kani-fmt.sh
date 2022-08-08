@@ -19,15 +19,9 @@ error=0
 cargo fmt "$@" || error=1
 
 # Check test source files.
-TESTS=("tests/kani"
-    "tests/prusti"
-    "tests/smack"
-    "tests/expected"
-    "tests/perf"
-    "tests/ui"
-    "tests/cargo-kani"
-    "tests/cargo-ui"
-    "docs/src/tutorial")
+# Note that this will respect the ignore section of rustfmt.toml. If you need to
+# skip any file / directory, add it there.
+TESTS=("tests" "docs/src/tutorial")
 
 for suite in "${TESTS[@]}"; do
     # Find uses breakline to split between files. This ensures that we can
