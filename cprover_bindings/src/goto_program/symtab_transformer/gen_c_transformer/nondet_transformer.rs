@@ -31,7 +31,7 @@ impl NondetTransformer {
     }
 
     pub fn poison_types_owned(&mut self) -> HashMap<String, Type> {
-        std::mem::take(&mut self.nondet_types)
+        std::mem::take(&mut self.poison_types)
     }
 }
 
