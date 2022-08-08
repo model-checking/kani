@@ -27,7 +27,7 @@ impl KaniSession {
         if !self.args.add_exe_trace_to_src && !self.args.quiet {
             println!(
                 "Executable trace for {}:\n```\n{}\n```",
-                &harness.mangled_name, &exe_trace.unit_test_name
+                &harness.mangled_name, &exe_trace.unit_test_str
             );
             println!(
                 "To automatically add this executable trace to the src code, run Kani with `--add-exe-trace-to-src`."
