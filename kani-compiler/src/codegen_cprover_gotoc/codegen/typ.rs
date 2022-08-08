@@ -14,8 +14,8 @@ use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::print::FmtPrinter;
 use rustc_middle::ty::subst::InternalSubsts;
 use rustc_middle::ty::{
-    self, AdtDef, FloatTy, GeneratorSubsts, Instance, IntTy, PolyFnSig, Ty, UintTy, VariantDef,
-    VtblEntry,
+    self, AdtDef, FloatTy, GeneratorSubsts, Instance, IntTy, PolyFnSig, Ty, TyKind, UintTy,
+    VariantDef, VtblEntry,
 };
 use rustc_middle::ty::{List, TypeFoldable};
 use rustc_span::def_id::DefId;
@@ -127,6 +127,129 @@ impl ExprExt for Expr {
 
 /// Function signatures
 impl<'tcx> GotocCtx<'tcx> {
+    /// This method prints the details of a GotoC type, for debugging purposes.
+    #[allow(unused)]
+    pub(crate) fn debug_print_type_recursively(&self, ty: &Type) -> String {
+        fn debug_write_type<'tcx>(
+            ctx: &GotocCtx<'tcx>,
+            ty: &Type,
+            out: &mut impl std::fmt::Write,
+            indent: usize,
+        ) -> Result<(), std::fmt::Error> {
+            match ty {
+                Type::Array { typ, size } => {
+                    write!(out, "[")?;
+                    debug_write_type(ctx, typ, out, indent + 2)?;
+                    write!(out, "; {size}]")?;
+                }
+                Type::Bool => write!(out, "bool")?,
+                Type::CBitField { typ, width } => {
+                    write!(out, "bitfield(")?;
+                    debug_write_type(ctx, typ, out, indent + 2)?;
+                    write!(out, ", {width}")?;
+                }
+                Type::CInteger(int_ty) => {
+                    let name = match int_ty {
+                        cbmc::goto_program::CIntType::Bool => "bool",
+                        cbmc::goto_program::CIntType::Char => "char",
+                        cbmc::goto_program::CIntType::Int => "int",
+                        cbmc::goto_program::CIntType::SizeT => "size_t",
+                        cbmc::goto_program::CIntType::SSizeT => "ssize_t",
+                    };
+                    write!(out, "{name}")?;
+                }
+                Type::Code { .. } => write!(out, "Code")?,
+                Type::Constructor => todo!(),
+                Type::Double => write!(out, "f64")?,
+                Type::Empty => todo!(),
+                Type::FlexibleArray { .. } => todo!(),
+                Type::Float => write!(out, "f32")?,
+                Type::IncompleteStruct { .. } => todo!(),
+                Type::IncompleteUnion { .. } => todo!(),
+                Type::InfiniteArray { .. } => todo!(),
+                Type::Pointer { typ } => {
+                    write!(out, "*")?;
+                    debug_write_type(ctx, typ, out, indent)?;
+                }
+                Type::Signedbv { width } => write!(out, "i{width}")?,
+                Type::Struct { tag, components } => {
+                    let pretty_name = if let Some(symbol) = ctx.symbol_table.lookup(aggr_tag(*tag))
+                    {
+                        symbol.pretty_name.unwrap()
+                    } else {
+                        "<no pretty name available>".into()
+                    };
+                    writeln!(out, "struct {tag} ({pretty_name}) {{")?;
+                    for c in components {
+                        match c {
+                            DatatypeComponent::Field { name, typ } => {
+                                write!(out, "{:indent$}{name}: ", "", indent = indent + 2)?;
+                                debug_write_type(ctx, typ, out, indent + 2)?;
+                                writeln!(out, ",")?;
+                            }
+                            DatatypeComponent::Padding { bits, .. } => {
+                                writeln!(
+                                    out,
+                                    "{:indent$}/* padding: {bits} bits */",
+                                    "",
+                                    indent = indent + 2
+                                )?;
+                            }
+                        }
+                    }
+                    write!(out, "{:indent$}}}", "", indent = indent)?;
+                }
+                Type::StructTag(tag) => {
+                    let ty = &ctx.symbol_table.lookup(*tag).unwrap().typ;
+                    debug_write_type(ctx, ty, out, indent)?;
+                }
+                Type::TypeDef { name, typ } => {
+                    write!(out, "typedef {{ {name}: ")?;
+                    debug_write_type(ctx, typ, out, indent + 2)?;
+                    write!(out, "{:indent$}}}", "", indent = indent)?;
+                }
+                Type::Union { tag, components } => {
+                    let pretty_name = if let Some(symbol) = ctx.symbol_table.lookup(aggr_tag(*tag))
+                    {
+                        symbol.pretty_name.unwrap()
+                    } else {
+                        "<no pretty name available>".into()
+                    };
+                    writeln!(out, "union {tag} ({pretty_name}) {{ ")?;
+                    for c in components {
+                        match c {
+                            DatatypeComponent::Field { name, typ } => {
+                                write!(out, "{:indent$}{name}: ", "", indent = indent + 2)?;
+                                debug_write_type(ctx, typ, out, indent + 2)?;
+                                writeln!(out, ",")?;
+                            }
+                            DatatypeComponent::Padding { bits, .. } => {
+                                writeln!(
+                                    out,
+                                    "{:indent$}/* padding: {bits} bits */",
+                                    "",
+                                    indent = indent + 2
+                                )?;
+                            }
+                        }
+                    }
+                    write!(out, "{:indent$}}}", "", indent = indent)?;
+                }
+                Type::UnionTag(tag) => {
+                    let ty = &ctx.symbol_table.lookup(*tag).unwrap().typ;
+                    debug_write_type(ctx, ty, out, indent)?;
+                }
+                Type::Unsignedbv { width } => write!(out, "u{width}")?,
+                Type::VariadicCode { .. } => write!(out, "VariadicCode")?,
+                Type::Vector { .. } => todo!(),
+            }
+            Ok(())
+        }
+        let mut out = String::new();
+        debug_write_type(self, ty, &mut out, 0).unwrap();
+        out
+    }
+
     /// Closures expect their last arg untupled at call site, see comment at
     /// ty_needs_closure_untupled.
     fn sig_with_closure_untupled(&self, sig: ty::PolyFnSig<'tcx>) -> ty::PolyFnSig<'tcx> {
@@ -520,17 +643,25 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn ty_mangled_name(&self, t: Ty<'tcx>) -> InternedString {
         // Crate resolution: mangled names need to be distinct across different versions
         // of the same crate that could be pulled in by dependencies. However, Kani's
-        // treatment of FFI C calls asssumes that we generate the same name for structs
+        // treatment of FFI C calls assumes that we generate the same name for #[repr(C)] types
         // as the C name, so don't mangle in that case.
-        // TODO: this is likely insufficient if a dependent crate has two versions of
+        // However, there was an issue with different type instantiations being given the same mangled name.
+        // https://github.com/model-checking/kani/issues/1438.
+        // Hence we DO mangle the type name if the type has generic type arguments, even if it's #[repr(C)].
+        // This is not a restriction because C can only access non-generic types anyway.
+        // TODO: Skipping name mangling is likely insufficient if a dependent crate has two versions of
         // linked C libraries
         // https://github.com/model-checking/kani/issues/450
-        if is_repr_c_adt(t) {
-            self.ty_pretty_name(t)
-        } else {
-            // This hash is documented to be the same no matter the crate context
-            let id_u64 = self.tcx.type_id_hash(t);
-            format!("_{}", id_u64).intern()
+        match t.kind() {
+            TyKind::Adt(def, substs) if substs.is_empty() && def.repr().c() => {
+                // For non-generic #[repr(C)] types, use the literal path instead of mangling it.
+                self.tcx.def_path_str(def.did()).intern()
+            }
+            _ => {
+                // This hash is documented to be the same no matter the crate context
+                let id_u64 = self.tcx.type_id_hash(t);
+                format!("_{}", id_u64).intern()
+            }
         }
     }
 
@@ -667,7 +798,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     self.ensure_struct(
                         self.ty_mangled_name(ty),
                         self.ty_pretty_name(ty),
-                        |tcx, _| tcx.codegen_ty_tuple_fields(ty, *ts),
+                        |tcx, _| tcx.codegen_ty_tuple_fields(ty, ts),
                     )
                 }
             }
@@ -786,7 +917,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
                 final_fields.extend(self.codegen_alignment_padding(
                     offset,
-                    &layout,
+                    layout,
                     final_fields.len(),
                 ));
                 final_fields
@@ -991,7 +1122,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let field_name = if Some(idx) == discriminant_field {
                     "case".into()
                 } else {
-                    ctx.generator_field_name(idx).into()
+                    ctx.generator_field_name(idx)
                 };
                 let field_ty = type_and_layout.field(ctx, idx).ty;
                 let field_offset = type_and_layout.fields.offset(idx);
@@ -1139,24 +1270,24 @@ impl<'tcx> GotocCtx<'tcx> {
         let params = sig
             .inputs()
             .iter()
-            .filter_map(|arg_type| {
+            .map(|arg_type| {
                 if is_first {
                     is_first = false;
                     debug!(self_type=?arg_type, fn_signature=?sig, "codegen_dynamic_function_sig");
                     if arg_type.is_ref() {
                         // Convert fat pointer to thin pointer to data portion.
                         let first_ty = pointee_type(*arg_type).unwrap();
-                        Some(self.codegen_trait_data_pointer(first_ty))
+                        self.codegen_trait_data_pointer(first_ty)
                     } else if arg_type.is_trait() {
                         // Convert dyn T to thin pointer.
-                        Some(self.codegen_trait_data_pointer(*arg_type))
+                        self.codegen_trait_data_pointer(*arg_type)
                     } else {
                         // Codegen type with thin pointer (E.g.: Box<dyn T> -> Box<data_ptr>).
-                        Some(self.codegen_trait_receiver(*arg_type))
+                        self.codegen_trait_receiver(*arg_type)
                     }
                 } else {
                     debug!("Using type {:?} in function signature", arg_type);
-                    Some(self.codegen_ty(*arg_type))
+                    self.codegen_ty(*arg_type)
                 }
             })
             .collect();
@@ -1404,7 +1535,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     // fields.
                     Some(
                         lo.fields()
-                            .offset(lo.fields().index_by_increasing_offset().nth(0).unwrap()),
+                            .offset(lo.fields().index_by_increasing_offset().next().unwrap()),
                     )
                 }
             })
@@ -1700,7 +1831,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Pre-condition: The argument must be a valid receiver for dispatchable trait functions.
     /// See <https://doc.rust-lang.org/reference/items/traits.html#object-safety> for more details.
     pub fn receiver_data_path<'a>(
-        self: &'a Self,
+        &'a self,
         typ: Ty<'tcx>,
     ) -> impl Iterator<Item = (String, Ty<'tcx>)> + 'a {
         struct ReceiverIter<'tcx, 'a> {
@@ -1751,14 +1882,6 @@ pub fn pointee_type(pointer_type: Ty) -> Option<Ty> {
         ty::Ref(_, pointee_type, _) => Some(*pointee_type),
         ty::RawPtr(ty::TypeAndMut { ty: pointee_type, .. }) => Some(*pointee_type),
         _ => None,
-    }
-}
-
-/// Is the MIR type using a C representation (marked with #[repr(C)] at the source level)?
-pub fn is_repr_c_adt(mir_type: Ty) -> bool {
-    match mir_type.kind() {
-        ty::Adt(def, _) => def.repr().c(),
-        _ => false,
     }
 }
 

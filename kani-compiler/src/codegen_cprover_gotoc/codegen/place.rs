@@ -277,7 +277,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     }
                     ty::Closure(..) => Ok(res.member(&f.index().to_string(), &self.symbol_table)),
                     ty::Generator(..) => {
-                        let field_name = self.generator_field_name(f.index().into());
+                        let field_name = self.generator_field_name(f.index());
                         Ok(res
                             .member("direct_fields", &self.symbol_table)
                             .member(field_name, &self.symbol_table))
@@ -291,7 +291,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 Ok(res.member(&field.name.to_string(), &self.symbol_table))
             }
             TypeOrVariant::GeneratorVariant(_var_idx) => {
-                let field_name = self.generator_field_name(f.index().into());
+                let field_name = self.generator_field_name(f.index());
                 Ok(res.member(field_name, &self.symbol_table))
             }
         }

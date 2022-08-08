@@ -4,11 +4,14 @@
 #![feature(min_specialization)] // Used for default implementation of Arbitrary.
 
 pub mod arbitrary;
+pub mod futures;
 pub mod invariant;
 pub mod slice;
 pub mod vec;
 
 pub use arbitrary::Arbitrary;
+pub use futures::block_on;
+#[allow(deprecated)]
 pub use invariant::Invariant;
 
 /// Creates an assumption that will be valid after this statement run. Note that the assumption
@@ -74,38 +77,32 @@ pub fn any<T: Arbitrary>() -> T {
 
 /// This function creates an unconstrained value of type `T`. This may result in an invalid value.
 ///
-/// # Example:
-///
-/// In the snippet below, we are verifying the behavior of the function `fn_under_verification`
-/// under all possible values of char, including invalid ones that are greater than char::MAX.
-///
-/// ```rust
-/// let inputA = unsafe { kani::any_raw::<char>() };
-/// fn_under_verification(inputA);
-/// ```
-///
 /// # Safety
 ///
 /// This function is unsafe and it may represent invalid `T` values which can lead to many
-/// undesirable undefined behaviors. Users must validate that the symbolic variable respects
-/// the type invariant as well as any other constraint relevant to their usage. E.g.:
+/// undesirable undefined behaviors. Users must guarantee that an unconstrained symbolic value
+/// for type T only represents valid values.
 ///
-/// ```rust
-/// let c = unsafe { kani::any_raw::char() };
-/// kani::assume(char::from_u32(c as u32).is_ok());
-/// ```
+/// # Deprecation
 ///
-#[rustc_diagnostic_item = "KaniAnyRaw"]
+/// We have decided to deprecate this function due to the fact that its result can be the source
+/// of undefined behavior.
 #[inline(never)]
+#[deprecated(
+    since = "0.8.0",
+    note = "This function may return symbolic values that don't respects the language type invariants."
+)]
+#[doc(hidden)]
 pub unsafe fn any_raw<T>() -> T {
-    unimplemented!("Kani any_raw")
+    any_raw_internal()
 }
 
-/// This function has been split into a safe and unsafe functions: `kani::any` and `kani::any_raw`.
-#[deprecated]
+/// This function will replace `any_raw` that has been deprecated and it should only be used
+/// internally when we can guarantee that it will not trigger any undefined behavior.
+#[rustc_diagnostic_item = "KaniAnyRaw"]
 #[inline(never)]
-pub fn nondet<T: Arbitrary>() -> T {
-    any::<T>()
+pub(crate) unsafe fn any_raw_internal<T>() -> T {
+    unimplemented!("Kani any_raw")
 }
 
 /// Function used in tests for cases where the condition is not always true.
@@ -121,6 +118,7 @@ pub fn expect_fail(_cond: bool, _message: &'static str) {}
 /// overrides, but not the other way around.
 #[inline(never)]
 #[rustc_diagnostic_item = "KaniPanic"]
+#[doc(hidden)]
 pub fn panic(message: &'static str) -> ! {
     panic!("{}", message)
 }

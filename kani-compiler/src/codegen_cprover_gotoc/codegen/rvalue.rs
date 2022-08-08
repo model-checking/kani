@@ -4,7 +4,7 @@ use super::typ::{is_pointer, pointee_type, TypeExt};
 use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::codegen_cprover_gotoc::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
-use crate::unwrap_or_return_codegen_unimplemented;
+use crate::{emit_concurrency_warning, unwrap_or_return_codegen_unimplemented};
 use cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
 use cbmc::utils::BUG_REPORT_URL;
 use cbmc::MachineModel;
@@ -203,49 +203,23 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
+    /// Codegens expressions of the type `let a  = [4u8; 6];`
     fn codegen_rvalue_repeat(
         &mut self,
         op: &Operand<'tcx>,
         sz: &ty::Const<'tcx>,
         res_ty: Ty<'tcx>,
+        loc: Location,
     ) -> Expr {
-        let func_name = format!("gen-repeat<{}>", self.ty_mangled_name(res_ty));
-        let pretty_name = format!("init_array_repeat<{}>", self.ty_pretty_name(res_ty));
-        self.ensure(&func_name, |tcx, _| {
-            let paramt = tcx.codegen_ty(tcx.operand_ty(op));
-            let res_t = tcx.codegen_ty(res_ty);
-            let inp = tcx.gen_function_parameter(1, &func_name, paramt);
-            let res = tcx.gen_function_local_variable(2, &func_name, res_t.clone()).to_expr();
-            let idx = tcx.gen_function_local_variable(3, &func_name, Type::size_t()).to_expr();
-            let mut body = vec![
-                Stmt::decl(res.clone(), None, Location::none()),
-                Stmt::decl(idx.clone(), Some(Type::size_t().zero()), Location::none()),
-            ];
-
-            let lbody = Stmt::block(
-                vec![
-                    tcx.codegen_idx_array(res.clone(), idx.clone())
-                        .assign(inp.to_expr(), Location::none()),
-                ],
-                Location::none(),
-            );
-            body.push(Stmt::for_loop(
-                Stmt::skip(Location::none()),
-                idx.clone().lt(tcx.codegen_const(*sz, None)),
-                idx.postincr().as_stmt(Location::none()),
-                lbody,
-                Location::none(),
-            ));
-            body.push(res.ret(Location::none()));
-            Symbol::function(
-                &func_name,
-                Type::code(vec![inp.to_function_parameter()], res_t),
-                Some(Stmt::block(body, Location::none())),
-                &pretty_name,
-                Location::none(),
-            )
-        });
-        self.find_function(&func_name).unwrap().call(vec![self.codegen_operand(op)])
+        let res_t = self.codegen_ty(res_ty);
+        let op_expr = self.codegen_operand(op);
+        let width = sz.try_eval_usize(self.tcx, ty::ParamEnv::reveal_all()).unwrap();
+        Expr::struct_expr(
+            res_t,
+            btree_string_map![("0", op_expr.array_constant(width))],
+            &self.symbol_table,
+        )
+        .with_location(loc)
     }
 
     pub fn codegen_rvalue_len(&mut self, p: &Place<'tcx>) -> Expr {
@@ -422,7 +396,7 @@ impl<'tcx> GotocCtx<'tcx> {
         debug!(?rv, "codegen_rvalue");
         match rv {
             Rvalue::Use(p) => self.codegen_operand(p),
-            Rvalue::Repeat(op, sz) => self.codegen_rvalue_repeat(op, sz, res_ty),
+            Rvalue::Repeat(op, sz) => self.codegen_rvalue_repeat(op, sz, res_ty, loc),
             Rvalue::Ref(_, _, p) | Rvalue::AddressOf(_, p) => self.codegen_rvalue_ref(p, res_ty),
             Rvalue::Len(p) => self.codegen_rvalue_len(p),
             // Rust has begun distinguishing "ptr -> num" and "num -> ptr" (providence-relevant casts) but we do not yet:
@@ -485,14 +459,10 @@ impl<'tcx> GotocCtx<'tcx> {
             Rvalue::Aggregate(ref k, operands) => {
                 self.codegen_rvalue_aggregate(k, operands, res_ty)
             }
-            Rvalue::ThreadLocalRef(_) => {
-                let typ = self.codegen_ty(res_ty);
-                self.codegen_unimplemented(
-                    "Rvalue::ThreadLocalRef",
-                    typ,
-                    Location::none(),
-                    "https://github.com/model-checking/kani/issues/541",
-                )
+            Rvalue::ThreadLocalRef(def_id) => {
+                // Since Kani is single-threaded, we treat a thread local like a static variable:
+                emit_concurrency_warning!("thread local", loc, "a static variable");
+                self.codegen_static_pointer(*def_id, true)
             }
             // A CopyForDeref is equivalent to a read from a place at the codegen level.
             // https://github.com/rust-lang/rust/blob/1673f1450eeaf4a5452e086db0fe2ae274a0144f/compiler/rustc_middle/src/mir/syntax.rs#L1055
@@ -689,12 +659,10 @@ impl<'tcx> GotocCtx<'tcx> {
                                 .tcx
                                 .normalize_erasing_regions(ty::ParamEnv::reveal_all(), src_subt);
                             match src_subt.kind() {
-                                ty::Slice(_) | ty::Str | ty::Dynamic(..) => {
-                                    return self
-                                        .codegen_operand(src)
-                                        .member("data", &self.symbol_table)
-                                        .cast_to(self.codegen_ty(dst_t));
-                                }
+                                ty::Slice(_) | ty::Str | ty::Dynamic(..) => self
+                                    .codegen_operand(src)
+                                    .member("data", &self.symbol_table)
+                                    .cast_to(self.codegen_ty(dst_t)),
                                 _ => self.codegen_operand(src).cast_to(self.codegen_ty(dst_t)),
                             }
                         }

@@ -15,7 +15,7 @@ fn mutate_the_thing(new: i32) {
 
 #[kani::proof]
 fn main() {
-    if kani::nondet() {
+    if kani::any() {
         assert!(10 == foo());
     }
     assert!(12 == foo());
