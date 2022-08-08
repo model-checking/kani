@@ -16,12 +16,12 @@ use std::process::Command;
 
 impl KaniSession {
     /// The main driver for generating executable traces and adding them to source code.
-    pub fn exe_trace_main(&self, output_filename: &Path, harness: &HarnessMetadata) {
+    pub fn gen_and_add_exe_trace(&self, output_filename: &Path, harness: &HarnessMetadata) {
         if !self.args.gen_exe_trace {
             return;
         }
 
-        let det_vals = parser::get_det_vals(output_filename);
+        let det_vals = parser::extract_det_vals(output_filename);
         let exe_trace = format_unit_test(&harness.mangled_name, det_vals.as_slice());
 
         if !self.args.add_exe_trace_to_src && !self.args.quiet {
@@ -208,6 +208,19 @@ struct ExeTrace {
 }
 
 /// Read the CBMC output, parse it as a JSON object, and extract the deterministic values.
+/// Note: the CBMC output should roughly look like this for parsing to work properly:
+/// ```json
+/// ...
+/// { "result": [
+///     ...,
+///     { "description": "assertion failed: x", "status": "FAILURE", "trace": [
+///         ...,
+///         { "assignmentType": "variable", "lhs": "var_0",
+///           "sourceLocation": { "function": "kani::any_raw_internal::<u8, 1_usize>" },
+///           "stepType": "assignment", "value": { "binary": "00000001", "data": "101", "width": 8 } }
+///         ..., ] }
+///     ..., ] }
+/// ```
 mod parser {
     use serde_json::Value;
     use std::fs::File;
@@ -220,13 +233,13 @@ mod parser {
     }
 
     /// Extract deterministic values from a failing harness.
-    pub fn get_det_vals(output_filename: &Path) -> Vec<DetVal> {
-        let cbmc_out = get_cbmc_out(output_filename);
+    pub fn extract_det_vals(output_filename: &Path) -> Vec<DetVal> {
+        let cbmc_out = read_cbmc_out(output_filename);
         parse_cbmc_out(&cbmc_out)
     }
 
     /// Read in the CBMC results file and deserialize it to a JSON object.
-    fn get_cbmc_out(results_filename: &Path) -> Value {
+    fn read_cbmc_out(results_filename: &Path) -> Value {
         let results_file = File::open(results_filename).unwrap();
         let reader = BufReader::new(results_file);
         serde_json::from_reader(reader).unwrap()

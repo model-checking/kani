@@ -46,7 +46,7 @@ impl KaniSession {
             let format_result = self.format_cbmc_output(&output_filename);
 
             if format_result.is_err() {
-                self.exe_trace_main(&output_filename, harness);
+                self.gen_and_add_exe_trace(&output_filename, harness);
                 // Because of things like --assertion-reach-checks and other future features,
                 // we now decide if we fail or not based solely on the output of the formatter.
                 return Ok(VerificationStatus::Failure);
