@@ -111,8 +111,9 @@ pub enum ExprValue {
     },
     /// `__nondet()`
     Nondet,
-    /// Poison comes from the Deinit statement of Rust
-    /// CBMC doesn't model it (as of now)
+    /// Poison corresponds to a region of memory that
+    /// is uninitialized, and reading it is undefined
+    /// behaviour.
     Poison,
     /// `NULL`
     PointerConstant(u64),

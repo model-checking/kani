@@ -256,7 +256,7 @@ impl ToIrep for ExprValue {
             ExprValue::Poison => {
                 // For  now, Poison is lowered to Nondet with a comment.
                 // In the future, CBMC might handle poison expressions directly
-                side_effect_irep(IrepId::Nondet, vec![]).with_comment("deinit")
+                side_effect_irep(IrepId::Nondet, vec![]).with_comment("poison")
             }
             ExprValue::PointerConstant(0) => Irep {
                 id: IrepId::Constant,
