@@ -266,24 +266,22 @@ impl SourceLocation {
 ///    attribute was formatted.
 impl std::fmt::Display for SourceLocation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use std::fmt::Write;
         let mut fmt_str = String::new();
         if let Some(file) = self.file.clone() {
-            let file_str = filepath(file);
-            fmt_str.push_str(file_str.as_str());
+            let file_path = filepath(file);
+            write!(&mut fmt_str, "{file_path}")?;
             if let Some(line) = self.line.clone() {
-                let line_str = format!(":{}", line);
-                fmt_str.push_str(line_str.as_str());
+                write!(&mut fmt_str, ":{line}")?;
                 if let Some(column) = self.column.clone() {
-                    let column_str = format!(":{}", column);
-                    fmt_str.push_str(column_str.as_str());
+                    write!(&mut fmt_str, ":{column}")?;
                 }
             }
         } else {
-            fmt_str.push_str("Unknown file");
+            write!(&mut fmt_str, "Unknown file")?;
         }
         if let Some(function) = self.function.clone() {
-            let fun_str = format!(" in function {}", function);
-            fmt_str.push_str(fun_str.as_str());
+            write!(&mut fmt_str, " in function {function}")?;
         }
 
         write! {f, "{}", fmt_str}
