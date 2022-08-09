@@ -21,12 +21,20 @@ KANI_PATH=${KANI_CANDIDATES[0]}
 
 # if the crate uses proptest, get ready to run that. Make sure local
 # proptest import and kani's proptest does not clash.
-if tomlq '.target."cfg(not(kani))".dependencies.proptest' Cargo.toml  > /dev/null; then
+function has-direct-proptest-import() {
+    (tomlq -e '.dev-dependencies.proptest' Cargo.toml ||
+         tomlq -e '.dependencies.proptest' Cargo.toml) &> /dev/null
+}
+function has-kani-escaped-proptest-import() {
+    (tomlq -e '.target."cfg(not(kani))".dev-dependencies.proptest' Cargo.toml  ||
+        tomlq -e '.target."cfg(not(kani))".dependencies.proptest' Cargo.toml) &> /dev/null
+}
+if has-kani-escaped-proptest-import; then
     if [ -z "${CARGO_KANI_IS_CHILD+x}" ]; then
         $SCRIPT_DIR/refresh-kani-proptest.sh
         export IS_KANI_PROPTEST=1
     fi
-else
+elif has-direct-proptest-import; then
     echo "Clashing import of proptest. Stopping cargo kani."
     echo "Please put your proptest import under [target.'cfg(not(kani))'.dependencies]"
     exit 1
