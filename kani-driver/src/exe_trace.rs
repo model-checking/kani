@@ -71,7 +71,7 @@ impl KaniSession {
         if src_as_str.contains(&exe_trace.unit_test_name) {
             if !self.args.quiet {
                 println!(
-                    "Exe trace `{}/{}` already found in source code, so skipping modification.",
+                    "Executable trace `{}/{}` already found in source code, so skipping modification.",
                     src_path, exe_trace.unit_test_name,
                 );
             }
