@@ -34,13 +34,13 @@ use std::{
     process::{Child, ChildStdout},
 };
 
+type CbmcAltDescriptions = HashMap<&'static str, Vec<(&'static str, Option<&'static str>)>>;
+
 /// Hash map that relates property classes with descriptions, used by
 /// `get_readable_description` to provide user friendly descriptions.
 /// See the comment in `get_readable_description` for more information on
 /// how this data structure is used.
-static CBMC_ALT_DESCRIPTIONS: Lazy<
-    HashMap<&'static str, Vec<(&'static str, Option<&'static str>)>>,
-> = Lazy::new(|| {
+static CBMC_ALT_DESCRIPTIONS: Lazy<CbmcAltDescriptions> = Lazy::new(|| {
     let mut map = HashMap::new();
     map.insert("error_label", vec![]);
     map.insert("division-by-zero", vec![("division by zero", None)]);
@@ -308,7 +308,7 @@ pub struct TraceItem {
     pub source_location: Option<SourceLocation>,
 }
 
-#[derive(Copy, Clone, Debug, Deserialize, PartialEq)]
+#[derive(Copy, Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum CheckStatus {
     Failure,
