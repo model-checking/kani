@@ -15,7 +15,7 @@
 
 pub mod arbitrary;
 #[cfg(feature = "exe_trace")]
-pub mod exe_trace;
+mod exe_trace;
 pub mod futures;
 pub mod invariant;
 pub mod slice;
