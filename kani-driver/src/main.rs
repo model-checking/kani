@@ -60,6 +60,7 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
 
     let mut failed_harnesses: Vec<&HarnessMetadata> = Vec::new();
 
+    let mut have_seen_failed_harness = false;
     for harness in &harnesses {
         let harness_filename = harness.pretty_name.replace("::", "-");
         let report_dir = report_base.join(format!("report-{}", harness_filename));
@@ -74,6 +75,15 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
         let result = ctx.check_harness(&specialized_obj, &report_dir, harness)?;
         if result == VerificationStatus::Failure {
             failed_harnesses.push(harness);
+
+            if have_seen_failed_harness && ctx.args.add_exe_trace_to_src && !ctx.args.quiet {
+                println!(
+                    "WARNING: Watch out for harness `{}/{}`. Adding multiple deterministic unit tests to the source code may not work as expected.",
+                    &harness.original_file, &harness.mangled_name
+                );
+            } else if !have_seen_failed_harness {
+                have_seen_failed_harness = true;
+            }
         }
     }
 
@@ -107,6 +117,7 @@ fn standalone_main() -> Result<()> {
 
     let mut failed_harnesses: Vec<&HarnessMetadata> = Vec::new();
 
+    let mut have_seen_failed_harness = false;
     for harness in &harnesses {
         let harness_filename = harness.pretty_name.replace("::", "-");
         let report_dir = report_base.join(format!("report-{}", harness_filename));
@@ -125,6 +136,15 @@ fn standalone_main() -> Result<()> {
         let result = ctx.check_harness(&specialized_obj, &report_dir, harness)?;
         if result == VerificationStatus::Failure {
             failed_harnesses.push(harness);
+
+            if have_seen_failed_harness && ctx.args.add_exe_trace_to_src && !ctx.args.quiet {
+                println!(
+                    "WARNING: Watch out for harness `{}/{}`. Adding multiple deterministic unit tests to the source code may not work as expected.",
+                    &harness.original_file, &harness.mangled_name
+                );
+            } else if !have_seen_failed_harness {
+                have_seen_failed_harness = true;
+            }
         }
     }
 
