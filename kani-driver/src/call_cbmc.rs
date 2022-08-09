@@ -8,7 +8,7 @@ use std::path::Path;
 use std::process::Command;
 use std::time::Instant;
 
-use crate::args::{KaniArgs, OutputFormat};
+use crate::args::KaniArgs;
 use crate::cbmc_output_parser::process_cbmc_output;
 use crate::session::KaniSession;
 
