@@ -22,6 +22,11 @@ impl KaniSession {
             return;
         }
 
+        assert!(
+            self.args.output_format != crate::args::OutputFormat::Old,
+            "The Kani argument `--output-format old` is not supported with the executable trace feature."
+        );
+
         let det_vals = parser::extract_det_vals(output_filename)
             .expect("Something went wrong when trying to get det vals from the CBMC output file");
         let exe_trace = format_unit_test(&harness.mangled_name, &det_vals);
