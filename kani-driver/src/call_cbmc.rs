@@ -101,7 +101,9 @@ impl KaniSession {
             args.push("--validate-ssa-equation".into());
         }
 
-        args.push("--slice-formula".into());
+        if !self.args.visualize && !self.args.no_slice_formula {
+            args.push("--slice-formula".into());
+        }
 
         if self.args.gen_exe_trace {
             args.push("--trace".into());
