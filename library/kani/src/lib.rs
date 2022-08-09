@@ -54,8 +54,9 @@ pub use invariant::Invariant;
 #[inline(never)]
 #[rustc_diagnostic_item = "KaniAssume"]
 pub fn assume(_cond: bool) {
-    #[cfg(feature = "exe_trace")]
-    assert!(_cond, "kani::assume should always hold");
+    if cfg!(feature = "exe_trace") {
+        assert!(_cond, "kani::assume should always hold");
+    }
 }
 
 /// Creates an assertion of the specified condition and message.
@@ -118,6 +119,10 @@ where
     // This generic_const_exprs feature lets Rust know the size of generic T.
     [(); std::mem::size_of::<T>()]:,
 {
+    assert!(
+        !cfg!(feature = "exe_trace"),
+        "The function `kani::any_raw::<T>() is not supported with the executable trace feature. Use `kani::any::<T>()` instead."
+    );
     any_raw_internal::<T, { std::mem::size_of::<T>() }>()
 }
 

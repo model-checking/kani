@@ -42,6 +42,10 @@ where
     [(); std::mem::size_of::<T>()]:,
 {
     default fn any() -> Self {
+        assert!(
+            !cfg!(feature = "exe_trace"),
+            "Calling `any()` on an `Invariant` type is not supported with the executable trace feature."
+        );
         let value = unsafe { crate::any_raw_internal::<T, { std::mem::size_of::<T>() }>() };
         crate::assume(value.is_valid());
         value

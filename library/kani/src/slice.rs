@@ -175,5 +175,9 @@ where
     // This generic_const_exprs feature lets Rust know the size of generic T.
     [(); std::mem::size_of::<T>()]:,
 {
+    assert!(
+        !cfg!(feature = "exe_trace"),
+        "The function `kani::slice::any_raw_slice::<T, MAX_SLICE_LENGTH>() is not supported with the executable trace feature. Use `kani::slice::any_slice::<T, MAX_SLICE_LENGTH>()` instead."
+    );
     AnySlice::<T, MAX_SLICE_LENGTH>::new_raw()
 }
