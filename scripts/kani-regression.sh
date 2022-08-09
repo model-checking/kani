@@ -30,7 +30,6 @@ PYTHONPATH=${SCRIPT_DIR} python3 -m unittest ${SCRIPT_DIR}/test_cbmc_json_parser
 
 # Build all packages in the workspace
 cargo build --workspace
-${SCRIPT_DIR}/refresh-kani-proptest.sh
 
 # Unit tests
 cargo test -p cprover_bindings
