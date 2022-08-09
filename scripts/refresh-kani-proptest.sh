@@ -8,6 +8,8 @@
 # to called manually, but rather from `scripts/kani` and
 # `scripts/cargo-kani`.
 
+set -eu
+
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 KANI_REPO_ROOT="$SCRIPT_DIR/.."
 
@@ -18,7 +20,7 @@ if [ ! -f "$PROPTEST_SYMTAB_PATH" ] || [[ "$PROPTEST_SYMTAB_PATH" -ot "$PROPTEST
     echo 'Proptest symtab not found or too old. (Re)compiling proptest..'
     (
         cd $KANI_REPO_ROOT/library/proptest;
-        export CARGO_KANI_IS_CHILD=1
+        export CARGO_KANI_IS_CHILD=1;
         cargo kani --only-codegen;
     )
 fi
