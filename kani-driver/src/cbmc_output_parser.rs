@@ -256,6 +256,9 @@ impl SourceLocation {
 ///    specified.
 ///  * Lines and columns are only formatted if they were specified and preceding
 ///    attribute was formatted.
+///
+/// TODO: We could `write!` to `f` directly
+/// <https://github.com/model-checking/kani/issues/1480>
 impl std::fmt::Display for SourceLocation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use std::fmt::Write;
@@ -556,6 +559,9 @@ fn format_item_terse(item: &ParserItem) -> Option<String> {
 /// Formats a result item (i.e., the complete set of verification checks).
 /// This could be split into two functions for clarity, but at the moment
 /// it uses the flag `show_checks` which depends on the output format.
+///
+/// TODO: We could `write!` to `result_str` instead
+/// <https://github.com/model-checking/kani/issues/1480>
 fn format_result(properties: &Vec<Property>, show_checks: bool) -> String {
     let mut result_str = String::new();
     let mut number_tests_failed = 0;
