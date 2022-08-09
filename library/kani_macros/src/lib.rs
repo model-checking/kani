@@ -19,7 +19,7 @@ use {
 #[cfg(all(not(kani), not(test)))]
 #[proc_macro_attribute]
 pub fn proof(_attr: TokenStream, _item: TokenStream) -> TokenStream {
-    // Not-Kani, Not-Test means this code shouldn't exist, return nothing.
+    // Not-Kani, not-test means this code shouldn't exist, return nothing.
     TokenStream::new()
 }
 
@@ -39,73 +39,68 @@ pub fn proof(_attr: TokenStream, item: TokenStream) -> TokenStream {
     // )
 }
 
+/// Marks a Kani proof harness
+///
+/// For async harnesses, this will call [`kani::block_on`] (see its documentation for more information).
 #[cfg(kani)]
 #[proc_macro_attribute]
 pub fn proof(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let mut result = TokenStream::new();
-
-    assert!(attr.is_empty(), "#[kani::proof] does not take any arguments");
-    result.extend("#[kanitool::proof]".parse::<TokenStream>().unwrap());
-    // no_mangle is a temporary hack to make the function "public" so it gets codegen'd
-    result.extend("#[no_mangle]".parse::<TokenStream>().unwrap());
-    result.extend(item);
-    result
-    // quote!(
-    //     #[kanitool::proof]
-    //     $item
-    // )
-}
-
-#[cfg(not(kani))]
-#[proc_macro_attribute]
-/// Treats #[kani::async_proof] like a normal #[kani::proof] if Kani is not active
-pub fn async_proof(attr: TokenStream, item: TokenStream) -> TokenStream {
-    proof(attr, item)
-}
-
-#[cfg(kani)]
-#[proc_macro_attribute]
-/// Translates #[kani::async_proof] to a #[kani::proof] harness that calls `kani::block_on`, if Kani is active
-///
-/// Specifically, it translates
-/// ```ignore
-/// #[kani::async_proof]
-/// #[attribute]
-/// pub async fn harness() { ... }
-/// ```
-/// to
-/// ```ignore
-/// #[kani::proof]
-/// #[attribute]
-/// pub fn harness() {
-///   async fn harness() { ... }
-///   kani::block_on(harness())
-/// }
-/// ```
-pub fn async_proof(attr: TokenStream, item: TokenStream) -> TokenStream {
-    assert!(attr.is_empty(), "#[kani::async_proof] does not take any arguments for now");
     let fn_item = parse_macro_input!(item as ItemFn);
     let attrs = fn_item.attrs;
     let vis = fn_item.vis;
     let sig = fn_item.sig;
-    assert!(sig.asyncness.is_some(), "#[kani::async_proof] can only be applied to async functions");
-    assert!(
-        sig.inputs.is_empty(),
-        "#[kani::async_proof] can only be applied to functions without inputs"
-    );
-    let mut modified_sig = sig.clone();
-    modified_sig.asyncness = None;
     let body = fn_item.block;
-    let fn_name = &sig.ident;
-    quote!(
-        #[kani::proof]
-        #(#attrs)*
-        #vis #modified_sig {
-            #sig #body
-            kani::block_on(#fn_name())
-        }
-    )
-    .into()
+
+    let kani_attributes = quote!(
+        #[kanitool::proof]
+        // no_mangle is a temporary hack to make the function "public" so it gets codegen'd
+        #[no_mangle]
+    );
+
+    assert!(attr.is_empty(), "#[kani::proof] does not take any arguments for now");
+
+    if sig.asyncness.is_none() {
+        // Adds `#[kanitool::proof]` and other attributes
+        quote!(
+            #kani_attributes
+            #(#attrs)*
+            #vis #sig #body
+        )
+        .into()
+    } else {
+        // For async functions, it translates to a synchronous function that calls `kani::block_on`.
+        // Specifically, it translates
+        // ```ignore
+        // #[kani::async_proof]
+        // #[attribute]
+        // pub async fn harness() { ... }
+        // ```
+        // to
+        // ```ignore
+        // #[kani::proof]
+        // #[attribute]
+        // pub fn harness() {
+        //   async fn harness() { ... }
+        //   kani::block_on(harness())
+        // }
+        // ```
+        assert!(
+            sig.inputs.is_empty(),
+            "#[kani::proof] cannot be applied to async functions that take inputs for now"
+        );
+        let mut modified_sig = sig.clone();
+        modified_sig.asyncness = None;
+        let fn_name = &sig.ident;
+        quote!(
+            #kani_attributes
+            #(#attrs)*
+            #vis #modified_sig {
+                #sig #body
+                kani::block_on(#fn_name())
+            }
+        )
+        .into()
+    }
 }
 
 #[cfg(not(kani))]

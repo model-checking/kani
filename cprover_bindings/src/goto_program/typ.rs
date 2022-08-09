@@ -781,11 +781,8 @@ impl Type {
         &self,
         st: &'a SymbolTable,
     ) -> Option<Vec<&'a DatatypeComponent>> {
-        if let Some(components) = self.lookup_components(st) {
-            Some(components.iter().filter(|x| x.sizeof_in_bits(st) != 0).collect())
-        } else {
-            None
-        }
+        self.lookup_components(st)
+            .map(|components| components.iter().filter(|x| x.sizeof_in_bits(st) != 0).collect())
     }
 
     /// Calculates an under-approximation of whether two types are structurally equivalent.

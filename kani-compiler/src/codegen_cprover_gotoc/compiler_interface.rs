@@ -37,8 +37,8 @@ pub struct GotocCodegenBackend {
 }
 
 impl GotocCodegenBackend {
-    pub fn new(queries: &Rc<QueryDb>) -> Box<dyn CodegenBackend> {
-        Box::new(GotocCodegenBackend { queries: Rc::clone(queries) })
+    pub fn new(queries: &Rc<QueryDb>) -> Self {
+        GotocCodegenBackend { queries: Rc::clone(queries) }
     }
 }
 

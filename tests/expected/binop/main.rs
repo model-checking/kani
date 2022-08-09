@@ -58,7 +58,7 @@ fn ibxor_test(a: i32, b: i32, correct: i32, wrong: i32) {
 
 #[kani::proof]
 fn main() {
-    match kani::nondet::<u8>() {
+    match kani::any::<u8>() {
         0 => iadd_test(1, 2, 3, 4),
         1 => isub_test(3, 4, -1, 0),
         2 => imul_test(5, 6, 30, 60),
