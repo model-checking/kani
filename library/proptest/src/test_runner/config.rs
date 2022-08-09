@@ -31,7 +31,7 @@ fn default_default_config() -> Config {
 // defaults.
 
 /// Configuration for how a proptest test should be run.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Config {
     /// The number of successful test cases that must execute for the test as a
     /// whole to pass.
