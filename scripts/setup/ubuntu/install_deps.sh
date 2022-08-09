@@ -26,6 +26,8 @@ DEPS=(
   wget
   zlib1g
   zlib1g-dev
+  tomlq # used by the proptest feature for detecting Cargo.toml structure
+  jq    # needs jq as dependency
 )
 
 # Version specific dependencies.

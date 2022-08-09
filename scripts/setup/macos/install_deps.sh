@@ -16,6 +16,8 @@ brew install universal-ctags wget
 PYTHON_DEPS=(
   autopep8
   colorama # Used for introducing colors into terminal output
+  tomlq # used by the proptest feature for detecting Cargo.toml structure
+  jq    # needs jq as dependency
 )
 
 python3 -m pip install "${PYTHON_DEPS[@]}"
