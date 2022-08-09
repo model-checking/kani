@@ -4,7 +4,10 @@
 use super::typ::pointee_type;
 use super::PropertyClass;
 use crate::codegen_cprover_gotoc::GotocCtx;
-use cbmc::goto_program::{ArithmeticOverflowResult, BuiltinFn, Expr, Location, Stmt, Type};
+use cbmc::goto_program::{
+    arithmetic_overflow_result_type, ArithmeticOverflowResult, BuiltinFn, Expr, Location, Stmt,
+    Type, ARITH_OVERFLOW_OVERFLOWED_FIELD, ARITH_OVERFLOW_RESULT_FIELD,
+};
 use rustc_middle::mir::{BasicBlock, Operand, Place};
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{self, Ty};
@@ -186,13 +189,28 @@ impl<'tcx> GotocCtx<'tcx> {
                 let t = self.codegen_ty(pt);
                 let a = fargs.remove(0);
                 let b = fargs.remove(0);
+                let op_type = a.typ().clone();
                 let res = a.$f(b);
+                // add to symbol table
+                let struct_tag = self.codegen_arithmetic_overflow_result_type(op_type.clone());
+                assert_eq!(*res.typ(), struct_tag);
+
+                // store the result in a temporary variable
+                let (var, decl) = self.decl_temp_variable(struct_tag, Some(res), loc);
+                // cast into result type
                 let e = Expr::struct_expr_from_values(
-                    t,
-                    vec![res.result, res.overflowed.cast_to(Type::c_bool())],
+                    t.clone(),
+                    vec![
+                        var.clone().member(ARITH_OVERFLOW_RESULT_FIELD, &self.symbol_table),
+                        var.member(ARITH_OVERFLOW_OVERFLOWED_FIELD, &self.symbol_table)
+                            .cast_to(Type::c_bool()),
+                    ],
                     &self.symbol_table,
                 );
-                self.codegen_expr_to_place(p, e)
+                self.codegen_expr_to_place(
+                    p,
+                    Expr::statement_expression(vec![decl, e.as_stmt(loc)], t),
+                )
             }};
         }
 
@@ -201,15 +219,35 @@ impl<'tcx> GotocCtx<'tcx> {
             ($f:ident) => {{
                 let a = fargs.remove(0);
                 let b = fargs.remove(0);
+                let op_type = a.typ().clone();
                 let res = a.$f(b);
+                // add to symbol table
+                let struct_tag = self.codegen_arithmetic_overflow_result_type(op_type.clone());
+                assert_eq!(*res.typ(), struct_tag);
+
+                // store the result in a temporary variable
+                let (var, decl) = self.decl_temp_variable(struct_tag, Some(res), loc);
                 let check = self.codegen_assert(
-                    res.overflowed.not(),
+                    var.clone()
+                        .member(ARITH_OVERFLOW_OVERFLOWED_FIELD, &self.symbol_table)
+                        .cast_to(Type::c_bool())
+                        .not(),
                     PropertyClass::ArithmeticOverflow,
                     format!("attempt to compute {} which would overflow", intrinsic).as_str(),
                     loc,
                 );
-                let expr_place = self.codegen_expr_to_place(p, res.result);
-                Stmt::block(vec![expr_place, check], loc)
+                self.codegen_expr_to_place(
+                    p,
+                    Expr::statement_expression(
+                        vec![
+                            decl,
+                            check,
+                            var.member(ARITH_OVERFLOW_RESULT_FIELD, &self.symbol_table)
+                                .as_stmt(loc),
+                        ],
+                        op_type,
+                    ),
+                )
             }};
         }
 
@@ -396,7 +434,7 @@ impl<'tcx> GotocCtx<'tcx> {
         }
 
         match intrinsic {
-            "add_with_overflow" => codegen_op_with_overflow!(add_overflow),
+            "add_with_overflow" => codegen_op_with_overflow!(add_overflow_result),
             "arith_offset" => self.codegen_offset(intrinsic, instance, fargs, p, loc),
             "assert_inhabited" => self.codegen_assert_intrinsic(instance, intrinsic, span),
             "assert_uninit_valid" => self.codegen_assert_intrinsic(instance, intrinsic, span),
@@ -560,7 +598,7 @@ impl<'tcx> GotocCtx<'tcx> {
             "min_align_of_val" => codegen_size_align!(align),
             "minnumf32" => codegen_simple_intrinsic!(Fminf),
             "minnumf64" => codegen_simple_intrinsic!(Fmin),
-            "mul_with_overflow" => codegen_op_with_overflow!(mul_overflow),
+            "mul_with_overflow" => codegen_op_with_overflow!(mul_overflow_result),
             "nearbyintf32" => codegen_simple_intrinsic!(Nearbyintf),
             "nearbyintf64" => codegen_simple_intrinsic!(Nearbyint),
             "needs_drop" => codegen_intrinsic_const!(),
@@ -625,7 +663,7 @@ impl<'tcx> GotocCtx<'tcx> {
             "size_of_val" => codegen_size_align!(size),
             "sqrtf32" => unstable_codegen!(codegen_simple_intrinsic!(Sqrtf)),
             "sqrtf64" => unstable_codegen!(codegen_simple_intrinsic!(Sqrt)),
-            "sub_with_overflow" => codegen_op_with_overflow!(sub_overflow),
+            "sub_with_overflow" => codegen_op_with_overflow!(sub_overflow_result),
             "transmute" => self.codegen_intrinsic_transmute(fargs, ret_ty, p),
             "truncf32" => codegen_simple_intrinsic!(Truncf),
             "truncf64" => codegen_simple_intrinsic!(Trunc),
@@ -639,9 +677,9 @@ impl<'tcx> GotocCtx<'tcx> {
             "unaligned_volatile_load" => {
                 unstable_codegen!(self.codegen_expr_to_place(p, fargs.remove(0).dereference()))
             }
-            "unchecked_add" => codegen_op_with_overflow_check!(add_overflow),
+            "unchecked_add" => codegen_op_with_overflow_check!(add_overflow_result),
             "unchecked_div" => codegen_op_with_div_overflow_check!(div),
-            "unchecked_mul" => codegen_op_with_overflow_check!(mul_overflow),
+            "unchecked_mul" => codegen_op_with_overflow_check!(mul_overflow_result),
             "unchecked_rem" => codegen_op_with_div_overflow_check!(rem),
             "unchecked_shl" => codegen_intrinsic_binop!(shl),
             "unchecked_shr" => {
@@ -651,7 +689,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     codegen_intrinsic_binop!(lshr)
                 }
             }
-            "unchecked_sub" => codegen_op_with_overflow_check!(sub_overflow),
+            "unchecked_sub" => codegen_op_with_overflow_check!(sub_overflow_result),
             "unlikely" => self.codegen_expr_to_place(p, fargs.remove(0)),
             "unreachable" => unreachable!(
                 "Expected `std::intrinsics::unreachable` to be handled by `TerminatorKind::Unreachable`"
@@ -1455,5 +1493,20 @@ impl<'tcx> GotocCtx<'tcx> {
             loc,
         );
         (size_of_count_elems.result, assert_stmt)
+    }
+
+    /// Codegens the struct type that CBMC produces for its arithmetic with overflow operators:
+    /// ```
+    /// struct overflow_result_<operand_type> {
+    ///     operand_type result;     // the result of the operation
+    ///     bool         overflowed; // whether the operation overflowed
+    /// }
+    /// ```
+    /// and adds the type to the symbol table
+    fn codegen_arithmetic_overflow_result_type(&mut self, operand_type: Type) -> Type {
+        let res_type = arithmetic_overflow_result_type(operand_type);
+        self.ensure_struct(res_type.tag().unwrap(), res_type.tag().unwrap(), |_, _| {
+            res_type.components().unwrap().clone()
+        })
     }
 }

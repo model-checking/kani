@@ -7,7 +7,7 @@ use anyhow::{bail, Context, Result};
 use std::cell::RefCell;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitStatus};
+use std::process::{Child, Command, ExitStatus, Stdio};
 
 /// Contains information about the execution environment and arguments that affect operations
 pub struct KaniSession {
@@ -20,8 +20,6 @@ pub struct KaniSession {
     pub kani_lib_c: PathBuf,
     /// The location we found the Kani C stub .c files
     pub kani_c_stubs: PathBuf,
-    /// The location we found 'cbmc_json_parser.py'
-    pub cbmc_json_parser_py: PathBuf,
 
     /// The location we found our pre-built libraries
     pub kani_rlib: Option<PathBuf>,
@@ -49,7 +47,6 @@ impl KaniSession {
             kani_compiler: install.kani_compiler()?,
             kani_lib_c: install.kani_lib_c()?,
             kani_c_stubs: install.kani_c_stubs()?,
-            cbmc_json_parser_py: install.cbmc_json_parser_py()?,
             kani_rlib: install.kani_rlib()?,
             temporaries: RefCell::new(vec![]),
         })
@@ -140,6 +137,26 @@ impl KaniSession {
 
         cmd.status().context(format!("Failed to invoke {}", cmd.get_program().to_string_lossy()))
     }
+
+    /// Run a job and pipe its output to this process.
+    /// Returns an error if the process could not be spawned
+    pub fn run_piped(&self, mut cmd: Command) -> Result<Option<Child>> {
+        if self.args.verbose || self.args.dry_run {
+            println!("{}", render_command(&cmd).to_string_lossy());
+            if self.args.dry_run {
+                return Ok(None);
+            }
+        }
+        // Run the process as a child process
+        let process = cmd.stdout(Stdio::piped()).spawn();
+
+        // Render the command if the process could not be spawned
+        if process.is_err() {
+            bail!("Could not spawn process `{}`", render_command(&cmd).to_string_lossy());
+        }
+        // Return the child process handle
+        Ok(Some(process.unwrap()))
+    }
 }
 
 /// Return the path for the folder where the current executable is located.
@@ -190,10 +207,6 @@ impl InstallType {
 
     pub fn kani_c_stubs(&self) -> Result<PathBuf> {
         self.base_path_with("library/kani/stubs/C")
-    }
-
-    pub fn cbmc_json_parser_py(&self) -> Result<PathBuf> {
-        self.base_path_with("scripts/cbmc_json_parser.py")
     }
 
     pub fn kani_rlib(&self) -> Result<Option<PathBuf>> {
