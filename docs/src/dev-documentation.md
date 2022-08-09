@@ -13,6 +13,7 @@ developers (including external contributors):
  2. [Useful command-line instructions for Kani/CBMC/Git](./cheat-sheets.md).
  3. [Development setup recommendations for working with `rustc`](./rustc-hacks.md).
  4. [Guide for testing in Kani](./testing.md).
+ 5. [(Experimental) Running Proptests with Kani](./proptest.md).
 
 > **NOTE**: The developer documentation is intended for Kani developers and not
 users. At present, the project is under heavy development and some items
