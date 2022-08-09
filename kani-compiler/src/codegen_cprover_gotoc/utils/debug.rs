@@ -24,7 +24,8 @@ pub fn init() {
     LazyLock::force(&DEFAULT_HOOK); // Install ice hook
 }
 
-// Custom panic hook to add more information when panic occurs during goto-c codegen.
+/// Custom panic hook to add more information when panic occurs during goto-c codegen.
+#[allow(clippy::type_complexity)]
 static DEFAULT_HOOK: LazyLock<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send + 'static>> =
     LazyLock::new(|| {
         let hook = panic::take_hook();

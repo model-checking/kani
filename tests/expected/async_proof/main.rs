@@ -3,15 +3,12 @@
 //
 // compile-flags: --edition 2018
 
-// Tests that the #[kani::async_proof] attribute works correctly
+// Tests that the #[kani::proof] attribute works correctly for async functions
 
 fn main() {}
 
-#[kani::async_proof(foo)]
+#[kani::proof(foo)]
 async fn test_async_proof_with_arguments() {}
 
-#[kani::async_proof]
-fn test_async_proof_on_sync_function() {}
-
-#[kani::async_proof]
+#[kani::proof]
 async fn test_async_proof_on_function_with_inputs(_: ()) {}
