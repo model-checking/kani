@@ -57,10 +57,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // Save this occurrence so we can emit a warning in the compilation report.
         debug!("codegen_unimplemented: {} at {}", operation_name, loc.short_string());
         let key: InternedString = operation_name.into();
-        if !self.unsupported_constructs.contains_key(&key) {
-            self.unsupported_constructs.insert(key, Vec::new());
-        }
-        self.unsupported_constructs.get_mut(&key).unwrap().push(loc);
+        self.unsupported_constructs.entry(key).or_insert_with(Vec::new).push(loc);
 
         let body = vec![
             // Assert false to alert the user that there is a path that uses an unimplemented feature.
