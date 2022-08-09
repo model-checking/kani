@@ -71,8 +71,9 @@ pub fn assume(_cond: bool) {
 #[inline(never)]
 #[rustc_diagnostic_item = "KaniAssert"]
 pub fn assert(_cond: bool, _msg: &'static str) {
-    #[cfg(feature = "exe_trace")]
-    assert!(_cond, "{}", _msg);
+    if cfg!(feature = "exe_trace") {
+        assert!(_cond, "{}", _msg);
+    }
 }
 
 /// This creates an symbolic *valid* value of type `T`. You can assign the return value of this
@@ -155,8 +156,9 @@ fn any_raw_inner<T>() -> T {
 #[inline(never)]
 #[rustc_diagnostic_item = "KaniExpectFail"]
 pub fn expect_fail(_cond: bool, _message: &'static str) {
-    #[cfg(feature = "exe_trace")]
-    assert!(!_cond, "kani::expect_fail does not hold: {}", _message);
+    if cfg!(feature = "exe_trace") {
+        assert!(!_cond, "kani::expect_fail does not hold: {}", _message);
+    }
 }
 
 /// Function used to generate panic with a static message as this is the only one currently
