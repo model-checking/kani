@@ -124,7 +124,10 @@ where
 /// This function will replace `any_raw` that has been deprecated and it should only be used
 /// internally when we can guarantee that it will not trigger any undefined behavior.
 /// This function is also used to find deterministic bytes in the CBMC output trace.
-/// Note: the semantics of this function require SIZE_T to be the size of type T.
+///
+/// # Safety
+///
+/// The semantics of this function require that SIZE_T equals the size of type T.
 #[inline(never)]
 pub(crate) unsafe fn any_raw_internal<T, const SIZE_T: usize>() -> T {
     #[cfg(feature = "exe_trace")]
