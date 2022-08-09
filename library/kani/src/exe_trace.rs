@@ -3,12 +3,14 @@
 
 //! Helper code for running executable traces.
 
-use std::sync::Mutex;
-/// DET_VALS_LOCK is used by each playback test case to ensure that only a single thread is modifying DET_VALS at once.
-/// We need to separate the lock from the data because there's no other way to pass the data from
-/// kani::exe_trace_run() to kani::any_raw_internal() while still holding the lock.
-static DET_VALS_LOCK: Mutex<()> = Mutex::new(());
-pub static mut DET_VALS: Vec<Vec<u8>> = Vec::new();
+use std::cell::RefCell;
+
+/// thread_local! gives us a separate DET_VALS instance for each thread.
+/// This allows us to run deterministic unit tests in parallel.
+/// RefCell is necessary for mut statics.
+thread_local! {
+    static DET_VALS: RefCell<Vec<Vec<u8>>> = RefCell::new(Vec::new());
+}
 
 /// This function sets deterministic values and plays back the user's proof harness.
 pub fn exe_trace_run<F: Fn()>(mut det_vals: Vec<Vec<u8>>, proof_harness: F) {
@@ -16,22 +18,21 @@ pub fn exe_trace_run<F: Fn()>(mut det_vals: Vec<Vec<u8>>, proof_harness: F) {
     // Here, we need to reverse this order because det vals are popped off of the outer Vec,
     // so the chronological first det val should come last.
     det_vals.reverse();
-    // If another thread panicked while holding the lock (e.g., because they hit an expected assertion failure), we still want to continue.
-    let _guard = match DET_VALS_LOCK.lock() {
-        Ok(guard) => guard,
-        Err(poisoned) => poisoned.into_inner(),
-    };
-    unsafe {
-        DET_VALS = det_vals;
-    }
+    DET_VALS.with(|det_vals| {
+        let mut_ref_det_vals = &mut *det_vals.borrow_mut();
+        *mut_ref_det_vals = det_vals;
+    });
     // Since F is a type argument, there should be a direct, static call to proof_harness().
     proof_harness();
 }
 
 /// Executable trace implementation of kani::any_raw_internal.
 pub unsafe fn any_raw_internal<T, const SIZE_T: usize>() -> T {
-    // This code will only run when our thread's exe_trace_run() fn holds the lock.
-    let next_det_val = DET_VALS.pop().expect("Not enough det vals found");
+    let mut next_det_val: Vec<Vec<u8>> = Vec::new();
+    DET_VALS.with(|det_vals| {
+        let mut_ref_det_vals = &mut &det_vals.borrow_mut();
+        next_det_val = mut_ref_det_vals.pop().expect("Not enough det vals found");
+    });
     let next_det_val_len = next_det_val.len();
     let bytes_t: [u8; SIZE_T] = next_det_val.try_into().expect(&format!(
         "Expected {SIZE_T} bytes instead of {next_det_val_len} bytes in the following det vals vec"
