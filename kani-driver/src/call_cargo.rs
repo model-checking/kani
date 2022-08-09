@@ -85,7 +85,7 @@ impl KaniSession {
         let mut symtabs = glob(&outdir.join("*.symtab.json"))?;
         let mut metadata = glob(&outdir.join("*.kani-metadata.json"))?;
         if std::env::var("IS_KANI_PROPTEST").is_ok() {
-            // if the "proptests is precent" flag is enabled by cargo-kani
+            // if the "proptests is present" flag is enabled by cargo-kani
             symtabs.extend(glob(&kani_extern_lib_path.join("*.symtab.json"))?);
             metadata.extend(glob(&outdir.join("*.kani-metadata.json"))?);
         }
