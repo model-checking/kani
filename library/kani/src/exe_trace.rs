@@ -31,7 +31,7 @@ pub fn exe_trace_run<F: Fn()>(mut local_det_vals: Vec<Vec<u8>>, proof_harness: F
 /// # Safety
 ///
 /// The semantics of this function require that SIZE_T equals the size of type T.
-pub unsafe fn any_raw_internal<T, const SIZE_T: usize>() -> T {
+pub(crate) unsafe fn any_raw_internal<T, const SIZE_T: usize>() -> T {
     let mut next_det_val: Vec<u8> = Vec::new();
     DET_VALS.with(|glob_det_vals| {
         let mut_ref_glob_det_vals = &mut *glob_det_vals.borrow_mut();
