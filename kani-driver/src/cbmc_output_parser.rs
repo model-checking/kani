@@ -598,8 +598,6 @@ fn format_result(properties: &Vec<Property>, show_checks: bool) -> String {
         }
 
         if show_checks {
-            // TODO: Add color to status if printing to terminal.
-            // <https://github.com/model-checking/kani/issues/1431>
             let check_id = format!("Check {}: {}\n", index, name);
             let status_msg = format!("\t - Status: {}\n", status);
             let description_msg = format!("\t - Description: \"{}\"\n", description);
