@@ -257,6 +257,7 @@ struct ExeTrace {
 mod parser {
     use anyhow::{ensure, Context, Result};
     use serde_json::Value;
+    use std::cell::RefCell;
     use std::fs::File;
     use std::io::BufReader;
     use std::path::Path;
@@ -264,6 +265,10 @@ mod parser {
     pub struct DetVal {
         pub byte_arr: Vec<u8>,
         pub interp_val: String,
+    }
+
+    thread_local! {
+        static HAVE_PARSED_ASSERT_FAIL: RefCell<bool> = RefCell::new(false);
     }
 
     /// Extract deterministic values from a failing harness.
@@ -292,7 +297,6 @@ mod parser {
         let cbmc_out_arr = cbmc_out
             .as_array()
             .with_context(|| format!("Expected this CBMC output to be an array: {}", cbmc_out))?;
-        let mut have_parsed_assert_fail = false;
         for general_msg in cbmc_out_arr {
             let result_msg = &general_msg["result"];
             if !result_msg.is_null() {
@@ -300,7 +304,7 @@ mod parser {
                     format!("Expected this CBMC result object to be an array: {}", result_msg)
                 })?;
                 for result_val in result_arr {
-                    parse_result(result_val, &mut det_vals, &mut have_parsed_assert_fail)?;
+                    parse_result(result_val, &mut det_vals)?;
                 }
             }
         }
@@ -308,24 +312,28 @@ mod parser {
     }
 
     /// The second-level CBMC output parser. This extracts the trace entries of failing assertions.
-    fn parse_result(
-        result_val: &Value,
-        det_vals: &mut Vec<DetVal>,
-        have_parsed_assert_fail: &mut bool,
-    ) -> Result<()> {
+    fn parse_result(result_val: &Value, det_vals: &mut Vec<DetVal>) -> Result<()> {
         let desc = result_val["description"].to_string();
         let prop = result_val["property"].to_string();
         let status = result_val["status"].to_string();
         let prop_is_assert = prop.contains("assertion");
         let status_is_failure = status == "\"FAILURE\"";
+        let mut have_parsed_assert_fail = false;
+        HAVE_PARSED_ASSERT_FAIL.with(|tmp_have_parsed_assert_fail| {
+            have_parsed_assert_fail = *tmp_have_parsed_assert_fail.borrow();
+        });
 
         if prop_is_assert && status_is_failure {
-            if *have_parsed_assert_fail {
+            if have_parsed_assert_fail {
                 println!(
                     "WARNING: Unable to parse deterministic values from multiple failing assertions. Skipping property `{prop}` with description `{desc}`."
                 );
             } else {
-                *have_parsed_assert_fail = true;
+                HAVE_PARSED_ASSERT_FAIL.with(|tmp_have_parsed_assert_fail| {
+                    let mut_ref_have_parsed_assert_fail =
+                        &mut *tmp_have_parsed_assert_fail.borrow_mut();
+                    *mut_ref_have_parsed_assert_fail = true;
+                });
                 println!(
                     "INFO: Parsing deterministic values from property `{prop}` with description `{desc}`."
                 );
