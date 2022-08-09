@@ -341,6 +341,7 @@ dependencies = [
  "console",
  "glob",
  "kani_metadata",
+ "once_cell",
  "pathdiff",
  "regex",
  "serde",
