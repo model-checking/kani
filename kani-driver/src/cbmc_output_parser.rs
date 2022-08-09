@@ -362,7 +362,11 @@ impl<'a, 'b> Parser<'a, 'b> {
     ///  * Square brackets ('[' and ']') will trigger the `ClearInput` action
     ///    because we assume parsing is done on a JSON array.
     ///  * Curly closing bracket ('}') preceded by two spaces will trigger the
-    ///    `ProcessItem` action.
+    ///    `ProcessItem` action. The spaces are important in this case because
+    ///    assume we're in a JSON array. Matching on this specific string guarantees
+    ///    that we'll always get an item when we attempt to process an item.
+    ///
+    /// This has be updated if the output format changes at some point.
     fn triggers_action(&self, input: String) -> Option<Action> {
         if input.starts_with('[') || input.starts_with(']') {
             // We don't expect any other characters (except '\n') to appear
