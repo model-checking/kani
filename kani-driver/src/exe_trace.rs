@@ -95,10 +95,13 @@ impl KaniSession {
         let tmp_src_path = src_path.to_string() + ".exe_trace_overwrite";
         let mut tmp_src_file = File::create(&tmp_src_path)
             .with_context(|| format!("Couldn't create tmp source code file `{}`", tmp_src_path))?;
-        let new_src_str =
-            format!("{}\n{}{}", src_before_exe_trace, exe_trace.unit_test_str, src_after_exe_trace);
-        write!(tmp_src_file, "{}", new_src_str).with_context(|| {
-            format!("Couldn't write new src str `{new_src_str}` into tmp src file `{tmp_src_path}`")
+        write!(
+            tmp_src_file,
+            "{}\n{}{}",
+            src_before_exe_trace, exe_trace.unit_test_str, src_after_exe_trace
+        )
+        .with_context(|| {
+            format!("Couldn't write new src str into tmp src file `{tmp_src_path}`")
         })?;
         fs::rename(&tmp_src_path, src_path).with_context(|| {
             format!("Couldn't rename tmp src file `{tmp_src_path}` to actual src file `{src_path}`")
