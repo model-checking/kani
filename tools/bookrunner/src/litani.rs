@@ -178,6 +178,7 @@ impl Litani {
     }
 
     /// Adds a single command with its dependencies.
+    #[allow(clippy::too_many_arguments)]
     pub fn add_job(
         &mut self,
         command: &Command,
