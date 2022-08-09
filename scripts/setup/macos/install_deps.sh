@@ -15,7 +15,6 @@ brew install universal-ctags wget
 # Add Python package dependencies
 PYTHON_DEPS=(
   autopep8
-  colorama # Used for introducing colors into terminal output
 )
 
 python3 -m pip install "${PYTHON_DEPS[@]}"

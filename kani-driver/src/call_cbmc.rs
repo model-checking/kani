@@ -9,6 +9,7 @@ use std::process::Command;
 use std::time::Instant;
 
 use crate::args::KaniArgs;
+use crate::cbmc_output_parser::process_cbmc_output;
 use crate::session::KaniSession;
 
 #[derive(PartialEq, Eq)]
@@ -24,7 +25,7 @@ impl KaniSession {
 
         {
             let mut temps = self.temporaries.borrow_mut();
-            temps.push(output_filename.clone());
+            temps.push(output_filename);
         }
 
         let args: Vec<OsString> = self.cbmc_flags(file, harness)?;
@@ -33,32 +34,41 @@ impl KaniSession {
         let mut cmd = Command::new("cbmc");
         cmd.args(args);
 
-        if self.args.output_format == crate::args::OutputFormat::Old {
+        let now = Instant::now();
+
+        let verification_result = if self.args.output_format == crate::args::OutputFormat::Old {
             if self.run_terminal(cmd).is_err() {
-                return Ok(VerificationStatus::Failure);
+                Ok(VerificationStatus::Failure)
+            } else {
+                Ok(VerificationStatus::Success)
             }
         } else {
-            // extra argument
+            // Add extra argument to receive the output in JSON format.
+            // Done here because `--visualize` uses the XML format instead.
             cmd.arg("--json-ui");
 
-            let now = Instant::now();
-            let _cbmc_result = self.run_redirect(cmd, &output_filename)?;
-            let elapsed = now.elapsed().as_secs_f32();
-            let format_result = self.format_cbmc_output(&output_filename);
-
-            if format_result.is_err() {
-                // Because of things like --assertion-reach-checks and other future features,
-                // we now decide if we fail or not based solely on the output of the formatter.
-                return Ok(VerificationStatus::Failure);
-                // todo: this is imperfect, since we don't know why failure happened.
-                // the best possible fix is port to rust instead of using python, or getting more
-                // feedback than just exit status (or using a particular magic exit code?)
+            // Spawn the CBMC process and process its output below
+            let cbmc_process_opt = self.run_piped(cmd)?;
+            if let Some(cbmc_process) = cbmc_process_opt {
+                // The introduction of reachability checks forces us to decide
+                // the verification result based on the postprocessing of CBMC results.
+                let processed_result = process_cbmc_output(
+                    cbmc_process,
+                    self.args.extra_pointer_checks,
+                    &self.args.output_format,
+                );
+                Ok(processed_result)
+            } else {
+                Ok(VerificationStatus::Failure)
             }
-            // TODO: We should print this even the verification fails but not if it crashes.
+        };
+        // TODO: We should print this even the verification fails but not if it crashes.
+        if !self.args.dry_run {
+            let elapsed = now.elapsed().as_secs_f32();
             println!("Verification Time: {}s", elapsed);
         }
 
-        Ok(VerificationStatus::Success)
+        verification_result
     }
 
     /// used by call_cbmc_viewer, invokes different variants of CBMC.
