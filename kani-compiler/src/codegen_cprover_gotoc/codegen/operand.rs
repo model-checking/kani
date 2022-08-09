@@ -289,6 +289,9 @@ impl<'tcx> GotocCtx<'tcx> {
                                 let cgt = self.codegen_ty(ty);
                                 let fields =
                                     cgt.get_non_empty_components(&self.symbol_table).unwrap();
+                                // TagEncoding::Direct makes a constant with a tag but no data.
+                                // Check our understanding that that the Enum must have one field,
+                                // which is the tag, and no data field.
                                 assert_eq!(
                                     fields.len(),
                                     1,
