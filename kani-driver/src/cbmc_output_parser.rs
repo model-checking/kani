@@ -365,6 +365,9 @@ impl<'a, 'b> Parser<'a, 'b> {
     ///    `ProcessItem` action.
     fn triggers_action(&self, input: String) -> Option<Action> {
         if input.starts_with('[') || input.starts_with(']') {
+            // We don't expect any other characters (except '\n') to appear
+            // after '[' or ']'. The assert below ensures we won't ignore them.
+            assert!(input.len() == 2);
             return Some(Action::ClearInput);
         }
         if input.starts_with("  }") {
@@ -375,7 +378,7 @@ impl<'a, 'b> Parser<'a, 'b> {
 
     /// Clears the input accumulated so far.
     fn clear_input(&mut self) {
-        self.input_so_far = String::new();
+        self.input_so_far.clear();
     }
 
     /// Performs an action. In both cases, the input is cleared.
@@ -410,7 +413,6 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
         let complete_string = &self.input_so_far[0..self.input_so_far.len()];
         let result_item: Result<ParserItem, _> = serde_json::from_str(complete_string);
-        assert!(result_item.is_ok());
         result_item.unwrap()
     }
 
@@ -520,9 +522,9 @@ pub fn process_cbmc_output(
         // Both formatting and printing could be handled by objects which
         // implement a trait `Printer`.
         let formatted_item = format_item(&processed_item, output_format);
-        if formatted_item.is_some() {
-            println!("{}", formatted_item.unwrap())
-        };
+        if let Some(fmt_item) = formatted_item {
+            println!("{}", fmt_item);
+        }
         // TODO: Record processed items and dump them into a JSON file
         // <https://github.com/model-checking/kani/issues/942>
     }
@@ -806,8 +808,7 @@ fn get_readable_description(property: &Property) -> String {
     if let Some(alt_descriptions) = description_alternatives {
         for (desc_to_match, opt_desc_to_replace) in alt_descriptions {
             if original.contains(desc_to_match) {
-                if opt_desc_to_replace.is_some() {
-                    let desc_to_replace = opt_desc_to_replace.unwrap();
+                if let Some(desc_to_replace) = opt_desc_to_replace {
                     return desc_to_replace.to_string();
                 } else {
                     return desc_to_match.to_string();
