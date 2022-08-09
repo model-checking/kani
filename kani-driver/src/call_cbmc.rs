@@ -43,6 +43,10 @@ impl KaniSession {
                 Ok(VerificationStatus::Success)
             }
         } else {
+            // Add extra argument to receive the output in JSON format.
+            // Done here because `--visualize` uses the XML format instead.
+            cmd.arg("--json-ui");
+
             // Spawn the CBMC process and process its output below
             let cbmc_process_opt = self.run_piped(cmd)?;
             if let Some(cbmc_process) = cbmc_process_opt {
@@ -108,10 +112,6 @@ impl KaniSession {
         }
 
         args.push("--slice-formula".into());
-
-        if self.args.output_format != OutputFormat::Old {
-            args.push("--json-ui".into());
-        }
 
         args.extend(self.args.cbmc_args.iter().cloned());
 
