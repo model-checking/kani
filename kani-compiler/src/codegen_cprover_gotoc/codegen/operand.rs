@@ -3,6 +3,7 @@
 use crate::codegen_cprover_gotoc::utils::slice_fat_ptr;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::unwrap_or_return_codegen_unimplemented;
+use cbmc::btree_string_map;
 use cbmc::goto_program::{DatatypeComponent, Expr, Location, Stmt, Symbol, Type};
 use rustc_ast::ast::Mutability;
 use rustc_middle::mir::interpret::{
@@ -284,9 +285,28 @@ impl<'tcx> GotocCtx<'tcx> {
                             TagEncoding::Direct => {
                                 // then the scalar field stores the discriminant
                                 let discr_ty = self.codegen_enum_discr_typ(ty);
-
                                 let init = self.codegen_scalar(s, discr_ty, span);
-                                self.codegen_direct_literal(ty, init)
+                                let cgt = self.codegen_ty(ty);
+                                let fields =
+                                    cgt.get_non_empty_components(&self.symbol_table).unwrap();
+                                // TagEncoding::Direct makes a constant with a tag but no data.
+                                // Check our understanding that that the Enum must have one field,
+                                // which is the tag, and no data field.
+                                assert_eq!(
+                                    fields.len(),
+                                    1,
+                                    "TagEncoding::Direct encountered for enum with non-empty variants"
+                                );
+                                assert_eq!(
+                                    fields[0].name().to_string(),
+                                    "case",
+                                    "Unexpected field in enum/generator. Please report your failing case at https://github.com/model-checking/kani/issues/1465"
+                                );
+                                Expr::struct_expr_with_nondet_fields(
+                                    cgt,
+                                    btree_string_map![("case", init)],
+                                    &self.symbol_table,
+                                )
                             }
                         },
                     }
@@ -317,32 +337,6 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             _ => unimplemented!(),
         }
-    }
-
-    fn codegen_direct_literal(&mut self, ty: Ty<'tcx>, init: Expr) -> Expr {
-        let func_name = format!("gen-{}:direct", self.ty_mangled_name(ty));
-        let pretty_name = format!("init_direct::<{}>", self.ty_pretty_name(ty));
-        let cgt = self.codegen_ty(ty);
-        self.ensure(&func_name, |tcx, _| {
-            let target_ty = init.typ().clone(); // N
-            let param = tcx.gen_function_parameter(1, &func_name, target_ty);
-            let var = tcx.gen_function_local_variable(2, &func_name, cgt.clone()).to_expr();
-            let body = vec![
-                Stmt::decl(var.clone(), None, Location::none()),
-                tcx.codegen_discriminant_field(var.clone(), ty)
-                    .assign(param.to_expr(), Location::none()),
-                var.ret(Location::none()),
-            ];
-            Symbol::function(
-                &func_name,
-                Type::code(vec![param.to_function_parameter()], cgt),
-                Some(Stmt::block(body, Location::none())),
-                pretty_name,
-                Location::none(),
-            )
-        });
-
-        self.find_function(&func_name).unwrap().call(vec![init])
     }
 
     pub fn codegen_fndef(
