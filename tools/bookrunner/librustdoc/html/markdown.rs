@@ -15,7 +15,7 @@ use crate::doctest;
 
 use pulldown_cmark::{CodeBlockKind, Event, Parser, Tag};
 
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub /* via find_testable_code */ enum ErrorCodes {
     Yes,
     No,
