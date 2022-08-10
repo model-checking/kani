@@ -5,7 +5,7 @@
 
 // Should return a nondet string of up to n characters
 // Currently Kani does not support strings
-fn kani::any_string(n: u32) -> String {
+fn any_string(n: u32) -> String {
     unimplemented!()
 }
 

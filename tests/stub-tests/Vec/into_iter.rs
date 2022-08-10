@@ -10,7 +10,6 @@ fn main() {
         assert!(iter.next() == Some(4));
         assert!(iter.next() == Some(5));
         assert!(iter.next() == None);
-
     }
 
     into_iter_test();
