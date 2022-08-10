@@ -49,7 +49,6 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends --ye
 # Add Python package dependencies
 PYTHON_DEPS=(
   autopep8
-  colorama # Used for introducing colors into terminal output
 )
 
 python3 -m pip install "${PYTHON_DEPS[@]}"

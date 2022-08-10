@@ -5,6 +5,7 @@
 
 mod debug;
 mod names;
+#[allow(clippy::module_inception)]
 mod utils;
 
 // TODO clean this up

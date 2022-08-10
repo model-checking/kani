@@ -154,6 +154,10 @@ pub struct KaniArgs {
     /// Execute CBMC's sanity checks to ensure the goto-program we generate is correct.
     #[structopt(long, hidden_short_help(true), requires("enable-unstable"))]
     pub run_sanity_checks: bool,
+
+    /// Disable CBMC's slice formula which prevents values from being assigned to redundant variables in traces.
+    #[structopt(long, hidden_short_help(true), requires("enable-unstable"))]
+    pub no_slice_formula: bool,
     /*
     The below is a "TODO list" of things not yet implemented from the kani_flags.py script.
 
@@ -411,5 +415,10 @@ mod tests {
     #[test]
     fn check_restrict_cbmc_args() {
         check_unstable_flag("--cbmc-args --json-ui")
+    }
+
+    #[test]
+    fn check_disable_slicing_unstable() {
+        check_unstable_flag("--no-slice-formula")
     }
 }

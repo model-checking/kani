@@ -7,16 +7,5 @@ rustflags = [ # Global lints/warnings. Need to use underscore instead of -.
     # Purposefully disabled lints
     "-Aclippy::expect_fun_call",
     "-Aclippy::or_fun_call",
-
-    # todo address the following lints.
-    "-Aclippy::derive_partial_eq_without_eq",
-    "-Aclippy::manual_map",
-    "-Aclippy::manual_range_contains",
-    "-Aclippy::map_entry",
-    "-Aclippy::missing_safety_doc",
-    "-Aclippy::module_inception",
-    "-Aclippy::new_ret_no_self",
     "-Aclippy::new_without_default",
-    "-Aclippy::too_many_arguments",
-    "-Aclippy::type_complexity",
 ]
