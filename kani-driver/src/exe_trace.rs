@@ -257,8 +257,8 @@ struct ExeTrace {
 ///     ..., ] }
 /// ```
 /// TODO: this parser should be overhauled once the new Rust CBMC output parser is merged in.
-/// Link to the new Rust parser PR: https://github.com/model-checking/kani/pull/1433.
-/// Link to the issue: https://github.com/model-checking/kani/issues/1477.
+/// Link to the new Rust parser PR: <https://github.com/model-checking/kani/pull/1433>.
+/// Link to the issue: <https://github.com/model-checking/kani/issues/1477>.
 mod parser {
     use anyhow::{ensure, Context, Result};
     use serde_json::Value;

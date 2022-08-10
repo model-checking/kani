@@ -177,7 +177,7 @@ static CBMC_ALT_DESCRIPTIONS: Lazy<CbmcAltDescriptions> = Lazy::new(|| {
 /// Buffered writer over the CBMC output file.
 /// This is needed for old parsers (e.g., like the one in the executable trace code) that require the actual CBMC output file.
 /// TODO: This can be removed once the executable trace parser gets overhauled.
-/// See this tracking issue: https://github.com/model-checking/kani/issues/1477.
+/// See this tracking issue: <https://github.com/model-checking/kani/issues/1477>.
 static mut CBMC_OUT_BUF_WRITER: Option<BufWriter<File>> = None;
 
 const UNSUPPORTED_CONSTRUCT_DESC: &str = "is not currently supported by Kani";
