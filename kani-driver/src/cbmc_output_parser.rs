@@ -439,6 +439,7 @@ impl<'a, 'b> Parser<'a, 'b> {
     /// Processes a line to determine if an action must be triggered.
     /// The action may result in a `ParserItem`, which is then returned.
     pub fn process_line(&mut self, input: String) -> Option<ParserItem> {
+        self.add_line_to_buf_writer(&input);
         self.add_to_input(input.clone());
         let action_required = self.triggers_action(input);
         if let Some(action) = action_required {
@@ -451,7 +452,7 @@ impl<'a, 'b> Parser<'a, 'b> {
     /// Adds a single line to the CBMC output buffered writer.
     pub fn add_line_to_buf_writer(&mut self, line: &str) {
         if let Some(buf_writer) = self.cbmc_out_buf_writer.as_mut() {
-            writeln!(buf_writer, "{}", line).expect(&format!(
+            write!(buf_writer, "{}", line).expect(&format!(
                 "In CBMC output parser, couldn't write `{}` to CBMC output buffered writer",
                 line
             ));
@@ -479,9 +480,9 @@ impl<'a, 'b> Iterator for Parser<'a, 'b> {
             match self.buffer.read_line(&mut input) {
                 Ok(len) => {
                     if len == 0 {
+                        self.flush_buf_writer();
                         return None;
                     }
-                    self.add_line_to_buf_writer(&input);
                     let item = self.process_line(input);
                     if item.is_some() {
                         return item;
@@ -551,10 +552,10 @@ pub fn process_cbmc_output(
 ) -> VerificationStatus {
     let stdout = process.stdout.as_mut().unwrap();
     let mut stdout_reader = BufReader::new(stdout);
-    let mut parser = Parser::new(&mut stdout_reader, output_filename_opt);
+    let parser = Parser::new(&mut stdout_reader, output_filename_opt);
     let mut result = false;
 
-    for item in &mut parser {
+    for item in parser {
         // Some items (e.g., messages) are skipped.
         // We could also process them and decide to skip later.
         if item.must_be_skipped() {
@@ -571,7 +572,6 @@ pub fn process_cbmc_output(
         // <https://github.com/model-checking/kani/issues/942>
     }
 
-    parser.flush_buf_writer();
     if result { VerificationStatus::Success } else { VerificationStatus::Failure }
 }
 
