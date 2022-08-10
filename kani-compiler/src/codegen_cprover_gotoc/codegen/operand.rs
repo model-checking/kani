@@ -14,7 +14,7 @@ use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{self, Const, ConstKind, FloatTy, Instance, IntTy, Ty, Uint, UintTy};
 use rustc_span::def_id::DefId;
 use rustc_span::Span;
-use rustc_target::abi::{FieldsShape, Size, TagEncoding, Variants};
+use rustc_target::abi::{Size, TagEncoding, Variants};
 use tracing::{debug, trace};
 
 enum AllocData<'a> {
@@ -271,24 +271,21 @@ impl<'tcx> GotocCtx<'tcx> {
                                 _ => unreachable!(),
                             }
                         }
-                        Variants::Multiple { tag_encoding, .. } => match tag_encoding {
+                        Variants::Multiple { tag_encoding, tag_field, .. } => match tag_encoding {
                             TagEncoding::Niche { .. } => {
-                                let offset = match &layout.fields {
-                                    FieldsShape::Arbitrary { offsets, .. } => offsets[0],
-                                    _ => unreachable!("niche encoding must have arbitrary fields"),
-                                };
+                                let niche_offset = layout.fields.offset(*tag_field);
                                 let discr_ty = self.codegen_enum_discr_typ(ty);
                                 let niche_val = self.codegen_scalar(s, discr_ty, span);
                                 let cgt = self.codegen_ty(ty);
-                                let target_ty = niche_val.typ().clone(); // N
+                                let niche_ty = niche_val.typ().clone();
                                 let loc = *niche_val.location();
                                 let (temp, temp_decl) =
                                     self.decl_temp_variable(cgt.clone(), None, loc);
                                 let stmts = vec![
                                     temp_decl,
-                                    self.codegen_get_niche(temp.clone(), offset, target_ty)
+                                    self.codegen_get_niche(temp.clone(), niche_offset, niche_ty)
                                         .assign(niche_val, loc),
-                                    temp.clone().as_stmt(loc),
+                                    temp.as_stmt(loc),
                                 ];
                                 Expr::statement_expression(stmts, cgt)
                             }
