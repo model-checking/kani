@@ -12,7 +12,7 @@ use tokio::time::{sleep_until, Duration, Instant};
 use tokio_test::block_on;
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 fn async_block() {
     assert_eq!(4, block_on(async { 4 }));
 }
@@ -22,7 +22,7 @@ async fn five() -> u8 {
 }
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 fn async_fn() {
     assert_eq!(5, block_on(five()));
 }

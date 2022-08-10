@@ -16,7 +16,7 @@ use tokio_test::{assert_ok, io::Builder};
 use std::io::Cursor;
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn read_line() {
     let mut buf = String::new();
     let mut rd = Cursor::new(b"hello\nworld\n\n");
@@ -39,7 +39,7 @@ async fn read_line() {
 }
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn read_line_not_all_ready() {
     let mock = Builder::new().read(b"Hello Wor").read(b"ld\nFizzBuz").read(b"z\n1\n2").build();
 
@@ -67,7 +67,7 @@ async fn read_line_not_all_ready() {
 }
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn read_line_invalid_utf8() {
     let mock = Builder::new().read(b"Hello Wor\xffld.\n").build();
 
@@ -81,7 +81,7 @@ async fn read_line_invalid_utf8() {
 }
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn read_line_fail() {
     let mock = Builder::new()
         .read(b"Hello Wor")
@@ -98,7 +98,7 @@ async fn read_line_fail() {
 }
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn read_line_fail_and_utf8_fail() {
     let mock = Builder::new()
         .read(b"Hello Wor")

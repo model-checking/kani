@@ -12,7 +12,7 @@ use tokio_test::{assert_pending, assert_ready, assert_ready_err, assert_ready_ok
 
 #[allow(clippy::let_unit_value)]
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn empty_unit() {
     // Drains the stream.
     let mut iter = vec![(), (), ()].into_iter();
@@ -21,28 +21,28 @@ async fn empty_unit() {
 }
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn empty_vec() {
     let coll: Vec<u32> = stream::empty().collect().await;
     assert!(coll.is_empty());
 }
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn empty_box_slice() {
     let coll: Box<[u32]> = stream::empty().collect().await;
     assert!(coll.is_empty());
 }
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn empty_string() {
     let coll: String = stream::empty::<&str>().collect().await;
     assert!(coll.is_empty());
 }
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn empty_result() {
     let coll: Result<Vec<u32>, &str> = stream::empty().collect().await;
     assert_eq!(Ok(vec![]), coll);

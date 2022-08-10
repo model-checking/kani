@@ -12,7 +12,7 @@ use tokio_test::task;
 use tokio_test::{assert_pending, assert_ready};
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn merge_sync_streams() {
     let mut s = stream::iter(vec![0, 2, 4, 6]).merge(stream::iter(vec![1, 3, 5]));
 

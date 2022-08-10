@@ -19,7 +19,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn write_all_buf() {
     struct Wr {
         buf: BytesMut,
@@ -62,7 +62,7 @@ async fn write_all_buf() {
 }
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn write_buf_err() {
     /// Error out after writing the first 4 bytes
     struct Wr {

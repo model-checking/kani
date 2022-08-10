@@ -14,7 +14,7 @@ use tokio_stream::iter;
 use tokio_util::io::StreamReader;
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn test_stream_reader() -> std::io::Result<()> {
     let stream = iter(vec![
         std::io::Result::Ok(Bytes::from_static(&[])),

@@ -31,7 +31,7 @@ macro_rules! assert_ready_none {
 }
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn empty() {
     let mut map = StreamMap::<&str, stream::Pending<()>>::new();
 

@@ -19,7 +19,7 @@ use std::task::{Context, Poll};
 use crate::tokio::support::leaked_buffers::LeakedBuffers;
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn read() {
     #[derive(Default)]
     struct Rd {
@@ -73,7 +73,7 @@ impl AsyncRead for BadAsyncRead {
 
 // Kani does not support should_panic
 // #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 #[tokio::test]
 #[should_panic]
 async fn read_buf_bad_async_read() {

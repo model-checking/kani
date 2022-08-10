@@ -14,7 +14,7 @@ use tokio::io::{AsyncBufReadExt, BufReader, Error};
 use tokio_test::{assert_ok, io::Builder};
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn read_until() {
     let mut buf = vec![];
     let mut rd: &[u8] = b"hello world";
@@ -33,7 +33,7 @@ async fn read_until() {
 }
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn read_until_not_all_ready() {
     let mock = Builder::new().read(b"Hello Wor").read(b"ld#Fizz\xffBuz").read(b"z#1#2").build();
 
@@ -61,7 +61,7 @@ async fn read_until_not_all_ready() {
 }
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn read_until_fail() {
     let mock = Builder::new()
         .read(b"Hello \xffWor")

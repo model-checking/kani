@@ -11,7 +11,7 @@ use tokio_stream::{self as stream, Stream, StreamExt};
 use tokio_test::{assert_pending, assert_ready, task};
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn basic_usage_chain() {
     let one = stream::iter(vec![1, 2, 3]);
     let two = stream::iter(vec![4, 5, 6]);

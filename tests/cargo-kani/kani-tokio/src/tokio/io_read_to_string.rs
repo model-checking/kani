@@ -15,7 +15,7 @@ use tokio_test::assert_ok;
 use tokio_test::io::Builder;
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn read_to_string() {
     let mut buf = String::new();
     let mut rd: &[u8] = b"hello world";
@@ -26,7 +26,7 @@ async fn read_to_string() {
 }
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn to_string_does_not_truncate_on_utf8_error() {
     let data = vec![0xff, 0xff, 0xff];
 
@@ -42,7 +42,7 @@ async fn to_string_does_not_truncate_on_utf8_error() {
 }
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn to_string_does_not_truncate_on_io_error() {
     let mut mock = Builder::new()
         .read(b"def")
@@ -60,7 +60,7 @@ async fn to_string_does_not_truncate_on_io_error() {
 }
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn to_string_appends() {
     let data = b"def".to_vec();
 

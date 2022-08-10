@@ -13,7 +13,7 @@ use tokio::io::AsyncBufReadExt;
 use tokio_test::assert_ok;
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn lines_inherent() {
     let rd: &[u8] = b"hello\r\nworld\n\n";
     let mut st = rd.lines();

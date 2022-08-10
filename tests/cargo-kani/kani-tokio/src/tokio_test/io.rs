@@ -13,7 +13,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_test::io::Builder;
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn read1() {
     let mut mock = Builder::new().read(b"hello ").read(b"world!").build();
 
@@ -27,7 +27,7 @@ async fn read1() {
 }
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn read_error() {
     let error = io::Error::new(io::ErrorKind::Other, "cruel");
     let mut mock = Builder::new().read(b"hello ").read_error(error).read(b"world!").build();
@@ -49,7 +49,7 @@ async fn read_error() {
 }
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn write1() {
     let mut mock = Builder::new().write(b"hello ").write(b"world!").build();
 
@@ -58,7 +58,7 @@ async fn write1() {
 }
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn write_error() {
     let error = io::Error::new(io::ErrorKind::Other, "cruel");
     let mut mock = Builder::new().write(b"hello ").write_error(error).write(b"world!").build();

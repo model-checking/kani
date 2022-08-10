@@ -34,7 +34,7 @@ impl AssertSend for mpsc::Sender<i32> {}
 impl AssertSend for mpsc::Receiver<i32> {}
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn send_recv_with_buffer() {
     let (tx, mut rx) = mpsc::channel::<i32>(16);
 
@@ -170,7 +170,7 @@ fn buffer_gteq_one() {
 }
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn send_recv_unbounded() {
     let (tx, mut rx) = mpsc::unbounded_channel::<i32>();
 
@@ -221,7 +221,7 @@ async fn send_recv_stream_unbounded() {
 }
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn no_t_bounds_buffer() {
     struct NoImpls;
 
@@ -238,7 +238,7 @@ async fn no_t_bounds_buffer() {
 }
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn no_t_bounds_unbounded() {
     struct NoImpls;
 
@@ -286,7 +286,7 @@ async fn send_recv_buffer_limited() {
 }
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn recv_close_gets_none_idle() {
     let (tx, mut rx) = mpsc::channel::<i32>(10);
 
@@ -327,14 +327,14 @@ async fn recv_close_gets_none_reserved() {
 }
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn tx_close_gets_none() {
     let (_, mut rx) = mpsc::channel::<i32>(10);
     assert!(rx.recv().await.is_none());
 }
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn try_send_fail() {
     let (tx, mut rx) = mpsc::channel(1);
 
@@ -356,7 +356,7 @@ async fn try_send_fail() {
 }
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn try_send_fail_with_try_recv() {
     let (tx, mut rx) = mpsc::channel(1);
 
@@ -378,7 +378,7 @@ async fn try_send_fail_with_try_recv() {
 }
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn try_reserve_fails() {
     let (tx, mut rx) = mpsc::channel(1);
 
@@ -421,7 +421,7 @@ async fn drop_permit_releases_permit() {
 }
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn dropping_rx_closes_channel() {
     let (tx, rx) = mpsc::channel(100);
 
@@ -434,7 +434,7 @@ async fn dropping_rx_closes_channel() {
 }
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 fn dropping_rx_closes_channel_for_try() {
     let (tx, rx) = mpsc::channel(100);
 
@@ -451,7 +451,7 @@ fn dropping_rx_closes_channel_for_try() {
 }
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 fn unconsumed_messages_are_dropped() {
     let msg = Arc::new(());
 
@@ -553,7 +553,7 @@ async fn permit_available_not_acquired_close() {
 }
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 fn try_recv_bounded() {
     let (tx, mut rx) = mpsc::channel(5);
 
@@ -616,7 +616,7 @@ fn try_recv_unbounded() {
 }
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 fn try_recv_close_while_empty_bounded() {
     let (tx, mut rx) = mpsc::channel::<()>(5);
 
@@ -626,7 +626,7 @@ fn try_recv_close_while_empty_bounded() {
 }
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 fn try_recv_close_while_empty_unbounded() {
     let (tx, mut rx) = mpsc::unbounded_channel::<()>();
 
@@ -636,7 +636,7 @@ fn try_recv_close_while_empty_unbounded() {
 }
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 // #[tokio::test(start_paused = true)]
 #[cfg(feature = "full")]
 async fn recv_timeout() {

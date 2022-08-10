@@ -18,7 +18,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn write2() {
     struct Wr {
         buf: BytesMut,
@@ -53,7 +53,7 @@ async fn write2() {
 }
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn write_cursor() {
     use std::io::Cursor;
 

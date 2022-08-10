@@ -15,7 +15,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, ReadBuf};
 use tokio_test::assert_ok;
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn read_to_end() {
     let mut buf = vec![];
     let mut rd: &[u8] = b"hello world";
@@ -75,7 +75,7 @@ impl AsyncRead for UninitTest {
 }
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn read_to_end_uninit() {
     let mut buf = Vec::with_capacity(64);
     let mut test = UninitTest { num_init: 0, state: State::Initializing };

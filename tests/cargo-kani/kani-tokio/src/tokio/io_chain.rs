@@ -13,7 +13,7 @@ use tokio::io::AsyncReadExt;
 use tokio_test::assert_ok;
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn chain() {
     let mut buf = Vec::new();
     let rd1: &[u8] = b"hello ";

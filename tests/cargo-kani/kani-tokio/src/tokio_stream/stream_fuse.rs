@@ -29,7 +29,7 @@ impl Stream for Alternate {
 }
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn basic_usage_fuse() {
     let mut stream = Alternate { state: 0 };
 

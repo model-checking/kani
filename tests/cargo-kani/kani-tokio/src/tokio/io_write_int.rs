@@ -16,7 +16,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn write_int_should_err_if_write_count_0() {
     struct Wr {}
 

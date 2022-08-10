@@ -18,7 +18,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn copy() {
     struct Rd(bool);
 
@@ -47,7 +47,7 @@ async fn copy() {
 }
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn proxy() {
     struct BufferedWd {
         buf: BytesMut,

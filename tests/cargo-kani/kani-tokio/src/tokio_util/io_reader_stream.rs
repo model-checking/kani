@@ -44,7 +44,7 @@ impl AsyncRead for Reader {
 }
 
 #[kani::proof]
-#[kani::unwind(32)]
+#[kani::unwind(2)]
 async fn correct_behavior_on_errors() {
     let reader = Reader { remaining: 8000 };
     let mut stream = tokio_util::io::ReaderStream::new(reader);
