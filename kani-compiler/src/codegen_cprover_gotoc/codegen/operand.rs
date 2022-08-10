@@ -279,7 +279,18 @@ impl<'tcx> GotocCtx<'tcx> {
                                 };
                                 let discr_ty = self.codegen_enum_discr_typ(ty);
                                 let niche_val = self.codegen_scalar(s, discr_ty, span);
-                                self.codegen_niche_literal(ty, offset, niche_val)
+                                let cgt = self.codegen_ty(ty);
+                                let target_ty = niche_val.typ().clone(); // N
+                                let loc = *niche_val.location();
+                                let (temp, temp_decl) =
+                                    self.decl_temp_variable(cgt.clone(), None, loc);
+                                let stmts = vec![
+                                    temp_decl,
+                                    self.codegen_get_niche(temp.clone(), offset, target_ty)
+                                        .assign(niche_val, loc),
+                                    temp.clone().as_stmt(loc),
+                                ];
+                                Expr::statement_expression(stmts, cgt)
                             }
 
                             TagEncoding::Direct => {
@@ -589,11 +600,6 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    fn codegen_niche_init_name(&self, ty: Ty<'tcx>) -> String {
-        let name = self.ty_mangled_name(ty);
-        format!("gen-{}:niche", name)
-    }
-
     /// fetch the niche value (as both left and right value)
     pub fn codegen_get_niche(&self, v: Expr, offset: Size, niche_ty: Type) -> Expr {
         v // t: T
@@ -602,31 +608,6 @@ impl<'tcx> GotocCtx<'tcx> {
             .plus(Expr::int_constant(offset.bytes_usize(), Type::size_t())) // ((u8 *)&t) + offset: u8 *
             .cast_to(niche_ty.to_pointer()) // (N *)(((u8 *)&t) + offset): N *
             .dereference() // *(N *)(((u8 *)&t) + offset): N
-    }
-
-    fn codegen_niche_literal(&mut self, ty: Ty<'tcx>, offset: Size, init: Expr) -> Expr {
-        let cgt = self.codegen_ty(ty);
-        let fname = self.codegen_niche_init_name(ty);
-        let pretty_name = format!("init_niche<{}>", self.ty_pretty_name(ty));
-        self.ensure(&fname, |tcx, _| {
-            let target_ty = init.typ().clone(); // N
-            let param = tcx.gen_function_parameter(1, &fname, target_ty.clone());
-            let var = tcx.gen_function_local_variable(2, &fname, cgt.clone()).to_expr();
-            let body = vec![
-                Stmt::decl(var.clone(), None, Location::none()),
-                tcx.codegen_get_niche(var.clone(), offset, target_ty)
-                    .assign(param.to_expr(), Location::none()),
-                var.ret(Location::none()),
-            ];
-            Symbol::function(
-                &fname,
-                Type::code(vec![param.to_function_parameter()], cgt),
-                Some(Stmt::block(body, Location::none())),
-                pretty_name,
-                Location::none(),
-            )
-        });
-        self.find_function(&fname).unwrap().call(vec![init])
     }
 
     /// Ensure that the given instance is in the symbol table, returning the symbol.
