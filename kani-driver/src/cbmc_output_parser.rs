@@ -551,10 +551,10 @@ pub fn process_cbmc_output(
 ) -> VerificationStatus {
     let stdout = process.stdout.as_mut().unwrap();
     let mut stdout_reader = BufReader::new(stdout);
-    let parser = Parser::new(&mut stdout_reader, output_filename_opt);
+    let mut parser = Parser::new(&mut stdout_reader, output_filename_opt);
     let mut result = false;
 
-    for item in parser {
+    for item in &mut parser {
         // Some items (e.g., messages) are skipped.
         // We could also process them and decide to skip later.
         if item.must_be_skipped() {
