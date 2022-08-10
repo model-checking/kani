@@ -22,10 +22,9 @@ impl KaniSession {
     /// Verify a goto binary that's been prepared with goto-instrument
     pub fn run_cbmc(&self, file: &Path, harness: &HarnessMetadata) -> Result<VerificationStatus> {
         let output_filename = crate::util::append_path(file, "cbmc_output");
-
         {
             let mut temps = self.temporaries.borrow_mut();
-            temps.push(output_filename);
+            temps.push(output_filename.clone());
         }
 
         let args: Vec<OsString> = self.cbmc_flags(file, harness)?;
@@ -52,10 +51,13 @@ impl KaniSession {
             if let Some(cbmc_process) = cbmc_process_opt {
                 // The introduction of reachability checks forces us to decide
                 // the verification result based on the postprocessing of CBMC results.
+                let output_filename_opt: Option<&Path> =
+                    if self.args.gen_exe_trace { Some(&output_filename) } else { None };
                 let processed_result = process_cbmc_output(
                     cbmc_process,
                     self.args.extra_pointer_checks,
                     &self.args.output_format,
+                    output_filename_opt,
                 );
                 Ok(processed_result)
             } else {
@@ -66,6 +68,10 @@ impl KaniSession {
         if !self.args.dry_run {
             let elapsed = now.elapsed().as_secs_f32();
             println!("Verification Time: {}s", elapsed);
+        }
+
+        if let Ok(VerificationStatus::Failure) = verification_result {
+            self.gen_and_add_exe_trace(&output_filename, harness);
         }
 
         verification_result
@@ -113,6 +119,10 @@ impl KaniSession {
 
         if !self.args.visualize && !self.args.no_slice_formula {
             args.push("--slice-formula".into());
+        }
+
+        if self.args.gen_exe_trace {
+            args.push("--trace".into());
         }
 
         args.extend(self.args.cbmc_args.iter().cloned());

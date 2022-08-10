@@ -17,7 +17,8 @@ macro_rules! trivial_arbitrary {
         impl Arbitrary for $type {
             #[inline(always)]
             fn any() -> Self {
-                unsafe { crate::any_raw_internal::<$type>() }
+                // This size_of call does not use generic_const_exprs feature. It's inside a macro, and $type isn't generic.
+                unsafe { crate::any_raw_internal::<$type, { std::mem::size_of::<$type>() }>() }
             }
         }
     };

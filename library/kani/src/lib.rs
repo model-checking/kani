@@ -1,15 +1,29 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-#![feature(rustc_attrs)] // Used for rustc_diagnostic_item.
-#![feature(min_specialization)] // Used for default implementation of Arbitrary.
+
+// Used for rustc_diagnostic_item.
+#![feature(rustc_attrs)]
+// Used for default implementation of Arbitrary.
+#![feature(min_specialization)]
+// generic_const_exprs is used for getting the size of generic types.
+// incomplete_features is used to suppress warnings for using generic_const_exprs.
+// See this issue for more details: https://github.com/rust-lang/rust/issues/44580.
+// Note: We can remove both features after we remove the following deprecated functions:
+// kani::any_raw, slice::AnySlice::new_raw(), slice::any_raw_slice(), (T: Invariant)::any().
+#![allow(incomplete_features)]
+#![feature(generic_const_exprs)]
 
 pub mod arbitrary;
+#[cfg(feature = "exe_trace")]
+mod exe_trace;
 pub mod futures;
 pub mod invariant;
 pub mod slice;
 pub mod vec;
 
 pub use arbitrary::Arbitrary;
+#[cfg(feature = "exe_trace")]
+pub use exe_trace::exe_trace_run;
 pub use futures::block_on;
 #[allow(deprecated)]
 pub use invariant::Invariant;
@@ -39,7 +53,11 @@ pub use invariant::Invariant;
 /// ```
 #[inline(never)]
 #[rustc_diagnostic_item = "KaniAssume"]
-pub fn assume(_cond: bool) {}
+pub fn assume(_cond: bool) {
+    if cfg!(feature = "exe_trace") {
+        assert!(_cond, "kani::assume should always hold");
+    }
+}
 
 /// Creates an assertion of the specified condition and message.
 ///
@@ -52,7 +70,11 @@ pub fn assume(_cond: bool) {}
 /// ```
 #[inline(never)]
 #[rustc_diagnostic_item = "KaniAssert"]
-pub fn assert(_cond: bool, _msg: &'static str) {}
+pub fn assert(_cond: bool, _msg: &'static str) {
+    if cfg!(feature = "exe_trace") {
+        assert!(_cond, "{}", _msg);
+    }
+}
 
 /// This creates an symbolic *valid* value of type `T`. You can assign the return value of this
 /// function to a variable that you want to make symbolic.
@@ -93,22 +115,51 @@ pub fn any<T: Arbitrary>() -> T {
     note = "This function may return symbolic values that don't respects the language type invariants."
 )]
 #[doc(hidden)]
-pub unsafe fn any_raw<T>() -> T {
-    any_raw_internal()
+pub unsafe fn any_raw<T>() -> T
+where
+    // This generic_const_exprs feature lets Rust know the size of generic T.
+    [(); std::mem::size_of::<T>()]:,
+{
+    assert!(
+        !cfg!(feature = "exe_trace"),
+        "The function `kani::any_raw::<T>() is not supported with the executable trace feature. Use `kani::any::<T>()` instead."
+    );
+    any_raw_internal::<T, { std::mem::size_of::<T>() }>()
 }
 
 /// This function will replace `any_raw` that has been deprecated and it should only be used
 /// internally when we can guarantee that it will not trigger any undefined behavior.
+/// This function is also used to find deterministic bytes in the CBMC output trace.
+///
+/// # Safety
+///
+/// The semantics of this function require that SIZE_T equals the size of type T.
+#[inline(never)]
+pub(crate) unsafe fn any_raw_internal<T, const SIZE_T: usize>() -> T {
+    #[cfg(feature = "exe_trace")]
+    return exe_trace::any_raw_internal::<T, SIZE_T>();
+
+    #[cfg(not(feature = "exe_trace"))]
+    #[allow(unreachable_code)]
+    any_raw_inner::<T>()
+}
+
+/// This low-level function returns nondet bytes of size T.
 #[rustc_diagnostic_item = "KaniAnyRaw"]
 #[inline(never)]
-pub(crate) unsafe fn any_raw_internal<T>() -> T {
-    unimplemented!("Kani any_raw")
+#[allow(dead_code)]
+fn any_raw_inner<T>() -> T {
+    unimplemented!("Kani any_raw_inner");
 }
 
 /// Function used in tests for cases where the condition is not always true.
 #[inline(never)]
 #[rustc_diagnostic_item = "KaniExpectFail"]
-pub fn expect_fail(_cond: bool, _message: &'static str) {}
+pub fn expect_fail(_cond: bool, _message: &'static str) {
+    if cfg!(feature = "exe_trace") {
+        assert!(!_cond, "kani::expect_fail does not hold: {}", _message);
+    }
+}
 
 /// Function used to generate panic with a static message as this is the only one currently
 /// supported by Kani display.

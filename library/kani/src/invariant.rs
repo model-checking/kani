@@ -38,9 +38,15 @@ pub unsafe trait Invariant {
 impl<T> Arbitrary for T
 where
     T: Invariant,
+    // This generic_const_exprs feature lets Rust know the size of generic T.
+    [(); std::mem::size_of::<T>()]:,
 {
     default fn any() -> Self {
-        let value = unsafe { crate::any_raw_internal::<T>() };
+        assert!(
+            !cfg!(feature = "exe_trace"),
+            "Calling `any()` on an `Invariant` type is not supported with the executable trace feature."
+        );
+        let value = unsafe { crate::any_raw_internal::<T, { std::mem::size_of::<T>() }>() };
         crate::assume(value.is_valid());
         value
     }
