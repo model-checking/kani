@@ -274,20 +274,21 @@ impl<'tcx> GotocCtx<'tcx> {
                         Variants::Multiple { tag_encoding, tag_field, .. } => match tag_encoding {
                             TagEncoding::Niche { .. } => {
                                 let niche_offset = layout.fields.offset(*tag_field);
+                                assert_eq!(
+                                    niche_offset,
+                                    Size::ZERO,
+                                    "nonzero offset for niche in scalar"
+                                );
                                 let discr_ty = self.codegen_enum_discr_typ(ty);
                                 let niche_val = self.codegen_scalar(s, discr_ty, span);
-                                let cgt = self.codegen_ty(ty);
-                                let niche_ty = niche_val.typ().clone();
-                                let loc = *niche_val.location();
-                                let (temp, temp_decl) =
-                                    self.decl_temp_variable(cgt.clone(), None, loc);
-                                let stmts = vec![
-                                    temp_decl,
-                                    self.codegen_get_niche(temp.clone(), niche_offset, niche_ty)
-                                        .assign(niche_val, loc),
-                                    temp.as_stmt(loc),
-                                ];
-                                Expr::statement_expression(stmts, cgt)
+                                let result_type = self.codegen_ty(ty);
+                                let niche_type = niche_val.typ().clone();
+                                assert_eq!(
+                                    niche_type.sizeof_in_bits(&self.symbol_table),
+                                    result_type.sizeof_in_bits(&self.symbol_table),
+                                    "niche type and enum have different size in scalar"
+                                );
+                                niche_val.transmute_to(result_type, &self.symbol_table)
                             }
 
                             TagEncoding::Direct => {
