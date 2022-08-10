@@ -29,8 +29,9 @@ use serde::Deserialize;
 use std::{
     collections::HashMap,
     env,
-    io::{BufRead, BufReader},
-    path::PathBuf,
+    fs::File,
+    io::{BufRead, BufReader, BufWriter, Write},
+    path::{Path, PathBuf},
     process::{Child, ChildStdout},
 };
 
@@ -172,6 +173,12 @@ static CBMC_ALT_DESCRIPTIONS: Lazy<CbmcAltDescriptions> = Lazy::new(|| {
     // map.insert("precondition_instance": vec![]);
     map
 });
+
+/// Buffered writer over the CBMC output file.
+/// This is needed for old parsers (e.g., like the one in the executable trace code) that require the actual CBMC output file.
+/// TODO: This can be removed once the executable trace parser gets overhauled.
+/// See this tracking issue: https://github.com/model-checking/kani/issues/1477.
+static mut CBMC_OUT_BUF_WRITER: Option<BufWriter<File>> = None;
 
 const UNSUPPORTED_CONSTRUCT_DESC: &str = "is not currently supported by Kani";
 const UNWINDING_ASSERT_DESC: &str = "unwinding assertion loop";
@@ -445,6 +452,13 @@ impl<'a, 'b> Iterator for Parser<'a, 'b> {
                     if len == 0 {
                         return None;
                     }
+                    unsafe {
+                        if let Some(buf_writer) = CBMC_OUT_BUF_WRITER.as_mut() {
+                            writeln!(buf_writer, "{}", input).expect(
+                                &format!("In CBMC output parser, wasn't able to write `{}` to CBMC output buffered writer.", input)
+                            );
+                        }
+                    }
                     let item = self.process_line(input);
                     if item.is_some() {
                         return item;
@@ -510,7 +524,19 @@ pub fn process_cbmc_output(
     mut process: Child,
     extra_ptr_checks: bool,
     output_format: &OutputFormat,
+    output_filename_opt: Option<&Path>,
 ) -> VerificationStatus {
+    if let Some(output_filename) = output_filename_opt {
+        let cbmc_out_file = File::create(output_filename).expect(&format!(
+            "In CBMC output parser, couldn't create CBMC output file `{}`",
+            output_filename.display()
+        ));
+        let cbmc_out_buf_writer = BufWriter::new(cbmc_out_file);
+        unsafe {
+            CBMC_OUT_BUF_WRITER = Some(cbmc_out_buf_writer);
+        }
+    }
+
     let stdout = process.stdout.as_mut().unwrap();
     let mut stdout_reader = BufReader::new(stdout);
     let parser = Parser::new(&mut stdout_reader);
@@ -531,6 +557,17 @@ pub fn process_cbmc_output(
         }
         // TODO: Record processed items and dump them into a JSON file
         // <https://github.com/model-checking/kani/issues/942>
+    }
+
+    unsafe {
+        if let (Some(output_filename), Some(buf_writer)) =
+            (output_filename_opt, CBMC_OUT_BUF_WRITER.as_mut())
+        {
+            buf_writer.flush().expect(&format!(
+                "In CBMC output parser, couldn't flush buffered writer to CBMC output file `{}`",
+                output_filename.display()
+            ));
+        }
     }
     if result { VerificationStatus::Success } else { VerificationStatus::Failure }
 }

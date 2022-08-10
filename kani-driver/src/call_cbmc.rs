@@ -51,10 +51,13 @@ impl KaniSession {
             if let Some(cbmc_process) = cbmc_process_opt {
                 // The introduction of reachability checks forces us to decide
                 // the verification result based on the postprocessing of CBMC results.
+                let output_filename_opt: Option<&Path> =
+                    if self.args.gen_exe_trace { Some(&output_filename) } else { None };
                 let processed_result = process_cbmc_output(
                     cbmc_process,
                     self.args.extra_pointer_checks,
                     &self.args.output_format,
+                    output_filename_opt,
                 );
                 Ok(processed_result)
             } else {
