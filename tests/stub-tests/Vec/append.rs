@@ -6,7 +6,7 @@ fn main() {
         let mut vec = kani_vec![1, 2, 3];
         let mut vec2 = kani_vec![4, 5, 6];
         vec.append(&mut vec2);
-        assert!(vec  == [1, 2, 3, 4, 5, 6]);
+        assert!(vec == [1, 2, 3, 4, 5, 6]);
         assert!(vec2 == []);
     }
 

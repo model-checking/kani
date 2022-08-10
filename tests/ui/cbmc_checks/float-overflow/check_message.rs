@@ -20,4 +20,3 @@ fn main() {
     dummy(any::<f32>() % any::<f32>()); // This is not emitting CBMC check.
     dummy(-any::<f32>()); // This is not emitting CBMC check.
 }
-

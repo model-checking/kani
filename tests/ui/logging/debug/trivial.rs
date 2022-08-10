@@ -10,5 +10,5 @@
 #[kani::proof]
 fn harness() {
     let v = vec![1, 2];
-    assert_ne!(v[0], v[1]); 
+    assert_ne!(v[0], v[1]);
 }
