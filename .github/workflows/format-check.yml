@@ -1,0 +1,48 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+name: Kani Format Check
+on: pull_request
+
+jobs:
+  format-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Kani
+        uses: actions/checkout@v2
+
+      - name: Execute copyright check
+        run: ./scripts/ci/run-copyright-check.sh
+
+      - name: Check C code formatting
+        run: ./scripts/run-clang-format.sh -d
+
+      - name: Check Python code formatting
+        run: |
+            pip3 install --upgrade autopep8
+            ./scripts/run-autopep8.sh
+
+  clippy-check:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout Kani
+        uses: actions/checkout@v2
+
+      - name: Setup Kani Dependencies
+        uses: ./.github/actions/setup
+        with:
+            os: ubuntu-20.04
+
+      - name: "Install jq for parsing."
+        run: |
+          sudo apt-get install -y jq
+
+      - name: "Run Clippy"
+        run: |
+          cargo clippy --all -- -D warnings
+
+      - name: "Print Clippy Statistics"
+        run: |
+          rm .cargo/config.toml
+          (cargo clippy --all --message-format=json 2>/dev/null  | \
+          jq 'select(.message!=null) | .message.code.code' | grep -v '^null$' | \
+          sort | uniq -c) || true
