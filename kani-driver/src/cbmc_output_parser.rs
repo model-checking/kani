@@ -816,9 +816,9 @@ fn has_check_failure(properties: &Vec<Property>, description: &str) -> bool {
 fn modify_undefined_function_checks(mut properties: Vec<Property>) -> (Vec<Property>, bool) {
     let mut has_unknown_location_checks = false;
     for mut prop in &mut properties {
-        if prop.description.contains(ASSERTION_FALSE)
-            && extract_property_class(prop).unwrap() == DEFAULT_ASSERTION
+        if prop.description == DEFAULT_ASSERTION
             && prop.source_location.file.is_none()
+            && prop.source_location.function.is_some()
         {
             prop.description = "Function with missing definition is unreachable".to_string();
             if prop.status == CheckStatus::Failure {
