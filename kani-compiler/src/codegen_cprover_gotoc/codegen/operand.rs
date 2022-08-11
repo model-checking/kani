@@ -14,7 +14,7 @@ use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{self, Const, ConstKind, FloatTy, Instance, IntTy, Ty, Uint, UintTy};
 use rustc_span::def_id::DefId;
 use rustc_span::Span;
-use rustc_target::abi::{FieldsShape, Size, TagEncoding, Variants};
+use rustc_target::abi::{Size, TagEncoding, Variants};
 use tracing::{debug, trace};
 
 enum AllocData<'a> {
@@ -271,15 +271,24 @@ impl<'tcx> GotocCtx<'tcx> {
                                 _ => unreachable!(),
                             }
                         }
-                        Variants::Multiple { tag_encoding, .. } => match tag_encoding {
+                        Variants::Multiple { tag_encoding, tag_field, .. } => match tag_encoding {
                             TagEncoding::Niche { .. } => {
-                                let offset = match &layout.fields {
-                                    FieldsShape::Arbitrary { offsets, .. } => offsets[0],
-                                    _ => unreachable!("niche encoding must have arbitrary fields"),
-                                };
+                                let niche_offset = layout.fields.offset(*tag_field);
+                                assert_eq!(
+                                    niche_offset,
+                                    Size::ZERO,
+                                    "nonzero offset for niche in scalar"
+                                );
                                 let discr_ty = self.codegen_enum_discr_typ(ty);
                                 let niche_val = self.codegen_scalar(s, discr_ty, span);
-                                self.codegen_niche_literal(ty, offset, niche_val)
+                                let result_type = self.codegen_ty(ty);
+                                let niche_type = niche_val.typ().clone();
+                                assert_eq!(
+                                    niche_type.sizeof_in_bits(&self.symbol_table),
+                                    result_type.sizeof_in_bits(&self.symbol_table),
+                                    "niche type and enum have different size in scalar"
+                                );
+                                niche_val.transmute_to(result_type, &self.symbol_table)
                             }
 
                             TagEncoding::Direct => {
@@ -589,11 +598,6 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    fn codegen_niche_init_name(&self, ty: Ty<'tcx>) -> String {
-        let name = self.ty_mangled_name(ty);
-        format!("gen-{}:niche", name)
-    }
-
     /// fetch the niche value (as both left and right value)
     pub fn codegen_get_niche(&self, v: Expr, offset: Size, niche_ty: Type) -> Expr {
         v // t: T
@@ -602,31 +606,6 @@ impl<'tcx> GotocCtx<'tcx> {
             .plus(Expr::int_constant(offset.bytes_usize(), Type::size_t())) // ((u8 *)&t) + offset: u8 *
             .cast_to(niche_ty.to_pointer()) // (N *)(((u8 *)&t) + offset): N *
             .dereference() // *(N *)(((u8 *)&t) + offset): N
-    }
-
-    fn codegen_niche_literal(&mut self, ty: Ty<'tcx>, offset: Size, init: Expr) -> Expr {
-        let cgt = self.codegen_ty(ty);
-        let fname = self.codegen_niche_init_name(ty);
-        let pretty_name = format!("init_niche<{}>", self.ty_pretty_name(ty));
-        self.ensure(&fname, |tcx, _| {
-            let target_ty = init.typ().clone(); // N
-            let param = tcx.gen_function_parameter(1, &fname, target_ty.clone());
-            let var = tcx.gen_function_local_variable(2, &fname, cgt.clone()).to_expr();
-            let body = vec![
-                Stmt::decl(var.clone(), None, Location::none()),
-                tcx.codegen_get_niche(var.clone(), offset, target_ty)
-                    .assign(param.to_expr(), Location::none()),
-                var.ret(Location::none()),
-            ];
-            Symbol::function(
-                &fname,
-                Type::code(vec![param.to_function_parameter()], cgt),
-                Some(Stmt::block(body, Location::none())),
-                pretty_name,
-                Location::none(),
-            )
-        });
-        self.find_function(&fname).unwrap().call(vec![init])
     }
 
     /// Ensure that the given instance is in the symbol table, returning the symbol.
