@@ -273,6 +273,7 @@ impl<'tcx> GotocCtx<'tcx> {
         for attr in other_attributes.iter() {
             match attr.0.as_str() {
                 "unwind" => self.handle_kanitool_unwind(attr.1, &mut harness),
+                "assigns" => self.handle_kanitool_assigns(attr.1),
                 _ => {
                     self.tcx.sess.span_err(
                         attr.1.span,
@@ -298,6 +299,12 @@ impl<'tcx> GotocCtx<'tcx> {
             original_line: loc.line().unwrap().to_string(),
             unwind_value: None,
         }
+    }
+
+    /// Generates a symbol for the function contract and adds it to the symbol table
+    fn handle_kanitool_assigns(&mut self, attr: &Attribute) {
+        let attr_args = attr.meta_item_list().unwrap();
+        self.codegen_assigns_clause(attr_args);
     }
 
     /// Updates the proof harness with new unwind value
