@@ -7,6 +7,11 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Kani Contributors
+// See GitHub history for details.
+
 // This #[cfg] is only here so that CI can test building proptest with the
 // timeout feature disabled. You do not need it in your code.
 #[cfg(feature = "timeout")]

@@ -1,3 +1,8 @@
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+#
+# Modifications Copyright Kani Contributors
+# See GitHub history for details.
+
 cd single-crate
 rd /s /q proptest-regressions
 cargo test >cargo.txt

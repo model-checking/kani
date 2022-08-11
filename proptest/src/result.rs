@@ -7,6 +7,11 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Kani Contributors
+// See GitHub history for details.
+
 //! Strategies for combining delegate strategies into `std::Result`s.
 //!
 //! That is, the strategies here are for producing `Ok` _and_ `Err` cases. To

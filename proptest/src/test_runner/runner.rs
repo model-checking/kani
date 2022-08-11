@@ -7,6 +7,11 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Kani Contributors
+// See GitHub history for details.
+
 use crate::std_facade::{Arc, BTreeMap, Box, String, Vec};
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering::SeqCst;

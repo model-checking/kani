@@ -1,4 +1,8 @@
 #! /usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+#
+# Modifications Copyright Kani Contributors
+# See GitHub history for details.
 
 # This file is used to generate the docs for the `proptest` crate and deposit
 # them in the appropriate place to be hosted on GH pages.

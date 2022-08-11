@@ -15,4 +15,4 @@ KANI_DIR=$CI_SCRIPT_DIR/../..
 # https://github.com/model-checking/kani/issues/974
 git ls-files $KANI_DIR |\
     grep -v -E -f $CI_SCRIPT_DIR/copyright-exclude |\
-    xargs -d "\n" ./scripts/ci/copyright_check.py
+    xargs -n1 ./scripts/ci/copyright_check.py

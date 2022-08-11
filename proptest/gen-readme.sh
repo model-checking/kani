@@ -1,4 +1,8 @@
 #! /bin/sh
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+#
+# Modifications Copyright Kani Contributors
+# See GitHub history for details.
 
 # Generate `README.md` from the crate documentation, plus some extra stuff.
 

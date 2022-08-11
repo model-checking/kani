@@ -7,6 +7,11 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Kani Contributors
+// See GitHub history for details.
+
 //! Defines macros for product type creation, extraction, and the type signature
 //! itself. This version uses tuples. This mechanism is used to be very
 //! loosely coupled with `frunk_core` so that only `lib.rs` has to be changed
