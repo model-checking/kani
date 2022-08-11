@@ -26,7 +26,7 @@ pub fn exe_trace_run<F: Fn()>(mut local_det_vals: Vec<Vec<u8>>, proof_harness: F
     proof_harness();
     // This code will not run if a user assertion fails on deterministic playback.
     // But if you comment out the failing assertion during playback,
-    // this can be used to know if the wrong number of det vals were loaded into the deterministic test case.
+    // this can be used to know if too many det vals were loaded into the deterministic test case.
     DET_VALS.with(|glob_det_vals| {
         let ref_glob_det_vals = &*glob_det_vals.borrow();
         assert!(
