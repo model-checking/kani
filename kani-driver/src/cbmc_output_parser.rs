@@ -176,7 +176,6 @@ static CBMC_ALT_DESCRIPTIONS: Lazy<CbmcAltDescriptions> = Lazy::new(|| {
 
 const UNSUPPORTED_CONSTRUCT_DESC: &str = "is not currently supported by Kani";
 const UNWINDING_ASSERT_DESC: &str = "unwinding assertion loop";
-const ASSERTION_FALSE: &str = "assertion false";
 const DEFAULT_ASSERTION: &str = "assertion";
 const REACH_CHECK_DESC: &str = "[KANI_REACHABILITY_CHECK]";
 
