@@ -129,7 +129,7 @@ impl Symbol {
         )
     }
 
-    pub fn contract<T: Into<InternedString>, U: Into<InternedString>>(
+    pub fn contract<T: Into<InternedString>>(
         name: T,
         typ: Type,
         contract: Contract,
