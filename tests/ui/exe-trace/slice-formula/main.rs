@@ -5,7 +5,9 @@
 
 #[kani::proof]
 pub fn harness() {
-    let u8_1: u8 = kani::any();
-    let _u8_2: u8 = kani::any();
-    assert!(u8_1 != 101);
+    let _u8_1: u8 = kani::any();
+    let u8_2: u16 = kani::any();
+    let _u8_3: u32 = kani::any();
+    let u8_4: u64 = kani::any();
+    assert!(!(u8_2 == 101 && u8_4 == 102));
 }
