@@ -13,7 +13,7 @@ use tokio::io::AsyncReadExt;
 use tokio_test::assert_ok;
 
 #[kani::proof]
-#[kani::unwind(2)]
+#[kani::unwind(12)]
 async fn read_exact() {
     let mut buf = Box::new([0; 8]);
     let mut rd: &[u8] = b"hello world";

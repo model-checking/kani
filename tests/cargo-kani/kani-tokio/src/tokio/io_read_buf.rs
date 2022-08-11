@@ -17,7 +17,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 #[kani::proof]
-#[kani::unwind(2)]
+#[kani::unwind(12)]
 async fn read_buf() {
     struct Rd {
         cnt: usize,

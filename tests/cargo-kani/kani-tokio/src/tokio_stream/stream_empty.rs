@@ -9,7 +9,7 @@
 use tokio_stream::{self as stream, Stream, StreamExt};
 
 #[kani::proof]
-#[kani::unwind(2)]
+#[kani::unwind(3)]
 async fn basic_usage_empty() {
     let mut stream = stream::empty::<i32>();
 

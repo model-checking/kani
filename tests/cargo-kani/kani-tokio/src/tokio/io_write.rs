@@ -53,7 +53,7 @@ async fn write2() {
 }
 
 #[kani::proof]
-#[kani::unwind(2)]
+#[kani::unwind(12)]
 async fn write_cursor() {
     use std::io::Cursor;
 

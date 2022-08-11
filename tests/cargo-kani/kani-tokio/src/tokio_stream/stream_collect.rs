@@ -12,7 +12,7 @@ use tokio_test::{assert_pending, assert_ready, assert_ready_err, assert_ready_ok
 
 #[allow(clippy::let_unit_value)]
 #[kani::proof]
-#[kani::unwind(2)]
+#[kani::unwind(4)]
 async fn empty_unit() {
     // Drains the stream.
     let mut iter = vec![(), (), ()].into_iter();

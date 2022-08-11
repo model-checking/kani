@@ -19,7 +19,7 @@ use std::task::{Context, Poll};
 use crate::tokio::support::leaked_buffers::LeakedBuffers;
 
 #[kani::proof]
-#[kani::unwind(2)]
+#[kani::unwind(12)]
 async fn read() {
     #[derive(Default)]
     struct Rd {

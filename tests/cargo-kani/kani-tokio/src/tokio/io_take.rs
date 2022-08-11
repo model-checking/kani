@@ -17,7 +17,7 @@ use tokio_test::assert_ok;
 use crate::tokio::support::leaked_buffers::LeakedBuffers;
 
 #[kani::proof]
-#[kani::unwind(2)]
+#[kani::unwind(12)]
 async fn take() {
     let mut buf = [0; 6];
     let rd: &[u8] = b"hello world";
@@ -29,7 +29,7 @@ async fn take() {
 }
 
 #[kani::proof]
-#[kani::unwind(2)]
+#[kani::unwind(12)]
 async fn issue_4435() {
     let mut buf = [0; 8];
     let rd: &[u8] = b"hello world";
