@@ -4,6 +4,11 @@
 
 #![allow(dead_code)]
 #![allow(unused_variables)]
+// Used for getting the size of generic types.
+// See this issue for more details: https://github.com/rust-lang/rust/issues/44580.
+// Note: We can remove this feature after we add the (T: kani::Arbitrary)
+// trait bound in GuestMemoryMmap::read_obj().
+#![feature(generic_const_exprs)]
 
 mod descriptor_permission_checker;
 use descriptor_permission_checker::*;
@@ -42,6 +47,8 @@ impl GuestMemoryMmap {
     fn read_obj<T>(&self, addr: GuestAddress) -> Result<T, Error>
     where
         T: ByteValued + kani::Invariant + ReadObjChecks<T>,
+        // This generic_const_exprs feature lets Rust know the size of generic T.
+        [(); std::mem::size_of::<T>()]:,
     {
         if kani::any() {
             let val = kani::any::<T>();

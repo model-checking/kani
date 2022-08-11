@@ -100,7 +100,7 @@ fn main() -> Result<(), &'static str> {
     if matches.is_present("goto-c") {
         if cfg!(feature = "cprover") {
             compiler.set_make_codegen_backend(Some(Box::new(move |_cfg| {
-                codegen_cprover_gotoc::GotocCodegenBackend::new(&Rc::new(queries))
+                Box::new(codegen_cprover_gotoc::GotocCodegenBackend::new(&Rc::new(queries)))
             })));
         } else {
             return Err("Kani was configured without 'cprover' feature. You must enable this \

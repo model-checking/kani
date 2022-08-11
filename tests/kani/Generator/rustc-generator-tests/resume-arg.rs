@@ -1,10 +1,10 @@
+// Copyright rustc Contributors
+// Adapted from rustc: https://github.com/rust-lang/rust/tree/5f98537eb7b5f42c246a52c550813c3cff336069/src/test/ui/generator/resume-arg-size.rs
+//
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
 // Modifications Copyright Kani Contributors
 // See GitHub history for details.
-
-// Copyright rustc Contributors
-// Adapted from rustc: https://github.com/rust-lang/rust/tree/5f98537eb7b5f42c246a52c550813c3cff336069/src/test/ui/generator/resume-arg-size.rs
 
 #![feature(generators, generator_trait)]
 

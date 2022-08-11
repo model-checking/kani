@@ -49,7 +49,6 @@ declare -a PATTERNS=(
     'struct PrettyStruct pretty_function(struct PrettyStruct' # expected demangled struct and function name
     'monomorphize::<usize>(' # monomorphized function name
     'struct ()' # pretty-printed unit struct
-    'init_array_repeat<[bool; 2]>' # pretty-printed array initializer
     'struct &str' # pretty-printed reference type
     'TestEnum::Variant1' # pretty-printed variant
 )

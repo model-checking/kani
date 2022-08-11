@@ -10,4 +10,3 @@ goto-instrument --generate-function-body-options assert-false-assume-false --gen
 goto-instrument --ensure-one-backedge-per-target 
 Checking harness harness...
 cbmc --bounds-check --pointer-check --div-by-zero-check --float-overflow-check --nan-check --undefined-shift-check --unwinding-assertions --object-bits 16 --slice-formula
-debug/deps/cbmc-for-harness.out.cbmc_output

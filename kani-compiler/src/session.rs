@@ -19,6 +19,7 @@ const BUG_REPORT_URL: &str =
     "https://github.com/model-checking/kani/issues/new?labels=bug&template=bug_report.md";
 
 // Custom panic hook.
+#[allow(clippy::type_complexity)]
 static PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send + 'static>> =
     LazyLock::new(|| {
         let hook = panic::take_hook();

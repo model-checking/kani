@@ -78,7 +78,10 @@ fn check_result<T: PercentTrait + Arbitrary>() {
     }
 }
 
-fn check_array<T: PercentTrait + Arbitrary>() {
+fn check_array<T: PercentTrait + Arbitrary>()
+where
+    [T; 10]: Arbitrary,
+{
     let var: [T; 10] = kani::any();
     assert!(var.iter().all(|e| e.ok()));
 }

@@ -316,7 +316,8 @@ impl<'tcx> GotocCtx<'tcx> {
             pretty_name,
             mangled_name,
             original_file: loc.filename().unwrap(),
-            original_line: loc.line().unwrap().to_string(),
+            original_start_line: loc.start_line().unwrap().to_string(),
+            original_end_line: loc.end_line().unwrap().to_string(),
             unwind_value: None,
         }
     }
@@ -335,7 +336,6 @@ impl<'tcx> GotocCtx<'tcx> {
                 self.tcx
                     .sess
                     .span_err(attr.span, "Exactly one Unwind Argument as Integer accepted");
-                return;
             }
             Some(unwind_integer_value) => {
                 let val: Result<u32, _> = unwind_integer_value.try_into();

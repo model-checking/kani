@@ -3,6 +3,7 @@
 use crate::codegen_cprover_gotoc::utils::slice_fat_ptr;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::unwrap_or_return_codegen_unimplemented;
+use cbmc::btree_string_map;
 use cbmc::goto_program::{DatatypeComponent, Expr, Location, Stmt, Symbol, Type};
 use rustc_ast::ast::Mutability;
 use rustc_middle::mir::interpret::{
@@ -13,7 +14,7 @@ use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{self, Const, ConstKind, FloatTy, Instance, IntTy, Ty, Uint, UintTy};
 use rustc_span::def_id::DefId;
 use rustc_span::Span;
-use rustc_target::abi::{FieldsShape, Size, TagEncoding, Variants};
+use rustc_target::abi::{Size, TagEncoding, Variants};
 use tracing::{debug, trace};
 
 enum AllocData<'a> {
@@ -270,23 +271,51 @@ impl<'tcx> GotocCtx<'tcx> {
                                 _ => unreachable!(),
                             }
                         }
-                        Variants::Multiple { tag_encoding, .. } => match tag_encoding {
+                        Variants::Multiple { tag_encoding, tag_field, .. } => match tag_encoding {
                             TagEncoding::Niche { .. } => {
-                                let offset = match &layout.fields {
-                                    FieldsShape::Arbitrary { offsets, .. } => offsets[0],
-                                    _ => unreachable!("niche encoding must have arbitrary fields"),
-                                };
+                                let niche_offset = layout.fields.offset(*tag_field);
+                                assert_eq!(
+                                    niche_offset,
+                                    Size::ZERO,
+                                    "nonzero offset for niche in scalar"
+                                );
                                 let discr_ty = self.codegen_enum_discr_typ(ty);
                                 let niche_val = self.codegen_scalar(s, discr_ty, span);
-                                self.codegen_niche_literal(ty, offset, niche_val)
+                                let result_type = self.codegen_ty(ty);
+                                let niche_type = niche_val.typ().clone();
+                                assert_eq!(
+                                    niche_type.sizeof_in_bits(&self.symbol_table),
+                                    result_type.sizeof_in_bits(&self.symbol_table),
+                                    "niche type and enum have different size in scalar"
+                                );
+                                niche_val.transmute_to(result_type, &self.symbol_table)
                             }
 
                             TagEncoding::Direct => {
                                 // then the scalar field stores the discriminant
                                 let discr_ty = self.codegen_enum_discr_typ(ty);
-
                                 let init = self.codegen_scalar(s, discr_ty, span);
-                                self.codegen_direct_literal(ty, init)
+                                let cgt = self.codegen_ty(ty);
+                                let fields =
+                                    cgt.get_non_empty_components(&self.symbol_table).unwrap();
+                                // TagEncoding::Direct makes a constant with a tag but no data.
+                                // Check our understanding that that the Enum must have one field,
+                                // which is the tag, and no data field.
+                                assert_eq!(
+                                    fields.len(),
+                                    1,
+                                    "TagEncoding::Direct encountered for enum with non-empty variants"
+                                );
+                                assert_eq!(
+                                    fields[0].name().to_string(),
+                                    "case",
+                                    "Unexpected field in enum/generator. Please report your failing case at https://github.com/model-checking/kani/issues/1465"
+                                );
+                                Expr::struct_expr_with_nondet_fields(
+                                    cgt,
+                                    btree_string_map![("case", init)],
+                                    &self.symbol_table,
+                                )
                             }
                         },
                     }
@@ -319,32 +348,6 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    fn codegen_direct_literal(&mut self, ty: Ty<'tcx>, init: Expr) -> Expr {
-        let func_name = format!("gen-{}:direct", self.ty_mangled_name(ty));
-        let pretty_name = format!("init_direct::<{}>", self.ty_pretty_name(ty));
-        let cgt = self.codegen_ty(ty);
-        self.ensure(&func_name, |tcx, _| {
-            let target_ty = init.typ().clone(); // N
-            let param = tcx.gen_function_parameter(1, &func_name, target_ty);
-            let var = tcx.gen_function_local_variable(2, &func_name, cgt.clone()).to_expr();
-            let body = vec![
-                Stmt::decl(var.clone(), None, Location::none()),
-                tcx.codegen_discriminant_field(var.clone(), ty)
-                    .assign(param.to_expr(), Location::none()),
-                var.ret(Location::none()),
-            ];
-            Symbol::function(
-                &func_name,
-                Type::code(vec![param.to_function_parameter()], cgt),
-                Some(Stmt::block(body, Location::none())),
-                pretty_name,
-                Location::none(),
-            )
-        });
-
-        self.find_function(&func_name).unwrap().call(vec![init])
-    }
-
     pub fn codegen_fndef(
         &mut self,
         d: DefId,
@@ -368,38 +371,10 @@ impl<'tcx> GotocCtx<'tcx> {
                 // here we have a function pointer
                 self.codegen_func_expr(instance, span).address_of()
             }
-            GlobalAlloc::Static(def_id) => {
-                // here we have a potentially unevaluated static
-                let instance = Instance::mono(self.tcx, def_id);
-
-                let sym = self.ensure(&self.symbol_name(instance), |ctx, name| {
-                    // check if this static is extern
-                    let rlinkage = ctx.tcx.codegen_fn_attrs(def_id).linkage;
-
-                    // we believe rlinkage being `Some` means the static not extern
-                    // based on compiler/rustc_codegen_cranelift/src/linkage.rs#L21
-                    // see https://github.com/model-checking/kani/issues/388
-                    //
-                    // Update: The assertion below may fail in similar environments.
-                    // We are disabling it until we find out the root cause, see
-                    // https://github.com/model-checking/kani/issues/400
-                    //
-                    // assert!(rlinkage.is_none());
-
-                    let span = ctx.tcx.def_span(def_id);
-                    Symbol::static_variable(
-                        name.to_string(),
-                        name.to_string(),
-                        ctx.codegen_ty(instance.ty(ctx.tcx, ty::ParamEnv::reveal_all())),
-                        ctx.codegen_span(&span),
-                    )
-                    .with_is_extern(rlinkage.is_none())
-                });
-                sym.clone().to_expr().address_of()
-            }
+            GlobalAlloc::Static(def_id) => self.codegen_static_pointer(def_id, false),
             GlobalAlloc::Memory(alloc) => {
                 // Full (mangled) crate name added so that allocations from different
-                // crates do not conflict. The name alone is insufficient becase Rust
+                // crates do not conflict. The name alone is insufficient because Rust
                 // allows different versions of the same crate to be used.
                 let name = format!("{}::{:?}", self.full_crate_name(), alloc_id);
                 self.codegen_allocation(alloc.inner(), |_| name.clone(), Some(name.clone()))
@@ -421,6 +396,38 @@ impl<'tcx> GotocCtx<'tcx> {
             assert!(res_t.is_pointer());
             offset_addr.cast_to(res_t)
         }
+    }
+
+    /// Generates a pointer to a static or thread-local variable.
+    pub fn codegen_static_pointer(&mut self, def_id: DefId, is_thread_local: bool) -> Expr {
+        // here we have a potentially unevaluated static
+        let instance = Instance::mono(self.tcx, def_id);
+
+        let sym = self.ensure(&self.symbol_name(instance), |ctx, name| {
+            // check if this static is extern
+            let rlinkage = ctx.tcx.codegen_fn_attrs(def_id).linkage;
+
+            // we believe rlinkage being `Some` means the static not extern
+            // based on compiler/rustc_codegen_cranelift/src/linkage.rs#L21
+            // see https://github.com/model-checking/kani/issues/388
+            //
+            // Update: The assertion below may fail in similar environments.
+            // We are disabling it until we find out the root cause, see
+            // https://github.com/model-checking/kani/issues/400
+            //
+            // assert!(rlinkage.is_none());
+
+            let span = ctx.tcx.def_span(def_id);
+            Symbol::static_variable(
+                name.to_string(),
+                name.to_string(),
+                ctx.codegen_ty(instance.ty(ctx.tcx, ty::ParamEnv::reveal_all())),
+                ctx.codegen_span(&span),
+            )
+            .with_is_extern(rlinkage.is_none())
+            .with_is_thread_local(is_thread_local)
+        });
+        sym.clone().to_expr().address_of()
     }
 
     pub fn codegen_allocation_auto_imm_name<F: FnOnce(&mut GotocCtx<'tcx>) -> String>(
@@ -591,11 +598,6 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    fn codegen_niche_init_name(&self, ty: Ty<'tcx>) -> String {
-        let name = self.ty_mangled_name(ty);
-        format!("gen-{}:niche", name)
-    }
-
     /// fetch the niche value (as both left and right value)
     pub fn codegen_get_niche(&self, v: Expr, offset: Size, niche_ty: Type) -> Expr {
         v // t: T
@@ -604,31 +606,6 @@ impl<'tcx> GotocCtx<'tcx> {
             .plus(Expr::int_constant(offset.bytes_usize(), Type::size_t())) // ((u8 *)&t) + offset: u8 *
             .cast_to(niche_ty.to_pointer()) // (N *)(((u8 *)&t) + offset): N *
             .dereference() // *(N *)(((u8 *)&t) + offset): N
-    }
-
-    fn codegen_niche_literal(&mut self, ty: Ty<'tcx>, offset: Size, init: Expr) -> Expr {
-        let cgt = self.codegen_ty(ty);
-        let fname = self.codegen_niche_init_name(ty);
-        let pretty_name = format!("init_niche<{}>", self.ty_pretty_name(ty));
-        self.ensure(&fname, |tcx, _| {
-            let target_ty = init.typ().clone(); // N
-            let param = tcx.gen_function_parameter(1, &fname, target_ty.clone());
-            let var = tcx.gen_function_local_variable(2, &fname, cgt.clone()).to_expr();
-            let body = vec![
-                Stmt::decl(var.clone(), None, Location::none()),
-                tcx.codegen_get_niche(var.clone(), offset, target_ty)
-                    .assign(param.to_expr(), Location::none()),
-                var.ret(Location::none()),
-            ];
-            Symbol::function(
-                &fname,
-                Type::code(vec![param.to_function_parameter()], cgt),
-                Some(Stmt::block(body, Location::none())),
-                pretty_name,
-                Location::none(),
-            )
-        });
-        self.find_function(&fname).unwrap().call(vec![init])
     }
 
     /// Ensure that the given instance is in the symbol table, returning the symbol.
@@ -681,7 +658,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let fn_singleton = self.ensure_global_var(
             &fn_singleton_name,
             false,
-            fn_struct_ty.clone(),
+            fn_struct_ty,
             Location::none(),
             |_, _| None, // zero-sized, so no initialization necessary
         );
