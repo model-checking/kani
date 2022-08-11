@@ -6,6 +6,6 @@
 #[kani::proof]
 pub fn harness() {
     let u8_1: u8 = kani::any();
-    let u8_2: u8 = kani::any();
+    let _u8_2: u8 = kani::any();
     assert!(u8_1 != 101);
 }
