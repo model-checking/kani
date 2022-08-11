@@ -37,6 +37,12 @@ pub const PRETTY_OUTPUT_FILES: &str = "pretty-json-files";
 /// Option used for suppressing global ASM error.
 pub const IGNORE_GLOBAL_ASM: &str = "ignore-global-asm";
 
+/// Option used for checking function contracts.
+pub const ENFORCE_CONTRACTS: &str = "enforce-contracts";
+
+/// Option used for replacing function with its contract.
+pub const REPLACE_WITH_CONTRACTS: &str = "replace-with-contracts";
+
 /// Option name used to override the sysroot.
 pub const SYSROOT: &str = "sysroot";
 
@@ -142,6 +148,17 @@ pub fn parser<'a, 'b>() -> App<'a, 'b> {
             Arg::with_name(IGNORE_GLOBAL_ASM)
                 .long("--ignore-global-asm")
                 .help("Suppress error due to the existence of global_asm in a crate"),
+        )
+        .arg(
+            Arg::with_name(ENFORCE_CONTRACTS)
+                .long("--enforce-contracts")
+                .help("Check if functions satisfy their contracts."),
+        )
+        .arg(
+            Arg::with_name(REPLACE_WITH_CONTRACTS)
+                .long("--replace-with-contracts")
+                .help("Replace functions with their contracts.")
+                .conflicts_with(ENFORCE_CONTRACTS),
         )
 }
 

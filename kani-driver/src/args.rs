@@ -148,6 +148,14 @@ pub struct KaniArgs {
     /// This option may impact the soundness of the analysis and may cause false proofs and/or counterexamples
     #[structopt(long, hidden_short_help(true), requires("enable-unstable"))]
     pub ignore_global_asm: bool,
+
+    /// Check if functions satisfy their contracts.
+    #[structopt(long, hidden_short_help(true), requires("enable-unstable"))]
+    pub enforce_contracts: bool,
+
+    /// Replace functions with their contracts.
+    #[structopt(long, hidden_short_help(true), requires("enable-unstable"))]
+    pub replace_with_contracts: bool,
     /*
     The below is a "TODO list" of things not yet implemented from the kani_flags.py script.
 
