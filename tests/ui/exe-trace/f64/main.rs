@@ -3,6 +3,7 @@
 
 // kani-flags: --harness harness --enable-unstable --gen-exe-trace
 
+/// Note: Don't include NaN because there are multiple possible NaN values.
 #[kani::proof]
 pub fn harness() {
     let f64_1: f64 = kani::any();
@@ -23,5 +24,4 @@ pub fn harness() {
             && f64_7 == f64::MAX
             && f64_8 == f64::INFINITY)
     );
-    // Note: Don't include NaN because there are multiple possible NaN values.
 }
