@@ -3,6 +3,9 @@
 
 // kani-flags: --harness harness --enable-unstable --gen-exe-trace
 
+//! We explicitly don't check what concrete values are returned for `_u8_1` and `_u8_3` as they could be anything.
+//! In practice, though, they will likely be 0.
+
 #[kani::proof]
 pub fn harness() {
     let _u8_1: u8 = kani::any();
