@@ -1,2 +1,3 @@
 Status: FAILURE\
-Description: "assertion"
+Description: "Function with missing definition is unreachable"
+Status: UNDETERMINED
