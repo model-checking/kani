@@ -1336,6 +1336,7 @@ mod test {
         };
     }
 
+    #[cfg(DISABLE_FOR_NOW)]
     proptest! {
         #![proptest_config(crate::test_runner::Config::with_cases(1024))]
 
