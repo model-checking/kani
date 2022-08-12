@@ -190,26 +190,11 @@ impl KaniSession {
     }
 }
 
-/// Generate a unit test from a list of det vals.
+const TAB: &str = "    ";
+
+/// Format a full deterministic unit test for a number of det vals.
 fn format_unit_test(harness_name: &str, det_vals: &[parser::DetVal]) -> ExeTrace {
-    /*
-    Given a number of byte vectors, format them as:
-    // interp_det_val_1
-    vec![det_val_1],
-    // interp_det_val_2
-    vec![det_val_2], ...
-    */
-    let vec_whitespace = " ".repeat(8);
-    let vecs_as_str = det_vals
-        .iter()
-        .map(|det_val| {
-            format!(
-                "{vec_whitespace}// {}\n{vec_whitespace}vec!{:?}",
-                det_val.interp_val, det_val.byte_arr
-            )
-        })
-        .collect::<Vec<String>>()
-        .join(",\n");
+    let vecs_as_str = format_det_vals(det_vals);
 
     // Hash the generated det val string along with the proof harness name.
     let mut hasher = DefaultHasher::new();
@@ -218,18 +203,36 @@ fn format_unit_test(harness_name: &str, det_vals: &[parser::DetVal]) -> ExeTrace
     let hash = hasher.finish();
 
     let exe_trace_func_name = format!("kani_exe_trace_{harness_name}_{hash}");
-    #[rustfmt::skip]
     let exe_trace = format!(
-"#[test]
-fn {exe_trace_func_name}() {{
-    let det_vals: Vec<Vec<u8>> = vec![
-{vecs_as_str}
-    ];
-    kani::exe_trace_run(det_vals, {harness_name});
-}}"
+        "#[test]\
+        fn {exe_trace_func_name}() {{\
+        {TAB}let det_vals: Vec<Vec<u8>> = vec![\
+        {vecs_as_str}\
+        {TAB}];\
+        {TAB}kani::exe_trace_run(det_vals, {harness_name});\
+        }}"
     );
 
     ExeTrace { unit_test_str: exe_trace, unit_test_name: exe_trace_func_name }
+}
+
+/// Format an initializer expression for a number of det vals.
+fn format_det_vals(det_vals: &[parser::DetVal]) -> String {
+    /*
+    Given a number of byte vectors, format them as:
+    // interp_det_val_1
+    vec![det_val_1],
+    // interp_det_val_2
+    vec![det_val_2], ...
+    */
+    let two_tab = TAB.repeat(2);
+    det_vals
+        .iter()
+        .map(|det_val| {
+            format!("{two_tab}// {}\n{two_tab}vec!{:?}", det_val.interp_val, det_val.byte_arr)
+        })
+        .collect::<Vec<String>>()
+        .join(",\n")
 }
 
 struct FileLineRange {
@@ -405,5 +408,47 @@ mod parser {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parser::*;
+    use super::*;
+
+    #[test]
+    fn format_zero_det_vals() {
+        let det_vals: [DetVal; 0] = [];
+        let actual = format_det_vals(&det_vals);
+        assert_eq!(actual, "");
+    }
+
+    #[test]
+    fn format_one_det_val() {
+        let det_vals = [DetVal { byte_arr: vec![0, 0], interp_val: "0".to_string() }];
+        let actual = format_det_vals(&det_vals);
+        let two_tab = TAB.repeat(2);
+        let expected = format!(
+            "{two_tab}// 0\n\
+            {two_tab}vec![0, 0]"
+        );
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn format_two_det_vals() {
+        let det_vals = [
+            DetVal { byte_arr: vec![0, 0], interp_val: "0".to_string() },
+            DetVal { byte_arr: vec![0, 0, 0, 0, 0, 0, 0, 0], interp_val: "0l".to_string() },
+        ];
+        let actual = format_det_vals(&det_vals);
+        let two_tab = TAB.repeat(2);
+        let expected = format!(
+            "{two_tab}// 0\n\
+            {two_tab}vec![0, 0],\n\
+            {two_tab}// 0l\n\
+            {two_tab}vec![0, 0, 0, 0, 0, 0, 0, 0]"
+        );
+        assert_eq!(actual, expected);
     }
 }
