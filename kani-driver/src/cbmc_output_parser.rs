@@ -25,6 +25,7 @@ use console::style;
 use once_cell::sync::Lazy;
 use pathdiff::diff_paths;
 use regex::Regex;
+use rustc_demangle::demangle;
 use serde::Deserialize;
 use std::{
     collections::HashMap,
@@ -276,7 +277,8 @@ impl std::fmt::Display for SourceLocation {
             write!(&mut fmt_str, "Unknown file")?;
         }
         if let Some(function) = self.function.clone() {
-            write!(&mut fmt_str, " in function {function}")?;
+            let demangled_function = demangle(&function);
+            write!(&mut fmt_str, " in function {demangled_function}")?;
         }
 
         write! {f, "{}", fmt_str}
@@ -810,16 +812,24 @@ fn has_check_failure(properties: &Vec<Property>, description: &str) -> bool {
 
 /// Replaces the description of all properties from functions with a missing
 /// definition.
-/// TODO: This hasn't been working as expected, see
-/// <https://github.com/model-checking/kani/issues/1424>
 fn modify_undefined_function_checks(mut properties: Vec<Property>) -> (Vec<Property>, bool) {
     let mut has_unknown_location_checks = false;
     for mut prop in &mut properties {
-        if prop.description == DEFAULT_ASSERTION
+        if let Some(function) = &prop.source_location.function
+            && prop.description == DEFAULT_ASSERTION
             && prop.source_location.file.is_none()
-            && prop.source_location.function.is_some()
         {
-            prop.description = "Function with missing definition is unreachable".to_string();
+            // Missing functions come with mangled names. `demangle` produces
+            // the demangled version if it's a mangled name, but for some reason
+            // the name is not being fully demangled. For example:
+            //
+            // function: _ZN60_$LT$alloc..string..String$u20$as$u20$core..clone..Clone$GT$5clone17h830b64d2ac32f613E
+            // demangle(function): <alloc::string::String as core::clone::Clone>::clone::h830b64d2ac32f613
+            //
+            // Note the last part, which doesn't appear to be demangled.
+            // Still, it's more readable than the mangled name.
+            let modified_description = format!("Function {} with missing definition is unreachable", demangle(function));
+            prop.description = modified_description;
             if prop.status == CheckStatus::Failure {
                 has_unknown_location_checks = true;
             }
