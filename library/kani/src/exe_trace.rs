@@ -24,6 +24,20 @@ pub fn exe_trace_run<F: Fn()>(mut local_det_vals: Vec<Vec<u8>>, proof_harness: F
     });
     // Since F is a type argument, there should be a direct, static call to proof_harness().
     proof_harness();
+    // This code will not run if a user assertion fails on deterministic playback.
+    // But if you comment out the failing assertion during playback,
+    // this can be used to know if too many det vals were loaded into the deterministic test case.
+    DET_VALS.with(|glob_det_vals| {
+        let ref_glob_det_vals = &*glob_det_vals.borrow();
+        assert!(
+            ref_glob_det_vals.is_empty(),
+            "At the end of deterministic playback, there were still these deterministic values left over `{:?}`. \
+            This either happened because: \
+            1) Your code/harness changed after you generated this deterministic test. \
+            2) There's a bug in Kani. Please report the issue here: <https://github.com/model-checking/kani/issues/new?assignees=&labels=bug&template=bug_report.md>",
+            ref_glob_det_vals
+        );
+    });
 }
 
 /// Executable trace implementation of kani::any_raw_internal.
