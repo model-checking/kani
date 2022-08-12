@@ -14,7 +14,7 @@ use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::print::FmtPrinter;
 use rustc_middle::ty::subst::InternalSubsts;
 use rustc_middle::ty::{
-    self, AdtDef, FloatTy, GeneratorSubsts, Instance, IntTy, PolyFnSig, Ty, TyKind, UintTy,
+    self, AdtDef, FloatTy, GeneratorSubsts, Instance, IntTy, PolyFnSig, Ty, TyCtxt, TyKind, UintTy,
     VariantDef, VtblEntry,
 };
 use rustc_middle::ty::{List, TypeFoldable};
@@ -37,6 +37,13 @@ use ty::layout::HasParamEnv;
 /// variable `struct Unit VoidUnit` returned by all void functions.
 const UNIT_TYPE_EMPTY_STRUCT_NAME: &str = "Unit";
 pub const FN_RETURN_VOID_VAR_NAME: &str = "VoidUnit";
+
+/// Name for the common vtable structure.
+const COMMON_VTABLE_STRUCT_NAME: &str = "Kani::CommonVTable";
+
+const VTABLE_DROP_FIELD: &str = "drop";
+pub const VTABLE_SIZE_FIELD: &str = "size";
+pub const VTABLE_ALIGN_FIELD: &str = "align";
 
 /// Map the never i.e. `!` type to an empty struct.
 /// The never type can appear as a function argument, e.g. in library/core/src/num/error.rs
@@ -417,37 +424,14 @@ impl<'tcx> GotocCtx<'tcx> {
         self.monomorphize(p.ty(self.current_fn().mir().local_decls(), self.tcx).ty)
     }
 
-    /// Is the MIR type an unsized type (i.e. one represented by a fat pointer?)
+    /// Is the MIR type an unsized type
+    /// Unsized types can represent:
+    /// 1- Types that rust cannot infer their type such as ForeignItems.
+    /// 2- Types that can only be accessed via FatPointer.
     pub fn is_unsized(&self, t: Ty<'tcx>) -> bool {
         !self
             .monomorphize(t)
             .is_sized(self.tcx.at(rustc_span::DUMMY_SP), ty::ParamEnv::reveal_all())
-    }
-
-    /// Is the MIR type a ref of an unsized type (i.e. one represented by a fat pointer?)
-    pub fn is_ref_of_unsized(&self, t: Ty<'tcx>) -> bool {
-        match t.kind() {
-            ty::Ref(_, to, _) | ty::RawPtr(ty::TypeAndMut { ty: to, .. }) => self.is_unsized(*to),
-            _ => false,
-        }
-    }
-
-    /// Is the MIR type a ref of an unsized type (i.e. one represented by a fat pointer?)
-    pub fn is_ref_of_sized(&self, t: Ty<'tcx>) -> bool {
-        match t.kind() {
-            ty::Ref(_, to, _) | ty::RawPtr(ty::TypeAndMut { ty: to, .. }) => !self.is_unsized(*to),
-            _ => false,
-        }
-    }
-
-    /// Is the MIR type a box of an unsized type (i.e. one represented by a fat pointer?)
-    pub fn is_box_of_unsized(&self, t: Ty<'tcx>) -> bool {
-        if t.is_box() {
-            let boxed_t = self.monomorphize(t.boxed_ty());
-            self.is_unsized(boxed_t)
-        } else {
-            false
-        }
     }
 
     /// Generates the type for a single field for a dynamic vtable.
@@ -568,14 +552,9 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Given a trait of type `t`, determine the fields of the struct that will implement its vtable.
     ///
     /// The order of fields (i.e., the layout of a vtable) is not guaranteed by the compiler.
-    /// We follow the order implemented by the compiler in compiler/rustc_codegen_ssa/src/meth.rs
-    /// `get_vtable`.
+    /// We follow the order from the `TyCtxt::COMMON_VTABLE_ENTRIES`.
     fn trait_vtable_field_types(&mut self, t: ty::Ty<'tcx>) -> Vec<DatatypeComponent> {
-        let mut vtable_base = vec![
-            DatatypeComponent::field("drop", self.trait_vtable_drop_type(t)),
-            DatatypeComponent::field("size", Type::size_t()),
-            DatatypeComponent::field("align", Type::size_t()),
-        ];
+        let mut vtable_base = common_vtable_fields(self.trait_vtable_drop_type(t));
         if let ty::Dynamic(binder, _region) = t.kind() {
             // The virtual methods on the trait ref. Some auto traits have no methods.
             if let Some(principal) = binder.principal() {
@@ -700,6 +679,19 @@ impl<'tcx> GotocCtx<'tcx> {
     /// The unit type in Rust is an empty struct in gotoc
     pub fn codegen_ty_unit(&mut self) -> Type {
         self.ensure_struct(UNIT_TYPE_EMPTY_STRUCT_NAME, "()", |_, _| vec![])
+    }
+
+    /// The common VTable entries.
+    /// A VTable is an opaque type to the compiler, but they all follow the same structure.
+    /// The first three entries are always the following:
+    /// 1- Function pointer to drop in place.
+    /// 2- The size of the object.
+    /// 3- The alignment of the object.
+    /// We use this common structure to extract information out of a vtable.
+    pub fn codegen_ty_common_vtable(&mut self) -> Type {
+        self.ensure_struct(COMMON_VTABLE_STRUCT_NAME, COMMON_VTABLE_STRUCT_NAME, |_, _| {
+            common_vtable_fields(Type::void_pointer())
+        })
     }
 
     /// codegen for types. it finds a C type which corresponds to a rust type.
@@ -1870,19 +1862,46 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 }
 
-/// The mir type is a mir pointer type.
-pub fn is_pointer(mir_type: Ty) -> bool {
-    return matches!(mir_type.kind(), ty::Ref(..) | ty::RawPtr(..));
+/// Return the datatype components for fields are present in every vtable struct.
+///
+/// We follow the order from the `TyCtxt::::COMMON_VTABLE_ENTRIES`.
+fn common_vtable_fields(drop_in_place: Type) -> Vec<DatatypeComponent> {
+    let fields: Vec<DatatypeComponent> = TyCtxt::COMMON_VTABLE_ENTRIES
+        .iter()
+        .map(|entry| match entry {
+            VtblEntry::MetadataDropInPlace => {
+                DatatypeComponent::field(VTABLE_DROP_FIELD, drop_in_place.clone())
+            }
+            VtblEntry::MetadataSize => DatatypeComponent::field(VTABLE_SIZE_FIELD, Type::size_t()),
+            VtblEntry::MetadataAlign => {
+                DatatypeComponent::field(VTABLE_ALIGN_FIELD, Type::size_t())
+            }
+            VtblEntry::Vacant | VtblEntry::Method(_) | VtblEntry::TraitVPtr(_) => {
+                unimplemented!("Entry shouldn't be common: {:?}", entry)
+            }
+        })
+        .collect();
+    assert_eq!(fields.len(), 3, "We expect only three common fields for every vtable.");
+    fields
 }
 
-/// Extract from a mir pointer type the mir type of the value to which the
-/// pointer points.
-pub fn pointee_type(pointer_type: Ty) -> Option<Ty> {
-    match pointer_type.kind() {
+/// The mir type is a mir pointer type (Ref or RawPtr).
+/// This will return false for all smart pointers. See is_std_pointer for a more complete check.
+pub fn is_pointer(mir_type: Ty) -> bool {
+    return pointee_type(mir_type).is_some();
+}
+
+/// If given type is a Ref / Raw ref, return the pointee type.
+pub fn pointee_type(mir_type: Ty) -> Option<Ty> {
+    match mir_type.kind() {
         ty::Ref(_, pointee_type, _) => Some(*pointee_type),
         ty::RawPtr(ty::TypeAndMut { ty: pointee_type, .. }) => Some(*pointee_type),
         _ => None,
     }
+}
+
+pub fn std_pointee_type(mir_type: Ty) -> Option<Ty> {
+    mir_type.builtin_deref(true).map(|tm| tm.ty)
 }
 
 /// This is a place holder function that should normalize the given type.
@@ -1896,11 +1915,19 @@ fn normalize_type(ty: Ty) -> Ty {
 impl<'tcx> GotocCtx<'tcx> {
     /// A pointer to the mir type should be a thin pointer.
     /// Use thin pointer if the type is sized or if the resulting pointer has no metadata.
+    /// Note: Foreign items are unsized but it codegen as a thin pointer since there is no
+    /// metadata associated with it.
     pub fn use_thin_pointer(&self, mir_type: Ty<'tcx>) -> bool {
         // ptr_metadata_ty is not defined on all types, the projection of an associated type
         let (metadata, _check_is_sized) = mir_type.ptr_metadata_ty(self.tcx, normalize_type);
         !self.is_unsized(mir_type) || metadata == self.tcx.types.unit
     }
+
+    /// We use fat pointer if not thin pointer.
+    pub fn use_fat_pointer(&self, mir_type: Ty<'tcx>) -> bool {
+        !self.use_thin_pointer(mir_type)
+    }
+
     /// A pointer to the mir type should be a slice fat pointer.
     /// We use a slice fat pointer if the metadata is the slice length (type usize).
     pub fn use_slice_fat_pointer(&self, mir_type: Ty<'tcx>) -> bool {
@@ -1915,9 +1942,13 @@ impl<'tcx> GotocCtx<'tcx> {
         metadata != self.tcx.types.unit && metadata != self.tcx.types.usize
     }
 
+    /// Does the current mir represent a fat pointer (Box, raw pointer or ref)
+    pub fn is_fat_pointer(&self, pointer_ty: Ty<'tcx>) -> bool {
+        pointee_type(pointer_ty).map_or(false, |pointee_ty| self.use_fat_pointer(pointee_ty))
+    }
+
     /// Check if the mir type already is a vtable fat pointer.
     pub fn is_vtable_fat_pointer(&self, mir_type: Ty<'tcx>) -> bool {
-        self.is_ref_of_unsized(mir_type)
-            && self.use_vtable_fat_pointer(pointee_type(mir_type).unwrap())
+        pointee_type(mir_type).map_or(false, |pointee_ty| self.use_vtable_fat_pointer(pointee_ty))
     }
 }

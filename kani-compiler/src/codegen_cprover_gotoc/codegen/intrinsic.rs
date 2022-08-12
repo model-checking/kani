@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! this module handles intrinsics
-use super::typ::pointee_type;
+use super::typ::{self, pointee_type};
 use super::PropertyClass;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{
@@ -33,6 +33,11 @@ macro_rules! emit_concurrency_warning {
 struct SizeAlign {
     size: Expr,
     align: Expr,
+}
+
+enum VTableInfo {
+    Size,
+    Align,
 }
 
 impl<'tcx> GotocCtx<'tcx> {
@@ -703,6 +708,8 @@ impl<'tcx> GotocCtx<'tcx> {
                 assert!(self.place_ty(p).is_unit());
                 self.codegen_volatile_store(fargs, farg_types, loc)
             }
+            "vtable_size" => self.vtable_info(VTableInfo::Size, fargs, p, loc),
+            "vtable_align" => self.vtable_info(VTableInfo::Align, fargs, p, loc),
             "wrapping_add" => codegen_wrapping_op!(plus),
             "wrapping_mul" => codegen_wrapping_op!(mul),
             "wrapping_sub" => codegen_wrapping_op!(sub),
@@ -1199,6 +1206,25 @@ impl<'tcx> GotocCtx<'tcx> {
             .eq(Type::c_int().zero())
             .cast_to(Type::c_bool());
         self.codegen_expr_to_place(p, e)
+    }
+
+    fn vtable_info(
+        &mut self,
+        info: VTableInfo,
+        mut fargs: Vec<Expr>,
+        place: &Place<'tcx>,
+        _loc: Location,
+    ) -> Stmt {
+        let vtable_obj = fargs
+            .pop()
+            .unwrap()
+            .cast_to(self.codegen_ty_common_vtable().to_pointer())
+            .dereference();
+        let expr = match info {
+            VTableInfo::Size => vtable_obj.member(typ::VTABLE_SIZE_FIELD, &self.symbol_table),
+            VTableInfo::Align => vtable_obj.member(typ::VTABLE_ALIGN_FIELD, &self.symbol_table),
+        };
+        self.codegen_expr_to_place(place, expr)
     }
 
     /// This function computes the size and alignment of a dynamically-sized type.
