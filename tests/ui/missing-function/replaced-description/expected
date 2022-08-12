@@ -1,3 +1,4 @@
 Status: FAILURE\
-Description: "Function <alloc::string::String as core::clone::Clone>::clone::h830b64d2ac32f613 with missing definition is unreachable"
+Description: "Function <alloc::string::String as core::clone::Clone>::clone::
+with missing definition is unreachable"
 Status: UNDETERMINED
