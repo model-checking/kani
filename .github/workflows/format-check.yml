@@ -13,14 +13,6 @@ jobs:
       - name: Execute copyright check
         run: ./scripts/ci/run-copyright-check.sh
 
-      - name: Check C code formatting
-        run: ./scripts/run-clang-format.sh -d
-
-      - name: Check Python code formatting
-        run: |
-            pip3 install --upgrade autopep8
-            ./scripts/run-autopep8.sh
-
   clippy-check:
     runs-on: ubuntu-20.04
     steps:
