@@ -6,7 +6,6 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
 // Modifications Copyright Kani Contributors
@@ -21,15 +20,12 @@ enum T0 {
     V1 {
         #[proptest(strategy = "random garbage")]
         field: u8,
-    }
+    },
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0026]
 enum T1 {
-    V1(
-        #[proptest(strategy = "random garbage")]
-        u8,
-    ),
+    V1(#[proptest(strategy = "random garbage")] u8),
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0026]
@@ -39,25 +35,19 @@ struct T2 {
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0026]
-struct T3(
-    #[proptest(strategy = "random garbage")]
-    String
-);
+struct T3(#[proptest(strategy = "random garbage")] String);
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0026]
 enum T4 {
     V1 {
         #[proptest(value = "random garbage")]
         field: u8,
-    }
+    },
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0026]
 enum T5 {
-    V1(
-        #[proptest(value = "random garbage")]
-        u8,
-    ),
+    V1(#[proptest(value = "random garbage")] u8),
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0026]
@@ -67,25 +57,19 @@ struct T6 {
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0026]
-struct T7(
-    #[proptest(value = "random garbage")]
-    String
-);
+struct T7(#[proptest(value = "random garbage")] String);
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0026]
 enum T8 {
     V1 {
         #[proptest(strategy("random garbage"))]
         field: u8,
-    }
+    },
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0026]
 enum T9 {
-    V1(
-        #[proptest(strategy("random garbage"))]
-        u8,
-    ),
+    V1(#[proptest(strategy("random garbage"))] u8),
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0026]
@@ -95,25 +79,19 @@ struct T10 {
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0026]
-struct T11(
-    #[proptest(strategy("random garbage"))]
-    String
-);
+struct T11(#[proptest(strategy("random garbage"))] String);
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0026]
 enum T12 {
     V1 {
         #[proptest(value("random garbage"))]
         field: u8,
-    }
+    },
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0026]
 enum T13 {
-    V1(
-        #[proptest(value("random garbage"))]
-        u8,
-    ),
+    V1(#[proptest(value("random garbage"))] u8),
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0026]
@@ -123,7 +101,4 @@ struct T14 {
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0026]
-struct T15(
-    #[proptest(value("random garbage"))]
-    String
-);
+struct T15(#[proptest(value("random garbage"))] String);

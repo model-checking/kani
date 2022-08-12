@@ -67,11 +67,11 @@ multiplex_alloc! {
 //#[cfg(not(feature = "std"))]
 //pub(crate) use hashmap_core::map as hash_map;
 #[cfg(feature = "std")]
-pub use ::std::collections::hash_map;
+pub use std::collections::hash_map;
 //#[cfg(not(feature = "std"))]
 //pub(crate) use hashmap_core::set as hash_set;
 #[cfg(feature = "std")]
-pub use ::std::collections::hash_set;
+pub use std::collections::hash_set;
 
 multiplex_core! {
     core::fmt, ::std::fmt,

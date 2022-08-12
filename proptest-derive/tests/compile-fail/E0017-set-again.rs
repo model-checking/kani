@@ -6,7 +6,6 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
 // Modifications Copyright Kani Contributors
@@ -16,23 +15,26 @@ use proptest_derive::Arbitrary;
 
 fn main() {}
 
-#[derive(Debug, Arbitrary)] //~  ERROR: 2 errors
-                            //~| # [proptest_derive, E0017]
-                            //~| # [proptest_derive, E0030]
+#[derive(Debug, Arbitrary)]
+//~  ERROR: 2 errors
+//~| # [proptest_derive, E0017]
+//~| # [proptest_derive, E0030]
 #[proptest(no_params)]
 #[proptest(no_params)]
 struct T0;
 
-#[derive(Debug, Arbitrary)] //~  ERROR: 2 errors
-                            //~| # [proptest_derive, E0017]
-                            //~| # [proptest_derive, E0030]
+#[derive(Debug, Arbitrary)]
+//~  ERROR: 2 errors
+//~| # [proptest_derive, E0017]
+//~| # [proptest_derive, E0030]
 #[proptest(no_params)]
 #[proptest(no_params)]
 struct T1();
 
-#[derive(Debug, Arbitrary)] //~  ERROR: 2 errors
-                            //~| # [proptest_derive, E0017]
-                            //~| # [proptest_derive, E0030]
+#[derive(Debug, Arbitrary)]
+//~  ERROR: 2 errors
+//~| # [proptest_derive, E0017]
+//~| # [proptest_derive, E0030]
 #[proptest(no_params)]
 #[proptest(no_params)]
 struct T2 {}
@@ -78,7 +80,11 @@ enum T7 {
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0017]
 enum T8 {
-    V0(#[proptest(no_params)] #[proptest(no_params)] bool)
+    V0(
+        #[proptest(no_params)]
+        #[proptest(no_params)]
+        bool,
+    ),
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0017]
@@ -95,21 +101,24 @@ enum T10 {
     V0 { bar: bool },
 }
 
-#[derive(Debug, Arbitrary)] //~  ERROR: 2 errors
-                            //~| # [proptest_derive, E0017]
-                            //~| # [proptest_derive, E0030]
+#[derive(Debug, Arbitrary)]
+//~  ERROR: 2 errors
+//~| # [proptest_derive, E0017]
+//~| # [proptest_derive, E0030]
 #[proptest(no_params, no_params)]
 struct T11;
 
-#[derive(Debug, Arbitrary)] //~  ERROR: 2 errors
-                            //~| # [proptest_derive, E0017]
-                            //~| # [proptest_derive, E0030]
+#[derive(Debug, Arbitrary)]
+//~  ERROR: 2 errors
+//~| # [proptest_derive, E0017]
+//~| # [proptest_derive, E0030]
 #[proptest(no_params, no_params)]
 struct T12();
 
-#[derive(Debug, Arbitrary)] //~  ERROR: 2 errors
-                            //~| # [proptest_derive, E0017]
-                            //~| # [proptest_derive, E0030]
+#[derive(Debug, Arbitrary)]
+//~  ERROR: 2 errors
+//~| # [proptest_derive, E0017]
+//~| # [proptest_derive, E0030]
 #[proptest(no_params, no_params)]
 struct T13 {}
 
@@ -120,10 +129,7 @@ struct T14 {
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0017]
-struct T15(
-    #[proptest(no_params, no_params)]
-    usize,
-);
+struct T15(#[proptest(no_params, no_params)] usize);
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0017]
 #[proptest(no_params, no_params)]
@@ -149,7 +155,7 @@ enum T18 {
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0017]
 enum T19 {
-    V0(#[proptest(no_params, no_params)] bool)
+    V0(#[proptest(no_params, no_params)] bool),
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0017]

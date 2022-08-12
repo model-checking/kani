@@ -6,7 +6,6 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
 // Modifications Copyright Kani Contributors
@@ -17,9 +16,10 @@ extern crate proptest_derive;
 fn main() {}
 
 // Show non-fatal:
-#[derive(Debug, Arbitrary)] //~ ERROR: 2 errors:
-                            //~| [proptest_derive, E0027]
-                            //~| [proptest_derive, E0008]
+#[derive(Debug, Arbitrary)]
+//~ ERROR: 2 errors:
+//~| [proptest_derive, E0027]
+//~| [proptest_derive, E0008]
 #[proptest(filter)]
 #[proptest(skip)]
 struct NonFatal;
@@ -31,53 +31,43 @@ struct T0 {
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0027]
-struct T1(
-    #[proptest(filter)]
-    usize,
-);
+struct T1(#[proptest(filter)] usize);
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0027]
 enum T2 {
     V1 {
         #[proptest(filter)]
-        batman: u8
-    }
+        batman: u8,
+    },
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0027]
 enum T3 {
-    V1(
-        #[proptest(filter)]
-        u8
-    )
+    V1(#[proptest(filter)] u8),
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0027]
 enum T4 {
     #[proptest(filter)]
-    V1 {
-        batman: u8
-    }
+    V1 { batman: u8 },
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0027]
 enum T5 {
     #[proptest(filter)]
-    V1(u8)
+    V1(u8),
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0027]
 #[proptest(filter)]
 enum T6 {
-    V1 {
-        batman: u8
-    }
+    V1 { batman: u8 },
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0027]
 #[proptest(filter)]
 enum T7 {
-    V1(u8)
+    V1(u8),
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0027]

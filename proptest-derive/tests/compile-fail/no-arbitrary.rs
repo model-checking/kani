@@ -6,7 +6,6 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
 // Modifications Copyright Kani Contributors
@@ -19,4 +18,6 @@ fn main() {}
 struct T0;
 
 #[derive(Debug, Arbitrary)] //~ Arbitrary` is not satisfied [E0277]
-struct T1 { f0: T0, }
+struct T1 {
+    f0: T0,
+}

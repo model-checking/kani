@@ -3,5 +3,6 @@
 // Modifications Copyright Kani Contributors
 // See GitHub history for details.
 
-#[macro_use] extern crate proptest;
+#[macro_use]
+extern crate proptest;
 pub mod submodule;

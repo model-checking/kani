@@ -6,7 +6,6 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
 // Modifications Copyright Kani Contributors
@@ -17,4 +16,6 @@ extern crate proptest_derive;
 fn main() {}
 
 #[derive(Arbitrary)] //~ `Foo` doesn't implement `Debug` [E0277]
-struct Foo { x: usize }
+struct Foo {
+    x: usize,
+}

@@ -6,7 +6,6 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
 // Modifications Copyright Kani Contributors
@@ -27,5 +26,5 @@ enum T0 {
 enum T1 {
     V0(!, bool),
     V1([!; 1]),
-    V2([(!, bool); 1])
+    V2([(!, bool); 1]),
 }

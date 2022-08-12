@@ -6,7 +6,6 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
 // Modifications Copyright Kani Contributors
@@ -19,7 +18,7 @@ fn main() {}
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0022]
 #[proptest(no_params, params = "u8")]
 enum T0 {
-    V1
+    V1,
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0022]

@@ -6,7 +6,6 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
 // Modifications Copyright Kani Contributors
@@ -473,7 +472,7 @@ enum ZeroOneTwo {
 #[derive(Arbitrary, Debug)]
 enum Nested {
     First(SameType),
-    Second(ZeroOneTwo, OneTwo)
+    Second(ZeroOneTwo, OneTwo),
 }
 
 #[test]

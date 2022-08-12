@@ -6,7 +6,6 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
 // Modifications Copyright Kani Contributors
@@ -470,7 +469,7 @@ impl ToTokens for ToReg {
             ToReg::Range(to) => {
                 let params: Vec<_> = (0..to).map(param).collect();
                 NestedTuple(&params).to_tokens(tokens)
-            },
+            }
             ToReg::API => call_site_ident(API_PARAM_NAME).to_tokens(tokens),
         }
     }
@@ -525,8 +524,7 @@ impl<'a, T: ToTokens> ToTokens for NestedTuple<'a, T> {
         let NestedTuple(elems) = self;
         if elems.is_empty() {
             quote_append!(tokens, ());
-        }
-        else if let [x] = elems {
+        } else if let [x] = elems {
             x.to_tokens(tokens);
         } else {
             let chunks = elems.chunks(NESTED_TUPLE_CHUNK_SIZE);
@@ -552,7 +550,11 @@ impl<'a, T: ToTokens> ToTokens for NestedTuple<'a, T> {
     }
 }
 
-fn map_ctor_to_tokens(tokens: &mut TokenStream, ctors: &[Ctor], closure: &MapClosure) {
+fn map_ctor_to_tokens(
+    tokens: &mut TokenStream,
+    ctors: &[Ctor],
+    closure: &MapClosure,
+) {
     let ctors = NestedTuple(ctors);
 
     quote_append!(tokens,
