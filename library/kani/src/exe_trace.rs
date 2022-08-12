@@ -31,7 +31,11 @@ pub fn exe_trace_run<F: Fn()>(mut local_det_vals: Vec<Vec<u8>>, proof_harness: F
         let ref_glob_det_vals = &*glob_det_vals.borrow();
         assert!(
             ref_glob_det_vals.is_empty(),
-            "At the end of deterministic playback, there were still these deterministic values left over `{:?}`", ref_glob_det_vals
+            "At the end of deterministic playback, there were still these deterministic values left over `{:?}`. \
+            This either happened because: \
+            1) Your code/harness changed after you generated this deterministic test. \
+            2) There's a bug in Kani. Please report the issue here: <https://github.com/model-checking/kani/issues/new?assignees=&labels=bug&template=bug_report.md>",
+            ref_glob_det_vals
         );
     });
 }
