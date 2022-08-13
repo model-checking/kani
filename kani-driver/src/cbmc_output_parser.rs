@@ -278,7 +278,7 @@ impl std::fmt::Display for SourceLocation {
         }
         if let Some(function) = self.function.clone() {
             let demangled_function = demangle(&function);
-            write!(&mut fmt_str, " in function {demangled_function}")?;
+            write!(&mut fmt_str, " in function {:#}", demangled_function)?;
         }
 
         write! {f, "{}", fmt_str}
@@ -828,7 +828,7 @@ fn modify_undefined_function_checks(mut properties: Vec<Property>) -> (Vec<Prope
             //
             // Note the last part, which doesn't appear to be demangled.
             // Still, it's more readable than the mangled name.
-            let modified_description = format!("Function {} with missing definition is unreachable", demangle(function));
+            let modified_description = format!("Function {:#} with missing definition is unreachable", demangle(function));
             prop.description = modified_description;
             if prop.status == CheckStatus::Failure {
                 has_unknown_location_checks = true;
