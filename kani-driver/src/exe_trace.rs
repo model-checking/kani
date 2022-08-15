@@ -250,7 +250,7 @@ struct ExeTrace {
 ///     ...,
 ///     { "description": "assertion failed: x", "status": "FAILURE", "trace": [
 ///         ...,
-///         { "assignmentType": "variable", "lhs": "var_0",
+///         { "assignmentType": "variable", "lhs": "goto_symex$$return_value...",
 ///           "sourceLocation": { "function": "kani::any_raw_internal::<u8, 1_usize>" },
 ///           "stepType": "assignment", "value": { "binary": "00000001", "data": "101", "width": 8 } }
 ///         ..., ] }
@@ -371,7 +371,7 @@ mod parser {
             trace_entry["value"]["width"].as_u64(),
         ) {
             if step_type == "assignment"
-                && lhs == "var_0"
+                && lhs.starts_with("goto_symex$$return_value")
                 && func.starts_with("kani::any_raw_internal")
             {
                 let declared_width = width_u64 as usize;
