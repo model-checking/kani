@@ -22,6 +22,6 @@ fn main() {
         4 => dummy(any::<u32>() % any::<u32>()),
         5 => dummy(any::<u32>() << any::<u32>()),
         6 => dummy(any::<u32>() >> any::<u32>()),
-        _ => ()
+        _ => (),
     }
 }
