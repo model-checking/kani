@@ -8,9 +8,11 @@
 //! the underlying storage buffer and only model its `capacity`.
 //!
 //! This is useful from a verification perspective because we can write proof
-//! harnesses that show that the (abstracted) methods of our queue maintain
-//! a resource invariant (using the kani::Invariant trait). This means that
-//! we have confidence that the fix to the CVE covers all possible cases.
+//! harnesses that show that the (abstracted) methods of our queue maintain a
+//! resource invariant. This means that we have confidence that the fix to the
+//! CVE covers all possible cases.
+
+use kani::Arbitrary;
 
 ///
 /// Based on src/alloc/collections/vec_deque/mod.rs
@@ -24,14 +26,19 @@ struct AbstractVecDeque {
     buf: AbstractRawVec,
 }
 
-unsafe impl kani::Invariant for AbstractVecDeque {
+impl kani::Arbitrary for AbstractVecDeque {
+    fn any() -> AbstractVecDeque {
+        let value = AbstractVecDeque { tail: kani::any(), head: kani::any(), buf: kani::any() };
+        kani::assume(value.is_valid());
+        value
+    }
+}
+
+impl AbstractVecDeque {
     fn is_valid(&self) -> bool {
         self.tail < self.cap() && self.head < self.cap() && is_nonzero_pow2(self.cap())
     }
-}
-use kani::Invariant;
 
-impl AbstractVecDeque {
     // what we call the *buf capacity*
     fn cap(&self) -> usize {
         self.buf.capacity()
@@ -231,13 +238,19 @@ struct AbstractRawVec {
     /* alloc: A removed */
 }
 
-unsafe impl kani::Invariant for AbstractRawVec {
-    fn is_valid(&self) -> bool {
-        true
+impl kani::Arbitrary for AbstractRawVec {
+    fn any() -> AbstractRawVec {
+        let value = AbstractRawVec { cap: kani::any() };
+        kani::assume(value.is_valid());
+        value
     }
 }
 
 impl AbstractRawVec {
+    fn is_valid(&self) -> bool {
+        true
+    }
+
     pub fn capacity(&self) -> usize {
         self.cap
     }
