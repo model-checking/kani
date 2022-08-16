@@ -46,7 +46,7 @@ impl GuestMemoryMmap {
     // ANCHOR: read_obj
     fn read_obj<T>(&self, addr: GuestAddress) -> Result<T, Error>
     where
-        T: ByteValued + kani::Invariant + ReadObjChecks<T>,
+        T: ByteValued + kani::Arbitrary + ReadObjChecks<T>,
         // This generic_const_exprs feature lets Rust know the size of generic T.
         [(); std::mem::size_of::<T>()]:,
     {
@@ -64,9 +64,9 @@ impl GuestMemoryMmap {
 #[derive(Default, Clone, Copy)]
 pub struct GuestAddress(pub u64);
 
-unsafe impl kani::Invariant for GuestAddress {
-    fn is_valid(&self) -> bool {
-        true
+impl kani::Arbitrary for GuestAddress {
+    fn any() -> GuestAddress {
+        GuestAddress(kani::any())
     }
 }
 
@@ -91,9 +91,14 @@ struct Descriptor {
 
 unsafe impl ByteValued for Descriptor {}
 
-unsafe impl kani::Invariant for Descriptor {
-    fn is_valid(&self) -> bool {
-        true
+impl kani::Arbitrary for Descriptor {
+    fn any() -> Self {
+        Descriptor {
+            addr: kani::any(),
+            len: kani::any(),
+            flags: kani::any(),
+            next: kani::any(),
+        }
     }
 }
 
@@ -218,14 +223,15 @@ impl RequestHeader {
     pub fn new(request_type: u32, sector: u64) -> RequestHeader {
         RequestHeader { request_type, _reserved: 0, sector }
     }
+
     fn read_from(memory: &GuestMemoryMmap, addr: GuestAddress) -> Result<Self, Error> {
         memory.read_obj(addr)
     }
 }
 
-unsafe impl kani::Invariant for RequestHeader {
-    fn is_valid(&self) -> bool {
-        true
+impl kani::Arbitrary for RequestHeader {
+    fn any() -> Self {
+        RequestHeader { request_type: kani::any(), _reserved: kani::any(), sector: kani::any() }
     }
 }
 
@@ -296,24 +302,24 @@ pub enum Error {
     Persist, /*(crate::virtio::persist::Error)*/
 }
 
-unsafe impl kani::Invariant for Error {
-    fn is_valid(&self) -> bool {
-        matches!(
-            *self,
-            Error::DescriptorChainTooShort
-                | Error::DescriptorLengthTooSmall
-                | Error::GetFileMetadata
-                | Error::GuestMemory
-                | Error::InvalidDataLength
-                | Error::InvalidOffset
-                | Error::UnexpectedReadOnlyDescriptor
-                | Error::UnexpectedWriteOnlyDescriptor
-                | Error::FileEngine
-                | Error::BackingFile
-                | Error::EventFd
-                | Error::IrqTrigger
-                | Error::RateLimiter
-        ) || matches!(*self, Error::Persist)
+impl kani::Arbitrary for Error {
+    fn any() -> Error {
+        match kani::any() {
+            0 => Error::DescriptorChainTooShort,
+            1 => Error::DescriptorLengthTooSmall,
+            2 => Error::GetFileMetadata,
+            3 => Error::GuestMemory,
+            4 => Error::InvalidDataLength,
+            5 => Error::InvalidOffset,
+            6 => Error::UnexpectedReadOnlyDescriptor,
+            7 => Error::UnexpectedWriteOnlyDescriptor,
+            8 => Error::FileEngine,
+            9 => Error::BackingFile,
+            10 => Error::EventFd,
+            11 => Error::IrqTrigger,
+            12 => Error::RateLimiter,
+            _ => Error::Persist,
+        }
     }
 }
 
