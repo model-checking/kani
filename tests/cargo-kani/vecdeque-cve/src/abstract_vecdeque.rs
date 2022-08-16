@@ -240,7 +240,7 @@ struct AbstractRawVec {
 
 impl kani::Arbitrary for AbstractRawVec {
     fn any() -> Self {
-        AbstractRawVec { cap: kani::any() };
+        AbstractRawVec { cap: kani::any() }
     }
 }
 
