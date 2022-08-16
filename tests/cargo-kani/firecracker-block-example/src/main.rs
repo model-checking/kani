@@ -93,12 +93,7 @@ unsafe impl ByteValued for Descriptor {}
 
 impl kani::Arbitrary for Descriptor {
     fn any() -> Self {
-        Descriptor {
-            addr: kani::any(),
-            len: kani::any(),
-            flags: kani::any(),
-            next: kani::any(),
-        }
+        Descriptor { addr: kani::any(), len: kani::any(), flags: kani::any(), next: kani::any() }
     }
 }
 
