@@ -563,6 +563,13 @@ impl Expr {
     }
 
     /// `typ x[__CPROVER_infinity()] = >>> {elem} <<<`
+    /// i.e. initilize an infinite sized sparse array.
+    /// This is useful for maps:
+    /// ```
+    /// bool x[__CPROVER_infinity()] = {false};
+    /// x[idx_1] = true;
+    /// if (x[idx_2]) { ... }
+    /// ```
     pub fn infinite_array_constant(self) -> Self {
         expr!(ArrayOf { elem: self }, self.typ.clone().infinite_array_of())
     }
@@ -825,7 +832,7 @@ impl Expr {
             typ,
             values
         );
-        let typ = if typ.is_struct() { typ.aggr_tag().unwrap() } else { typ };
+        let typ = typ.aggr_tag().unwrap();
         let fields = typ.lookup_components(symbol_table).unwrap();
         assert_eq!(
             fields.len(),
