@@ -319,12 +319,20 @@ impl<'tcx> GotocHook<'tcx> for SliceFromRawPart {
 
 /// This hook intercepts calls to `memcmp` and skips CBMC's pointer checks if the number of bytes to be compared is zero.
 /// See issue https://github.com/model-checking/kani/issues/1489
+///
+/// This compiles `memcmp(first, second, count)` to:
+/// ```c
+/// count_var = count;
+/// first_var = first;
+/// second_var = second;
+/// count_var == 0 && first_var != NULL && second_var != NULL ? 0 : memcmp(first_var, second_var, count_var)
+/// ```
 pub struct MemCmp;
 
 impl<'tcx> GotocHook<'tcx> for MemCmp {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
         let name = with_no_trimmed_paths!(tcx.def_path_str(instance.def_id()));
-        name.contains("memcmp")
+        name == "core::slice::cmp::memcmp"
     }
 
     fn handle(
@@ -348,8 +356,10 @@ impl<'tcx> GotocHook<'tcx> for MemCmp {
         let (second_var, second_decl) =
             tcx.decl_temp_variable(second.typ().clone(), Some(second), Location::none());
         let is_count_zero = count_var.clone().is_zero();
-        // TODO: we should also check that the pointers have correct alignment.
-        // At this point, we don't have the Rust types available anymore, however, so this is more difficult.
+        // We have to ensure that the pointers are valid even if we're comparing zero bytes.
+        // According to Rust's current definition (see https://github.com/model-checking/kani/issues/1489),
+        // this means they have to be non-null and aligned.
+        // But alignment is automatically satisfied because `memcmp` takes `*const u8` pointers.
         let is_first_ok = first_var.clone().is_nonnull();
         let is_second_ok = second_var.clone().is_nonnull();
         let should_skip_pointer_checks = is_count_zero.and(is_first_ok).and(is_second_ok);
