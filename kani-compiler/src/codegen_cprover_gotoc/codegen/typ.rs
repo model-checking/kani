@@ -687,10 +687,14 @@ impl<'tcx> GotocCtx<'tcx> {
     /// 1- Function pointer to drop in place.
     /// 2- The size of the object.
     /// 3- The alignment of the object.
-    /// We use this common structure to extract information out of a vtable.
+    /// We use this common structure to extract information out of a vtable. Since we don't have
+    /// any information about the original type, we use `void*` to encode the drop fn argument type.
     pub fn codegen_ty_common_vtable(&mut self) -> Type {
         self.ensure_struct(COMMON_VTABLE_STRUCT_NAME, COMMON_VTABLE_STRUCT_NAME, |_, _| {
-            common_vtable_fields(Type::void_pointer())
+            let drop_type =
+                Type::code_with_unnamed_parameters(vec![Type::void_pointer()], Type::unit())
+                    .to_pointer();
+            common_vtable_fields(drop_type)
         })
     }
 
@@ -1900,6 +1904,8 @@ pub fn pointee_type(mir_type: Ty) -> Option<Ty> {
     }
 }
 
+/// Extracts the pointee type if the given mir type is either a known smart pointer (Box, Rc, ..)
+/// or a regular pointer.
 pub fn std_pointee_type(mir_type: Ty) -> Option<Ty> {
     mir_type.builtin_deref(true).map(|tm| tm.ty)
 }
@@ -1942,7 +1948,9 @@ impl<'tcx> GotocCtx<'tcx> {
         metadata != self.tcx.types.unit && metadata != self.tcx.types.usize
     }
 
-    /// Does the current mir represent a fat pointer (Box, raw pointer or ref)
+    /// Does the current mir represent a fat pointer (Raw pointer or ref)
+    /// TODO: Should we use `std_pointee_type` here?
+    /// https://github.com/model-checking/kani/issues/1529
     pub fn is_fat_pointer(&self, pointer_ty: Ty<'tcx>) -> bool {
         pointee_type(pointer_ty).map_or(false, |pointee_ty| self.use_fat_pointer(pointee_ty))
     }

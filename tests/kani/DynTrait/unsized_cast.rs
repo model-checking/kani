@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 //! Check that we can cast between two unsized objects.
-//! This fix-me is derived from unsized_rc_cast.rs and it should be merged with the original test.
-//! The issue https://github.com/model-checking/kani/issues/1528 tracks the fix for this testcase.
 use std::rc::Rc;
 
 trait Byte {
@@ -16,14 +14,26 @@ impl Byte for u8 {
     }
 }
 
-fn all_zero_rc(num: Rc<dyn Byte>) -> bool {
+fn all_zero(num: Box<dyn Byte>) -> bool {
     num.eq(0x0)
 }
 
 #[kani::proof]
-fn check_rc() {
+fn check_box() {
     let num: u8 = kani::any();
     kani::assume(num != 0);
-    let rc: Rc<dyn Byte + Sync> = Rc::new(num);
-    assert!(!all_zero_rc(rc));
+    let boxed: Box<dyn Byte + Sync> = Box::new(num);
+    assert!(!all_zero(boxed));
+}
+
+fn all_zero_ref(num: &dyn Byte) -> bool {
+    num.eq(0x0)
+}
+
+#[kani::proof]
+fn check_ref() {
+    let num: u8 = kani::any();
+    kani::assume(num != 0);
+    let fat_ptr: &(dyn Byte + Sync) = &num;
+    assert!(!all_zero_ref(fat_ptr));
 }

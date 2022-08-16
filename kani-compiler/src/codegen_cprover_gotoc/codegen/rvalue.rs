@@ -1079,6 +1079,8 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Note: This seems conceptually wrong. If we are converting sized to unsized, how come
     /// source and destination can have the same type? Also, how come destination can be a thin
     /// pointer?
+    /// TODO: Fix the cast code structure:
+    /// https://github.com/model-checking/kani/issues/1531
     fn cast_sized_pointer_to_fat_pointer(
         &mut self,
         src_goto_expr: Expr,

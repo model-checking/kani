@@ -1215,6 +1215,7 @@ impl<'tcx> GotocCtx<'tcx> {
         place: &Place<'tcx>,
         _loc: Location,
     ) -> Stmt {
+        assert_eq!(fargs.len(), 1, "vtable intrinsics expects one raw pointer argument");
         let vtable_obj = fargs
             .pop()
             .unwrap()
