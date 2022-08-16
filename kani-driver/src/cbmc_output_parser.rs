@@ -278,7 +278,7 @@ impl std::fmt::Display for SourceLocation {
         }
         if let Some(function) = self.function.clone() {
             let demangled_function = demangle(&function);
-            write!(&mut fmt_str, " in function `{:#}`", demangled_function)?;
+            write!(&mut fmt_str, " in function {:#}", demangled_function)?;
         }
 
         write! {f, "{}", fmt_str}
