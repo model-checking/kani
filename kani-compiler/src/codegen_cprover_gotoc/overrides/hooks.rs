@@ -317,6 +317,64 @@ impl<'tcx> GotocHook<'tcx> for SliceFromRawPart {
     }
 }
 
+/// This hook intercepts calls to `memcmp` and skips CBMC's pointer checks if the number of bytes to be compared is zero.
+/// See issue https://github.com/model-checking/kani/issues/1489
+pub struct MemCmp;
+
+impl<'tcx> GotocHook<'tcx> for MemCmp {
+    fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
+        let name = with_no_trimmed_paths!(tcx.def_path_str(instance.def_id()));
+        name.contains("memcmp")
+    }
+
+    fn handle(
+        &self,
+        tcx: &mut GotocCtx<'tcx>,
+        instance: Instance<'tcx>,
+        mut fargs: Vec<Expr>,
+        assign_to: Place<'tcx>,
+        target: Option<BasicBlock>,
+        span: Option<Span>,
+    ) -> Stmt {
+        let loc = tcx.codegen_span_option(span);
+        let target = target.unwrap();
+        let first = fargs.remove(0);
+        let second = fargs.remove(0);
+        let count = fargs.remove(0);
+        let (count_var, count_decl) =
+            tcx.decl_temp_variable(count.typ().clone(), Some(count), Location::none());
+        let (first_var, first_decl) =
+            tcx.decl_temp_variable(first.typ().clone(), Some(first), Location::none());
+        let (second_var, second_decl) =
+            tcx.decl_temp_variable(second.typ().clone(), Some(second), Location::none());
+        let is_count_zero = count_var.clone().is_zero();
+        // TODO: we should also check that the pointers have correct alignment.
+        // At this point, we don't have the Rust types available anymore, however, so this is more difficult.
+        let is_first_ok = first_var.clone().is_nonnull();
+        let is_second_ok = second_var.clone().is_nonnull();
+        let should_skip_pointer_checks = is_count_zero.and(is_first_ok).and(is_second_ok);
+        let place_expr =
+            unwrap_or_return_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&assign_to))
+                .goto_expr;
+        let rhs = should_skip_pointer_checks.ternary(
+            Expr::int_constant(0, place_expr.typ().clone()), // zero bytes are always equal (as long as pointers are nonnull and aligned)
+            tcx.codegen_func_expr(instance, span.as_ref())
+                .call(vec![first_var, second_var, count_var]),
+        );
+        let code = place_expr.assign(rhs, loc).with_location(loc);
+        Stmt::block(
+            vec![
+                count_decl,
+                first_decl,
+                second_decl,
+                code,
+                Stmt::goto(tcx.current_fn().find_label(&target), loc),
+            ],
+            loc,
+        )
+    }
+}
+
 pub fn fn_hooks<'tcx>() -> GotocHooks<'tcx> {
     GotocHooks {
         hooks: vec![
@@ -327,6 +385,7 @@ pub fn fn_hooks<'tcx>() -> GotocHooks<'tcx> {
             Rc::new(Nondet),
             Rc::new(RustAlloc),
             Rc::new(SliceFromRawPart),
+            Rc::new(MemCmp),
         ],
     }
 }
