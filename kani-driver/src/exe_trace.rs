@@ -34,7 +34,8 @@ impl KaniSession {
         if !self.args.add_exe_trace_to_src && !self.args.quiet {
             println!(
                 "Executable trace for `{}`:\n```\n{}\n```",
-                &harness.mangled_name, &exe_trace.unit_test_str
+                harness.mangled_name,
+                exe_trace.unit_test.join("\n")
             );
             println!(
                 "To automatically add the executable trace `{}` to the src code, run Kani with `--add-exe-trace-to-src`.",
@@ -103,7 +104,7 @@ impl KaniSession {
         write!(
             tmp_src_file,
             "{}\n{}{}",
-            src_before_exe_trace, exe_trace.unit_test_str, src_after_exe_trace
+            src_before_exe_trace, exe_trace.unit_test, src_after_exe_trace
         )
         .with_context(|| {
             format!("Couldn't write new src str into tmp src file `{tmp_src_path}`")
@@ -133,7 +134,7 @@ impl KaniSession {
             )
         })?;
 
-        let exe_trace_num_lines = exe_trace.unit_test_str.matches('\n').count() + 1;
+        let exe_trace_num_lines = exe_trace.unit_test.matches('\n').count() + 1;
         let unit_test_start_line = proof_harness_end_line + 1;
         let unit_test_end_line = unit_test_start_line + exe_trace_num_lines - 1;
         let file_line_ranges = vec![FileLineRange {
@@ -194,30 +195,33 @@ const TAB: &str = "    ";
 
 /// Format a full deterministic unit test for a number of det vals.
 fn format_unit_test(harness_name: &str, det_vals: &[parser::DetVal]) -> ExeTrace {
-    let vecs_as_str = format_det_vals(det_vals);
+    let mut formatted_det_vals = format_det_vals(det_vals);
 
     // Hash the generated det val string along with the proof harness name.
     let mut hasher = DefaultHasher::new();
     harness_name.hash(&mut hasher);
-    vecs_as_str.hash(&mut hasher);
+    formatted_det_vals.hash(&mut hasher);
     let hash = hasher.finish();
 
     let exe_trace_func_name = format!("kani_exe_trace_{harness_name}_{hash}");
-    let exe_trace = format!(
-        "#[test]\
-        fn {exe_trace_func_name}() {{\
-        {TAB}let det_vals: Vec<Vec<u8>> = vec![\
-        {vecs_as_str}\
-        {TAB}];\
-        {TAB}kani::exe_trace_run(det_vals, {harness_name});\
-        }}"
-    );
+    let exe_trace: Vec<String> = vec![
+        "#[test]".to_string(),
+        format!("fn {exe_trace_func_name}() {{"),
+        format!("{TAB}let det_vals: Vec<Vec<u8>> = vec!["),
+    ];
+    // TODO: Try to convert this to iterator
+    exe_trace.append(&mut formatted_det_vals);
+    exe_trace.extend([
+        format!("{TAB}];"),
+        format!("{TAB}kani::exe_trace_run(det_vals, {harness_name});"),
+        "}}".to_string(),
+    ]);
 
-    ExeTrace { unit_test_str: exe_trace, unit_test_name: exe_trace_func_name }
+    ExeTrace { unit_test: exe_trace, unit_test_name: exe_trace_func_name }
 }
 
 /// Format an initializer expression for a number of det vals.
-fn format_det_vals(det_vals: &[parser::DetVal]) -> String {
+fn format_det_vals(det_vals: &[parser::DetVal]) -> Vec<String> {
     /*
     Given a number of byte vectors, format them as:
     // interp_det_val_1
@@ -228,11 +232,13 @@ fn format_det_vals(det_vals: &[parser::DetVal]) -> String {
     let two_tab = TAB.repeat(2);
     det_vals
         .iter()
-        .map(|det_val| {
-            format!("{two_tab}// {}\n{two_tab}vec!{:?}", det_val.interp_val, det_val.byte_arr)
+        .flat_map(|det_val| {
+            [
+                format!("{two_tab}// {}", det_val.interp_val),
+                format!("{two_tab}vec!{:?}", det_val.byte_arr),
+            ]
         })
         .collect::<Vec<String>>()
-        .join(",\n")
 }
 
 struct FileLineRange {
@@ -241,7 +247,7 @@ struct FileLineRange {
 }
 
 struct ExeTrace {
-    unit_test_str: String,
+    unit_test: Vec<String>,
     unit_test_name: String,
 }
 
@@ -450,5 +456,29 @@ mod tests {
             {two_tab}vec![0, 0, 0, 0, 0, 0, 0, 0]"
         );
         assert_eq!(actual, expected);
+    }
+
+    struct UnitTestName {
+        before_hash: String,
+        hash: String,
+    }
+
+    /// Unit test names are "kani_exe_trace_{harness_name}_{hash}".
+    /// Split this into the "kani_exe_trace_{harness_name}" and "{hash}".
+    fn split_unit_test_name(unit_test_name: &str) -> UnitTestName {
+        let underscore_locs: Vec<_> = unit_test_name.match_indices('_').collect();
+        let last_underscore_idx = underscore_locs[underscore_locs.len() - 1].0;
+        UnitTestName {
+            before_hash: unit_test_name[..last_underscore_idx].to_string(),
+            hash: unit_test_name[last_underscore_idx + 1..].to_string(),
+        }
+    }
+
+    #[test]
+    fn format_unit_test_overall_structure() {
+        let harness_name = "test_proof_harness";
+        let det_vals = [DetVal { byte_arr: vec![0, 0], interp_val: "0".to_string() }];
+        let unit_test = format_unit_test(harness_name, &det_vals);
+        //let unit_test_name = split_unit_test_name(unit_test.)
     }
 }
