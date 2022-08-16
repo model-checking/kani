@@ -349,12 +349,10 @@ impl<'tcx> GotocHook<'tcx> for MemCmp {
         let first = fargs.remove(0);
         let second = fargs.remove(0);
         let count = fargs.remove(0);
-        let (count_var, count_decl) =
-            tcx.decl_temp_variable(count.typ().clone(), Some(count), Location::none());
-        let (first_var, first_decl) =
-            tcx.decl_temp_variable(first.typ().clone(), Some(first), Location::none());
+        let (count_var, count_decl) = tcx.decl_temp_variable(count.typ().clone(), Some(count), loc);
+        let (first_var, first_decl) = tcx.decl_temp_variable(first.typ().clone(), Some(first), loc);
         let (second_var, second_decl) =
-            tcx.decl_temp_variable(second.typ().clone(), Some(second), Location::none());
+            tcx.decl_temp_variable(second.typ().clone(), Some(second), loc);
         let is_count_zero = count_var.clone().is_zero();
         // We have to ensure that the pointers are valid even if we're comparing zero bytes.
         // According to Rust's current definition (see https://github.com/model-checking/kani/issues/1489),
