@@ -24,6 +24,7 @@ clap = "2.34"
 glob = "0.3"
 toml = "0.5"
 regex = "1.6"
+rustc-demangle = "0.1.21"
 pathdiff = "0.2.1"
 
 # A good set of suggested dependencies can be found in rustup:
