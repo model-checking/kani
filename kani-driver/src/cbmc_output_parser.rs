@@ -819,15 +819,8 @@ fn modify_undefined_function_checks(mut properties: Vec<Property>) -> (Vec<Prope
             && prop.description == DEFAULT_ASSERTION
             && prop.source_location.file.is_none()
         {
-            // Missing functions come with mangled names. `demangle` produces
-            // the demangled version if it's a mangled name, but for some reason
-            // the name is not being fully demangled. For example:
-            //
-            // function: _ZN60_$LT$alloc..string..String$u20$as$u20$core..clone..Clone$GT$5clone17h830b64d2ac32f613E
-            // demangle(function): <alloc::string::String as core::clone::Clone>::clone::h830b64d2ac32f613
-            //
-            // Note the last part, which doesn't appear to be demangled.
-            // Still, it's more readable than the mangled name.
+            // Missing functions come with mangled names.
+            // `demangle` produces the demangled version if it's a mangled name.
             let modified_description = format!("Function `{:#}` with missing definition is unreachable", demangle(function));
             prop.description = modified_description;
             if prop.status == CheckStatus::Failure {
