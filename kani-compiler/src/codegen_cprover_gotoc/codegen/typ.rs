@@ -1950,7 +1950,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Does the current mir represent a fat pointer (Raw pointer or ref)
     /// TODO: Should we use `std_pointee_type` here?
-    /// https://github.com/model-checking/kani/issues/1529
+    /// <https://github.com/model-checking/kani/issues/1529>
     pub fn is_fat_pointer(&self, pointer_ty: Ty<'tcx>) -> bool {
         pointee_type(pointer_ty).map_or(false, |pointee_ty| self.use_fat_pointer(pointee_ty))
     }

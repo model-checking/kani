@@ -1080,7 +1080,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// source and destination can have the same type? Also, how come destination can be a thin
     /// pointer?
     /// TODO: Fix the cast code structure:
-    /// https://github.com/model-checking/kani/issues/1531
+    /// <https://github.com/model-checking/kani/issues/1531>
     fn cast_sized_pointer_to_fat_pointer(
         &mut self,
         src_goto_expr: Expr,
