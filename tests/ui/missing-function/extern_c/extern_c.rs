@@ -7,8 +7,6 @@
 // TODO: Verify that this prints a compiler warning:
 //  - https://github.com/model-checking/kani/issues/576
 
-// TODO: Missing functions produce non-informative property descriptions
-// https://github.com/model-checking/kani/issues/1271
 extern "C" {
     fn missing_function() -> u32;
 }

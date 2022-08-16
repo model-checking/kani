@@ -344,6 +344,7 @@ dependencies = [
  "once_cell",
  "pathdiff",
  "regex",
+ "rustc-demangle",
  "serde",
  "serde_json",
  "structopt",

@@ -418,6 +418,11 @@ impl Type {
         }
     }
 
+    pub fn is_bitfield(&self) -> bool {
+        let concrete = self.unwrap_typedef();
+        matches!(concrete, CBitField { .. })
+    }
+
     pub fn is_bool(&self) -> bool {
         let concrete = self.unwrap_typedef();
         match concrete {
@@ -1211,7 +1216,7 @@ impl Type {
     }
 
     pub fn one(&self) -> Expr {
-        if self.is_integer() {
+        if self.is_integer() || self.is_bitfield() {
             Expr::int_constant(1, self.clone())
         } else if self.is_c_bool() {
             Expr::c_true()
@@ -1225,8 +1230,10 @@ impl Type {
     }
 
     pub fn zero(&self) -> Expr {
-        if self.is_integer() {
+        if self.is_integer() || self.is_bitfield() {
             Expr::int_constant(0, self.clone())
+        } else if self.is_bool() {
+            Expr::bool_false()
         } else if self.is_c_bool() {
             Expr::c_false()
         } else if self.is_float() {
@@ -1236,7 +1243,63 @@ impl Type {
         } else if self.is_pointer() {
             Expr::pointer_constant(0, self.clone())
         } else {
-            unreachable!("Can't convert {:?} to a one value", self);
+            unreachable!("Can't convert {:?} to a zero value", self);
+        }
+    }
+
+    pub fn zero_initializer(&self, st: &SymbolTable) -> Expr {
+        let concrete = self.unwrap_typedef();
+        match concrete {
+            // Base case
+            Bool
+            | CBitField { .. }
+            | CInteger(_)
+            | Double
+            | Float
+            | Pointer { .. }
+            | Signedbv { .. }
+            | Unsignedbv { .. } => self.zero(),
+
+            // Recursive cases
+            Array { typ, size } => typ.zero_initializer(st).array_constant(*size),
+            InfiniteArray { typ } => typ.zero_initializer(st).infinite_array_constant(),
+            Struct { components, .. } => {
+                let values: Vec<Expr> =
+                    components.iter().map(|c| c.typ().zero_initializer(st)).collect();
+                Expr::struct_expr_from_padded_values(self.clone(), values, st)
+            }
+            StructTag(tag) => st.lookup(*tag).unwrap().typ.zero_initializer(st),
+            TypeDef { .. } => unreachable!("Should have been normalized away"),
+            Union { components, .. } => {
+                if components.is_empty() {
+                    Expr::empty_union(self.clone(), st)
+                } else {
+                    let largest = components.iter().max_by_key(|c| c.sizeof_in_bits(st)).unwrap();
+                    Expr::union_expr(
+                        self.clone(),
+                        largest.name(),
+                        largest.typ().zero_initializer(st),
+                        st,
+                    )
+                }
+            }
+            UnionTag(tag) => st.lookup(*tag).unwrap().typ.zero_initializer(st),
+            Vector { typ, size } => {
+                let zero = typ.zero_initializer(st);
+                let size = (*size).try_into().unwrap();
+                let elems = vec![zero; size];
+                Expr::vector_expr(self.clone(), elems)
+            }
+
+            // Cases that can't be zero init
+            // Note that other than flexible array, none of these can be fields in a struct or union
+            Code { .. }
+            | Constructor
+            | Empty
+            | FlexibleArray { .. }
+            | IncompleteStruct { .. }
+            | IncompleteUnion { .. }
+            | VariadicCode { .. } => panic!("Can't zero init {:?}", self),
         }
     }
 }

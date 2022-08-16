@@ -25,6 +25,7 @@ use console::style;
 use once_cell::sync::Lazy;
 use pathdiff::diff_paths;
 use regex::Regex;
+use rustc_demangle::demangle;
 use serde::Deserialize;
 use std::{
     collections::HashMap,
@@ -176,7 +177,6 @@ static CBMC_ALT_DESCRIPTIONS: Lazy<CbmcAltDescriptions> = Lazy::new(|| {
 
 const UNSUPPORTED_CONSTRUCT_DESC: &str = "is not currently supported by Kani";
 const UNWINDING_ASSERT_DESC: &str = "unwinding assertion loop";
-const ASSERTION_FALSE: &str = "assertion false";
 const DEFAULT_ASSERTION: &str = "assertion";
 const REACH_CHECK_DESC: &str = "[KANI_REACHABILITY_CHECK]";
 
@@ -277,7 +277,8 @@ impl std::fmt::Display for SourceLocation {
             write!(&mut fmt_str, "Unknown file")?;
         }
         if let Some(function) = self.function.clone() {
-            write!(&mut fmt_str, " in function {function}")?;
+            let demangled_function = demangle(&function);
+            write!(&mut fmt_str, " in function {:#}", demangled_function)?;
         }
 
         write! {f, "{}", fmt_str}
@@ -811,16 +812,17 @@ fn has_check_failure(properties: &Vec<Property>, description: &str) -> bool {
 
 /// Replaces the description of all properties from functions with a missing
 /// definition.
-/// TODO: This hasn't been working as expected, see
-/// <https://github.com/model-checking/kani/issues/1424>
 fn modify_undefined_function_checks(mut properties: Vec<Property>) -> (Vec<Property>, bool) {
     let mut has_unknown_location_checks = false;
     for mut prop in &mut properties {
-        if prop.description.contains(ASSERTION_FALSE)
-            && extract_property_class(prop).unwrap() == DEFAULT_ASSERTION
+        if let Some(function) = &prop.source_location.function
+            && prop.description == DEFAULT_ASSERTION
             && prop.source_location.file.is_none()
         {
-            prop.description = "Function with missing definition is unreachable".to_string();
+            // Missing functions come with mangled names.
+            // `demangle` produces the demangled version if it's a mangled name.
+            let modified_description = format!("Function `{:#}` with missing definition is unreachable", demangle(function));
+            prop.description = modified_description;
             if prop.status == CheckStatus::Failure {
                 has_unknown_location_checks = true;
             }
