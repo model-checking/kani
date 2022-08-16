@@ -65,7 +65,7 @@ impl GuestMemoryMmap {
 pub struct GuestAddress(pub u64);
 
 impl kani::Arbitrary for GuestAddress {
-    fn any() -> GuestAddress {
+    fn any() -> Self {
         GuestAddress(kani::any())
     }
 }

@@ -27,7 +27,7 @@ struct AbstractVecDeque {
 }
 
 impl kani::Arbitrary for AbstractVecDeque {
-    fn any() -> AbstractVecDeque {
+    fn any() -> Self {
         let value = AbstractVecDeque { tail: kani::any(), head: kani::any(), buf: kani::any() };
         kani::assume(value.is_valid());
         value
@@ -239,18 +239,12 @@ struct AbstractRawVec {
 }
 
 impl kani::Arbitrary for AbstractRawVec {
-    fn any() -> AbstractRawVec {
-        let value = AbstractRawVec { cap: kani::any() };
-        kani::assume(value.is_valid());
-        value
+    fn any() -> Self {
+        AbstractRawVec { cap: kani::any() };
     }
 }
 
 impl AbstractRawVec {
-    fn is_valid(&self) -> bool {
-        true
-    }
-
     pub fn capacity(&self) -> usize {
         self.cap
     }
