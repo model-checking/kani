@@ -219,6 +219,7 @@ impl ToIrep for ExprValue {
                     )],
                 }
             }
+            ExprValue::EmptyUnion => Irep::just_id(IrepId::EmptyUnion),
             ExprValue::FloatConstant(i) => {
                 let c: u32 = i.to_bits();
                 Irep {
