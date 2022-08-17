@@ -54,7 +54,14 @@ impl<'tcx> GotocCtx<'tcx> {
         Spec::new(bv, Expr::bool_true(), loc)
     }
 
-    /// Generates a symbol for the function contract and adds it to the symbol table
+    /// Generates a new contract symbol and adds it to the symbol table.
+    /// See https://github.com/diffblue/cbmc/pull/6799 for further details about the contract symbol.
+    /// The name of the contract symbol should be set to "contract::<function-name>".
+    /// The type field of the contract symbol contains the `#spec_requires`, `#spec_ensures`, and `#spec_assigns` fields 
+    ///     for specifying the preconditions, postconditions, and the modifies (assigns/write) set of the function respectively.
+    /// The contract symbol serves as the entry point for CBMC to check the contract. 
+    /// Since we want CBMC to only check the modifies clause, we set the other expected fields - 
+    ///     `#spec_requires` and `#spec_ensures` to "true".
     pub fn codegen_modifies_clause(&mut self, args: Vec<NestedMetaItem>) {
         let mir = self.current_fn().mir();
         let loc = self.codegen_span(&mir.span);
@@ -65,7 +72,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         let name = format!("contract::{}", self.current_fn().name()); // name of the contract symbol
 
-        // Transform comma-separated "targets" (variables, references, etc.) from the modifies clause into specifications containing lambda expressions
+        // Transform comma-separated "targets" (variables) from the modifies clause into specifications containing lambda expressions
         let spec_args = args
             .iter()
             .map(|a| {
