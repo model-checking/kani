@@ -318,7 +318,7 @@ impl<'tcx> GotocHook<'tcx> for SliceFromRawPart {
 }
 
 /// This hook intercepts calls to `memcmp` and skips CBMC's pointer checks if the number of bytes to be compared is zero.
-/// See issue https://github.com/model-checking/kani/issues/1489
+/// See issue <https://github.com/model-checking/kani/issues/1489>
 ///
 /// This compiles `memcmp(first, second, count)` to:
 /// ```c
