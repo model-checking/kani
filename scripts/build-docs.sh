@@ -2,6 +2,10 @@
 # Copyright Kani Contributors
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
+# Build all our documentation and place them under book/ directory.
+# The user facing doc is built into book/
+# Our RFCs is placed under book/rfcs/
+
 set -eu
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
@@ -20,7 +24,10 @@ fi
 
 # Publish bookrunner report into our documentation
 KANI_DIR=$SCRIPT_DIR/..
+DOCS_DIR=$KANI_DIR/docs
 HTML_DIR=$KANI_DIR/build/output/latest/html/
+
+pushd $DOCS_DIR
 
 if [ -d $HTML_DIR ]; then
     # Litani run is copied into `src` to avoid deletion by `mdbook`
@@ -38,14 +45,17 @@ else
     echo "WARNING: Could not find the latest bookrunner run."
 fi
 
+echo "Building use documentation..."
 # Build the book into ./book/
 mkdir -p book
-./mdbook build
+${SCRIPT_DIR}/mdbook build
 touch book/.nojekyll
 
 # Testing of the code in the documentation is done via the usual
 # ./scripts/kani-regression.sh script. A note on running just the
 # doc tests is in README.md. We don't run them here because
 # that would cause CI to run these tests twice.
+
+echo "Building rfcs..."
 
 echo "Finished documentation build successfully."
