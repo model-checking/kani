@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// kani-flags: --harness harness --enable-unstable --gen-exe-trace
+// kani-flags: --harness harness --enable-unstable --gen-conc-playback
 
 /// This should generate 2 bools.
 /// The first should be 0 because the Result type is Ok.

@@ -16,12 +16,12 @@ kani = { path = "{path_to_kani}/library/kani", features = ["exe_trace"] }
 
 ## Usage
 
-Run Kani with the `--gen-exe-trace` flag.
+Run Kani with the `--gen-conc-playback` flag.
 After verifying the proof harness checks, Kani will extract concrete values for the `kani::any()` variables
 and generate a Rust unit test case.
 This unit test initializes the concrete values and calls the proof harness.
 A user can then either 1) copy this unit test into the same module as their proof harness or
-2) run Kani with the `--add-exe-trace-to-src` flag to have Kani automatically do this.
+2) run Kani with the `--add-conc-playback-to-src` flag to have Kani automatically do this.
 
 After the unit test is in their source code, users can run it with `cargo test`.
 To debug it, there are a couple of options.

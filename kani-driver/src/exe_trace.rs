@@ -18,7 +18,7 @@ use std::process::Command;
 impl KaniSession {
     /// The main driver for generating executable traces and adding them to source code.
     pub fn gen_and_add_exe_trace(&self, output_filename: &Path, harness: &HarnessMetadata) {
-        if !self.args.gen_exe_trace {
+        if !self.args.gen_conc_playback {
             return;
         }
 
@@ -31,18 +31,18 @@ impl KaniSession {
             .expect("Something went wrong when trying to get det vals from the CBMC output file");
         let exe_trace = format_unit_test(&harness.mangled_name, &det_vals);
 
-        if !self.args.add_exe_trace_to_src && !self.args.quiet {
+        if !self.args.add_conc_playback_to_src && !self.args.quiet {
             println!(
                 "Executable trace for `{}`:\n```\n{}\n```",
                 &harness.mangled_name, &exe_trace.unit_test_str
             );
             println!(
-                "To automatically add the executable trace `{}` to the src code, run Kani with `--add-exe-trace-to-src`.",
+                "To automatically add the executable trace `{}` to the src code, run Kani with `--add-conc-playback-to-src`.",
                 &exe_trace.unit_test_name
             );
         }
 
-        if self.args.add_exe_trace_to_src {
+        if self.args.add_conc_playback_to_src {
             if !self.args.quiet {
                 println!(
                     "Now modifying the source code to include the unit test `{}`.",

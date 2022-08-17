@@ -51,10 +51,10 @@ pub struct KaniArgs {
         requires("harness"),
         conflicts_with_all(&["visualize", "dry-run"]),
     )]
-    pub gen_exe_trace: bool,
+    pub gen_conc_playback: bool,
     /// Additionally add executable trace test case to the source code
-    #[structopt(long, requires("gen-exe-trace"))]
-    pub add_exe_trace_to_src: bool,
+    #[structopt(long, requires("gen-conc-playback"))]
+    pub add_conc_playback_to_src: bool,
     /// Keep temporary files generated throughout Kani process
     #[structopt(long, hidden_short_help(true))]
     pub keep_temps: bool,
