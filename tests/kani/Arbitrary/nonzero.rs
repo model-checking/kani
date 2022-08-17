@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
 //! Ensure that kani::any behaves correcty with NonZero types.
-//! This is currently failing due to some issue in the niche optimization.
-//! See <https://github.com/model-checking/kani/issues/1533> for more details.
 
 use std::num::*;
 
