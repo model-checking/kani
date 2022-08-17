@@ -43,6 +43,18 @@ pub struct KaniArgs {
     /// Generate visualizer report to <target-dir>/report/html/index.html
     #[structopt(long)]
     pub visualize: bool,
+    /// Generate executable trace test case and print it to stdout.
+    /// This option does not work with `--output-format old`.
+    #[structopt(
+        long,
+        requires("enable-unstable"),
+        requires("harness"),
+        conflicts_with_all(&["visualize", "dry-run"]),
+    )]
+    pub gen_exe_trace: bool,
+    /// Additionally add executable trace test case to the source code
+    #[structopt(long, requires("gen-exe-trace"))]
+    pub add_exe_trace_to_src: bool,
     /// Keep temporary files generated throughout Kani process
     #[structopt(long, hidden_short_help(true))]
     pub keep_temps: bool,
@@ -61,9 +73,11 @@ pub struct KaniArgs {
     pub enable_unstable: bool,
 
     // Hide this since it depends on function that is a hidden option.
-    /// Print commands instead of running them
-    #[structopt(long, requires("function"), hidden(true))]
+    /// Print commands instead of running them. This command uses "harness" as a place holder for
+    /// name of the target harness.
+    #[structopt(long, hidden(true), requires("enable-unstable"))]
     pub dry_run: bool,
+
     /// Generate C file equivalent to inputted program.
     /// This feature is unstable and it requires `--enable-unstable` to be used
     #[structopt(long, hidden_short_help(true), requires("enable-unstable"))]
@@ -83,7 +97,7 @@ pub struct KaniArgs {
 
     /// Entry point for verification (symbol name).
     /// This is an unstable feature. Consider using --harness instead
-    #[structopt(long, hidden = true, requires("enable-unstable"))]
+    #[structopt(long, hidden = true, requires("enable-unstable"), conflicts_with("dry-run"))]
     pub function: Option<String>,
     /// Entry point for verification (proof harness)
     // In a dry-run, we don't have kani-metadata.json to read, so we can't use this flag
@@ -148,6 +162,14 @@ pub struct KaniArgs {
     /// This option may impact the soundness of the analysis and may cause false proofs and/or counterexamples
     #[structopt(long, hidden_short_help(true), requires("enable-unstable"))]
     pub ignore_global_asm: bool,
+
+    /// Execute CBMC's sanity checks to ensure the goto-program we generate is correct.
+    #[structopt(long, hidden_short_help(true), requires("enable-unstable"))]
+    pub run_sanity_checks: bool,
+
+    /// Disable CBMC's slice formula which prevents values from being assigned to redundant variables in traces.
+    #[structopt(long, hidden_short_help(true), requires("enable-unstable"))]
+    pub no_slice_formula: bool,
     /*
     The below is a "TODO list" of things not yet implemented from the kani_flags.py script.
 
@@ -405,5 +427,10 @@ mod tests {
     #[test]
     fn check_restrict_cbmc_args() {
         check_unstable_flag("--cbmc-args --json-ui")
+    }
+
+    #[test]
+    fn check_disable_slicing_unstable() {
+        check_unstable_flag("--no-slice-formula")
     }
 }

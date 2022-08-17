@@ -19,12 +19,9 @@ error=0
 cargo fmt "$@" || error=1
 
 # Check test source files.
-TESTS=("tests/kani"
-    "tests/prusti"
-    "tests/smack"
-    "tests/expected"
-    "tests/cargo-kani"
-    "docs/src/tutorial")
+# Note that this will respect the ignore section of rustfmt.toml. If you need to
+# skip any file / directory, add it there.
+TESTS=("tests" "docs/src/tutorial")
 
 for suite in "${TESTS[@]}"; do
     # Find uses breakline to split between files. This ensures that we can
@@ -32,7 +29,9 @@ for suite in "${TESTS[@]}"; do
     set -f; IFS=$'\n'
     files=($(find "${suite}" -name "*.rs"))
     set +f; unset IFS
-    rustfmt --unstable-features "$@" "${files[@]}" || error=1
+    # Note: We set the configuration file here because some submodules have
+    # their own configuration file.
+    rustfmt --unstable-features "$@" --config-path rustfmt.toml "${files[@]}" || error=1
 done
 
 exit $error

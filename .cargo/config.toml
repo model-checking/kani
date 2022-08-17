@@ -1,0 +1,11 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+[target.'cfg(all())']
+rustflags = [ # Global lints/warnings. Need to use underscore instead of -.
+
+    # Purposefully disabled lints
+    "-Aclippy::expect_fun_call",
+    "-Aclippy::or_fun_call",
+    "-Aclippy::new_without_default",
+]

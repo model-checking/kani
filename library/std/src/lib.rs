@@ -100,42 +100,28 @@ macro_rules! debug_assert_ne {
     ($($x:tt)*) => ({ $crate::assert_ne!($($x)*); })
 }
 
-#[macro_export]
-macro_rules! evaluate_print_args {
-    () => { /* do nothing */ };
-    // For println!("Some message {} {} ...", arg1, arg2, ...)
-    // $msg is "Some message {} {} ..."
-    // and $arg has arg1, arg2, ...
-    ($msg:expr $(, $arg:expr)* $(,)?) => {
-        // Evaluate each of the arguments since they may have side effects
-        {
-            $(
-                let _ = &$arg;
-            )*
-        }
-    };
-}
-
 // Override the print macros to skip all the formatting functionality (which
 // is not relevant for verification)
 #[macro_export]
 macro_rules! print {
-    ($($x:tt)*) => { evaluate_print_args!($($x)*); };
+    ($($x:tt)*) => {{ let _ = format_args!($($x)*); }};
 }
 
 #[macro_export]
 macro_rules! eprint {
-    ($($x:tt)*) => { evaluate_print_args!($($x)*); };
+    ($($x:tt)*) => {{ let _ = format_args!($($x)*); }};
 }
 
 #[macro_export]
 macro_rules! println {
-    ($($x:tt)*) => { evaluate_print_args!($($x)*); };
+    () => { };
+    ($($x:tt)*) => {{ let _ = format_args!($($x)*); }};
 }
 
 #[macro_export]
 macro_rules! eprintln {
-    ($($x:tt)*) => { evaluate_print_args!($($x)*); };
+    () => { };
+    ($($x:tt)*) => {{ let _ = format_args!($($x)*); }};
 }
 
 #[macro_export]
@@ -158,7 +144,9 @@ macro_rules! unreachable {
     );
     // The first argument is the format and the rest contains tokens to be included in the msg.
     // `unreachable!("Error: {}", code);`
-    ($fmt:literal, $($arg:tt)*) => (
+    // We have the same issue as with panic!() described bellow where we over-approx what we can
+    // handle.
+    ($fmt:expr, $($arg:tt)*) => (
         kani::panic(concat!("internal error: entered unreachable code: ",
         stringify!($fmt, $($arg)*))));
 }
@@ -185,9 +173,19 @@ macro_rules! panic {
     ($msg:expr $(,)?) => ({
         kani::panic(stringify!($msg));
     });
-    // The first argument is the format and the rest contains tokens to be included in the msg.
+    // The first argument is the message and the rest contains tokens to be included in the msg.
     // `panic!("Error: {}", code);`
-    ($msg:literal, $($arg:tt)+) => ({
+    //
+    // Note: This macro may match things that wouldn't be accepted by the panic!() macro. we have
+    // decided to over-approximate the matching so we can deal with things like macro inside a macro
+    // E.g.:
+    // ```
+    // panic!(concat!("Message {}", " split in two"), argument);
+    // ```
+    // The std implementation of `panic!()` macro is implemented in the compiler and it seems to
+    // be able to do things that we cannot do here.
+    // https://github.com/rust-lang/rust/blob/dc2d232c7485c60dd856f8b9aee83426492d4661/compiler/rustc_expand/src/base.rs#L1197
+    ($msg:expr, $($arg:tt)+) => ({
         kani::panic(stringify!($msg, $($arg)+));
     });
 }

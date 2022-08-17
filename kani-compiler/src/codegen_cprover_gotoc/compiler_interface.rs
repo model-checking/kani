@@ -37,8 +37,8 @@ pub struct GotocCodegenBackend {
 }
 
 impl GotocCodegenBackend {
-    pub fn new(queries: &Rc<QueryDb>) -> Box<dyn CodegenBackend> {
-        Box::new(GotocCodegenBackend { queries: Rc::clone(queries) })
+    pub fn new(queries: &Rc<QueryDb>) -> Self {
+        GotocCodegenBackend { queries: Rc::clone(queries) }
     }
 }
 
@@ -151,7 +151,7 @@ impl CodegenBackend for GotocCodegenBackend {
         let metadata = KaniMetadata { proof_harnesses: c.proof_harnesses };
 
         // No output should be generated if user selected no_codegen.
-        if !tcx.sess.opts.debugging_opts.no_codegen && tcx.sess.opts.output_types.should_codegen() {
+        if !tcx.sess.opts.unstable_opts.no_codegen && tcx.sess.opts.output_types.should_codegen() {
             let outputs = tcx.output_filenames(());
             let base_filename = outputs.output_path(OutputType::Object);
             let pretty = self.queries.get_output_pretty_json();
@@ -214,8 +214,9 @@ impl CodegenBackend for GotocCodegenBackend {
 
         // All this ultimately boils down to is emitting an `rlib` that contains just one file: `lib.rmeta`
         use rustc_codegen_ssa::back::link::link_binary;
-        link_binary::<crate::codegen_cprover_gotoc::archive::ArArchiveBuilder<'_>>(
+        link_binary(
             sess,
+            &crate::codegen_cprover_gotoc::archive::ArArchiveBuilderBuilder,
             &codegen_results,
             outputs,
         )

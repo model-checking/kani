@@ -35,7 +35,7 @@ A non-exhaustive list of these, based on the non-exhaustive list from the [Rust 
 * Calling a function with the wrong call ABI or unwinding from a function with the wrong unwind ABI.
     * Kani relies on `rustc` to check for this case.
 * Producing an invalid value, even in private fields and locals. 
-    * Kani provides a [mechanism](./tutorial-nondeterministic-variables.md#safe-nondeterministic-variables-for-custom-types) `is_valid()` which users can use to check validity of objects, but it does not currently apply to all types.
+    * Kani [won't create invalid values](./tutorial-nondeterministic-variables.md) with `kani::any()` but it also won't complain if you `transmute` an invalid value to a Rust type (for example, a `0` to `NonZeroU32`).
 * Incorrect use of inline assembly.
     * Kani does not support inline assembly.
 * Using uninitialized memory.
@@ -46,5 +46,3 @@ Kani makes a best-effort attempt to detect some cases of UB:
     * Kani can detect invalid dereferences, but may not detect them in [place expression context](https://doc.rust-lang.org/reference/expressions.html#place-expressions-and-value-expressions).
 * Invoking undefined behavior via compiler intrinsics.
     * See [current support for compiler intrinsics](./rust-feature-support/intrinsics.md).
-* Producing an invalid value, even in private fields and locals.
-    * Kani provides a [mechanism](./tutorial-nondeterministic-variables.md#safe-nondeterministic-variables-for-custom-types) `is_valid()` which users can use to check validity of objects, but it does not currently apply to all types.

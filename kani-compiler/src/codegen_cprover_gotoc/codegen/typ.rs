@@ -6,6 +6,7 @@ use cbmc::goto_program::{DatatypeComponent, Expr, Location, Parameter, Symbol, S
 use cbmc::utils::aggr_tag;
 use cbmc::{InternString, InternedString};
 use rustc_ast::ast::Mutability;
+use rustc_hir::{LangItem, Unsafety};
 use rustc_index::vec::IndexVec;
 use rustc_middle::mir::{HasLocalDecls, Local, Operand, Place, Rvalue};
 use rustc_middle::ty::layout::LayoutOf;
@@ -13,17 +14,17 @@ use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::print::FmtPrinter;
 use rustc_middle::ty::subst::InternalSubsts;
 use rustc_middle::ty::{
-    self, AdtDef, FloatTy, Instance, IntTy, PolyFnSig, Ty, UintTy, VariantDef, VtblEntry,
+    self, AdtDef, FloatTy, GeneratorSubsts, Instance, IntTy, PolyFnSig, Ty, TyCtxt, TyKind, UintTy,
+    VariantDef, VtblEntry,
 };
 use rustc_middle::ty::{List, TypeFoldable};
 use rustc_span::def_id::DefId;
 use rustc_target::abi::{
-    Abi::Vector, FieldsShape, Integer, Layout, Primitive, TagEncoding, VariantIdx, Variants,
+    Abi::Vector, FieldsShape, Integer, Layout, Primitive, Size, TagEncoding, TyAndLayout,
+    VariantIdx, Variants,
 };
 use rustc_target::spec::abi::Abi;
 use std::collections::BTreeMap;
-use std::convert::TryInto;
-use std::fmt::Debug;
 use std::iter;
 use std::iter::FromIterator;
 use tracing::{debug, trace, warn};
@@ -36,6 +37,13 @@ use ty::layout::HasParamEnv;
 /// variable `struct Unit VoidUnit` returned by all void functions.
 const UNIT_TYPE_EMPTY_STRUCT_NAME: &str = "Unit";
 pub const FN_RETURN_VOID_VAR_NAME: &str = "VoidUnit";
+
+/// Name for the common vtable structure.
+const COMMON_VTABLE_STRUCT_NAME: &str = "Kani::CommonVTable";
+
+const VTABLE_DROP_FIELD: &str = "drop";
+pub const VTABLE_SIZE_FIELD: &str = "size";
+pub const VTABLE_ALIGN_FIELD: &str = "align";
 
 /// Map the never i.e. `!` type to an empty struct.
 /// The never type can appear as a function argument, e.g. in library/core/src/num/error.rs
@@ -126,6 +134,129 @@ impl ExprExt for Expr {
 
 /// Function signatures
 impl<'tcx> GotocCtx<'tcx> {
+    /// This method prints the details of a GotoC type, for debugging purposes.
+    #[allow(unused)]
+    pub(crate) fn debug_print_type_recursively(&self, ty: &Type) -> String {
+        fn debug_write_type<'tcx>(
+            ctx: &GotocCtx<'tcx>,
+            ty: &Type,
+            out: &mut impl std::fmt::Write,
+            indent: usize,
+        ) -> Result<(), std::fmt::Error> {
+            match ty {
+                Type::Array { typ, size } => {
+                    write!(out, "[")?;
+                    debug_write_type(ctx, typ, out, indent + 2)?;
+                    write!(out, "; {size}]")?;
+                }
+                Type::Bool => write!(out, "bool")?,
+                Type::CBitField { typ, width } => {
+                    write!(out, "bitfield(")?;
+                    debug_write_type(ctx, typ, out, indent + 2)?;
+                    write!(out, ", {width}")?;
+                }
+                Type::CInteger(int_ty) => {
+                    let name = match int_ty {
+                        cbmc::goto_program::CIntType::Bool => "bool",
+                        cbmc::goto_program::CIntType::Char => "char",
+                        cbmc::goto_program::CIntType::Int => "int",
+                        cbmc::goto_program::CIntType::SizeT => "size_t",
+                        cbmc::goto_program::CIntType::SSizeT => "ssize_t",
+                    };
+                    write!(out, "{name}")?;
+                }
+                Type::Code { .. } => write!(out, "Code")?,
+                Type::Constructor => todo!(),
+                Type::Double => write!(out, "f64")?,
+                Type::Empty => todo!(),
+                Type::FlexibleArray { .. } => todo!(),
+                Type::Float => write!(out, "f32")?,
+                Type::IncompleteStruct { .. } => todo!(),
+                Type::IncompleteUnion { .. } => todo!(),
+                Type::InfiniteArray { .. } => todo!(),
+                Type::Pointer { typ } => {
+                    write!(out, "*")?;
+                    debug_write_type(ctx, typ, out, indent)?;
+                }
+                Type::Signedbv { width } => write!(out, "i{width}")?,
+                Type::Struct { tag, components } => {
+                    let pretty_name = if let Some(symbol) = ctx.symbol_table.lookup(aggr_tag(*tag))
+                    {
+                        symbol.pretty_name.unwrap()
+                    } else {
+                        "<no pretty name available>".into()
+                    };
+                    writeln!(out, "struct {tag} ({pretty_name}) {{")?;
+                    for c in components {
+                        match c {
+                            DatatypeComponent::Field { name, typ } => {
+                                write!(out, "{:indent$}{name}: ", "", indent = indent + 2)?;
+                                debug_write_type(ctx, typ, out, indent + 2)?;
+                                writeln!(out, ",")?;
+                            }
+                            DatatypeComponent::Padding { bits, .. } => {
+                                writeln!(
+                                    out,
+                                    "{:indent$}/* padding: {bits} bits */",
+                                    "",
+                                    indent = indent + 2
+                                )?;
+                            }
+                        }
+                    }
+                    write!(out, "{:indent$}}}", "", indent = indent)?;
+                }
+                Type::StructTag(tag) => {
+                    let ty = &ctx.symbol_table.lookup(*tag).unwrap().typ;
+                    debug_write_type(ctx, ty, out, indent)?;
+                }
+                Type::TypeDef { name, typ } => {
+                    write!(out, "typedef {{ {name}: ")?;
+                    debug_write_type(ctx, typ, out, indent + 2)?;
+                    write!(out, "{:indent$}}}", "", indent = indent)?;
+                }
+                Type::Union { tag, components } => {
+                    let pretty_name = if let Some(symbol) = ctx.symbol_table.lookup(aggr_tag(*tag))
+                    {
+                        symbol.pretty_name.unwrap()
+                    } else {
+                        "<no pretty name available>".into()
+                    };
+                    writeln!(out, "union {tag} ({pretty_name}) {{ ")?;
+                    for c in components {
+                        match c {
+                            DatatypeComponent::Field { name, typ } => {
+                                write!(out, "{:indent$}{name}: ", "", indent = indent + 2)?;
+                                debug_write_type(ctx, typ, out, indent + 2)?;
+                                writeln!(out, ",")?;
+                            }
+                            DatatypeComponent::Padding { bits, .. } => {
+                                writeln!(
+                                    out,
+                                    "{:indent$}/* padding: {bits} bits */",
+                                    "",
+                                    indent = indent + 2
+                                )?;
+                            }
+                        }
+                    }
+                    write!(out, "{:indent$}}}", "", indent = indent)?;
+                }
+                Type::UnionTag(tag) => {
+                    let ty = &ctx.symbol_table.lookup(*tag).unwrap().typ;
+                    debug_write_type(ctx, ty, out, indent)?;
+                }
+                Type::Unsignedbv { width } => write!(out, "u{width}")?,
+                Type::VariadicCode { .. } => write!(out, "VariadicCode")?,
+                Type::Vector { .. } => todo!(),
+            }
+            Ok(())
+        }
+        let mut out = String::new();
+        debug_write_type(self, ty, &mut out, 0).unwrap();
+        out
+    }
+
     /// Closures expect their last arg untupled at call site, see comment at
     /// ty_needs_closure_untupled.
     fn sig_with_closure_untupled(&self, sig: ty::PolyFnSig<'tcx>) -> ty::PolyFnSig<'tcx> {
@@ -197,27 +328,62 @@ impl<'tcx> GotocCtx<'tcx> {
         self.sig_with_closure_untupled(sig)
     }
 
-    pub fn fn_sig_of_instance(&self, instance: Instance<'tcx>) -> Option<ty::PolyFnSig<'tcx>> {
+    // Adapted from `fn_sig_for_fn_abi` in compiler/rustc_middle/src/ty/layout.rs
+    // Code duplication tracked here: https://github.com/model-checking/kani/issues/1365
+    fn generator_sig(
+        &self,
+        ty: Ty<'tcx>,
+        substs: ty::subst::SubstsRef<'tcx>,
+    ) -> ty::PolyFnSig<'tcx> {
+        let sig = substs.as_generator().poly_sig();
+
+        let bound_vars = self.tcx.mk_bound_variable_kinds(
+            sig.bound_vars().iter().chain(iter::once(ty::BoundVariableKind::Region(ty::BrEnv))),
+        );
+        let br = ty::BoundRegion {
+            var: ty::BoundVar::from_usize(bound_vars.len() - 1),
+            kind: ty::BoundRegionKind::BrEnv,
+        };
+        let env_region = ty::ReLateBound(ty::INNERMOST, br);
+        let env_ty = self.tcx.mk_mut_ref(self.tcx.mk_region(env_region), ty);
+
+        let pin_did = self.tcx.require_lang_item(LangItem::Pin, None);
+        let pin_adt_ref = self.tcx.adt_def(pin_did);
+        let pin_substs = self.tcx.intern_substs(&[env_ty.into()]);
+        let env_ty = self.tcx.mk_adt(pin_adt_ref, pin_substs);
+
+        let sig = sig.skip_binder();
+        let state_did = self.tcx.require_lang_item(LangItem::GeneratorState, None);
+        let state_adt_ref = self.tcx.adt_def(state_did);
+        let state_substs = self.tcx.intern_substs(&[sig.yield_ty.into(), sig.return_ty.into()]);
+        let ret_ty = self.tcx.mk_adt(state_adt_ref, state_substs);
+        ty::Binder::bind_with_vars(
+            self.tcx.mk_fn_sig(
+                [env_ty, sig.resume_ty].iter(),
+                &ret_ty,
+                false,
+                Unsafety::Normal,
+                rustc_target::spec::abi::Abi::Rust,
+            ),
+            bound_vars,
+        )
+    }
+
+    pub fn fn_sig_of_instance(&self, instance: Instance<'tcx>) -> ty::PolyFnSig<'tcx> {
         let fntyp = instance.ty(self.tcx, ty::ParamEnv::reveal_all());
         self.monomorphize(match fntyp.kind() {
-            ty::Closure(def_id, subst) => Some(self.closure_sig(*def_id, subst)),
+            ty::Closure(def_id, subst) => self.closure_sig(*def_id, subst),
             ty::FnPtr(..) | ty::FnDef(..) => {
                 let sig = fntyp.fn_sig(self.tcx);
                 // Some virtual calls through a vtable may actually be closures
                 // or shims that also need the arguments untupled, even though
                 // the kind of the trait type is not a ty::Closure.
                 if self.ty_needs_closure_untupled(fntyp) {
-                    return Some(self.sig_with_closure_untupled(sig));
+                    return self.sig_with_closure_untupled(sig);
                 }
-                Some(sig)
+                sig
             }
-            ty::Generator(_def_id, _substs, _movability) => {
-                let error_msg = GotocCtx::unsupported_msg(
-                    "The `generators` feature",
-                    Some("https://github.com/model-checking/kani/issues/416"),
-                );
-                self.emit_error_and_exit(&error_msg)
-            }
+            ty::Generator(_, substs, _) => self.generator_sig(fntyp, substs),
             _ => unreachable!("Can't get function signature of type: {:?}", fntyp),
         })
     }
@@ -258,37 +424,14 @@ impl<'tcx> GotocCtx<'tcx> {
         self.monomorphize(p.ty(self.current_fn().mir().local_decls(), self.tcx).ty)
     }
 
-    /// Is the MIR type an unsized type (i.e. one represented by a fat pointer?)
+    /// Is the MIR type an unsized type
+    /// Unsized types can represent:
+    /// 1- Types that rust cannot infer their type such as ForeignItems.
+    /// 2- Types that can only be accessed via FatPointer.
     pub fn is_unsized(&self, t: Ty<'tcx>) -> bool {
         !self
             .monomorphize(t)
             .is_sized(self.tcx.at(rustc_span::DUMMY_SP), ty::ParamEnv::reveal_all())
-    }
-
-    /// Is the MIR type a ref of an unsized type (i.e. one represented by a fat pointer?)
-    pub fn is_ref_of_unsized(&self, t: Ty<'tcx>) -> bool {
-        match t.kind() {
-            ty::Ref(_, to, _) | ty::RawPtr(ty::TypeAndMut { ty: to, .. }) => self.is_unsized(*to),
-            _ => false,
-        }
-    }
-
-    /// Is the MIR type a ref of an unsized type (i.e. one represented by a fat pointer?)
-    pub fn is_ref_of_sized(&self, t: Ty<'tcx>) -> bool {
-        match t.kind() {
-            ty::Ref(_, to, _) | ty::RawPtr(ty::TypeAndMut { ty: to, .. }) => !self.is_unsized(*to),
-            _ => false,
-        }
-    }
-
-    /// Is the MIR type a box of an unsized type (i.e. one represented by a fat pointer?)
-    pub fn is_box_of_unsized(&self, t: Ty<'tcx>) -> bool {
-        if t.is_box() {
-            let boxed_t = self.monomorphize(t.boxed_ty());
-            self.is_unsized(boxed_t)
-        } else {
-            false
-        }
     }
 
     /// Generates the type for a single field for a dynamic vtable.
@@ -299,7 +442,7 @@ impl<'tcx> GotocCtx<'tcx> {
         idx: usize,
     ) -> DatatypeComponent {
         // Gives a binder with function signature
-        let sig = self.fn_sig_of_instance(instance).unwrap();
+        let sig = self.fn_sig_of_instance(instance);
 
         // Gives an Irep Pointer object for the signature
         let fn_ty = self.codegen_dynamic_function_sig(sig);
@@ -409,14 +552,9 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Given a trait of type `t`, determine the fields of the struct that will implement its vtable.
     ///
     /// The order of fields (i.e., the layout of a vtable) is not guaranteed by the compiler.
-    /// We follow the order implemented by the compiler in compiler/rustc_codegen_ssa/src/meth.rs
-    /// `get_vtable`.
+    /// We follow the order from the `TyCtxt::COMMON_VTABLE_ENTRIES`.
     fn trait_vtable_field_types(&mut self, t: ty::Ty<'tcx>) -> Vec<DatatypeComponent> {
-        let mut vtable_base = vec![
-            DatatypeComponent::field("drop", self.trait_vtable_drop_type(t)),
-            DatatypeComponent::field("size", Type::size_t()),
-            DatatypeComponent::field("align", Type::size_t()),
-        ];
+        let mut vtable_base = common_vtable_fields(self.trait_vtable_drop_type(t));
         if let ty::Dynamic(binder, _region) = t.kind() {
             // The virtual methods on the trait ref. Some auto traits have no methods.
             if let Some(principal) = binder.principal() {
@@ -484,17 +622,25 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn ty_mangled_name(&self, t: Ty<'tcx>) -> InternedString {
         // Crate resolution: mangled names need to be distinct across different versions
         // of the same crate that could be pulled in by dependencies. However, Kani's
-        // treatment of FFI C calls asssumes that we generate the same name for structs
+        // treatment of FFI C calls assumes that we generate the same name for #[repr(C)] types
         // as the C name, so don't mangle in that case.
-        // TODO: this is likely insufficient if a dependent crate has two versions of
+        // However, there was an issue with different type instantiations being given the same mangled name.
+        // https://github.com/model-checking/kani/issues/1438.
+        // Hence we DO mangle the type name if the type has generic type arguments, even if it's #[repr(C)].
+        // This is not a restriction because C can only access non-generic types anyway.
+        // TODO: Skipping name mangling is likely insufficient if a dependent crate has two versions of
         // linked C libraries
         // https://github.com/model-checking/kani/issues/450
-        if is_repr_c_adt(t) {
-            self.ty_pretty_name(t)
-        } else {
-            // This hash is documented to be the same no matter the crate context
-            let id_u64 = self.tcx.type_id_hash(t);
-            format!("_{}", id_u64).intern()
+        match t.kind() {
+            TyKind::Adt(def, substs) if substs.is_empty() && def.repr().c() => {
+                // For non-generic #[repr(C)] types, use the literal path instead of mangling it.
+                self.tcx.def_path_str(def.did()).intern()
+            }
+            _ => {
+                // This hash is documented to be the same no matter the crate context
+                let id_u64 = self.tcx.type_id_hash(t);
+                format!("_{}", id_u64).intern()
+            }
         }
     }
 
@@ -535,6 +681,23 @@ impl<'tcx> GotocCtx<'tcx> {
         self.ensure_struct(UNIT_TYPE_EMPTY_STRUCT_NAME, "()", |_, _| vec![])
     }
 
+    /// The common VTable entries.
+    /// A VTable is an opaque type to the compiler, but they all follow the same structure.
+    /// The first three entries are always the following:
+    /// 1- Function pointer to drop in place.
+    /// 2- The size of the object.
+    /// 3- The alignment of the object.
+    /// We use this common structure to extract information out of a vtable. Since we don't have
+    /// any information about the original type, we use `void*` to encode the drop fn argument type.
+    pub fn codegen_ty_common_vtable(&mut self) -> Type {
+        self.ensure_struct(COMMON_VTABLE_STRUCT_NAME, COMMON_VTABLE_STRUCT_NAME, |_, _| {
+            let drop_type =
+                Type::code_with_unnamed_parameters(vec![Type::void_pointer()], Type::unit())
+                    .to_pointer();
+            common_vtable_fields(drop_type)
+        })
+    }
+
     /// codegen for types. it finds a C type which corresponds to a rust type.
     /// that means [ty] has to be monomorphized.
     ///
@@ -546,10 +709,10 @@ impl<'tcx> GotocCtx<'tcx> {
         let normalized = self.tcx.normalize_erasing_regions(ty::ParamEnv::reveal_all(), ty);
         let goto_typ = self.codegen_ty_inner(normalized);
         if let Some(tag) = goto_typ.tag() {
-            if !self.type_map.contains_key(&tag) {
+            self.type_map.entry(tag).or_insert_with(|| {
                 debug!(mir_type=?normalized, gotoc_name=?tag, ?goto_typ,  "codegen_ty: new type");
-                self.type_map.insert(tag, normalized);
-            }
+                normalized
+            });
         }
         goto_typ
     }
@@ -620,7 +783,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             ty::FnPtr(sig) => self.codegen_function_sig(*sig).to_pointer(),
             ty::Closure(_, subst) => self.codegen_ty_closure(ty, subst),
-            ty::Generator(_, subst, _) => self.codegen_ty_generator(subst),
+            ty::Generator(..) => self.codegen_ty_generator(ty),
             ty::Never => self.ensure_struct(NEVER_TYPE_EMPTY_STRUCT_NAME, "!", |_, _| vec![]),
             ty::Tuple(ts) => {
                 if ts.is_empty() {
@@ -631,7 +794,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     self.ensure_struct(
                         self.ty_mangled_name(ty),
                         self.ty_pretty_name(ty),
-                        |tcx, _| tcx.codegen_ty_tuple_fields(ty, *ts),
+                        |tcx, _| tcx.codegen_ty_tuple_fields(ty, ts),
                     )
                 }
             }
@@ -679,24 +842,34 @@ impl<'tcx> GotocCtx<'tcx> {
         self.codegen_ty_tuple_like(t, tys.to_vec())
     }
 
-    fn codegen_struct_padding<T>(
+    fn codegen_struct_padding(
         &self,
-        current_offset: T,
-        next_offset: T,
+        current_offset: Size,
+        next_offset: Size,
         idx: usize,
-    ) -> Option<DatatypeComponent>
-    where
-        T: TryInto<u64>,
-        T::Error: Debug,
-    {
-        let current_offset: u64 = current_offset.try_into().unwrap();
-        let next_offset: u64 = next_offset.try_into().unwrap();
+    ) -> Option<DatatypeComponent> {
         assert!(current_offset <= next_offset);
         if current_offset < next_offset {
             // We need to pad to the next offset
-            let bits = next_offset - current_offset;
+            let padding_size = next_offset - current_offset;
             let name = format!("$pad{}", idx);
-            Some(DatatypeComponent::padding(&name, bits))
+            Some(DatatypeComponent::padding(&name, padding_size.bits()))
+        } else {
+            None
+        }
+    }
+
+    /// Adds padding to ensure that the size of the struct is a multiple of the alignment
+    fn codegen_alignment_padding(
+        &self,
+        size: Size,
+        layout: &Layout,
+        idx: usize,
+    ) -> Option<DatatypeComponent> {
+        let align = Size::from_bits(layout.align().abi.bits());
+        let overhang = Size::from_bits(size.bits() % align.bits());
+        if overhang != Size::ZERO {
+            self.codegen_struct_padding(size, size + align - overhang, idx)
         } else {
             None
         }
@@ -716,16 +889,16 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         flds: Vec<(String, Ty<'tcx>)>,
         layout: &Layout,
-        initial_offset: usize,
+        initial_offset: Size,
     ) -> Vec<DatatypeComponent> {
         match &layout.fields() {
             FieldsShape::Arbitrary { offsets, memory_index } => {
                 assert_eq!(flds.len(), offsets.len());
                 assert_eq!(offsets.len(), memory_index.len());
                 let mut final_fields = Vec::with_capacity(flds.len());
-                let mut offset: u64 = initial_offset.try_into().unwrap();
+                let mut offset = initial_offset;
                 for idx in layout.fields().index_by_increasing_offset() {
-                    let fld_offset = offsets[idx].bits();
+                    let fld_offset = offsets[idx];
                     let (fld_name, fld_ty) = &flds[idx];
                     if let Some(padding) =
                         self.codegen_struct_padding(offset, fld_offset, final_fields.len())
@@ -736,23 +909,13 @@ impl<'tcx> GotocCtx<'tcx> {
                     final_fields.push(DatatypeComponent::field(fld_name, self.codegen_ty(*fld_ty)));
                     let layout = self.layout_of(*fld_ty);
                     // we compute the overall offset of the end of the current struct
-                    offset = fld_offset + layout.size.bits();
+                    offset = fld_offset + layout.size;
                 }
-
-                // If we don't meet our expected alignment, pad until we do
-                let align = layout.align().abi.bits();
-                let overhang = offset % align;
-                if overhang != 0 {
-                    final_fields.push(
-                        self.codegen_struct_padding(
-                            offset,
-                            offset + align - overhang,
-                            final_fields.len(),
-                        )
-                        .unwrap(),
-                    )
-                }
-
+                final_fields.extend(self.codegen_alignment_padding(
+                    offset,
+                    layout,
+                    final_fields.len(),
+                ));
                 final_fields
             }
             // Primitives, such as NEVER, have no fields
@@ -766,10 +929,11 @@ impl<'tcx> GotocCtx<'tcx> {
         let flds: Vec<_> =
             tys.iter().enumerate().map(|(i, t)| (GotocCtx::tuple_fld_name(i), *t)).collect();
         // tuple cannot have other initial offset
-        self.codegen_struct_fields(flds, &layout.layout, 0)
+        self.codegen_struct_fields(flds, &layout.layout, Size::ZERO)
     }
 
     /// A closure in Rust MIR takes two arguments:
+    ///
     ///    0. a struct representing the environment
     ///    1. a tuple containing the parameters
     ///
@@ -779,16 +943,22 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Checking whether the type's kind is a closure is insufficient, because
     /// a virtual method call through a vtable can have the trait's non-closure
     /// type. For example:
+    ///
+    /// ```
     ///         let p: &dyn Fn(i32) = &|x| assert!(x == 1);
     ///         p(1);
+    /// ```
     ///
-    /// Here, the call p(1) desugars to an MIR trait call Fn::call(&p, (1,)),
+    /// Here, the call `p(1)` desugars to an MIR trait call `Fn::call(&p, (1,))`,
     /// where the second argument is a tuple. The instance type kind for
-    /// Fn::call is not a closure, because dynamically, the pointer may be to
+    /// `Fn::call` is not a closure, because dynamically, the pointer may be to
     /// a function definition instead. We still need to untuple in this case,
     /// so we follow the example elsewhere in Rust to use the ABI call type.
-    /// See `make_call_args` in kani/compiler/rustc_mir/src/transform/inline.rs
+    ///
+    /// See `make_call_args` in `rustc_mir_transform/src/inline.rs`
     pub fn ty_needs_closure_untupled(&self, ty: Ty<'tcx>) -> bool {
+        // Note that [Abi::RustCall] is not [Abi::Rust].
+        // Documentation is sparse, but it does seem to correspond to the need for untupling.
         match ty.kind() {
             ty::FnDef(..) | ty::FnPtr(..) => ty.fn_sig(self.tcx).abi() == Abi::RustCall,
             _ => unreachable!("Can't treat type as a function: {:?}", ty),
@@ -804,13 +974,179 @@ impl<'tcx> GotocCtx<'tcx> {
         })
     }
 
-    /// Preliminary support for the Generator type kind. The core functionality remains
-    /// unimplemented, but this way we fail at verification time only if paths that
-    /// rely on Generator types are used.
-    fn codegen_ty_generator(&mut self, substs: ty::subst::SubstsRef<'tcx>) -> Type {
-        let tys = substs.as_generator().upvar_tys().map(|t| self.codegen_ty(t)).collect();
-        let output = self.codegen_ty(substs.as_generator().return_ty());
-        Type::code_with_unnamed_parameters(tys, output)
+    /// Translate a generator type similarly to an enum with a variant for each suspend point.
+    ///
+    /// Consider the following generator:
+    /// ```
+    /// || {
+    ///     let a = true;
+    ///     let b = &a;
+    ///     yield;
+    ///     assert_eq!(b as *const _, &a as *const _);
+    ///     yield;
+    /// };
+    /// ```
+    ///
+    /// Rustc compiles this to something similar to the following enum (but there are differences, see below!),
+    /// as described at the top of <https://github.com/rust-lang/rust/blob/master/compiler/rustc_mir_transform/src/generator.rs>:
+    ///
+    /// ```ignore
+    /// enum GeneratorEnum {
+    ///     Unresumed,                        // initial state of the generator
+    ///     Returned,                         // generator has returned
+    ///     Panicked,                         // generator has panicked
+    ///     Suspend0 { b: &bool, a: bool },   // state after suspending (`yield`ing) for the first time
+    ///     Suspend1,                         // state after suspending (`yield`ing) for the second time
+    /// }
+    /// ```
+    ///
+    /// However, its layout may differ from normal Rust enums in the following ways:
+    /// * Contrary to enums, the discriminant may not be at offset 0.
+    /// * Contrary to enums, there may be other fields than the discriminant "at the top level" (outside the variants).
+    ///
+    /// This means that we CANNOT use the enum translation, which would be roughly as follows:
+    ///
+    /// ```ignore
+    /// struct GeneratorEnum {
+    ///     int case; // discriminant
+    ///     union GeneratorEnum-union cases; // variant
+    /// }
+    ///
+    /// union GeneratorEnum-union {
+    ///     struct Unresumed variant0;
+    ///     struct Returned variant1;
+    ///     // ...
+    /// }
+    /// ```
+    ///
+    /// Instead, we use the following translation:
+    ///
+    /// ```ignore
+    /// union GeneratorEnum {
+    ///     struct DirectFields direct_fields;
+    ///     struct Unresumed generator_variant_Unresumed;
+    ///     struct Returned generator_variant_Returned;
+    ///     // ...
+    /// }
+    ///
+    /// struct DirectFields {
+    ///     // padding (for bool *b in Suspend0 below)
+    ///     char case;
+    ///     // padding (for bool a in Suspend0 below)
+    /// }
+    ///
+    /// struct Unresumed {
+    ///     // padding (this variant has no fields)
+    /// }
+    ///
+    /// // ...
+    ///
+    /// struct Suspend0 {
+    ///     bool *generator_field_0; // variable b in the generator code above
+    ///     // padding (for char case in DirectFields)
+    ///     bool generator_field_1; // variable a in the generator code above
+    /// }
+    /// ```
+    ///
+    /// Of course, if the generator has any other top-level/direct fields, they'd be included in the `DirectFields` struct as well.
+    fn codegen_ty_generator(&mut self, ty: Ty<'tcx>) -> Type {
+        let generator_name = self.ty_mangled_name(ty);
+        let pretty_name = self.ty_pretty_name(ty);
+        debug!(?pretty_name, "codeged_ty_generator");
+        self.ensure_union(self.ty_mangled_name(ty), pretty_name, |ctx, _| {
+            let type_and_layout = ctx.layout_of(ty);
+            let (discriminant_field, variants) = match &type_and_layout.variants {
+                Variants::Multiple {
+                    tag_encoding: TagEncoding::Direct,
+                    tag_field,
+                    variants,
+                    ..
+                } => (tag_field, variants),
+                _ => unreachable!("Generators have more than one variant and use direct encoding"),
+            };
+            // generate a struct for the direct fields of the layout (fields that don't occur in the variants)
+            let direct_fields = DatatypeComponent::Field {
+                name: "direct_fields".into(),
+                typ: ctx.codegen_generator_variant_struct(
+                    generator_name,
+                    pretty_name,
+                    type_and_layout,
+                    "DirectFields".into(),
+                    Some(*discriminant_field),
+                ),
+            };
+            let mut fields = vec![direct_fields];
+            for var_idx in variants.indices() {
+                let variant_name = GeneratorSubsts::variant_name(var_idx).into();
+                fields.push(DatatypeComponent::Field {
+                    name: ctx.generator_variant_name(var_idx),
+                    typ: ctx.codegen_generator_variant_struct(
+                        generator_name,
+                        pretty_name,
+                        type_and_layout.for_variant(ctx, var_idx),
+                        variant_name,
+                        None,
+                    ),
+                });
+            }
+            fields
+        })
+    }
+
+    /// Generates a struct for a variant of the generator.
+    ///
+    /// The field `discriminant_field` should be `Some(idx)` when generating the variant for the direct (top-[evel) fields of the generator.
+    /// Then the field with the index `idx` will be treated as the discriminant and will be given a special name to work with the rest of the code.
+    /// The field `discriminant_field` should be `None` when generating an actual variant of the generator because those don't contain the discriminant as a field.
+    fn codegen_generator_variant_struct(
+        &mut self,
+        generator_name: InternedString,
+        pretty_generator_name: InternedString,
+        type_and_layout: TyAndLayout<'tcx, Ty<'tcx>>,
+        variant_name: InternedString,
+        discriminant_field: Option<usize>,
+    ) -> Type {
+        let struct_name = format!("{generator_name}::{variant_name}");
+        let pretty_struct_name = format!("{pretty_generator_name}::{variant_name}");
+        debug!(?pretty_struct_name, "codeged_generator_variant_struct");
+        self.ensure_struct(struct_name, pretty_struct_name, |ctx, _| {
+            let mut offset = Size::ZERO;
+            let mut fields = vec![];
+            for idx in type_and_layout.fields.index_by_increasing_offset() {
+                // The discriminant field needs to have a special name to work with the rest of the code.
+                // If discriminant_field is None, this variant does not have the discriminant as a field.
+                let field_name = if Some(idx) == discriminant_field {
+                    "case".into()
+                } else {
+                    ctx.generator_field_name(idx)
+                };
+                let field_ty = type_and_layout.field(ctx, idx).ty;
+                let field_offset = type_and_layout.fields.offset(idx);
+                let field_size = type_and_layout.field(ctx, idx).size;
+                if let Some(padding) = ctx.codegen_struct_padding(offset, field_offset, idx) {
+                    fields.push(padding);
+                }
+                fields.push(DatatypeComponent::Field {
+                    name: field_name,
+                    typ: ctx.codegen_ty(field_ty),
+                });
+                offset += field_size;
+            }
+            fields.extend(ctx.codegen_alignment_padding(
+                offset,
+                &type_and_layout.layout,
+                fields.len(),
+            ));
+            fields
+        })
+    }
+
+    pub fn generator_variant_name(&self, var_idx: VariantIdx) -> InternedString {
+        format!("generator_variant_{}", GeneratorSubsts::variant_name(var_idx)).into()
+    }
+
+    pub fn generator_field_name(&self, field_idx: usize) -> InternedString {
+        format!("generator_field_{field_idx}").into()
     }
 
     /// Codegen "fat pointers" to the given `pointee_type`. These are pointers with metadata.
@@ -887,6 +1223,7 @@ impl<'tcx> GotocCtx<'tcx> {
             | ty::Closure(..)
             | ty::Float(_)
             | ty::Foreign(_)
+            | ty::Generator(..)
             | ty::Int(_)
             | ty::RawPtr(_)
             | ty::Ref(..)
@@ -901,15 +1238,6 @@ impl<'tcx> GotocCtx<'tcx> {
             // These types were blocking stdlib. Doing the default thing to unblock.
             // https://github.com/model-checking/kani/issues/214
             ty::FnPtr(_) => self.codegen_ty(pointee_type).to_pointer(),
-
-            // Use the default for a reference to a generator. This is a
-            // temporary workaround to allow codegen to continue to a point
-            // where it either:
-            // 1. codegens unimplemented for the generator OR
-            // 2. errors out
-            // Adding full support for generators is tracked by:
-            // https://github.com/model-checking/kani/issues/416
-            ty::Generator(_, _, _) => self.codegen_ty(pointee_type).to_pointer(),
 
             // These types have no regression tests for them.
             // For soundness, hold off on generating them till we have test-cases.
@@ -938,27 +1266,24 @@ impl<'tcx> GotocCtx<'tcx> {
         let params = sig
             .inputs()
             .iter()
-            .filter_map(|arg_type| {
+            .map(|arg_type| {
                 if is_first {
                     is_first = false;
                     debug!(self_type=?arg_type, fn_signature=?sig, "codegen_dynamic_function_sig");
                     if arg_type.is_ref() {
                         // Convert fat pointer to thin pointer to data portion.
                         let first_ty = pointee_type(*arg_type).unwrap();
-                        Some(self.codegen_trait_data_pointer(first_ty))
+                        self.codegen_trait_data_pointer(first_ty)
                     } else if arg_type.is_trait() {
                         // Convert dyn T to thin pointer.
-                        Some(self.codegen_trait_data_pointer(*arg_type))
+                        self.codegen_trait_data_pointer(*arg_type)
                     } else {
                         // Codegen type with thin pointer (E.g.: Box<dyn T> -> Box<data_ptr>).
-                        Some(self.codegen_trait_receiver(*arg_type))
+                        self.codegen_trait_receiver(*arg_type)
                     }
-                } else if self.ignore_var_ty(*arg_type) {
-                    debug!("Ignoring type {:?} in function signature", arg_type);
-                    None
                 } else {
                     debug!("Using type {:?} in function signature", arg_type);
-                    Some(self.codegen_ty(*arg_type))
+                    self.codegen_ty(*arg_type)
                 }
             })
             .collect();
@@ -970,19 +1295,7 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_function_sig(&mut self, sig: PolyFnSig<'tcx>) -> Type {
         let sig = self.monomorphize(sig);
         let sig = self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig);
-        let params = sig
-            .inputs()
-            .iter()
-            .filter_map(|t| {
-                if self.ignore_var_ty(*t) {
-                    debug!("Ignoring type {:?} in function signature", t);
-                    None
-                } else {
-                    debug!("Using type {:?} in function signature", t);
-                    Some(self.codegen_ty(*t))
-                }
-            })
-            .collect();
+        let params = sig.inputs().iter().map(|t| self.codegen_ty(*t)).collect();
 
         if sig.c_variadic {
             Type::variadic_code_with_unnamed_parameters(params, self.codegen_ty(sig.output()))
@@ -1019,7 +1332,7 @@ impl<'tcx> GotocCtx<'tcx> {
         self.ensure_struct(self.ty_mangled_name(ty), self.ty_pretty_name(ty), |ctx, _| {
             let variant = &def.variants().raw[0];
             let layout = ctx.layout_of(ty);
-            ctx.codegen_variant_struct_fields(variant, subst, &layout.layout, 0)
+            ctx.codegen_variant_struct_fields(variant, subst, &layout.layout, Size::ZERO)
         })
     }
 
@@ -1029,7 +1342,7 @@ impl<'tcx> GotocCtx<'tcx> {
         variant: &VariantDef,
         subst: &'tcx InternalSubsts<'tcx>,
         layout: &Layout,
-        initial_offset: usize,
+        initial_offset: Size,
     ) -> Vec<DatatypeComponent> {
         let flds: Vec<_> =
             variant.fields.iter().map(|f| (f.name.to_string(), f.ty(self.tcx, subst))).collect();
@@ -1099,8 +1412,9 @@ impl<'tcx> GotocCtx<'tcx> {
         self.ensure_struct(self.ty_mangled_name(ty), pretty_name, |ctx, name| {
             // variants appearing in source code (in source code order)
             let source_variants = &adtdef.variants();
+            let layout = ctx.layout_of(ty);
             // variants appearing in mir code
-            match &ctx.layout_of(ty).variants {
+            match &layout.variants {
                 Variants::Single { index } => {
                     match source_variants.get(*index) {
                         None => {
@@ -1110,11 +1424,15 @@ impl<'tcx> GotocCtx<'tcx> {
                         Some(variant) => {
                             // a single enum is pretty much like a struct
                             let layout = ctx.layout_of(ty).layout;
-                            ctx.codegen_variant_struct_fields(variant, subst, &layout, 0)
+                            ctx.codegen_variant_struct_fields(variant, subst, &layout, Size::ZERO)
                         }
                     }
                 }
-                Variants::Multiple { tag_encoding, variants, .. } => {
+                Variants::Multiple { tag_encoding, variants, tag_field, .. } => {
+                    // Contrary to generators, currently enums have only one field (the discriminant), the rest are in the variants:
+                    assert!(layout.fields.count() <= 1);
+                    // Contrary to generators, the discriminant is the first (and only) field for enums:
+                    assert_eq!(*tag_field, 0);
                     match tag_encoding {
                         TagEncoding::Direct => {
                             // For direct encoding of tags, we generate a type with two fields:
@@ -1130,7 +1448,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             // of each union field is the name of the corresponding discriminant.
                             let discr_t = ctx.codegen_enum_discr_typ(ty);
                             let int = ctx.codegen_ty(discr_t);
-                            let discr_offset = ctx.layout_of(discr_t).size.bits_usize();
+                            let discr_offset = ctx.layout_of(discr_t).size;
                             let initial_offset =
                                 ctx.variant_min_offset(variants).unwrap_or(discr_offset);
                             let mut fields = vec![DatatypeComponent::field("case", int)];
@@ -1181,7 +1499,14 @@ impl<'tcx> GotocCtx<'tcx> {
                                 ?subst,
                                 "codegen_enum: Niche"
                             );
-                            ctx.codegen_enum_cases(name, pretty_name, adtdef, subst, variants, 0)
+                            ctx.codegen_enum_cases(
+                                name,
+                                pretty_name,
+                                adtdef,
+                                subst,
+                                variants,
+                                Size::ZERO,
+                            )
                         }
                     }
                 }
@@ -1192,7 +1517,7 @@ impl<'tcx> GotocCtx<'tcx> {
     pub(crate) fn variant_min_offset(
         &self,
         variants: &IndexVec<VariantIdx, Layout>,
-    ) -> Option<usize> {
+    ) -> Option<Size> {
         variants
             .iter()
             .filter_map(|lo| {
@@ -1206,8 +1531,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     // fields.
                     Some(
                         lo.fields()
-                            .offset(lo.fields().index_by_increasing_offset().nth(0).unwrap())
-                            .bits_usize(),
+                            .offset(lo.fields().index_by_increasing_offset().next().unwrap()),
                     )
                 }
             })
@@ -1280,7 +1604,7 @@ impl<'tcx> GotocCtx<'tcx> {
         def: &'tcx AdtDef,
         subst: &'tcx InternalSubsts<'tcx>,
         layouts: &IndexVec<VariantIdx, Layout>,
-        initial_offset: usize,
+        initial_offset: Size,
     ) -> Vec<DatatypeComponent> {
         def.variants()
             .iter_enumerated()
@@ -1312,7 +1636,7 @@ impl<'tcx> GotocCtx<'tcx> {
         case: &VariantDef,
         subst: &'tcx InternalSubsts<'tcx>,
         variant: &Layout,
-        initial_offset: usize,
+        initial_offset: Size,
     ) -> Type {
         let case_name = format!("{}::{}", name, case.name);
         let pretty_name = format!("{}::{}", pretty_name, case.name);
@@ -1341,43 +1665,35 @@ impl<'tcx> GotocCtx<'tcx> {
     /// the function type of the current instance
     pub fn fn_typ(&mut self) -> Type {
         let sig = self.current_fn().sig();
-        let sig =
-            self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig.unwrap());
+        let sig = self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig);
         // we don't call [codegen_function_sig] because we want to get a bit more metainformation.
         let mut params: Vec<Parameter> = sig
             .inputs()
             .iter()
             .enumerate()
-            .filter_map(|(i, t)| {
-                if self.ignore_var_ty(*t) {
-                    None
-                } else {
-                    let lc = Local::from_usize(i + 1);
-                    let mut ident = self.codegen_var_name(&lc);
+            .map(|(i, t)| {
+                let lc = Local::from_usize(i + 1);
+                let mut ident = self.codegen_var_name(&lc);
 
-                    // `spread_arg` indicates that the last argument is tupled
-                    // at the LLVM/codegen level, so we need to declare the indivual
-                    // components as parameters with a special naming convention
-                    // so that we can "retuple" them in the function prelude.
-                    // See: compiler/rustc_codegen_llvm/src/gotoc/mod.rs:codegen_function_prelude
-                    if let Some(spread) = self.current_fn().mir().spread_arg {
-                        if lc.index() >= spread.index() {
-                            let (name, _) = self.codegen_spread_arg_name(&lc);
-                            ident = name;
-                        }
+                // `spread_arg` indicates that the last argument is tupled
+                // at the LLVM/codegen level, so we need to declare the indivual
+                // components as parameters with a special naming convention
+                // so that we can "retuple" them in the function prelude.
+                // See: compiler/rustc_codegen_llvm/src/gotoc/mod.rs:codegen_function_prelude
+                if let Some(spread) = self.current_fn().mir().spread_arg {
+                    if lc.index() >= spread.index() {
+                        let (name, _) = self.codegen_spread_arg_name(&lc);
+                        ident = name;
                     }
-                    Some(
-                        self.codegen_ty(*t)
-                            .as_parameter(Some(ident.clone().into()), Some(ident.into())),
-                    )
                 }
+                self.codegen_ty(*t).as_parameter(Some(ident.clone().into()), Some(ident.into()))
             })
             .collect();
 
         // For vtable shims, we need to modify fn(self, ...) to fn(self: *mut Self, ...),
         // since the vtable functions expect a pointer as the first argument. See the comment
         // and similar code in compiler/rustc_mir/src/shim.rs.
-        if let ty::InstanceDef::VtableShim(..) = self.current_fn().instance().def {
+        if let ty::InstanceDef::VTableShim(..) = self.current_fn().instance().def {
             if let Some(self_param) = params.first() {
                 let ident = self_param.identifier();
                 let ty = self_param.typ().clone();
@@ -1390,17 +1706,6 @@ impl<'tcx> GotocCtx<'tcx> {
             Type::variadic_code(params, self.codegen_ty(sig.output()))
         } else {
             Type::code(params, self.codegen_ty(sig.output()))
-        }
-    }
-
-    /// Whether a variable of type ty should be ignored as a parameter to a function
-    pub fn ignore_var_ty(&self, ty: Ty<'tcx>) -> bool {
-        match ty.kind() {
-            // Ignore variables of the generator type until we add support for
-            // them:
-            // https://github.com/model-checking/kani/issues/416
-            ty::Generator(..) => true,
-            _ => false,
         }
     }
 
@@ -1522,7 +1827,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Pre-condition: The argument must be a valid receiver for dispatchable trait functions.
     /// See <https://doc.rust-lang.org/reference/items/traits.html#object-safety> for more details.
     pub fn receiver_data_path<'a>(
-        self: &'a Self,
+        &'a self,
         typ: Ty<'tcx>,
     ) -> impl Iterator<Item = (String, Ty<'tcx>)> + 'a {
         struct ReceiverIter<'tcx, 'a> {
@@ -1561,27 +1866,48 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 }
 
-/// The mir type is a mir pointer type.
-pub fn is_pointer(mir_type: Ty) -> bool {
-    return matches!(mir_type.kind(), ty::Ref(..) | ty::RawPtr(..));
+/// Return the datatype components for fields are present in every vtable struct.
+///
+/// We follow the order from the `TyCtxt::::COMMON_VTABLE_ENTRIES`.
+fn common_vtable_fields(drop_in_place: Type) -> Vec<DatatypeComponent> {
+    let fields: Vec<DatatypeComponent> = TyCtxt::COMMON_VTABLE_ENTRIES
+        .iter()
+        .map(|entry| match entry {
+            VtblEntry::MetadataDropInPlace => {
+                DatatypeComponent::field(VTABLE_DROP_FIELD, drop_in_place.clone())
+            }
+            VtblEntry::MetadataSize => DatatypeComponent::field(VTABLE_SIZE_FIELD, Type::size_t()),
+            VtblEntry::MetadataAlign => {
+                DatatypeComponent::field(VTABLE_ALIGN_FIELD, Type::size_t())
+            }
+            VtblEntry::Vacant | VtblEntry::Method(_) | VtblEntry::TraitVPtr(_) => {
+                unimplemented!("Entry shouldn't be common: {:?}", entry)
+            }
+        })
+        .collect();
+    assert_eq!(fields.len(), 3, "We expect only three common fields for every vtable.");
+    fields
 }
 
-/// Extract from a mir pointer type the mir type of the value to which the
-/// pointer points.
-pub fn pointee_type(pointer_type: Ty) -> Option<Ty> {
-    match pointer_type.kind() {
+/// The mir type is a mir pointer type (Ref or RawPtr).
+/// This will return false for all smart pointers. See is_std_pointer for a more complete check.
+pub fn is_pointer(mir_type: Ty) -> bool {
+    return pointee_type(mir_type).is_some();
+}
+
+/// If given type is a Ref / Raw ref, return the pointee type.
+pub fn pointee_type(mir_type: Ty) -> Option<Ty> {
+    match mir_type.kind() {
         ty::Ref(_, pointee_type, _) => Some(*pointee_type),
         ty::RawPtr(ty::TypeAndMut { ty: pointee_type, .. }) => Some(*pointee_type),
         _ => None,
     }
 }
 
-/// Is the MIR type using a C representation (marked with #[repr(C)] at the source level)?
-pub fn is_repr_c_adt(mir_type: Ty) -> bool {
-    match mir_type.kind() {
-        ty::Adt(def, _) => def.repr().c(),
-        _ => false,
-    }
+/// Extracts the pointee type if the given mir type is either a known smart pointer (Box, Rc, ..)
+/// or a regular pointer.
+pub fn std_pointee_type(mir_type: Ty) -> Option<Ty> {
+    mir_type.builtin_deref(true).map(|tm| tm.ty)
 }
 
 /// This is a place holder function that should normalize the given type.
@@ -1595,11 +1921,19 @@ fn normalize_type(ty: Ty) -> Ty {
 impl<'tcx> GotocCtx<'tcx> {
     /// A pointer to the mir type should be a thin pointer.
     /// Use thin pointer if the type is sized or if the resulting pointer has no metadata.
+    /// Note: Foreign items are unsized but it codegen as a thin pointer since there is no
+    /// metadata associated with it.
     pub fn use_thin_pointer(&self, mir_type: Ty<'tcx>) -> bool {
         // ptr_metadata_ty is not defined on all types, the projection of an associated type
         let (metadata, _check_is_sized) = mir_type.ptr_metadata_ty(self.tcx, normalize_type);
         !self.is_unsized(mir_type) || metadata == self.tcx.types.unit
     }
+
+    /// We use fat pointer if not thin pointer.
+    pub fn use_fat_pointer(&self, mir_type: Ty<'tcx>) -> bool {
+        !self.use_thin_pointer(mir_type)
+    }
+
     /// A pointer to the mir type should be a slice fat pointer.
     /// We use a slice fat pointer if the metadata is the slice length (type usize).
     pub fn use_slice_fat_pointer(&self, mir_type: Ty<'tcx>) -> bool {
@@ -1614,9 +1948,15 @@ impl<'tcx> GotocCtx<'tcx> {
         metadata != self.tcx.types.unit && metadata != self.tcx.types.usize
     }
 
+    /// Does the current mir represent a fat pointer (Raw pointer or ref)
+    /// TODO: Should we use `std_pointee_type` here?
+    /// <https://github.com/model-checking/kani/issues/1529>
+    pub fn is_fat_pointer(&self, pointer_ty: Ty<'tcx>) -> bool {
+        pointee_type(pointer_ty).map_or(false, |pointee_ty| self.use_fat_pointer(pointee_ty))
+    }
+
     /// Check if the mir type already is a vtable fat pointer.
     pub fn is_vtable_fat_pointer(&self, mir_type: Ty<'tcx>) -> bool {
-        self.is_ref_of_unsized(mir_type)
-            && self.use_vtable_fat_pointer(pointee_type(mir_type).unwrap())
+        pointee_type(mir_type).map_or(false, |pointee_ty| self.use_vtable_fat_pointer(pointee_ty))
     }
 }

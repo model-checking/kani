@@ -9,6 +9,6 @@ fn main() {
         vec.pop();
         assert!(vec.pop() == Some(3));
     }
-    
+
     simple_test();
 }

@@ -12,7 +12,7 @@ fn main() {
 }
 
 #[kani::proof]
-#[kani::unwind(10,5)]
+#[kani::unwind(10, 5)]
 fn harness() {
     let mut counter = 0;
     loop {

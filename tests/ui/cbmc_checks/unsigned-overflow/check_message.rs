@@ -22,4 +22,3 @@ fn main() {
     dummy(any::<u32>() << any::<u32>());
     dummy(any::<u32>() >> any::<u32>());
 }
-

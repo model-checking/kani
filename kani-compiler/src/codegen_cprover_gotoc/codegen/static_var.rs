@@ -11,13 +11,16 @@ use rustc_middle::ty::{subst::InternalSubsts, Instance};
 use tracing::debug;
 
 impl<'tcx> GotocCtx<'tcx> {
+    /// Ensures a static variable is initialized.
     pub fn codegen_static(&mut self, def_id: DefId, item: MonoItem<'tcx>) {
         debug!("codegen_static");
         let alloc = self.tcx.eval_static_initializer(def_id).unwrap();
         let symbol_name = item.symbol_name(self.tcx).to_string();
+        // This is an `Expr` constructing function, but it mutates the symbol table to ensure initialization.
         self.codegen_allocation(alloc.inner(), |_| symbol_name.clone(), Some(symbol_name.clone()));
     }
 
+    /// Mutates the Goto-C symbol table to add a forward-declaration of the static variable.
     pub fn declare_static(&mut self, def_id: DefId, item: MonoItem<'tcx>) {
         // Unique mangled monomorphized name.
         let symbol_name = item.symbol_name(self.tcx).to_string();

@@ -258,6 +258,7 @@ pub trait Transformer: Sized {
             ExprValue::CBoolConstant(value) => self.transform_expr_c_bool_constant(typ, value),
             ExprValue::Dereference(child) => self.transform_expr_dereference(typ, child),
             ExprValue::DoubleConstant(value) => self.transform_expr_double_constant(typ, value),
+            ExprValue::EmptyUnion => self.transform_expr_empty_union(typ),
             ExprValue::FloatConstant(value) => self.transform_expr_float_constant(typ, value),
             ExprValue::FunctionCall { function, arguments } => {
                 self.transform_expr_function_call(typ, function, arguments)
@@ -359,6 +360,11 @@ pub trait Transformer: Sized {
     /// Transforms a double constant expr (`1.0`)
     fn transform_expr_double_constant(&mut self, _typ: &Type, value: &f64) -> Expr {
         Expr::double_constant(*value)
+    }
+
+    /// Transforms an empty union expr (`{}`)
+    fn transform_expr_empty_union(&mut self, typ: &Type) -> Expr {
+        Expr::empty_union(typ.clone(), self.symbol_table())
     }
 
     /// Transforms a float constant expr (`1.0f`)

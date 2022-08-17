@@ -30,8 +30,6 @@ impl<'tcx> GotocCtx<'tcx> {
             "fmt::ArgumentV1::<'a>::as_usize" => true,
             // https://github.com/model-checking/kani/issues/282
             "bridge::closure::Closure::<'a, A, R>::call" => true,
-            // Generators
-            name if name.starts_with("<std::future::from_generator::GenFuture<T>") => true,
             name if name.contains("reusable_box::ReusableBoxFuture") => true,
             "tokio::sync::Semaphore::acquire_owned::{closure#0}" => true,
             _ => false,
@@ -41,10 +39,23 @@ impl<'tcx> GotocCtx<'tcx> {
 
 /// Codegen MIR functions into gotoc
 impl<'tcx> GotocCtx<'tcx> {
+    /// Get the number of parameters that the current function expects.
+    fn get_params_size(&self) -> usize {
+        let sig = self.current_fn().sig();
+        let sig = self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig);
+        // we don't call [codegen_function_sig] because we want to get a bit more metainformation.
+        sig.inputs().len()
+    }
+
+    /// Declare variables according to their index.
+    /// - Index 0 represents the return value.
+    /// - Indices [1, N] represent the function parameters where N is the number of parameters.
+    /// - Indices that are greater than N represent local variables.
     fn codegen_declare_variables(&mut self) {
         let mir = self.current_fn().mir();
         let ldecls = mir.local_decls();
-        ldecls.indices().for_each(|lc| {
+        let num_args = self.get_params_size();
+        ldecls.indices().enumerate().for_each(|(idx, lc)| {
             if Some(lc) == mir.spread_arg {
                 // We have already added this local in the function prelude, so
                 // skip adding it again here.
@@ -56,9 +67,11 @@ impl<'tcx> GotocCtx<'tcx> {
             let t = self.monomorphize(ldata.ty);
             let t = self.codegen_ty(t);
             let loc = self.codegen_span(&ldata.source_info.span);
+            // Indices [1, N] represent the function parameters where N is the number of parameters.
             let sym =
                 Symbol::variable(name, base_name, t, self.codegen_span(&ldata.source_info.span))
-                    .with_is_hidden(!ldata.is_user_variable());
+                    .with_is_hidden(!ldata.is_user_variable())
+                    .with_is_parameter(idx > 0 && idx <= num_args);
             let sym_e = sym.to_expr();
             self.symbol_table.insert(sym);
 
@@ -206,7 +219,8 @@ impl<'tcx> GotocCtx<'tcx> {
                 let lc = Local::from_usize(arg_i + starting_idx);
                 let (name, base_name) = self.codegen_spread_arg_name(&lc);
                 let sym = Symbol::variable(name, base_name, self.codegen_ty(arg_t), loc)
-                    .with_is_hidden(false);
+                    .with_is_hidden(false)
+                    .with_is_parameter(true);
                 // The spread arguments are additional function paramaters that are patched in
                 // They are to the function signature added in the `fn_typ` function.
                 // But they were never added to the symbol table, which we currently do here.
@@ -302,7 +316,8 @@ impl<'tcx> GotocCtx<'tcx> {
             pretty_name,
             mangled_name,
             original_file: loc.filename().unwrap(),
-            original_line: loc.line().unwrap().to_string(),
+            original_start_line: loc.start_line().unwrap().to_string(),
+            original_end_line: loc.end_line().unwrap().to_string(),
             unwind_value: None,
         }
     }
@@ -321,7 +336,6 @@ impl<'tcx> GotocCtx<'tcx> {
                 self.tcx
                     .sess
                     .span_err(attr.span, "Exactly one Unwind Argument as Integer accepted");
-                return;
             }
             Some(unwind_integer_value) => {
                 let val: Result<u32, _> = unwind_integer_value.try_into();

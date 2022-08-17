@@ -81,8 +81,6 @@ fn bundle_kani(dir: &Path) -> Result<()> {
     let scripts = dir.join("scripts");
     std::fs::create_dir(&scripts)?;
 
-    cp(Path::new("./scripts/cbmc_json_parser.py"), &scripts)?;
-
     // 3. Kani libraries
     let library = dir.join("library");
     std::fs::create_dir(&library)?;

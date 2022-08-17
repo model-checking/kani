@@ -17,7 +17,7 @@ unsafe impl kani::Invariant for Pair {
     }
 }
 
-fn test<T: kani::Invariant + std::cmp::PartialEq + Clone>() {
+fn test<T: kani::Arbitrary + std::cmp::PartialEq + Clone>() {
     let mut var1 = kani::any::<T>();
     let mut var2 = kani::any::<T>();
     let old_var1 = var1.clone();

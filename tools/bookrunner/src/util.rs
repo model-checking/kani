@@ -218,7 +218,7 @@ pub fn add_verification_job(litani: &mut Litani, test_props: &TestProps) {
         &kani,
         &[&phony_in],
         &[],
-        "Ca Kani reason about it?",
+        "Can Kani reason about it?",
         test_props.path.to_str().unwrap(),
         "verification",
         exit_status,

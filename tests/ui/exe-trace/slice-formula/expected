@@ -1,0 +1,20 @@
+VERIFICATION:- FAILED
+
+Executable trace
+```
+#[test]
+fn kani_exe_trace_harness
+    let det_vals: Vec<Vec<u8>> = vec![
+        //
+        vec![
+        // 101
+        vec![101, 0],
+        //
+        vec![
+        // 102ul
+        vec![102, 0, 0, 0, 0, 0, 0, 0]
+    ];
+    kani::exe_trace_run(det_vals, harness);
+}
+```
+

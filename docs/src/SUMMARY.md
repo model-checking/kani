@@ -3,9 +3,7 @@
 - [Getting started](./getting-started.md)
   - [Installation](./install-guide.md)
     - [Building from source](./build-from-source.md)
-  - [Usage](./usage.md)
-    - [On a single file](./kani-single-file.md)
-    - [On a package](./cargo-kani.md)
+  - [Using Kani](./usage.md)
   - [Verification results](./verification-results.md)
 
 - [Tutorial](./kani-tutorial.md)
@@ -19,6 +17,7 @@
   - [Where to start on real code](./tutorial-real-code.md)
 
 - [Developer documentation](dev-documentation.md)
+  - [Coding conventions](./conventions.md)
   - [Working with CBMC](./cbmc-hacks.md)
   - [Working with `rustc`](./rustc-hacks.md)
   - [Command cheat sheets](./cheat-sheets.md)

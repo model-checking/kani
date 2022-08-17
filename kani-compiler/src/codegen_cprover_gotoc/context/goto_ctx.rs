@@ -23,9 +23,9 @@ use cbmc::InternedString;
 use cbmc::{MachineModel, RoundingMode};
 use kani_metadata::HarnessMetadata;
 use kani_queries::{QueryDb, UserInput};
+use rustc_data_structures::fx::FxHashMap;
 use rustc_data_structures::owning_ref::OwningRef;
 use rustc_data_structures::rustc_erase_owner;
-use rustc_data_structures::stable_map::FxHashMap;
 use rustc_data_structures::sync::MetadataRef;
 use rustc_middle::mir::interpret::Allocation;
 use rustc_middle::span_bug;
@@ -124,7 +124,12 @@ impl<'tcx> GotocCtx<'tcx> {
 
     // Generate a Symbol Expression representing a function variable from the MIR
     pub fn gen_function_local_variable(&mut self, c: u64, fname: &str, t: Type) -> Symbol {
-        self.gen_stack_variable(c, fname, "var", t, Location::none())
+        self.gen_stack_variable(c, fname, "var", t, Location::none(), false)
+    }
+
+    // Generate a Symbol Expression representing a function parameter from the MIR
+    pub fn gen_function_parameter(&mut self, c: u64, fname: &str, t: Type) -> Symbol {
+        self.gen_stack_variable(c, fname, "var", t, Location::none(), true)
     }
 
     /// Given a counter `c` a function name `fname, and a prefix `prefix`, generates a new function local variable
@@ -136,10 +141,11 @@ impl<'tcx> GotocCtx<'tcx> {
         prefix: &str,
         t: Type,
         loc: Location,
+        is_param: bool,
     ) -> Symbol {
         let base_name = format!("{}_{}", prefix, c);
         let name = format!("{}::1::{}", fname, base_name);
-        let symbol = Symbol::variable(name, base_name, t, loc);
+        let symbol = Symbol::variable(name, base_name, t, loc).with_is_parameter(is_param);
         self.symbol_table.insert(symbol.clone());
         symbol
     }
@@ -153,7 +159,8 @@ impl<'tcx> GotocCtx<'tcx> {
         loc: Location,
     ) -> (Expr, Stmt) {
         let c = self.current_fn_mut().get_and_incr_counter();
-        let var = self.gen_stack_variable(c, &self.current_fn().name(), "temp", t, loc).to_expr();
+        let var =
+            self.gen_stack_variable(c, &self.current_fn().name(), "temp", t, loc, false).to_expr();
         let decl = Stmt::decl(var.clone(), value, loc);
         (var, decl)
     }
@@ -262,10 +269,6 @@ impl<'tcx> GotocCtx<'tcx> {
             self.symbol_table.replace_with_completion(sym);
         }
         Type::union_tag(union_name)
-    }
-
-    pub fn find_function<T: Into<InternedString>>(&mut self, fname: T) -> Option<Expr> {
-        self.symbol_table.lookup(fname).map(|s| s.to_expr())
     }
 
     /// Makes a __attribute__((constructor)) fnname() {body} initalizer function

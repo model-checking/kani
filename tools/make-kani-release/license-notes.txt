@@ -22,9 +22,6 @@ License: Apache-2.0
 
 ## Notable Python dependencies
 
-colorama: https://github.com/tartley/colorama
-License: BSD-3-Clause
-
 voluptuous: https://github.com/alecthomas/voluptuous
 License: BSD-3-Clause
 

@@ -6,6 +6,7 @@
 //! in [GotocCtx::codegen_place] below.
 
 use super::typ::TypeExt;
+use crate::codegen_cprover_gotoc::codegen::typ::{pointee_type, std_pointee_type};
 use crate::codegen_cprover_gotoc::utils::slice_fat_ptr;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{Expr, Location, Type};
@@ -15,7 +16,7 @@ use rustc_middle::{
     mir::{Field, Local, Place, ProjectionElem},
     ty::{self, Ty, TypeAndMut, VariantDef},
 };
-use rustc_target::abi::{TagEncoding, Variants};
+use rustc_target::abi::{TagEncoding, VariantIdx, Variants};
 use tracing::{debug, trace, warn};
 
 /// A projection in Kani can either be to a type (the normal case),
@@ -24,6 +25,7 @@ use tracing::{debug, trace, warn};
 pub enum TypeOrVariant<'tcx> {
     Type(Ty<'tcx>),
     Variant(&'tcx VariantDef),
+    GeneratorVariant(VariantIdx),
 }
 
 /// A struct for storing the data for passing to `codegen_unimplemented`
@@ -129,7 +131,7 @@ impl<'tcx> ProjectedPlace<'tcx> {
                 }
             }
             // TODO: handle Variant https://github.com/model-checking/kani/issues/448
-            TypeOrVariant::Variant(_) => None,
+            TypeOrVariant::Variant(_) | TypeOrVariant::GeneratorVariant(_) => None,
         }
     }
 
@@ -197,7 +199,7 @@ impl<'tcx> TypeOrVariant<'tcx> {
     pub fn monomorphize(self, ctx: &GotocCtx<'tcx>) -> Self {
         match self {
             TypeOrVariant::Type(t) => TypeOrVariant::Type(ctx.monomorphize(t)),
-            TypeOrVariant::Variant(_) => self,
+            TypeOrVariant::Variant(_) | TypeOrVariant::GeneratorVariant(_) => self,
         }
     }
 }
@@ -207,6 +209,9 @@ impl<'tcx> TypeOrVariant<'tcx> {
         match self {
             TypeOrVariant::Type(t) => *t,
             TypeOrVariant::Variant(v) => panic!("expect a type but variant is found: {:?}", v),
+            TypeOrVariant::GeneratorVariant(v) => {
+                panic!("expect a type but generator variant is found: {:?}", v)
+            }
         }
     }
 
@@ -215,6 +220,9 @@ impl<'tcx> TypeOrVariant<'tcx> {
         match self {
             TypeOrVariant::Type(t) => panic!("expect a variant but type is found: {:?}", t),
             TypeOrVariant::Variant(v) => v,
+            TypeOrVariant::GeneratorVariant(v) => {
+                panic!("expect a variant but generator variant found {:?}", v)
+            }
         }
     }
 }
@@ -269,12 +277,12 @@ impl<'tcx> GotocCtx<'tcx> {
                         Ok(res.member(&field.name.to_string(), &self.symbol_table))
                     }
                     ty::Closure(..) => Ok(res.member(&f.index().to_string(), &self.symbol_table)),
-                    ty::Generator(..) => Err(UnimplementedData::new(
-                        "ty::Generator",
-                        "https://github.com/model-checking/kani/issues/416",
-                        Type::code(vec![], Type::empty()),
-                        *res.location(),
-                    )),
+                    ty::Generator(..) => {
+                        let field_name = self.generator_field_name(f.index());
+                        Ok(res
+                            .member("direct_fields", &self.symbol_table)
+                            .member(field_name, &self.symbol_table))
+                    }
                     _ => unimplemented!(),
                 }
             }
@@ -282,6 +290,10 @@ impl<'tcx> GotocCtx<'tcx> {
             TypeOrVariant::Variant(v) => {
                 let field = &v.fields[f.index()];
                 Ok(res.member(&field.name.to_string(), &self.symbol_table))
+            }
+            TypeOrVariant::GeneratorVariant(_var_idx) => {
+                let field_name = self.generator_field_name(f.index());
+                Ok(res.member(field_name, &self.symbol_table))
             }
         }
     }
@@ -349,31 +361,30 @@ impl<'tcx> GotocCtx<'tcx> {
                     before.goto_expr
                 };
 
-                let inner_mir_typ_and_mut = base_type.builtin_deref(true).unwrap();
-                let fat_ptr_mir_typ = if self.is_box_of_unsized(base_type) {
-                    // If we have a box, its fat pointer typ is a pointer to the boxes inner type.
-                    Some(self.tcx.mk_ptr(inner_mir_typ_and_mut))
-                } else if self.is_ref_of_unsized(base_type) {
-                    Some(before.mir_typ_or_variant.expect_type())
+                let inner_mir_typ = std_pointee_type(base_type).unwrap();
+                let (fat_ptr_mir_typ, fat_ptr_goto_expr) = if self.use_thin_pointer(inner_mir_typ) {
+                    (before.fat_ptr_mir_typ, before.fat_ptr_goto_expr)
                 } else {
-                    before.fat_ptr_mir_typ
+                    (Some(before.mir_typ_or_variant.expect_type()), Some(inner_goto_expr.clone()))
                 };
-                let fat_ptr_goto_expr =
-                    if self.is_box_of_unsized(base_type) || self.is_ref_of_unsized(base_type) {
-                        Some(inner_goto_expr.clone())
-                    } else {
-                        before.fat_ptr_goto_expr
-                    };
 
                 // Check that we have a valid trait or slice fat pointer
                 if let Some(fat_ptr) = fat_ptr_goto_expr.clone() {
                     assert!(
                         fat_ptr.typ().is_rust_trait_fat_ptr(&self.symbol_table)
-                            || fat_ptr.typ().is_rust_slice_fat_ptr(&self.symbol_table)
+                            || fat_ptr.typ().is_rust_slice_fat_ptr(&self.symbol_table),
+                        "Unexpected type: {:?} -- {:?}",
+                        fat_ptr.typ(),
+                        pointee_type(fat_ptr_mir_typ.unwrap()).unwrap().kind(),
+                    );
+                    assert!(
+                        self.use_fat_pointer(pointee_type(fat_ptr_mir_typ.unwrap()).unwrap()),
+                        "Unexpected type: {:?} -- {:?}",
+                        fat_ptr.typ(),
+                        fat_ptr_mir_typ,
                     );
                 };
 
-                let inner_mir_typ = inner_mir_typ_and_mut.ty;
                 let expr = match inner_mir_typ.kind() {
                     ty::Slice(_) | ty::Str | ty::Dynamic(..) => {
                         inner_goto_expr.member("data", &self.symbol_table)
@@ -498,33 +509,43 @@ impl<'tcx> GotocCtx<'tcx> {
             ProjectionElem::Downcast(_, idx) => {
                 // downcast converts a variable of an enum type to one of its discriminated cases
                 let t = before.mir_typ();
-                match t.kind() {
+                let (case_name, type_or_variant) = match t.kind() {
                     ty::Adt(def, _) => {
-                        let variant = def.variants().get(idx).unwrap();
-                        let case_name = variant.name.to_string();
-                        let typ = TypeOrVariant::Variant(variant);
-                        let expr = match &self.layout_of(t).variants {
-                            Variants::Single { .. } => before.goto_expr,
-                            Variants::Multiple { tag_encoding, .. } => match tag_encoding {
-                                TagEncoding::Direct => before
-                                    .goto_expr
-                                    .member("cases", &self.symbol_table)
-                                    .member(&case_name, &self.symbol_table),
-                                TagEncoding::Niche { .. } => {
-                                    before.goto_expr.member(&case_name, &self.symbol_table)
-                                }
-                            },
-                        };
-                        ProjectedPlace::try_new(
-                            expr,
-                            typ,
-                            before.fat_ptr_goto_expr,
-                            before.fat_ptr_mir_typ,
-                            self,
-                        )
+                        let variant = def.variant(idx);
+                        (variant.name.as_str().into(), TypeOrVariant::Variant(variant))
                     }
-                    _ => unreachable!("it's a bug to reach here!"),
-                }
+                    ty::Generator(..) => {
+                        (self.generator_variant_name(idx), TypeOrVariant::GeneratorVariant(idx))
+                    }
+                    _ => unreachable!(
+                        "cannot downcast {:?} to a variant (only enums and generators can)",
+                        &t.kind()
+                    ),
+                };
+                let layout = self.layout_of(t);
+                let expr = match &layout.variants {
+                    Variants::Single { .. } => before.goto_expr,
+                    Variants::Multiple { tag_encoding, .. } => match tag_encoding {
+                        TagEncoding::Direct => {
+                            let cases = if t.is_generator() {
+                                before.goto_expr
+                            } else {
+                                before.goto_expr.member("cases", &self.symbol_table)
+                            };
+                            cases.member(case_name, &self.symbol_table)
+                        }
+                        TagEncoding::Niche { .. } => {
+                            before.goto_expr.member(case_name, &self.symbol_table)
+                        }
+                    },
+                };
+                ProjectedPlace::try_new(
+                    expr,
+                    type_or_variant,
+                    before.fat_ptr_goto_expr,
+                    before.fat_ptr_mir_typ,
+                    self,
+                )
             }
         }
     }

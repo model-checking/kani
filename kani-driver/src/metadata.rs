@@ -13,6 +13,17 @@ use std::io::{BufReader, BufWriter};
 
 use crate::session::KaniSession;
 
+fn generate_mock_harness() -> HarnessMetadata {
+    HarnessMetadata {
+        pretty_name: String::from("harness"),
+        mangled_name: String::from("harness"),
+        original_file: String::from("target_file.rs"),
+        original_start_line: String::from("0"),
+        original_end_line: String::from("0"),
+        unwind_value: None,
+    }
+}
+
 /// From either a file or a path with multiple files, output the CBMC restrictions file we should use.
 pub fn collect_and_link_function_pointer_restrictions(
     path: &Path,
@@ -110,7 +121,7 @@ impl KaniSession {
     pub fn collect_kani_metadata(&self, files: &[PathBuf]) -> Result<KaniMetadata> {
         if self.args.dry_run {
             // Mock an answer
-            Ok(KaniMetadata { proof_harnesses: vec![] })
+            Ok(KaniMetadata { proof_harnesses: vec![generate_mock_harness()] })
         } else {
             // TODO: one possible future improvement here would be to return some kind of Lazy
             // value, that only computes this metadata if it turns out we need it.
@@ -145,7 +156,8 @@ pub fn mock_proof_harness(name: &str, unwind_value: Option<u32>) -> HarnessMetad
         pretty_name: name.into(),
         mangled_name: name.into(),
         original_file: "<unknown>".into(),
-        original_line: "<unknown>".into(),
+        original_start_line: "<unknown>".into(),
+        original_end_line: "<unknown>".into(),
         unwind_value,
     }
 }

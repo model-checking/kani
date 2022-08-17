@@ -23,4 +23,3 @@ fn main() {
     dummy(any::<i32>() >> any::<i32>());
     dummy(-any::<i32>()); // This is not emitting CBMC check.
 }
-

@@ -9,6 +9,7 @@ pub fn check_vec() {
     // Create small vec with three elements.
     let chars: SmallVec<[char; 3]> = smallvec![kani::any(), kani::any(), kani::any()];
     for c in chars {
-        assert!(c.is_valid());
+        kani::assume(c != char::MAX);
+        assert!(c < char::MAX);
     }
 }

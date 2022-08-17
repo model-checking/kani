@@ -16,4 +16,3 @@ fn main() {
     }
     not_zero(ptr);
 }
-

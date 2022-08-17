@@ -1,5 +1,0 @@
-SUCCESS\
-assertion failed: inventory.get(&id).unwrap() == quantity
-FAILURE\
-called `Option::unwrap()` on a `None` value
-VERIFICATION:- FAILED

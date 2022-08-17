@@ -3,6 +3,7 @@
 use crate::codegen_cprover_gotoc::utils::slice_fat_ptr;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::unwrap_or_return_codegen_unimplemented;
+use cbmc::btree_string_map;
 use cbmc::goto_program::{DatatypeComponent, Expr, Location, Stmt, Symbol, Type};
 use rustc_ast::ast::Mutability;
 use rustc_middle::mir::interpret::{
@@ -13,8 +14,8 @@ use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{self, Const, ConstKind, FloatTy, Instance, IntTy, Ty, Uint, UintTy};
 use rustc_span::def_id::DefId;
 use rustc_span::Span;
-use rustc_target::abi::{FieldsShape, Size, TagEncoding, Variants};
-use tracing::debug;
+use rustc_target::abi::{Size, TagEncoding, Variants};
+use tracing::{debug, trace};
 
 enum AllocData<'a> {
     Bytes(&'a [u8]),
@@ -23,9 +24,10 @@ enum AllocData<'a> {
 
 impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_operand(&mut self, o: &Operand<'tcx>) -> Expr {
+        trace!(operand=?o, "codegen_operand");
         match o {
             Operand::Copy(d) | Operand::Move(d) =>
-            // TODO: move shouldn't be the same as copy
+            // TODO: move is an opportunity to poison/nondet the original memory.
             {
                 let projection =
                     unwrap_or_return_codegen_unimplemented!(self, self.codegen_place(d));
@@ -44,6 +46,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     fn codegen_constant(&mut self, c: &Constant<'tcx>) -> Expr {
+        trace!(constant=?c, "codegen_constant");
         let const_ = match self.monomorphize(c.literal) {
             ConstantKind::Ty(ct) => ct,
             ConstantKind::Val(val, ty) => return self.codegen_const_value(val, ty, Some(&c.span)),
@@ -145,6 +148,7 @@ impl<'tcx> GotocCtx<'tcx> {
         lit_ty: Ty<'tcx>,
         span: Option<&Span>,
     ) -> Expr {
+        trace!(val=?v, ?lit_ty, "codegen_const_value");
         match v {
             ConstValue::Scalar(s) => self.codegen_scalar(s, lit_ty, span),
             ConstValue::Slice { data, start, end } => {
@@ -160,11 +164,15 @@ impl<'tcx> GotocCtx<'tcx> {
                     .cast_to(self.codegen_ty(lit_ty).to_pointer())
                     .dereference()
             }
+            ConstValue::ZeroSized => match lit_ty.kind() {
+                ty::FnDef(d, substs) => self.codegen_fndef(*d, substs, span),
+                _ => unimplemented!(),
+            },
         }
     }
 
     fn codegen_scalar(&mut self, s: Scalar, ty: Ty<'tcx>, span: Option<&Span>) -> Expr {
-        debug! {"codegen_scalar\n{:?}\n{:?}\n{:?}\n{:?}",s, ty, span, &ty.kind()};
+        debug!(scalar=?s, ?ty, kind=?ty.kind(), ?span, "codegen_scalar");
         match (s, &ty.kind()) {
             (Scalar::Int(_), ty::Int(it)) => match it {
                 IntTy::I8 => Expr::int_constant(s.to_i8().unwrap(), Type::signed_int(8)),
@@ -199,9 +207,9 @@ impl<'tcx> GotocCtx<'tcx> {
                     FloatTy::F64 => Expr::double_constant_from_bitpattern(s.to_u64().unwrap()),
                 }
             }
-            (Scalar::Int(int), ty::FnDef(d, substs)) => {
-                assert_eq!(int.size(), Size::ZERO);
-                self.codegen_fndef(*d, substs, span)
+            (Scalar::Int(..), ty::FnDef(..)) => {
+                // This was removed here: https://github.com/rust-lang/rust/pull/98957.
+                unreachable!("ZST is no longer represented as a scalar")
             }
             (Scalar::Int(_), ty::RawPtr(tm)) => {
                 Expr::pointer_constant(s.to_u64().unwrap(), self.codegen_ty(tm.ty).to_pointer())
@@ -263,25 +271,51 @@ impl<'tcx> GotocCtx<'tcx> {
                                 _ => unreachable!(),
                             }
                         }
-                        Variants::Multiple { tag_encoding, .. } => match tag_encoding {
+                        Variants::Multiple { tag_encoding, tag_field, .. } => match tag_encoding {
                             TagEncoding::Niche { .. } => {
-                                let offset = match &layout.fields {
-                                    FieldsShape::Arbitrary { offsets, .. } => {
-                                        offsets[0].bytes_usize()
-                                    }
-                                    _ => unreachable!("niche encoding must have arbitrary fields"),
-                                };
+                                let niche_offset = layout.fields.offset(*tag_field);
+                                assert_eq!(
+                                    niche_offset,
+                                    Size::ZERO,
+                                    "nonzero offset for niche in scalar"
+                                );
                                 let discr_ty = self.codegen_enum_discr_typ(ty);
                                 let niche_val = self.codegen_scalar(s, discr_ty, span);
-                                self.codegen_niche_literal(ty, offset, niche_val)
+                                let result_type = self.codegen_ty(ty);
+                                let niche_type = niche_val.typ().clone();
+                                assert_eq!(
+                                    niche_type.sizeof_in_bits(&self.symbol_table),
+                                    result_type.sizeof_in_bits(&self.symbol_table),
+                                    "niche type and enum have different size in scalar"
+                                );
+                                niche_val.transmute_to(result_type, &self.symbol_table)
                             }
 
                             TagEncoding::Direct => {
                                 // then the scalar field stores the discriminant
                                 let discr_ty = self.codegen_enum_discr_typ(ty);
-
                                 let init = self.codegen_scalar(s, discr_ty, span);
-                                self.codegen_direct_literal(ty, init)
+                                let cgt = self.codegen_ty(ty);
+                                let fields =
+                                    cgt.get_non_empty_components(&self.symbol_table).unwrap();
+                                // TagEncoding::Direct makes a constant with a tag but no data.
+                                // Check our understanding that that the Enum must have one field,
+                                // which is the tag, and no data field.
+                                assert_eq!(
+                                    fields.len(),
+                                    1,
+                                    "TagEncoding::Direct encountered for enum with non-empty variants"
+                                );
+                                assert_eq!(
+                                    fields[0].name().to_string(),
+                                    "case",
+                                    "Unexpected field in enum/generator. Please report your failing case at https://github.com/model-checking/kani/issues/1465"
+                                );
+                                Expr::struct_expr_with_nondet_fields(
+                                    cgt,
+                                    btree_string_map![("case", init)],
+                                    &self.symbol_table,
+                                )
                             }
                         },
                     }
@@ -314,33 +348,6 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    fn codegen_direct_literal(&mut self, ty: Ty<'tcx>, init: Expr) -> Expr {
-        let func_name = format!("gen-{}:direct", self.ty_mangled_name(ty));
-        let pretty_name = format!("init_direct::<{}>", self.ty_pretty_name(ty));
-        let cgt = self.codegen_ty(ty);
-        self.ensure(&func_name, |tcx, _| {
-            let target_ty = init.typ().clone(); // N
-            let param = tcx.gen_function_local_variable(1, &func_name, target_ty);
-            let var = tcx.gen_function_local_variable(2, &func_name, cgt.clone()).to_expr();
-            let body = vec![
-                Stmt::decl(var.clone(), None, Location::none()),
-                var.clone()
-                    .member("case", &tcx.symbol_table)
-                    .assign(param.to_expr(), Location::none()),
-                var.ret(Location::none()),
-            ];
-            Symbol::function(
-                &func_name,
-                Type::code(vec![param.to_function_parameter()], cgt),
-                Some(Stmt::block(body, Location::none())),
-                pretty_name,
-                Location::none(),
-            )
-        });
-
-        self.find_function(&func_name).unwrap().call(vec![init])
-    }
-
     pub fn codegen_fndef(
         &mut self,
         d: DefId,
@@ -364,39 +371,19 @@ impl<'tcx> GotocCtx<'tcx> {
                 // here we have a function pointer
                 self.codegen_func_expr(instance, span).address_of()
             }
-            GlobalAlloc::Static(def_id) => {
-                // here we have a potentially unevaluated static
-                let instance = Instance::mono(self.tcx, def_id);
-
-                let sym = self.ensure(&self.symbol_name(instance), |ctx, name| {
-                    // check if this static is extern
-                    let rlinkage = ctx.tcx.codegen_fn_attrs(def_id).linkage;
-
-                    // we believe rlinkage being `Some` means the static not extern
-                    // based on compiler/rustc_codegen_cranelift/src/linkage.rs#L21
-                    // see https://github.com/model-checking/kani/issues/388
-                    //
-                    // Update: The assertion below may fail in similar environments.
-                    // We are disabling it until we find out the root cause, see
-                    // https://github.com/model-checking/kani/issues/400
-                    //
-                    // assert!(rlinkage.is_none());
-
-                    let span = ctx.tcx.def_span(def_id);
-                    Symbol::static_variable(
-                        name.to_string(),
-                        name.to_string(),
-                        ctx.codegen_ty(instance.ty(ctx.tcx, ty::ParamEnv::reveal_all())),
-                        ctx.codegen_span(&span),
-                    )
-                    .with_is_extern(rlinkage.is_none())
-                });
-                sym.clone().to_expr().address_of()
-            }
+            GlobalAlloc::Static(def_id) => self.codegen_static_pointer(def_id, false),
             GlobalAlloc::Memory(alloc) => {
                 // Full (mangled) crate name added so that allocations from different
-                // crates do not conflict. The name alone is insufficient becase Rust
+                // crates do not conflict. The name alone is insufficient because Rust
                 // allows different versions of the same crate to be used.
+                let name = format!("{}::{:?}", self.full_crate_name(), alloc_id);
+                self.codegen_allocation(alloc.inner(), |_| name.clone(), Some(name.clone()))
+            }
+            GlobalAlloc::VTable(ty, trait_ref) => {
+                // This is similar to GlobalAlloc::Memory but the type is opaque to rust and it
+                // requires a bit more logic to get information about the allocation.
+                let alloc_id = self.tcx.vtable_allocation((ty, trait_ref));
+                let alloc = self.tcx.global_alloc(alloc_id).unwrap_memory();
                 let name = format!("{}::{:?}", self.full_crate_name(), alloc_id);
                 self.codegen_allocation(alloc.inner(), |_| name.clone(), Some(name.clone()))
             }
@@ -417,6 +404,38 @@ impl<'tcx> GotocCtx<'tcx> {
             assert!(res_t.is_pointer());
             offset_addr.cast_to(res_t)
         }
+    }
+
+    /// Generates a pointer to a static or thread-local variable.
+    pub fn codegen_static_pointer(&mut self, def_id: DefId, is_thread_local: bool) -> Expr {
+        // here we have a potentially unevaluated static
+        let instance = Instance::mono(self.tcx, def_id);
+
+        let sym = self.ensure(&self.symbol_name(instance), |ctx, name| {
+            // check if this static is extern
+            let rlinkage = ctx.tcx.codegen_fn_attrs(def_id).linkage;
+
+            // we believe rlinkage being `Some` means the static not extern
+            // based on compiler/rustc_codegen_cranelift/src/linkage.rs#L21
+            // see https://github.com/model-checking/kani/issues/388
+            //
+            // Update: The assertion below may fail in similar environments.
+            // We are disabling it until we find out the root cause, see
+            // https://github.com/model-checking/kani/issues/400
+            //
+            // assert!(rlinkage.is_none());
+
+            let span = ctx.tcx.def_span(def_id);
+            Symbol::static_variable(
+                name.to_string(),
+                name.to_string(),
+                ctx.codegen_ty(instance.ty(ctx.tcx, ty::ParamEnv::reveal_all())),
+                ctx.codegen_span(&span),
+            )
+            .with_is_extern(rlinkage.is_none())
+            .with_is_thread_local(is_thread_local)
+        });
+        sym.clone().to_expr().address_of()
     }
 
     pub fn codegen_allocation_auto_imm_name<F: FnOnce(&mut GotocCtx<'tcx>) -> String>(
@@ -448,19 +467,20 @@ impl<'tcx> GotocCtx<'tcx> {
 
     fn codegen_allocation_data(&mut self, alloc: &'tcx Allocation) -> Vec<AllocData<'tcx>> {
         let mut alloc_vals = Vec::with_capacity(alloc.relocations().len() + 1);
-        let pointer_size = self.symbol_table.machine_model().pointer_width_in_bytes();
+        let pointer_size =
+            Size::from_bytes(self.symbol_table.machine_model().pointer_width_in_bytes());
 
-        let mut next_offset = 0;
+        let mut next_offset = Size::ZERO;
         for &(offset, alloc_id) in alloc.relocations().iter() {
-            let offset = offset.bytes_usize();
             if offset > next_offset {
-                let bytes =
-                    alloc.inspect_with_uninit_and_ptr_outside_interpreter(next_offset..offset);
+                let bytes = alloc.inspect_with_uninit_and_ptr_outside_interpreter(
+                    next_offset.bytes_usize()..offset.bytes_usize(),
+                );
                 alloc_vals.push(AllocData::Bytes(bytes));
             }
             let ptr_offset = {
                 let bytes = alloc.inspect_with_uninit_and_ptr_outside_interpreter(
-                    offset..(offset + pointer_size),
+                    offset.bytes_usize()..(offset + pointer_size).bytes_usize(),
                 );
                 read_target_uint(self.tcx.sess.target.options.endian, bytes)
             }
@@ -474,8 +494,8 @@ impl<'tcx> GotocCtx<'tcx> {
 
             next_offset = offset + pointer_size;
         }
-        if alloc.len() >= next_offset {
-            let range = next_offset..alloc.len();
+        if alloc.len() >= next_offset.bytes_usize() {
+            let range = next_offset.bytes_usize()..alloc.len();
             let bytes = alloc.inspect_with_uninit_and_ptr_outside_interpreter(range);
             alloc_vals.push(AllocData::Bytes(bytes));
         }
@@ -586,44 +606,14 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    fn codegen_niche_init_name(&self, ty: Ty<'tcx>) -> String {
-        let name = self.ty_mangled_name(ty);
-        format!("gen-{}:niche", name)
-    }
-
     /// fetch the niche value (as both left and right value)
-    pub fn codegen_get_niche(&self, v: Expr, offset: usize, niche_ty: Type) -> Expr {
+    pub fn codegen_get_niche(&self, v: Expr, offset: Size, niche_ty: Type) -> Expr {
         v // t: T
             .address_of() // &t: T*
             .cast_to(Type::unsigned_int(8).to_pointer()) // (u8 *)&t: u8 *
-            .plus(Expr::int_constant(offset, Type::size_t())) // ((u8 *)&t) + offset: u8 *
+            .plus(Expr::int_constant(offset.bytes_usize(), Type::size_t())) // ((u8 *)&t) + offset: u8 *
             .cast_to(niche_ty.to_pointer()) // (N *)(((u8 *)&t) + offset): N *
             .dereference() // *(N *)(((u8 *)&t) + offset): N
-    }
-
-    fn codegen_niche_literal(&mut self, ty: Ty<'tcx>, offset: usize, init: Expr) -> Expr {
-        let cgt = self.codegen_ty(ty);
-        let fname = self.codegen_niche_init_name(ty);
-        let pretty_name = format!("init_niche<{}>", self.ty_pretty_name(ty));
-        self.ensure(&fname, |tcx, _| {
-            let target_ty = init.typ().clone(); // N
-            let param = tcx.gen_function_local_variable(1, &fname, target_ty.clone());
-            let var = tcx.gen_function_local_variable(2, &fname, cgt.clone()).to_expr();
-            let body = vec![
-                Stmt::decl(var.clone(), None, Location::none()),
-                tcx.codegen_get_niche(var.clone(), offset, target_ty)
-                    .assign(param.to_expr(), Location::none()),
-                var.ret(Location::none()),
-            ];
-            Symbol::function(
-                &fname,
-                Type::code(vec![param.to_function_parameter()], cgt),
-                Some(Stmt::block(body, Location::none())),
-                pretty_name,
-                Location::none(),
-            )
-        });
-        self.find_function(&fname).unwrap().call(vec![init])
     }
 
     /// Ensure that the given instance is in the symbol table, returning the symbol.
@@ -634,7 +624,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// This is tracked in <https://github.com/model-checking/kani/issues/1350>.
     pub fn codegen_func_symbol(&mut self, instance: Instance<'tcx>) -> (&Symbol, Type) {
         let func = self.symbol_name(instance);
-        let funct = self.codegen_function_sig(self.fn_sig_of_instance(instance).unwrap());
+        let funct = self.codegen_function_sig(self.fn_sig_of_instance(instance));
         // make sure the functions imported from other modules are in the symbol table
         let sym = self.ensure(&func, |ctx, _| {
             Symbol::function(
@@ -676,7 +666,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let fn_singleton = self.ensure_global_var(
             &fn_singleton_name,
             false,
-            fn_struct_ty.clone(),
+            fn_struct_ty,
             Location::none(),
             |_, _| None, // zero-sized, so no initialization necessary
         );

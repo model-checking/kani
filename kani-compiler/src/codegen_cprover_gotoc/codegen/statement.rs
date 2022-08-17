@@ -4,10 +4,9 @@ use super::typ::TypeExt;
 use super::typ::FN_RETURN_VOID_VAR_NAME;
 use super::PropertyClass;
 use crate::codegen_cprover_gotoc::codegen::typ::pointee_type;
-use crate::codegen_cprover_gotoc::utils;
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
-use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Type};
+use cbmc::goto_program::{Expr, Location, Stmt, Type};
 use cbmc::utils::BUG_REPORT_URL;
 use kani_queries::UserInput;
 use rustc_hir::def_id::DefId;
@@ -24,19 +23,149 @@ use rustc_target::abi::{FieldsShape, Primitive, TagEncoding, Variants};
 use tracing::{debug, info_span, trace, warn};
 
 impl<'tcx> GotocCtx<'tcx> {
-    fn codegen_ret_unit(&mut self) -> Stmt {
-        let is_file_local = false;
-        let ty = self.codegen_ty_unit();
-        let var = self.ensure_global_var(
-            FN_RETURN_VOID_VAR_NAME,
-            is_file_local,
-            ty,
-            Location::none(),
-            |_, _| None,
-        );
-        Stmt::ret(Some(var), Location::none())
+    /// Generate Goto-C for MIR [Statement]s.
+    /// This does not cover all possible "statements" because MIR distinguishes between ordinary
+    /// statements and [Terminator]s, which can exclusively appear at the end of a basic block.
+    ///
+    /// See [GotocCtx::codegen_terminator] for those.
+    pub fn codegen_statement(&mut self, stmt: &Statement<'tcx>) -> Stmt {
+        let _trace_span = info_span!("CodegenStatement", statement = ?stmt).entered();
+        debug!(?stmt, kind=?stmt.kind, "handling_statement");
+        let location = self.codegen_span(&stmt.source_info.span);
+        match &stmt.kind {
+            StatementKind::Assign(box (l, r)) => {
+                let lty = self.place_ty(l);
+                let rty = self.rvalue_ty(r);
+                let llayout = self.layout_of(lty);
+                // we ignore assignment for all zero size types
+                if llayout.is_zst() {
+                    Stmt::skip(Location::none())
+                } else if lty.is_fn_ptr() && rty.is_fn() && !rty.is_fn_ptr() {
+                    // implicit address of a function pointer, e.g.
+                    // let fp: fn() -> i32 = foo;
+                    // where the reference is implicit.
+                    unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place(l))
+                        .goto_expr
+                        .assign(self.codegen_rvalue(r, location).address_of(), location)
+                } else if rty.is_bool() {
+                    unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place(l))
+                        .goto_expr
+                        .assign(self.codegen_rvalue(r, location).cast_to(Type::c_bool()), location)
+                } else {
+                    unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place(l))
+                        .goto_expr
+                        .assign(self.codegen_rvalue(r, location), location)
+                }
+            }
+            StatementKind::Deinit(place) => {
+                // From rustc doc: "This writes `uninit` bytes to the entire place."
+                // Thus, we assign nondet() value to the entire place.
+                let dst_mir_ty = self.place_ty(place);
+                let dst_type = self.codegen_ty(dst_mir_ty);
+                let layout = self.layout_of(dst_mir_ty);
+                if layout.is_zst() || dst_type.sizeof_in_bits(&self.symbol_table) == 0 {
+                    // We ignore assignment for all zero size types
+                    Stmt::skip(location)
+                } else {
+                    unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place(place))
+                        .goto_expr
+                        .assign(dst_type.nondet(), location)
+                }
+            }
+            StatementKind::SetDiscriminant { place, variant_index } => {
+                // this requires place points to an enum type.
+                let pt = self.place_ty(place);
+                let layout = self.layout_of(pt);
+                match &layout.variants {
+                    Variants::Single { .. } => Stmt::skip(location),
+                    Variants::Multiple { tag, tag_encoding, .. } => match tag_encoding {
+                        TagEncoding::Direct => {
+                            let discr =
+                                pt.discriminant_for_variant(self.tcx, *variant_index).unwrap();
+                            let discr_t = self.codegen_enum_discr_typ(pt);
+                            // The constant created below may not fit into the type.
+                            // https://github.com/model-checking/kani/issues/996
+                            //
+                            // It doesn't matter if the type comes from `self.codegen_enum_discr_typ(pt)`
+                            // or `discr.ty`. It looks like something is wrong with `discriminat_for_variant`
+                            // because when it tries to codegen `std::cmp::Ordering` (which should produce
+                            // discriminant values -1, 0 and 1) it produces values 255, 0 and 1 with i8 types:
+                            //
+                            // debug!("DISCRIMINANT - val:{:?} ty:{:?}", discr.val, discr.ty);
+                            // DISCRIMINANT - val:255 ty:i8
+                            // DISCRIMINANT - val:0 ty:i8
+                            // DISCRIMINANT - val:1 ty:i8
+                            let discr = Expr::int_constant(discr.val, self.codegen_ty(discr_t));
+                            let place_goto_expr = unwrap_or_return_codegen_unimplemented_stmt!(
+                                self,
+                                self.codegen_place(place)
+                            )
+                            .goto_expr;
+                            self.codegen_discriminant_field(place_goto_expr, pt)
+                                .assign(discr, location)
+                        }
+                        TagEncoding::Niche { dataful_variant, niche_variants, niche_start } => {
+                            if dataful_variant != variant_index {
+                                let offset = match &layout.fields {
+                                    FieldsShape::Arbitrary { offsets, .. } => offsets[0],
+                                    _ => unreachable!("niche encoding must have arbitrary fields"),
+                                };
+                                let discr_ty = self.codegen_enum_discr_typ(pt);
+                                let discr_ty = self.codegen_ty(discr_ty);
+                                let niche_value =
+                                    variant_index.as_u32() - niche_variants.start().as_u32();
+                                let niche_value = (niche_value as u128).wrapping_add(*niche_start);
+                                let value =
+                                    if niche_value == 0 && tag.primitive() == Primitive::Pointer {
+                                        discr_ty.null()
+                                    } else {
+                                        Expr::int_constant(niche_value, discr_ty.clone())
+                                    };
+                                let place = unwrap_or_return_codegen_unimplemented_stmt!(
+                                    self,
+                                    self.codegen_place(place)
+                                )
+                                .goto_expr;
+                                self.codegen_get_niche(place, offset, discr_ty)
+                                    .assign(value, location)
+                            } else {
+                                Stmt::skip(location)
+                            }
+                        }
+                    },
+                }
+            }
+            StatementKind::StorageLive(_) => Stmt::skip(location), // TODO: fix me
+            StatementKind::StorageDead(_) => Stmt::skip(location), // TODO: fix me
+            StatementKind::CopyNonOverlapping(box mir::CopyNonOverlapping {
+                ref src,
+                ref dst,
+                ref count,
+            }) => {
+                // Pack the operands and their types, then call `codegen_copy`
+                let fargs = vec![
+                    self.codegen_operand(src),
+                    self.codegen_operand(dst),
+                    self.codegen_operand(count),
+                ];
+                let farg_types =
+                    &[self.operand_ty(src), self.operand_ty(dst), self.operand_ty(count)];
+                self.codegen_copy("copy_nonoverlapping", true, fargs, farg_types, None, location)
+            }
+            StatementKind::FakeRead(_)
+            | StatementKind::Retag(_, _)
+            | StatementKind::AscribeUserType(_, _)
+            | StatementKind::Nop
+            | StatementKind::Coverage { .. } => Stmt::skip(location),
+        }
+        .with_location(self.codegen_span(&stmt.source_info.span))
     }
 
+    /// Generate Goto-c for MIR [Terminator] statements.
+    /// Many kinds of seemingly ordinary statements in Rust are "terminators" (i.e. the sort of statement that _ends_ a basic block)
+    /// because of the need for unwinding/drop. For instance, function calls.
+    ///
+    /// See also [`GotocCtx::codegen_statement`] for ordinary [Statement]s.
     pub fn codegen_terminator(&mut self, term: &Terminator<'tcx>) -> Stmt {
         let loc = self.codegen_span(&term.source_info.span);
         let _trace_span = info_span!("CodegenTerminator", statement = ?term.kind).entered();
@@ -60,7 +189,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 loc,
             ),
             TerminatorKind::Return => {
-                let rty = self.current_fn().sig().unwrap().skip_binder().output();
+                let rty = self.current_fn().sig().skip_binder().output();
                 if rty.is_unit() {
                     self.codegen_ret_unit()
                 } else {
@@ -83,9 +212,6 @@ impl<'tcx> GotocCtx<'tcx> {
                 loc,
             ),
             TerminatorKind::Drop { place, target, unwind: _ } => self.codegen_drop(place, target),
-            TerminatorKind::DropAndReplace { .. } => {
-                unreachable!("this instruction is unreachable")
-            }
             TerminatorKind::Call { func, args, destination, target, .. } => {
                 self.codegen_funcall(func, args, destination, target, term.source_info.span)
             }
@@ -130,10 +256,14 @@ impl<'tcx> GotocCtx<'tcx> {
                     loc,
                 )
             }
-            TerminatorKind::Yield { .. }
-            | TerminatorKind::GeneratorDrop
+            TerminatorKind::DropAndReplace { .. }
             | TerminatorKind::FalseEdge { .. }
-            | TerminatorKind::FalseUnwind { .. } => unreachable!("we should not hit these cases"),
+            | TerminatorKind::FalseUnwind { .. } => {
+                unreachable!("drop elaboration removes these TerminatorKind")
+            }
+            TerminatorKind::Yield { .. } | TerminatorKind::GeneratorDrop => {
+                unreachable!("we should not hit these cases") // why?
+            }
             TerminatorKind::InlineAsm { .. } => self
                 .codegen_unimplemented(
                     "InlineAsm",
@@ -145,25 +275,43 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    // TODO: this function doesn't handle unwinding which begins if the destructor panics
-    // https://github.com/model-checking/kani/issues/221
-    fn codegen_drop(&mut self, location: &Place<'tcx>, target: &BasicBlock) -> Stmt {
-        let loc_ty = self.place_ty(location);
-        debug!(?loc_ty, "codegen_drop");
-        let drop_instance = Instance::resolve_drop_in_place(self.tcx, loc_ty);
+    /// A special case handler to codegen `return ();`
+    fn codegen_ret_unit(&mut self) -> Stmt {
+        let is_file_local = false;
+        let ty = self.codegen_ty_unit();
+        let var = self.ensure_global_var(
+            FN_RETURN_VOID_VAR_NAME,
+            is_file_local,
+            ty,
+            Location::none(),
+            |_, _| None,
+        );
+        Stmt::ret(Some(var), Location::none())
+    }
+
+    /// Generates Goto-C for MIR [TerminatorKind::Drop] calls. We only handle code _after_ Rust's "drop elaboration"
+    /// transformation, so these have a simpler semantics.
+    ///
+    /// The generated code should invoke the appropriate `drop` function on `place`, then goto `target`.
+    fn codegen_drop(&mut self, place: &Place<'tcx>, target: &BasicBlock) -> Stmt {
+        // TODO: this function doesn't handle unwinding which begins if the destructor panics
+        // https://github.com/model-checking/kani/issues/221
+        let place_ty = self.place_ty(place);
+        debug!(?place_ty, "codegen_drop");
+        let drop_instance = Instance::resolve_drop_in_place(self.tcx, place_ty);
         // Once upon a time we did a `hook_applies` check here, but we no longer seem to hook drops
         let drop_implementation = match drop_instance.def {
             InstanceDef::DropGlue(_, None) => {
                 // We can skip empty DropGlue functions
                 Stmt::skip(Location::none())
             }
-            _ => {
-                match loc_ty.kind() {
+            InstanceDef::DropGlue(_def_id, Some(_)) => {
+                match place_ty.kind() {
                     ty::Dynamic(..) => {
                         // Virtual drop via a vtable lookup
                         let trait_fat_ptr = unwrap_or_return_codegen_unimplemented_stmt!(
                             self,
-                            self.codegen_place(location)
+                            self.codegen_place(place)
                         )
                         .fat_ptr_goto_expr
                         .unwrap();
@@ -177,7 +325,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         let fn_ptr = vtable.member("drop", &self.symbol_table);
 
                         // Pull the self argument off of the fat pointer's data pointer
-                        if let Some(typ) = pointee_type(self.local_ty(location.local)) {
+                        if let Some(typ) = pointee_type(self.local_ty(place.local)) {
                             if !(typ.is_trait() || typ.is_box()) {
                                 warn!(self_type=?typ, "Unsupported drop of unsized");
                                 return self
@@ -213,7 +361,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         let func = self.codegen_func_expr(drop_instance, None);
                         let place = unwrap_or_return_codegen_unimplemented_stmt!(
                             self,
-                            self.codegen_place(location)
+                            self.codegen_place(place)
                         );
                         let arg = if let Some(fat_ptr) = place.fat_ptr_goto_expr {
                             // Drop takes the fat pointer if it exists
@@ -245,15 +393,18 @@ impl<'tcx> GotocCtx<'tcx> {
                     }
                 }
             }
+            _ => unreachable!(
+                "TerminatorKind::Drop but not InstanceDef::DropGlue should be impossible"
+            ),
         };
         let goto_target = Stmt::goto(self.current_fn().find_label(target), Location::none());
         let block = vec![drop_implementation, goto_target];
         Stmt::block(block, Location::none())
     }
 
-    /// <https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/terminator/enum.TerminatorKind.html#variant.SwitchInt>
+    /// Generates Goto-C for MIR [TerminatorKind::SwitchInt].
     /// Operand evaluates to an integer;
-    /// jump depending on its value to one of the targets, and otherwise fallback to otherwise.
+    /// jump depending on its value to one of the targets, and otherwise fallback to `targets.otherwise()`.
     /// The otherwise value is stores as the last value of targets.
     fn codegen_switch_int(
         &mut self,
@@ -302,6 +453,9 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
+    /// As part of **calling** a function (closure actually), we may need to un-tuple arguments.
+    ///
+    /// See [GotocCtx::ty_needs_closure_untupled]
     fn codegen_untuple_closure_args(
         &mut self,
         instance: Instance<'tcx>,
@@ -343,6 +497,8 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
+    /// Because function calls terminate basic blocks, to "end" a function call, we
+    /// must jump to the next basic block.
     fn codegen_end_call(&self, target: Option<&BasicBlock>, loc: Location) -> Stmt {
         if let Some(next_bb) = target {
             Stmt::goto(self.current_fn().find_label(next_bb), loc)
@@ -356,21 +512,33 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    pub fn codegen_funcall_args(&mut self, args: &[Operand<'tcx>]) -> Vec<Expr> {
+    /// Generate Goto-C for each argument to a function call.
+    ///
+    /// N.B. public only because instrinsics use this directly, too.
+    pub(crate) fn codegen_funcall_args(&mut self, args: &[Operand<'tcx>]) -> Vec<Expr> {
         args.iter()
-            .filter_map(|o| {
-                let ot = self.operand_ty(o);
-                if self.ignore_var_ty(ot) {
-                    None
-                } else if ot.is_bool() {
-                    Some(self.codegen_operand(o).cast_to(Type::c_bool()))
+            .map(|o| {
+                if self.operand_ty(o).is_bool() {
+                    self.codegen_operand(o).cast_to(Type::c_bool())
                 } else {
-                    Some(self.codegen_operand(o))
+                    self.codegen_operand(o)
                 }
             })
             .collect()
     }
 
+    /// Generates Goto-C for a MIR [TerminatorKind::Call] statement.
+    ///
+    /// This calls either:
+    ///
+    /// 1. A statically-known function definition.
+    /// 2. A statically-known trait function, which gets a pointer out of a vtable.
+    /// 2. A direct function pointer.
+    ///
+    /// Kani also performs a few alterations:
+    ///
+    /// 1. Do nothing for "empty drop glue"
+    /// 2. If a Kani hook applies, do that instead.
     fn codegen_funcall(
         &mut self,
         func: &Operand<'tcx>,
@@ -427,7 +595,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     | InstanceDef::DropGlue(_, Some(_))
                     | InstanceDef::Intrinsic(..)
                     | InstanceDef::FnPtrShim(..)
-                    | InstanceDef::VtableShim(..)
+                    | InstanceDef::VTableShim(..)
                     | InstanceDef::ReifyShim(..)
                     | InstanceDef::ClosureOnceShim { .. }
                     | InstanceDef::CloneShim(..) => {
@@ -441,28 +609,28 @@ impl<'tcx> GotocCtx<'tcx> {
                     }
                 };
                 stmts.push(self.codegen_end_call(target.as_ref(), loc));
-                return Stmt::block(stmts, loc);
+                Stmt::block(stmts, loc)
             }
             // Function call through a pointer
             ty::FnPtr(_) => {
                 let func_expr = self.codegen_operand(func).dereference();
                 // Actually generate the function call and return.
-                return Stmt::block(
+                Stmt::block(
                     vec![
                         self.codegen_expr_to_place(destination, func_expr.call(fargs))
                             .with_location(loc),
                         Stmt::goto(self.current_fn().find_label(&target.unwrap()), loc),
                     ],
                     loc,
-                );
+                )
             }
             x => unreachable!("Function call where the function was of unexpected type: {:?}", x),
-        };
+        }
     }
 
     /// Extract a reference to self for virtual method calls.
-    /// See [codegen_dynamic_function_sig](GotocCtx::codegen_dynamic_function_sig) for more
-    /// details.
+    ///
+    /// See [GotocCtx::codegen_dynamic_function_sig] for more details.
     fn extract_ptr(&self, arg_expr: Expr, arg_ty: Ty<'tcx>) -> Expr {
         // Generate an expression that indexes the pointer.
         let expr = self
@@ -559,10 +727,11 @@ impl<'tcx> GotocCtx<'tcx> {
         ret_stmts
     }
 
-    /// A place is similar to the C idea of a LHS. For example, the returned value of a function call is stored to a place.
-    /// If the place is unit (i.e. the statement value is not stored anywhere), then we can just turn it directly to a statement.
-    /// Otherwise, we assign the value of the expression to the place.
-    pub fn codegen_expr_to_place(&mut self, p: &Place<'tcx>, e: Expr) -> Stmt {
+    /// Generates Goto-C to assign a value to a [Place].
+    /// A MIR [Place] is an L-value (i.e. the LHS of an assignment).
+    ///
+    /// In Kani, we slightly optimize the special case for Unit and don't assign anything.
+    pub(crate) fn codegen_expr_to_place(&mut self, p: &Place<'tcx>, e: Expr) -> Stmt {
         if self.place_ty(p).is_unit() {
             e.as_stmt(Location::none())
         } else {
@@ -647,9 +816,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             StatementKind::Deinit(place) => {
                 // From rustc doc: "This writes `uninit` bytes to the entire place."
-                // Our model of GotoC has a similar statement, which is later lowered
-                // to assigning a Nondet in CBMC, with a comment specifying that it
-                // corresponds to a Deinit.
+                // Thus, we assign nondet() value to the entire place.
                 let dst_mir_ty = self.place_ty(place);
                 let dst_type = self.codegen_ty(dst_mir_ty);
                 let layout = self.layout_of(dst_mir_ty);
@@ -661,7 +828,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 } else {
                     unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place(place))
                         .goto_expr
-                        .deinit(location)
+                        .assign(dst_type.nondet(), location)
                 }
             }
             StatementKind::SetDiscriminant { place, variant_index } => {
@@ -765,6 +932,6 @@ impl<'tcx> GotocCtx<'tcx> {
             | StatementKind::Nop
             | StatementKind::Coverage { .. } => Stmt::skip(location),
         }
-        .with_location(location)
+        .with_location(self.codegen_span(&stmt.source_info.span))
     }
 }

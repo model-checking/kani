@@ -19,14 +19,11 @@ KANI_DIR=$SCRIPT_DIR/..
 export KANI_FAIL_ON_UNEXPECTED_DESCRIPTION="true"
 
 # Required dependencies
-check-cbmc-version.py --major 5 --minor 61
+check-cbmc-version.py --major 5 --minor 63
 check-cbmc-viewer-version.py --major 3 --minor 5
 
 # Formatting check
 ${SCRIPT_DIR}/kani-fmt.sh --check
-
-# Parser tests
-PYTHONPATH=${SCRIPT_DIR} python3 -m unittest ${SCRIPT_DIR}/test_cbmc_json_parser.py
 
 # Build all packages in the workspace
 cargo build --workspace
@@ -43,14 +40,15 @@ time "$KANI_DIR"/tests/output-files/check-output.sh
 # Declare testing suite information (suite and mode)
 TESTS=(
     "kani kani"
+    "expected expected"
+    "ui expected"
     "firecracker kani"
     "prusti kani"
     "smack kani"
-    "expected expected"
     "cargo-kani cargo-kani"
+    "cargo-ui cargo-kani"
     "kani-docs cargo-kani"
     "kani-fixme kani-fixme"
-    "ui expected"
 )
 
 # Extract testing suite information and run compiletest

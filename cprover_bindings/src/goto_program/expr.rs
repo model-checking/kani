@@ -84,6 +84,8 @@ pub enum ExprValue {
     Dereference(Expr),
     /// `1.0`
     DoubleConstant(f64),
+    // {}
+    EmptyUnion,
     /// `1.0f`
     FloatConstant(f32),
     /// `function(arguments)`
@@ -184,6 +186,9 @@ pub enum BinaryOperator {
     OverflowMinus,
     OverflowMult,
     OverflowPlus,
+    OverflowResultMinus,
+    OverflowResultMult,
+    OverflowResultPlus,
     Plus,
     ROk,
     Rol,
@@ -241,6 +246,26 @@ pub struct ArithmeticOverflowResult {
     pub result: Expr,
     /// Boolean: true if overflow occured, false otherwise.
     pub overflowed: Expr,
+}
+
+pub const ARITH_OVERFLOW_RESULT_FIELD: &str = "result";
+pub const ARITH_OVERFLOW_OVERFLOWED_FIELD: &str = "overflowed";
+
+/// For arithmetic-overflow-with-result operators, CBMC returns a struct whose
+/// first component is the result, and whose second component is whether the
+/// operation overflowed
+pub fn arithmetic_overflow_result_type(operand_type: Type) -> Type {
+    assert!(operand_type.is_integer());
+    // give the struct the name "overflow_result_<type>", e.g.
+    // "overflow_result_Unsignedbv"
+    let name: InternedString = format!("overflow_result_{:?}", operand_type).into();
+    Type::struct_type(
+        name,
+        vec![
+            DatatypeComponent::field(ARITH_OVERFLOW_RESULT_FIELD, operand_type),
+            DatatypeComponent::field(ARITH_OVERFLOW_OVERFLOWED_FIELD, Type::bool()),
+        ],
+    )
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -330,6 +355,7 @@ impl Expr {
     pub fn can_cast_from(source: &Type, target: &Type) -> bool {
         let source = source.unwrap_typedef();
         let target = target.unwrap_typedef();
+        #[allow(clippy::needless_bool)]
         if source == target {
             true
         } else if target.is_bool() {
@@ -391,7 +417,7 @@ impl Expr {
 
     /// `typ x[width] = >>> {elem} <<<`
     pub fn array_constant(self, width: u64) -> Self {
-        assert!(self.is_int_constant());
+        // As per @kroening: "array_of will work with arrays of any type, no need for any assertion"
         expr!(ArrayOf { elem: self }, self.typ.clone().array_of(width))
     }
 
@@ -458,7 +484,7 @@ impl Expr {
 
     /// `(typ) self`.
     pub fn cast_to(self, typ: Type) -> Self {
-        assert!(self.can_cast_to(&typ), "Can't cast\n\n{:?}\n\n{:?}", self, typ);
+        assert!(self.can_cast_to(&typ), "Can't cast\n\n{:?} ({:?})\n\n{:?}", self, self.typ, typ);
         if self.typ == typ {
             self
         } else if typ.is_bool() {
@@ -518,6 +544,13 @@ impl Expr {
         Self::double_constant(c)
     }
 
+    pub fn empty_union(typ: Type, st: &SymbolTable) -> Self {
+        assert!(typ.is_union() || typ.is_union_tag());
+        assert!(typ.lookup_components(st).unwrap().is_empty());
+        let typ = typ.aggr_tag().unwrap();
+        expr!(EmptyUnion, typ)
+    }
+
     /// `1.0f`
     pub fn float_constant(c: f32) -> Self {
         expr!(FloatConstant(c), Type::float())
@@ -527,6 +560,18 @@ impl Expr {
     pub fn float_constant_from_bitpattern(bp: u32) -> Self {
         let c = f32::from_bits(bp);
         Self::float_constant(c)
+    }
+
+    /// `typ x[__CPROVER_infinity()] = >>> {elem} <<<`
+    /// i.e. initilize an infinite sized sparse array.
+    /// This is useful for maps:
+    /// ```
+    /// bool x[__CPROVER_infinity()] = {false};
+    /// x[idx_1] = true;
+    /// if (x[idx_2]) { ... }
+    /// ```
+    pub fn infinite_array_constant(self) -> Self {
+        expr!(ArrayOf { elem: self }, self.typ.clone().infinite_array_of())
     }
 
     /// `self[index]`
@@ -542,7 +587,7 @@ impl Expr {
     where
         T: Into<BigInt>,
     {
-        assert!(typ.is_integer());
+        assert!(typ.is_integer() || typ.is_bitfield());
         let i = i.into();
         // TODO: <https://github.com/model-checking/kani/issues/996>
         // if i != 0 && i != 1 {
@@ -562,7 +607,14 @@ impl Expr {
         // For variadic functions, all named arguments must match the type of their formal param.
         // Extra arguments (e.g the ... args) can have any type.
         fn typecheck_named_args(parameters: &[Parameter], arguments: &[Expr]) -> bool {
-            parameters.iter().zip(arguments.iter()).all(|(p, a)| a.typ() == p.typ())
+            parameters.iter().zip(arguments.iter()).all(|(p, a)| {
+                if a.typ() == p.typ() {
+                    true
+                } else {
+                    tracing::error!(param=?p.typ(), arg=?a.typ(), "Argument doesn't check");
+                    false
+                }
+            })
         }
 
         if function.typ().is_code() {
@@ -775,11 +827,12 @@ impl Expr {
         symbol_table: &SymbolTable,
     ) -> Self {
         assert!(
-            typ.is_struct_tag(),
-            "Error in struct_expr; must be given struct_tag.\n\t{:?}\n\t{:?}",
+            typ.is_struct_tag() || typ.is_struct(),
+            "Error in struct_expr; must be given struct.\n\t{:?}\n\t{:?}",
             typ,
             values
         );
+        let typ = typ.aggr_tag().unwrap();
         let fields = typ.lookup_components(symbol_table).unwrap();
         assert_eq!(
             fields.len(),
@@ -838,8 +891,9 @@ impl Expr {
         symbol_table: &SymbolTable,
     ) -> Self {
         let field = field.into();
-        assert!(typ.is_union_tag());
+        assert!(typ.is_union_tag() || typ.is_union());
         assert_eq!(typ.lookup_field_type(field, symbol_table).as_ref(), Some(value.typ()));
+        let typ = typ.aggr_tag().unwrap();
         expr!(Union { value, field }, typ)
     }
 }
@@ -890,11 +944,11 @@ impl Expr {
             // Floating Point Equalities
             IeeeFloatEqual | IeeeFloatNotequal => lhs.typ == rhs.typ && lhs.typ.is_floating_point(),
             // Overflow flags
-            OverflowMinus => {
+            OverflowMinus | OverflowResultMinus => {
                 (lhs.typ == rhs.typ && (lhs.typ.is_pointer() || lhs.typ.is_numeric()))
                     || (lhs.typ.is_pointer() && rhs.typ.is_integer())
             }
-            OverflowMult | OverflowPlus => {
+            OverflowMult | OverflowPlus | OverflowResultMult | OverflowResultPlus => {
                 (lhs.typ == rhs.typ && lhs.typ.is_integer())
                     || (lhs.typ.is_pointer() && rhs.typ.is_integer())
             }
@@ -940,6 +994,10 @@ impl Expr {
             IeeeFloatEqual | IeeeFloatNotequal => Type::bool(),
             // Overflow flags
             OverflowMinus | OverflowMult | OverflowPlus => Type::bool(),
+            OverflowResultMinus | OverflowResultMult | OverflowResultPlus => {
+                let struct_type = arithmetic_overflow_result_type(lhs.typ.clone());
+                Type::struct_tag(struct_type.tag().unwrap())
+            }
             ROk => Type::bool(),
         }
     }
@@ -1289,6 +1347,24 @@ impl Expr {
         ArithmeticOverflowResult { result, overflowed }
     }
 
+    /// Uses CBMC's add-with-overflow operation that performs a single addition
+    /// operation
+    /// `struct (T, bool) overflow(+, self, e)` where `T` is the type of `self`
+    /// Pseudocode:
+    /// ```
+    /// struct overflow_result_t {
+    ///   T    result;
+    ///   bool overflowed;
+    /// } overflow_result;
+    /// raw_result = (cast to wider type) self + (cast to wider type) e;
+    /// overflow_result.result = (cast to T) raw_result;
+    /// overflow_result.overflowed = raw_result > maximum value of T;
+    /// return overflow_result;
+    /// ```
+    pub fn add_overflow_result(self, e: Expr) -> Expr {
+        self.binop(OverflowResultPlus, e)
+    }
+
     /// `&self[0]`. Converts arrays into pointers
     pub fn array_to_ptr(self) -> Self {
         assert!(self.typ().is_array_like());
@@ -1321,6 +1397,14 @@ impl Expr {
         ArithmeticOverflowResult { result, overflowed }
     }
 
+    /// Uses CBMC's multiply-with-overflow operation that performs a single
+    /// multiplication operation
+    /// `struct (T, bool) overflow(*, self, e)` where `T` is the type of `self`
+    /// See pseudocode in `add_overflow_result`
+    pub fn mul_overflow_result(self, e: Expr) -> Expr {
+        self.binop(OverflowResultMult, e)
+    }
+
     /// Reinterpret the bits of `self` as being of type `t`.
     /// Note that this differs from standard casts, which may convert values.
     /// in C++ syntax: `(uint32_t)(1.0) == 1`, while `reinterpret_cast<uin32_t>(1.0) == 0x3f800000`
@@ -1342,6 +1426,14 @@ impl Expr {
         let result = self.clone().sub(e.clone());
         let overflowed = self.sub_overflow_p(e);
         ArithmeticOverflowResult { result, overflowed }
+    }
+
+    /// Uses CBMC's subtract-with-overflow operation that performs a single
+    /// subtraction operation
+    /// See pseudocode in `add_overflow_result`
+    /// `struct (T, bool) overflow(-, self, e)` where `T` is the type of `self`
+    pub fn sub_overflow_result(self, e: Expr) -> Expr {
+        self.binop(OverflowResultMinus, e)
     }
 
     /// `__CPROVER_same_object(self, e)`

@@ -12,7 +12,7 @@ use std::str::FromStr;
 use crate::util::PathBufExt;
 use test::ColorConfig;
 
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
 pub enum Mode {
     Kani,
     KaniFixme,
@@ -49,7 +49,7 @@ impl fmt::Display for Mode {
 }
 
 /// Step at which Kani test should fail.
-#[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
 pub enum KaniFailStep {
     /// Kani panics before the codegen step (up to MIR generation). This step
     /// runs the same checks on the test code as `cargo check` including syntax,
@@ -63,14 +63,14 @@ pub enum KaniFailStep {
     Verify,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
 pub enum FailMode {
     Check,
     Build,
     Run,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PanicStrategy {
     Unwind,
     Abort,

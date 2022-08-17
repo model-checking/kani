@@ -1,95 +1,112 @@
 # Nondeterministic variables
 
-Kani is able to reason about programs and their execution paths by allowing users to assign nondeterministic (i.e., symbolic) values to  certain variables.
-Since Kani is a bit-level model checker, this means that Kani considers that an unconstrained nondeterministic value represents all the possible bit-value combinations assigned to the variable's memory contents.
+Kani is able to reason about programs and their execution paths by allowing users to create nondeterministic (also called symbolic) values using `kani::any()`.
+Kani is a "bit-precise" model checker, which means that Kani considers all the possible bit-value combinations _that would be valid_ if assigned to a variable's memory contents.
+In other words, `kani::any()` should not produce values that are invalid for the type (which would lead to Rust undefined behavior).
 
-As a Rust developer, this sounds a lot like the `mem::transmute` operation, which is highly `unsafe`.
-And that's correct.
-
-In this tutorial, we will show how to:
- 1. Safely use nondeterministic assignments to generate valid symbolic variables that respect Rust's type invariants.
- 2. Unsafely use nondeterministic assignments to generate unconstrained symbolic variables that do not respect Rust's type invariants.
- 2. Specify invariants for types that you define, enabling the creation of safe nondeterministic variables for those types.
+Out of the box, Kani includes `kani::any()` implementations for most primitive and some `std` types.
+In this tutorial, we will show how to use `kani::any()` to create symbolic values for other types. 
 
 ## Safe nondeterministic variables
 
-Let's say you're developing an inventory management tool, and you would like to verify that your API to manage items is correct.
-Here is a simple implementation of this API:
+Let's say you're developing an inventory management tool, and you would like to start verifying properties about your API.
+Here is a simple example (available [here](https://github.com/model-checking/kani/blob/main/docs/src/tutorial/arbitrary-variables/src/inventory.rs)):
 
 ```rust
 {{#include tutorial/arbitrary-variables/src/inventory.rs:inventory_lib}}
 ```
 
-Now we would like to verify that, no matter which combination of `id` and `quantity`, a call to `Inventory::update()` followed by a call to `Inventory::get()` using the same `id` returns some value that's equal to the one we inserted:
+Let's write a fairly simple proof harness, one that just ensures we successfully `get` the value we inserted with `update`:
 
 ```rust
 {{#include tutorial/arbitrary-variables/src/inventory.rs:safe_update}}
 ```
 
-In this harness, we use `kani::any()` to generate the new `id` and `quantity`.
-`kani::any()` is a **safe** API function, and it represents only valid values.
+We use `kani::any()` twice here:
 
-If we run this example, Kani verification will succeed, including the assertion that shows that the underlying `u32` variable  used to represent `NonZeroU32` cannot be zero, per its type invariant:
+1. `id` has type `ProductId` which was actually just a `u32`, and so any value is fine.
+2. `quantity`, however, has type `NonZeroU32`.
+In Rust, it would be undefined behavior to have a value of `0` for this type.
 
-You can try it out by running the example under
-[`arbitrary-variables`](https://github.com/model-checking/kani/tree/main/docs/src/tutorial/arbitrary-variables/):
+We included an extra assertion that the value returned by `kani::any()` here was actually non-zero.
+If we run this, you'll notice that verification succeeds.
 
-```
+```bash
 cargo kani --harness safe_update
 ```
 
-## Unsafe nondeterministic variables
+`kani::any()` is safe Rust, and so Kani only implements it for types where type invariants are enforced.
+For `NonZeroU32`, this means we never return a `0` value.
+The assertion we wrote in this harness was just an extra check we added to demonstrate this fact, not an essential part of the proof.
 
-Kani also includes an **unsafe** method to generate unconstrained nondeterministic variables which do not take type invariants into consideration.
-As with any unsafe method in Rust, users have to make sure the right guardrails are put in place to avoid undesirable behavior.
+## Custom nondeterministic types
 
-That said, there may be cases where you want to verify your code taking into consideration that some inputs may contain invalid data.
+While `kani::any()` is the only method Kani provides to inject non-determinism into a proof harness, Kani only ships with implementations for a few types where we can guarantee safety.
+When you need nondeterministic variables of types that `kani::any()` cannot construct, you have two options:
 
-Let's see what happens if we modify our verification harness to use the unsafe method `kani::any_raw()` to generate the updated value.
+1. Implement the `kani::Arbitrary` trait for your type, so you can use `kani::any()`.
+2. Just write a function.
 
-```rust
-{{#include tutorial/arbitrary-variables/src/inventory.rs:unsafe_update}}
-```
+The advantage of the first approach is that it's simple and conventional.
+It also means that in addition to being able to use `kani::any()` with your type, you can also use it with `Option<MyType>` (for example).
 
-We commented out the assertion that the underlying `u32` variable cannot be `0`, since this no longer holds.
-The verification will now fail showing that the `inventory.get(&id).unwrap()` method call can panic.
+The advantage of the second approach is that you're able to pass in parameters, like bounds on the size of the data structure.
+(Which we'll discuss more in the next section.)
+This approach is also necessary when you are unable to implement a trait (like `Arbitrary`) on a type you're importing from another crate.
 
-This is an interesting issue that emerges from how `rustc` optimizes the memory layout of `Option<NonZeroU32>`.
-The compiler is able to represent `Option<NonZeroU32>` using `32` bits by using the value `0` to represent `None`.
-
-You can try it out by running the example under [`arbitrary-variables`](https://github.com/model-checking/kani/tree/main/docs/src/tutorial/arbitrary-variables/):
-
-```
-cargo kani --harness unsafe_update
-```
-
-## Safe nondeterministic variables for custom types
-
-Now you would like to add a new structure to your library that allow users to represent a review rating, which can go from 0 to 5 stars.
-Let's say you add the following implementation:
-
-```rust
-{{#include tutorial/arbitrary-variables/src/rating.rs:rating_struct}}
-```
-
-The easiest way to allow users to create nondeterministic variables of the Rating type which represents values from 0-5 stars is by implementing the `kani::Invariant` trait.
-
-The implementation only requires you to define a check to your structure that returns whether its current value is valid or not.
-In our case, we have the following implementation:
+Either way, inside this function you would simply return an arbitrary value by generating arbitrary values for its components.
+To generate a nondeterministic struct, you would just generate nondeterministic values for each of its fields.
+For complex data structures like vectors or other containers, you can start with an empty one and add a (bounded) nondeterministic number of entries.
+For an enum, you can make use of a simple trick:
 
 ```rust
 {{#include tutorial/arbitrary-variables/src/rating.rs:rating_invariant}}
 ```
 
-Now you can use `kani::any()` to create valid nondeterministic variables of the Rating type as shown in this harness:
+All we're doing here is making use of a nondeterministic integer to decide which variant of `Rating` to return.
+
+> **NOTE**: If we thought of this code as generating a random value, this function looks heavily biased.
+> We'd overwhelmingly generate a `Three` because it's matching "all other integers besides 1 and 2."
+> But Kani just see 3 meaningful possibilities, each of which is not treated any differently from each other.
+> The "proportion" of integers does not matter.
+
+## Bounding nondeterministic variables
+
+You can use `kani::any()` for `[T; N]` (if implemented for `T`) because this array type has an exact and constant size.
+But if you wanted a slice (`[T]`) up to size `N`, you can no longer use `kani::any()` for that.
+Likewise, there is no implementation of `kani::any()` for more complex data structures like `Vec`.
+
+The trouble with a nondeterministic vector is that you usually need to _bound_ the size of the vector, for the reasons we investigated in the [last chapter](./tutorial-loop-unwinding.md).
+The `kani::any()` function does not have any arguments, and so cannot be given an upper bound.
+
+This does not mean you cannot have a nondeterministic vector.
+It just means you have to construct one.
+Our example proof harness above constructs a nondeterministic `Inventory` of size `1`, simply by starting with the empty `Inventory` and inserting a nondeterministic entry.
+
+### Exercise
+
+Try writing a function to generate a (bounded) nondeterministic inventory (from the first example:)
 
 ```rust
-{{#include tutorial/arbitrary-variables/src/rating.rs:verify_rating}}
+fn any_inventory(bound: u32) -> Inventory {
+   // fill in here
+}
 ```
 
-You can try it out by running the example under
-[`arbitrary-variables`](https://github.com/model-checking/kani/tree/main/docs/src/tutorial/arbitrary-variables/):
+One thing you'll quickly find is that the bounds must be very small.
+Kani does not (yet!) scale well to nondeterministic-size data structures involving heap allocations.
+A proof harness like `safe_update` above, but starting with `any_inventory(2)` will probably take a couple of minutes to prove.
 
-```
-cargo kani --harness check_rating
-```
+A hint for this exercise: you might choose two different behaviors, "size of exactly `bound`" or "size up to `bound`".
+Try both!
+
+A solution can be found in [`exercise_solution.rs`](https://github.com/model-checking/kani/blob/main/docs/src/tutorial/arbitrary-variables/src/exercise_solution.rs).
+
+## Summary
+
+In this section:
+
+1. We saw how `kani::any()` will return "safe" values for each of the types Kani implements it for.
+2. We saw how to implement `kani::Arbitrary` or just write a function to create nondeterministic values for other types.
+3. We noted that some types cannot implement `kani::any()` as they need a bound on their size.
+4. We did an exercise to generate nondeterministic values of bounded size for `Inventory`.

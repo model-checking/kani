@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use anyhow::{Context, Result};
+use cargo_metadata::MetadataCommand;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -21,11 +22,20 @@ pub struct CargoOutputs {
     pub metadata: Vec<PathBuf>,
 }
 
+/// Finds the "target" directory while considering workspaces,
+fn find_target_dir() -> PathBuf {
+    fn maybe_get_target() -> Option<PathBuf> {
+        Some(MetadataCommand::new().exec().ok()?.target_directory.into())
+    }
+
+    maybe_get_target().unwrap_or(PathBuf::from("target"))
+}
+
 impl KaniSession {
     /// Calls `cargo_build` to generate `*.symtab.json` files in `target_dir`
     pub fn cargo_build(&self) -> Result<CargoOutputs> {
         let build_target = env!("TARGET"); // see build.rs
-        let target_dir = self.args.target_dir.as_ref().unwrap_or(&PathBuf::from("target")).clone();
+        let target_dir = self.args.target_dir.as_ref().unwrap_or(&find_target_dir()).clone();
         let outdir = target_dir.join(build_target).join("debug/deps");
 
         let flag_env = {
@@ -66,7 +76,7 @@ impl KaniSession {
                 outdir: outdir.clone(),
                 symtabs: vec![outdir.join("*.symtab.json")],
                 metadata: vec![outdir.join("*.kani-metadata.json")],
-                restrictions: self.args.restrict_vtable().then(|| outdir),
+                restrictions: self.args.restrict_vtable().then_some(outdir),
             });
         }
 
@@ -74,7 +84,7 @@ impl KaniSession {
             outdir: outdir.clone(),
             symtabs: glob(&outdir.join("*.symtab.json"))?,
             metadata: glob(&outdir.join("*.kani-metadata.json"))?,
-            restrictions: self.args.restrict_vtable().then(|| outdir),
+            restrictions: self.args.restrict_vtable().then_some(outdir),
         })
     }
 }
