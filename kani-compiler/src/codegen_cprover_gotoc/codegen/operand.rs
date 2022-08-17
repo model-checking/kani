@@ -379,6 +379,14 @@ impl<'tcx> GotocCtx<'tcx> {
                 let name = format!("{}::{:?}", self.full_crate_name(), alloc_id);
                 self.codegen_allocation(alloc.inner(), |_| name.clone(), Some(name.clone()))
             }
+            GlobalAlloc::VTable(ty, trait_ref) => {
+                // This is similar to GlobalAlloc::Memory but the type is opaque to rust and it
+                // requires a bit more logic to get information about the allocation.
+                let alloc_id = self.tcx.vtable_allocation((ty, trait_ref));
+                let alloc = self.tcx.global_alloc(alloc_id).unwrap_memory();
+                let name = format!("{}::{:?}", self.full_crate_name(), alloc_id);
+                self.codegen_allocation(alloc.inner(), |_| name.clone(), Some(name.clone()))
+            }
         };
         assert!(res_t.is_pointer() || res_t.is_transparent_type(&self.symbol_table));
         let offset_addr = base_addr
