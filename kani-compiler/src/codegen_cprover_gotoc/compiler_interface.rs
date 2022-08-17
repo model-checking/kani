@@ -214,8 +214,9 @@ impl CodegenBackend for GotocCodegenBackend {
 
         // All this ultimately boils down to is emitting an `rlib` that contains just one file: `lib.rmeta`
         use rustc_codegen_ssa::back::link::link_binary;
-        link_binary::<crate::codegen_cprover_gotoc::archive::ArArchiveBuilder<'_>>(
+        link_binary(
             sess,
+            &crate::codegen_cprover_gotoc::archive::ArArchiveBuilderBuilder,
             &codegen_results,
             outputs,
         )
