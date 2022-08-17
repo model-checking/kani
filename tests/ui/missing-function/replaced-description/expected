@@ -1,2 +1,3 @@
 Status: FAILURE\
-Description: "assertion"
+Description: "Function `<alloc::string::String as core::clone::Clone>::clone` with missing definition is unreachable"
+Status: UNDETERMINED

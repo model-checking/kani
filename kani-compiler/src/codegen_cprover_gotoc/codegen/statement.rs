@@ -584,7 +584,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     | InstanceDef::DropGlue(_, Some(_))
                     | InstanceDef::Intrinsic(..)
                     | InstanceDef::FnPtrShim(..)
-                    | InstanceDef::VtableShim(..)
+                    | InstanceDef::VTableShim(..)
                     | InstanceDef::ReifyShim(..)
                     | InstanceDef::ClosureOnceShim { .. }
                     | InstanceDef::CloneShim(..) => {
