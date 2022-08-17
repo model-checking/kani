@@ -48,13 +48,11 @@ impl<'tcx> GotocCtx<'tcx> {
             // Codegen an assertion failure since vtable comparison is not stable.
             let ret_type = Type::Bool;
             let body = vec![
-                self.codegen_assert_false(
+                self.codegen_assert_assume_false(
                     PropertyClass::SafetyCheck,
                     format!("Reached unstable vtable comparison '{:?}'", op).as_str(),
                     loc,
                 ),
-                // Assume false to block any further exploration of this path.
-                Stmt::assume(Expr::bool_false(), loc),
                 ret_type.nondet().as_stmt(loc).with_location(loc),
             ];
 

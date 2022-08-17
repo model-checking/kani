@@ -207,11 +207,9 @@ impl<'tcx> GotocCtx<'tcx> {
                     }
                 }
             }
-            TerminatorKind::Unreachable => Stmt::block(
-                vec![
-                    self.codegen_assert_false(PropertyClass::Unreachable, "unreachable code", loc),
-                    Stmt::assume(Expr::bool_false(), loc),
-                ],
+            TerminatorKind::Unreachable => self.codegen_assert_assume_false(
+                PropertyClass::Unreachable,
+                "unreachable code",
                 loc,
             ),
             TerminatorKind::Drop { place, target, unwind: _ } => self.codegen_drop(place, target),

@@ -8,11 +8,14 @@
 //! 1. A Kani `check` is a CBMC `assert`, which allows execution to proceed if it fails.
 //! 2. A Kani `assume` is a CBMC `assume`, thankfully.
 //! 3. A Kani `assert` is a CBMC `assert-assume`, first checking the property, then terminating the trace if it fails.
+//! 4. A Kani `cover` is a CBMC `assert(!cond)`, that we treat specially in our cbmc output handler.
+//!    (We do not use cbmc's notion of a `cover`.)
 //!
 //! Kani further offers a few special cases:
 //!
-//! 4. `codegen_unimplemented` : `assert(false)` but recorded specially
-//! 5. `codegen_sanity` : `assert` but not normally displayed as failure would be a Kani bug
+//! 5. `codegen_unimplemented_{stmt,expr}` : `assert(false)` but recorded specially
+//! 6. `codegen_mimic_unimplemented` : for cases where we emit unimplemented, but don't want to log visibly
+//! 7. `codegen_sanity` : `assert` but not normally displayed as failure would be a Kani bug
 //!
 
 use crate::codegen_cprover_gotoc::utils;
@@ -45,11 +48,13 @@ pub enum PropertyClass {
     Cover,
     /// Ordinary (Rust) assertions and panics.
     ///
-    /// SPECIAL BEHAVIOR: None, this is the default type of assertion.
+    /// SPECIAL BEHAVIOR: These assertion failures should be observable during normal execution of Rust code.
+    /// That is, they do not depend on special instrumentation that Kani performs that wouldn't
+    /// otherwise be observable.
     Assertion,
     /// Another instrinsic check.
     ///
-    /// SPECIAL BEHAVIORL None TODO: Why should this exist?
+    /// SPECIAL BEHAVIOR: None TODO: Why should this exist?
     ExactDiv,
     /// The `kani::expect_fail` assertion.
     ///
@@ -63,7 +68,7 @@ pub enum PropertyClass {
     /// Checks added by Kani compiler to detect safety conditions violation.
     /// E.g., things that trigger UB or unstable behavior.
     ///
-    /// SPECIAL BEHAVIOR: None, but UB is perhaps interesting? Maybe rename this?
+    /// SPECIAL BEHAVIOR: Assertions that may not exist when running code normally (i.e. not under Kani)
     SafetyCheck,
     /// Checks to ensure that Kani's code generation is correct.
     ///
@@ -71,11 +76,14 @@ pub enum PropertyClass {
     SanityCheck,
     /// See `codegen_unimplemented`. Used to indicate an unsupported construct was reachable.
     ///
-    /// SPECIAL BEHAVIOR: Reachability is notable to measure Kani support. Also makes other properties UNDETERMINED.
+    /// SPECIAL BEHAVIOR: Reachability of these assertions is notable, in order to measure Kani support.
+    /// Also makes other properties UNDETERMINED.
     UnsupportedConstruct,
     /// When Rust determines code is unreachable, this is the `assert(false)` we emit.
     ///
-    /// SPECIAL BEHAVIOR: None TODO: Why should this exist?
+    /// SPECIAL BEHAVIOR: Kinda should be a SanityCheck, except that we emit it also for
+    /// `std::intrinsics::unreachable()` and can't tell the difference between that case
+    /// and other cases where the Rust compiler thinks things should be unreachable.
     Unreachable,
 }
 
@@ -95,9 +103,13 @@ impl<'tcx> GotocCtx<'tcx> {
         message: &str,
         loc: Location,
     ) -> Stmt {
-        assert!(cond.typ().is_bool());
         let property_name = property_class.as_str();
         Stmt::assert(cond, property_name, message, loc)
+    }
+
+    /// Generates a CBMC assumption.
+    pub fn codegen_assume(&self, cond: Expr, loc: Location) -> Stmt {
+        Stmt::assume(cond, loc)
     }
 
     /// Generates a CBMC assertion, followed by an assumption of the same condition.
@@ -108,48 +120,11 @@ impl<'tcx> GotocCtx<'tcx> {
         message: &str,
         loc: Location,
     ) -> Stmt {
-        assert!(cond.typ().is_bool());
         let property_name = property_class.as_str();
         Stmt::block(
             vec![Stmt::assert(cond.clone(), property_name, message, loc), Stmt::assume(cond, loc)],
             loc,
         )
-    }
-
-    /// A shorthand for generating a CBMC assert-false. TODO: This should probably be eliminated!
-    pub fn codegen_assert_false(
-        &self,
-        property_class: PropertyClass,
-        message: &str,
-        loc: Location,
-    ) -> Stmt {
-        // Convert Property Class to String
-        let property_name = property_class.as_str();
-        Stmt::assert_false(property_name, message, loc)
-    }
-
-    /// Kani hooks function calls to `panic` and calls this intead.
-    pub fn codegen_panic(&self, span: Option<Span>, fargs: Vec<Expr>) -> Stmt {
-        // CBMC requires that the argument to the assertion must be a string constant.
-        // If there is one in the MIR, use it; otherwise, explain that we can't.
-        assert!(!fargs.is_empty(), "Panic requires a string message");
-        let msg = utils::extract_const_message(&fargs[0]).unwrap_or(String::from(
-            "This is a placeholder message; Kani doesn't support message formatted at runtime",
-        ));
-
-        self.codegen_fatal_error(PropertyClass::Assertion, &msg, span)
-    }
-
-    /// Generate code for fatal error which should trigger an assertion failure and abort the
-    /// execution.
-    pub fn codegen_fatal_error(
-        &self,
-        property_class: PropertyClass,
-        msg: &str,
-        span: Option<Span>,
-    ) -> Stmt {
-        let loc = self.codegen_caller_span(&span);
-        self.codegen_assert_assume(Expr::bool_false(), property_class, msg, loc)
     }
 
     /// Generate code to cover the given condition at the current location
@@ -162,9 +137,45 @@ impl<'tcx> GotocCtx<'tcx> {
         self.codegen_assert(cond.not(), PropertyClass::Cover, msg, loc)
     }
 
-    /// Generate code to cover the current location
+    // The above represent the basic operations we can perform w.r.t. assert/assume/cover
+    // Below are various helper functions for constructing the above more easily.
+
+    /// A shorthand for cover(true)
     pub fn codegen_cover_loc(&self, msg: &str, span: Option<Span>) -> Stmt {
         self.codegen_cover(Expr::bool_true(), msg, span)
+    }
+
+    /// A shorthand for generating a CBMC assert-assume(false)
+    pub fn codegen_assert_assume_false(
+        &self,
+        property_class: PropertyClass,
+        message: &str,
+        loc: Location,
+    ) -> Stmt {
+        self.codegen_assert_assume(Expr::bool_false(), property_class, message, loc)
+    }
+
+    /// A shorthand for assert-assume(false) that takes a MIR `Span` instead of a CBMC `Location`.
+    pub fn codegen_fatal_error(
+        &self,
+        property_class: PropertyClass,
+        msg: &str,
+        span: Option<Span>,
+    ) -> Stmt {
+        let loc = self.codegen_caller_span(&span);
+        self.codegen_assert_assume_false(property_class, msg, loc)
+    }
+
+    /// Kani hooks function calls to `panic` and calls this intead.
+    pub fn codegen_panic(&self, span: Option<Span>, fargs: Vec<Expr>) -> Stmt {
+        // CBMC requires that the argument to the assertion must be a string constant.
+        // If there is one in the MIR, use it; otherwise, explain that we can't.
+        assert!(!fargs.is_empty(), "Panic requires a string message");
+        let msg = utils::extract_const_message(&fargs[0]).unwrap_or(String::from(
+            "This is a placeholder message; Kani doesn't support message formatted at runtime",
+        ));
+
+        self.codegen_fatal_error(PropertyClass::Assertion, &msg, span)
     }
 
     /// Kani does not currently support all MIR constructs.
@@ -231,6 +242,8 @@ impl<'tcx> GotocCtx<'tcx> {
         url: &str,
     ) -> Stmt {
         debug!("codegen_mimic_unimplemented: {} at {}", operation_name, loc.short_string());
+
+        // TODO: We DO want to record this in kani-metadata, but we DON'T want to bother users about it with a message
 
         self.codegen_assert_assume(
             Expr::bool_false(),

@@ -185,7 +185,7 @@ impl Stmt {
             Location::create_location_with_property(message, property_name, loc);
 
         // Chose InternedString to seperate out codegen from the cprover_bindings logic
-        let property_class = property_name.to_string().intern();
+        let property_class = property_name.intern();
         let msg = message.into();
 
         stmt!(Assert { cond, property_class, msg }, loc_with_property)

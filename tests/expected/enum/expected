@@ -1,11 +1,7 @@
 SUCCESS\
-unreachable code
-SUCCESS\
 assertion failed: x == 10
 UNREACHABLE\
 assertion failed: false
-SUCCESS\
-unreachable code
 UNREACHABLE\
 assertion failed: false
 SUCCESS\

@@ -116,7 +116,10 @@ impl<'tcx> GotocHook<'tcx> for Assume {
         let loc = tcx.codegen_span_option(span);
 
         Stmt::block(
-            vec![Stmt::assume(cond, loc), Stmt::goto(tcx.current_fn().find_label(&target), loc)],
+            vec![
+                tcx.codegen_assume(cond, loc),
+                Stmt::goto(tcx.current_fn().find_label(&target), loc),
+            ],
             loc,
         )
     }
