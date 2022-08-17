@@ -304,7 +304,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Generates a symbol for the function contract and adds it to the symbol table
     fn handle_kanitool_assigns(&mut self, attr: &Attribute) {
         let attr_args = attr.meta_item_list().unwrap();
-        self.codegen_assigns_clause(attr_args);
+        self.codegen_modifies_clause(attr_args);
     }
 
     /// Updates the proof harness with new unwind value
