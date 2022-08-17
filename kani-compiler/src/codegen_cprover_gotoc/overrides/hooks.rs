@@ -256,42 +256,25 @@ impl<'tcx> GotocHook<'tcx> for Postcondition {
     fn handle(
         &self,
         tcx: &mut GotocCtx<'tcx>,
-        _instance: Instance<'tcx>,
+        instance: Instance<'tcx>,
         mut fargs: Vec<Expr>,
-        _assign_to: Place<'tcx>,
+        assign_to: Place<'tcx>,
         target: Option<BasicBlock>,
         span: Option<Span>,
     ) -> Stmt {
         assert_eq!(fargs.len(), 1);
-        let cond = fargs.remove(0).cast_to(Type::bool());
-        let target = target.unwrap();
+        // let cond = fargs.remove(0).cast_to(Type::bool());
+        // let target = target.unwrap();
         let loc = tcx.codegen_span_option(span);
 
         if tcx.queries.get_enforce_contracts() {
-            // If function contract is being checked,
-            // convert "postcondition(x)" into "assert!(x)"
-            let tmp = tcx.gen_temp_variable(cond.typ().clone(), loc).to_expr();
-            Stmt::block(
-                vec![
-                    Stmt::decl(tmp.clone(), Some(cond), loc),
-                    tcx.codegen_assert(tmp.clone(), PropertyClass::Assertion, "postcondition", loc),
-                    Stmt::goto(tcx.current_fn().find_label(&target), loc),
-                ],
-                loc,
-            )
+            fargs.push(Expr::string_constant("Post-condition failed"));
+            Assert.handle(tcx, instance, fargs, assign_to, target, span)
         } else if tcx.queries.get_replace_with_contracts() {
-            // If function is being replace with contract,
-            // convert "postcondition(x)" into "assume!(x)"
-            Stmt::block(
-                vec![
-                    Stmt::assume(cond, loc),
-                    Stmt::goto(tcx.current_fn().find_label(&target), loc),
-                ],
-                loc,
-            )
+            Assume.handle(tcx, instance, fargs, assign_to, target, span)
         } else {
             // The function contract is being ignored in this case.
-            Stmt::block(vec![Stmt::goto(tcx.current_fn().find_label(&target), loc)], loc)
+            Stmt::block(vec![Stmt::goto(tcx.current_fn().find_label(&target.unwrap()), loc)], loc)
         }
     }
 }
@@ -307,42 +290,52 @@ impl<'tcx> GotocHook<'tcx> for Precondition {
     fn handle(
         &self,
         tcx: &mut GotocCtx<'tcx>,
-        _instance: Instance<'tcx>,
+        instance: Instance<'tcx>,
         mut fargs: Vec<Expr>,
-        _assign_to: Place<'tcx>,
+        assign_to: Place<'tcx>,
         target: Option<BasicBlock>,
         span: Option<Span>,
     ) -> Stmt {
         assert_eq!(fargs.len(), 1);
-        let cond = fargs.remove(0).cast_to(Type::bool());
-        let target = target.unwrap();
+        // let cond = fargs.remove(0).cast_to(Type::bool());
+        // let target = target.unwrap();
         let loc = tcx.codegen_span_option(span);
 
         if tcx.queries.get_enforce_contracts() {
-            // If function contract is being checked,
-            // convert "precondition(x)" into "assume!(x)"
-            Stmt::block(
-                vec![
-                    Stmt::assume(cond, loc),
-                    Stmt::goto(tcx.current_fn().find_label(&target), loc),
-                ],
-                loc,
-            )
+            Assume.handle(tcx, instance, fargs, assign_to, target, span)
         } else if tcx.queries.get_replace_with_contracts() {
-            // If function is being replace with contract,
-            // convert  "precondition(x)" into "assert!(x)"
-            let tmp = tcx.gen_temp_variable(cond.typ().clone(), loc).to_expr();
-            Stmt::block(
-                vec![
-                    Stmt::decl(tmp.clone(), Some(cond), loc),
-                    tcx.codegen_assert(tmp.clone(), PropertyClass::Assertion, "precondition", loc),
-                ],
-                loc,
-            )
+            fargs.push(Expr::string_constant("Post-condition failed"));
+            Assert.handle(tcx, instance, fargs, assign_to, target, span)
         } else {
             // The function contract is being ignored in this case.
-            Stmt::block(vec![Stmt::goto(tcx.current_fn().find_label(&target), loc)], loc)
+            Stmt::block(vec![Stmt::goto(tcx.current_fn().find_label(&target.unwrap()), loc)], loc)
         }
+
+        // if tcx.queries.get_enforce_contracts() {
+        //     // If function contract is being checked,
+        //     // convert "precondition(x)" into "assume!(x)"
+        //     Stmt::block(
+        //         vec![
+        //             Stmt::assume(cond, loc),
+        //             Stmt::goto(tcx.current_fn().find_label(&target), loc),
+        //         ],
+        //         loc,
+        //     )
+        // } else if tcx.queries.get_replace_with_contracts() {
+        //     // If function is being replace with contract,
+        //     // convert  "precondition(x)" into "assert!(x)"
+        //     let tmp = tcx.gen_temp_variable(cond.typ().clone(), loc).to_expr();
+        //     Stmt::block(
+        //         vec![
+        //             Stmt::decl(tmp.clone(), Some(cond), loc),
+        //             tcx.codegen_assert(tmp.clone(), PropertyClass::Assertion, "precondition", loc),
+        //         ],
+        //         loc,
+        //     )
+        // } else {
+        //     // The function contract is being ignored in this case.
+        //     Stmt::block(vec![Stmt::goto(tcx.current_fn().find_label(&target), loc)], loc)
+        // }
     }
 }
 
