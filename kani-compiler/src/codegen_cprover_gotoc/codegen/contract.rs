@@ -55,7 +55,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Generates a symbol for the function contract and adds it to the symbol table
-    pub fn codegen_assigns_clause(&mut self, args: Vec<NestedMetaItem>) {
+    pub fn codegen_modifies_clause(&mut self, args: Vec<NestedMetaItem>) {
         let mir = self.current_fn().mir();
         let loc = self.codegen_span(&mir.span);
         let sig = self.current_fn().sig();
@@ -65,7 +65,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         let name = format!("contract::{}", self.current_fn().name()); // name of the contract symbol
 
-        // Transform comma-separated "targets" (variables, references, etc.) from the assigns clause into specifications containing lambda expressions
+        // Transform comma-separated "targets" (variables, references, etc.) from the modifies clause into specifications containing lambda expressions
         let spec_args = args
             .iter()
             .map(|a| {
