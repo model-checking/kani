@@ -430,10 +430,10 @@ impl ToIrep for StmtBody {
                     code_irep(IrepId::Decl, vec![lhs.to_irep(mm)])
                 }
             }
-            StmtBody::Deinit(place) => place
-                .assign(place.typ().nondet(), Location::none())
-                .to_irep(mm)
-                .with_comment("deinit"),
+            StmtBody::Deinit(place) => {
+                code_irep(IrepId::Assign, vec![place.to_irep(mm), place.typ().nondet().to_irep(mm)])
+                    .with_comment("deinit")
+            }
             StmtBody::Expression(e) => code_irep(IrepId::Expression, vec![e.to_irep(mm)]),
             StmtBody::For { init, cond, update, body } => code_irep(
                 IrepId::For,
