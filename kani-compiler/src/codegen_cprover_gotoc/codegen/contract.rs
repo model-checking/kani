@@ -55,7 +55,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Generates a new contract symbol and adds it to the symbol table.
-    /// See https://github.com/diffblue/cbmc/pull/6799 for further details about the contract symbol.
+    /// See <https://github.com/diffblue/cbmc/pull/6799> for further details about the contract symbol.
     /// The name of the contract symbol should be set to "contract::<function-name>".
     /// The type field of the contract symbol contains the `#spec_requires`, `#spec_ensures`, and `#spec_assigns` fields
     ///     for specifying the preconditions, postconditions, and the modifies (assigns/write) set of the function respectively.
@@ -75,12 +75,18 @@ impl<'tcx> GotocCtx<'tcx> {
         // Transform comma-separated "targets" (variables) from the modifies clause into specifications containing lambda expressions
         let spec_args = args
             .iter()
-            .map(|a| {
+            .filter_map(|a| {
                 let bv = self.get_lambda_binding_variables(sig);
                 let ident = a.meta_item().unwrap().path.segments[0].ident;
-                let sym = self.lookup_local_decl_by_name(&ident.to_string()).unwrap(); // lookup the symbol for the argument in the symbol table
-                let expr = Expr::symbol_expression(sym.name.clone(), sym.typ.clone());
-                Spec::new(bv, expr, loc)
+                let basename = &ident.to_string();
+                match self.lookup_local_decl_by_name(basename) {
+                    // lookup the symbol for the argument in the symbol table
+                    Some(sym) => {
+                        let expr = Expr::symbol_expression(sym.name.clone(), sym.typ.clone());
+                        Some(Spec::new(bv, expr, loc))
+                    }
+                    None => None, // ignore globals for now.
+                }
             })
             .collect();
         let contract = Contract::function_contract(
