@@ -273,7 +273,7 @@ impl<'tcx> GotocCtx<'tcx> {
         for attr in other_attributes.iter() {
             match attr.0.as_str() {
                 "unwind" => self.handle_kanitool_unwind(attr.1, &mut harness),
-                "assigns" => self.handle_kanitool_assigns(attr.1),
+                "modifies" => self.handle_kanitool_modifies(attr.1),
                 _ => {
                     self.tcx.sess.span_err(
                         attr.1.span,
@@ -302,7 +302,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Generates a symbol for the function contract and adds it to the symbol table
-    fn handle_kanitool_assigns(&mut self, attr: &Attribute) {
+    fn handle_kanitool_modifies(&mut self, attr: &Attribute) {
         let attr_args = attr.meta_item_list().unwrap();
         self.codegen_modifies_clause(attr_args);
     }
