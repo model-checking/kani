@@ -6,6 +6,7 @@
 //! in [GotocCtx::codegen_place] below.
 
 use super::typ::TypeExt;
+use crate::codegen_cprover_gotoc::codegen::typ::{pointee_type, std_pointee_type};
 use crate::codegen_cprover_gotoc::utils::slice_fat_ptr;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{Expr, Location, Type};
@@ -360,31 +361,30 @@ impl<'tcx> GotocCtx<'tcx> {
                     before.goto_expr
                 };
 
-                let inner_mir_typ_and_mut = base_type.builtin_deref(true).unwrap();
-                let fat_ptr_mir_typ = if self.is_box_of_unsized(base_type) {
-                    // If we have a box, its fat pointer typ is a pointer to the boxes inner type.
-                    Some(self.tcx.mk_ptr(inner_mir_typ_and_mut))
-                } else if self.is_ref_of_unsized(base_type) {
-                    Some(before.mir_typ_or_variant.expect_type())
+                let inner_mir_typ = std_pointee_type(base_type).unwrap();
+                let (fat_ptr_mir_typ, fat_ptr_goto_expr) = if self.use_thin_pointer(inner_mir_typ) {
+                    (before.fat_ptr_mir_typ, before.fat_ptr_goto_expr)
                 } else {
-                    before.fat_ptr_mir_typ
+                    (Some(before.mir_typ_or_variant.expect_type()), Some(inner_goto_expr.clone()))
                 };
-                let fat_ptr_goto_expr =
-                    if self.is_box_of_unsized(base_type) || self.is_ref_of_unsized(base_type) {
-                        Some(inner_goto_expr.clone())
-                    } else {
-                        before.fat_ptr_goto_expr
-                    };
 
                 // Check that we have a valid trait or slice fat pointer
                 if let Some(fat_ptr) = fat_ptr_goto_expr.clone() {
                     assert!(
                         fat_ptr.typ().is_rust_trait_fat_ptr(&self.symbol_table)
-                            || fat_ptr.typ().is_rust_slice_fat_ptr(&self.symbol_table)
+                            || fat_ptr.typ().is_rust_slice_fat_ptr(&self.symbol_table),
+                        "Unexpected type: {:?} -- {:?}",
+                        fat_ptr.typ(),
+                        pointee_type(fat_ptr_mir_typ.unwrap()).unwrap().kind(),
+                    );
+                    assert!(
+                        self.use_fat_pointer(pointee_type(fat_ptr_mir_typ.unwrap()).unwrap()),
+                        "Unexpected type: {:?} -- {:?}",
+                        fat_ptr.typ(),
+                        fat_ptr_mir_typ,
                     );
                 };
 
-                let inner_mir_typ = inner_mir_typ_and_mut.ty;
                 let expr = match inner_mir_typ.kind() {
                     ty::Slice(_) | ty::Str | ty::Dynamic(..) => {
                         inner_goto_expr.member("data", &self.symbol_table)
@@ -547,13 +547,6 @@ impl<'tcx> GotocCtx<'tcx> {
                     self,
                 )
             }
-            ProjectionElem::OpaqueCast(ty) => ProjectedPlace::try_new(
-                before.goto_expr.cast_to(self.codegen_ty(ty)),
-                TypeOrVariant::Type(ty),
-                before.fat_ptr_goto_expr,
-                before.fat_ptr_mir_typ,
-                self,
-            ),
         }
     }
 
