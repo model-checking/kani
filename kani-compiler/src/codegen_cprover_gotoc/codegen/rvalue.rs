@@ -1308,13 +1308,19 @@ impl<'tcx> GotocCtx<'tcx> {
 /// where "-" is wrapping subtraction, i.e., the result should be interpreted as
 /// an unsigned value (2's complement).
 fn wrapping_sub(expr: &Expr, constant: u64) -> Expr {
-    if constant == 0 {
-        // No need to subtract.
+    let unsigned_expr = if expr.typ().is_pointer() {
         expr.clone()
     } else {
         let unsigned = expr.typ().to_unsigned().unwrap();
-        let constant = Expr::int_constant(constant, unsigned.clone());
-        expr.clone().cast_to(unsigned).sub(constant)
+        expr.clone().cast_to(unsigned)
+    };
+    if constant == 0 {
+        // No need to subtract.
+        // But we still need to make sure we return an unsigned value.
+        unsigned_expr
+    } else {
+        let constant = Expr::int_constant(constant, unsigned_expr.typ().clone());
+        unsigned_expr.sub(constant)
     }
 }
 
