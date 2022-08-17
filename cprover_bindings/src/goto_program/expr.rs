@@ -484,7 +484,7 @@ impl Expr {
 
     /// `(typ) self`.
     pub fn cast_to(self, typ: Type) -> Self {
-        assert!(self.can_cast_to(&typ), "Can't cast\n\n{:?}\n\n{:?}", self, typ);
+        assert!(self.can_cast_to(&typ), "Can't cast\n\n{:?} ({:?})\n\n{:?}", self, self.typ, typ);
         if self.typ == typ {
             self
         } else if typ.is_bool() {
