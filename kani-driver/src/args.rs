@@ -114,7 +114,7 @@ pub struct KaniArgs {
     /// Kani will only compile the crate. No verification will be performed
     #[structopt(long, hidden_short_help(true))]
     pub only_codegen: bool,
-    /// Enable --workspace in cargo kani. Does not effect cargo binary.
+    /// Run Kani on all packages in the workspace.
     #[structopt(long)]
     pub workspace: bool,
 
