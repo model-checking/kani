@@ -59,7 +59,9 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             StatementKind::Deinit(place) => {
                 // From rustc doc: "This writes `uninit` bytes to the entire place."
-                // Thus, we assign nondet() value to the entire place.
+                // Our model of GotoC has a similar statement, which is later lowered
+                // to assigning a Nondet in CBMC, with a comment specifying that it
+                // corresponds to a Deinit.
                 let dst_mir_ty = self.place_ty(place);
                 let dst_type = self.codegen_ty(dst_mir_ty);
                 let layout = self.layout_of(dst_mir_ty);
@@ -69,7 +71,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 } else {
                     unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place(place))
                         .goto_expr
-                        .assign(dst_type.nondet(), location)
+                        .deinit(location)
                 }
             }
             StatementKind::SetDiscriminant { place, variant_index } => {
@@ -158,7 +160,7 @@ impl<'tcx> GotocCtx<'tcx> {
             | StatementKind::Nop
             | StatementKind::Coverage { .. } => Stmt::skip(location),
         }
-        .with_location(self.codegen_span(&stmt.source_info.span))
+        .with_location(location)
     }
 
     /// Generate Goto-c for MIR [Terminator] statements.
@@ -739,199 +741,5 @@ impl<'tcx> GotocCtx<'tcx> {
                 .goto_expr
                 .assign(e, Location::none())
         }
-    }
-
-    pub fn codegen_panic(&self, span: Option<Span>, fargs: Vec<Expr>) -> Stmt {
-        // CBMC requires that the argument to the assertion must be a string constant.
-        // If there is one in the MIR, use it; otherwise, explain that we can't.
-        assert!(!fargs.is_empty(), "Panic requires a string message");
-        let msg = utils::extract_const_message(&fargs[0]).unwrap_or(String::from(
-            "This is a placeholder message; Kani doesn't support message formatted at runtime",
-        ));
-
-        self.codegen_fatal_error(PropertyClass::Assertion, &msg, span)
-    }
-
-    // Generate code for fatal error which should trigger an assertion failure and abort the
-    // execution.
-    pub fn codegen_fatal_error(
-        &self,
-        property_class: PropertyClass,
-        msg: &str,
-        span: Option<Span>,
-    ) -> Stmt {
-        let loc = self.codegen_caller_span(&span);
-        Stmt::block(
-            vec![
-                self.codegen_assert_false(property_class, msg, loc),
-                BuiltinFn::Abort.call(vec![], loc).as_stmt(loc),
-            ],
-            loc,
-        )
-    }
-
-    /// Generate code to cover the given condition at the current location
-    pub fn codegen_cover(&self, cond: Expr, msg: &str, span: Option<Span>) -> Stmt {
-        let loc = self.codegen_caller_span(&span);
-        // Should use Stmt::cover, but currently this doesn't work with CBMC
-        // unless it is run with '--cover cover' (see
-        // https://github.com/diffblue/cbmc/issues/6613). So for now use
-        // assert(!cond).
-        self.codegen_assert(cond.not(), PropertyClass::Cover, msg, loc)
-    }
-
-    /// Generate code to cover the current location
-    pub fn codegen_cover_loc(&self, msg: &str, span: Option<Span>) -> Stmt {
-        self.codegen_cover(Expr::bool_true(), msg, span)
-    }
-
-    pub fn codegen_statement(&mut self, stmt: &Statement<'tcx>) -> Stmt {
-        let _trace_span = info_span!("CodegenStatement", statement = ?stmt).entered();
-        debug!("handling statement {:?}", stmt);
-        let location = self.codegen_span(&stmt.source_info.span);
-        match &stmt.kind {
-            StatementKind::Assign(box (l, r)) => {
-                let lty = self.place_ty(l);
-                let rty = self.rvalue_ty(r);
-                let llayout = self.layout_of(lty);
-                // we ignore assignment for all zero size types
-                if llayout.is_zst() {
-                    Stmt::skip(Location::none())
-                } else if lty.is_fn_ptr() && rty.is_fn() && !rty.is_fn_ptr() {
-                    // implicit address of a function pointer, e.g.
-                    // let fp: fn() -> i32 = foo;
-                    // where the reference is implicit.
-                    unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place(l))
-                        .goto_expr
-                        .assign(self.codegen_rvalue(r, location).address_of(), location)
-                } else if rty.is_bool() {
-                    unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place(l))
-                        .goto_expr
-                        .assign(self.codegen_rvalue(r, location).cast_to(Type::c_bool()), location)
-                } else {
-                    unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place(l))
-                        .goto_expr
-                        .assign(self.codegen_rvalue(r, location), location)
-                }
-            }
-            StatementKind::Deinit(place) => {
-                // From rustc doc: "This writes `uninit` bytes to the entire place."
-                // Thus, we assign nondet() value to the entire place.
-                let dst_mir_ty = self.place_ty(place);
-                let dst_type = self.codegen_ty(dst_mir_ty);
-                let layout = self.layout_of(dst_mir_ty);
-                if layout.is_zst() || dst_type.sizeof_in_bits(&self.symbol_table) == 0 {
-                    // We ignore assignment for all zero size types
-                    // Ignore generators too for now:
-                    // https://github.com/model-checking/kani/issues/416
-                    Stmt::skip(location)
-                } else {
-                    unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place(place))
-                        .goto_expr
-                        .assign(dst_type.nondet(), location)
-                }
-            }
-            StatementKind::SetDiscriminant { place, variant_index } => {
-                // this requires place points to an enum type.
-                let pt = self.place_ty(place);
-                let (def, _) = match pt.kind() {
-                    ty::Adt(def, substs) => (def, substs),
-                    ty::Generator(..) => {
-                        return self
-                            .codegen_unimplemented(
-                                "ty::Generator",
-                                Type::code(vec![], Type::empty()),
-                                location,
-                                "https://github.com/model-checking/kani/issues/416",
-                            )
-                            .as_stmt(location);
-                    }
-                    _ => unreachable!(),
-                };
-                let layout = self.layout_of(pt);
-                match &layout.variants {
-                    Variants::Single { .. } => Stmt::skip(location),
-                    Variants::Multiple { tag, tag_encoding, .. } => match tag_encoding {
-                        TagEncoding::Direct => {
-                            let discr = def.discriminant_for_variant(self.tcx, *variant_index);
-                            let discr_t = self.codegen_enum_discr_typ(pt);
-                            // The constant created below may not fit into the type.
-                            // https://github.com/model-checking/kani/issues/996
-                            //
-                            // It doesn't matter if the type comes from `self.codegen_enum_discr_typ(pt)`
-                            // or `discr.ty`. It looks like something is wrong with `discriminat_for_variant`
-                            // because when it tries to codegen `std::cmp::Ordering` (which should produce
-                            // discriminant values -1, 0 and 1) it produces values 255, 0 and 1 with i8 types:
-                            //
-                            // debug!("DISCRIMINANT - val:{:?} ty:{:?}", discr.val, discr.ty);
-                            // DISCRIMINANT - val:255 ty:i8
-                            // DISCRIMINANT - val:0 ty:i8
-                            // DISCRIMINANT - val:1 ty:i8
-                            let discr = Expr::int_constant(discr.val, self.codegen_ty(discr_t));
-                            unwrap_or_return_codegen_unimplemented_stmt!(
-                                self,
-                                self.codegen_place(place)
-                            )
-                            .goto_expr
-                            .member("case", &self.symbol_table)
-                            .assign(discr, location)
-                        }
-                        TagEncoding::Niche { dataful_variant, niche_variants, niche_start } => {
-                            if dataful_variant != variant_index {
-                                let offset = match &layout.fields {
-                                    FieldsShape::Arbitrary { offsets, .. } => {
-                                        offsets[0].bytes_usize()
-                                    }
-                                    _ => unreachable!("niche encoding must have arbitrary fields"),
-                                };
-                                let discr_ty = self.codegen_enum_discr_typ(pt);
-                                let discr_ty = self.codegen_ty(discr_ty);
-                                let niche_value =
-                                    variant_index.as_u32() - niche_variants.start().as_u32();
-                                let niche_value = (niche_value as u128).wrapping_add(*niche_start);
-                                let value =
-                                    if niche_value == 0 && tag.primitive() == Primitive::Pointer {
-                                        discr_ty.null()
-                                    } else {
-                                        Expr::int_constant(niche_value, discr_ty.clone())
-                                    };
-                                let place = unwrap_or_return_codegen_unimplemented_stmt!(
-                                    self,
-                                    self.codegen_place(place)
-                                )
-                                .goto_expr;
-                                self.codegen_get_niche(place, offset, discr_ty)
-                                    .assign(value, location)
-                            } else {
-                                Stmt::skip(location)
-                            }
-                        }
-                    },
-                }
-            }
-            StatementKind::StorageLive(_) => Stmt::skip(location), // TODO: fix me
-            StatementKind::StorageDead(_) => Stmt::skip(location), // TODO: fix me
-            StatementKind::CopyNonOverlapping(box mir::CopyNonOverlapping {
-                ref src,
-                ref dst,
-                ref count,
-            }) => {
-                // Pack the operands and their types, then call `codegen_copy`
-                let fargs = vec![
-                    self.codegen_operand(src),
-                    self.codegen_operand(dst),
-                    self.codegen_operand(count),
-                ];
-                let farg_types =
-                    &[self.operand_ty(src), self.operand_ty(dst), self.operand_ty(count)];
-                self.codegen_copy("copy_nonoverlapping", true, fargs, farg_types, None, location)
-            }
-            StatementKind::FakeRead(_)
-            | StatementKind::Retag(_, _)
-            | StatementKind::AscribeUserType(_, _)
-            | StatementKind::Nop
-            | StatementKind::Coverage { .. } => Stmt::skip(location),
-        }
-        .with_location(self.codegen_span(&stmt.source_info.span))
     }
 }
