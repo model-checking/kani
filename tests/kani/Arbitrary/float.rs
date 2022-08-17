@@ -6,7 +6,7 @@
 macro_rules! test {
     ( $type: ty ) => {{
         let v1 = kani::any::<$type>();
-        let v2 = unsafe { kani::any_raw::<$type>() };
+        let v2 = kani::any::<$type>();
         kani::expect_fail(v1 == v2, "This may not be true");
         kani::expect_fail(v1 != v2, "This may also not be true");
         kani::expect_fail(!v1.is_nan(), "NaN should be valid float");
@@ -17,7 +17,11 @@ macro_rules! test {
 }
 
 #[kani::proof]
-fn main() {
+fn check_f32() {
     test!(f32);
+}
+
+#[kani::proof]
+fn check_f64() {
     test!(f64);
 }

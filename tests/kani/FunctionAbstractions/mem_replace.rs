@@ -11,9 +11,9 @@ pub struct Pair {
     key: u16,
 }
 
-unsafe impl kani::Invariant for Pair {
-    fn is_valid(&self) -> bool {
-        true
+impl kani::Arbitrary for Pair {
+    fn any() -> Self {
+        Pair { value: kani::any(), key: kani::any() }
     }
 }
 

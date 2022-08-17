@@ -1,9 +1,9 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-//! this module contains various codegen hooks for functions.
-//! e.g.
-//! functions start with \[__nondet\] is silently replaced by nondeterministic values, and
-//! \[begin_panic\] is replaced by \[assert(false)\], etc.
+
+//! This module contains various codegen hooks for functions that require special handling.
+//!
+//! E.g.: Functions in the Kani library that generate assumptions or symbolic variables.
 //!
 //! It would be too nasty if we spread around these sort of undocumented hooks in place, so
 //! this module addresses this issue.
@@ -19,7 +19,7 @@ use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{Instance, TyCtxt};
 use rustc_span::Span;
 use std::rc::Rc;
-use tracing::{debug, warn};
+use tracing::debug;
 
 pub trait GotocHook<'tcx> {
     /// if the hook applies, it means the codegen would do something special to it
@@ -50,14 +50,6 @@ fn matches_function(tcx: TyCtxt, instance: Instance, attr_name: &str) -> bool {
 struct ExpectFail;
 impl<'tcx> GotocHook<'tcx> for ExpectFail {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-        // Deprecate old __VERIFIER notation that doesn't respect rust naming conventions.
-        // Complete removal is tracked here: https://github.com/model-checking/kani/issues/599
-        if utils::instance_name_starts_with(tcx, instance, "__VERIFIER_expect_fail") {
-            warn!(
-                "The function __VERIFIER_expect_fail is deprecated. Use kani::expect_fail instead"
-            );
-            return true;
-        }
         matches_function(tcx, instance, "KaniExpectFail")
     }
 
@@ -92,12 +84,6 @@ impl<'tcx> GotocHook<'tcx> for ExpectFail {
 struct Assume;
 impl<'tcx> GotocHook<'tcx> for Assume {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-        // Deprecate old __VERIFIER notation that doesn't respect rust naming conventions.
-        // Complete removal is tracked here: https://github.com/model-checking/kani/issues/599
-        if utils::instance_name_starts_with(tcx, instance, "__VERIFIER_assume") {
-            warn!("The function __VERIFIER_assume is deprecated. Use kani::assume instead");
-            return true;
-        }
         matches_function(tcx, instance, "KaniAssume")
     }
 
@@ -182,12 +168,6 @@ struct Nondet;
 
 impl<'tcx> GotocHook<'tcx> for Nondet {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-        // Deprecate old __nondet since it doesn't match rust naming conventions.
-        // Complete removal is tracked here: https://github.com/model-checking/kani/issues/599
-        if utils::instance_name_starts_with(tcx, instance, "__nondet") {
-            warn!("The function __nondet is deprecated. Use kani::any instead");
-            return true;
-        }
         matches_function(tcx, instance, "KaniAnyRaw")
     }
 
