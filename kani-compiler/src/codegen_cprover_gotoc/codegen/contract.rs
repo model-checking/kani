@@ -57,10 +57,10 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Generates a new contract symbol and adds it to the symbol table.
     /// See https://github.com/diffblue/cbmc/pull/6799 for further details about the contract symbol.
     /// The name of the contract symbol should be set to "contract::<function-name>".
-    /// The type field of the contract symbol contains the `#spec_requires`, `#spec_ensures`, and `#spec_assigns` fields 
+    /// The type field of the contract symbol contains the `#spec_requires`, `#spec_ensures`, and `#spec_assigns` fields
     ///     for specifying the preconditions, postconditions, and the modifies (assigns/write) set of the function respectively.
-    /// The contract symbol serves as the entry point for CBMC to check the contract. 
-    /// Since we want CBMC to only check the modifies clause, we set the other expected fields - 
+    /// The contract symbol serves as the entry point for CBMC to check the contract.
+    /// Since we want CBMC to only check the modifies clause, we set the other expected fields -
     ///     `#spec_requires` and `#spec_ensures` to "true".
     pub fn codegen_modifies_clause(&mut self, args: Vec<NestedMetaItem>) {
         let mir = self.current_fn().mir();
