@@ -117,6 +117,9 @@ pub struct KaniArgs {
     /// Compiles Kani harnesses in all features of all packages selected on the command-line.
     #[structopt(long)]
     pub all_features: bool,
+    /// Run Kani on all packages in the workspace.
+    #[structopt(long)]
+    pub workspace: bool,
 
     /// Specify the value used for loop unwinding in CBMC
     #[structopt(long)]

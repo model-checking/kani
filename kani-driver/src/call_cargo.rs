@@ -56,6 +56,10 @@ impl KaniSession {
             args.push("--all-features".into());
         }
 
+        if self.args.workspace {
+            args.push("--workspace".into());
+        }
+
         args.push("--target".into());
         args.push(build_target.into());
 
