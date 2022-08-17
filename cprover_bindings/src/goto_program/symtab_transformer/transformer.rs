@@ -267,7 +267,6 @@ pub trait Transformer: Sized {
             ExprValue::IntConstant(value) => self.transform_expr_int_constant(typ, value),
             ExprValue::Member { lhs, field } => self.transform_expr_member(typ, lhs, *field),
             ExprValue::Nondet => self.transform_expr_nondet(typ),
-            ExprValue::Poison => self.transform_expr_poison(typ),
             ExprValue::PointerConstant(value) => self.transform_expr_pointer_constant(typ, value),
             ExprValue::SelfOp { op, e } => self.transform_expr_self_op(typ, op, e),
             ExprValue::StatementExpression { statements } => {
@@ -409,12 +408,6 @@ pub trait Transformer: Sized {
 
     fn transform_expr_nondet(&mut self, typ: &Type) -> Expr {
         let transformed_typ = self.transform_type(typ);
-        Expr::poison(transformed_typ)
-    }
-
-    /// Transforms a CPROVER nondet call (`__nondet()`)
-    fn transform_expr_poison(&mut self, typ: &Type) -> Expr {
-        let transformed_typ = self.transform_type(typ);
         Expr::nondet(transformed_typ)
     }
 
@@ -520,6 +513,7 @@ pub trait Transformer: Sized {
             StmtBody::Break => self.transform_stmt_break(),
             StmtBody::Continue => self.transform_stmt_continue(),
             StmtBody::Decl { lhs, value } => self.transform_stmt_decl(lhs, value),
+            StmtBody::Deinit(place) => self.transform_stmt_deinit(place),
             StmtBody::Expression(expr) => self.transform_stmt_expression(expr),
             StmtBody::For { init, cond, update, body } => {
                 self.transform_stmt_for(init, cond, update, body)
@@ -596,6 +590,11 @@ pub trait Transformer: Sized {
         let transformed_lhs = self.transform_expr(lhs);
         let transformed_value = value.as_ref().map(|value| self.transform_expr(value));
         Stmt::decl(transformed_lhs, transformed_value, Location::none())
+    }
+
+    fn transform_stmt_deinit(&mut self, place: &Expr) -> Stmt {
+        let transformed_place = self.transform_expr(place);
+        Stmt::deinit(transformed_place, Location::none())
     }
 
     /// Transform an expression stmt (`e;`)

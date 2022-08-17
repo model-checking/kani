@@ -1206,10 +1206,6 @@ impl Type {
         Expr::nondet(self.clone())
     }
 
-    pub fn poison(&self) -> Expr {
-        Expr::poison(self.clone())
-    }
-
     /// null pointer of self type
     /// (t)NULL
     pub fn null(&self) -> Expr {

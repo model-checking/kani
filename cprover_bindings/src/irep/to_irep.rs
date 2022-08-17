@@ -253,11 +253,6 @@ impl ToIrep for ExprValue {
                 ],
             },
             ExprValue::Nondet => side_effect_irep(IrepId::Nondet, vec![]),
-            ExprValue::Poison => {
-                // For  now, Poison is lowered to Nondet with a comment.
-                // In the future, CBMC might handle poison expressions directly
-                side_effect_irep(IrepId::Nondet, vec![]).with_comment("poison")
-            }
             ExprValue::PointerConstant(0) => Irep {
                 id: IrepId::Constant,
                 sub: vec![],
@@ -429,6 +424,11 @@ impl ToIrep for StmtBody {
                     code_irep(IrepId::Decl, vec![lhs.to_irep(mm)])
                 }
             }
+            StmtBody::Deinit(place) => code_irep(
+                IrepId::Assign,
+                vec![place.to_irep(mm), side_effect_irep(IrepId::Nondet, vec![])],
+            )
+            .with_comment("deinit"),
             StmtBody::Expression(e) => code_irep(IrepId::Expression, vec![e.to_irep(mm)]),
             StmtBody::For { init, cond, update, body } => code_irep(
                 IrepId::For,

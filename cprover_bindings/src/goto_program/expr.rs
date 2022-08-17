@@ -111,10 +111,6 @@ pub enum ExprValue {
     },
     /// `__nondet()`
     Nondet,
-    /// Poison corresponds to a region of memory that
-    /// is uninitialized, and reading it is undefined
-    /// behaviour.
-    Poison,
     /// `NULL`
     PointerConstant(u64),
     // `op++` etc
@@ -618,10 +614,6 @@ impl Expr {
     /// `__nondet_typ()`
     pub fn nondet(typ: Type) -> Self {
         expr!(Nondet, typ)
-    }
-
-    pub fn poison(typ: Type) -> Self {
-        expr!(Poison, typ)
     }
 
     /// `e.g. NULL`
@@ -1407,6 +1399,10 @@ impl Expr {
     /// `self = rhs;`
     pub fn assign(self, rhs: Expr, loc: Location) -> Stmt {
         Stmt::assign(self, rhs, loc)
+    }
+
+    pub fn deinit(self, loc: Location) -> Stmt {
+        Stmt::deinit(self, loc)
     }
 
     /// `if (self) { t } else { e }` or `if (self) { t }`

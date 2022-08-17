@@ -62,6 +62,8 @@ pub enum StmtBody {
         lhs: Expr, // SymbolExpr
         value: Option<Expr>,
     },
+    /// Marks the target place as uninitialized.
+    Deinit(Expr),
     /// `e;`
     Expression(Expr),
     // `for (init; cond; update) {body}`
@@ -254,6 +256,10 @@ impl Stmt {
         assert!(lhs.is_symbol());
         assert!(value.iter().all(|x| lhs.typ() == x.typ()));
         stmt!(Decl { lhs, value }, loc)
+    }
+
+    pub fn deinit(place: Expr, loc: Location) -> Self {
+        stmt!(Deinit(place), loc)
     }
 
     /// `e;`
