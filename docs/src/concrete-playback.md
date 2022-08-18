@@ -6,7 +6,7 @@ Kani offers different options to help debug:
 enumerates the execution steps leading to the check failure.
 * `--concrete-playback`. This _experimental_ feature allows users to concretely play back
 their proof harness as a Rust unit test case.
-The following document describes the concrete playback feature in more detail.
+This document describes the concrete playback feature in more detail.
 
 ## Setup
 
@@ -26,6 +26,8 @@ and generate a Rust unit test case.
 This unit test initializes the concrete values and calls the proof harness.
 A user can then either 1) copy this unit test into the same module as their proof harness or
 2) run Kani with the `--concrete-playback=InPlace` flag to have Kani automatically do this.
+Before adding the unit test, the user might find it helpful to have their existing code committed to `git`.
+That way, they can easily remove the unit test with `git revert`.
 
 After the unit test is in their source code, users can run it with `cargo test`.
 To debug it, there are a couple of options.
