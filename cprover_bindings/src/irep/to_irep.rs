@@ -431,6 +431,9 @@ impl ToIrep for StmtBody {
                 }
             }
             StmtBody::Deinit(place) => {
+                // CBMC doesn't yet have a notion of poison (https://github.com/diffblue/cbmc/issues/7014)
+                // So we translate identically to `nondet` here, but add a comment noting we wish it were poison
+                // potentially for other backends to pick up and treat specially.
                 code_irep(IrepId::Assign, vec![place.to_irep(mm), place.typ().nondet().to_irep(mm)])
                     .with_comment("deinit")
             }

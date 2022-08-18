@@ -1493,6 +1493,7 @@ impl Expr {
         Stmt::assign(self, rhs, loc)
     }
 
+    /// Shorthand to build a `Deinit(self)` statement. See `StmtBody::Deinit`
     pub fn deinit(self, loc: Location) -> Stmt {
         Stmt::deinit(self, loc)
     }

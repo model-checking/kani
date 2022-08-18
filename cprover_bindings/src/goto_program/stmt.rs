@@ -258,6 +258,7 @@ impl Stmt {
         stmt!(Decl { lhs, value }, loc)
     }
 
+    /// `Deinit(place)`, see `StmtBody::Deinit`.
     pub fn deinit(place: Expr, loc: Location) -> Self {
         stmt!(Deinit(place), loc)
     }
