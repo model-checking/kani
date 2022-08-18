@@ -5,7 +5,7 @@
     - [Building from source](./build-from-source.md)
   - [Using Kani](./usage.md)
   - [Verification results](./verification-results.md)
-  - [Debugging harnesses](./concrete-playback.md)
+  - [Debugging verification failures](./concrete-playback.md)
 
 - [Tutorial](./kani-tutorial.md)
   - [First steps](./tutorial-first-steps.md)

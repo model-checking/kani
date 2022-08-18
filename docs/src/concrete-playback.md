@@ -1,8 +1,12 @@
-# Concretely playing back proof harnesses
+# Debugging verification failures with concrete playback
 
 When the result of a certain check comes back as a `FAILURE`,
-this _experimental_ feature allows users to debug their proof harness and understand what
-caused the failing check.
+Kani offers different options to help debug:
+* `--visualize`. This feature generates an HTML text-based trace that
+enumerates the execution steps leading to the check failure.
+* `--concrete-playback`. This _experimental_ feature allows users to concretely play back
+their proof harness as a Rust unit test case.
+The following document describes the concrete playback feature in more detail.
 
 ## Setup
 

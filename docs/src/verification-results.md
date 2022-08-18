@@ -38,9 +38,8 @@ Check 4: success_example.assertion.4
 ```
 
 2. `FAILURE`: This indicates that the check failed (i.e., the property doesn't
-hold). In this case, you can examine a trace by re-running with the
-`--visualize` option.  This generates an HTML report with the trace
-information.
+hold). In this case, please see the [debugging verification failures](./concrete-playback.md)
+section for more help.
 
 Example:
 ```rust
