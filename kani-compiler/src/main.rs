@@ -90,6 +90,8 @@ fn main() -> Result<(), &'static str> {
     queries.set_check_assertion_reachability(matches.is_present(parser::ASSERTION_REACH_CHECKS));
     queries.set_output_pretty_json(matches.is_present(parser::PRETTY_OUTPUT_FILES));
     queries.set_ignore_global_asm(matches.is_present(parser::IGNORE_GLOBAL_ASM));
+    queries.set_enforce_contracts(matches.is_present(parser::ENFORCE_CONTRACTS));
+    queries.set_replace_with_contracts(matches.is_present(parser::REPLACE_WITH_CONTRACTS));
 
     // Generate rustc args.
     let rustc_args = generate_rustc_args(&matches);

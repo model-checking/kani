@@ -18,6 +18,12 @@ pub trait UserInput {
 
     fn set_ignore_global_asm(&mut self, global_asm: bool);
     fn get_ignore_global_asm(&self) -> bool;
+
+    fn set_enforce_contracts(&mut self, enforce_contracts: bool);
+    fn get_enforce_contracts(&self) -> bool;
+
+    fn set_replace_with_contracts(&mut self, replace_with_contracts: bool);
+    fn get_replace_with_contracts(&self) -> bool;
 }
 
 #[derive(Debug, Default)]
@@ -27,6 +33,8 @@ pub struct QueryDb {
     symbol_table_passes: Vec<String>,
     json_pretty_print: AtomicBool,
     ignore_global_asm: AtomicBool,
+    enforce_contracts: AtomicBool,
+    replace_with_contracts: AtomicBool,
 }
 
 impl UserInput for QueryDb {
@@ -68,5 +76,20 @@ impl UserInput for QueryDb {
 
     fn get_ignore_global_asm(&self) -> bool {
         self.ignore_global_asm.load(Ordering::Relaxed)
+    }
+
+    fn set_enforce_contracts(&mut self, enforce_contracts: bool) {
+        self.enforce_contracts.store(enforce_contracts, Ordering::Relaxed);
+    }
+    fn get_enforce_contracts(&self) -> bool {
+        self.enforce_contracts.load(Ordering::Relaxed)
+    }
+
+    fn set_replace_with_contracts(&mut self, replace_with_contracts: bool) {
+        self.replace_with_contracts.store(replace_with_contracts, Ordering::Relaxed);
+    }
+
+    fn get_replace_with_contracts(&self) -> bool {
+        self.replace_with_contracts.load(Ordering::Relaxed)
     }
 }

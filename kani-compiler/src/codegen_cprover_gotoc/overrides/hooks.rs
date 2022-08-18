@@ -245,6 +245,70 @@ impl<'tcx> GotocHook<'tcx> for Panic {
     }
 }
 
+/// Hook for handling postconditions in function contracts.
+struct Postcondition;
+
+impl<'tcx> GotocHook<'tcx> for Postcondition {
+    fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
+        matches_function(tcx, instance, "KaniPostcondition")
+    }
+
+    fn handle(
+        &self,
+        tcx: &mut GotocCtx<'tcx>,
+        instance: Instance<'tcx>,
+        mut fargs: Vec<Expr>,
+        assign_to: Place<'tcx>,
+        target: Option<BasicBlock>,
+        span: Option<Span>,
+    ) -> Stmt {
+        assert_eq!(fargs.len(), 1);
+        let loc = tcx.codegen_span_option(span);
+
+        if tcx.queries.get_enforce_contracts() {
+            fargs.push(Expr::string_constant("Post-condition failed"));
+            Assert.handle(tcx, instance, fargs, assign_to, target, span)
+        } else if tcx.queries.get_replace_with_contracts() {
+            Assume.handle(tcx, instance, fargs, assign_to, target, span)
+        } else {
+            // The function contract is being ignored in this case.
+            Stmt::block(vec![Stmt::goto(tcx.current_fn().find_label(&target.unwrap()), loc)], loc)
+        }
+    }
+}
+
+/// Hook for handling preconditions in function contracts.
+struct Precondition;
+
+impl<'tcx> GotocHook<'tcx> for Precondition {
+    fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
+        matches_function(tcx, instance, "KaniPrecondition")
+    }
+
+    fn handle(
+        &self,
+        tcx: &mut GotocCtx<'tcx>,
+        instance: Instance<'tcx>,
+        mut fargs: Vec<Expr>,
+        assign_to: Place<'tcx>,
+        target: Option<BasicBlock>,
+        span: Option<Span>,
+    ) -> Stmt {
+        assert_eq!(fargs.len(), 1);
+        let loc = tcx.codegen_span_option(span);
+
+        if tcx.queries.get_enforce_contracts() {
+            Assume.handle(tcx, instance, fargs, assign_to, target, span)
+        } else if tcx.queries.get_replace_with_contracts() {
+            fargs.push(Expr::string_constant("Pre-condition failed"));
+            Assert.handle(tcx, instance, fargs, assign_to, target, span)
+        } else {
+            // The function contract is being ignored in this case.
+            Stmt::block(vec![Stmt::goto(tcx.current_fn().find_label(&target.unwrap()), loc)], loc)
+        }
+    }
+}
+
 struct PtrRead;
 
 impl<'tcx> GotocHook<'tcx> for PtrRead {
@@ -311,6 +375,37 @@ impl<'tcx> GotocHook<'tcx> for PtrWrite {
                 dst.dereference().assign(src, loc).with_location(loc),
                 Stmt::goto(tcx.current_fn().find_label(&target), loc),
             ],
+            loc,
+        )
+    }
+}
+
+/// Hook to set flag to nondet the function body if a function is being replaced by its contract.
+struct ReplaceFunctionBody;
+
+impl<'tcx> GotocHook<'tcx> for ReplaceFunctionBody {
+    fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
+        matches_function(tcx, instance, "KaniReplaceFunctionBody")
+    }
+
+    fn handle(
+        &self,
+        tcx: &mut GotocCtx<'tcx>,
+        _instance: Instance<'tcx>,
+        fargs: Vec<Expr>,
+        assign_to: Place<'tcx>,
+        target: Option<BasicBlock>,
+        span: Option<Span>,
+    ) -> Stmt {
+        assert_eq!(fargs.len(), 0);
+        let loc = tcx.codegen_span_option(span);
+        let target = target.unwrap();
+        let pe = unwrap_or_return_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&assign_to))
+            .goto_expr;
+        let value =
+            if tcx.queries.get_replace_with_contracts() { Expr::c_true() } else { Expr::c_false() };
+        Stmt::block(
+            vec![pe.assign(value, loc), Stmt::goto(tcx.current_fn().find_label(&target), loc)],
             loc,
         )
     }
@@ -396,8 +491,11 @@ pub fn fn_hooks<'tcx>() -> GotocHooks<'tcx> {
             Rc::new(Assert),
             Rc::new(ExpectFail),
             Rc::new(Nondet),
+            Rc::new(Postcondition),
+            Rc::new(Precondition),
             Rc::new(PtrRead),
             Rc::new(PtrWrite),
+            Rc::new(ReplaceFunctionBody),
             Rc::new(RustAlloc),
             Rc::new(SliceFromRawPart),
         ],
