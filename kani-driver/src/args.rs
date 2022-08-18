@@ -43,7 +43,7 @@ pub struct KaniArgs {
     /// Generate visualizer report to <target-dir>/report/html/index.html
     #[structopt(long)]
     pub visualize: bool,
-    /// Generate concrete playback unit test and print it to stdout.
+    /// Generate concrete playback unit test and either 1) just print it to stdout or 2) add it in-place to the source code.
     /// This option does not work with `--output-format old`.
     #[structopt(
         long,
