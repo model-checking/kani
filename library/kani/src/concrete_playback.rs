@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! Helper code for running executable traces.
+//! Helper code for concrete playback.
 
 use std::cell::RefCell;
 
@@ -40,7 +40,7 @@ pub fn concrete_playback_run<F: Fn()>(mut local_det_vals: Vec<Vec<u8>>, proof_ha
     });
 }
 
-/// Executable trace implementation of kani::any_raw_internal.
+/// Concrete playback implementation of kani::any_raw_internal.
 ///
 /// # Safety
 ///

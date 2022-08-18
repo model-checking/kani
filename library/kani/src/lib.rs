@@ -122,7 +122,7 @@ where
 {
     assert!(
         !cfg!(feature = "concrete_playback"),
-        "The function `kani::any_raw::<T>() is not supported with the executable trace feature. Use `kani::any::<T>()` instead."
+        "The function `kani::any_raw::<T>() is not supported with the concrete playback feature. Use `kani::any::<T>()` instead."
     );
     any_raw_internal::<T, { std::mem::size_of::<T>() }>()
 }

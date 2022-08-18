@@ -177,7 +177,7 @@ where
 {
     assert!(
         !cfg!(feature = "concrete_playback"),
-        "The function `kani::slice::any_raw_slice::<T, MAX_SLICE_LENGTH>() is not supported with the executable trace feature. Use `kani::slice::any_slice::<T, MAX_SLICE_LENGTH>()` instead."
+        "The function `kani::slice::any_raw_slice::<T, MAX_SLICE_LENGTH>() is not supported with the concrete playback feature. Use `kani::slice::any_slice::<T, MAX_SLICE_LENGTH>()` instead."
     );
     AnySlice::<T, MAX_SLICE_LENGTH>::new_raw()
 }
