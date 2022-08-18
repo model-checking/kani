@@ -6,7 +6,6 @@ use crate::codegen_cprover_gotoc::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use crate::{emit_concurrency_warning, unwrap_or_return_codegen_unimplemented};
 use cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
-use cbmc::utils::BUG_REPORT_URL;
 use cbmc::MachineModel;
 use cbmc::{btree_string_map, InternString, InternedString};
 use num::bigint::BigInt;
@@ -49,13 +48,11 @@ impl<'tcx> GotocCtx<'tcx> {
             // Codegen an assertion failure since vtable comparison is not stable.
             let ret_type = Type::Bool;
             let body = vec![
-                self.codegen_assert_false(
+                self.codegen_assert_assume_false(
                     PropertyClass::SafetyCheck,
                     format!("Reached unstable vtable comparison '{:?}'", op).as_str(),
                     loc,
                 ),
-                // Assume false to block any further exploration of this path.
-                Stmt::assume(Expr::bool_false(), loc),
                 ret_type.nondet().as_stmt(loc).with_location(loc),
             ];
 
@@ -132,7 +129,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Given a mir object denoted by a mir place, codegen a pointer to this object.
-    pub fn codegen_rvalue_ref(&mut self, place: &Place<'tcx>, result_mir_type: Ty<'tcx>) -> Expr {
+    fn codegen_rvalue_ref(&mut self, place: &Place<'tcx>, result_mir_type: Ty<'tcx>) -> Expr {
         let place_mir_type = self.place_ty(place);
         let projection = unwrap_or_return_codegen_unimplemented!(self, self.codegen_place(place));
 
@@ -222,7 +219,7 @@ impl<'tcx> GotocCtx<'tcx> {
         .with_location(loc)
     }
 
-    pub fn codegen_rvalue_len(&mut self, p: &Place<'tcx>) -> Expr {
+    fn codegen_rvalue_len(&mut self, p: &Place<'tcx>) -> Expr {
         let pt = self.place_ty(p);
         match pt.kind() {
             ty::Array(_, sz) => self.codegen_const(*sz, None),
@@ -349,7 +346,7 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    pub fn codegen_rvalue_aggregate(
+    fn codegen_rvalue_aggregate(
         &mut self,
         k: &AggregateKind<'tcx>,
         operands: &[Operand<'tcx>],
@@ -413,7 +410,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             Rvalue::Cast(CastKind::Pointer(k), e, t) => {
                 let t = self.monomorphize(*t);
-                self.codegen_pointer_cast(k, e, t)
+                self.codegen_pointer_cast(k, e, t, loc)
             }
             Rvalue::BinaryOp(op, box (ref e1, ref e2)) => {
                 self.codegen_rvalue_binary_op(op, e1, e2, loc)
@@ -560,11 +557,7 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    pub fn codegen_fat_ptr_to_fat_ptr_cast(
-        &mut self,
-        src: &Operand<'tcx>,
-        dst_t: Ty<'tcx>,
-    ) -> Expr {
+    fn codegen_fat_ptr_to_fat_ptr_cast(&mut self, src: &Operand<'tcx>, dst_t: Ty<'tcx>) -> Expr {
         debug!("codegen_fat_ptr_to_fat_ptr_cast |{:?}| |{:?}|", src, dst_t);
         let src_goto_expr = self.codegen_operand(src);
         let dst_goto_typ = self.codegen_ty(dst_t);
@@ -590,11 +583,7 @@ impl<'tcx> GotocCtx<'tcx> {
         )
     }
 
-    pub fn codegen_fat_ptr_to_thin_ptr_cast(
-        &mut self,
-        src: &Operand<'tcx>,
-        dst_t: Ty<'tcx>,
-    ) -> Expr {
+    fn codegen_fat_ptr_to_thin_ptr_cast(&mut self, src: &Operand<'tcx>, dst_t: Ty<'tcx>) -> Expr {
         debug!("codegen_fat_ptr_to_thin_ptr_cast |{:?}| |{:?}|", src, dst_t);
         let src_goto_expr = self.codegen_operand(src);
         let dst_goto_typ = self.codegen_ty(dst_t);
@@ -683,11 +672,12 @@ impl<'tcx> GotocCtx<'tcx> {
     /// See the [`PointerCast`] type for specifics.
     /// Note that this does not include all casts involving pointers,
     /// many of which are instead handled by [`Self::codegen_misc_cast`] instead.
-    pub fn codegen_pointer_cast(
+    fn codegen_pointer_cast(
         &mut self,
         k: &PointerCast,
         o: &Operand<'tcx>,
         t: Ty<'tcx>,
+        loc: Location,
     ) -> Expr {
         match k {
             PointerCast::ReifyFnPointer => match self.operand_ty(o).kind() {
@@ -705,10 +695,10 @@ impl<'tcx> GotocCtx<'tcx> {
             PointerCast::UnsafeFnPointer => self.codegen_operand(o),
             PointerCast::ClosureFnPointer(_) => {
                 let dest_typ = self.codegen_ty(t);
-                self.codegen_unimplemented(
+                self.codegen_unimplemented_expr(
                     "PointerCast::ClosureFnPointer",
                     dest_typ,
-                    Location::none(),
+                    loc,
                     "https://github.com/model-checking/kani/issues/274",
                 )
             }
@@ -845,14 +835,11 @@ impl<'tcx> GotocCtx<'tcx> {
                 format!("drop_unimplemented<{}>", self.readable_instance_name(drop_instance));
             let drop_sym = self.ensure(&drop_sym_name, |ctx, name| {
                 // Function body
-                let unimplemented = ctx
-                    .codegen_unimplemented(
-                        format!("drop_in_place for {}", drop_sym_name).as_str(),
-                        Type::empty(),
-                        Location::none(),
-                        "https://github.com/model-checking/kani/issues/281",
-                    )
-                    .as_stmt(Location::none());
+                let unimplemented = ctx.codegen_unimplemented_stmt(
+                    format!("drop_in_place for {}", drop_sym_name).as_str(),
+                    Location::none(),
+                    "https://github.com/model-checking/kani/issues/281",
+                );
 
                 // Declare symbol for the single, self parameter
                 let param_typ = ctx.codegen_ty(trait_ty).to_pointer();
@@ -915,8 +902,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let check = Expr::eq(cbmc_size, vt_size);
         let assert_msg =
             format!("Correct CBMC vtable size for {:?} (MIR type {:?})", ty, operand_type.kind());
-        let size_assert =
-            Stmt::assert_sanity_check(check, &assert_msg, BUG_REPORT_URL, Location::none());
+        let size_assert = self.codegen_sanity(check, &assert_msg, Location::none());
         Stmt::block(vec![decl, size_assert], Location::none())
     }
 
@@ -1244,7 +1230,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// position a concrete type. This function returns the pair (concrete type,
     /// trait type) that we can use to build the vtable for the concrete type
     /// implementation of the trait type.
-    pub fn nested_pair_of_concrete_and_trait_types(
+    fn nested_pair_of_concrete_and_trait_types(
         &self,
         src_mir_type: Ty<'tcx>,
         dst_mir_type: Ty<'tcx>,

@@ -362,7 +362,7 @@ impl<'tcx> GotocCtx<'tcx> {
             ($which: ident) => {{
                 let tp_ty = instance.substs.type_at(0);
                 if tp_ty.is_generator() {
-                    let e = self.codegen_unimplemented(
+                    let e = self.codegen_unimplemented_expr(
                         "size or alignment of a generator type",
                         cbmc_ret_ty,
                         loc,
@@ -374,13 +374,6 @@ impl<'tcx> GotocCtx<'tcx> {
                     let size_align = self.size_and_align_of_dst(tp_ty, arg);
                     self.codegen_expr_to_place(p, size_align.$which)
                 }
-            }};
-        }
-
-        macro_rules! codegen_unimplemented_intrinsic {
-            ($url: expr) => {{
-                let e = self.codegen_unimplemented(intrinsic, cbmc_ret_ty, loc, $url);
-                self.codegen_expr_to_place(p, e)
             }};
         }
 
@@ -418,7 +411,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         macro_rules! unstable_codegen {
             ($($tt:tt)*) => {{
-                let e = self.codegen_unimplemented(
+                let e = self.codegen_unimplemented_expr(
                     &format!("'{}' intrinsic", intrinsic),
                     cbmc_ret_ty,
                     loc,
@@ -447,7 +440,7 @@ impl<'tcx> GotocCtx<'tcx> {
             // https://doc.rust-lang.org/core/intrinsics/fn.assume.html
             // Informs the optimizer that a condition is always true.
             // If the condition is false, the behavior is undefined.
-            "assume" => self.codegen_assert(
+            "assume" => self.codegen_assert_assume(
                 fargs.remove(0).cast_to(Type::bool()),
                 PropertyClass::Assume,
                 "assumption failed",
@@ -533,11 +526,11 @@ impl<'tcx> GotocCtx<'tcx> {
             "black_box" => self.codegen_expr_to_place(p, fargs.remove(0)),
             "breakpoint" => Stmt::skip(loc),
             "bswap" => self.codegen_expr_to_place(p, fargs.remove(0).bswap()),
-            "caller_location" => {
-                codegen_unimplemented_intrinsic!(
-                    "https://github.com/model-checking/kani/issues/374"
-                )
-            }
+            "caller_location" => self.codegen_unimplemented_stmt(
+                intrinsic,
+                loc,
+                "https://github.com/model-checking/kani/issues/374",
+            ),
             "ceilf32" => codegen_simple_intrinsic!(Ceilf),
             "ceilf64" => codegen_simple_intrinsic!(Ceil),
             "copy" => self.codegen_copy(intrinsic, false, fargs, farg_types, Some(p), loc),
@@ -672,11 +665,11 @@ impl<'tcx> GotocCtx<'tcx> {
             "transmute" => self.codegen_intrinsic_transmute(fargs, ret_ty, p),
             "truncf32" => codegen_simple_intrinsic!(Truncf),
             "truncf64" => codegen_simple_intrinsic!(Trunc),
-            "try" => {
-                codegen_unimplemented_intrinsic!(
-                    "https://github.com/model-checking/kani/issues/267"
-                )
-            }
+            "try" => self.codegen_unimplemented_stmt(
+                intrinsic,
+                loc,
+                "https://github.com/model-checking/kani/issues/267",
+            ),
             "type_id" => codegen_intrinsic_const!(),
             "type_name" => codegen_intrinsic_const!(),
             "unaligned_volatile_load" => {
@@ -718,8 +711,10 @@ impl<'tcx> GotocCtx<'tcx> {
                 self.codegen_write_bytes(fargs, farg_types, loc)
             }
             // Unimplemented
-            _ => codegen_unimplemented_intrinsic!(
-                "https://github.com/model-checking/kani/issues/new/choose"
+            _ => self.codegen_unimplemented_stmt(
+                intrinsic,
+                loc,
+                "https://github.com/model-checking/kani/issues/new/choose",
             ),
         }
     }
@@ -741,10 +736,18 @@ impl<'tcx> GotocCtx<'tcx> {
         let msg1 = format!("first argument for {} is finite", intrinsic);
         let msg2 = format!("second argument for {} is finite", intrinsic);
         let loc = self.codegen_span_option(span);
-        let finite_check1 =
-            self.codegen_assert(arg1.is_finite(), PropertyClass::FiniteCheck, msg1.as_str(), loc);
-        let finite_check2 =
-            self.codegen_assert(arg2.is_finite(), PropertyClass::FiniteCheck, msg2.as_str(), loc);
+        let finite_check1 = self.codegen_assert_assume(
+            arg1.is_finite(),
+            PropertyClass::FiniteCheck,
+            msg1.as_str(),
+            loc,
+        );
+        let finite_check2 = self.codegen_assert_assume(
+            arg2.is_finite(),
+            PropertyClass::FiniteCheck,
+            msg2.as_str(),
+            loc,
+        );
         Stmt::block(vec![finite_check1, finite_check2, stmt], loc)
     }
 
@@ -774,19 +777,19 @@ impl<'tcx> GotocCtx<'tcx> {
         let division_does_not_overflow = self.div_does_not_overflow(a.clone(), b.clone());
         Stmt::block(
             vec![
-                self.codegen_assert(
+                self.codegen_assert_assume(
                     division_is_exact,
                     PropertyClass::ExactDiv,
                     "exact_div arguments divide exactly",
                     loc,
                 ),
-                self.codegen_assert(
+                self.codegen_assert_assume(
                     divisor_is_nonzero,
                     PropertyClass::ExactDiv,
                     "exact_div divisor is nonzero",
                     loc,
                 ),
-                self.codegen_assert(
+                self.codegen_assert_assume(
                     division_does_not_overflow,
                     PropertyClass::ExactDiv,
                     "exact_div division does not overflow",
@@ -979,14 +982,14 @@ impl<'tcx> GotocCtx<'tcx> {
 
         // Generate alignment checks for both pointers
         let src_align = self.is_ptr_aligned(farg_types[0], src.clone());
-        let src_align_check = self.codegen_assert(
+        let src_align_check = self.codegen_assert_assume(
             src_align,
             PropertyClass::SafetyCheck,
             "`src` must be properly aligned",
             loc,
         );
         let dst_align = self.is_ptr_aligned(farg_types[1], dst.clone());
-        let dst_align_check = self.codegen_assert(
+        let dst_align_check = self.codegen_assert_assume(
             dst_align,
             PropertyClass::SafetyCheck,
             "`dst` must be properly aligned",
@@ -1054,7 +1057,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // These checks may allow a wrapping-around behavior in CBMC:
         // https://github.com/model-checking/kani/issues/1150
         let dst_ptr_of = src_ptr.clone().cast_to(Type::ssize_t()).add_overflow(offset_bytes);
-        let overflow_check = self.codegen_assert(
+        let overflow_check = self.codegen_assert_assume(
             dst_ptr_of.overflowed.not(),
             PropertyClass::ArithmeticOverflow,
             "attempt to compute offset which would overflow",
@@ -1080,7 +1083,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // Check that computing `offset` in bytes would not overflow an `isize`
         // These checks may allow a wrapping-around behavior in CBMC:
         // https://github.com/model-checking/kani/issues/1150
-        let overflow_check = self.codegen_assert(
+        let overflow_check = self.codegen_assert_assume(
             offset_overflow.overflowed.not(),
             PropertyClass::ArithmeticOverflow,
             "attempt to compute offset in bytes which would overflow an `isize`",
@@ -1416,7 +1419,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let src = fargs.remove(0);
         let src_typ = farg_types[0];
         let align = self.is_ptr_aligned(src_typ, src.clone());
-        let align_check = self.codegen_assert(
+        let align_check = self.codegen_assert_assume(
             align,
             PropertyClass::SafetyCheck,
             "`src` must be properly aligned",
@@ -1443,7 +1446,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let src = fargs.remove(0);
         let dst_typ = farg_types[0];
         let align = self.is_ptr_aligned(dst_typ, dst.clone());
-        let align_check = self.codegen_assert(
+        let align_check = self.codegen_assert_assume(
             align,
             PropertyClass::SafetyCheck,
             "`dst` must be properly aligned",
@@ -1474,7 +1477,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // Check that `dst` must be properly aligned
         let dst_typ = farg_types[0];
         let align = self.is_ptr_aligned(dst_typ, dst.clone());
-        let align_check = self.codegen_assert(
+        let align_check = self.codegen_assert_assume(
             align,
             PropertyClass::SafetyCheck,
             "`dst` must be properly aligned",
@@ -1513,7 +1516,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let size_of_count_elems = count.mul_overflow(size_of_elem);
         let message =
             format!("{}: attempt to compute number in bytes which would overflow", intrinsic);
-        let assert_stmt = self.codegen_assert(
+        let assert_stmt = self.codegen_assert_assume(
             size_of_count_elems.overflowed.not(),
             PropertyClass::ArithmeticOverflow,
             message.as_str(),
