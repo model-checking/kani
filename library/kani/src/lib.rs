@@ -129,7 +129,7 @@ where
 
 /// This function will replace `any_raw` that has been deprecated and it should only be used
 /// internally when we can guarantee that it will not trigger any undefined behavior.
-/// This function is also used to find deterministic bytes in the CBMC output trace.
+/// This function is also used to return concrete values when running in concrete playback mode.
 ///
 /// # Safety
 ///

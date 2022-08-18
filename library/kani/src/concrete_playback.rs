@@ -7,7 +7,7 @@ use std::cell::RefCell;
 
 thread_local! {
     /// thread_local! gives us a separate CONCRETE_VALS instance for each thread.
-    /// This allows us to run deterministic unit tests in parallel.
+    /// This allows us to run concrete playback unit tests in parallel.
     /// RefCell is necessary for mut statics.
     static CONCRETE_VALS: RefCell<Vec<Vec<u8>>> = RefCell::new(Vec::new());
 }
@@ -24,16 +24,16 @@ pub fn concrete_playback_run<F: Fn()>(mut local_concrete_vals: Vec<Vec<u8>>, pro
     });
     // Since F is a type argument, there should be a direct, static call to proof_harness().
     proof_harness();
-    // This code will not run if a user assertion fails on deterministic playback.
+    // This code will not run if a user assertion fails on concrete playback.
     // But if you comment out the failing assertion during playback,
-    // this can be used to know if too many det vals were loaded into the deterministic test case.
+    // this can be used to know if too many concrete values were loaded into the concrete playback test case.
     CONCRETE_VALS.with(|glob_concrete_vals| {
         let ref_glob_concrete_vals = &*glob_concrete_vals.borrow();
         assert!(
             ref_glob_concrete_vals.is_empty(),
-            "At the end of deterministic playback, there were still these concrete values left over `{:?}`. \
+            "At the end of concrete playback, there were still these concrete values left over `{:?}`. \
             This either happened because: \
-            1) Your code/harness changed after you generated this deterministic test. \
+            1) Your code/harness changed after you generated this concrete playback unit test. \
             2) There's a bug in Kani. Please report the issue here: <https://github.com/model-checking/kani/issues/new?assignees=&labels=bug&template=bug_report.md>",
             ref_glob_concrete_vals
         );
