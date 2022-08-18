@@ -5,15 +5,15 @@
 #![feature(rustc_attrs)]
 
 pub mod arbitrary;
-#[cfg(feature = "concrete_playback")]
-mod concrete_playback;
+#[cfg(feature = "exe_trace")]
+mod exe_trace;
 pub mod futures;
 pub mod slice;
 pub mod vec;
 
 pub use arbitrary::Arbitrary;
-#[cfg(feature = "concrete_playback")]
-pub use concrete_playback::concrete_playback_run;
+#[cfg(feature = "exe_trace")]
+pub use exe_trace::exe_trace_run;
 pub use futures::block_on;
 
 /// Creates an assumption that will be valid after this statement run. Note that the assumption
@@ -42,7 +42,7 @@ pub use futures::block_on;
 #[inline(never)]
 #[rustc_diagnostic_item = "KaniAssume"]
 pub fn assume(_cond: bool) {
-    if cfg!(feature = "concrete_playback") {
+    if cfg!(feature = "exe_trace") {
         assert!(_cond, "kani::assume should always hold");
     }
 }
@@ -59,7 +59,7 @@ pub fn assume(_cond: bool) {
 #[inline(never)]
 #[rustc_diagnostic_item = "KaniAssert"]
 pub fn assert(_cond: bool, _msg: &'static str) {
-    if cfg!(feature = "concrete_playback") {
+    if cfg!(feature = "exe_trace") {
         assert!(_cond, "{}", _msg);
     }
 }
@@ -94,16 +94,15 @@ pub fn any<T: Arbitrary>() -> T {
 /// internally when we can guarantee that the type T has no restriction regarding its bit level
 /// representation.
 ///
-/// This function is also used to find concrete values in the CBMC output trace
-/// and return those concrete values in concrete playback mode.
+/// This function is also used to find deterministic bytes in the CBMC output trace.
 ///
 /// Note that SIZE_T must be equal the size of type T in bytes.
 #[inline(never)]
 pub(crate) unsafe fn any_raw_internal<T, const SIZE_T: usize>() -> T {
-    #[cfg(feature = "concrete_playback")]
-    return concrete_playback::any_raw_internal::<T, SIZE_T>();
+    #[cfg(feature = "exe_trace")]
+    return exe_trace::any_raw_internal::<T, SIZE_T>();
 
-    #[cfg(not(feature = "concrete_playback"))]
+    #[cfg(not(feature = "exe_trace"))]
     #[allow(unreachable_code)]
     any_raw_inner::<T>()
 }
@@ -120,7 +119,7 @@ fn any_raw_inner<T>() -> T {
 #[inline(never)]
 #[rustc_diagnostic_item = "KaniExpectFail"]
 pub fn expect_fail(_cond: bool, _message: &'static str) {
-    if cfg!(feature = "concrete_playback") {
+    if cfg!(feature = "exe_trace") {
         assert!(!_cond, "kani::expect_fail does not hold: {}", _message);
     }
 }

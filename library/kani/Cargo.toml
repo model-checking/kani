@@ -12,5 +12,5 @@ publish = false
 kani_macros = { path = "../kani_macros" }
 
 [features]
-concrete_playback = []
+exe_trace = []
 

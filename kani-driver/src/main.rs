@@ -21,7 +21,7 @@ mod call_goto_instrument;
 mod call_single_file;
 mod call_symtab;
 mod cbmc_output_parser;
-mod concrete_playback;
+mod exe_trace;
 mod metadata;
 mod session;
 mod util;
