@@ -43,7 +43,7 @@ where
 {
     default fn any() -> Self {
         assert!(
-            !cfg!(feature = "exe_trace"),
+            !cfg!(feature = "concrete_playback"),
             "Calling `any()` on an `Invariant` type is not supported with the executable trace feature."
         );
         let value = unsafe { crate::any_raw_internal::<T, { std::mem::size_of::<T>() }>() };

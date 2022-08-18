@@ -13,7 +13,7 @@ thread_local! {
 }
 
 /// This function sets deterministic values and plays back the user's proof harness.
-pub fn exe_trace_run<F: Fn()>(mut local_det_vals: Vec<Vec<u8>>, proof_harness: F) {
+pub fn concrete_playback_run<F: Fn()>(mut local_det_vals: Vec<Vec<u8>>, proof_harness: F) {
     // Det vals in the user test case should be in the same order as the order of kani::any() calls.
     // Here, we need to reverse this order because det vals are popped off of the outer Vec,
     // so the chronological first det val should come last.
