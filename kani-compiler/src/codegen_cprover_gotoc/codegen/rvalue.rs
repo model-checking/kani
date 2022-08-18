@@ -535,9 +535,13 @@ impl<'tcx> GotocCtx<'tcx> {
                         discr_type.null().eq(relative_discr.clone())
                     } else {
                         tracing::trace!(?tag, "Not Primitive::Pointer");
-                        relative_discr
-                            .clone()
-                            .le(Expr::int_constant(relative_max, relative_discr.typ().clone()))
+                        if relative_max == 0 {
+                            relative_discr.clone().is_zero()
+                        } else {
+                            relative_discr
+                                .clone()
+                                .le(Expr::int_constant(relative_max, relative_discr.typ().clone()))
+                        }
                     };
                     let niche_discr = {
                         let relative_discr = if relative_max == 0 {
