@@ -10,9 +10,9 @@ This document describes the concrete playback feature in more detail.
 
 ## Setup
 
-The user needs to have a fairly recent version of the Kani source code somewhere on their computer.
+You need to have a fairly recent version of the Kani source code somewhere on your computer.
 To do this, run `git clone https://github.com/model-checking/kani.git`.
-Then, the user needs to add the following lines to their `Cargo.toml` file:
+Then, add the following lines to the `Cargo.toml` file for the crate you're trying to debug:
 ```toml
 [dev-dependencies]
 kani = { path = "{path_to_kani}/library/kani", features = ["concrete_playback"] }
@@ -24,19 +24,19 @@ Run Kani with the `--concrete-playback=JustPrint` flag.
 After verifying the proof harness checks, Kani will extract concrete values for the `kani::any()` variables
 and generate a Rust unit test case.
 This unit test initializes the concrete values and calls the proof harness.
-A user can then either 1) copy this unit test into the same module as their proof harness or
+You can then either 1) copy this unit test into the same module as their proof harness or
 2) run Kani with the `--concrete-playback=InPlace` flag to have Kani automatically do this.
-Before adding the unit test, the user might find it helpful to have their existing code committed to `git`.
-That way, they can easily remove the unit test with `git revert`.
+Before adding the unit test, you might find it helpful to have your existing code committed to `git`.
+That way, you can easily remove the unit test with `git revert`.
 
-After the unit test is in their source code, users can run it with `cargo test`.
+After the unit test is in your source code, you can run it with `cargo test`.
 To debug it, there are a couple of options.
-If users have certain IDEs, there are extensions (e.g., `rust-analyzer` for `VS Code`)
+If you have certain IDEs, there are extensions (e.g., `rust-analyzer` for `VS Code`)
 that support UI elements like a `Run Test | Debug` button next to all unit tests.
-Otherwise, users can debug the unit test on the command line.
-To do this, they can first run `cargo test {unit_test_func_name}`.
+Otherwise, you can debug the unit test on the command line.
+To do this, you first run `cargo test {unit_test_func_name}`.
 The output from this will have a line in the beginning like `Running unittests {files} ({binary})`.
-They can then debug the binary with tools like `rust-gdb` or `lldb`.
+You can then debug the binary with tools like `rust-gdb` or `lldb`.
 
 ## Common issues
 
@@ -47,19 +47,18 @@ To fix this, remove `#[cfg(kani)]` from those paths.
 ## Request for comments
 
 This feature is experimental and is therefore subject to change.
-If users have ideas for improving the user experience of this feature,
-they can add it to [this github issue](https://github.com/model-checking/kani/issues/1536).
+If you have ideas for improving the user experience of this feature,
+please add them to [this github issue](https://github.com/model-checking/kani/issues/1536).
 
 ## Limitations 
 
-Currently, this feature does not generate unit tests for failing non-panic checks (e.g., UB checks)
-These checks would not trigger runtime errors when playing back the unit test.
-It also doesn't support generating unit tests for multiple assertion failures within the same harness.
+1. This feature does not generate unit tests for failing non-panic checks (e.g., UB checks).
+This is because checks would not trigger runtime errors during concrete playback.
+Kani generates warning messages for this.
+2. This feature does not support generating unit tests for multiple assertion failures within the same harness.
 This limitation might be removed in the future.
-For the above two, the feature provides warning messages to the user whenever it sees these occur.
-
-This feature also requires that the user doesn't change their code or runtime configurations between when the unit test
-was generated and when it was run.
-For instance, if the user linked with library A during unit test generation and library B during unit test play back,
+Kani generates warning messages for this.
+3. This feature requires that you do not change your code or runtime configurations between when Kani generates the unit test and when you run it.
+For instance, if you linked with library A during unit test generation and library B during unit test play back,
 that might cause unintended errors in the unit test counterexample.
-Kani currently has no way to mitigate this issue.
+Kani currently has no way to detect this issue.
