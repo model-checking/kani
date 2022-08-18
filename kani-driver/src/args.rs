@@ -114,6 +114,12 @@ pub struct KaniArgs {
     /// Kani will only compile the crate. No verification will be performed
     #[structopt(long, hidden_short_help(true))]
     pub only_codegen: bool,
+    /// Compiles Kani harnesses in all features of all packages selected on the command-line.
+    #[structopt(long)]
+    pub all_features: bool,
+    /// Run Kani on all packages in the workspace.
+    #[structopt(long)]
+    pub workspace: bool,
 
     /// Specify the value used for loop unwinding in CBMC
     #[structopt(long)]
