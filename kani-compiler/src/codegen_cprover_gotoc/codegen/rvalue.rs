@@ -14,7 +14,7 @@ use rustc_middle::mir::{AggregateKind, BinOp, CastKind, NullOp, Operand, Place, 
 use rustc_middle::ty::adjustment::PointerCast;
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{self, Instance, IntTy, Ty, TyCtxt, UintTy, VtblEntry};
-use rustc_target::abi::{FieldsShape, Primitive, TagEncoding, Variants};
+use rustc_target::abi::{FieldsShape, TagEncoding, Variants};
 use tracing::{debug, warn};
 
 impl<'tcx> GotocCtx<'tcx> {
@@ -503,7 +503,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     .map_or(index.as_u32() as u128, |discr| discr.val);
                 Expr::int_constant(discr_val, self.codegen_ty(res_ty))
             }
-            Variants::Multiple { tag, tag_encoding, .. } => match tag_encoding {
+            Variants::Multiple { tag_encoding, .. } => match tag_encoding {
                 TagEncoding::Direct => {
                     self.codegen_discriminant_field(e, ty).cast_to(self.codegen_ty(res_ty))
                 }
@@ -525,23 +525,17 @@ impl<'tcx> GotocCtx<'tcx> {
                     // Note: niche_variants can only represent values that fit in a u32.
                     let discr_mir_ty = self.codegen_enum_discr_typ(ty);
                     let discr_type = self.codegen_ty(discr_mir_ty);
-                    let niche_val = self.codegen_get_niche(e, offset, discr_type.clone());
+                    let niche_val = self.codegen_get_niche(e, offset, discr_type);
                     let relative_discr =
                         wrapping_sub(&niche_val, u64::try_from(*niche_start).unwrap());
                     let relative_max =
                         niche_variants.end().as_u32() - niche_variants.start().as_u32();
-                    let is_niche = if tag.primitive() == Primitive::Pointer {
-                        tracing::trace!(?tag, "Primitive::Pointer");
-                        discr_type.null().eq(relative_discr.clone())
+                    let is_niche = if relative_max == 0 {
+                        relative_discr.clone().is_zero()
                     } else {
-                        tracing::trace!(?tag, "Not Primitive::Pointer");
-                        if relative_max == 0 {
-                            relative_discr.clone().is_zero()
-                        } else {
-                            relative_discr
-                                .clone()
-                                .le(Expr::int_constant(relative_max, relative_discr.typ().clone()))
-                        }
+                        relative_discr
+                            .clone()
+                            .le(Expr::int_constant(relative_max, relative_discr.typ().clone()))
                     };
                     let niche_discr = {
                         let relative_discr = if relative_max == 0 {
