@@ -184,6 +184,10 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// 1. Fail verification in a machine-detectable manner if reachable
     /// 2. Warn about unsupported features at compile-time
+    ///
+    /// Because this appears in an expression context, it will technically return a
+    /// nondet value of the requested type. However, control flow will not actually
+    /// proceed from this assertion failure.
     pub fn codegen_unimplemented_expr(
         &mut self,
         operation_name: &str,
@@ -205,6 +209,8 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// 1. Fail verification in a machine-detectable manner if reachable
     /// 2. Warn about unsupported features at compile-time
+    ///
+    /// Control flow will not proceed forward from this assertion failure.
     pub fn codegen_unimplemented_stmt(
         &mut self,
         operation_name: &str,

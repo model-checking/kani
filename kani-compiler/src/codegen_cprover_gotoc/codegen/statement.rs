@@ -38,7 +38,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let llayout = self.layout_of(lty);
                 // we ignore assignment for all zero size types
                 if llayout.is_zst() {
-                    Stmt::skip(Location::none())
+                    Stmt::skip(location)
                 } else if lty.is_fn_ptr() && rty.is_fn() && !rty.is_fn_ptr() {
                     // implicit address of a function pointer, e.g.
                     // let fp: fn() -> i32 = foo;
@@ -175,7 +175,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 Stmt::goto(self.current_fn().find_label(target), loc)
             }
             TerminatorKind::SwitchInt { discr, switch_ty, targets } => {
-                self.codegen_switch_int(discr, *switch_ty, targets)
+                self.codegen_switch_int(discr, *switch_ty, targets, loc)
             }
             // The following two use `codegen_mimic_unimplemented`
             // because we don't want to raise the warning during compilation.
@@ -212,7 +212,9 @@ impl<'tcx> GotocCtx<'tcx> {
                 "unreachable code",
                 loc,
             ),
-            TerminatorKind::Drop { place, target, unwind: _ } => self.codegen_drop(place, target),
+            TerminatorKind::Drop { place, target, unwind: _ } => {
+                self.codegen_drop(place, target, loc)
+            }
             TerminatorKind::Call { func, args, destination, target, .. } => {
                 self.codegen_funcall(func, args, destination, target, term.source_info.span)
             }
@@ -291,7 +293,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// transformation, so these have a simpler semantics.
     ///
     /// The generated code should invoke the appropriate `drop` function on `place`, then goto `target`.
-    fn codegen_drop(&mut self, place: &Place<'tcx>, target: &BasicBlock) -> Stmt {
+    fn codegen_drop(&mut self, place: &Place<'tcx>, target: &BasicBlock, loc: Location) -> Stmt {
         // TODO: this function doesn't handle unwinding which begins if the destructor panics
         // https://github.com/model-checking/kani/issues/221
         let place_ty = self.place_ty(place);
@@ -301,7 +303,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let drop_implementation = match drop_instance.def {
             InstanceDef::DropGlue(_, None) => {
                 // We can skip empty DropGlue functions
-                Stmt::skip(Location::none())
+                Stmt::skip(loc)
             }
             InstanceDef::DropGlue(_def_id, Some(_)) => {
                 match place_ty.kind() {
@@ -328,7 +330,7 @@ impl<'tcx> GotocCtx<'tcx> {
                                 warn!(self_type=?typ, "Unsupported drop of unsized");
                                 return self.codegen_unimplemented_stmt(
                                     format!("Unsupported drop unsized struct: {:?}", typ).as_str(),
-                                    Location::None,
+                                    loc,
                                     "https://github.com/model-checking/kani/issues/1072",
                                 );
                             }
@@ -336,8 +338,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         let self_data = trait_fat_ptr.to_owned().member("data", &self.symbol_table);
                         let self_ref = self_data.cast_to(trait_fat_ptr.typ().clone().to_pointer());
 
-                        let call =
-                            fn_ptr.dereference().call(vec![self_ref]).as_stmt(Location::none());
+                        let call = fn_ptr.dereference().call(vec![self_ref]).as_stmt(loc);
                         if self.vtable_ctx.emit_vtable_restrictions {
                             self.virtual_call_with_restricted_fn_ptr(
                                 trait_fat_ptr.typ().clone(),
@@ -374,11 +375,11 @@ impl<'tcx> GotocCtx<'tcx> {
                         // https://github.com/model-checking/kani/issues/426
                         // Unblocks: https://github.com/model-checking/kani/issues/435
                         if Expr::typecheck_call(&func, &args) {
-                            func.call(args).as_stmt(Location::none())
+                            func.call(args).as_stmt(loc)
                         } else {
                             self.codegen_unimplemented_stmt(
                                 format!("drop_in_place call for {:?}", func).as_str(),
-                                Location::none(),
+                                loc,
                                 "https://github.com/model-checking/kani/issues/426",
                             )
                         }
@@ -389,9 +390,9 @@ impl<'tcx> GotocCtx<'tcx> {
                 "TerminatorKind::Drop but not InstanceDef::DropGlue should be impossible"
             ),
         };
-        let goto_target = Stmt::goto(self.current_fn().find_label(target), Location::none());
+        let goto_target = Stmt::goto(self.current_fn().find_label(target), loc);
         let block = vec![drop_implementation, goto_target];
-        Stmt::block(block, Location::none())
+        Stmt::block(block, loc)
     }
 
     /// Generates Goto-C for MIR [TerminatorKind::SwitchInt].
@@ -403,6 +404,7 @@ impl<'tcx> GotocCtx<'tcx> {
         discr: &Operand<'tcx>,
         switch_ty: Ty<'tcx>,
         targets: &SwitchTargets,
+        loc: Location,
     ) -> Stmt {
         let v = self.codegen_operand(discr);
         let switch_ty = self.monomorphize(switch_ty);
@@ -413,19 +415,13 @@ impl<'tcx> GotocCtx<'tcx> {
                 vec![
                     v.eq(Expr::int_constant(first_target.0, self.codegen_ty(switch_ty)))
                         .if_then_else(
-                            Stmt::goto(
-                                self.current_fn().find_label(&first_target.1),
-                                Location::none(),
-                            ),
+                            Stmt::goto(self.current_fn().find_label(&first_target.1), loc),
                             None,
-                            Location::none(),
+                            loc,
                         ),
-                    Stmt::goto(
-                        self.current_fn().find_label(&targets.otherwise()),
-                        Location::none(),
-                    ),
+                    Stmt::goto(self.current_fn().find_label(&targets.otherwise()), loc),
                 ],
-                Location::none(),
+                loc,
             )
         } else {
             // Switches with empty targets should've been eliminated already.
@@ -433,15 +429,12 @@ impl<'tcx> GotocCtx<'tcx> {
             let cases = targets
                 .iter()
                 .map(|(c, bb)| {
-                    Expr::int_constant(c, self.codegen_ty(switch_ty)).switch_case(Stmt::goto(
-                        self.current_fn().find_label(&bb),
-                        Location::none(),
-                    ))
+                    Expr::int_constant(c, self.codegen_ty(switch_ty))
+                        .switch_case(Stmt::goto(self.current_fn().find_label(&bb), loc))
                 })
                 .collect();
-            let default =
-                Stmt::goto(self.current_fn().find_label(&targets.otherwise()), Location::none());
-            v.switch(cases, Some(default), Location::none())
+            let default = Stmt::goto(self.current_fn().find_label(&targets.otherwise()), loc);
+            v.switch(cases, Some(default), loc)
         }
     }
 
@@ -560,10 +553,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let mut stmts: Vec<Stmt> = match instance.def {
                     // Here an empty drop glue is invoked; we just ignore it.
                     InstanceDef::DropGlue(_, None) => {
-                        return Stmt::goto(
-                            self.current_fn().find_label(&target.unwrap()),
-                            Location::none(),
-                        );
+                        return Stmt::goto(self.current_fn().find_label(&target.unwrap()), loc);
                     }
                     // Handle a virtual function call via a vtable lookup
                     InstanceDef::Virtual(def_id, idx) => {

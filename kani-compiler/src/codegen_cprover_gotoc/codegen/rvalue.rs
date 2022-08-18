@@ -129,7 +129,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Given a mir object denoted by a mir place, codegen a pointer to this object.
-    pub fn codegen_rvalue_ref(&mut self, place: &Place<'tcx>, result_mir_type: Ty<'tcx>) -> Expr {
+    fn codegen_rvalue_ref(&mut self, place: &Place<'tcx>, result_mir_type: Ty<'tcx>) -> Expr {
         let place_mir_type = self.place_ty(place);
         let projection = unwrap_or_return_codegen_unimplemented!(self, self.codegen_place(place));
 
@@ -219,7 +219,7 @@ impl<'tcx> GotocCtx<'tcx> {
         .with_location(loc)
     }
 
-    pub fn codegen_rvalue_len(&mut self, p: &Place<'tcx>) -> Expr {
+    fn codegen_rvalue_len(&mut self, p: &Place<'tcx>) -> Expr {
         let pt = self.place_ty(p);
         match pt.kind() {
             ty::Array(_, sz) => self.codegen_const(*sz, None),
@@ -346,7 +346,7 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    pub fn codegen_rvalue_aggregate(
+    fn codegen_rvalue_aggregate(
         &mut self,
         k: &AggregateKind<'tcx>,
         operands: &[Operand<'tcx>],
@@ -410,7 +410,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             Rvalue::Cast(CastKind::Pointer(k), e, t) => {
                 let t = self.monomorphize(*t);
-                self.codegen_pointer_cast(k, e, t)
+                self.codegen_pointer_cast(k, e, t, loc)
             }
             Rvalue::BinaryOp(op, box (ref e1, ref e2)) => {
                 self.codegen_rvalue_binary_op(op, e1, e2, loc)
@@ -556,11 +556,7 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    pub fn codegen_fat_ptr_to_fat_ptr_cast(
-        &mut self,
-        src: &Operand<'tcx>,
-        dst_t: Ty<'tcx>,
-    ) -> Expr {
+    fn codegen_fat_ptr_to_fat_ptr_cast(&mut self, src: &Operand<'tcx>, dst_t: Ty<'tcx>) -> Expr {
         debug!("codegen_fat_ptr_to_fat_ptr_cast |{:?}| |{:?}|", src, dst_t);
         let src_goto_expr = self.codegen_operand(src);
         let dst_goto_typ = self.codegen_ty(dst_t);
@@ -586,11 +582,7 @@ impl<'tcx> GotocCtx<'tcx> {
         )
     }
 
-    pub fn codegen_fat_ptr_to_thin_ptr_cast(
-        &mut self,
-        src: &Operand<'tcx>,
-        dst_t: Ty<'tcx>,
-    ) -> Expr {
+    fn codegen_fat_ptr_to_thin_ptr_cast(&mut self, src: &Operand<'tcx>, dst_t: Ty<'tcx>) -> Expr {
         debug!("codegen_fat_ptr_to_thin_ptr_cast |{:?}| |{:?}|", src, dst_t);
         let src_goto_expr = self.codegen_operand(src);
         let dst_goto_typ = self.codegen_ty(dst_t);
@@ -679,11 +671,12 @@ impl<'tcx> GotocCtx<'tcx> {
     /// See the [`PointerCast`] type for specifics.
     /// Note that this does not include all casts involving pointers,
     /// many of which are instead handled by [`Self::codegen_misc_cast`] instead.
-    pub fn codegen_pointer_cast(
+    fn codegen_pointer_cast(
         &mut self,
         k: &PointerCast,
         o: &Operand<'tcx>,
         t: Ty<'tcx>,
+        loc: Location,
     ) -> Expr {
         match k {
             PointerCast::ReifyFnPointer => match self.operand_ty(o).kind() {
@@ -704,7 +697,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 self.codegen_unimplemented_expr(
                     "PointerCast::ClosureFnPointer",
                     dest_typ,
-                    Location::none(),
+                    loc,
                     "https://github.com/model-checking/kani/issues/274",
                 )
             }
@@ -1236,7 +1229,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// position a concrete type. This function returns the pair (concrete type,
     /// trait type) that we can use to build the vtable for the concrete type
     /// implementation of the trait type.
-    pub fn nested_pair_of_concrete_and_trait_types(
+    fn nested_pair_of_concrete_and_trait_types(
         &self,
         src_mir_type: Ty<'tcx>,
         dst_mir_type: Ty<'tcx>,
