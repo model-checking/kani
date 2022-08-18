@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// kani-flags: --harness harness --enable-unstable --gen-conc-playback
+// kani-flags: --harness harness --enable-unstable --concrete-playback=JustPrint
 
 //! We explicitly don't check what concrete values are returned for `_u8_1` and `_u8_3` as they could be anything.
 //! In practice, though, they will likely be 0.

@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// kani-flags: --harness harness --enable-unstable --gen-conc-playback
+// kani-flags: --harness harness --enable-unstable --concrete-playback=JustPrint
 
 struct MyStruct {
     field1: u8,

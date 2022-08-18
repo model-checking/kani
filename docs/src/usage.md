@@ -23,7 +23,7 @@ This works like `cargo test` except that it will analyze all proof harnesses ins
 
 Common to both `kani` and `cargo kani` are many command-line flags:
 
- * `--gen-conc-playback`: Generates a Rust unit test case that plays back a failing proof harness using a concrete counterexample. The additional `--add-conc-playback-to-src` flag will automatically add this unit test to the source code next to the proof harness.
+ * `--concrete-playback=JustPrint`: Generates a Rust unit test case that plays back a failing proof harness using a concrete counterexample. The additional `--concrete-playback=InPlace` flag will automatically add this unit test to the source code next to the proof harness.
 
  * `--visualize`: Generates an HTML report showing coverage information and providing traces (i.e., counterexamples) for each failure found by Kani.
 

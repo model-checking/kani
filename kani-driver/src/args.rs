@@ -43,18 +43,17 @@ pub struct KaniArgs {
     /// Generate visualizer report to <target-dir>/report/html/index.html
     #[structopt(long)]
     pub visualize: bool,
-    /// Generate executable trace test case and print it to stdout.
+    /// Generate concrete playback unit test and print it to stdout.
     /// This option does not work with `--output-format old`.
     #[structopt(
         long,
         requires("enable-unstable"),
         requires("harness"),
         conflicts_with_all(&["visualize", "dry-run"]),
+        possible_values = &ConcretePlaybackMode::variants(),
+        case_insensitive = true,
     )]
-    pub gen_conc_playback: bool,
-    /// Additionally add executable trace test case to the source code
-    #[structopt(long, requires("gen-conc-playback"))]
-    pub add_conc_playback_to_src: bool,
+    pub concrete_playback: Option<ConcretePlaybackMode>,
     /// Keep temporary files generated throughout Kani process
     #[structopt(long, hidden_short_help(true))]
     pub keep_temps: bool,
@@ -200,6 +199,14 @@ impl KaniArgs {
         } else {
             Some(DEFAULT_OBJECT_BITS)
         }
+    }
+}
+
+arg_enum! {
+    #[derive(Debug, PartialEq, Eq)]
+    pub enum ConcretePlaybackMode {
+        JustPrint,
+        InPlace,
     }
 }
 

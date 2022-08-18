@@ -51,8 +51,11 @@ impl KaniSession {
             if let Some(cbmc_process) = cbmc_process_opt {
                 // The introduction of reachability checks forces us to decide
                 // the verification result based on the postprocessing of CBMC results.
-                let output_filename_opt: Option<&Path> =
-                    if self.args.gen_conc_playback { Some(&output_filename) } else { None };
+                let output_filename_opt: Option<&Path> = if self.args.concrete_playback.is_some() {
+                    Some(&output_filename)
+                } else {
+                    None
+                };
                 let processed_result = process_cbmc_output(
                     cbmc_process,
                     self.args.extra_pointer_checks,
@@ -117,11 +120,14 @@ impl KaniSession {
             args.push("--validate-ssa-equation".into());
         }
 
-        if !self.args.visualize && !self.args.gen_conc_playback && !self.args.no_slice_formula {
+        if !self.args.visualize
+            && self.args.concrete_playback.is_none()
+            && !self.args.no_slice_formula
+        {
             args.push("--slice-formula".into());
         }
 
-        if self.args.gen_conc_playback {
+        if self.args.concrete_playback.is_some() {
             args.push("--trace".into());
         }
 
