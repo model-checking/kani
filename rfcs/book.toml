@@ -9,7 +9,7 @@ multilingual = false
 src = "src"
 
 [output.html]
-site-url = "/kani-rfcs/"
+site-url = "/kani/rfcs/"
 git-repository-url = "https://github.com/model-checking/kani"
 edit-url-template = "https://github.com/model-checking/kani/edit/main/rfcs/{path}"
 

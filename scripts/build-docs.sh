@@ -25,9 +25,10 @@ fi
 # Publish bookrunner report into our documentation
 KANI_DIR=$SCRIPT_DIR/..
 DOCS_DIR=$KANI_DIR/docs
+RFCS_DIR=$KANI_DIR/rfcs
 HTML_DIR=$KANI_DIR/build/output/latest/html/
 
-pushd $DOCS_DIR
+cd $DOCS_DIR
 
 if [ -d $HTML_DIR ]; then
     # Litani run is copied into `src` to avoid deletion by `mdbook`
@@ -48,14 +49,17 @@ fi
 echo "Building use documentation..."
 # Build the book into ./book/
 mkdir -p book
-${SCRIPT_DIR}/mdbook build
+mkdir -p book/rfcs
+$SCRIPT_DIR/mdbook build
 touch book/.nojekyll
+
+echo "Building RFCs book..."
+cd $RFCS_DIR
+$SCRIPT_DIR/mdbook build -d $KANI_DIR/docs/book/rfcs
 
 # Testing of the code in the documentation is done via the usual
 # ./scripts/kani-regression.sh script. A note on running just the
 # doc tests is in README.md. We don't run them here because
 # that would cause CI to run these tests twice.
-
-echo "Building rfcs..."
 
 echo "Finished documentation build successfully."

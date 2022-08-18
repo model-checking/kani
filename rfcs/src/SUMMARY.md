@@ -1,8 +1,9 @@
 # Kani Rust Verifier - RFCs
 
-- [Introduction](./intro.md)
-- [Template](./template.md)
+[Introduction](./intro.md)
 
-# Active RFCs
+[RFC Template](./template.md)
+
+# Kani RFCs
 
 
