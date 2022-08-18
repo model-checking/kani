@@ -508,7 +508,9 @@ impl<'tcx> GotocCtx<'tcx> {
                     self.codegen_discriminant_field(e, ty).cast_to(self.codegen_ty(res_ty))
                 }
                 TagEncoding::Niche { dataful_variant, niche_variants, niche_start } => {
-                    // This code follows the logic in the cranelift codegen backend:
+                    // This code follows the logic in the ssa codegen backend:
+                    // https://github.com/rust-lang/rust/blob/fee75fbe11b1fad5d93c723234178b2a329a3c03/compiler/rustc_codegen_ssa/src/mir/place.rs#L247
+                    // See also the cranelift backend:
                     // https://github.com/rust-lang/rust/blob/05d22212e89588e7c443cc6b9bc0e4e02fdfbc8d/compiler/rustc_codegen_cranelift/src/discriminant.rs#L116
                     let offset = match &layout.fields {
                         FieldsShape::Arbitrary { offsets, .. } => offsets[0],
@@ -523,6 +525,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     // https://github.com/rust-lang/rust/blob/fee75fbe11b1fad5d93c723234178b2a329a3c03/compiler/rustc_codegen_ssa/src/mir/place.rs#L247
                     //
                     // Note: niche_variants can only represent values that fit in a u32.
+                    let result_type = self.codegen_ty(res_ty);
                     let discr_mir_ty = self.codegen_enum_discr_typ(ty);
                     let discr_type = self.codegen_ty(discr_mir_ty);
                     let niche_val = self.codegen_get_niche(e, offset, discr_type);
@@ -539,18 +542,18 @@ impl<'tcx> GotocCtx<'tcx> {
                     };
                     let niche_discr = {
                         let relative_discr = if relative_max == 0 {
-                            self.codegen_ty(res_ty).zero()
+                            result_type.zero()
                         } else {
-                            relative_discr.cast_to(self.codegen_ty(res_ty))
+                            relative_discr.cast_to(result_type.clone())
                         };
                         relative_discr.plus(Expr::int_constant(
                             niche_variants.start().as_u32(),
-                            self.codegen_ty(res_ty),
+                            result_type.clone(),
                         ))
                     };
                     is_niche.ternary(
                         niche_discr,
-                        Expr::int_constant(dataful_variant.as_u32(), self.codegen_ty(res_ty)),
+                        Expr::int_constant(dataful_variant.as_u32(), result_type),
                     )
                 }
             },
