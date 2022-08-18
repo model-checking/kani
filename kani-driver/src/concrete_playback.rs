@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! Module for parsing deterministic values from CBMC output traces,
+//! Module for parsing concrete values from CBMC output traces,
 //! generating concrete playback unit tests, and adding them to the user's source code.
 
 use crate::args::ConcretePlaybackMode;
@@ -28,9 +28,9 @@ impl KaniSession {
             "The Kani argument `--output-format old` is not supported with the concrete playback feature."
         );
 
-        let det_vals = parser::extract_det_vals(output_filename)
+        let concrete_vals = parser::extract_concrete_vals(output_filename)
             .expect("Something went wrong when trying to get det vals from the CBMC output file");
-        let concrete_playback = format_unit_test(&harness.mangled_name, &det_vals);
+        let concrete_playback = format_unit_test(&harness.mangled_name, &concrete_vals);
 
         if let Some(playback_mode) = &self.args.concrete_playback && *playback_mode == ConcretePlaybackMode::JustPrint && !self.args.quiet {
             println!(
@@ -194,21 +194,21 @@ impl KaniSession {
 }
 
 /// Generate a unit test from a list of det vals.
-fn format_unit_test(harness_name: &str, det_vals: &[parser::DetVal]) -> UnitTest {
+fn format_unit_test(harness_name: &str, concrete_vals: &[parser::ConcreteVal]) -> UnitTest {
     /*
     Given a number of byte vectors, format them as:
-    // interp_det_val_1
-    vec![det_val_1],
-    // interp_det_val_2
-    vec![det_val_2], ...
+    // interp_concrete_val_1
+    vec![concrete_val_1],
+    // interp_concrete_val_2
+    vec![concrete_val_2], ...
     */
     let vec_whitespace = " ".repeat(8);
-    let vecs_as_str = det_vals
+    let vecs_as_str = concrete_vals
         .iter()
-        .map(|det_val| {
+        .map(|concrete_val| {
             format!(
                 "{vec_whitespace}// {}\n{vec_whitespace}vec!{:?}",
-                det_val.interp_val, det_val.byte_arr
+                concrete_val.interp_val, concrete_val.byte_arr
             )
         })
         .collect::<Vec<String>>()
@@ -225,10 +225,10 @@ fn format_unit_test(harness_name: &str, det_vals: &[parser::DetVal]) -> UnitTest
     let concrete_playback = format!(
 "#[test]
 fn {concrete_playback_func_name}() {{
-    let det_vals: Vec<Vec<u8>> = vec![
+    let concrete_vals: Vec<Vec<u8>> = vec![
 {vecs_as_str}
     ];
-    kani::concrete_playback_run(det_vals, {harness_name});
+    kani::concrete_playback_run(concrete_vals, {harness_name});
 }}"
     );
 
@@ -245,7 +245,7 @@ struct UnitTest {
     unit_test_name: String,
 }
 
-/// Read the CBMC output, parse it as a JSON object, and extract the deterministic values.
+/// Read the CBMC output, parse it as a JSON object, and extract the concrete values.
 /// Note: the CBMC output should roughly look like this for parsing to work properly:
 /// ```json
 /// ...
@@ -269,19 +269,19 @@ mod parser {
     use std::io::BufReader;
     use std::path::Path;
 
-    pub struct DetVal {
+    pub struct ConcreteVal {
         pub byte_arr: Vec<u8>,
         pub interp_val: String,
     }
 
-    /// Extract deterministic values from a failing harness.
-    pub fn extract_det_vals(output_filename: &Path) -> Result<Vec<DetVal>> {
+    /// Extract concrete values from a failing harness.
+    pub fn extract_concrete_vals(output_filename: &Path) -> Result<Vec<ConcreteVal>> {
         let cbmc_out = read_cbmc_out(output_filename).with_context(|| {
             format!("Invalid CBMC output trace file: {}", output_filename.display())
         })?;
-        let det_vals = parse_cbmc_out(&cbmc_out)
+        let concrete_vals = parse_cbmc_out(&cbmc_out)
             .context("Failed to parse the CBMC output trace JSON to get det vals")?;
-        Ok(det_vals)
+        Ok(concrete_vals)
     }
 
     /// Read in the CBMC results file and deserialize it to a JSON object.
@@ -295,8 +295,8 @@ mod parser {
     }
 
     /// The first-level CBMC output parser. This extracts the result message.
-    fn parse_cbmc_out(cbmc_out: &Value) -> Result<Vec<DetVal>> {
-        let mut det_vals: Vec<DetVal> = Vec::new();
+    fn parse_cbmc_out(cbmc_out: &Value) -> Result<Vec<ConcreteVal>> {
+        let mut concrete_vals: Vec<ConcreteVal> = Vec::new();
         let cbmc_out_arr = cbmc_out
             .as_array()
             .with_context(|| format!("Expected this CBMC output to be an array: {}", cbmc_out))?;
@@ -308,17 +308,17 @@ mod parser {
                     format!("Expected this CBMC result object to be an array: {}", result_msg)
                 })?;
                 for result_val in result_arr {
-                    parse_result(result_val, &mut det_vals, &mut have_parsed_assert_fail)?;
+                    parse_result(result_val, &mut concrete_vals, &mut have_parsed_assert_fail)?;
                 }
             }
         }
-        Ok(det_vals)
+        Ok(concrete_vals)
     }
 
     /// The second-level CBMC output parser. This extracts the trace entries of failing assertions.
     fn parse_result(
         result_val: &Value,
-        det_vals: &mut Vec<DetVal>,
+        concrete_vals: &mut Vec<ConcreteVal>,
         have_parsed_assert_fail: &mut bool,
     ) -> Result<()> {
         let desc = result_val["description"].to_string();
@@ -330,12 +330,12 @@ mod parser {
         if prop_is_assert && status_is_failure {
             if *have_parsed_assert_fail {
                 println!(
-                    "WARNING: Unable to parse deterministic values from multiple failing assertions. Skipping property `{prop}` with description `{desc}`."
+                    "WARNING: Unable to parse concrete values from multiple failing assertions. Skipping property `{prop}` with description `{desc}`."
                 );
             } else {
                 *have_parsed_assert_fail = true;
                 println!(
-                    "INFO: Parsing deterministic values from property `{prop}` with description `{desc}`."
+                    "INFO: Parsing concrete values from property `{prop}` with description `{desc}`."
                 );
                 let trace_arr = result_val["trace"].as_array().with_context(|| {
                     format!(
@@ -344,26 +344,26 @@ mod parser {
                     )
                 })?;
                 for trace_entry in trace_arr {
-                    parse_trace_entry(trace_entry, det_vals)
+                    parse_trace_entry(trace_entry, concrete_vals)
                         .context("Failure in trace assignment expression:")?;
                 }
             }
         } else if !prop_is_assert && status_is_failure {
             println!(
-                "WARNING: Unable to parse deterministic values from failing non-assertion checks. Skipping property `{prop}` with description `{desc}`."
+                "WARNING: Unable to parse concrete values from failing non-assertion checks. Skipping property `{prop}` with description `{desc}`."
             );
         }
         Ok(())
     }
 
     /// The third-level CBMC output parser. This extracts individual bytes from kani::any_raw calls.
-    fn parse_trace_entry(trace_entry: &Value, det_vals: &mut Vec<DetVal>) -> Result<()> {
+    fn parse_trace_entry(trace_entry: &Value, concrete_vals: &mut Vec<ConcreteVal>) -> Result<()> {
         if let (
             Some(step_type),
             Some(lhs),
             Some(func),
-            Some(bit_det_val),
-            Some(interp_det_val),
+            Some(bit_concrete_val),
+            Some(interp_concrete_val),
             Some(width_u64),
         ) = (
             trace_entry["stepType"].as_str(),
@@ -378,7 +378,7 @@ mod parser {
                 && func.starts_with("kani::any_raw_internal")
             {
                 let declared_width = width_u64 as usize;
-                let actual_width = bit_det_val.len();
+                let actual_width = bit_concrete_val.len();
                 ensure!(
                     declared_width == actual_width,
                     format!(
@@ -389,7 +389,7 @@ mod parser {
 
                 // Reverse because of endianess of CBMC trace.
                 for i in (0..declared_width).step_by(8).rev() {
-                    let str_chunk = &bit_det_val[i..i + 8];
+                    let str_chunk = &bit_concrete_val[i..i + 8];
                     let str_chunk_len = str_chunk.len();
                     ensure!(
                         str_chunk_len == 8,
@@ -403,8 +403,10 @@ mod parser {
                     next_num.push(next_byte);
                 }
 
-                det_vals
-                    .push(DetVal { byte_arr: next_num, interp_val: interp_det_val.to_string() });
+                concrete_vals.push(ConcreteVal {
+                    byte_arr: next_num,
+                    interp_val: interp_concrete_val.to_string(),
+                });
             }
         }
         Ok(())

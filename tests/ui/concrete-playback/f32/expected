@@ -4,7 +4,7 @@ Concrete playback
 ```
 #[test]
 fn kani_concrete_playback_harness
-    let det_vals: Vec<Vec<u8>> = vec![
+    let concrete_vals: Vec<Vec<u8>> = vec![
         // -inf
         vec![0, 0, 128, 255],
         // -3.402823e+38
@@ -22,6 +22,6 @@ fn kani_concrete_playback_harness
         // +inf
         vec![0, 0, 128, 127]
     ];
-    kani::concrete_playback_run(det_vals, harness);
+    kani::concrete_playback_run(concrete_vals, harness);
 }
 ```
