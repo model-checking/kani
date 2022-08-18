@@ -38,7 +38,7 @@ impl KaniSession {
                 &harness.mangled_name, &concrete_playback.unit_test_str
             );
             println!(
-                "To automatically add the concrete playback `{}` to the src code, run Kani with `--concrete-playback=InPlace`.",
+                "To automatically add the unit test `{}` to the src code, run Kani with `--concrete-playback=InPlace`.",
                 &concrete_playback.unit_test_name
             );
         }
