@@ -11,3 +11,7 @@ license = "MIT OR Apache-2.0"
 proc-macro = true
 
 [dependencies]
+syn = { version = "1.0", features = ["full", "parsing", "printing", "visit-mut", "visit", "extra-traits", "clone-impls"]}
+quote = "1.0"
+proc-macro2 = "1.0"
+uuid = { version = "1.0", features = ["v4"] }
