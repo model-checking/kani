@@ -2,16 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 // Utility functions for macro expansion of function contract clauses.
-// use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use proc_macro2::{Ident, Span};
 use quote::quote;
-// use quote::{format_ident, quote, ToTokens};
 use syn::{Attribute, Expr, FnArg, ItemFn, Signature};
-// use syn::{
-//     spanned::Spanned, visit_mut as visitor, Attribute, Expr, ExprCall, FnArg, ItemFn, ReturnType,
-//     Signature,
-// };
 use uuid::Uuid;
 
 /// Given a function `foo`, this function creates a closure with name
