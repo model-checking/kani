@@ -608,7 +608,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// fetch the niche value (as both left and right value)
     pub fn codegen_get_niche(&self, v: Expr, offset: Size, niche_ty: Type) -> Expr {
-        if offset.bytes() == 0 {
+        if offset == Size::ZERO {
             v.reinterpret_cast(niche_ty)
         } else {
             v // t: T
