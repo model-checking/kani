@@ -257,6 +257,25 @@ macro_rules! cover {
     ($cond:expr, $msg:literal) => {
         kani::cover($cond, $msg);
     };
+
+/// Function used to inline `#[kani::requires(...)]` function contract clauses as "precondition(..)"
+/// statements within the function body.
+#[inline(never)]
+#[rustc_diagnostic_item = "KaniPrecondition"]
+pub fn precondition(_cond: bool) {}
+
+/// Function used to inline `#[kani::ensures(...)]` function contract clauses as "postcondition(..)"
+/// statements within the function body.
+#[inline(never)]
+#[rustc_diagnostic_item = "KaniPostcondition"]
+pub fn postcondition(_cond: bool) {}
+
+/// Function used as a flag to nondet the body of a function when a function is being replaced
+/// by its contract.
+#[inline(never)]
+#[rustc_diagnostic_item = "KaniReplaceFunctionBody"]
+pub fn replace_function_body() -> bool {
+    unimplemented!("Kani replace_function_body")
 }
 
 /// Kani proc macros must be in a separate crate

@@ -15,6 +15,8 @@
 //! in order to apply the stubs. For the subsequent runs, we add the stub configuration to
 //! `-C llvm-args`.
 
+#[cfg(feature = "boogie")]
+use crate::codegen_boogie::BoogieCodegenBackend;
 #[cfg(feature = "cprover")]
 use crate::codegen_cprover_gotoc::GotocCodegenBackend;
 use crate::kani_middle::stubbing;
@@ -52,6 +54,12 @@ pub fn run(mut args: Vec<String>) -> ExitCode {
     ExitCode::SUCCESS
 }
 
+/// Configure the boogie backend that generate boogie programs.
+#[cfg(feature = "boogie")]
+fn backend(queries: Arc<Mutex<QueryDb>>) -> Box<dyn CodegenBackend> {
+    Box::new(BoogieCodegenBackend::new(queries))
+}
+
 /// Configure the cprover backend that generate goto-programs.
 #[cfg(feature = "cprover")]
 fn backend(queries: Arc<Mutex<QueryDb>>) -> Box<dyn CodegenBackend> {
@@ -59,9 +67,9 @@ fn backend(queries: Arc<Mutex<QueryDb>>) -> Box<dyn CodegenBackend> {
 }
 
 /// Fallback backend. It will trigger an error if no backend has been enabled.
-#[cfg(not(feature = "cprover"))]
+#[cfg(not(any(feature = "cprover", feature = "boogie")))]
 fn backend(queries: Arc<Mutex<QueryDb>>) -> Box<CodegenBackend> {
-    compile_error!("No backend is available. Only supported value today is `cprover`");
+    compile_error!("No backend is available. Only supported value today is `cprover` and `boogie`");
 }
 
 /// This object controls the compiler behavior.
@@ -145,6 +153,8 @@ impl Callbacks for KaniCompiler {
                 cfg!(feature = "write_json_symtab") || matches.get_flag(parser::WRITE_JSON_SYMTAB),
             );
             queries.set_reachability_analysis(matches.reachability_type());
+            queries.set_enforce_contracts(matches.get_flag(parser::ENFORCE_CONTRACTS));
+            queries.set_replace_with_contracts(matches.get_flag(parser::REPLACE_WITH_CONTRACTS));
 
             if let Some(features) = matches.get_many::<String>(parser::UNSTABLE_FEATURE) {
                 queries.set_unstable_features(&features.cloned().collect::<Vec<_>>());

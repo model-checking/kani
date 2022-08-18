@@ -86,6 +86,12 @@ impl KaniSession {
         if self.args.ignore_global_asm {
             flags.push("--ignore-global-asm".into());
         }
+        if self.args.enforce_contracts {
+            flags.push("--enforce-contracts".into());
+        }
+        if self.args.replace_with_contracts {
+            flags.push("--replace-with-contracts".into());
+        }
 
         // Users activate it via the command line switch
         if self.args.write_json_symtab {

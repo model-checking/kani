@@ -42,6 +42,12 @@ pub trait UserInput {
 
     fn set_unstable_features(&mut self, features: &[String]);
     fn get_unstable_features(&self) -> &[String];
+
+    fn set_enforce_contracts(&mut self, enforce_contracts: bool);
+    fn get_enforce_contracts(&self) -> bool;
+
+    fn set_replace_with_contracts(&mut self, replace_with_contracts: bool);
+    fn get_replace_with_contracts(&self) -> bool;
 }
 
 /// This structure should only be used behind a synchronized reference or a snapshot.
@@ -56,6 +62,8 @@ pub struct QueryDb {
     reachability_analysis: ReachabilityType,
     stubbing_enabled: bool,
     unstable_features: Vec<String>,
+    enforce_contracts: bool,
+    replace_with_contracts: bool,
 }
 
 impl QueryDb {
@@ -136,5 +144,20 @@ impl UserInput for QueryDb {
 
     fn get_unstable_features(&self) -> &[String] {
         &self.unstable_features
+    }
+
+    fn set_enforce_contracts(&mut self, enforce_contracts: bool) {
+        self.enforce_contracts.store(enforce_contracts, Ordering::Relaxed);
+    }
+    fn get_enforce_contracts(&self) -> bool {
+        self.enforce_contracts.load(Ordering::Relaxed)
+    }
+
+    fn set_replace_with_contracts(&mut self, replace_with_contracts: bool) {
+        self.replace_with_contracts.store(replace_with_contracts, Ordering::Relaxed);
+    }
+
+    fn get_replace_with_contracts(&self) -> bool {
+        self.replace_with_contracts.load(Ordering::Relaxed)
     }
 }
