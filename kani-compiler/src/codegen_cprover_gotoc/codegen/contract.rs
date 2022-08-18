@@ -85,7 +85,13 @@ impl<'tcx> GotocCtx<'tcx> {
                         let expr = Expr::symbol_expression(sym.name.clone(), sym.typ.clone());
                         Some(Spec::new(bv, expr, loc))
                     }
-                    None => panic!("Global variables are not supported inside modifies clauses."),
+                    None => {
+                        self.tcx.sess.span_err(
+                            mir.span,
+                            "Global variables are not supported inside modifies clauses.",
+                        );
+                        None
+                    }
                 }
             })
             .collect();
