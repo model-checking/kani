@@ -33,7 +33,7 @@ impl KaniSession {
         );
         let concrete_playback = format_unit_test(&harness.mangled_name, &concrete_vals);
 
-        if let Some(playback_mode) = &self.args.concrete_playback && *playback_mode == ConcretePlaybackMode::JustPrint && !self.args.quiet {
+        if let Some(playback_mode) = &self.args.concrete_playback && *playback_mode == ConcretePlaybackMode::Print && !self.args.quiet {
             println!(
                 "Concrete playback unit test for `{}`:\n```\n{}\n```",
                 &harness.mangled_name, &concrete_playback.unit_test_str

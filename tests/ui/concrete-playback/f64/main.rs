@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// kani-flags: --harness harness --enable-unstable --concrete-playback=JustPrint
+// kani-flags: --harness harness --enable-unstable --concrete-playback=Print
 
 /// Note: Don't include NaN because there are multiple possible NaN values.
 #[kani::proof]

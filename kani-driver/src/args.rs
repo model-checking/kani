@@ -208,7 +208,7 @@ impl KaniArgs {
 arg_enum! {
     #[derive(Debug, PartialEq, Eq)]
     pub enum ConcretePlaybackMode {
-        JustPrint,
+        Print,
         InPlace,
     }
 }
