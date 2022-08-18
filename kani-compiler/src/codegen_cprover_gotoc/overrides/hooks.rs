@@ -12,7 +12,7 @@ use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::codegen_cprover_gotoc::utils;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
-use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Type};
+use cbmc::goto_program::{BuiltinFn, DatatypeComponent, Expr, Location, Stmt, Type};
 use kani_queries::UserInput;
 use rustc_middle::mir::{BasicBlock, Place};
 use rustc_middle::ty::print::with_no_trimmed_paths;
@@ -266,7 +266,11 @@ impl<'tcx> GotocHook<'tcx> for Postcondition {
         let loc = tcx.codegen_span_option(span);
 
         if tcx.queries.get_enforce_contracts() {
-            fargs.push(Expr::string_constant("Post-condition failed"));
+            let msg = Expr::string_constant("Post-condition failed");
+            let struct_tag = tcx.ensure_struct(&"msg", Some("msg"), |_, _| {
+                vec![DatatypeComponent::field("msg", msg.typ().clone())]
+            });
+            fargs.push(Expr::struct_expr_from_values(struct_tag, vec![msg], &tcx.symbol_table));
             Assert.handle(tcx, instance, fargs, assign_to, target, span)
         } else if tcx.queries.get_replace_with_contracts() {
             Assume.handle(tcx, instance, fargs, assign_to, target, span)
@@ -300,7 +304,11 @@ impl<'tcx> GotocHook<'tcx> for Precondition {
         if tcx.queries.get_enforce_contracts() {
             Assume.handle(tcx, instance, fargs, assign_to, target, span)
         } else if tcx.queries.get_replace_with_contracts() {
-            fargs.push(Expr::string_constant("Pre-condition failed"));
+            let msg = Expr::string_constant("Pre-condition failed");
+            let struct_tag = tcx.ensure_struct(&"msg", Some("msg"), |_, _| {
+                vec![DatatypeComponent::field("msg", msg.typ().clone())]
+            });
+            fargs.push(Expr::struct_expr_from_values(struct_tag, vec![msg], &tcx.symbol_table));
             Assert.handle(tcx, instance, fargs, assign_to, target, span)
         } else {
             // The function contract is being ignored in this case.
