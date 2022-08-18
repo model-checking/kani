@@ -28,17 +28,18 @@ impl KaniSession {
             "The Kani argument `--output-format old` is not supported with the concrete playback feature."
         );
 
-        let concrete_vals = parser::extract_concrete_vals(output_filename)
-            .expect("Something went wrong when trying to get det vals from the CBMC output file");
+        let concrete_vals = parser::extract_concrete_vals(output_filename).expect(
+            "Something went wrong when trying to get concrete values from the CBMC output file",
+        );
         let concrete_playback = format_unit_test(&harness.mangled_name, &concrete_vals);
 
         if let Some(playback_mode) = &self.args.concrete_playback && *playback_mode == ConcretePlaybackMode::JustPrint && !self.args.quiet {
             println!(
-                "Concrete playback for `{}`:\n```\n{}\n```",
+                "Concrete playback unit test for `{}`:\n```\n{}\n```",
                 &harness.mangled_name, &concrete_playback.unit_test_str
             );
             println!(
-                "To automatically add the unit test `{}` to the src code, run Kani with `--concrete-playback=InPlace`.",
+                "To automatically add the concrete playback unit test `{}` to the src code, run Kani with `--concrete-playback=InPlace`.",
                 &concrete_playback.unit_test_name
             );
         }
@@ -46,7 +47,7 @@ impl KaniSession {
         if let Some(playback_mode) = &self.args.concrete_playback && *playback_mode == ConcretePlaybackMode::InPlace {
             if !self.args.quiet {
                 println!(
-                    "Now modifying the source code to include the unit test `{}`.",
+                    "Now modifying the source code to include the concrete playback unit test `{}`.",
                     &concrete_playback.unit_test_name
                 );
             }
@@ -77,7 +78,7 @@ impl KaniSession {
         if src_as_str.contains(&concrete_playback.unit_test_name) {
             if !self.args.quiet {
                 println!(
-                    "concrete playback `{}/{}` already found in source code, so skipping modification.",
+                    "Concrete playback unit test `{}/{}` already found in source code, so skipping modification.",
                     src_path, concrete_playback.unit_test_name,
                 );
             }
@@ -193,7 +194,7 @@ impl KaniSession {
     }
 }
 
-/// Generate a unit test from a list of det vals.
+/// Generate a unit test from a list of concrete values.
 fn format_unit_test(harness_name: &str, concrete_vals: &[parser::ConcreteVal]) -> UnitTest {
     /*
     Given a number of byte vectors, format them as:
@@ -280,7 +281,7 @@ mod parser {
             format!("Invalid CBMC output trace file: {}", output_filename.display())
         })?;
         let concrete_vals = parse_cbmc_out(&cbmc_out)
-            .context("Failed to parse the CBMC output trace JSON to get det vals")?;
+            .context("Failed to parse the CBMC output trace JSON to get concrete values")?;
         Ok(concrete_vals)
     }
 
