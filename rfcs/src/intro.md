@@ -1,13 +1,13 @@
 # Introduction
 
 Kani is an open-source verification tool that uses automated reasoning to analyze Rust programs. In order to 
-integate feedback from developers and users on future changes to Kani, we decided to follow a light-weight 
+integrate feedback from developers and users on future changes to Kani, we decided to follow a light-weight 
 "RFC" (request for comments) process.
 
 ## When to create an RFC
 
 As a rule of thumb you should create an RFC if you are making changes that impact the user experience. New 
-APIs, new features, as well as deprecation, should follow an RFC process. We also ask for substantial architectural 
+APIs, new features, as well as depreciation, should follow an RFC process. We also ask for substantial architectural 
 changes to be made via RFC.
 
 Bugs and smaller improvements to existing features do not require an RFC. If you are in doubt, feel free to create 
