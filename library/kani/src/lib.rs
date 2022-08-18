@@ -3,21 +3,11 @@
 
 // Used for rustc_diagnostic_item.
 #![feature(rustc_attrs)]
-// Used for default implementation of Arbitrary.
-#![feature(min_specialization)]
-// generic_const_exprs is used for getting the size of generic types.
-// incomplete_features is used to suppress warnings for using generic_const_exprs.
-// See this issue for more details: https://github.com/rust-lang/rust/issues/44580.
-// Note: We can remove both features after we remove the following deprecated functions:
-// kani::any_raw, slice::AnySlice::new_raw(), slice::any_raw_slice(), (T: Invariant)::any().
-#![allow(incomplete_features)]
-#![feature(generic_const_exprs)]
 
 pub mod arbitrary;
 #[cfg(feature = "concrete_playback")]
 mod concrete_playback;
 pub mod futures;
-pub mod invariant;
 pub mod slice;
 pub mod vec;
 
@@ -25,8 +15,6 @@ pub use arbitrary::Arbitrary;
 #[cfg(feature = "concrete_playback")]
 pub use concrete_playback::concrete_playback_run;
 pub use futures::block_on;
-#[allow(deprecated)]
-pub use invariant::Invariant;
 
 /// Creates an assumption that will be valid after this statement run. Note that the assumption
 /// will only be applied for paths that follow the assumption. If the assumption doesn't hold, the
@@ -97,43 +85,19 @@ pub fn any<T: Arbitrary>() -> T {
     T::any()
 }
 
-/// This function creates an unconstrained value of type `T`. This may result in an invalid value.
+/// This function creates a symbolic value of type `T`. This may result in an invalid value.
 ///
 /// # Safety
 ///
 /// This function is unsafe and it may represent invalid `T` values which can lead to many
-/// undesirable undefined behaviors. Users must guarantee that an unconstrained symbolic value
-/// for type T only represents valid values.
+/// undesirable undefined behaviors. Because of that, this function can only be used
+/// internally when we can guarantee that the type T has no restriction regarding its bit level
+/// representation.
 ///
-/// # Deprecation
+/// This function is also used to find concrete values in the CBMC output trace
+/// and return those concrete values in concrete playback mode.
 ///
-/// We have decided to deprecate this function due to the fact that its result can be the source
-/// of undefined behavior.
-#[inline(never)]
-#[deprecated(
-    since = "0.8.0",
-    note = "This function may return symbolic values that don't respects the language type invariants."
-)]
-#[doc(hidden)]
-pub unsafe fn any_raw<T>() -> T
-where
-    // This generic_const_exprs feature lets Rust know the size of generic T.
-    [(); std::mem::size_of::<T>()]:,
-{
-    assert!(
-        !cfg!(feature = "concrete_playback"),
-        "The function `kani::any_raw::<T>() is not supported with the concrete playback feature. Use `kani::any::<T>()` instead."
-    );
-    any_raw_internal::<T, { std::mem::size_of::<T>() }>()
-}
-
-/// This function will replace `any_raw` that has been deprecated and it should only be used
-/// internally when we can guarantee that it will not trigger any undefined behavior.
-/// This function is also used to return concrete values when running in concrete playback mode.
-///
-/// # Safety
-///
-/// The semantics of this function require that SIZE_T equals the size of type T.
+/// Note that SIZE_T must be equal the size of type T in bytes.
 #[inline(never)]
 pub(crate) unsafe fn any_raw_internal<T, const SIZE_T: usize>() -> T {
     #[cfg(feature = "concrete_playback")]

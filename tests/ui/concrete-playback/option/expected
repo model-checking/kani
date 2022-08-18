@@ -5,10 +5,12 @@ Concrete playback
 #[test]
 fn kani_concrete_playback_harness
     let concrete_vals: Vec<Vec<u8>> = vec![
-        // 0
-        vec![0],
+        // 1
+        vec![1],
         // 101
-        vec![101]
+        vec![101],
+        // 0
+        vec![0]
     ];
     kani::concrete_playback_run(concrete_vals, harness);
 }
