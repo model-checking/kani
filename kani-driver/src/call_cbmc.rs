@@ -74,7 +74,7 @@ impl KaniSession {
         }
 
         if let Ok(VerificationStatus::Failure) = verification_result {
-            self.gen_and_add_exe_trace(&output_filename, harness);
+            self.gen_and_add_concrete_playback(&output_filename, harness);
         }
 
         verification_result
