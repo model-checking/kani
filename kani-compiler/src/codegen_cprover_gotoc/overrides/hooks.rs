@@ -402,24 +402,12 @@ impl<'tcx> GotocHook<'tcx> for ReplaceFunctionBody {
         let target = target.unwrap();
         let pe = unwrap_or_return_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&assign_to))
             .goto_expr;
-        if tcx.queries.get_replace_with_contracts() {
-            // function is being replace with contract
-            Stmt::block(
-                vec![
-                    pe.assign(Expr::c_true(), loc),
-                    Stmt::goto(tcx.current_fn().find_label(&target), loc),
-                ],
-                loc,
-            )
-        } else {
-            Stmt::block(
-                vec![
-                    pe.assign(Expr::c_false(), loc),
-                    Stmt::goto(tcx.current_fn().find_label(&target), loc),
-                ],
-                loc,
-            )
-        }
+        let value =
+            if tcx.queries.get_replace_with_contracts() { Expr::c_true() } else { Expr::c_false() };
+        Stmt::block(
+            vec![pe.assign(value, loc), Stmt::goto(tcx.current_fn().find_label(&target), loc)],
+            loc,
+        )
     }
 }
 
