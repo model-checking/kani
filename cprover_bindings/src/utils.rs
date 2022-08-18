@@ -7,10 +7,6 @@ use num::bigint::{BigInt, Sign};
 use num::Signed;
 use num_traits::Zero;
 
-/// Kani bug report URL, for asserts/errors
-pub const BUG_REPORT_URL: &str =
-    "https://github.com/model-checking/kani/issues/new?template=bug_report.md";
-
 /// The aggregate name used in CBMC for aggregates of type `n`.
 pub fn aggr_tag<T: Into<InternedString>>(n: T) -> InternedString {
     let n = n.into();

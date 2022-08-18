@@ -653,7 +653,7 @@ impl<'tcx> GotocCtx<'tcx> {
 macro_rules! unwrap_or_return_codegen_unimplemented {
     ($ctx:expr, $pp_result:expr) => {{
         if let Err(err) = $pp_result {
-            return $ctx.codegen_unimplemented(
+            return $ctx.codegen_unimplemented_expr(
                 err.operation.as_str(),
                 err.goto_type,
                 err.loc,
@@ -669,14 +669,11 @@ macro_rules! unwrap_or_return_codegen_unimplemented {
 macro_rules! unwrap_or_return_codegen_unimplemented_stmt {
     ($ctx:expr, $pp_result:expr) => {{
         if let Err(err) = $pp_result {
-            return $ctx
-                .codegen_unimplemented(
-                    err.operation.as_str(),
-                    err.goto_type,
-                    err.loc,
-                    err.bug_url.as_str(),
-                )
-                .as_stmt(err.loc);
+            return $ctx.codegen_unimplemented_stmt(
+                err.operation.as_str(),
+                err.loc,
+                err.bug_url.as_str(),
+            );
         }
         $pp_result.unwrap()
     }};
