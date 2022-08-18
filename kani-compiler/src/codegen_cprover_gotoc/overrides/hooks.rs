@@ -332,7 +332,7 @@ pub struct MemCmp;
 impl<'tcx> GotocHook<'tcx> for MemCmp {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
         let name = with_no_trimmed_paths!(tcx.def_path_str(instance.def_id()));
-        name == "core::slice::cmp::memcmp"
+        name == "core::slice::cmp::memcmp" || name == "std::slice::cmp::memcmp"
     }
 
     fn handle(
