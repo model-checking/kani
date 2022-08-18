@@ -11,7 +11,7 @@ To do this, run `git clone https://github.com/model-checking/kani.git`.
 Then, the user needs to add the following lines to their `Cargo.toml` file:
 ```toml
 [dev-dependencies]
-kani = { path = "{path_to_kani}/library/kani", features = ["exe_trace"] }
+kani = { path = "{path_to_kani}/library/kani", features = ["concrete_playback"] }
 ```
 
 ## Usage
