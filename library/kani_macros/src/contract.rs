@@ -55,7 +55,8 @@ pub fn extract_function_args(sig: &Signature) -> Vec<syn::Pat> {
         .collect()
 }
 
-/// Return all attributes that are not inlined during macro expansion (that is, not "[#kani::requires(...)]" or "[#kani::ensures(...)]").
+/// Return all attributes that are not inlined during macro expansion
+/// (that is, not "[#kani::requires(...)]" or "[#kani::ensures(...)]").
 pub fn extract_non_inlined_attributes(attributes: &Vec<Attribute>) -> TokenStream2 {
     attributes
         .iter()
