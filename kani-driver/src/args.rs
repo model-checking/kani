@@ -121,6 +121,9 @@ pub struct KaniArgs {
     /// Run Kani on all packages in the workspace.
     #[structopt(long)]
     pub workspace: bool,
+    /// Run Kani on the specified package.
+    #[structopt(long, short)]
+    pub package: Option<String>,
 
     /// Specify the value used for loop unwinding in CBMC
     #[structopt(long)]
