@@ -3,7 +3,7 @@
 use super::super::codegen::TypeExt;
 use crate::codegen_cprover_gotoc::codegen::typ::{is_pointer, pointee_type};
 use crate::codegen_cprover_gotoc::GotocCtx;
-use cbmc::goto_program::{Expr, ExprValue, Location, SymbolTable, Type};
+use cbmc::goto_program::{Expr, ExprValue, Location, Stmt, Symbol, SymbolTable, Type};
 use cbmc::{btree_string_map, InternedString};
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{Instance, Ty};
@@ -212,5 +212,20 @@ impl<'tcx> GotocCtx<'tcx> {
         let component = components.first().unwrap();
         assert_eq!(component.name().to_string().as_str(), "pointer");
         assert!(component.typ().is_pointer() || component.typ().is_rust_fat_ptr(&self.symbol_table))
+    }
+}
+
+impl<'tcx> GotocCtx<'tcx> {
+    /// Iterates over the list of local declarations of the current function and
+    /// returns the corresponding symbol from the symbol table, if the base name matches the target.
+    pub fn lookup_local_decl_by_name(&mut self, target: &str) -> Option<&Symbol> {
+        let mir = self.current_fn().mir();
+        let ldecls = &mir.local_decls;
+        let sym_name = ldecls
+            .indices()
+            .into_iter()
+            .find(|lc| self.codegen_var_base_name(&lc) == target)
+            .map_or_else(|| None, |lc| Some(self.codegen_var_name(&lc)))?;
+        self.symbol_table.lookup(sym_name)
     }
 }

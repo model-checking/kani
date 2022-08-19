@@ -7,6 +7,7 @@
 mod assert;
 mod block;
 mod foreign_function;
+mod contract;
 mod function;
 mod intrinsic;
 mod operand;
