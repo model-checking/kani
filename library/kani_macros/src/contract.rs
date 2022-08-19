@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// Utility functions for macro expansion of function contract clauses.
+//! Utility functions for macro expansion of function contract clauses.
 use proc_macro2::TokenStream as TokenStream2;
 use proc_macro2::{Ident, Span};
 use quote::quote;
