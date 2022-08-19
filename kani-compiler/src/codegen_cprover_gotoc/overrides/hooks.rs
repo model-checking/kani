@@ -245,6 +245,15 @@ impl<'tcx> GotocHook<'tcx> for Panic {
     }
 }
 
+/// Function to create a function argument from a string constant.
+fn farg_from_string<'tcx>(tcx: &mut GotocCtx<'tcx>, msg: &str) -> Expr {
+    let msg = Expr::string_constant(msg);
+    let struct_tag = tcx.ensure_struct(&"msg", Some("msg"), |_, _| {
+        vec![DatatypeComponent::field("msg", msg.typ().clone())]
+    });
+    Expr::struct_expr_from_values(struct_tag, vec![msg], &tcx.symbol_table)
+}
+
 /// Hook for handling postconditions in function contracts.
 struct Postcondition;
 
@@ -266,11 +275,7 @@ impl<'tcx> GotocHook<'tcx> for Postcondition {
         let loc = tcx.codegen_span_option(span);
 
         if tcx.queries.get_enforce_contracts() {
-            let msg = Expr::string_constant("Post-condition failed");
-            let struct_tag = tcx.ensure_struct(&"msg", Some("msg"), |_, _| {
-                vec![DatatypeComponent::field("msg", msg.typ().clone())]
-            });
-            fargs.push(Expr::struct_expr_from_values(struct_tag, vec![msg], &tcx.symbol_table));
+            fargs.push(farg_from_string(tcx, "Post-condition failed"));
             Assert.handle(tcx, instance, fargs, assign_to, target, span)
         } else if tcx.queries.get_replace_with_contracts() {
             Assume.handle(tcx, instance, fargs, assign_to, target, span)
@@ -304,11 +309,7 @@ impl<'tcx> GotocHook<'tcx> for Precondition {
         if tcx.queries.get_enforce_contracts() {
             Assume.handle(tcx, instance, fargs, assign_to, target, span)
         } else if tcx.queries.get_replace_with_contracts() {
-            let msg = Expr::string_constant("Pre-condition failed");
-            let struct_tag = tcx.ensure_struct(&"msg", Some("msg"), |_, _| {
-                vec![DatatypeComponent::field("msg", msg.typ().clone())]
-            });
-            fargs.push(Expr::struct_expr_from_values(struct_tag, vec![msg], &tcx.symbol_table));
+            fargs.push(farg_from_string(tcx, "Pre-condition failed"));
             Assert.handle(tcx, instance, fargs, assign_to, target, span)
         } else {
             // The function contract is being ignored in this case.
