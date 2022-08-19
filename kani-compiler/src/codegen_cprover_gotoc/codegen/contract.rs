@@ -86,9 +86,10 @@ impl<'tcx> GotocCtx<'tcx> {
                         Some(Spec::new(bv, expr, loc))
                     }
                     None => {
-                        self.tcx
-                            .sess
-                            .span_err(mir.span, "Symbol not supported inside modifies clauses.");
+                        self.tcx.sess.span_err(
+                            mir.span,
+                            format!("Symbol {} not supported inside modifies clauses.", basename),
+                        );
                         None
                     }
                 }
