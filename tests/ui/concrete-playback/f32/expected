@@ -1,0 +1,27 @@
+VERIFICATION:- FAILED
+
+Concrete playback
+```
+#[test]
+fn kani_concrete_playback_harness
+    let concrete_vals: Vec<Vec<u8>> = vec![
+        // -inf
+        vec![0, 0, 128, 255],
+        // -3.402823e+38
+        vec![255, 255, 127, 255],
+        // -101
+        vec![0, 0, 202, 194],
+        // -0
+        vec![0, 0, 0, 128],
+        // 1.175494e-38
+        vec![0, 0, 128, 0],
+        // 101
+        vec![0, 0, 202, 66],
+        // 3.402823e+38
+        vec![255, 255, 127, 127],
+        // +inf
+        vec![0, 0, 128, 127]
+    ];
+    kani::concrete_playback_run(concrete_vals, harness);
+}
+```
