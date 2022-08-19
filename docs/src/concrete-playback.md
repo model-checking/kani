@@ -2,20 +2,26 @@
 
 When the result of a certain check comes back as a `FAILURE`,
 Kani offers different options to help debug:
+* `--concrete-playback`. This _experimental_ feature generates a Rust unit test case that plays back a failing
+proof harness using a concrete counterexample.
 * `--visualize`. This feature generates an HTML text-based trace that
 enumerates the execution steps leading to the check failure.
-* `--concrete-playback`. This _experimental_ feature allows users to concretely play back
-their proof harness as a Rust unit test case.
+
 This document describes the concrete playback feature in more detail.
 
 ## Setup
 
-You need to have a fairly recent version of the Kani source code somewhere on your computer.
-To do this, run `git clone https://github.com/model-checking/kani.git`.
-Then, add the following lines to the `Cargo.toml` file for the crate you're trying to debug:
+The Kani library needs to be linked as a dev dependency to the crate you're trying to debug.
+To use the latest Kani library version, add the following lines to your `Cargo.toml` file:
 ```toml
 [dev-dependencies]
-kani = { path = "{path_to_kani}/library/kani", features = ["concrete_playback"] }
+kani = { git = "https://github.com/model-checking/kani", features = ["concrete_playback"] }
+```
+Otherwise, if you would like to use a specific version of the Kani library (v0.9+) and have already downloaded its source code files,
+add the following lines to your `Cargo.toml` file:
+```toml
+[dev-dependencies]
+kani = { path = "{path_to_kani_root}/library/kani", features = ["concrete_playback"] }
 ```
 
 ## Usage
