@@ -78,7 +78,7 @@ pub fn extract_non_inlined_attributes(attributes: &Vec<Attribute>) -> TokenStrea
             let name = kani_attr_name(a);
             match name.as_deref() {
                 Some("requires") | Some("ensures") => None,
-                _ => Some(quote! {#a})
+                _ => Some(quote! {#a}),
             }
         })
         .collect()
