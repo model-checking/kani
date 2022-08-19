@@ -86,10 +86,9 @@ impl<'tcx> GotocCtx<'tcx> {
                         Some(Spec::new(bv, expr, loc))
                     }
                     None => {
-                        self.tcx.sess.span_err(
-                            mir.span,
-                            "Global variables are not supported inside modifies clauses.",
-                        );
+                        self.tcx
+                            .sess
+                            .span_err(mir.span, "Symbol not supported inside modifies clauses.");
                         None
                     }
                 }
