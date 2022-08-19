@@ -38,6 +38,8 @@ You will then need to copy this unit test into the same module as your proof har
 * `inplace`: Kani will automatically copy the unit test into your source code.
 Before running this mode, you might find it helpful to have your existing code committed to `git`.
 That way, you can easily remove the unit test with `git revert`.
+Note that Kani will not copy the unit test into your source code if it detects
+that the exact same test already exists. 
 
 After the unit test is in your source code, you can run it with `cargo test`.
 To debug it, there are a couple of options:
@@ -47,6 +49,29 @@ that support UI elements like a `Run Test | Debug` button next to all unit tests
 To do this, you first run `cargo test {unit_test_func_name}`.
 The output from this will have a line in the beginning like `Running unittests {files} ({binary})`.
 You can then debug the binary with tools like `rust-gdb` or `lldb`.
+
+### Example
+
+Running `kani --harness proof_harness --enable-unstable --concrete-playback=print` on the following source file:
+```rust
+#[kani::proof]
+fn proof_harness() {
+    let a: u8 = kani::any();
+    assert!(a / 2 * 2 == a);
+}
+```
+yields this concrete playback Rust unit test:
+```rust
+#[test]
+fn kani_concrete_playback_proof_harness_16220658101615121791() {
+    let concrete_vals: Vec<Vec<u8>> = vec![
+        // 133
+        vec![133],
+    ];
+    kani::concrete_playback_run(concrete_vals, proof_harness);
+}
+```
+Here, `133` is the concrete value that, when substituted for `a`, causes the assertion to fail.
 
 ### Common issues
 
