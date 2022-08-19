@@ -25,7 +25,7 @@ pub fn convert_to_closure(item: &ItemFn) -> (Ident, TokenStream2) {
     (ident, inner_fn)
 }
 
-/// Converts all "[#kani::ensures(...)]" attributes to "#kani::postcondition(...)" statement tokens.
+/// Converts all "#[kani::ensures(...)]" attributes to "kani::postcondition(...)" statement tokens.
 pub fn extract_ensures_as_postconditions(attributes: &Vec<Attribute>) -> TokenStream2 {
     attributes
         .iter()
@@ -69,7 +69,7 @@ pub fn extract_non_inlined_attributes(attributes: &Vec<Attribute>) -> TokenStrea
         .collect()
 }
 
-/// Converts all "[#kani::requires(...)]" attributes to "#kani::precondition(...)" statement tokens.
+/// Converts all "#[kani::requires(...)]" attributes to "kani::precondition(...)" statement tokens.
 pub fn extract_requires_as_preconditions(attributes: &Vec<Attribute>) -> TokenStream2 {
     attributes
         .iter()
@@ -88,7 +88,7 @@ pub fn extract_requires_as_preconditions(attributes: &Vec<Attribute>) -> TokenSt
         .collect()
 }
 
-/// Splits a vector of attributes into a vector of "[#kani::requires(...)]" attributes only and the rest.
+/// Splits a vector of attributes into a vector of "#[kani::requires(...)]" attributes only and the rest.
 pub fn handle_modifies_attributes(attributes: &Vec<Attribute>) -> (TokenStream2, TokenStream2) {
     let modifies_attrs = attributes
         .iter()
