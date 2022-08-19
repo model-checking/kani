@@ -43,7 +43,9 @@ pub struct KaniArgs {
     /// Generate visualizer report to <target-dir>/report/html/index.html
     #[structopt(long)]
     pub visualize: bool,
-    /// Generate concrete playback unit test and either 1) just print it to stdout or 2) add it in-place to the source code.
+    /// Generate concrete playback unit test.
+    /// If value supplied is 'print', Kani prints the unit test to stdout.
+    /// If value supplied is 'inplace', Kani automatically adds the unit test to your source code.
     /// This option does not work with `--output-format old`.
     #[structopt(
         long,
