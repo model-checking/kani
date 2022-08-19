@@ -57,7 +57,9 @@ Running `kani --harness proof_harness --enable-unstable --concrete-playback=prin
 #[kani::proof]
 fn proof_harness() {
     let a: u8 = kani::any();
-    assert!(a / 2 * 2 == a);
+    let b: u16 = kani::any();
+    assert!(a / 2 * 2 == a &&
+            b / 2 * 2 == b);
 }
 ```
 yields this concrete playback Rust unit test:
@@ -67,11 +69,15 @@ fn kani_concrete_playback_proof_harness_16220658101615121791() {
     let concrete_vals: Vec<Vec<u8>> = vec![
         // 133
         vec![133],
+        // 35207
+        vec![135, 137],
     ];
     kani::concrete_playback_run(concrete_vals, proof_harness);
 }
 ```
-Here, `133` is the concrete value that, when substituted for `a`, causes the assertion to fail.
+Here, `133` and `35207` are the concrete values that, when substituted for `a` and `b`,
+cause an assertion failure.
+`vec![135, 137]` is the byte array representation of `35207`.
 
 ### Common issues
 
