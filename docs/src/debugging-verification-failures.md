@@ -89,7 +89,9 @@ To fix this, remove `#[cfg(kani)]` from those paths.
 
 This feature is experimental and is therefore subject to change.
 If you have ideas for improving the user experience of this feature,
-please add them to [this github issue](https://github.com/model-checking/kani/issues/1536).
+please add them to [this GitHub issue](https://github.com/model-checking/kani/issues/1536).
+We are tracking the existing feature requests in
+[this GitHub milestone](https://github.com/model-checking/kani/milestone/10).
 
 ### Limitations 
 
