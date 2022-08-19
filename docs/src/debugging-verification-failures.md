@@ -29,7 +29,7 @@ kani = { path = "{path_to_kani_root}/library/kani", features = ["concrete_playba
 
 ### Usage
 
-In order to enable this feature, run Kani with the `--concrete-playback=[print|inplace]` flag.
+In order to enable this feature, run Kani with the `--enable-unstable --concrete-playback=[print|inplace]` flag.
 After getting a verification failure, Kani will generate a Rust unit test case that plays back a failing
 proof harness with a concrete counterexample.
 The concrete playback modes mean the following:
