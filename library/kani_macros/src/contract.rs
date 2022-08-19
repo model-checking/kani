@@ -88,7 +88,7 @@ pub fn extract_requires_as_preconditions(attributes: &Vec<Attribute>) -> TokenSt
         .collect()
 }
 
-/// Splits a vector of attributes into a vector of "#[kani::requires(...)]" attributes only and the rest.
+/// Splits a vector of attributes into a vector of "#[kani::modifies(...)]" attributes only and the rest.
 pub fn handle_modifies_attributes(attributes: &Vec<Attribute>) -> (TokenStream2, TokenStream2) {
     let modifies_attrs = attributes
         .iter()
