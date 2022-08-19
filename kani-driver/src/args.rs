@@ -48,7 +48,6 @@ pub struct KaniArgs {
     #[structopt(
         long,
         requires("enable-unstable"),
-        requires("harness"),
         conflicts_with_all(&["visualize", "dry-run"]),
         possible_values = &ConcretePlaybackMode::variants(),
         case_insensitive = true,

@@ -316,8 +316,8 @@ impl<'tcx> GotocCtx<'tcx> {
             pretty_name,
             mangled_name,
             original_file: loc.filename().unwrap(),
-            original_start_line: loc.start_line().unwrap().to_string(),
-            original_end_line: loc.end_line().unwrap().to_string(),
+            original_start_line: loc.start_line().unwrap() as usize,
+            original_end_line: loc.end_line().unwrap() as usize,
             unwind_value: None,
         }
     }

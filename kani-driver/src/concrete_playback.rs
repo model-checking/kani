@@ -51,11 +51,7 @@ impl KaniSession {
                     &concrete_playback.unit_test_name
                 );
             }
-            let proof_harness_end_line: usize = harness
-                .original_end_line
-                .parse()
-                .expect(&format!("Invalid proof harness end line: {}", harness.original_end_line));
-            self.modify_src_code(&harness.original_file, proof_harness_end_line, &concrete_playback)
+            self.modify_src_code(&harness.original_file, harness.original_end_line, &concrete_playback)
                 .expect("Failed to modify source code");
         }
     }
