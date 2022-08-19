@@ -5,7 +5,7 @@
 use proc_macro2::TokenStream as TokenStream2;
 use proc_macro2::{Ident, Span};
 use quote::quote;
-use syn::{Attribute, Expr, FnArg, ItemFn, Signature};
+use syn::{Attribute, Expr, FnArg, ItemFn, Path, Signature};
 use uuid::Uuid;
 
 /// Given a function `foo`, this function creates a closure with name
@@ -25,14 +25,24 @@ pub fn convert_to_closure(item: &ItemFn) -> (Ident, TokenStream2) {
     (ident, inner_fn)
 }
 
+/// If the attribute is named `kani::name`, this extracts `name`
+fn kani_attr_name(attr: &Attribute) -> Option<String> {
+    let segments = &attr.path.segments;
+    if segments.len() == 2 && segments[0].ident.to_string() == "kani" {
+        Some(segments[1].ident.to_string())
+    } else {
+        None
+    }
+}
+
 /// Converts all "#[kani::ensures(...)]" attributes to "kani::postcondition(...)" statement tokens.
 pub fn extract_ensures_as_postconditions(attributes: &Vec<Attribute>) -> TokenStream2 {
     attributes
         .iter()
         .filter_map(|a| {
-            let name = a.path.segments.last().unwrap().ident.to_string();
-            match name.as_str() {
-                "ensures" => {
+            let name = kani_attr_name(a);
+            match name.as_deref() {
+                Some("ensures") => {
                     let arg = a
                         .parse_args::<Expr>()
                         .expect("An argument expected inside the ensures clause");
@@ -65,12 +75,11 @@ pub fn extract_non_inlined_attributes(attributes: &Vec<Attribute>) -> TokenStrea
     attributes
         .iter()
         .filter_map(|a| {
-            let segments = &a.path.segments;
-            let is_inlined = segments.len() == 2
-                && (segments[0].ident.to_string() == "kani")
-                && (segments[1].ident.to_string() == "ensures"
-                    || segments[1].ident.to_string() == "requires");
-            if is_inlined { None } else { Some(quote! {#a}) }
+            let name = kani_attr_name(a);
+            match name.as_deref() {
+                Some("requires") | Some("ensures") => None,
+                _ => Some(quote! {#a})
+            }
         })
         .collect()
 }
@@ -80,9 +89,9 @@ pub fn extract_requires_as_preconditions(attributes: &Vec<Attribute>) -> TokenSt
     attributes
         .iter()
         .filter_map(|a| {
-            let name = a.path.segments.last().unwrap().ident.to_string();
-            match name.as_str() {
-                "requires" => {
+            let name = kani_attr_name(a);
+            match name.as_deref() {
+                Some("requires") => {
                     let arg = a
                         .parse_args::<Expr>()
                         .expect("An argument expected inside the requires clause");
@@ -99,9 +108,9 @@ pub fn handle_modifies_attributes(attributes: &Vec<Attribute>) -> (TokenStream2,
     let modifies_attrs = attributes
         .iter()
         .filter_map(|a| {
-            let name = a.path.segments.last().unwrap().ident.to_string();
-            match name.as_str() {
-                "modifies" => Some(quote! {#a}),
+            let name = kani_attr_name(a);
+            match name.as_deref() {
+                Some("modifies") => Some(quote! {#a}),
                 _ => None,
             }
         })
@@ -109,9 +118,9 @@ pub fn handle_modifies_attributes(attributes: &Vec<Attribute>) -> (TokenStream2,
     let non_modifies_attrs = attributes
         .iter()
         .filter_map(|a| {
-            let name = a.path.segments.last().unwrap().ident.to_string();
-            match name.as_str() {
-                "modifies" => None,
+            let name = kani_attr_name(a);
+            match name.as_deref() {
+                Some("modifies") => None,
                 _ => Some(quote! {#a}),
             }
         })
