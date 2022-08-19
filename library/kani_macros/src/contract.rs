@@ -65,11 +65,12 @@ pub fn extract_non_inlined_attributes(attributes: &Vec<Attribute>) -> TokenStrea
     attributes
         .iter()
         .filter_map(|a| {
-            let name = a.path.segments.last().unwrap().ident.to_string();
-            match name.as_str() {
-                "ensures" | "requires" => None,
-                _ => Some(quote! {#a}),
-            }
+            let segments = &a.path.segments;
+            let is_inlined = segments.len() == 2
+                && (segments[0].ident.to_string() == "kani")
+                && (segments[1].ident.to_string() == "ensures"
+                    || segments[1].ident.to_string() == "requires");
+            if is_inlined { None } else { Some(quote! {#a}) }
         })
         .collect()
 }
