@@ -44,19 +44,23 @@ pub fn extract_ensures_as_postconditions(attributes: &Vec<Attribute>) -> TokenSt
         .collect()
 }
 
-/// Returns the list of function arguments from the function signature.
+/// Returns the list of function arguments from the function signature
+///     for use in a function or method call.
 pub fn extract_function_args(sig: &Signature) -> Vec<syn::Pat> {
     sig.inputs
         .iter()
         .filter_map(|x| match x {
             FnArg::Typed(syn::PatType { pat, .. }) => Some(*pat.clone()),
-            FnArg::Receiver(syn::Receiver { .. }) => None, // Ignore arguments like "self", etc.
+            // Ignore the "self" argument of an associated method while calling the method.
+            // For example, `vec![x, y]` is extracted from `fn foo(self, x: i32, y: i32)`
+            //   for use in the method call - `foo(x, y);`
+            FnArg::Receiver(syn::Receiver { .. }) => None,
         })
         .collect()
 }
 
 /// Return all attributes that are not inlined during macro expansion
-/// (that is, not "[#kani::requires(...)]" or "[#kani::ensures(...)]").
+/// (that is, not "#[kani::requires(...)]" or "#[kani::ensures(...)]").
 pub fn extract_non_inlined_attributes(attributes: &Vec<Attribute>) -> TokenStream2 {
     attributes
         .iter()
