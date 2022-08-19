@@ -1,4 +1,4 @@
-# Debugging verification failures with concrete playback
+# Debugging verification failures
 
 When the result of a certain check comes back as a `FAILURE`,
 Kani offers different options to help debug:
@@ -7,9 +7,11 @@ proof harness using a concrete counterexample.
 * `--visualize`. This feature generates an HTML text-based trace that
 enumerates the execution steps leading to the check failure.
 
-This document describes the concrete playback feature in more detail.
+## Concrete playback
 
-## Setup
+This section describes the concrete playback feature in more detail.
+
+### Setup
 
 The Kani library needs to be linked as a dev dependency to the crate you're trying to debug.
 To use the latest Kani library version, add the following lines to your `Cargo.toml` file:
@@ -24,7 +26,7 @@ add the following lines to your `Cargo.toml` file:
 kani = { path = "{path_to_kani_root}/library/kani", features = ["concrete_playback"] }
 ```
 
-## Usage
+### Usage
 
 Run Kani with the `--concrete-playback=JustPrint` flag.
 After verifying the proof harness checks, Kani will extract concrete values for the `kani::any()` variables
@@ -44,19 +46,19 @@ To do this, you first run `cargo test {unit_test_func_name}`.
 The output from this will have a line in the beginning like `Running unittests {files} ({binary})`.
 You can then debug the binary with tools like `rust-gdb` or `lldb`.
 
-## Common issues
+### Common issues
 
 `error[E0425]: cannot find function x in this scope`:
 this is usually caused by having `#[cfg(kani)]` somewhere in the control flow path of the user's proof harness.
 To fix this, remove `#[cfg(kani)]` from those paths.
 
-## Request for comments
+### Request for comments
 
 This feature is experimental and is therefore subject to change.
 If you have ideas for improving the user experience of this feature,
 please add them to [this github issue](https://github.com/model-checking/kani/issues/1536).
 
-## Limitations 
+### Limitations 
 
 1. This feature does not generate unit tests for failing non-panic checks (e.g., UB checks).
 This is because checks would not trigger runtime errors during concrete playback.
