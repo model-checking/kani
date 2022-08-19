@@ -151,7 +151,10 @@ impl KaniSession {
     }
 }
 
-/// Sort harnesses by original_file and then by original_start_line, with greater start line coming earlier.
+/// Sort harnesses such that for two harnesses in the same file, it is guaranteed that later
+/// appearing harnesses get processed earlier.
+/// This is necessary for the concrete playback feature (with in-place unit test modification)
+/// because it guarantees that injected unit tests will not change the location of to-be-processed harnesses.
 pub fn sort_harnesses(harnesses: &mut [HarnessMetadata]) {
     harnesses.sort_unstable_by(|harness1, harness2| {
         harness1
