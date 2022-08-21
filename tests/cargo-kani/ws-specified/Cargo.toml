@@ -10,7 +10,8 @@ edition = "2021"
 members = [
   "libcrate",
   "bincrate",
+  "subcrate3",
 ]
 
 [package.metadata.kani.flags]
-package = "libcrate"
+package = ["libcrate", "bincrate"]
