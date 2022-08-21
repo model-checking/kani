@@ -52,7 +52,7 @@ impl KaniSession {
             args.push("build".into());
         }
 
-        if let Some(package) = self.args.package.as_ref() {
+        for package in self.args.package.iter() {
             args.push("--package".into());
             args.push(package.into());
         }
