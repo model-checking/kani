@@ -1,7 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! See the companion 'bincrate' for a comment about this test
+//! One of 2 sub packages used to test specifying packages with -p
+//! flag.
 
 #[kani::proof]
 fn check_libcrate_proof() {
