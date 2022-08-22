@@ -33,8 +33,8 @@ License: BSD-3-Clause
 
 ## Notable Rust crate dependencies
 
-instant: https://github.com/sebcrozet/instant
-License: BSD-3-Clause
-
 Inflector: https://github.com/whatisinternet/inflector
 License: BSD-2-Clause
+
+unicode-ident: https://github.com/dtolnay/unicode-ident
+License: (MIT OR Apache-2.0) AND Unicode-DFS-2016
