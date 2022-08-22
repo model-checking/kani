@@ -6,13 +6,16 @@ integrate feedback from developers and users on future changes to Kani, we decid
 
 ## When to create an RFC
 
-As a rule of thumb you should create an RFC if you are making changes that impact the user experience. New 
-APIs, new features, as well as depreciation, should follow an RFC process. We also ask for substantial architectural 
-changes to be made via RFC.
+You should create an RFC in one of two cases:
 
-Bugs and smaller improvements to existing features do not require an RFC. If you are in doubt, feel free to create 
-a [feature request](https://github.com/model-checking/kani/issues/new?assignees=&labels=&template=feature_request.md)
-and discuss the next steps in the new issue.
+1. The change you are proposing would be a "one way door": e.g. a change to the public API, a new feature that would be difficult to modify once released, deprecating a feature, etc.
+2. The change you are making has a significant design component, and would benefit from a design review.
+
+Bugs and smaller improvements to existing features do not require an RFC.
+If you are in doubt, feel free to create  a [feature request](https://github.com/model-checking/kani/issues/new?assignees=&labels=&template=feature_request.md) and discuss the next steps in the new issue.
+Your PR reviewer may also request an RFC if your change appears to fall into category 1 or 2.
+
+You do not necessarily need to create an RFC immediately. It is our experience that it is often best to write some "proof of concept" code to test out possible ideas before writing the formal RFC.```
 
 ## The RFC process
 
