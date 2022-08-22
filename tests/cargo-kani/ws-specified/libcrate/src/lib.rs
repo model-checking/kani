@@ -6,5 +6,5 @@
 
 #[kani::proof]
 fn check_libcrate_proof() {
-    assert!(1 == 1);
+    assert!(1 == 2);
 }
