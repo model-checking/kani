@@ -5,6 +5,6 @@
 //! flag.
 
 #[kani::proof]
-fn check_libcrate_proof() {
+fn check_subcrate3_proof() {
     assert!(1 == 1);
 }
