@@ -8,7 +8,6 @@
 
 extern crate kani;
 use kani::slice::{any_slice, AnySlice};
-use kani::Invariant;
 
 #[kani::proof]
 fn check_any_slice_valid() {

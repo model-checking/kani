@@ -1328,7 +1328,7 @@ impl Expr {
 
     /// `self == 0`
     pub fn is_zero(self) -> Self {
-        assert!(self.typ.is_numeric());
+        assert!(self.typ.is_numeric() || self.typ.is_pointer());
         let typ = self.typ.clone();
         self.eq(typ.zero())
     }

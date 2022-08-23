@@ -187,7 +187,7 @@ impl Stmt {
             Location::create_location_with_property(message, property_name, loc);
 
         // Chose InternedString to seperate out codegen from the cprover_bindings logic
-        let property_class = property_name.to_string().intern();
+        let property_class = property_name.intern();
         let msg = message.into();
 
         stmt!(Assert { cond, property_class, msg }, loc_with_property)
@@ -195,25 +195,6 @@ impl Stmt {
 
     pub fn assert_false(property_name: &str, message: &str, loc: Location) -> Self {
         Stmt::assert(Expr::bool_false(), property_name, message, loc)
-    }
-
-    /// A __CPROVER_assert to sanity check expected components of code
-    /// generation. If users see these assertions fail, something in the
-    /// translation to Gotoc has gone wrong, and we want them to file an issue.
-    pub fn assert_sanity_check(expect_true: Expr, message: &str, url: &str, loc: Location) -> Stmt {
-        let assert_msg =
-            format!("Code generation sanity check: {}. Please report failures:\n{}", message, url);
-
-        Stmt::block(
-            vec![
-                // Assert our expected true expression.
-                Stmt::assert(expect_true.clone(), "sanity_check", &assert_msg, loc),
-                // If expect_true is false, assume false to block any further
-                // exploration of this path.
-                Stmt::assume(expect_true, loc),
-            ],
-            loc,
-        )
     }
 
     /// `__CPROVER_assume(cond);`

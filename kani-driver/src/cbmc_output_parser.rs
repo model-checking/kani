@@ -354,8 +354,8 @@ struct Parser<'a, 'b> {
     pub input_so_far: String,
     pub buffer: &'a mut BufReader<&'b mut ChildStdout>,
     /// Buffered writer over the CBMC output file.
-    /// This is needed for old parsers (e.g., like the one in the executable trace code) that require the actual CBMC output file.
-    /// TODO: This can be removed once we overhaul the executable trace parser.
+    /// This is needed for old parsers (e.g., like the one in the concrete playback code) that require the actual CBMC output file.
+    /// TODO: This can be removed once we overhaul the concrete playback parser.
     /// See this tracking issue: <https://github.com/model-checking/kani/issues/1477>.
     cbmc_out_buf_writer: Option<BufWriter<File>>,
 }

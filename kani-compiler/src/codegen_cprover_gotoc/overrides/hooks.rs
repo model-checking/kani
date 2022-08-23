@@ -1,9 +1,9 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-//! this module contains various codegen hooks for functions.
-//! e.g.
-//! functions start with \[__nondet\] is silently replaced by nondeterministic values, and
-//! \[begin_panic\] is replaced by \[assert(false)\], etc.
+
+//! This module contains various codegen hooks for functions that require special handling.
+//!
+//! E.g.: Functions in the Kani library that generate assumptions or symbolic variables.
 //!
 //! It would be too nasty if we spread around these sort of undocumented hooks in place, so
 //! this module addresses this issue.
@@ -19,7 +19,7 @@ use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{Instance, TyCtxt};
 use rustc_span::Span;
 use std::rc::Rc;
-use tracing::{debug, warn};
+use tracing::debug;
 
 pub trait GotocHook<'tcx> {
     /// if the hook applies, it means the codegen would do something special to it
@@ -50,14 +50,6 @@ fn matches_function(tcx: TyCtxt, instance: Instance, attr_name: &str) -> bool {
 struct ExpectFail;
 impl<'tcx> GotocHook<'tcx> for ExpectFail {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-        // Deprecate old __VERIFIER notation that doesn't respect rust naming conventions.
-        // Complete removal is tracked here: https://github.com/model-checking/kani/issues/599
-        if utils::instance_name_starts_with(tcx, instance, "__VERIFIER_expect_fail") {
-            warn!(
-                "The function __VERIFIER_expect_fail is deprecated. Use kani::expect_fail instead"
-            );
-            return true;
-        }
         matches_function(tcx, instance, "KaniExpectFail")
     }
 
@@ -78,12 +70,10 @@ impl<'tcx> GotocHook<'tcx> for ExpectFail {
         let msg =
             format!("EXPECTED FAIL: {}", utils::extract_const_message(&fargs.remove(0)).unwrap());
 
-        let property_class = PropertyClass::ExpectFail;
-
         let loc = tcx.codegen_span_option(span);
         Stmt::block(
             vec![
-                tcx.codegen_assert(cond, property_class, &msg, loc),
+                tcx.codegen_assert(cond, PropertyClass::ExpectFail, &msg, loc),
                 Stmt::goto(tcx.current_fn().find_label(&target), loc),
             ],
             loc,
@@ -94,12 +84,6 @@ impl<'tcx> GotocHook<'tcx> for ExpectFail {
 struct Assume;
 impl<'tcx> GotocHook<'tcx> for Assume {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-        // Deprecate old __VERIFIER notation that doesn't respect rust naming conventions.
-        // Complete removal is tracked here: https://github.com/model-checking/kani/issues/599
-        if utils::instance_name_starts_with(tcx, instance, "__VERIFIER_assume") {
-            warn!("The function __VERIFIER_assume is deprecated. Use kani::assume instead");
-            return true;
-        }
         matches_function(tcx, instance, "KaniAssume")
     }
 
@@ -118,7 +102,10 @@ impl<'tcx> GotocHook<'tcx> for Assume {
         let loc = tcx.codegen_span_option(span);
 
         Stmt::block(
-            vec![Stmt::assume(cond, loc), Stmt::goto(tcx.current_fn().find_label(&target), loc)],
+            vec![
+                tcx.codegen_assume(cond, loc),
+                Stmt::goto(tcx.current_fn().find_label(&target), loc),
+            ],
             loc,
         )
     }
@@ -163,13 +150,13 @@ impl<'tcx> GotocHook<'tcx> for Assert {
 
         // Since `cond` might have side effects, assign it to a temporary
         // variable so that it's evaluated once, then assert and assume it
+        // TODO: I don't think `cond` can have side effects, this is MIR, it's going to be temps
         let (tmp, decl) = tcx.decl_temp_variable(cond.typ().clone(), Some(cond), caller_loc);
         Stmt::block(
             vec![
                 reach_stmt,
                 decl,
-                tcx.codegen_assert(tmp.clone(), PropertyClass::Assertion, &msg, caller_loc),
-                Stmt::assume(tmp, caller_loc),
+                tcx.codegen_assert_assume(tmp, PropertyClass::Assertion, &msg, caller_loc),
                 Stmt::goto(tcx.current_fn().find_label(&target), caller_loc),
             ],
             caller_loc,
@@ -181,12 +168,6 @@ struct Nondet;
 
 impl<'tcx> GotocHook<'tcx> for Nondet {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-        // Deprecate old __nondet since it doesn't match rust naming conventions.
-        // Complete removal is tracked here: https://github.com/model-checking/kani/issues/599
-        if utils::instance_name_starts_with(tcx, instance, "__nondet") {
-            warn!("The function __nondet is deprecated. Use kani::any instead");
-            return true;
-        }
         matches_function(tcx, instance, "KaniAnyRaw")
     }
 
@@ -317,6 +298,72 @@ impl<'tcx> GotocHook<'tcx> for SliceFromRawPart {
     }
 }
 
+/// This hook intercepts calls to `memcmp` and skips CBMC's pointer checks if the number of bytes to be compared is zero.
+/// See issue <https://github.com/model-checking/kani/issues/1489>
+///
+/// This compiles `memcmp(first, second, count)` to:
+/// ```c
+/// count_var = count;
+/// first_var = first;
+/// second_var = second;
+/// count_var == 0 && first_var != NULL && second_var != NULL ? 0 : memcmp(first_var, second_var, count_var)
+/// ```
+pub struct MemCmp;
+
+impl<'tcx> GotocHook<'tcx> for MemCmp {
+    fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
+        let name = with_no_trimmed_paths!(tcx.def_path_str(instance.def_id()));
+        name == "core::slice::cmp::memcmp" || name == "std::slice::cmp::memcmp"
+    }
+
+    fn handle(
+        &self,
+        tcx: &mut GotocCtx<'tcx>,
+        instance: Instance<'tcx>,
+        mut fargs: Vec<Expr>,
+        assign_to: Place<'tcx>,
+        target: Option<BasicBlock>,
+        span: Option<Span>,
+    ) -> Stmt {
+        let loc = tcx.codegen_span_option(span);
+        let target = target.unwrap();
+        let first = fargs.remove(0);
+        let second = fargs.remove(0);
+        let count = fargs.remove(0);
+        let (count_var, count_decl) = tcx.decl_temp_variable(count.typ().clone(), Some(count), loc);
+        let (first_var, first_decl) = tcx.decl_temp_variable(first.typ().clone(), Some(first), loc);
+        let (second_var, second_decl) =
+            tcx.decl_temp_variable(second.typ().clone(), Some(second), loc);
+        let is_count_zero = count_var.clone().is_zero();
+        // We have to ensure that the pointers are valid even if we're comparing zero bytes.
+        // According to Rust's current definition (see https://github.com/model-checking/kani/issues/1489),
+        // this means they have to be non-null and aligned.
+        // But alignment is automatically satisfied because `memcmp` takes `*const u8` pointers.
+        let is_first_ok = first_var.clone().is_nonnull();
+        let is_second_ok = second_var.clone().is_nonnull();
+        let should_skip_pointer_checks = is_count_zero.and(is_first_ok).and(is_second_ok);
+        let place_expr =
+            unwrap_or_return_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&assign_to))
+                .goto_expr;
+        let rhs = should_skip_pointer_checks.ternary(
+            Expr::int_constant(0, place_expr.typ().clone()), // zero bytes are always equal (as long as pointers are nonnull and aligned)
+            tcx.codegen_func_expr(instance, span.as_ref())
+                .call(vec![first_var, second_var, count_var]),
+        );
+        let code = place_expr.assign(rhs, loc).with_location(loc);
+        Stmt::block(
+            vec![
+                count_decl,
+                first_decl,
+                second_decl,
+                code,
+                Stmt::goto(tcx.current_fn().find_label(&target), loc),
+            ],
+            loc,
+        )
+    }
+}
+
 pub fn fn_hooks<'tcx>() -> GotocHooks<'tcx> {
     GotocHooks {
         hooks: vec![
@@ -327,6 +374,7 @@ pub fn fn_hooks<'tcx>() -> GotocHooks<'tcx> {
             Rc::new(Nondet),
             Rc::new(RustAlloc),
             Rc::new(SliceFromRawPart),
+            Rc::new(MemCmp),
         ],
     }
 }

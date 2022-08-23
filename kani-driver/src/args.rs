@@ -43,18 +43,19 @@ pub struct KaniArgs {
     /// Generate visualizer report to <target-dir>/report/html/index.html
     #[structopt(long)]
     pub visualize: bool,
-    /// Generate executable trace test case and print it to stdout.
+    /// Generate concrete playback unit test.
+    /// If value supplied is 'print', Kani prints the unit test to stdout.
+    /// If value supplied is 'inplace', Kani automatically adds the unit test to your source code.
     /// This option does not work with `--output-format old`.
     #[structopt(
         long,
         requires("enable-unstable"),
         requires("harness"),
         conflicts_with_all(&["visualize", "dry-run"]),
+        possible_values = &ConcretePlaybackMode::variants(),
+        case_insensitive = true,
     )]
-    pub gen_exe_trace: bool,
-    /// Additionally add executable trace test case to the source code
-    #[structopt(long, requires("gen-exe-trace"))]
-    pub add_exe_trace_to_src: bool,
+    pub concrete_playback: Option<ConcretePlaybackMode>,
     /// Keep temporary files generated throughout Kani process
     #[structopt(long, hidden_short_help(true))]
     pub keep_temps: bool,
@@ -114,6 +115,15 @@ pub struct KaniArgs {
     /// Kani will only compile the crate. No verification will be performed
     #[structopt(long, hidden_short_help(true))]
     pub only_codegen: bool,
+    /// Compiles Kani harnesses in all features of all packages selected on the command-line.
+    #[structopt(long)]
+    pub all_features: bool,
+    /// Run Kani on all packages in the workspace.
+    #[structopt(long)]
+    pub workspace: bool,
+    /// Run Kani on the specified packages.
+    #[structopt(long, short)]
+    pub package: Vec<String>,
 
     /// Specify the value used for loop unwinding in CBMC
     #[structopt(long)]
@@ -197,6 +207,14 @@ impl KaniArgs {
         } else {
             Some(DEFAULT_OBJECT_BITS)
         }
+    }
+}
+
+arg_enum! {
+    #[derive(Debug, PartialEq, Eq)]
+    pub enum ConcretePlaybackMode {
+        Print,
+        InPlace,
     }
 }
 

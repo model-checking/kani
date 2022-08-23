@@ -128,7 +128,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         // TODO: Handle cases with other types such as tuples and larger integers.
                         let loc = self.codegen_span_option(span.cloned());
                         let typ = self.codegen_ty(lit_ty);
-                        return self.codegen_unimplemented(
+                        return self.codegen_unimplemented_expr(
                             "Constant slice value with 2+ bytes",
                             typ,
                             loc,
@@ -608,12 +608,16 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// fetch the niche value (as both left and right value)
     pub fn codegen_get_niche(&self, v: Expr, offset: Size, niche_ty: Type) -> Expr {
-        v // t: T
-            .address_of() // &t: T*
-            .cast_to(Type::unsigned_int(8).to_pointer()) // (u8 *)&t: u8 *
-            .plus(Expr::int_constant(offset.bytes_usize(), Type::size_t())) // ((u8 *)&t) + offset: u8 *
-            .cast_to(niche_ty.to_pointer()) // (N *)(((u8 *)&t) + offset): N *
-            .dereference() // *(N *)(((u8 *)&t) + offset): N
+        if offset == Size::ZERO {
+            v.reinterpret_cast(niche_ty)
+        } else {
+            v // t: T
+                .address_of() // &t: T*
+                .cast_to(Type::unsigned_int(8).to_pointer()) // (u8 *)&t: u8 *
+                .plus(Expr::int_constant(offset.bytes(), Type::size_t())) // ((u8 *)&t) + offset: u8 *
+                .cast_to(niche_ty.to_pointer()) // (N *)(((u8 *)&t) + offset): N *
+                .dereference() // *(N *)(((u8 *)&t) + offset): N
+        }
     }
 
     /// Ensure that the given instance is in the symbol table, returning the symbol.
