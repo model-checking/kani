@@ -44,6 +44,13 @@ impl Irep {
         }
     }
 
+    /// Adds a `comment` sub to the irep.
+    /// Note that there might be comments both on the irep itself and
+    /// inside the location sub of the irep.
+    pub fn with_comment<T: Into<InternedString>>(self, c: T) -> Self {
+        self.with_named_sub(IrepId::Comment, Irep::just_string_id(c))
+    }
+
     pub fn with_named_sub(mut self, key: IrepId, value: Irep) -> Self {
         if !value.is_nil() {
             self.named_sub.insert(key, value);
