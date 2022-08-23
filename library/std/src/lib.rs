@@ -40,7 +40,7 @@ macro_rules! assert {
     ($cond:expr $(,)?) => {
         kani::assert($cond, concat!("assertion failed: ", stringify!($cond)));
     };
-    ($cond:expr, $($arg:tt)+) => {
+    ($cond:expr, $($arg:tt)+) => {{
         kani::assert($cond, concat!(stringify!($($arg)+)));
         // Process the arguments of the assert inside an unreachable block. This
         // is to make sure errors in the arguments (e.g. an unknown variable or
@@ -56,7 +56,7 @@ macro_rules! assert {
         if false {
             let _ = format_args!($($arg)+);
         }
-    };
+    }};
 }
 
 // Override the assert_eq and assert_ne macros to
