@@ -48,6 +48,13 @@ members = [
   "tools/bookrunner/librustdoc",
 ]
 
+# This indicates what package to e.g. build with 'cargo build' without --workspace
+default-members = [
+  ".",
+  "kani-driver",
+  "kani-compiler",
+]
+
 exclude = [
   "build",
   "target",
