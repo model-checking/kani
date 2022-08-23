@@ -13,6 +13,10 @@ then
   WRAPPER="env time -v"
 elif [[ $PLATFORM == "Darwin i386" ]]
 then
+  # Temporarily disabled (in CI) to keeps CI times down
+  # See https://github.com/model-checking/kani/issues/1578
+  exit 0
+
   TARGET="x86_64-apple-darwin"
   # mac 'time' doesn't have -v
   WRAPPER=""
