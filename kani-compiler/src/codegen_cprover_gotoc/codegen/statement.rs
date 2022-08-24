@@ -58,7 +58,9 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             StatementKind::Deinit(place) => {
                 // From rustc doc: "This writes `uninit` bytes to the entire place."
-                // Thus, we assign nondet() value to the entire place.
+                // Our model of GotoC has a similar statement, which is later lowered
+                // to assigning a Nondet in CBMC, with a comment specifying that it
+                // corresponds to a Deinit.
                 let dst_mir_ty = self.place_ty(place);
                 let dst_type = self.codegen_ty(dst_mir_ty);
                 let layout = self.layout_of(dst_mir_ty);
@@ -68,7 +70,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 } else {
                     unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place(place))
                         .goto_expr
-                        .assign(dst_type.nondet(), location)
+                        .deinit(location)
                 }
             }
             StatementKind::SetDiscriminant { place, variant_index } => {
@@ -157,7 +159,7 @@ impl<'tcx> GotocCtx<'tcx> {
             | StatementKind::Nop
             | StatementKind::Coverage { .. } => Stmt::skip(location),
         }
-        .with_location(self.codegen_span(&stmt.source_info.span))
+        .with_location(location)
     }
 
     /// Generate Goto-c for MIR [Terminator] statements.

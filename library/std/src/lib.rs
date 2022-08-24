@@ -34,19 +34,29 @@ pub mod process;
 /// assert!(a + b == c, "The sum of {} and {} is {}", a, b, c);
 /// ```
 /// the assert message will be:
-/// "The sum of {} and {} is {}", 1, 1, 2
+/// "The sum of {} and {} is {}", a, b, c
 #[macro_export]
 macro_rules! assert {
     ($cond:expr $(,)?) => {
         kani::assert($cond, concat!("assertion failed: ", stringify!($cond)));
     };
-    ($cond:expr, $($arg:tt)+) => {
-        // Note that by stringifying the arguments to the custom message, any
-        // compile-time checks on those arguments (e.g. checking that the symbol
-        // is defined and that it implements the Display trait) are bypassed:
-        // https://github.com/model-checking/kani/issues/803
+    ($cond:expr, $($arg:tt)+) => {{
         kani::assert($cond, concat!(stringify!($($arg)+)));
-    };
+        // Process the arguments of the assert inside an unreachable block. This
+        // is to make sure errors in the arguments (e.g. an unknown variable or
+        // an argument that does not implement the Display or Debug traits) are
+        // reported, without creating any overhead on verification performance
+        // that may arise from processing strings involved in the arguments.
+        // Note that this approach is only correct with the "abort" panic
+        // strategy, but is unsound with the "unwind" panic strategy which
+        // requires evaluating the arguments (because they might have side
+        // effects). This is fine until we add support for the "unwind" panic
+        // strategy, which is tracked in
+        // https://github.com/model-checking/kani/issues/692
+        if false {
+            let _ = format_args!($($arg)+);
+        }
+    }};
 }
 
 // Override the assert_eq and assert_ne macros to
@@ -100,7 +110,7 @@ macro_rules! debug_assert_ne {
     ($($x:tt)*) => ({ $crate::assert_ne!($($x)*); })
 }
 
-// Override the print macros to skip all the formatting functionality (which
+// Override the print macros to skip all the printing functionality (which
 // is not relevant for verification)
 #[macro_export]
 macro_rules! print {

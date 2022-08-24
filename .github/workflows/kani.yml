@@ -1,7 +1,16 @@
 # Copyright Kani Contributors
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 name: Kani CI
-on: [push, pull_request]
+on:
+  pull_request:
+  push:
+    # Not just any push, as that includes tags.
+    # We don't want to re-trigger this workflow when tagging an existing commit.
+    branches:
+      - main
+
+env:
+  RUST_BACKTRACE: 1
 
 jobs:
   regression:
@@ -19,9 +28,7 @@ jobs:
             os: ${{ matrix.os }}
 
       - name: Build Kani
-        run: |
-          export RUST_BACKTRACE=1
-          cargo build --workspace
+        run: cargo build
 
       - name: Execute Kani regression
         run: ./scripts/kani-regression.sh
@@ -38,9 +45,7 @@ jobs:
             os: ubuntu-20.04
 
       - name: Build Kani
-        run: |
-          export RUST_BACKTRACE=1
-          cargo build --workspace
+        run: cargo build
 
       - name: Execute Kani performance tests
         run: ./scripts/kani-perf.sh
@@ -59,9 +64,7 @@ jobs:
             os: ubuntu-20.04
 
       - name: Build Kani
-        run: |
-          export RUST_BACKTRACE=1
-          cargo build --workspace
+        run: cargo build
 
       - name: Install book runner dependencies
         run: ./scripts/setup/install_bookrunner_deps.sh

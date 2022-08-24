@@ -1,0 +1,10 @@
+// Copyright Kani Contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! One of 3 sub packages used to test specifying packages with -p
+//! flag.
+
+#[kani::proof]
+fn check_subcrate3_proof() {
+    assert!(1 == 1);
+}

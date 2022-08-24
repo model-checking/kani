@@ -11,6 +11,10 @@ pub struct NondetTransformer {
     nondet_types: HashMap<String, Type>,
 }
 
+// Note: this replaces every occurence of a Nondet expression by an equivalent function call.
+// Since the introduction of StmtBody::Deinit, some Nondet expressions only appear
+// at Irep generating time. Such expressions will not be substituted by this transformer.
+
 impl NondetTransformer {
     /// Transform all identifiers in the symbol table to be valid C identifiers;
     /// perform other clean-up operations to make valid C code.
