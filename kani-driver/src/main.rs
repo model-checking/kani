@@ -55,13 +55,13 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     }
 
     let metadata = ctx.collect_kani_metadata(&outputs.metadata)?;
-    let mut harnesses = ctx.determine_targets(&metadata)?;
-    metadata::sort_harnesses(&mut harnesses);
+    let harnesses = ctx.determine_targets(&metadata)?;
+    let sorted_harnesses = metadata::sort_harnesses(&harnesses);
     let report_base = ctx.args.target_dir.clone().unwrap_or(PathBuf::from("target"));
 
     let mut failed_harnesses: Vec<&HarnessMetadata> = Vec::new();
 
-    for harness in &harnesses {
+    for harness in &sorted_harnesses {
         let harness_filename = harness.pretty_name.replace("::", "-");
         let report_dir = report_base.join(format!("report-{}", harness_filename));
         let specialized_obj = outputs.outdir.join(format!("cbmc-for-{}.out", harness_filename));
@@ -78,7 +78,7 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
         }
     }
 
-    ctx.print_final_summary(&harnesses, &failed_harnesses)
+    ctx.print_final_summary(&sorted_harnesses, &failed_harnesses)
 }
 
 fn standalone_main() -> Result<()> {
@@ -103,13 +103,13 @@ fn standalone_main() -> Result<()> {
     }
 
     let metadata = ctx.collect_kani_metadata(&[outputs.metadata])?;
-    let mut harnesses = ctx.determine_targets(&metadata)?;
-    metadata::sort_harnesses(&mut harnesses);
+    let harnesses = ctx.determine_targets(&metadata)?;
+    let sorted_harnesses = metadata::sort_harnesses(&harnesses);
     let report_base = ctx.args.target_dir.clone().unwrap_or(PathBuf::from("."));
 
     let mut failed_harnesses: Vec<&HarnessMetadata> = Vec::new();
 
-    for harness in &harnesses {
+    for harness in &sorted_harnesses {
         let harness_filename = harness.pretty_name.replace("::", "-");
         let report_dir = report_base.join(format!("report-{}", harness_filename));
         let specialized_obj = append_path(&linked_obj, &format!("for-{}", harness_filename));
@@ -130,7 +130,7 @@ fn standalone_main() -> Result<()> {
         }
     }
 
-    ctx.print_final_summary(&harnesses, &failed_harnesses)
+    ctx.print_final_summary(&sorted_harnesses, &failed_harnesses)
 }
 
 impl KaniSession {
