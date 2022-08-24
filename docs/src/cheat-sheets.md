@@ -9,11 +9,6 @@ development purposes.
 ### Build
 
 ```bash
-# Build all packages in the repository
-cargo build --workspace
-```
-
-```bash
 # Error "'rustc' panicked at 'failed to lookup `SourceFile` in new context'"
 # or similar error?
 # Clean `kani-compiler` and re-build:

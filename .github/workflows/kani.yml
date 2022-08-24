@@ -28,7 +28,7 @@ jobs:
             os: ${{ matrix.os }}
 
       - name: Build Kani
-        run: cargo build --workspace
+        run: cargo build
 
       - name: Execute Kani regression
         run: ./scripts/kani-regression.sh
@@ -45,7 +45,7 @@ jobs:
             os: ubuntu-20.04
 
       - name: Build Kani
-        run: cargo build --workspace
+        run: cargo build
 
       - name: Execute Kani performance tests
         run: ./scripts/kani-perf.sh
@@ -64,7 +64,7 @@ jobs:
             os: ubuntu-20.04
 
       - name: Build Kani
-        run: cargo build --workspace
+        run: cargo build
 
       - name: Install book runner dependencies
         run: ./scripts/setup/install_bookrunner_deps.sh

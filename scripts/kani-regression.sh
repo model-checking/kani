@@ -26,7 +26,7 @@ check-cbmc-viewer-version.py --major 3 --minor 5
 ${SCRIPT_DIR}/kani-fmt.sh --check
 
 # Build all packages in the workspace
-cargo build --workspace
+cargo build
 
 # Unit tests
 cargo test -p cprover_bindings
