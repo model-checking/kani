@@ -62,7 +62,7 @@ fn prebundle(dir: &Path) -> Result<()> {
     }
 
     // Before we begin, ensure Kani is built successfully in release mode.
-    Command::new("cargo").args(&["build", "--release", "--workspace"]).run()?;
+    Command::new("cargo").args(&["build", "--release"]).run()?;
 
     Ok(())
 }
