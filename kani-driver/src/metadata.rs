@@ -155,7 +155,7 @@ impl KaniSession {
 /// appearing harnesses get processed earlier.
 /// This is necessary for the concrete playback feature (with in-place unit test modification)
 /// because it guarantees that injected unit tests will not change the location of to-be-processed harnesses.
-pub fn sort_harnesses(harnesses: &[HarnessMetadata]) -> Vec<HarnessMetadata> {
+pub fn sort_harnesses_by_loc(harnesses: &[HarnessMetadata]) -> Vec<HarnessMetadata> {
     let mut harnesses_clone = harnesses.to_vec();
     harnesses_clone.sort_unstable_by(|harness1, harness2| {
         harness1
