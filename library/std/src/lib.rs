@@ -156,9 +156,12 @@ macro_rules! unreachable {
     // `unreachable!("Error: {}", code);`
     // We have the same issue as with panic!() described bellow where we over-approx what we can
     // handle.
-    ($fmt:expr, $($arg:tt)*) => (
+    ($fmt:expr, $($arg:tt)*) => {{
+        if false {
+            let _ = format_args!($fmt, $($arg)+);
+        }
         kani::panic(concat!("internal error: entered unreachable code: ",
-        stringify!($fmt, $($arg)*))));
+        stringify!($fmt, $($arg)*)))}};
 }
 
 #[macro_export]
@@ -195,7 +198,10 @@ macro_rules! panic {
     // The std implementation of `panic!()` macro is implemented in the compiler and it seems to
     // be able to do things that we cannot do here.
     // https://github.com/rust-lang/rust/blob/dc2d232c7485c60dd856f8b9aee83426492d4661/compiler/rustc_expand/src/base.rs#L1197
-    ($msg:expr, $($arg:tt)+) => ({
+    ($msg:expr, $($arg:tt)+) => {{
+        if false {
+            let _ = format_args!($msg, $($arg)+);
+        }
         kani::panic(stringify!($msg, $($arg)+));
-    });
+    }};
 }
