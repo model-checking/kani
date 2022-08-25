@@ -36,7 +36,7 @@ This is the technical portion of the RFC. Please provide high level details of t
   installation...)
 - How will they be modified? Any changes to how these components communicate?
 - Will this require any new dependency?
-- What are the corner cases you antecipate?
+- What corner cases do you anticipate?
 
 # Rationale and alternatives
 [rationale-and-alternatives]: #rationale-and-alternatives

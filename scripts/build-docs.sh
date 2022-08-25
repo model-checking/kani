@@ -4,7 +4,7 @@
 
 # Build all our documentation and place them under book/ directory.
 # The user facing doc is built into book/
-# Our RFCs is placed under book/rfcs/
+# RFCs are placed under book/rfcs/
 
 set -eu
 
