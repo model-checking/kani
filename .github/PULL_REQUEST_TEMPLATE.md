@@ -7,6 +7,12 @@ Describe Kani's current behavior and how your code changes that behavior. If the
 
 Resolves #ISSUE-NUMBER
 
+### Related RFC:
+
+<!--
+Link to the Tracking RFC issue if this work implements part of an RFC.
+-->
+Optional #ISSUE-NUMBER.
 
 ### Call-outs:
 
