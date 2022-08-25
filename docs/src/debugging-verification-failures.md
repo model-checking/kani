@@ -52,7 +52,7 @@ You can then debug the binary with tools like `rust-gdb` or `lldb`.
 
 ### Example
 
-Running `kani --harness proof_harness --enable-unstable --concrete-playback=print` on the following source file:
+Running `kani --enable-unstable --concrete-playback=print` on the following source file:
 ```rust
 #[kani::proof]
 fn proof_harness() {
