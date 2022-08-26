@@ -9,12 +9,6 @@ branding:
   icon: 'cloud'
   color: 'orange'
 
-inputs:
-  source_path:
-    description: 'Path to your crate'
-    default: .
-    required: false
-
 #TODO: Change to model-checking/kani-20-04 once the image is released.
 runs:
   using: 'docker'
@@ -22,4 +16,4 @@ runs:
   args:
     - bash
     - '-c'
-    - 'cd ${{ inputs.source_path }}; cargo kani'
+    - 'PATH="/root/.cargo/bin:${PATH}"; cargo kani'
