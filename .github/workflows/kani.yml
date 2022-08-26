@@ -6,8 +6,8 @@ on:
   push:
     # Not just any push, as that includes tags.
     # We don't want to re-trigger this workflow when tagging an existing commit.
-    branches:
-      - main
+    tags-ignore:
+      - '**'
 
 env:
   RUST_BACKTRACE: 1
