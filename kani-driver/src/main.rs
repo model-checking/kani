@@ -40,12 +40,14 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     let ctx = session::KaniSession::new(args.common_opts)?;
 
     let outputs = ctx.cargo_build()?;
-    if ctx.args.only_codegen {
-        return Ok(());
-    }
+
     let mut goto_objs: Vec<PathBuf> = Vec::new();
     for symtab in &outputs.symtabs {
         goto_objs.push(ctx.symbol_table_to_gotoc(symtab)?);
+    }
+
+    if ctx.args.only_codegen {
+        return Ok(());
     }
 
     let linked_obj = outputs.outdir.join("cbmc-linked.out");
@@ -87,10 +89,12 @@ fn standalone_main() -> Result<()> {
     let ctx = session::KaniSession::new(args.common_opts)?;
 
     let outputs = ctx.compile_single_rust_file(&args.input)?;
+
+    let goto_obj = ctx.symbol_table_to_gotoc(&outputs.symtab)?;
+
     if ctx.args.only_codegen {
         return Ok(());
     }
-    let goto_obj = ctx.symbol_table_to_gotoc(&outputs.symtab)?;
 
     let linked_obj = util::alter_extension(&args.input, "out");
     {
