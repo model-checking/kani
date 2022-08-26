@@ -35,8 +35,16 @@ pub struct StandaloneArgs {
     setting = structopt::clap::AppSettings::AllArgsOverrideSelf
 )]
 pub struct CargoKaniArgs {
+    #[structopt(subcommand)]
+    pub command: Option<CargoKaniSubcommand>,
+
     #[structopt(flatten)]
     pub common_opts: KaniArgs,
+}
+
+#[derive(Debug, StructOpt)]
+pub enum CargoKaniSubcommand {
+    Assess,
 }
 
 // Common arguments for invoking Kani. This gets put into KaniContext, whereas

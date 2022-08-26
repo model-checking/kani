@@ -4,13 +4,13 @@
 
 use anyhow::Result;
 use args_toml::join_args;
-
 use std::ffi::OsString;
 use std::path::PathBuf;
 use structopt::StructOpt;
 
 mod args;
 mod args_toml;
+mod assess;
 mod call_cargo;
 mod call_cbmc;
 mod call_cbmc_viewer;
@@ -40,6 +40,11 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     let args = args::CargoKaniArgs::from_iter(input_args);
     args.validate();
     let ctx = session::KaniSession::new(args.common_opts)?;
+
+    if let Some(args::CargoKaniSubcommand::Assess) = args.command {
+        // Run the alternative command instead
+        return assess::cargokani_assess_main(ctx);
+    }
 
     let outputs = ctx.cargo_build()?;
 
