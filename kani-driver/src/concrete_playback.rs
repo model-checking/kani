@@ -5,8 +5,10 @@
 //! generating concrete playback unit tests, and adding them to the user's source code.
 
 use crate::args::ConcretePlaybackMode;
+use crate::call_cbmc::VerificationStatus;
+use crate::cbmc_output_parser::VerificationResult;
 use crate::session::KaniSession;
-use anyhow::{Context, Result};
+use anyhow::{ensure, Context, Result};
 use kani_metadata::HarnessMetadata;
 use std::collections::hash_map::DefaultHasher;
 use std::ffi::OsString;
@@ -18,42 +20,60 @@ use std::process::Command;
 
 impl KaniSession {
     /// The main driver for generating concrete playback unit tests and adding them to source code.
-    pub fn gen_and_add_concrete_playback(&self, output_filename: &Path, harness: &HarnessMetadata) {
+    pub fn gen_and_add_concrete_playback(
+        &self,
+        output_filename: &Path,
+        harness: &HarnessMetadata,
+        verification_result: &VerificationResult,
+    ) -> Result<()> {
         if self.args.concrete_playback.is_none() {
-            return;
+            return Ok(());
         }
 
-        assert!(
+        ensure!(
             self.args.output_format != crate::args::OutputFormat::Old,
             "The Kani argument `--output-format old` is not supported with the concrete playback feature."
         );
 
-        let concrete_vals = parser::extract_concrete_vals(output_filename).expect(
-            "Something went wrong when trying to get concrete values from the CBMC output file",
-        );
-        let concrete_playback = format_unit_test(&harness.mangled_name, &concrete_vals);
-
-        if let Some(playback_mode) = &self.args.concrete_playback && *playback_mode == ConcretePlaybackMode::Print && !self.args.quiet {
-            println!(
-                "Concrete playback unit test for `{}`:\n```\n{}\n```",
-                &harness.mangled_name, &concrete_playback.unit_test_str
-            );
-            println!(
-                "To automatically add the concrete playback unit test `{}` to the src code, run Kani with `--concrete-playback=InPlace`.",
-                &concrete_playback.unit_test_name
-            );
-        }
-
-        if let Some(playback_mode) = &self.args.concrete_playback && *playback_mode == ConcretePlaybackMode::InPlace {
+        if verification_result.status == VerificationStatus::Success {
             if !self.args.quiet {
                 println!(
-                    "Now modifying the source code to include the concrete playback unit test `{}`.",
+                    "INFO: The concrete playback feature does not generate unit tests when verification succeeds."
+                )
+            }
+            return Ok(());
+        }
+
+        if let Some(_processed_items) = &verification_result.processed_items {
+            // TODO: rename parser to extractor
+            let concrete_vals = concrete_vals_extractor::extract_concrete_vals(output_filename).expect(
+                "Something went wrong when trying to get concrete values from the CBMC output file",
+            );
+            let concrete_playback = format_unit_test(&harness.mangled_name, &concrete_vals);
+
+            if let Some(playback_mode) = &self.args.concrete_playback && *playback_mode == ConcretePlaybackMode::Print && !self.args.quiet {
+                println!(
+                    "Concrete playback unit test for `{}`:\n```\n{}\n```",
+                    &harness.mangled_name, &concrete_playback.unit_test_str
+                );
+                println!(
+                    "INFO: To automatically add the concrete playback unit test `{}` to the src code, run Kani with `--concrete-playback=InPlace`.",
                     &concrete_playback.unit_test_name
                 );
             }
-            self.modify_src_code(&harness.original_file, harness.original_end_line, &concrete_playback)
-                .expect("Failed to modify source code");
+
+            if let Some(playback_mode) = &self.args.concrete_playback && *playback_mode == ConcretePlaybackMode::InPlace {
+                if !self.args.quiet {
+                    println!(
+                        "INFO: Now modifying the source code to include the concrete playback unit test `{}`.",
+                        &concrete_playback.unit_test_name
+                    );
+                }
+                self.modify_src_code(&harness.original_file, harness.original_end_line, &concrete_playback)
+                    .expect("Failed to modify source code");
+            }
         }
+        Ok(())
     }
 
     /// Add the unit test to the user's source code, format it, and short circuit if code already present.
@@ -191,7 +211,7 @@ impl KaniSession {
 }
 
 /// Generate a unit test from a list of concrete values.
-fn format_unit_test(harness_name: &str, concrete_vals: &[parser::ConcreteVal]) -> UnitTest {
+fn format_unit_test(harness_name: &str, concrete_vals: &[concrete_vals_extractor::ConcreteVal]) -> UnitTest {
     /*
     Given a number of byte vectors, format them as:
     // interp_concrete_val_1
@@ -242,8 +262,8 @@ struct UnitTest {
     unit_test_name: String,
 }
 
-/// Read the CBMC output, parse it as a JSON object, and extract the concrete values.
-/// Note: the CBMC output should roughly look like this for parsing to work properly:
+/// Extract concrete values from the CBMC output processed items.
+/// Note: we parse items that roughly look like the following:
 /// ```json
 /// ...
 /// { "result": [
@@ -256,60 +276,34 @@ struct UnitTest {
 ///         ..., ] }
 ///     ..., ] }
 /// ```
-/// TODO: this parser should be overhauled once the new Rust CBMC output parser is merged in.
-/// Link to the new Rust parser PR: <https://github.com/model-checking/kani/pull/1433>.
-/// Link to the issue: <https://github.com/model-checking/kani/issues/1477>.
-mod parser {
+mod concrete_vals_extractor {
     use anyhow::{ensure, Context, Result};
     use serde_json::Value;
-    use std::fs::File;
-    use std::io::BufReader;
     use std::path::Path;
+    use crate::cbmc_output_parser::{ParserItem, Property};
 
     pub struct ConcreteVal {
         pub byte_arr: Vec<u8>,
         pub interp_val: String,
     }
 
-    /// Extract concrete values from a failing harness.
-    pub fn extract_concrete_vals(output_filename: &Path) -> Result<Vec<ConcreteVal>> {
-        let cbmc_out = read_cbmc_out(output_filename).with_context(|| {
-            format!("Invalid CBMC output trace file: {}", output_filename.display())
-        })?;
-        let concrete_vals = parse_cbmc_out(&cbmc_out)
-            .context("Failed to parse the CBMC output trace JSON to get concrete values")?;
-        Ok(concrete_vals)
-    }
-
-    /// Read in the CBMC results file and deserialize it to a JSON object.
-    fn read_cbmc_out(results_filename: &Path) -> Result<Value> {
-        let results_file =
-            File::open(results_filename).context("Failed to open CBMC output trace file")?;
-        let reader = BufReader::new(results_file);
-        let json_val = serde_json::from_reader(reader)
-            .context("Could not convert CBMC output trace file into valid JSON")?;
-        Ok(json_val)
-    }
-
-    /// The first-level CBMC output parser. This extracts the result message.
-    fn parse_cbmc_out(cbmc_out: &Value) -> Result<Vec<ConcreteVal>> {
+    /// The first-level extractor. Traverses processed items for properties.
+    pub fn extract_from_processed_items(processed_items: &[ParserItem]) -> Result<Vec<ConcreteVal>> {
         let mut concrete_vals: Vec<ConcreteVal> = Vec::new();
-        let cbmc_out_arr = cbmc_out
-            .as_array()
-            .with_context(|| format!("Expected this CBMC output to be an array: {}", cbmc_out))?;
         let mut have_parsed_assert_fail = false;
-        for general_msg in cbmc_out_arr {
-            let result_msg = &general_msg["result"];
-            if !result_msg.is_null() {
-                let result_arr = result_msg.as_array().with_context(|| {
-                    format!("Expected this CBMC result object to be an array: {}", result_msg)
-                })?;
-                for result_val in result_arr {
-                    parse_result(result_val, &mut concrete_vals, &mut have_parsed_assert_fail)?;
+        for processed_item in processed_items.iter() {
+            if let ParserItem::Result { result } = processed_item {
+                for property in result.iter() {
+                    extract_from_property(property, &mut concrete_vals, &mut have_parsed_assert_fail);
                 }
             }
         }
         Ok(concrete_vals)
+    }
+
+    /// The second-level extractor. Extracts det vals 
+    pub fn extract_from_property(property: &Property, concrete_vals: &mut Vec<ConcreteVal>, have_parsed_assert_fail: &mut bool) {
+            
     }
 
     /// The second-level CBMC output parser. This extracts the trace entries of failing assertions.

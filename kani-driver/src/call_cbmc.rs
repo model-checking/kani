@@ -9,7 +9,7 @@ use std::process::Command;
 use std::time::Instant;
 
 use crate::args::KaniArgs;
-use crate::cbmc_output_parser::process_cbmc_output;
+use crate::cbmc_output_parser::{process_cbmc_output, VerificationResult};
 use crate::session::KaniSession;
 
 #[derive(PartialEq, Eq)]
@@ -37,9 +37,9 @@ impl KaniSession {
 
         let verification_result = if self.args.output_format == crate::args::OutputFormat::Old {
             if self.run_terminal(cmd).is_err() {
-                Ok(VerificationStatus::Failure)
+                VerificationResult { status: VerificationStatus::Failure, processed_items: None }
             } else {
-                Ok(VerificationStatus::Success)
+                VerificationResult { status: VerificationStatus::Success, processed_items: None }
             }
         } else {
             // Add extra argument to receive the output in JSON format.
@@ -53,15 +53,14 @@ impl KaniSession {
                 // the verification result based on the postprocessing of CBMC results.
                 let output_filename_opt: Option<&Path> =
                     self.args.concrete_playback.as_ref().map(|_| output_filename.as_path());
-                let processed_result = process_cbmc_output(
+                process_cbmc_output(
                     cbmc_process,
                     self.args.extra_pointer_checks,
                     &self.args.output_format,
                     output_filename_opt,
-                );
-                Ok(processed_result)
+                )
             } else {
-                Ok(VerificationStatus::Failure)
+                VerificationResult { status: VerificationStatus::Failure, processed_items: None }
             }
         };
         // TODO: We should print this even the verification fails but not if it crashes.
@@ -70,11 +69,8 @@ impl KaniSession {
             println!("Verification Time: {}s", elapsed);
         }
 
-        if let Ok(VerificationStatus::Failure) = verification_result {
-            self.gen_and_add_concrete_playback(&output_filename, harness);
-        }
-
-        verification_result
+        self.gen_and_add_concrete_playback(&output_filename, harness, &verification_result)?;
+        Ok(verification_result.status)
     }
 
     /// used by call_cbmc_viewer, invokes different variants of CBMC.

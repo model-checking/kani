@@ -184,7 +184,7 @@ const REACH_CHECK_DESC: &str = "[KANI_REACHABILITY_CHECK]";
 /// See the parser for more information on how they are processed.
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
-enum ParserItem {
+pub enum ParserItem {
     Program {
         program: String,
     },
@@ -560,6 +560,12 @@ fn postprocess_error_message(message: ParserItem) -> ParserItem {
     }
 }
 
+/// The verification result, as extracted by the CBMC output parser.
+pub struct VerificationResult {
+    pub status: VerificationStatus,
+    pub processed_items: Option<Vec<ParserItem>>,
+}
+
 /// The main function to process CBMC's output.
 ///
 /// First, we create a reader on CBMC's `stdout`, which is required for the
@@ -573,30 +579,30 @@ pub fn process_cbmc_output(
     extra_ptr_checks: bool,
     output_format: &OutputFormat,
     output_filename_opt: Option<&Path>,
-) -> VerificationStatus {
+) -> VerificationResult {
     let stdout = process.stdout.as_mut().unwrap();
     let mut stdout_reader = BufReader::new(stdout);
     let parser = Parser::new(&mut stdout_reader, output_filename_opt);
     let mut result = false;
-
-    for item in parser {
+    let processed_items: Vec<_> = parser
+        .into_iter()
         // Some items (e.g., messages) are skipped.
         // We could also process them and decide to skip later.
-        if item.must_be_skipped() {
-            continue;
-        }
-        let processed_item = process_item(item, extra_ptr_checks, &mut result);
+        .filter(|item| !item.must_be_skipped())
+        .map(|item| process_item(item, extra_ptr_checks, &mut result))
+        .collect();
+    for processed_item in processed_items.iter() {
         // Both formatting and printing could be handled by objects which
         // implement a trait `Printer`.
-        let formatted_item = format_item(&processed_item, output_format);
+        let formatted_item = format_item(processed_item, output_format);
         if let Some(fmt_item) = formatted_item {
             println!("{}", fmt_item);
         }
         // TODO: Record processed items and dump them into a JSON file
         // <https://github.com/model-checking/kani/issues/942>
     }
-
-    if result { VerificationStatus::Success } else { VerificationStatus::Failure }
+    let status = if result { VerificationStatus::Success } else { VerificationStatus::Failure };
+    return VerificationResult { status, processed_items: Some(processed_items) };
 }
 
 /// Returns an optional formatted item based on the output format
