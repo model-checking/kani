@@ -1,0 +1,25 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+name: 'Kani Model Checker'
+description: 'Run the Kani Model Checker on a Cargo Crate'
+author: 'Kani Contributors'
+
+branding:
+  icon: 'cloud'
+  color: 'orange'
+
+inputs:
+  source_path:
+    description: 'Path to your crate'
+    default: .
+    required: false
+
+#TODO: Change to model-checking/kani-20-04 once the image is released.
+runs:
+  using: 'docker'
+  image: docker://ghcr.io/yoshikitakashima/kani-20-04:latest
+  args:
+    - bash
+    - '-c'
+    - 'cd ${{ inputs.source_path }}; cargo kani'
