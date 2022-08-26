@@ -134,7 +134,7 @@ pub fn expect_fail(_cond: bool, _message: &'static str) {
 #[inline(never)]
 #[rustc_diagnostic_item = "KaniPanic"]
 #[doc(hidden)]
-pub fn panic(message: &'static str) -> ! {
+pub const fn panic(message: &'static str) -> ! {
     panic!("{}", message)
 }
 
