@@ -297,6 +297,7 @@ fn filepath(file: String) -> String {
         file
     }
 }
+
 /// Struct that represents traces.
 ///
 /// In general, traces may include more information than this, but this is not
@@ -307,7 +308,29 @@ pub struct TraceItem {
     pub thread: u32,
     pub step_type: String,
     pub hidden: bool,
+    pub lhs: Option<String>,
     pub source_location: Option<SourceLocation>,
+    pub value: Option<TraceValue>,
+}
+
+/// Struct that represents a trace value.
+///
+/// Note: this struct can have a lot of different fields depending on the value type.
+/// The fields included right now are relevant to primitive types.
+#[derive(Clone, Debug, Deserialize)]
+pub struct TraceValue {
+    pub name: String,
+    pub binary: Option<String>,
+    pub data: Option<TraceData>,
+    pub width: Option<u8>,
+}
+
+/// Enum that represents a trace data item.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(untagged)]
+pub enum TraceData {
+    NonBool(String),
+    Bool(bool),
 }
 
 #[derive(Copy, Clone, Debug, Deserialize, PartialEq, Eq)]
