@@ -121,7 +121,7 @@ jobs:
         with:
           registry: ghcr.io
           context: .
-          file: scripts/ci/Dockerfile.bundle-test-ubuntu-20-04
+          file: scripts/ci/Dockerfile.bundle-release-20-04
           push: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
           tags: |
