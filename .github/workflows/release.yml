@@ -93,6 +93,7 @@ jobs:
     runs-on: ubuntu-20.04
     permissions:
       contents: write
+      packages: write
     env:
       os: ubuntu-20.04
       target: x86_64-unknown-linux-gnu
