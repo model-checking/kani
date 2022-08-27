@@ -113,7 +113,7 @@ jobs:
         uses: docker/login-action@v2
         with:
           registry: ghcr.io
-          username: model-checking
+          username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push
@@ -127,3 +127,7 @@ jobs:
           tags: |
             ghcr.io/model-checking/kani-${{ env.os }}:${{ needs.Release.outputs.version }}
             ghcr.io/model-checking/kani-${{ env.os }}:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.repositoryUrl }}
+            org.opencontainers.image.version=${{ needs.Release.outputs.version }}
+            org.opencontainers.image.licenses=Apache-2.0 OR MIT

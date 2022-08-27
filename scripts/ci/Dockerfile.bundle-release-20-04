@@ -25,5 +25,3 @@ RUN apt-get update && \
     cargo-kani setup --use-local-bundle ./kani-latest-x86_64-unknown-linux-gnu.tar.gz && \
     apt-get clean && \
     rm -rf /tmp/kani/* /root/.rustup/toolchains/*/share
-
-LABEL org.opencontainers.image.source https://github.com/model-checking/kani
