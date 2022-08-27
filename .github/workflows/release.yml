@@ -93,7 +93,7 @@ jobs:
     runs-on: ubuntu-20.04
     permissions:
       contents: write
-    strategy:
+    env:
       os: ubuntu-20.04
       target: x86_64-unknown-linux-gnu
     steps:
@@ -125,5 +125,5 @@ jobs:
           push: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
           tags: |
-            ghcr.io/model-checking/kani-${{ matrix.target }}:${{ needs.Release.outputs.version }}
-            ghcr.io/model-checking/kani-${{ matrix.target }}:latest
+            ghcr.io/model-checking/kani-${{ os }}:${{ needs.Release.outputs.version }}
+            ghcr.io/model-checking/kani-${{ os }}:latest
