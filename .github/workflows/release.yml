@@ -119,7 +119,6 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v3
         with:
-          registry: ghcr.io
           context: .
           file: scripts/ci/Dockerfile.bundle-release-20-04
           push: true
