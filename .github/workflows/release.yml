@@ -117,6 +117,12 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: 'Set lower case owner name. Needed for docker push.'
+        run: |
+          echo "OWNER_LC=${OWNER,,}" >>${GITHUB_ENV}
+        env:
+          OWNER: '${{ github.repository_owner }}'
+
       - name: Build and push
         uses: docker/build-push-action@v3
         with:
@@ -125,8 +131,8 @@ jobs:
           push: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
           tags: |
-            ghcr.io/${{ github.repository_owner }}/kani-${{ env.os }}:${{ needs.Release.outputs.version }}
-            ghcr.io/${{ github.repository_owner }}/kani-${{ env.os }}:latest
+            ghcr.io/${{ env.OWNER_LC }}/kani-${{ env.os }}:${{ needs.Release.outputs.version }}
+            ghcr.io/${{ env.OWNER_LC }}/kani-${{ env.os }}:latest
           labels: |
             org.opencontainers.image.source=${{ github.repositoryUrl }}
             org.opencontainers.image.version=${{ needs.Release.outputs.version }}
