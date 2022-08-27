@@ -6,7 +6,7 @@ on:
   push:
     # Not just any push, as that includes tags.
     # We don't want to re-trigger this workflow when tagging an existing commit.
-    tags-ignore:
+    branches:
       - '**'
 
 env:
