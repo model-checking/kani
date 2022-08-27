@@ -125,5 +125,5 @@ jobs:
           push: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
           tags: |
-            ghcr.io/model-checking/kani-${{ os }}:${{ needs.Release.outputs.version }}
-            ghcr.io/model-checking/kani-${{ os }}:latest
+            ghcr.io/model-checking/kani-${{ env.os }}:${{ needs.Release.outputs.version }}
+            ghcr.io/model-checking/kani-${{ env.os }}:latest
