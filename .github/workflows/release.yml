@@ -125,8 +125,8 @@ jobs:
           push: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
           tags: |
-            ghcr.io/model-checking/kani-${{ env.os }}:${{ needs.Release.outputs.version }}
-            ghcr.io/model-checking/kani-${{ env.os }}:latest
+            ghcr.io/${{ github.repository_owner }}/kani-${{ env.os }}:${{ needs.Release.outputs.version }}
+            ghcr.io/${{ github.repository_owner }}/kani-${{ env.os }}:latest
           labels: |
             org.opencontainers.image.source=${{ github.repositoryUrl }}
             org.opencontainers.image.version=${{ needs.Release.outputs.version }}
