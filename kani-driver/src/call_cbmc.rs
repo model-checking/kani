@@ -51,13 +51,10 @@ impl KaniSession {
             if let Some(cbmc_process) = cbmc_process_opt {
                 // The introduction of reachability checks forces us to decide
                 // the verification result based on the postprocessing of CBMC results.
-                let output_filename_opt: Option<&Path> =
-                    self.args.concrete_playback.as_ref().map(|_| output_filename.as_path());
                 process_cbmc_output(
                     cbmc_process,
                     self.args.extra_pointer_checks,
                     &self.args.output_format,
-                    output_filename_opt,
                 )
             } else {
                 VerificationResult { status: VerificationStatus::Failure, processed_items: None }
@@ -69,7 +66,7 @@ impl KaniSession {
             println!("Verification Time: {}s", elapsed);
         }
 
-        self.gen_and_add_concrete_playback(&output_filename, harness, &verification_result)?;
+        self.gen_and_add_concrete_playback(harness, &verification_result)?;
         Ok(verification_result.status)
     }
 

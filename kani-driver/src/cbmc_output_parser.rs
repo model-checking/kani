@@ -30,9 +30,8 @@ use serde::Deserialize;
 use std::{
     collections::HashMap,
     env,
-    fs::File,
-    io::{BufRead, BufReader, BufWriter, Write},
-    path::{Path, PathBuf},
+    io::{BufRead, BufReader},
+    path::PathBuf,
     process::{Child, ChildStdout},
 };
 
@@ -333,6 +332,16 @@ pub enum TraceData {
     Bool(bool),
 }
 
+impl std::fmt::Display for TraceData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let trace_data_str = match self {
+            Self::NonBool(x) => x.to_string(),
+            Self::Bool(x) => x.to_string(),
+        };
+        write! {f, "{}", trace_data_str}
+    }
+}
+
 #[derive(Copy, Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum CheckStatus {
@@ -376,26 +385,11 @@ enum Action {
 struct Parser<'a, 'b> {
     pub input_so_far: String,
     pub buffer: &'a mut BufReader<&'b mut ChildStdout>,
-    /// Buffered writer over the CBMC output file.
-    /// This is needed for old parsers (e.g., like the one in the concrete playback code) that require the actual CBMC output file.
-    /// TODO: This can be removed once we overhaul the concrete playback parser.
-    /// See this tracking issue: <https://github.com/model-checking/kani/issues/1477>.
-    cbmc_out_buf_writer: Option<BufWriter<File>>,
 }
 
 impl<'a, 'b> Parser<'a, 'b> {
-    pub fn new(
-        buffer: &'a mut BufReader<&'b mut ChildStdout>,
-        output_filename_opt: Option<&Path>,
-    ) -> Self {
-        let cbmc_out_buf_writer = output_filename_opt.map(|output_filename| {
-            let cbmc_out_file = File::create(output_filename).expect(&format!(
-                "In CBMC output parser, couldn't create CBMC output file `{}`",
-                output_filename.display()
-            ));
-            BufWriter::new(cbmc_out_file)
-        });
-        Parser { input_so_far: String::new(), buffer, cbmc_out_buf_writer }
+    pub fn new(buffer: &'a mut BufReader<&'b mut ChildStdout>) -> Self {
+        Parser { input_so_far: String::new(), buffer }
     }
 
     /// Triggers an action based on the input:
@@ -463,7 +457,6 @@ impl<'a, 'b> Parser<'a, 'b> {
     /// Processes a line to determine if an action must be triggered.
     /// The action may result in a `ParserItem`, which is then returned.
     pub fn process_line(&mut self, input: String) -> Option<ParserItem> {
-        self.add_line_to_buf_writer(&input);
         self.add_to_input(input.clone());
         let action_required = self.triggers_action(input);
         if let Some(action) = action_required {
@@ -471,26 +464,6 @@ impl<'a, 'b> Parser<'a, 'b> {
             return possible_item;
         }
         None
-    }
-
-    /// Adds a single line to the CBMC output buffered writer.
-    pub fn add_line_to_buf_writer(&mut self, line: &str) {
-        if let Some(buf_writer) = self.cbmc_out_buf_writer.as_mut() {
-            write!(buf_writer, "{}", line).expect(&format!(
-                "In CBMC output parser, couldn't write `{}` to CBMC output buffered writer",
-                line
-            ));
-        }
-    }
-
-    /// Flushes the CBMC output buffered writer.
-    /// This should be called after the parser has processed the entire CBMC output.
-    pub fn flush_buf_writer(&mut self) {
-        if let Some(buf_writer) = self.cbmc_out_buf_writer.as_mut() {
-            buf_writer.flush().expect(
-                "In CBMC output parser, couldn't flush buffered writer to CBMC output file",
-            );
-        }
     }
 }
 
@@ -504,7 +477,6 @@ impl<'a, 'b> Iterator for Parser<'a, 'b> {
             match self.buffer.read_line(&mut input) {
                 Ok(len) => {
                     if len == 0 {
-                        self.flush_buf_writer();
                         return None;
                     }
                     let item = self.process_line(input);
@@ -578,11 +550,10 @@ pub fn process_cbmc_output(
     mut process: Child,
     extra_ptr_checks: bool,
     output_format: &OutputFormat,
-    output_filename_opt: Option<&Path>,
 ) -> VerificationResult {
     let stdout = process.stdout.as_mut().unwrap();
     let mut stdout_reader = BufReader::new(stdout);
-    let parser = Parser::new(&mut stdout_reader, output_filename_opt);
+    let parser = Parser::new(&mut stdout_reader);
     let mut result = false;
     let processed_items: Vec<_> = parser
         .into_iter()

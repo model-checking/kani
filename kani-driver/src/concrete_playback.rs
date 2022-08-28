@@ -22,7 +22,6 @@ impl KaniSession {
     /// The main driver for generating concrete playback unit tests and adding them to source code.
     pub fn gen_and_add_concrete_playback(
         &self,
-        output_filename: &Path,
         harness: &HarnessMetadata,
         verification_result: &VerificationResult,
     ) -> Result<()> {
@@ -44,9 +43,11 @@ impl KaniSession {
             return Ok(());
         }
 
-        if let Some(_processed_items) = &verification_result.processed_items {
-            // TODO: rename parser to extractor
-            let concrete_vals = concrete_vals_extractor::extract_concrete_vals(output_filename).expect(
+        if let Some(processed_items) = &verification_result.processed_items {
+            let concrete_vals = concrete_vals_extractor::extract_from_processed_items(
+                processed_items,
+            )
+            .expect(
                 "Something went wrong when trying to get concrete values from the CBMC output file",
             );
             let concrete_playback = format_unit_test(&harness.mangled_name, &concrete_vals);
@@ -211,7 +212,10 @@ impl KaniSession {
 }
 
 /// Generate a unit test from a list of concrete values.
-fn format_unit_test(harness_name: &str, concrete_vals: &[concrete_vals_extractor::ConcreteVal]) -> UnitTest {
+fn format_unit_test(
+    harness_name: &str,
+    concrete_vals: &[concrete_vals_extractor::ConcreteVal],
+) -> UnitTest {
     /*
     Given a number of byte vectors, format them as:
     // interp_concrete_val_1
@@ -277,127 +281,121 @@ struct UnitTest {
 ///     ..., ] }
 /// ```
 mod concrete_vals_extractor {
+    use crate::cbmc_output_parser::{CheckStatus, ParserItem, Property, TraceItem};
     use anyhow::{ensure, Context, Result};
-    use serde_json::Value;
-    use std::path::Path;
-    use crate::cbmc_output_parser::{ParserItem, Property};
 
     pub struct ConcreteVal {
         pub byte_arr: Vec<u8>,
         pub interp_val: String,
     }
 
-    /// The first-level extractor. Traverses processed items for properties.
-    pub fn extract_from_processed_items(processed_items: &[ParserItem]) -> Result<Vec<ConcreteVal>> {
+    /// The first-level extractor. Traverses processed items to find properties.
+    pub fn extract_from_processed_items(
+        processed_items: &[ParserItem],
+    ) -> Result<Vec<ConcreteVal>> {
         let mut concrete_vals: Vec<ConcreteVal> = Vec::new();
         let mut have_parsed_assert_fail = false;
         for processed_item in processed_items.iter() {
             if let ParserItem::Result { result } = processed_item {
                 for property in result.iter() {
-                    extract_from_property(property, &mut concrete_vals, &mut have_parsed_assert_fail);
+                    extract_from_property(
+                        property,
+                        &mut concrete_vals,
+                        &mut have_parsed_assert_fail,
+                    )?;
                 }
             }
         }
         Ok(concrete_vals)
     }
 
-    /// The second-level extractor. Extracts det vals 
-    pub fn extract_from_property(property: &Property, concrete_vals: &mut Vec<ConcreteVal>, have_parsed_assert_fail: &mut bool) {
-            
-    }
-
-    /// The second-level CBMC output parser. This extracts the trace entries of failing assertions.
-    fn parse_result(
-        result_val: &Value,
+    /// The second-level extractor. Traverses properties to find trace items.
+    pub fn extract_from_property(
+        property: &Property,
         concrete_vals: &mut Vec<ConcreteVal>,
         have_parsed_assert_fail: &mut bool,
     ) -> Result<()> {
-        let desc = result_val["description"].to_string();
-        let prop = result_val["property"].to_string();
-        let status = result_val["status"].to_string();
-        let prop_is_assert = prop.contains("assertion");
-        let status_is_failure = status == "\"FAILURE\"";
+        let property_is_assert = property.property.contains("assertion");
+        let status_is_failure = property.status == CheckStatus::Failure;
 
-        if prop_is_assert && status_is_failure {
+        if property_is_assert && status_is_failure {
             if *have_parsed_assert_fail {
                 println!(
-                    "WARNING: Unable to parse concrete values from multiple failing assertions. Skipping property `{prop}` with description `{desc}`."
+                    "WARNING: Unable to parse concrete values from multiple failing assertions. Skipping property `{}` with description `{}`.",
+                    property.property, property.description,
                 );
             } else {
                 *have_parsed_assert_fail = true;
                 println!(
-                    "INFO: Parsing concrete values from property `{prop}` with description `{desc}`."
+                    "INFO: Parsing concrete values from property `{}` with description `{}`.",
+                    property.property, property.description,
                 );
-                let trace_arr = result_val["trace"].as_array().with_context(|| {
-                    format!(
-                        "Expected this CBMC result trace to be an array: {}",
-                        result_val["trace"]
-                    )
-                })?;
-                for trace_entry in trace_arr {
-                    parse_trace_entry(trace_entry, concrete_vals)
-                        .context("Failure in trace assignment expression:")?;
+                if let Some(trace) = &property.trace {
+                    for trace_item in trace {
+                        extract_from_trace_item(&trace_item, concrete_vals)
+                            .context("Failure in trace assignment expression:")?;
+                    }
                 }
             }
-        } else if !prop_is_assert && status_is_failure {
+        } else if !property_is_assert && status_is_failure {
             println!(
-                "WARNING: Unable to parse concrete values from failing non-assertion checks. Skipping property `{prop}` with description `{desc}`."
+                "WARNING: Unable to parse concrete values from failing non-assertion checks. Skipping property `{}` with description `{}`.",
+                property.property, property.description,
             );
         }
         Ok(())
     }
 
-    /// The third-level CBMC output parser. This extracts individual bytes from kani::any_raw calls.
-    fn parse_trace_entry(trace_entry: &Value, concrete_vals: &mut Vec<ConcreteVal>) -> Result<()> {
-        if let (
-            Some(step_type),
-            Some(lhs),
-            Some(func),
-            Some(bit_concrete_val),
-            Some(interp_concrete_val),
-            Some(width_u64),
-        ) = (
-            trace_entry["stepType"].as_str(),
-            trace_entry["lhs"].as_str(),
-            trace_entry["sourceLocation"]["function"].as_str(),
-            trace_entry["value"]["binary"].as_str(),
-            trace_entry["value"]["data"].as_str(),
-            trace_entry["value"]["width"].as_u64(),
-        ) {
-            if step_type == "assignment"
-                && lhs.starts_with("goto_symex$$return_value")
-                && func.starts_with("kani::any_raw_internal")
+    /// The third-level extractor. Extracts individual bytes from kani::any calls.
+    fn extract_from_trace_item(
+        trace_item: &TraceItem,
+        concrete_vals: &mut Vec<ConcreteVal>,
+    ) -> Result<()> {
+        if let (Some(lhs), Some(source_location), Some(value)) =
+            (&trace_item.lhs, &trace_item.source_location, &trace_item.value)
+        {
+            if let (
+                Some(func),
+                Some(width_u64),
+                Some(bit_concrete_val),
+                Some(interp_concrete_val),
+            ) = (&source_location.function, value.width, &value.binary, &value.data)
             {
-                let declared_width = width_u64 as usize;
-                let actual_width = bit_concrete_val.len();
-                ensure!(
-                    declared_width == actual_width,
-                    format!(
-                        "Declared width of {declared_width} doesn't equal actual width of {actual_width}"
-                    )
-                );
-                let mut next_num: Vec<u8> = Vec::new();
-
-                // Reverse because of endianess of CBMC trace.
-                for i in (0..declared_width).step_by(8).rev() {
-                    let str_chunk = &bit_concrete_val[i..i + 8];
-                    let str_chunk_len = str_chunk.len();
+                if trace_item.step_type == "assignment"
+                    && lhs.starts_with("goto_symex$$return_value")
+                    && func.starts_with("kani::any_raw_internal")
+                {
+                    let declared_width = width_u64 as usize;
+                    let actual_width = bit_concrete_val.len();
                     ensure!(
-                        str_chunk_len == 8,
+                        declared_width == actual_width,
                         format!(
-                            "Tried to read a chunk of 8 bits of actually read {str_chunk_len} bits"
+                            "Declared width of {declared_width} doesn't equal actual width of {actual_width}"
                         )
                     );
-                    let next_byte = u8::from_str_radix(str_chunk, 2).with_context(|| {
-                        format!("Couldn't convert the string chunk `{str_chunk}` to u8")
-                    })?;
-                    next_num.push(next_byte);
-                }
+                    let mut next_num: Vec<u8> = Vec::new();
 
-                concrete_vals.push(ConcreteVal {
-                    byte_arr: next_num,
-                    interp_val: interp_concrete_val.to_string(),
-                });
+                    // Reverse because of endianess of CBMC trace.
+                    for i in (0..declared_width).step_by(8).rev() {
+                        let str_chunk = &bit_concrete_val[i..i + 8];
+                        let str_chunk_len = str_chunk.len();
+                        ensure!(
+                            str_chunk_len == 8,
+                            format!(
+                                "Tried to read a chunk of 8 bits of actually read {str_chunk_len} bits"
+                            )
+                        );
+                        let next_byte = u8::from_str_radix(str_chunk, 2).with_context(|| {
+                            format!("Couldn't convert the string chunk `{str_chunk}` to u8")
+                        })?;
+                        next_num.push(next_byte);
+                    }
+
+                    concrete_vals.push(ConcreteVal {
+                        byte_arr: next_num,
+                        interp_val: interp_concrete_val.to_string(),
+                    });
+                }
             }
         }
         Ok(())
