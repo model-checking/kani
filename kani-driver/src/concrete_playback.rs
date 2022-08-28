@@ -294,15 +294,18 @@ mod concrete_vals_extractor {
         processed_items: &[ParserItem],
     ) -> Result<Vec<ConcreteVal>> {
         let mut concrete_vals: Vec<ConcreteVal> = Vec::new();
-        let mut have_parsed_assert_fail = false;
+        let mut extracted_assert_fail = false;
         for processed_item in processed_items.iter() {
             if let ParserItem::Result { result } = processed_item {
-                for property in result.iter() {
-                    extract_from_property(
-                        property,
-                        &mut concrete_vals,
-                        &mut have_parsed_assert_fail,
-                    )?;
+                for property in result {
+                    // Even after extracting an assert fail, we continue to call extract on more properties to provide
+                    // better diagnostics to the user in case they expected even future checks to be extracted.
+                    let old_extracted_assert_fail = extracted_assert_fail;
+                    let new_concrete_vals =
+                        extract_from_property(property, &mut extracted_assert_fail)?;
+                    if !old_extracted_assert_fail && extracted_assert_fail {
+                        concrete_vals = new_concrete_vals;
+                    }
                 }
             }
         }
@@ -310,30 +313,33 @@ mod concrete_vals_extractor {
     }
 
     /// The second-level extractor. Traverses properties to find trace items.
-    pub fn extract_from_property(
+    fn extract_from_property(
         property: &Property,
-        concrete_vals: &mut Vec<ConcreteVal>,
-        have_parsed_assert_fail: &mut bool,
-    ) -> Result<()> {
+        extracted_assert_fail: &mut bool,
+    ) -> Result<Vec<ConcreteVal>> {
+        let mut concrete_vals: Vec<ConcreteVal> = Vec::new();
         let property_is_assert = property.property.contains("assertion");
         let status_is_failure = property.status == CheckStatus::Failure;
 
         if property_is_assert && status_is_failure {
-            if *have_parsed_assert_fail {
+            if *extracted_assert_fail {
                 println!(
                     "WARNING: Unable to parse concrete values from multiple failing assertions. Skipping property `{}` with description `{}`.",
                     property.property, property.description,
                 );
             } else {
-                *have_parsed_assert_fail = true;
+                *extracted_assert_fail = true;
                 println!(
                     "INFO: Parsing concrete values from property `{}` with description `{}`.",
                     property.property, property.description,
                 );
                 if let Some(trace) = &property.trace {
                     for trace_item in trace {
-                        extract_from_trace_item(&trace_item, concrete_vals)
+                        let concrete_val_opt = extract_from_trace_item(&trace_item)
                             .context("Failure in trace assignment expression:")?;
+                        if let Some(concrete_val) = concrete_val_opt {
+                            concrete_vals.push(concrete_val);
+                        }
                     }
                 }
             }
@@ -343,14 +349,11 @@ mod concrete_vals_extractor {
                 property.property, property.description,
             );
         }
-        Ok(())
+        Ok(concrete_vals)
     }
 
     /// The third-level extractor. Extracts individual bytes from kani::any calls.
-    fn extract_from_trace_item(
-        trace_item: &TraceItem,
-        concrete_vals: &mut Vec<ConcreteVal>,
-    ) -> Result<()> {
+    fn extract_from_trace_item(trace_item: &TraceItem) -> Result<Option<ConcreteVal>> {
         if let (Some(lhs), Some(source_location), Some(value)) =
             (&trace_item.lhs, &trace_item.source_location, &trace_item.value)
         {
@@ -391,13 +394,13 @@ mod concrete_vals_extractor {
                         next_num.push(next_byte);
                     }
 
-                    concrete_vals.push(ConcreteVal {
+                    return Ok(Some(ConcreteVal {
                         byte_arr: next_num,
                         interp_val: interp_concrete_val.to_string(),
-                    });
+                    }));
                 }
             }
         }
-        Ok(())
+        Ok(None)
     }
 }
