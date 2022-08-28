@@ -573,7 +573,7 @@ pub fn process_cbmc_output(
         // <https://github.com/model-checking/kani/issues/942>
     }
     let status = if result { VerificationStatus::Success } else { VerificationStatus::Failure };
-    return VerificationResult { status, processed_items: Some(processed_items) };
+    VerificationResult { status, processed_items: Some(processed_items) }
 }
 
 /// Returns an optional formatted item based on the output format

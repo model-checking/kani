@@ -335,7 +335,7 @@ mod concrete_vals_extractor {
                 );
                 if let Some(trace) = &property.trace {
                     for trace_item in trace {
-                        let concrete_val_opt = extract_from_trace_item(&trace_item)
+                        let concrete_val_opt = extract_from_trace_item(trace_item)
                             .context("Failure in trace assignment expression:")?;
                         if let Some(concrete_val) = concrete_val_opt {
                             concrete_vals.push(concrete_val);
