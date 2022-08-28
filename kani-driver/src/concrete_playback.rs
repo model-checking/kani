@@ -9,6 +9,7 @@ use crate::call_cbmc::VerificationStatus;
 use crate::cbmc_output_parser::VerificationOutput;
 use crate::session::KaniSession;
 use anyhow::{ensure, Context, Result};
+use concrete_vals_extractor::{extract_from_processed_items, ConcreteVal};
 use kani_metadata::HarnessMetadata;
 use std::collections::hash_map::DefaultHasher;
 use std::ffi::OsString;
@@ -46,10 +47,9 @@ impl KaniSession {
         if let (Some(processed_items), Some(playback_mode)) =
             (&verification_output.processed_items, &self.args.concrete_playback)
         {
-            let concrete_vals = concrete_vals_extractor::extract_from_processed_items(
-                processed_items,
-            )
-            .expect("Something went wrong when trying to get concrete values from the CBMC output");
+            let concrete_vals = extract_from_processed_items(processed_items).expect(
+                "Something went wrong when trying to get concrete values from the CBMC output",
+            );
             let concrete_playback = format_unit_test(&harness.mangled_name, &concrete_vals);
 
             if *playback_mode == ConcretePlaybackMode::Print && !self.args.quiet {
@@ -216,10 +216,7 @@ impl KaniSession {
 }
 
 /// Generate a unit test from a list of concrete values.
-fn format_unit_test(
-    harness_name: &str,
-    concrete_vals: &[concrete_vals_extractor::ConcreteVal],
-) -> UnitTest {
+fn format_unit_test(harness_name: &str, concrete_vals: &[ConcreteVal]) -> UnitTest {
     /*
     Given a number of byte vectors, format them as:
     // interp_concrete_val_1
@@ -299,7 +296,7 @@ mod concrete_vals_extractor {
     ) -> Result<Vec<ConcreteVal>> {
         let mut concrete_vals: Vec<ConcreteVal> = Vec::new();
         let mut extracted_assert_fail = false;
-        for processed_item in processed_items.iter() {
+        for processed_item in processed_items {
             if let ParserItem::Result { result } = processed_item {
                 for property in result {
                     // Even after extracting an assert fail, we continue to call extract on more properties to provide

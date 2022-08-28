@@ -562,7 +562,7 @@ pub fn process_cbmc_output(
         .filter(|item| !item.must_be_skipped())
         .map(|item| process_item(item, extra_ptr_checks, &mut result))
         .collect();
-    for processed_item in processed_items.iter() {
+    for processed_item in &processed_items {
         // Both formatting and printing could be handled by objects which
         // implement a trait `Printer`.
         let formatted_item = format_item(processed_item, output_format);
