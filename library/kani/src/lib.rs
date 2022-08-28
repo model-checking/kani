@@ -58,7 +58,7 @@ pub fn assume(_cond: bool) {
 /// ```
 #[inline(never)]
 #[rustc_diagnostic_item = "KaniAssert"]
-pub fn assert(_cond: bool, _msg: &'static str) {
+pub const fn assert(_cond: bool, _msg: &'static str) {
     if cfg!(feature = "concrete_playback") {
         assert!(_cond, "{}", _msg);
     }
@@ -134,7 +134,7 @@ pub fn expect_fail(_cond: bool, _message: &'static str) {
 #[inline(never)]
 #[rustc_diagnostic_item = "KaniPanic"]
 #[doc(hidden)]
-pub fn panic(message: &'static str) -> ! {
+pub const fn panic(message: &'static str) -> ! {
     panic!("{}", message)
 }
 
