@@ -267,7 +267,7 @@ struct UnitTest {
 }
 
 /// Extract concrete values from the CBMC output processed items.
-/// Note: we parse items that roughly look like the following:
+/// Note: we extract items that roughly look like the following:
 /// ```json
 /// ...
 /// { "result": [
@@ -324,7 +324,7 @@ mod concrete_vals_extractor {
         if property_is_assert && status_is_failure {
             if *extracted_assert_fail {
                 println!(
-                    "WARNING: Unable to parse concrete values from multiple failing assertions. Skipping property `{}` with description `{}`.",
+                    "WARNING: Unable to extract concrete values from multiple failing assertions. Skipping property `{}` with description `{}`.",
                     property.property, property.description,
                 );
             } else {
@@ -345,7 +345,7 @@ mod concrete_vals_extractor {
             }
         } else if !property_is_assert && status_is_failure {
             println!(
-                "WARNING: Unable to parse concrete values from failing non-assertion checks. Skipping property `{}` with description `{}`.",
+                "WARNING: Unable to extract concrete values from failing non-assertion checks. Skipping property `{}` with description `{}`.",
                 property.property, property.description,
             );
         }
