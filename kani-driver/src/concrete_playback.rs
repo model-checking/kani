@@ -6,7 +6,7 @@
 
 use crate::args::ConcretePlaybackMode;
 use crate::call_cbmc::VerificationStatus;
-use crate::cbmc_output_parser::VerificationResult;
+use crate::cbmc_output_parser::VerificationOutput;
 use crate::session::KaniSession;
 use anyhow::{ensure, Context, Result};
 use kani_metadata::HarnessMetadata;
@@ -23,7 +23,7 @@ impl KaniSession {
     pub fn gen_and_add_concrete_playback(
         &self,
         harness: &HarnessMetadata,
-        verification_result: &VerificationResult,
+        verification_output: &VerificationOutput,
     ) -> Result<()> {
         if self.args.concrete_playback.is_none() {
             return Ok(());
@@ -34,7 +34,7 @@ impl KaniSession {
             "The Kani argument `--output-format old` is not supported with the concrete playback feature."
         );
 
-        if verification_result.status == VerificationStatus::Success {
+        if verification_output.status == VerificationStatus::Success {
             if !self.args.quiet {
                 println!(
                     "INFO: The concrete playback feature does not generate unit tests when verification succeeds."
@@ -43,7 +43,7 @@ impl KaniSession {
             return Ok(());
         }
 
-        if let Some(processed_items) = &verification_result.processed_items {
+        if let Some(processed_items) = &verification_output.processed_items {
             let concrete_vals = concrete_vals_extractor::extract_from_processed_items(
                 processed_items,
             )

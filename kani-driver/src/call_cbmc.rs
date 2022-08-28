@@ -9,7 +9,7 @@ use std::process::Command;
 use std::time::Instant;
 
 use crate::args::KaniArgs;
-use crate::cbmc_output_parser::{process_cbmc_output, VerificationResult};
+use crate::cbmc_output_parser::{process_cbmc_output, VerificationOutput};
 use crate::session::KaniSession;
 
 #[derive(PartialEq, Eq)]
@@ -29,11 +29,11 @@ impl KaniSession {
 
         let now = Instant::now();
 
-        let verification_result = if self.args.output_format == crate::args::OutputFormat::Old {
+        let verification_output = if self.args.output_format == crate::args::OutputFormat::Old {
             if self.run_terminal(cmd).is_err() {
-                VerificationResult { status: VerificationStatus::Failure, processed_items: None }
+                VerificationOutput { status: VerificationStatus::Failure, processed_items: None }
             } else {
-                VerificationResult { status: VerificationStatus::Success, processed_items: None }
+                VerificationOutput { status: VerificationStatus::Success, processed_items: None }
             }
         } else {
             // Add extra argument to receive the output in JSON format.
@@ -51,7 +51,7 @@ impl KaniSession {
                     &self.args.output_format,
                 )
             } else {
-                VerificationResult { status: VerificationStatus::Failure, processed_items: None }
+                VerificationOutput { status: VerificationStatus::Failure, processed_items: None }
             }
         };
         // TODO: We should print this even the verification fails but not if it crashes.
@@ -60,8 +60,8 @@ impl KaniSession {
             println!("Verification Time: {}s", elapsed);
         }
 
-        self.gen_and_add_concrete_playback(harness, &verification_result)?;
-        Ok(verification_result.status)
+        self.gen_and_add_concrete_playback(harness, &verification_output)?;
+        Ok(verification_output.status)
     }
 
     /// used by call_cbmc_viewer, invokes different variants of CBMC.

@@ -335,8 +335,8 @@ pub enum TraceData {
 impl std::fmt::Display for TraceData {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let trace_data_str = match self {
-            Self::NonBool(x) => x.to_string(),
-            Self::Bool(x) => x.to_string(),
+            Self::NonBool(trace_data) => trace_data.to_string(),
+            Self::Bool(trace_data) => trace_data.to_string(),
         };
         write! {f, "{}", trace_data_str}
     }
@@ -532,8 +532,8 @@ fn postprocess_error_message(message: ParserItem) -> ParserItem {
     }
 }
 
-/// The verification result, as extracted by the CBMC output parser.
-pub struct VerificationResult {
+/// The verification output, as extracted by the CBMC output parser.
+pub struct VerificationOutput {
     pub status: VerificationStatus,
     pub processed_items: Option<Vec<ParserItem>>,
 }
@@ -550,7 +550,7 @@ pub fn process_cbmc_output(
     mut process: Child,
     extra_ptr_checks: bool,
     output_format: &OutputFormat,
-) -> VerificationResult {
+) -> VerificationOutput {
     let stdout = process.stdout.as_mut().unwrap();
     let mut stdout_reader = BufReader::new(stdout);
     let parser = Parser::new(&mut stdout_reader);
@@ -573,7 +573,7 @@ pub fn process_cbmc_output(
         // <https://github.com/model-checking/kani/issues/942>
     }
     let status = if result { VerificationStatus::Success } else { VerificationStatus::Failure };
-    VerificationResult { status, processed_items: Some(processed_items) }
+    VerificationOutput { status, processed_items: Some(processed_items) }
 }
 
 /// Returns an optional formatted item based on the output format
