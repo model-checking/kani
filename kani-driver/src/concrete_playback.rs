@@ -43,16 +43,16 @@ impl KaniSession {
             return Ok(());
         }
 
-        if let Some(processed_items) = &verification_output.processed_items {
+        if let (Some(processed_items), Some(playback_mode)) =
+            (&verification_output.processed_items, &self.args.concrete_playback)
+        {
             let concrete_vals = concrete_vals_extractor::extract_from_processed_items(
                 processed_items,
             )
-            .expect(
-                "Something went wrong when trying to get concrete values from the CBMC output file",
-            );
+            .expect("Something went wrong when trying to get concrete values from the CBMC output");
             let concrete_playback = format_unit_test(&harness.mangled_name, &concrete_vals);
 
-            if let Some(playback_mode) = &self.args.concrete_playback && *playback_mode == ConcretePlaybackMode::Print && !self.args.quiet {
+            if *playback_mode == ConcretePlaybackMode::Print && !self.args.quiet {
                 println!(
                     "Concrete playback unit test for `{}`:\n```\n{}\n```",
                     &harness.mangled_name, &concrete_playback.unit_test_str
@@ -63,15 +63,19 @@ impl KaniSession {
                 );
             }
 
-            if let Some(playback_mode) = &self.args.concrete_playback && *playback_mode == ConcretePlaybackMode::InPlace {
+            if *playback_mode == ConcretePlaybackMode::InPlace {
                 if !self.args.quiet {
                     println!(
                         "INFO: Now modifying the source code to include the concrete playback unit test `{}`.",
                         &concrete_playback.unit_test_name
                     );
                 }
-                self.modify_src_code(&harness.original_file, harness.original_end_line, &concrete_playback)
-                    .expect("Failed to modify source code");
+                self.modify_src_code(
+                    &harness.original_file,
+                    harness.original_end_line,
+                    &concrete_playback,
+                )
+                .expect("Failed to modify source code");
             }
         }
         Ok(())
