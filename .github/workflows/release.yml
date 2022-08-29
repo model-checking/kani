@@ -36,6 +36,11 @@ jobs:
             echo "Git tag ${{env.TAG_VERSION}} did not match crate version ${{env.CRATE_VERSION}}"
             exit 1
           fi
+          # Check the action script's tag.
+          if ! grep "image: docker://ghcr.io/model-checking/kani.*:${{ env.TAG_VERSION }}" action.yml; then
+            echo "Git tag ${{env.TAG_VERSION}} did not match version in action.yml"
+            exit 1;
+          fi
 
       - name: Create release
         id: create_release

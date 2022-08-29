@@ -9,11 +9,11 @@ branding:
   icon: 'cloud'
   color: 'orange'
 
-#TODO: Change to model-checking/kani-20-04 once the image is released.
 runs:
   using: 'docker'
-  image: docker://ghcr.io/yoshikitakashima/kani-20-04:latest
+  image: docker://ghcr.io/model-checking/kani-ubuntu-20.04:0.9.0
   args:
     - bash
     - '-c'
     - 'PATH="/root/.cargo/bin:${PATH}"; cargo kani'
+
