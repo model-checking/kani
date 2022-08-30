@@ -79,12 +79,10 @@ fn overlap_x_and_y() -> impl Generator<Yield = (), Return = ()> {
 
 #[kani::proof]
 fn main() {
-    // FIXME: size of generators does not work reliably (https://github.com/model-checking/kani/issues/1395)
     assert_eq!(1025, std::mem::size_of_val(&move_before_yield()));
-    // The following assertion fails for some reason (tracking issue: https://github.com/model-checking/kani/issues/1395).
-    // But it also fails for WASM (https://github.com/rust-lang/rust/issues/62807),
-    // so it is probably not a big problem:
-    assert_eq!(1026, std::mem::size_of_val(&move_before_yield_with_noop()));
+    // With panic=unwind, the following assertion passes:
+    // assert_eq!(1026, std::mem::size_of_val(&move_before_yield_with_noop()));
+    assert_eq!(1025, std::mem::size_of_val(&move_before_yield_with_noop()));
     assert_eq!(2051, std::mem::size_of_val(&overlap_move_points()));
     assert_eq!(1026, std::mem::size_of_val(&overlap_x_and_y()));
 }
