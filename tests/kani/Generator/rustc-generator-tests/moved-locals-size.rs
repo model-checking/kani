@@ -6,6 +6,14 @@
 // Modifications Copyright Kani Contributors
 // See GitHub history for details.
 
+//! Tests the size of generators
+//! Note that the size of generators can depend on the panic strategy.
+//! This is the case here (see the bottom of the file).
+//! In particular, running rustc with default options on this file will fail an assertion.
+//! Since Kani uses "panic=abort", you need to run rustc with `-C panic=abort`
+//! to get the same results as Kani.
+//! More information: https://github.com/rust-lang/rust/issues/59123
+
 // run-pass
 // Test that we don't duplicate storage for a variable that is moved to another
 // binding. This used to happen in the presence of unwind and drop edges (see
@@ -15,7 +23,7 @@
 // don't want to see is the `complex` generator size being upwards of 2048 bytes
 // (which would indicate it is reserving space for two copies of Foo.)
 //
-// See issue #59123 for a full explanation.
+// See issue https://github.com/rust-lang/rust/issues/59123 for a full explanation.
 
 // edition:2018
 // ignore-wasm32 issue #62807
@@ -79,12 +87,10 @@ fn overlap_x_and_y() -> impl Generator<Yield = (), Return = ()> {
 
 #[kani::proof]
 fn main() {
-    // FIXME: size of generators does not work reliably (https://github.com/model-checking/kani/issues/1395)
     assert_eq!(1025, std::mem::size_of_val(&move_before_yield()));
-    // The following assertion fails for some reason (tracking issue: https://github.com/model-checking/kani/issues/1395).
-    // But it also fails for WASM (https://github.com/rust-lang/rust/issues/62807),
-    // so it is probably not a big problem:
-    assert_eq!(1026, std::mem::size_of_val(&move_before_yield_with_noop()));
+    // With panic=unwind, the following assertion fails because the size increases to 1026.
+    // More information here: https://github.com/rust-lang/rust/issues/59123
+    assert_eq!(1025, std::mem::size_of_val(&move_before_yield_with_noop()));
     assert_eq!(2051, std::mem::size_of_val(&overlap_move_points()));
     assert_eq!(1026, std::mem::size_of_val(&overlap_x_and_y()));
 }
