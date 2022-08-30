@@ -6,13 +6,13 @@
 // Modifications Copyright Kani Contributors
 // See GitHub history for details.
 
-/// Tests the size of generators
-/// Note that the size of generators can depend on the panic strategy.
-/// This is the case here (see the bottom of the file).
-/// In particular, running rustc with default options on this file will fail an assertion.
-/// Since Kani uses "panic=abort", you need to run rustc with `-C panic=abort`
-/// to get the same results as Kani.
-/// More information: https://github.com/rust-lang/rust/issues/59123
+//! Tests the size of generators
+//! Note that the size of generators can depend on the panic strategy.
+//! This is the case here (see the bottom of the file).
+//! In particular, running rustc with default options on this file will fail an assertion.
+//! Since Kani uses "panic=abort", you need to run rustc with `-C panic=abort`
+//! to get the same results as Kani.
+//! More information: https://github.com/rust-lang/rust/issues/59123
 
 // run-pass
 // Test that we don't duplicate storage for a variable that is moved to another
