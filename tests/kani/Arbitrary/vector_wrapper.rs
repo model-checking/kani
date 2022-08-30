@@ -1,11 +1,9 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-// Check that users can implement Invariant and Arbitrary to the same struct.
-#![cfg_attr(kani, feature(min_specialization))]
-
+// Check that users can implement Arbitrary to a simple data struct with Vec<>.
 extern crate kani;
-use kani::{Arbitrary, Invariant};
+use kani::Arbitrary;
 
 // Dummy wrappar that keeps track of the vector size.
 struct VecWrapper {
@@ -21,9 +19,7 @@ impl VecWrapper {
     fn from(buf: &[u8]) -> Self {
         VecWrapper { has_data: true, data: Vec::from(buf) }
     }
-}
 
-unsafe impl Invariant for VecWrapper {
     fn is_valid(&self) -> bool {
         self.has_data ^ self.data.is_empty()
     }
@@ -36,7 +32,7 @@ impl Arbitrary for VecWrapper {
 }
 
 #[kani::proof]
-fn check() {
+fn check_any() {
     let wrap: VecWrapper = kani::any();
     assert!(wrap.is_valid());
 }

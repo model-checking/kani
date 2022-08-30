@@ -7,7 +7,6 @@ use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::InternedString;
 use rustc_hir::def_id::DefId;
 use rustc_hir::def_id::LOCAL_CRATE;
-use rustc_hir::definitions::DefPathDataName;
 use rustc_middle::mir::mono::CodegenUnitNameBuilder;
 use rustc_middle::mir::Local;
 use rustc_middle::ty::print::with_no_trimmed_paths;
@@ -142,19 +141,4 @@ pub fn full_crate_name(tcx: TyCtxt) -> String {
         ),
         tcx.crate_name(LOCAL_CRATE)
     )
-}
-
-//TODO: These were moved from hooks.rs, where they didn't have a goto context. Normalize them.
-
-/// Helper function to determine if the function name starts with `expected`
-// TODO: rationalize how we match the hooks https://github.com/model-checking/kani/issues/130
-pub fn instance_name_starts_with(tcx: TyCtxt, instance: Instance, expected: &str) -> bool {
-    let def_path = tcx.def_path(instance.def.def_id());
-    if let Some(data) = def_path.data.last() {
-        match data.data.name() {
-            DefPathDataName::Named(name) => return name.to_string().starts_with(expected),
-            DefPathDataName::Anon { .. } => (),
-        }
-    }
-    false
 }

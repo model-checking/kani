@@ -2,13 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use super::super::codegen::TypeExt;
 use crate::codegen_cprover_gotoc::codegen::typ::{is_pointer, pointee_type};
-use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::codegen_cprover_gotoc::GotocCtx;
-use cbmc::goto_program::{Expr, ExprValue, Location, Stmt, SymbolTable, Type};
-use cbmc::{btree_string_map, InternedString};
+use cbmc::btree_string_map;
+use cbmc::goto_program::{Expr, ExprValue, SymbolTable, Type};
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{Instance, Ty};
-use tracing::debug;
 
 // Should move into rvalue
 //make this a member function
@@ -40,40 +38,6 @@ pub fn extract_const_message(arg: &Expr) -> Option<String> {
 }
 
 impl<'tcx> GotocCtx<'tcx> {
-    /// Kani does not currently support all MIR constructs.
-    /// When we hit a construct we don't handle, we have two choices:
-    /// We can use the `unimplemented!()` macro, which causes a compile time failure.
-    /// Or, we can use this function, which inserts an `assert(false, "FOO is not currently supported by Kani")` into the generated code.
-    /// This means that if the unimplemented feature is dynamically used by the code being verified, we will see an assertion failure.
-    /// If it is not used, we the assertion will pass.
-    /// This allows us to continue to make progress parsing rust code, while remaining sound (thanks to the `assert(false)`)
-    pub fn codegen_unimplemented(
-        &mut self,
-        operation_name: &str,
-        t: Type,
-        loc: Location,
-        url: &str,
-    ) -> Expr {
-        // Save this occurrence so we can emit a warning in the compilation report.
-        debug!("codegen_unimplemented: {} at {}", operation_name, loc.short_string());
-        let key: InternedString = operation_name.into();
-        self.unsupported_constructs.entry(key).or_insert_with(Vec::new).push(loc);
-
-        let body = vec![
-            // Assert false to alert the user that there is a path that uses an unimplemented feature.
-            self.codegen_assert_false(
-                PropertyClass::UnsupportedConstruct,
-                &GotocCtx::unsupported_msg(operation_name, Some(url)),
-                loc,
-            ),
-            // Assume false to block any further exploration of this path.
-            Stmt::assume(Expr::bool_false(), loc),
-            t.nondet().as_stmt(loc).with_location(loc), //TODO assume rust validity contraints
-        ];
-
-        Expr::statement_expression(body, t).with_location(loc)
-    }
-
     /// Generates an expression `(ptr as usize) % align_of(T) == 0`
     /// to determine if a pointer `ptr` with pointee type `T` is aligned.
     pub fn is_ptr_aligned(&mut self, typ: Ty<'tcx>, ptr: Expr) -> Expr {

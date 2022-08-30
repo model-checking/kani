@@ -6,13 +6,19 @@ pub enum Unit {
     Unit,
 }
 
+impl kani::Arbitrary for Unit {
+    fn any() -> Self {
+        Unit::Unit
+    }
+}
+
 fn foo(input: &Result<u32, Unit>) -> u32 {
     if let Ok(num) = input { *num } else { 3 }
 }
 
 #[kani::proof]
 fn main() {
-    let input: Result<u32, Unit> = unsafe { kani::any_raw() };
+    let input: Result<u32, Unit> = kani::any();
     let x = foo(&input);
     assert!(x == 3 || input != Err(Unit::Unit));
     let input: Result<u32, Unit> = if kani::any() { Ok(0) } else { Err(Unit::Unit) };

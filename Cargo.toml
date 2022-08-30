@@ -3,7 +3,7 @@
 
 [package]
 name = "kani-verifier"
-version = "0.8.0"
+version = "0.9.0"
 edition = "2021"
 description = "A bit-precise model checker for Rust."
 readme = "README.md"
@@ -46,6 +46,13 @@ members = [
   "kani_metadata",
   # `librustdoc` is still needed by bookrunner.
   "tools/bookrunner/librustdoc",
+]
+
+# This indicates what package to e.g. build with 'cargo build' without --workspace
+default-members = [
+  ".",
+  "kani-driver",
+  "kani-compiler",
 ]
 
 exclude = [

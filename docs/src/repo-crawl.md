@@ -84,8 +84,7 @@ will refer to the name as `$CONTAINER_NAME` from now on.
 In this step we will download the list of repositories using a script
 [kani-run-on-repos.sh](../../scripts/exps/kani-run-on-repos.sh)
 
-Make sure to have Kani ready to run. If not, compile with `cargo build
---workspace`.
+Make sure to have Kani ready to run. If not, compile with `cargo build`.
 
 From the repository root, you can run the script with
 `./scripts/exps/kani-run-on-repos.sh $URL_LIST_FILE` where

@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-use crate::{any, any_raw_internal, assume, Arbitrary};
+use crate::{any, assume, Arbitrary};
 use std::alloc::{alloc, dealloc, Layout};
 use std::ops::{Deref, DerefMut};
 
@@ -78,27 +78,6 @@ impl<T, const MAX_SLICE_LENGTH: usize> AnySlice<T, MAX_SLICE_LENGTH> {
         any_slice
     }
 
-    #[deprecated(
-        since = "0.8.0",
-        note = "This function may return symbolic values that don't respects the language type invariants."
-    )]
-    fn new_raw() -> Self
-    where
-        // This generic_const_exprs feature lets Rust know the size of generic T.
-        [(); std::mem::size_of::<T>()]:,
-    {
-        let any_slice = AnySlice::<T, MAX_SLICE_LENGTH>::alloc_slice();
-        unsafe {
-            let mut i = 0;
-            // See note on `MAX_SLICE_LENGTH` in `new` method above
-            while i < any_slice.slice_len && i < MAX_SLICE_LENGTH {
-                *any_slice.ptr.add(i) = any_raw_internal::<T, { std::mem::size_of::<T>() }>();
-                i += 1;
-            }
-        }
-        any_slice
-    }
-
     fn alloc_slice() -> Self {
         let slice_len = any();
         assume(slice_len <= MAX_SLICE_LENGTH);
@@ -154,30 +133,4 @@ where
     T: Arbitrary,
 {
     AnySlice::<T, MAX_SLICE_LENGTH>::new()
-}
-
-/// # Safety
-///
-/// Users must guarantee that an unconstrained symbolic value for type T only represents valid
-/// values.
-///
-/// # Deprecated
-///
-/// This has been deprecated due to its limited value and high risk of generating undefined
-/// behavior.
-#[allow(deprecated)]
-#[deprecated(
-    since = "0.8.0",
-    note = "This function may return symbolic values that don't respects the language type invariants."
-)]
-pub unsafe fn any_raw_slice<T, const MAX_SLICE_LENGTH: usize>() -> AnySlice<T, MAX_SLICE_LENGTH>
-where
-    // This generic_const_exprs feature lets Rust know the size of generic T.
-    [(); std::mem::size_of::<T>()]:,
-{
-    assert!(
-        !cfg!(feature = "exe_trace"),
-        "The function `kani::slice::any_raw_slice::<T, MAX_SLICE_LENGTH>() is not supported with the executable trace feature. Use `kani::slice::any_slice::<T, MAX_SLICE_LENGTH>()` instead."
-    );
-    AnySlice::<T, MAX_SLICE_LENGTH>::new_raw()
 }

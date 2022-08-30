@@ -1328,7 +1328,7 @@ impl Expr {
 
     /// `self == 0`
     pub fn is_zero(self) -> Self {
-        assert!(self.typ.is_numeric());
+        assert!(self.typ.is_numeric() || self.typ.is_pointer());
         let typ = self.typ.clone();
         self.eq(typ.zero())
     }
@@ -1491,6 +1491,11 @@ impl Expr {
     /// `self = rhs;`
     pub fn assign(self, rhs: Expr, loc: Location) -> Stmt {
         Stmt::assign(self, rhs, loc)
+    }
+
+    /// Shorthand to build a `Deinit(self)` statement. See `StmtBody::Deinit`
+    pub fn deinit(self, loc: Location) -> Stmt {
+        Stmt::deinit(self, loc)
     }
 
     /// `if (self) { t } else { e }` or `if (self) { t }`

@@ -1,2 +1,2 @@
 Status: FAILURE\
-arithmetic overflow on signed multiplication
+offset: attempt to compute number in bytes which would overflow
