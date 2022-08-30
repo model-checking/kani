@@ -1,7 +1,7 @@
 - **Feature Name:** `MIR` Linker (mir_linker)
 - **RFC Tracking Issue**: <https://github.com/model-checking/kani/issues/1588>
-- **RFC PR:** *TODO*
-- **Status:** Draft
+- **RFC PR:** <https://github.com/model-checking/kani/pull/1600>
+- **Status:** Under Review
 - **Version:** 0
 
 -------------------
