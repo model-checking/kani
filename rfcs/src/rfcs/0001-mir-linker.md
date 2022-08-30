@@ -61,7 +61,7 @@ After this RFC, the system flow would be slightly different:
    I.e., for every crate compiled, `kani-compiler` will generate an artifact that includes the `MIR` representation
   of all items in the crate.
 2. Kani will generate the `goto-program` only while compiling the target user crate.
-  It will generate one `goto-program` model that includes all items reachable from every harness in the target crate.
+  It will generate one `goto-program` model that includes all items reachable from any harness in the target crate.
 3. `goto-cc` will still be invoked to link the generated model against Kani's `C` library.
 4. Steps #3 and #4 above will be performed without any change.
 
