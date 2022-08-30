@@ -1,17 +1,15 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// compile-flags: --edition 2018
 
 // Regression test for https://github.com/model-checking/kani/issues/1593
 // The problem was that the size of a generator was wrong, which was discovered
 // in the context of vtables.
 
-use std::{
-    future::Future,
-    pin::Pin,
-    sync::{
-        atomic::{AtomicI64, Ordering},
-        Arc,
-    },
+use std::sync::{
+    atomic::{AtomicI64, Ordering},
+    Arc,
 };
 
 #[kani::proof]
