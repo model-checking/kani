@@ -555,25 +555,25 @@ pub fn process_cbmc_output(
     let mut stdout_reader = BufReader::new(stdout);
     let parser = Parser::new(&mut stdout_reader);
     let mut result = false;
-    let mut processed_items: Vec<ParserItem> = Vec::new();
-
-    for item in parser {
-        // Some items (e.g., messages) are skipped.
-        // We could also process them and decide to skip later.
-        if item.must_be_skipped() {
-            continue;
-        }
-        let processed_item = process_item(item, extra_ptr_checks, &mut result);
-        // Both formatting and printing could be handled by objects which
-        // implement a trait `Printer`.
-        let formatted_item = format_item(&processed_item, output_format);
-        if let Some(fmt_item) = formatted_item {
-            println!("{}", fmt_item);
-        }
-        // TODO: Record processed items and dump them into a JSON file
-        // <https://github.com/model-checking/kani/issues/942>
-        processed_items.push(processed_item);
-    }
+    let processed_items: Vec<_> = parser
+        .filter_map(|item| {
+            // Some items (e.g., messages) are skipped.
+            // We could also process them and decide to skip later.
+            if item.must_be_skipped() {
+                return None;
+            }
+            let processed_item = process_item(item, extra_ptr_checks, &mut result);
+            // Both formatting and printing could be handled by objects which
+            // implement a trait `Printer`.
+            let formatted_item = format_item(&processed_item, output_format);
+            if let Some(fmt_item) = formatted_item {
+                println!("{}", fmt_item);
+            }
+            // TODO: Record processed items and dump them into a JSON file
+            // <https://github.com/model-checking/kani/issues/942>
+            Some(processed_item)
+        })
+        .collect();
     let status = if result { VerificationStatus::Success } else { VerificationStatus::Failure };
     VerificationOutput { status, processed_items: Some(processed_items) }
 }
