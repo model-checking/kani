@@ -68,9 +68,17 @@ impl<'tcx> GotocCtx<'tcx> {
                     // We ignore assignment for all zero size types
                     Stmt::skip(location)
                 } else {
-                    unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place(place))
-                        .goto_expr
-                        .deinit(location)
+                    let place = unwrap_or_return_codegen_unimplemented_stmt!(
+                        self,
+                        self.codegen_place(place)
+                    )
+                    .goto_expr;
+                    if self.queries.get_zero_init_vars() {
+                        let zero_init = place.typ().zero_initializer(&self.symbol_table);
+                        place.assign(zero_init, location)
+                    } else {
+                        place.deinit(location)
+                    }
                 }
             }
             StatementKind::SetDiscriminant { place, variant_index } => {
