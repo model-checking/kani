@@ -71,6 +71,9 @@ pub struct KaniArgs {
     /// Enable usage of unstable options
     #[structopt(long, hidden_short_help(true))]
     pub enable_unstable: bool,
+    /// Enable usage of potentially unsound experimental features
+    #[structopt(long, hidden = true, requires("enable-unstable"))]
+    pub enable_unsound_experiments: bool,
 
     // Hide this since it depends on function that is a hidden option.
     /// Print commands instead of running them. This command uses "harness" as a place holder for
@@ -99,8 +102,8 @@ pub struct KaniArgs {
     /// This is useful for experiments to see whether assigning constant values produces better
     /// performance by allowing CBMC to do more constant propegation.
     /// Unfortunatly, it is unsafe to use for production code, since it may unsoundly hide bugs.
-    /// Marked as `unstable` to prevent use outside of experimental contexts.
-    #[structopt(long, hidden = true, requires("enable-unstable"))]
+    /// Marked as `unsound` to prevent use outside of experimental contexts.
+    #[structopt(long, hidden = true, requires("enable-unsound-experiments"))]
     pub zero_init_vars: bool,
 
     /// Entry point for verification (symbol name).

@@ -185,13 +185,13 @@ impl DatatypeComponent {
     }
 
     pub fn field<T: Into<InternedString>>(name: T, typ: Type) -> Self {
+        let name = name.into();
         assert!(
             Self::typecheck_datatype_field(&typ),
             "Illegal field.\n\tName: {}\n\tType: {:?}",
-            name.into(),
+            name,
             typ
         );
-        let name = name.into();
         Field { name, typ }
     }
 
