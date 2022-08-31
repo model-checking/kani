@@ -18,11 +18,20 @@ jobs:
         with:
             os: ${{ matrix.os }}
 
-      - name: Build Kani
+      - name: Format Check
+        run: ./scripts/kani-fmt.sh --check
+
+      - name: Build proptest
         run: |
           export RUST_BACKTRACE=1
           cargo build --workspace
 
-      - name: Execute Kani regression
-        run: ./scripts/kani-regression.sh
+      - name: Run Tests
+        run: |
+          export RUST_BACKTRACE=1
+          cargo test -p proptest
 
+      - name: Run Tests
+        run: |
+          export RUST_BACKTRACE=1
+          cargo doc --workspace --no-deps --exclude std

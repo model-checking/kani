@@ -9,9 +9,6 @@ set -eux
 # https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners#supported-software
 #brew update
 
-# Install dependencies via `brew`
-brew install universal-ctags wget
-
 # Add Python package dependencies
 PYTHON_DEPS=(
   autopep8

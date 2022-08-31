@@ -6,26 +6,9 @@ set -eu
 
 # Dependencies.
 DEPS=(
-  bison
-  cmake
-  curl
-  flex
-  g++
-  gcc
   git
-  gpg-agent
-  libssl-dev
-  lsb-release
-  make
-  ninja-build
-  patch
-  pkg-config
   python3-pip # Default in CI, but missing in AWS AMI
   python3-setuptools
-  software-properties-common
-  wget
-  zlib1g
-  zlib1g-dev
 )
 
 # Version specific dependencies.
