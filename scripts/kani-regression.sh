@@ -20,7 +20,7 @@ cargo build --workspace
 
 # Unit tests
 cargo test -p proptest
-# proptest-derive not working.
+# proptest-derive not supported.
 
 # TODO: for parts where Kani is enabled, test with kani.
 
