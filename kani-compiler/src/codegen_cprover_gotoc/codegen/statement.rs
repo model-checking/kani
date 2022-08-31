@@ -56,31 +56,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         .assign(self.codegen_rvalue(r, location), location)
                 }
             }
-            StatementKind::Deinit(place) => {
-                // From rustc doc: "This writes `uninit` bytes to the entire place."
-                // Our model of GotoC has a similar statement, which is later lowered
-                // to assigning a Nondet in CBMC, with a comment specifying that it
-                // corresponds to a Deinit.
-                let dst_mir_ty = self.place_ty(place);
-                let dst_type = self.codegen_ty(dst_mir_ty);
-                let layout = self.layout_of(dst_mir_ty);
-                if layout.is_zst() || dst_type.sizeof_in_bits(&self.symbol_table) == 0 {
-                    // We ignore assignment for all zero size types
-                    Stmt::skip(location)
-                } else {
-                    let place = unwrap_or_return_codegen_unimplemented_stmt!(
-                        self,
-                        self.codegen_place(place)
-                    )
-                    .goto_expr;
-                    if self.queries.get_zero_init_vars() {
-                        let zero_init = place.typ().zero_initializer(&self.symbol_table);
-                        place.assign(zero_init, location)
-                    } else {
-                        place.deinit(location)
-                    }
-                }
-            }
+            StatementKind::Deinit(place) => self.codegen_deinit(place, location),
             StatementKind::SetDiscriminant { place, variant_index } => {
                 // this requires place points to an enum type.
                 let pt = self.place_ty(place);
@@ -282,6 +258,28 @@ impl<'tcx> GotocCtx<'tcx> {
                 loc,
                 "https://github.com/model-checking/kani/issues/2",
             ),
+        }
+    }
+
+    // From rustc doc: "This writes `uninit` bytes to the entire place."
+    // Our model of GotoC has a similar statement, which is later lowered
+    // to assigning a Nondet in CBMC, with a comment specifying that it
+    // corresponds to a Deinit.
+    fn codegen_deinit(&mut self, place: &Box<Place<'tcx>>, loc: Location) -> Stmt {
+        let dst_mir_ty = self.place_ty(place);
+        let dst_type = self.codegen_ty(dst_mir_ty);
+        let layout = self.layout_of(dst_mir_ty);
+        let goto_place =
+            unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place(place)).goto_expr;
+        if layout.is_zst() || dst_type.sizeof_in_bits(&self.symbol_table) == 0 {
+            // We ignore assignment for all zero size types
+            Stmt::skip(loc)
+        } else if let Some(init) = self.codegen_default_initializer(&goto_place) {
+            // If we have a default initilizer, use that instead of the de-init statement
+            // This will currently only happen in "unsound_experiments" mode
+            goto_place.assign(init, loc)
+        } else {
+            goto_place.deinit(loc)
         }
     }
 

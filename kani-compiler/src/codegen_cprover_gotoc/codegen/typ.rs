@@ -5,6 +5,7 @@ use cbmc::btree_map;
 use cbmc::goto_program::{DatatypeComponent, Expr, Location, Parameter, Symbol, SymbolTable, Type};
 use cbmc::utils::aggr_tag;
 use cbmc::{InternString, InternedString};
+#[cfg(feature = "unsound_experiments")]
 use kani_queries::UserInput;
 use rustc_ast::ast::Mutability;
 use rustc_hir::{LangItem, Unsafety};
@@ -681,12 +682,22 @@ impl<'tcx> GotocCtx<'tcx> {
     /// If the zero initilizer flag is set, does zero init (if possible).
     /// Otherwise, returns `None` which leaves the variable uninitilized.
     /// In CBMC, this translates to a NONDET value.
+    #[cfg(feature = "unsound_experiments")]
     pub fn codegen_default_initializer(&self, e: &Expr) -> Option<Expr> {
         if self.queries.get_zero_init_vars() {
             Some(e.typ().zero_initializer(&self.symbol_table))
         } else {
             None
         }
+    }
+
+    /// Codegens the an initalizer for variables without one.
+    /// If the zero initilizer flag is set, does zero init (if possible).
+    /// Otherwise, returns `None` which leaves the variable uninitilized.
+    /// In CBMC, this translates to a NONDET value.
+    #[cfg(not(feature = "unsound_experiments"))]
+    pub fn codegen_default_initializer(&self, _e: &Expr) -> Option<Expr> {
+        None
     }
 
     /// The unit type in Rust is an empty struct in gotoc

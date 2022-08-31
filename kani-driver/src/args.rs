@@ -72,6 +72,7 @@ pub struct KaniArgs {
     #[structopt(long, hidden_short_help(true))]
     pub enable_unstable: bool,
     /// Enable usage of potentially unsound experimental features
+    #[cfg(feature = "unsound_experiments")]
     #[structopt(long, hidden = true, requires("enable-unstable"))]
     pub enable_unsound_experiments: bool,
 
@@ -103,6 +104,7 @@ pub struct KaniArgs {
     /// performance by allowing CBMC to do more constant propegation.
     /// Unfortunatly, it is unsafe to use for production code, since it may unsoundly hide bugs.
     /// Marked as `unsound` to prevent use outside of experimental contexts.
+    #[cfg(feature = "unsound_experiments")]
     #[structopt(long, hidden = true, requires("enable-unsound-experiments"))]
     pub zero_init_vars: bool,
 

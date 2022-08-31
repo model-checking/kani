@@ -120,6 +120,8 @@ impl KaniSession {
         if self.args.ignore_global_asm {
             flags.push("--ignore-global-asm".into());
         }
+
+        #[cfg(feature = "unsound_experiments")]
         if self.args.zero_init_vars {
             flags.push("--zero-init-vars".into());
         }
