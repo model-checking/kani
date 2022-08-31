@@ -80,6 +80,7 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
         }
     }
 
+    ctx.inform_if_no_failed(&failed_harnesses);
     ctx.print_final_summary(&sorted_harnesses, &failed_harnesses)
 }
 
@@ -134,6 +135,7 @@ fn standalone_main() -> Result<()> {
         }
     }
 
+    ctx.inform_if_no_failed(&failed_harnesses);
     ctx.print_final_summary(&sorted_harnesses, &failed_harnesses)
 }
 
