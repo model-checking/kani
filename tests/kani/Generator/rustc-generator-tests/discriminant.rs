@@ -95,7 +95,6 @@ fn cycle(
 }
 
 #[kani::proof]
-#[kani::unwind(260)]
 fn main() {
     // Has only one invalid discr. value.
     let gen_u8_tiny_niche = || {
