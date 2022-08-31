@@ -286,7 +286,7 @@ struct UnitTest {
 /// ```
 mod concrete_vals_extractor {
     use crate::cbmc_output_parser::{CheckStatus, ParserItem, Property, TraceItem};
-    use anyhow::{ensure, Context, Result};
+    use anyhow::{bail, ensure, Context, Result};
 
     pub struct ConcreteVal {
         pub byte_arr: Vec<u8>,
@@ -299,21 +299,28 @@ mod concrete_vals_extractor {
     ) -> Result<Vec<ConcreteVal>> {
         let mut concrete_vals: Vec<ConcreteVal> = Vec::new();
         let mut extracted_assert_fail = false;
-        for processed_item in processed_items {
-            if let ParserItem::Result { result } = processed_item {
-                for property in result {
-                    // Even after extracting an assert fail, we continue to call extract on more properties to provide
-                    // better diagnostics to the user in case they expected even future checks to be extracted.
-                    let old_extracted_assert_fail = extracted_assert_fail;
-                    let new_concrete_vals =
-                        extract_from_property(property, &mut extracted_assert_fail)?;
-                    if !old_extracted_assert_fail && extracted_assert_fail {
-                        concrete_vals = new_concrete_vals;
-                    }
-                }
+        let result_item = extract_result_from_processed_items(processed_items)?;
+        for property in result_item {
+            // Even after extracting an assert fail, we continue to call extract on more properties to provide
+            // better diagnostics to the user in case they expected even future checks to be extracted.
+            let old_extracted_assert_fail = extracted_assert_fail;
+            let new_concrete_vals =
+                extract_from_property(property, &mut extracted_assert_fail)?;
+            if !old_extracted_assert_fail && extracted_assert_fail {
+                concrete_vals = new_concrete_vals;
             }
         }
         Ok(concrete_vals)
+    }
+
+    /// Extracts the result item from all the processed items. No result item means that there is an error.
+    fn extract_result_from_processed_items(processed_items: &[ParserItem]) -> Result<&[Property]> {
+        for processed_item in processed_items {
+            if let ParserItem::Result { result } = processed_item {
+                return Ok(result);
+            }
+        } 
+        bail!("No result item found in processed items.")
     }
 
     /// The second-level extractor. Traverses properties to find trace items.
