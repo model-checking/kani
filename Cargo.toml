@@ -16,9 +16,6 @@ homepage = "https://github.com/model-checking/kani"
 # N.B. Cargo.* is included automatically:
 include = ["/src", "/build.rs", "/rust-toolchain.toml", "/LICENSE-*", "/README.md"]
 
-[features]
-unsound-experiments = []
-
 [dependencies]
 anyhow = "1"
 home = "0.5"

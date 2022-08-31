@@ -35,7 +35,7 @@ tracing-tree = "0.2.0"
 default = ['cprover']
 cprover = ['ar', 'bitflags', 'cbmc', 'kani_metadata', 'libc', 'num', 'object', 'rustc-demangle', 'serde',
     'serde_json', "strum", "strum_macros"]
-unsound_experiments = []
+unsound_experiments = ["kani_queries/unsound_experiments"]
 
 [package.metadata.rust-analyzer]
 # This package uses rustc crates.
