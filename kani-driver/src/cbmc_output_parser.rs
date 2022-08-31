@@ -917,7 +917,7 @@ fn remove_check_ids_from_description(mut properties: Vec<Property>) -> Vec<Prope
 /// Extracts the property class from the property string.
 ///
 /// Property strings have the format `([<function>.]<property_class_id>.<counter>)`
-fn extract_property_class(property: &Property) -> Option<&str> {
+pub fn extract_property_class(property: &Property) -> Option<&str> {
     let property_class: Vec<&str> = property.property.rsplitn(3, '.').collect();
     if property_class.len() > 1 { Some(property_class[1]) } else { None }
 }

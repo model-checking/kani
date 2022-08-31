@@ -285,7 +285,9 @@ struct UnitTest {
 ///     ..., ] }
 /// ```
 mod concrete_vals_extractor {
-    use crate::cbmc_output_parser::{CheckStatus, ParserItem, Property, TraceItem};
+    use crate::cbmc_output_parser::{
+        extract_property_class, CheckStatus, ParserItem, Property, TraceItem,
+    };
     use anyhow::{bail, ensure, Context, Result};
 
     pub struct ConcreteVal {
@@ -304,8 +306,7 @@ mod concrete_vals_extractor {
             // Even after extracting an assert fail, we continue to call extract on more properties to provide
             // better diagnostics to the user in case they expected even future checks to be extracted.
             let old_extracted_assert_fail = extracted_assert_fail;
-            let new_concrete_vals =
-                extract_from_property(property, &mut extracted_assert_fail)?;
+            let new_concrete_vals = extract_from_property(property, &mut extracted_assert_fail)?;
             if !old_extracted_assert_fail && extracted_assert_fail {
                 concrete_vals = new_concrete_vals;
             }
@@ -319,7 +320,7 @@ mod concrete_vals_extractor {
             if let ParserItem::Result { result } = processed_item {
                 return Ok(result);
             }
-        } 
+        }
         bail!("No result item found in processed items.")
     }
 
@@ -329,7 +330,9 @@ mod concrete_vals_extractor {
         extracted_assert_fail: &mut bool,
     ) -> Result<Vec<ConcreteVal>> {
         let mut concrete_vals: Vec<ConcreteVal> = Vec::new();
-        let property_is_assert = property.property.contains("assertion");
+        let property_class =
+            extract_property_class(property).context("Incorrectly formatted property class.")?;
+        let property_is_assert = property_class == "assertion";
         let status_is_failure = property.status == CheckStatus::Failure;
 
         if property_is_assert && status_is_failure {
