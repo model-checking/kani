@@ -26,9 +26,10 @@ impl KaniSession {
         harness: &HarnessMetadata,
         verification_output: &VerificationOutput,
     ) -> Result<()> {
-        if self.args.concrete_playback.is_none() {
-            return Ok(());
-        }
+        let playback_mode = match &self.args.concrete_playback {
+            Some(playback_mode) => playback_mode,
+            None => return Ok(()),
+        };
 
         ensure!(
             self.args.output_format != crate::args::OutputFormat::Old,
@@ -44,9 +45,7 @@ impl KaniSession {
             return Ok(());
         }
 
-        if let (Some(processed_items), Some(playback_mode)) =
-            (&verification_output.processed_items, &self.args.concrete_playback)
-        {
+        if let Some(processed_items) = &verification_output.processed_items {
             let concrete_vals = extract_from_processed_items(processed_items).expect(
                 "Something went wrong when trying to get concrete values from the CBMC output",
             );
