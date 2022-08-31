@@ -4,7 +4,7 @@
 
 # Build all our documentation and place them under book/ directory.
 # The user facing doc is built into book/
-# RFCs are placed under book/rfcs/
+# RFCs are placed under book/rfc/
 
 set -eu
 
@@ -25,7 +25,7 @@ fi
 # Publish bookrunner report into our documentation
 KANI_DIR=$SCRIPT_DIR/..
 DOCS_DIR=$KANI_DIR/docs
-RFCS_DIR=$KANI_DIR/rfcs
+RFC_DIR=$KANI_DIR/rfc
 HTML_DIR=$KANI_DIR/build/output/latest/html/
 
 cd $DOCS_DIR
@@ -46,16 +46,16 @@ else
     echo "WARNING: Could not find the latest bookrunner run."
 fi
 
-echo "Building use documentation..."
+echo "Building user documentation..."
 # Build the book into ./book/
 mkdir -p book
-mkdir -p book/rfcs
+mkdir -p book/rfc
 $SCRIPT_DIR/mdbook build
 touch book/.nojekyll
 
-echo "Building RFCs book..."
-cd $RFCS_DIR
-$SCRIPT_DIR/mdbook build -d $KANI_DIR/docs/book/rfcs
+echo "Building RFC book..."
+cd $RFC_DIR
+$SCRIPT_DIR/mdbook build -d $KANI_DIR/docs/book/rfc
 
 # Testing of the code in the documentation is done via the usual
 # ./scripts/kani-regression.sh script. A note on running just the

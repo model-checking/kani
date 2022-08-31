@@ -34,7 +34,7 @@ This is the overall workflow for the RFC process:
 1. Create an RFC
    1. Create a tracking issue for your RFC (e.g.: [Issue-1588](https://github.com/model-checking/kani/issues/1588)).
    2. Start from a fork of the Kani repository.
-   3. Copy the template file ([`rfcs/src/template.md`](./template.md)) to `rfcs/src/<ID_NUMBER><my-feature>.md`.
+   3. Copy the template file ([`rfc/src/template.md`](./template.md)) to `rfc/src/<ID_NUMBER><my-feature>.md`.
    4. Fill in the details according to the template instructions.
    5. Submit a pull request.
 2. Build consensus and integrate feedback.
