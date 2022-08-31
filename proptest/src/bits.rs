@@ -35,7 +35,7 @@ use crate::strategy::*;
 use crate::test_runner::*;
 
 /// Trait for types which can be handled with `BitSetStrategy`.
-#[cfg_attr(feature = "cargo-clippy", allow(len_without_is_empty))]
+#[cfg_attr(feature = "cargo-clippy", allow(clippy::len_without_is_empty))]
 pub trait BitSetLike: Clone + fmt::Debug {
     /// Create a new value of `Self` with space for up to `max` bits, all
     /// initialised to zero.

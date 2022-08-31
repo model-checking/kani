@@ -22,7 +22,7 @@ wrap_from!(UnsafeCell);
 
 lazy_just!(BorrowError, || {
     // False positive:
-    #[cfg_attr(feature = "cargo-clippy", allow(let_and_return))]
+    #[cfg_attr(feature = "cargo-clippy", allow(clippy::let_and_return))]
     {
         let _rc = RefCell::new(());
         let _bm = _rc.borrow_mut();
@@ -33,7 +33,7 @@ lazy_just!(BorrowError, || {
 });
 lazy_just!(BorrowMutError, || {
     // False positive:
-    #[cfg_attr(feature = "cargo-clippy", allow(let_and_return))]
+    #[cfg_attr(feature = "cargo-clippy", allow(clippy::let_and_return))]
     {
         let _rc = RefCell::new(());
         let _bm = _rc.borrow_mut();
