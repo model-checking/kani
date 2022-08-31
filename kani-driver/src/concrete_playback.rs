@@ -51,7 +51,11 @@ impl KaniSession {
             );
             let concrete_playback = format_unit_test(&harness.mangled_name, &concrete_vals);
 
-            if *playback_mode == ConcretePlaybackMode::Print && !self.args.quiet {
+            if *playback_mode == ConcretePlaybackMode::Print {
+                ensure!(
+                    !self.args.quiet,
+                    "With `--quiet` mode enabled, `--concrete-playback=print` mode can not print test cases."
+                );
                 println!(
                     "Concrete playback unit test for `{}`:\n```\n{}\n```",
                     &harness.mangled_name, &concrete_playback.unit_test_str
