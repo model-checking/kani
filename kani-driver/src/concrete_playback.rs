@@ -294,11 +294,11 @@ fn extract_parent_dir_and_src_file(src_path: &Path) -> Result<ParentDirAndSrcFil
 /// ...
 /// { "result": [
 ///     ...,
-///     { "description": "assertion failed: x", "status": "FAILURE", "trace": [
+///     { "property": "assertion.1", "status": "FAILURE", "trace": [
 ///         ...,
-///         { "assignmentType": "variable", "lhs": "goto_symex$$return_value...",
+///         { "lhs": "goto_symex$$return_value...", "stepType": "assignment",
 ///           "sourceLocation": { "function": "kani::any_raw_internal::<u8, 1_usize>" },
-///           "stepType": "assignment", "value": { "binary": "00000001", "data": "101", "width": 8 } }
+///           "value": { "binary": "00000001", "data": "1", "width": 8 } }
 ///         ..., ] }
 ///     ..., ] }
 /// ```
@@ -440,8 +440,6 @@ mod concrete_vals_extractor {
 
 #[cfg(test)]
 mod tests {
-    use cargo_metadata::Source;
-
     use crate::cbmc_output_parser::{
         CheckStatus, ParserItem, Property, SourceLocation, TraceData, TraceItem, TraceValue,
     };
