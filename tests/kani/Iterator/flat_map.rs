@@ -13,11 +13,3 @@ pub fn check_flat_map_char() {
     assert_eq!(hi_flat.next(), Some('i'));
     assert_eq!(hi_flat.next(), None);
 }
-
-#[kani::proof]
-#[kani::unwind(4)]
-fn check_flat_map_len() {
-    let hello = ["Hi", "!"];
-    let length = hello.iter().flat_map(|s| s.chars()).count();
-    assert_eq!(length, 3);
-}

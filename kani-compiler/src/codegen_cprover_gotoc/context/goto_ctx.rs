@@ -296,7 +296,7 @@ impl<'tcx> GotocCtx<'tcx> {
             self,
             self.tcx
                 .instance_mir(instance.def)
-                .basic_blocks()
+                .basic_blocks
                 .indices()
                 .map(|bb| format!("{:?}", bb))
                 .collect(),
