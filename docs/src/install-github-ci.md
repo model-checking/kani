@@ -31,7 +31,7 @@ jobs:
 
 ## Configuring Kani with flags
 
-The github action itself does not take any flags that `cargo kani`
+The GitHub Action itself does not take any flags that `cargo kani`
 would take. Instead, they should be configured in `Cargo.toml`. See
 ["Configuration in Cargo.toml"](usage.md#configuration-in-cargotoml)
 for details.
