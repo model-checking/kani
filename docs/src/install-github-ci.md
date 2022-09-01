@@ -4,7 +4,7 @@ Kani offers a GitHub action for running Kani in the CI. As of now,
 only Ubuntu 20.04 wtih `x86_64-unknown-linux-gnu` is supported for
 Kani in the CI.
 
-## Using Kani in Your GitHub Workflow.
+## Using Kani in your GitHub workflow
 Our GitHub CI Action is available in the GitHub Marketspace with the
 name `model-checking/kani`
 
