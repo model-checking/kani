@@ -221,23 +221,24 @@ fn format_unit_test(harness_name: &str, concrete_vals: &[ConcreteVal]) -> UnitTe
     let hash = hasher.finish();
     let func_name = format!("kani_concrete_playback_{harness_name}_{hash}");
 
-    let full_func: Vec<_> = [
+    let func_before_concrete_vals = [
         "#[test]".to_string(),
         format!("fn {func_name}() {{"),
         format!("{TAB}let concrete_vals: Vec<Vec<u8>> = vec!["),
     ]
-    .into_iter()
-    .chain(format_concrete_vals(concrete_vals))
-    .chain(
-        [
-            format!("{TAB}];"),
-            format!("{TAB}kani::concrete_playback_run(concrete_vals, {harness_name});"),
-            "}".to_string(),
-        ]
-        .into_iter(),
-    )
-    .collect();
+    .into_iter();
+    let formatted_concrete_vals = format_concrete_vals(concrete_vals);
+    let func_after_concrete_vals = [
+        format!("{TAB}];"),
+        format!("{TAB}kani::concrete_playback_run(concrete_vals, {harness_name});"),
+        "}".to_string(),
+    ]
+    .into_iter();
 
+    let full_func: Vec<_> = func_before_concrete_vals
+        .chain(formatted_concrete_vals)
+        .chain(func_after_concrete_vals)
+        .collect();
     UnitTest { full_func, func_name }
 }
 
