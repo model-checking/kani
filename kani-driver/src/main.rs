@@ -21,7 +21,7 @@ mod call_goto_instrument;
 mod call_single_file;
 mod call_symtab;
 mod cbmc_output_parser;
-mod exe_trace;
+mod concrete_playback;
 mod metadata;
 mod session;
 mod util;
@@ -40,12 +40,14 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     let ctx = session::KaniSession::new(args.common_opts)?;
 
     let outputs = ctx.cargo_build()?;
-    if ctx.args.only_codegen {
-        return Ok(());
-    }
+
     let mut goto_objs: Vec<PathBuf> = Vec::new();
     for symtab in &outputs.symtabs {
         goto_objs.push(ctx.symbol_table_to_gotoc(symtab)?);
+    }
+
+    if ctx.args.only_codegen {
+        return Ok(());
     }
 
     let linked_obj = outputs.outdir.join("cbmc-linked.out");
@@ -56,11 +58,12 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
 
     let metadata = ctx.collect_kani_metadata(&outputs.metadata)?;
     let harnesses = ctx.determine_targets(&metadata)?;
+    let sorted_harnesses = metadata::sort_harnesses_by_loc(&harnesses);
     let report_base = ctx.args.target_dir.clone().unwrap_or(PathBuf::from("target"));
 
     let mut failed_harnesses: Vec<&HarnessMetadata> = Vec::new();
 
-    for harness in &harnesses {
+    for harness in &sorted_harnesses {
         let harness_filename = harness.pretty_name.replace("::", "-");
         let report_dir = report_base.join(format!("report-{}", harness_filename));
         let specialized_obj = outputs.outdir.join(format!("cbmc-for-{}.out", harness_filename));
@@ -77,7 +80,8 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
         }
     }
 
-    ctx.print_final_summary(&harnesses, &failed_harnesses)
+    ctx.inform_if_no_failed(&failed_harnesses);
+    ctx.print_final_summary(&sorted_harnesses, &failed_harnesses)
 }
 
 fn standalone_main() -> Result<()> {
@@ -86,10 +90,12 @@ fn standalone_main() -> Result<()> {
     let ctx = session::KaniSession::new(args.common_opts)?;
 
     let outputs = ctx.compile_single_rust_file(&args.input)?;
+
+    let goto_obj = ctx.symbol_table_to_gotoc(&outputs.symtab)?;
+
     if ctx.args.only_codegen {
         return Ok(());
     }
-    let goto_obj = ctx.symbol_table_to_gotoc(&outputs.symtab)?;
 
     let linked_obj = util::alter_extension(&args.input, "out");
     {
@@ -103,11 +109,12 @@ fn standalone_main() -> Result<()> {
 
     let metadata = ctx.collect_kani_metadata(&[outputs.metadata])?;
     let harnesses = ctx.determine_targets(&metadata)?;
+    let sorted_harnesses = metadata::sort_harnesses_by_loc(&harnesses);
     let report_base = ctx.args.target_dir.clone().unwrap_or(PathBuf::from("."));
 
     let mut failed_harnesses: Vec<&HarnessMetadata> = Vec::new();
 
-    for harness in &harnesses {
+    for harness in &sorted_harnesses {
         let harness_filename = harness.pretty_name.replace("::", "-");
         let report_dir = report_base.join(format!("report-{}", harness_filename));
         let specialized_obj = append_path(&linked_obj, &format!("for-{}", harness_filename));
@@ -128,7 +135,8 @@ fn standalone_main() -> Result<()> {
         }
     }
 
-    ctx.print_final_summary(&harnesses, &failed_harnesses)
+    ctx.inform_if_no_failed(&failed_harnesses);
+    ctx.print_final_summary(&sorted_harnesses, &failed_harnesses)
 }
 
 impl KaniSession {

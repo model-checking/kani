@@ -18,8 +18,8 @@ fn generate_mock_harness() -> HarnessMetadata {
         pretty_name: String::from("harness"),
         mangled_name: String::from("harness"),
         original_file: String::from("target_file.rs"),
-        original_start_line: String::from("0"),
-        original_end_line: String::from("0"),
+        original_start_line: 0,
+        original_end_line: 0,
         unwind_value: None,
     }
 }
@@ -151,13 +151,28 @@ impl KaniSession {
     }
 }
 
+/// Sort harnesses such that for two harnesses in the same file, it is guaranteed that later
+/// appearing harnesses get processed earlier.
+/// This is necessary for the concrete playback feature (with in-place unit test modification)
+/// because it guarantees that injected unit tests will not change the location of to-be-processed harnesses.
+pub fn sort_harnesses_by_loc(harnesses: &[HarnessMetadata]) -> Vec<HarnessMetadata> {
+    let mut harnesses_clone = harnesses.to_vec();
+    harnesses_clone.sort_unstable_by(|harness1, harness2| {
+        harness1
+            .original_file
+            .cmp(&harness2.original_file)
+            .then(harness1.original_start_line.cmp(&harness2.original_start_line).reverse())
+    });
+    harnesses_clone
+}
+
 pub fn mock_proof_harness(name: &str, unwind_value: Option<u32>) -> HarnessMetadata {
     HarnessMetadata {
         pretty_name: name.into(),
         mangled_name: name.into(),
         original_file: "<unknown>".into(),
-        original_start_line: "<unknown>".into(),
-        original_end_line: "<unknown>".into(),
+        original_start_line: 0,
+        original_end_line: 0,
         unwind_value,
     }
 }

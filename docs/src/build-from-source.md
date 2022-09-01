@@ -57,7 +57,7 @@ source $HOME/.cargo/env
 Build the Kani package:
 
 ```
-cargo build --workspace
+cargo build
 ```
 
 Then, optionally, run the regression tests:

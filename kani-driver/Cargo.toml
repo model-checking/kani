@@ -3,7 +3,7 @@
 
 [package]
 name = "kani-driver"
-version = "0.8.0"
+version = "0.9.0"
 edition = "2021"
 description = "Build a project with Kani and run all proof harnesses"
 license = "MIT OR Apache-2.0"
@@ -24,6 +24,7 @@ clap = "2.34"
 glob = "0.3"
 toml = "0.5"
 regex = "1.6"
+rustc-demangle = "0.1.21"
 pathdiff = "0.2.1"
 
 # A good set of suggested dependencies can be found in rustup:

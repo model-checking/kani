@@ -33,8 +33,8 @@ confidence-threshold = 0.8
 
 # All these exceptions should probably appear in: tools/make-kani-release/license-notes.txt
 exceptions = [
-    { name = "instant", allow=["BSD-3-Clause"] },
     { name = "Inflector", allow=["BSD-2-Clause"] },
+    { name = "unicode-ident", allow=["Unicode-DFS-2016"] },
 ]
 
 [licenses.private]

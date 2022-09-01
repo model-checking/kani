@@ -1,7 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use kani::Invariant;
 use smallvec::{smallvec, SmallVec};
 
 #[kani::proof]

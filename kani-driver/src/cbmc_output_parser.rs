@@ -25,13 +25,13 @@ use console::style;
 use once_cell::sync::Lazy;
 use pathdiff::diff_paths;
 use regex::Regex;
+use rustc_demangle::demangle;
 use serde::Deserialize;
 use std::{
     collections::HashMap,
     env,
-    fs::File,
-    io::{BufRead, BufReader, BufWriter, Write},
-    path::{Path, PathBuf},
+    io::{BufRead, BufReader},
+    path::PathBuf,
     process::{Child, ChildStdout},
 };
 
@@ -176,7 +176,6 @@ static CBMC_ALT_DESCRIPTIONS: Lazy<CbmcAltDescriptions> = Lazy::new(|| {
 
 const UNSUPPORTED_CONSTRUCT_DESC: &str = "is not currently supported by Kani";
 const UNWINDING_ASSERT_DESC: &str = "unwinding assertion loop";
-const ASSERTION_FALSE: &str = "assertion false";
 const DEFAULT_ASSERTION: &str = "assertion";
 const REACH_CHECK_DESC: &str = "[KANI_REACHABILITY_CHECK]";
 
@@ -184,7 +183,7 @@ const REACH_CHECK_DESC: &str = "[KANI_REACHABILITY_CHECK]";
 /// See the parser for more information on how they are processed.
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
-enum ParserItem {
+pub enum ParserItem {
     Program {
         program: String,
     },
@@ -277,7 +276,8 @@ impl std::fmt::Display for SourceLocation {
             write!(&mut fmt_str, "Unknown file")?;
         }
         if let Some(function) = self.function.clone() {
-            write!(&mut fmt_str, " in function {function}")?;
+            let demangled_function = demangle(&function);
+            write!(&mut fmt_str, " in function {:#}", demangled_function)?;
         }
 
         write! {f, "{}", fmt_str}
@@ -296,6 +296,7 @@ fn filepath(file: String) -> String {
         file
     }
 }
+
 /// Struct that represents traces.
 ///
 /// In general, traces may include more information than this, but this is not
@@ -306,7 +307,39 @@ pub struct TraceItem {
     pub thread: u32,
     pub step_type: String,
     pub hidden: bool,
+    pub lhs: Option<String>,
     pub source_location: Option<SourceLocation>,
+    pub value: Option<TraceValue>,
+}
+
+/// Struct that represents a trace value.
+///
+/// Note: this struct can have a lot of different fields depending on the value type.
+/// The fields included right now are relevant to primitive types.
+#[derive(Clone, Debug, Deserialize)]
+pub struct TraceValue {
+    pub name: String,
+    pub binary: Option<String>,
+    pub data: Option<TraceData>,
+    pub width: Option<u8>,
+}
+
+/// Enum that represents a trace data item.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(untagged)]
+pub enum TraceData {
+    NonBool(String),
+    Bool(bool),
+}
+
+impl std::fmt::Display for TraceData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let trace_data_str = match self {
+            Self::NonBool(trace_data) => trace_data.to_string(),
+            Self::Bool(trace_data) => trace_data.to_string(),
+        };
+        write! {f, "{}", trace_data_str}
+    }
 }
 
 #[derive(Copy, Clone, Debug, Deserialize, PartialEq, Eq)]
@@ -352,26 +385,11 @@ enum Action {
 struct Parser<'a, 'b> {
     pub input_so_far: String,
     pub buffer: &'a mut BufReader<&'b mut ChildStdout>,
-    /// Buffered writer over the CBMC output file.
-    /// This is needed for old parsers (e.g., like the one in the executable trace code) that require the actual CBMC output file.
-    /// TODO: This can be removed once we overhaul the executable trace parser.
-    /// See this tracking issue: <https://github.com/model-checking/kani/issues/1477>.
-    cbmc_out_buf_writer: Option<BufWriter<File>>,
 }
 
 impl<'a, 'b> Parser<'a, 'b> {
-    pub fn new(
-        buffer: &'a mut BufReader<&'b mut ChildStdout>,
-        output_filename_opt: Option<&Path>,
-    ) -> Self {
-        let cbmc_out_buf_writer = output_filename_opt.map(|output_filename| {
-            let cbmc_out_file = File::create(output_filename).expect(&format!(
-                "In CBMC output parser, couldn't create CBMC output file `{}`",
-                output_filename.display()
-            ));
-            BufWriter::new(cbmc_out_file)
-        });
-        Parser { input_so_far: String::new(), buffer, cbmc_out_buf_writer }
+    pub fn new(buffer: &'a mut BufReader<&'b mut ChildStdout>) -> Self {
+        Parser { input_so_far: String::new(), buffer }
     }
 
     /// Triggers an action based on the input:
@@ -439,7 +457,6 @@ impl<'a, 'b> Parser<'a, 'b> {
     /// Processes a line to determine if an action must be triggered.
     /// The action may result in a `ParserItem`, which is then returned.
     pub fn process_line(&mut self, input: String) -> Option<ParserItem> {
-        self.add_line_to_buf_writer(&input);
         self.add_to_input(input.clone());
         let action_required = self.triggers_action(input);
         if let Some(action) = action_required {
@@ -447,26 +464,6 @@ impl<'a, 'b> Parser<'a, 'b> {
             return possible_item;
         }
         None
-    }
-
-    /// Adds a single line to the CBMC output buffered writer.
-    pub fn add_line_to_buf_writer(&mut self, line: &str) {
-        if let Some(buf_writer) = self.cbmc_out_buf_writer.as_mut() {
-            write!(buf_writer, "{}", line).expect(&format!(
-                "In CBMC output parser, couldn't write `{}` to CBMC output buffered writer",
-                line
-            ));
-        }
-    }
-
-    /// Flushes the CBMC output buffered writer.
-    /// This should be called after the parser has processed the entire CBMC output.
-    pub fn flush_buf_writer(&mut self) {
-        if let Some(buf_writer) = self.cbmc_out_buf_writer.as_mut() {
-            buf_writer.flush().expect(
-                "In CBMC output parser, couldn't flush buffered writer to CBMC output file",
-            );
-        }
     }
 }
 
@@ -480,7 +477,6 @@ impl<'a, 'b> Iterator for Parser<'a, 'b> {
             match self.buffer.read_line(&mut input) {
                 Ok(len) => {
                     if len == 0 {
-                        self.flush_buf_writer();
                         return None;
                     }
                     let item = self.process_line(input);
@@ -536,6 +532,12 @@ fn postprocess_error_message(message: ParserItem) -> ParserItem {
     }
 }
 
+/// The verification output, as extracted by the CBMC output parser.
+pub struct VerificationOutput {
+    pub status: VerificationStatus,
+    pub processed_items: Option<Vec<ParserItem>>,
+}
+
 /// The main function to process CBMC's output.
 ///
 /// First, we create a reader on CBMC's `stdout`, which is required for the
@@ -548,31 +550,32 @@ pub fn process_cbmc_output(
     mut process: Child,
     extra_ptr_checks: bool,
     output_format: &OutputFormat,
-    output_filename_opt: Option<&Path>,
-) -> VerificationStatus {
+) -> VerificationOutput {
     let stdout = process.stdout.as_mut().unwrap();
     let mut stdout_reader = BufReader::new(stdout);
-    let parser = Parser::new(&mut stdout_reader, output_filename_opt);
+    let parser = Parser::new(&mut stdout_reader);
     let mut result = false;
-
-    for item in parser {
-        // Some items (e.g., messages) are skipped.
-        // We could also process them and decide to skip later.
-        if item.must_be_skipped() {
-            continue;
-        }
-        let processed_item = process_item(item, extra_ptr_checks, &mut result);
-        // Both formatting and printing could be handled by objects which
-        // implement a trait `Printer`.
-        let formatted_item = format_item(&processed_item, output_format);
-        if let Some(fmt_item) = formatted_item {
-            println!("{}", fmt_item);
-        }
-        // TODO: Record processed items and dump them into a JSON file
-        // <https://github.com/model-checking/kani/issues/942>
-    }
-
-    if result { VerificationStatus::Success } else { VerificationStatus::Failure }
+    let processed_items: Vec<_> = parser
+        .filter_map(|item| {
+            // Some items (e.g., messages) are skipped.
+            // We could also process them and decide to skip later.
+            if item.must_be_skipped() {
+                return None;
+            }
+            let processed_item = process_item(item, extra_ptr_checks, &mut result);
+            // Both formatting and printing could be handled by objects which
+            // implement a trait `Printer`.
+            let formatted_item = format_item(&processed_item, output_format);
+            if let Some(fmt_item) = formatted_item {
+                println!("{}", fmt_item);
+            }
+            // TODO: Record processed items and dump them into a JSON file
+            // <https://github.com/model-checking/kani/issues/942>
+            Some(processed_item)
+        })
+        .collect();
+    let status = if result { VerificationStatus::Success } else { VerificationStatus::Failure };
+    VerificationOutput { status, processed_items: Some(processed_items) }
 }
 
 /// Returns an optional formatted item based on the output format
@@ -811,16 +814,17 @@ fn has_check_failure(properties: &Vec<Property>, description: &str) -> bool {
 
 /// Replaces the description of all properties from functions with a missing
 /// definition.
-/// TODO: This hasn't been working as expected, see
-/// <https://github.com/model-checking/kani/issues/1424>
 fn modify_undefined_function_checks(mut properties: Vec<Property>) -> (Vec<Property>, bool) {
     let mut has_unknown_location_checks = false;
     for mut prop in &mut properties {
-        if prop.description.contains(ASSERTION_FALSE)
-            && extract_property_class(prop).unwrap() == DEFAULT_ASSERTION
+        if let Some(function) = &prop.source_location.function
+            && prop.description == DEFAULT_ASSERTION
             && prop.source_location.file.is_none()
         {
-            prop.description = "Function with missing definition is unreachable".to_string();
+            // Missing functions come with mangled names.
+            // `demangle` produces the demangled version if it's a mangled name.
+            let modified_description = format!("Function `{:#}` with missing definition is unreachable", demangle(function));
+            prop.description = modified_description;
             if prop.status == CheckStatus::Failure {
                 has_unknown_location_checks = true;
             }
@@ -913,7 +917,7 @@ fn remove_check_ids_from_description(mut properties: Vec<Property>) -> Vec<Prope
 /// Extracts the property class from the property string.
 ///
 /// Property strings have the format `([<function>.]<property_class_id>.<counter>)`
-fn extract_property_class(property: &Property) -> Option<&str> {
+pub fn extract_property_class(property: &Property) -> Option<&str> {
     let property_class: Vec<&str> = property.property.rsplitn(3, '.').collect();
     if property_class.len() > 1 { Some(property_class[1]) } else { None }
 }

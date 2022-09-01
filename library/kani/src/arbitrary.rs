@@ -49,7 +49,8 @@ impl Arbitrary for bool {
     #[inline(always)]
     fn any() -> Self {
         let byte = u8::any();
-        byte == 0
+        crate::assume(byte < 2);
+        byte == 1
     }
 }
 

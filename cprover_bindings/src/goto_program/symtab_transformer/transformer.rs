@@ -258,6 +258,7 @@ pub trait Transformer: Sized {
             ExprValue::CBoolConstant(value) => self.transform_expr_c_bool_constant(typ, value),
             ExprValue::Dereference(child) => self.transform_expr_dereference(typ, child),
             ExprValue::DoubleConstant(value) => self.transform_expr_double_constant(typ, value),
+            ExprValue::EmptyUnion => self.transform_expr_empty_union(typ),
             ExprValue::FloatConstant(value) => self.transform_expr_float_constant(typ, value),
             ExprValue::FunctionCall { function, arguments } => {
                 self.transform_expr_function_call(typ, function, arguments)
@@ -361,6 +362,11 @@ pub trait Transformer: Sized {
         Expr::double_constant(*value)
     }
 
+    /// Transforms an empty union expr (`{}`)
+    fn transform_expr_empty_union(&mut self, typ: &Type) -> Expr {
+        Expr::empty_union(typ.clone(), self.symbol_table())
+    }
+
     /// Transforms a float constant expr (`1.0f`)
     fn transform_expr_float_constant(&mut self, _typ: &Type, value: &f32) -> Expr {
         Expr::float_constant(*value)
@@ -406,7 +412,6 @@ pub trait Transformer: Sized {
         transformed_lhs.member(field, self.symbol_table())
     }
 
-    /// Transforms a CPROVER nondet call (`__nondet()`)
     fn transform_expr_nondet(&mut self, typ: &Type) -> Expr {
         let transformed_typ = self.transform_type(typ);
         Expr::nondet(transformed_typ)
@@ -514,6 +519,7 @@ pub trait Transformer: Sized {
             StmtBody::Break => self.transform_stmt_break(),
             StmtBody::Continue => self.transform_stmt_continue(),
             StmtBody::Decl { lhs, value } => self.transform_stmt_decl(lhs, value),
+            StmtBody::Deinit(place) => self.transform_stmt_deinit(place),
             StmtBody::Expression(expr) => self.transform_stmt_expression(expr),
             StmtBody::For { init, cond, update, body } => {
                 self.transform_stmt_for(init, cond, update, body)
@@ -590,6 +596,11 @@ pub trait Transformer: Sized {
         let transformed_lhs = self.transform_expr(lhs);
         let transformed_value = value.as_ref().map(|value| self.transform_expr(value));
         Stmt::decl(transformed_lhs, transformed_value, Location::none())
+    }
+
+    fn transform_stmt_deinit(&mut self, place: &Expr) -> Stmt {
+        let transformed_place = self.transform_expr(place);
+        Stmt::deinit(transformed_place, Location::none())
     }
 
     /// Transform an expression stmt (`e;`)
