@@ -2,9 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 // Kani now has -Zrandomize-layout activated by default.
-// This test only succeeds on the layout of a structure being
-// decided in a deterministic way.
-// With randomization, there is a very very high probability that it fails (1 - (1/2^100))
+// This test checks that it doesn't affect repr(C) and Kani is still bit-precise
 
 macro_rules! make_structs {
   ($i:ident) => {
