@@ -440,12 +440,11 @@ mod concrete_vals_extractor {
 
 #[cfg(test)]
 mod tests {
+    use super::concrete_vals_extractor::*;
+    use super::*;
     use crate::cbmc_output_parser::{
         CheckStatus, ParserItem, Property, SourceLocation, TraceData, TraceItem, TraceValue,
     };
-
-    use super::concrete_vals_extractor::*;
-    use super::*;
 
     #[test]
     fn format_zero_concrete_vals() {
