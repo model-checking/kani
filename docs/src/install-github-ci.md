@@ -1,12 +1,12 @@
-# GitHub CI Action
+# GitHub Action
 
-Kani offers a GitHub action for running Kani in the CI. As of now,
-only Ubuntu 20.04 wtih `x86_64-unknown-linux-gnu` is supported for
-Kani in the CI.
+Kani offers a GitHub Action for running Kani in CI. As of now, only
+Ubuntu 20.04 with `x86_64-unknown-linux-gnu` is supported for Kani in
+CI.
 
 ## Using Kani in your GitHub workflow
-Our GitHub CI Action is available in the GitHub Marketspace with the
-name `model-checking/kani`
+Our GitHub Action is available in the GitHub Marketspace with the name
+`model-checking/kani`
 
 The following workflow snippet will checkout your repository and run
 `cargo kani` on it whenever a push or pull request occurs. Replace

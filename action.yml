@@ -1,8 +1,8 @@
 # Copyright Kani Contributors
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
-name: 'Kani Model Checker'
-description: 'Run the Kani Model Checker on a Cargo Crate'
+name: 'Kani Rust Verifier'
+description: 'Run the Kani Rust Verifier on a Rust Crate'
 author: 'Kani Contributors'
 
 branding:
