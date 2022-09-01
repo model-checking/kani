@@ -115,6 +115,8 @@ impl KaniSession {
             }
         }
 
+        // Flush before we remove/rename the file.
+        tmp_src_buf_writer.flush()?;
         if unit_test_already_in_src {
             if !self.args.quiet {
                 println!(
@@ -122,11 +124,11 @@ impl KaniSession {
                     src_path_as_str, concrete_playback.func_name,
                 );
             }
+            fs::remove_file(&tmp_src_path)
+                .with_context(|| format!("Couldn't remove tmp src file `{tmp_src_path}`."))?;
             return Ok(());
         }
-
         // Renames are usually automic, so we won't corrupt the user's source file during a crash.
-        tmp_src_buf_writer.flush()?;
         fs::rename(&tmp_src_path, src_path_as_str).with_context(|| {
             format!(
                 "Couldn't rename tmp src file `{tmp_src_path}` to actual src file `{src_path_as_str}`."
