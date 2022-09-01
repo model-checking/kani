@@ -1,4 +1,4 @@
-KANIFLAGS="--goto-c --log-level=warn --assertion-reach-checks -C symbol-mangling-version=v0" RUSTC=
+KANIFLAGS="--goto-c --log-level=warn --assertion-reach-checks -Zrandomize-layout -C symbol-mangling-version=v0" RUSTC=
 RUSTFLAGS="--kani-flags" cargo build
 symtab2gb 
 goto-cc 
