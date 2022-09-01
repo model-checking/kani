@@ -3,6 +3,15 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
+#[cfg(feature = "unsound_experiments")]
+mod unsound_experiments;
+
+#[cfg(feature = "unsound_experiments")]
+use {
+    crate::unsound_experiments::UnsoundExperiments,
+    std::sync::{Arc, Mutex},
+};
+
 pub trait UserInput {
     fn set_symbol_table_passes(&mut self, passes: Vec<String>);
     fn get_symbol_table_passes(&self) -> Vec<String>;
@@ -20,9 +29,7 @@ pub trait UserInput {
     fn get_ignore_global_asm(&self) -> bool;
 
     #[cfg(feature = "unsound_experiments")]
-    fn set_zero_init_vars(&mut self, zero_init: bool);
-    #[cfg(feature = "unsound_experiments")]
-    fn get_zero_init_vars(&self) -> bool;
+    fn get_unsound_experiments(&self) -> Arc<Mutex<UnsoundExperiments>>;
 }
 
 #[derive(Debug, Default)]
@@ -33,7 +40,7 @@ pub struct QueryDb {
     json_pretty_print: AtomicBool,
     ignore_global_asm: AtomicBool,
     #[cfg(feature = "unsound_experiments")]
-    zero_init_vars: AtomicBool,
+    unsound_experiments: Arc<Mutex<UnsoundExperiments>>,
 }
 
 impl UserInput for QueryDb {
@@ -78,12 +85,7 @@ impl UserInput for QueryDb {
     }
 
     #[cfg(feature = "unsound_experiments")]
-    fn set_zero_init_vars(&mut self, zero_init: bool) {
-        self.zero_init_vars.store(zero_init, Ordering::Relaxed);
-    }
-
-    #[cfg(feature = "unsound_experiments")]
-    fn get_zero_init_vars(&self) -> bool {
-        self.zero_init_vars.load(Ordering::Relaxed)
+    fn get_unsound_experiments(&self) -> Arc<Mutex<UnsoundExperiments>> {
+        self.unsound_experiments.clone()
     }
 }
