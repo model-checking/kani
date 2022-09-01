@@ -99,18 +99,16 @@ impl KaniSession {
         let mut unit_test_already_in_src = false;
         let mut curr_line_num = 0;
 
-        for line_result in src_buf_reader.lines() {
-            if let Ok(line) = line_result {
-                if line.contains(&concrete_playback.func_name) {
-                    unit_test_already_in_src = true;
-                }
-                curr_line_num += 1;
-                writeln!(tmp_src_buf_writer, "{}", line)?;
-                if curr_line_num == proof_harness_end_line {
-                    for unit_test_line in concrete_playback.full_func.iter() {
-                        curr_line_num += 1;
-                        writeln!(tmp_src_buf_writer, "{}", unit_test_line)?;
-                    }
+        for line in src_buf_reader.lines().flatten() {
+            if line.contains(&concrete_playback.func_name) {
+                unit_test_already_in_src = true;
+            }
+            curr_line_num += 1;
+            writeln!(tmp_src_buf_writer, "{}", line)?;
+            if curr_line_num == proof_harness_end_line {
+                for unit_test_line in concrete_playback.full_func.iter() {
+                    curr_line_num += 1;
+                    writeln!(tmp_src_buf_writer, "{}", unit_test_line)?;
                 }
             }
         }
