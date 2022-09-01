@@ -1,0 +1,17 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+[book]
+title = "Kani RFC Book"
+description = "Design documents for Kani Rust Verifier"
+authors = ["Kani Developers"]
+language = "en"
+multilingual = false
+src = "src"
+
+[output.html]
+site-url = "/kani/rfc/"
+git-repository-url = "https://github.com/model-checking/kani"
+edit-url-template = "https://github.com/model-checking/kani/edit/main/rfc/{path}"
+
+[output.html.playground]
+runnable = false
