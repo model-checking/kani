@@ -88,8 +88,9 @@ impl KaniSession {
         concrete_playback: &UnitTest,
     ) -> Result<()> {
         // Write new source lines to a tmp file.
-        let src_file = File::open(src_path_as_str)
-            .with_context(|| format!("Couldn't open user's source code file `{src_path_as_str}`"))?;
+        let src_file = File::open(src_path_as_str).with_context(|| {
+            format!("Couldn't open user's source code file `{src_path_as_str}`")
+        })?;
         let src_buf_reader = BufReader::new(src_file);
         let tmp_src_path = src_path_as_str.to_string() + ".concrete_playback_overwrite";
         let tmp_src_file = File::create(&tmp_src_path)
@@ -183,11 +184,8 @@ impl KaniSession {
             cmd.current_dir(current_dir);
         }
 
-        if self.args.quiet {
-            self.run_suppress(cmd).context("Failed to rustfmt modified source code.")?;
-        } else {
-            self.run_terminal(cmd).context("Failed to rustfmt modified source code")?;
-        }
+        if self.args.quiet { self.run_suppress(cmd) } else { self.run_terminal(cmd) }
+            .context("Failed to rustfmt modified source code.")?;
         Ok(())
     }
 
