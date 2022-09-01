@@ -1,0 +1,43 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+[target.'cfg(all())']
+rustflags = [ # Global lints/warnings. Need to use underscore instead of -.
+
+    # Purposefully disabled lints
+    "-Aclippy::expect_fun_call",
+    "-Aclippy::or_fun_call",
+    "-Aclippy::new_without_default",
+
+    # Resolve
+    "-Aclippy::derive_partial_eq_without_eq",
+    "-Aclippy::duration_subsec",
+    "-Aclippy::explicit_auto_deref",
+    "-Aclippy::into_iter_on_ref",
+    "-Aclippy::len_zero",
+    "-Aclippy::let_unit_value",
+    "-Aclippy::manual_non_exhaustive",
+    "-Aclippy::manual_range_contains",
+    "-Aclippy::match_like_matches_macro",
+    "-Aclippy::match_ref_pats",
+    "-Aclippy::mem_replace_with_default",
+    "-Aclippy::needless_borrow",
+    "-Aclippy::needless_doctest_main",
+    "-Aclippy::needless_lifetimes",
+    "-Aclippy::needless_range_loop",
+    "-Aclippy::needless_return",
+    "-Aclippy::nonminimal_bool",
+    "-Aclippy::option_as_ref_deref",
+    "-Aclippy::precedence",
+    "-Aclippy::redundant_field_names",
+    "-Aclippy::redundant_static_lifetimes",
+    "-Aclippy::single_component_path_imports",
+    "-Aclippy::single_match",
+    "-Aclippy::to_string_in_format_args",
+    "-Aclippy::type_complexity",
+    "-Aclippy::unused_unit",
+    "-Aclippy::unwrap_or_else_default",
+    "-Aclippy::upper_case_acronyms",
+    "-Aclippy::useless_conversion",
+    "-Aclippy::useless_format",
+]

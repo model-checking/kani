@@ -6,15 +6,20 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Kani Contributors
+// See GitHub history for details.
 #[macro_use]
 extern crate proptest_derive;
 
 fn main() {}
 
 // Show non-fatal:
-#[derive(Debug, Arbitrary)] //~ ERROR: 2 errors:
-                            //~| [proptest_derive, E0034]
-                            //~| [proptest_derive, E0008]
+#[derive(Debug, Arbitrary)]
+//~ ERROR: 2 errors:
+//~| [proptest_derive, E0034]
+//~| [proptest_derive, E0008]
 #[proptest(regex)]
 #[proptest(skip)]
 struct NonFatal;
@@ -23,8 +28,8 @@ struct NonFatal;
 enum T1 {
     V1 {
         #[proptest(regex)]
-        batman: u8
-    }
+        batman: u8,
+    },
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0034]
@@ -34,17 +39,14 @@ struct T3 {
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0034]
-struct T4(
-    #[proptest(regex)]
-    usize,
-);
+struct T4(#[proptest(regex)] usize);
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0034]
 enum T5 {
     V1 {
         #[proptest(regex)]
-        batman: u8
-    }
+        batman: u8,
+    },
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0034]
@@ -54,19 +56,10 @@ struct T6 {
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0034]
-struct T7(
-    #[proptest(regex)]
-    usize,
-);
+struct T7(#[proptest(regex)] usize);
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0034]
-struct T8(
-    #[proptest(regex = 1)]
-    String,
-);
+struct T8(#[proptest(regex = 1)] String);
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0034]
-struct T9(
-    #[proptest(regex = true)]
-    String,
-);
+struct T9(#[proptest(regex = true)] String);

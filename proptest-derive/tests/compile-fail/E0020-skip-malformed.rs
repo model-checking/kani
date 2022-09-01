@@ -6,15 +6,20 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Kani Contributors
+// See GitHub history for details.
 extern crate proptest_derive;
 use proptest_derive::Arbitrary;
 
 fn main() {}
 
 // Show non fatal:
-#[derive(Debug, Arbitrary)] //~ ERROR: 2 errors:
-                            //~| [proptest_derive, E0020]
-                            //~| [proptest_derive, E0007]
+#[derive(Debug, Arbitrary)]
+//~ ERROR: 2 errors:
+//~| [proptest_derive, E0020]
+//~| [proptest_derive, E0007]
 #[proptest(skip = 1, value = "T0(1)")]
 struct T0(u8);
 

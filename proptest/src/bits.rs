@@ -7,6 +7,11 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Kani Contributors
+// See GitHub history for details.
+
 //! Strategies for working with bit sets.
 //!
 //! Besides `BitSet` itself, this also defines strategies for all the primitive
@@ -30,7 +35,7 @@ use crate::strategy::*;
 use crate::test_runner::*;
 
 /// Trait for types which can be handled with `BitSetStrategy`.
-#[cfg_attr(feature = "cargo-clippy", allow(len_without_is_empty))]
+#[cfg_attr(feature = "cargo-clippy", allow(clippy::len_without_is_empty))]
 pub trait BitSetLike: Clone + fmt::Debug {
     /// Create a new value of `Self` with space for up to `max` bits, all
     /// initialised to zero.

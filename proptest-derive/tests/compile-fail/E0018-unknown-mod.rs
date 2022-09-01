@@ -6,6 +6,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Kani Contributors
+// See GitHub history for details.
 extern crate proptest_derive;
 use proptest_derive::Arbitrary;
 
@@ -29,18 +33,12 @@ enum T2 {
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0018]
 enum T3 {
-    V0(
-        #[proptest(strat = "1..0")]
-        u8
-    ),
+    V0(#[proptest(strat = "1..0")] u8),
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0018]
 enum T4 {
-    V0(
-        #[proptest(strategies = "1..0")]
-        u8
-    ),
+    V0(#[proptest(strategies = "1..0")] u8),
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0018]
@@ -74,9 +72,10 @@ enum T9 {
 }
 
 // Show that E0018 is non-fatal.
-#[derive(Debug, Arbitrary)] //~ ERROR: 2 errors:
-                            //~| [proptest_derive, E0018]
-                            //~| [proptest_derive, E0011]
+#[derive(Debug, Arbitrary)]
+//~ ERROR: 2 errors:
+//~| [proptest_derive, E0018]
+//~| [proptest_derive, E0011]
 #[proptest(parameters = "u8")]
 enum T10 {
     #[proptest(params = "u8")]

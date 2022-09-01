@@ -6,6 +6,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Kani Contributors
+// See GitHub history for details.
 #[macro_use]
 extern crate proptest_derive;
 
@@ -21,10 +25,7 @@ struct T1<T> {
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0031]
-struct T2<T>(
-    #[proptest(no_bound)]
-    ::std::marker::PhantomData<T>,
-);
+struct T2<T>(#[proptest(no_bound)] ::std::marker::PhantomData<T>);
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0031]
 enum T3<T> {
@@ -35,15 +36,10 @@ enum T3<T> {
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0031]
 enum T4<T> {
     #[proptest(no_bound)]
-    V1 {
-        field: T
-    }
+    V1 { field: T },
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0031]
 enum T5<T> {
-    V1(
-        #[proptest(no_bound)]
-        T
-    ),
+    V1(#[proptest(no_bound)] T),
 }

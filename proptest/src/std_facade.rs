@@ -7,6 +7,11 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Kani Contributors
+// See GitHub history for details.
+
 //! This module provides #[cfg(..)]ed type aliases over features.
 
 macro_rules! multiplex_alloc {
@@ -62,11 +67,11 @@ multiplex_alloc! {
 //#[cfg(not(feature = "std"))]
 //pub(crate) use hashmap_core::map as hash_map;
 #[cfg(feature = "std")]
-pub use ::std::collections::hash_map;
+pub use std::collections::hash_map;
 //#[cfg(not(feature = "std"))]
 //pub(crate) use hashmap_core::set as hash_set;
 #[cfg(feature = "std")]
-pub use ::std::collections::hash_set;
+pub use std::collections::hash_set;
 
 multiplex_core! {
     core::fmt, ::std::fmt,

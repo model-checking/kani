@@ -6,6 +6,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Kani Contributors
+// See GitHub history for details.
 #[macro_use]
 extern crate proptest_derive;
 
@@ -36,22 +40,13 @@ struct T2 {
 }
 
 #[derive(Debug, Arbitrary)] //~ StrategyFromRegex` is not satisfied [E0277]
-struct T3(
-    #[proptest(regex = "a+")]
-    (),
-);
+struct T3(#[proptest(regex = "a+")] ());
 
 #[derive(Debug, Arbitrary)] //~ StrategyFromRegex` is not satisfied [E0277]
-struct T4(
-    #[proptest(regex("a*"))]
-    u8,
-);
+struct T4(#[proptest(regex("a*"))] u8);
 
 #[derive(Debug, Arbitrary)] //~ StrategyFromRegex` is not satisfied [E0277]
-struct T5(
-    #[proptest(regex(make_regex))]
-    Vec<u16>,
-);
+struct T5(#[proptest(regex(make_regex))] Vec<u16>);
 
 // enum:
 
@@ -60,7 +55,7 @@ enum T6 {
     V0 {
         #[proptest(regex = "a+")]
         f0: (),
-    }
+    },
 }
 
 #[derive(Debug, Arbitrary)] //~ StrategyFromRegex` is not satisfied [E0277]
@@ -68,7 +63,7 @@ enum T7 {
     V0 {
         #[proptest(regex("a*"))]
         f0: u8,
-    }
+    },
 }
 
 #[derive(Debug, Arbitrary)] //~ StrategyFromRegex` is not satisfied [E0277]
@@ -76,29 +71,20 @@ enum T8 {
     V0 {
         #[proptest(regex(make_regex))]
         f0: Vec<u16>,
-    }
+    },
 }
 
 #[derive(Debug, Arbitrary)] //~ StrategyFromRegex` is not satisfied [E0277]
 enum T9 {
-    V0(
-        #[proptest(regex = "a+")]
-        (),
-    )
+    V0(#[proptest(regex = "a+")] ()),
 }
 
 #[derive(Debug, Arbitrary)] //~ StrategyFromRegex` is not satisfied [E0277]
 enum T10 {
-    V0(
-        #[proptest(regex("a*"))]
-        u8,
-    )
+    V0(#[proptest(regex("a*"))] u8),
 }
 
 #[derive(Debug, Arbitrary)] //~ StrategyFromRegex` is not satisfied [E0277]
 enum T11 {
-    V0(
-        #[proptest(regex(make_regex))]
-        Vec<u16>,
-    )
+    V0(#[proptest(regex(make_regex))] Vec<u16>),
 }

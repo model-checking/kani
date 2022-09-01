@@ -7,6 +7,11 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Kani Contributors
+// See GitHub history for details.
+
 //! Support for combining strategies into tuples.
 //!
 //! There is no explicit "tuple strategy"; simply make a tuple containing the

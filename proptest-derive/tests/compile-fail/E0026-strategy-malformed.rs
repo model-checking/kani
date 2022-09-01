@@ -6,15 +6,20 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Kani Contributors
+// See GitHub history for details.
 #[macro_use]
 extern crate proptest_derive;
 
 fn main() {}
 
 // Show non-fatal:
-#[derive(Debug, Arbitrary)] //~ ERROR: 2 errors:
-                            //~| [proptest_derive, E0026]
-                            //~| [proptest_derive, E0008]
+#[derive(Debug, Arbitrary)]
+//~ ERROR: 2 errors:
+//~| [proptest_derive, E0026]
+//~| [proptest_derive, E0008]
 #[proptest(strategy)]
 #[proptest(skip)]
 struct NonFatal;
@@ -23,8 +28,8 @@ struct NonFatal;
 enum T1 {
     V1 {
         #[proptest(strategy)]
-        batman: u8
-    }
+        batman: u8,
+    },
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0026]
@@ -34,17 +39,14 @@ struct T3 {
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0026]
-struct T4(
-    #[proptest(strategy)]
-    usize,
-);
+struct T4(#[proptest(strategy)] usize);
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0026]
 enum T5 {
     V1 {
         #[proptest(value)]
-        batman: u8
-    }
+        batman: u8,
+    },
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0026]
@@ -54,7 +56,4 @@ struct T6 {
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0026]
-struct T7(
-    #[proptest(value)]
-    usize,
-);
+struct T7(#[proptest(value)] usize);

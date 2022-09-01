@@ -6,6 +6,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Kani Contributors
+// See GitHub history for details.
 //! Provides a parser from syn attributes to our logical model.
 
 use syn::{self, Attribute, Expr, Ident, Lit, Meta, NestedMeta, Type};

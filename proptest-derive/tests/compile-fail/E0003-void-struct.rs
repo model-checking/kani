@@ -6,6 +6,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Kani Contributors
+// See GitHub history for details.
 #![feature(never_type)]
 
 extern crate proptest_derive;
@@ -22,7 +26,9 @@ struct NonFatal {
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0003]
-struct Ty0 { x: ! }
+struct Ty0 {
+    x: !,
+}
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0003]
 struct Ty1 {
@@ -38,7 +44,7 @@ struct Ty2 {
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0003]
 struct Ty3 {
-    x: [!; 1]
+    x: [!; 1],
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0003]

@@ -7,6 +7,11 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Kani Contributors
+// See GitHub history for details.
+
 //! Re-exports the most commonly-needed APIs of proptest.
 //!
 //! This module is intended to be wildcard-imported, i.e.,

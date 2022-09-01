@@ -6,12 +6,16 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Kani Contributors
+// See GitHub history for details.
 #[macro_use]
 extern crate proptest_derive;
 
 fn main() {}
 
-#[derive(Debug, Arbitrary)] //~ ERROR: 2 errors 
+#[derive(Debug, Arbitrary)] //~ ERROR: 2 errors
                             //~| [proptest_derive, E0028]
                             //~| [proptest_derive, E0006]
 enum NonFatal {
@@ -28,12 +32,9 @@ enum T0 {
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0028]
 enum T1 {
-    #[proptest(
-        skip,
-        strategy = "(0..10).prop_map(|field| T0::V1 { field })"
-    )]
+    #[proptest(skip, strategy = "(0..10).prop_map(|field| T0::V1 { field })")]
     V1 {
-        field: u8
+        field: u8,
     },
     V2,
 }
@@ -41,10 +42,7 @@ enum T1 {
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0028]
 enum T2 {
     #[proptest(skip)]
-    V1(
-        #[proptest(strategy = "0..10")]
-        u8
-    ),
+    V1(#[proptest(strategy = "0..10")] u8),
     V2,
 }
 
@@ -53,7 +51,7 @@ enum T3 {
     #[proptest(skip)]
     V1 {
         #[proptest(strategy = "0..10")]
-        field: u8
+        field: u8,
     },
     V2,
 }
@@ -69,7 +67,7 @@ enum T4 {
 enum T5 {
     #[proptest(skip, value = "T0::V1 { field: 3 }")]
     V1 {
-        field: u8
+        field: u8,
     },
     V2,
 }
@@ -77,10 +75,7 @@ enum T5 {
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0028]
 enum T6 {
     #[proptest(skip)]
-    V1(
-        #[proptest(value = "42")]
-        u8
-    ),
+    V1(#[proptest(value = "42")] u8),
     V2,
 }
 
@@ -89,7 +84,7 @@ enum T7 {
     #[proptest(skip)]
     V1 {
         #[proptest(value = "1337")]
-        field: usize
+        field: usize,
     },
     V2,
 }
@@ -99,7 +94,7 @@ enum T8 {
     #[proptest(skip)]
     V1 {
         #[proptest(value("1337"))]
-        field: usize
+        field: usize,
     },
     V2,
 }
@@ -109,7 +104,7 @@ enum T9 {
     #[proptest(skip)]
     V1 {
         #[proptest(value(1337))]
-        field: usize
+        field: usize,
     },
     V2,
 }
@@ -119,7 +114,7 @@ enum T10 {
     #[proptest(skip)]
     V1 {
         #[proptest(value = 1337)]
-        field: usize
+        field: usize,
     },
     V2,
 }

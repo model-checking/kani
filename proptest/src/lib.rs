@@ -7,6 +7,11 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Kani Contributors
+// See GitHub history for details.
+
 //! # Proptest Reference Documentation
 //!
 //! This is the reference documentation for the proptest API.
@@ -18,9 +23,9 @@
 #![deny(missing_docs, bare_trait_objects)]
 #![no_std]
 #![cfg_attr(feature = "cargo-clippy", allow(
-    doc_markdown,
+    clippy::doc_markdown,
     // We have a lot of these lints for associated types... And we don't care.
-    type_complexity
+    clippy::type_complexity
 ))]
 #![cfg_attr(
     feature = "unstable",

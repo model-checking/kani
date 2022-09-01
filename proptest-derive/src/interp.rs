@@ -6,6 +6,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Kani Contributors
+// See GitHub history for details.
 use syn::{self, BinOp as B, Expr as E, IntSuffix as IS, Lit as L, UnOp as U};
 
 /// Adapted from https://docs.rs/syn/0.14.2/src/syn/lit.rs.html#943 to accept

@@ -6,6 +6,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Kani Contributors
+// See GitHub history for details.
 #[macro_use]
 extern crate proptest_derive;
 
@@ -16,15 +20,12 @@ enum T0 {
     V1 {
         #[proptest(filter = "random garbage")]
         field: u8,
-    }
+    },
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0027]
 enum T1 {
-    V1(
-        #[proptest(filter = "random garbage")]
-        u8,
-    ),
+    V1(#[proptest(filter = "random garbage")] u8),
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0027]
@@ -34,25 +35,19 @@ struct T2 {
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0027]
-struct T3(
-    #[proptest(filter = "random garbage")]
-    String
-);
+struct T3(#[proptest(filter = "random garbage")] String);
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0027]
 enum T4 {
     V1 {
         #[proptest(filter("random garbage"))]
         field: u8,
-    }
+    },
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0027]
 enum T5 {
-    V1(
-        #[proptest(filter("random garbage"))]
-        u8,
-    ),
+    V1(#[proptest(filter("random garbage"))] u8),
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0027]
@@ -62,25 +57,18 @@ struct T6 {
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0027]
-struct T7(
-    #[proptest(filter("random garbage"))]
-    String
-);
+struct T7(#[proptest(filter("random garbage"))] String);
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0027]
 enum T8 {
     #[proptest(filter = "random garbage")]
-    V1 {
-        field: u8,
-    }
+    V1 { field: u8 },
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0027]
 enum T9 {
     #[proptest(filter = "random garbage")]
-    V1(
-        u8,
-    ),
+    V1(u8),
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0027]
@@ -91,24 +79,18 @@ struct T10 {
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0027]
 #[proptest(filter = "random garbage")]
-struct T11(
-    String
-);
+struct T11(String);
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0027]
 enum T12 {
     #[proptest(filter("random garbage"))]
-    V1 {
-        field: u8,
-    }
+    V1 { field: u8 },
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0027]
 enum T13 {
     #[proptest(filter("random garbage"))]
-    V1(
-        u8,
-    ),
+    V1(u8),
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0027]
@@ -119,38 +101,28 @@ struct T14 {
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0027]
 #[proptest(filter("random garbage"))]
-struct T15(
-    String
-);
+struct T15(String);
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0027]
 #[proptest(filter = "random garbage")]
 enum T16 {
-    V1 {
-        field: u8,
-    }
+    V1 { field: u8 },
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0027]
 #[proptest(filter = "random garbage")]
 enum T17 {
-    V1(
-        u8,
-    ),
+    V1(u8),
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0027]
 #[proptest(filter("random garbage"))]
 enum T18 {
-    V1 {
-        field: u8,
-    }
+    V1 { field: u8 },
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0027]
 #[proptest(filter("random garbage"))]
 enum T19 {
-    V1(
-        u8,
-    ),
+    V1(u8),
 }

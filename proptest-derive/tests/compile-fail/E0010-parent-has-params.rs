@@ -6,6 +6,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Kani Contributors
+// See GitHub history for details.
 extern crate proptest_derive;
 use proptest_derive::Arbitrary;
 
@@ -14,55 +18,46 @@ fn main() {}
 // Show non-fatal:
 
 #[derive(Debug, Arbitrary)] //~ ERROR: 2 errors
-                            //~| [proptest_derive, E0010]
-                            //~| [proptest_derive, E0008]
+//~| [proptest_derive, E0010]
+//~| [proptest_derive, E0008]
 #[proptest(no_params)]
 struct NonFatal<#[proptest(skip)] T> {
     #[proptest(no_params)]
-    field: T
+    field: T,
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0010]
 #[proptest(no_params)]
 struct T0 {
     #[proptest(no_params)]
-    field: String
+    field: String,
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0010]
 #[proptest(no_params)]
-struct T1(
-    #[proptest(no_params)]
-    String
-);
+struct T1(#[proptest(no_params)] String);
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0010]
 #[proptest(params = "u8")]
 struct T2 {
     #[proptest(no_params)]
-    bar: String
+    bar: String,
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0010]
 #[proptest(params = "usize")]
-struct T3(
-    #[proptest(no_params)]
-    String
-);
+struct T3(#[proptest(no_params)] String);
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0010]
 #[proptest(no_params)]
 struct T4 {
     #[proptest(params = "usize")]
-    baz: String
+    baz: String,
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0010]
 #[proptest(no_params)]
-struct T5(
-    #[proptest(params = "String")]
-    String
-);
+struct T5(#[proptest(params = "String")] String);
 
 #[derive(Debug, Arbitrary)] // ERROR: [proptest_derive, E0010]
 #[proptest(no_params)]
@@ -74,28 +69,19 @@ enum T6 {
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0010]
 enum T7 {
     #[proptest(no_params)]
-    V0(
-        #[proptest(params = "String")]
-        u8
-    ),
+    V0(#[proptest(params = "String")] u8),
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0010]
 #[proptest(no_params)]
 enum T8 {
-    V0(
-        #[proptest(params = "String")]
-        u8
-    ),
+    V0(#[proptest(params = "String")] u8),
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0010]
 #[proptest(params = "String")]
 enum T9 {
-    V0(
-        #[proptest(no_params)]
-        u8
-    ),
+    V0(#[proptest(no_params)] u8),
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0010]
@@ -103,7 +89,7 @@ enum T9 {
 enum T10 {
     V0 {
         #[proptest(no_params)]
-        batman: u8
+        batman: u8,
     },
 }
 
@@ -112,6 +98,6 @@ enum T10 {
 enum T11 {
     V0 {
         #[proptest(params = "String")]
-        batman: u8
+        batman: u8,
     },
 }

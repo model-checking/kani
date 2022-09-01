@@ -6,6 +6,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Kani Contributors
+// See GitHub history for details.
 use proptest::prelude::{proptest, Arbitrary, BoxedStrategy, Strategy};
 use proptest::string::StrategyFromRegex;
 use proptest_derive::Arbitrary;

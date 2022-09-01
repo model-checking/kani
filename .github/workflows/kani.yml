@@ -1,0 +1,37 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+name: Kani CI
+on: [push, pull_request]
+
+jobs:
+  regression:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-11, ubuntu-18.04, ubuntu-20.04]
+    steps:
+      - name: Checkout Kani
+        uses: actions/checkout@v2
+
+      - name: Setup Kani Dependencies
+        uses: ./.github/actions/setup
+        with:
+            os: ${{ matrix.os }}
+
+      - name: Format Check
+        run: ./scripts/kani-fmt.sh --check
+
+      - name: Build proptest
+        run: |
+          export RUST_BACKTRACE=1
+          cargo build --workspace
+
+      - name: Run Tests
+        run: |
+          export RUST_BACKTRACE=1
+          cargo test -p proptest
+
+      - name: Run Tests
+        run: |
+          export RUST_BACKTRACE=1
+          cargo doc --workspace --no-deps --exclude std

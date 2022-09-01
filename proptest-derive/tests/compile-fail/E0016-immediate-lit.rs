@@ -6,15 +6,20 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Kani Contributors
+// See GitHub history for details.
 extern crate proptest_derive;
 use proptest_derive::Arbitrary;
 
 fn main() {}
 
 // Show non-fatal:
-#[derive(Debug, Arbitrary)] //~ ERROR: 2 errors:
-                            //~| [proptest_derive, E0016]
-                            //~| [proptest_derive, E0008]
+#[derive(Debug, Arbitrary)]
+//~ ERROR: 2 errors:
+//~| [proptest_derive, E0016]
+//~| [proptest_derive, E0008]
 #[proptest(1)]
 #[proptest(skip)]
 struct T0;
@@ -34,10 +39,7 @@ struct T3 {
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0016]
-struct T4(
-    #[proptest(1)]
-    usize,
-);
+struct T4(#[proptest(1)] usize);
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0016]
 #[proptest(1)]
@@ -61,7 +63,7 @@ enum T7 {
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0016]
 enum T8 {
-    V0(#[proptest(1)] bool)
+    V0(#[proptest(1)] bool),
 }
 
 #[derive(Debug, Arbitrary)] //~ ERROR: [proptest_derive, E0016]

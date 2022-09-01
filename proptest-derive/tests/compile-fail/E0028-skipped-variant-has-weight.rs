@@ -6,12 +6,16 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Kani Contributors
+// See GitHub history for details.
 #[macro_use]
 extern crate proptest_derive;
 
 fn main() {}
 
-#[derive(Debug, Arbitrary)] //~ ERROR: 2 errors 
+#[derive(Debug, Arbitrary)] //~ ERROR: 2 errors
                             //~| [proptest_derive, E0028]
                             //~| [proptest_derive, E0006]
 enum NonFatal {

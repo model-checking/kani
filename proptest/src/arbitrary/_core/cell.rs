@@ -7,6 +7,11 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Kani Contributors
+// See GitHub history for details.
+
 //! Arbitrary implementations for `std::cell`.
 
 use core::cell::{BorrowError, BorrowMutError, Cell, RefCell, UnsafeCell};
@@ -17,7 +22,7 @@ wrap_from!(UnsafeCell);
 
 lazy_just!(BorrowError, || {
     // False positive:
-    #[cfg_attr(feature = "cargo-clippy", allow(let_and_return))]
+    #[cfg_attr(feature = "cargo-clippy", allow(clippy::let_and_return))]
     {
         let _rc = RefCell::new(());
         let _bm = _rc.borrow_mut();
@@ -28,7 +33,7 @@ lazy_just!(BorrowError, || {
 });
 lazy_just!(BorrowMutError, || {
     // False positive:
-    #[cfg_attr(feature = "cargo-clippy", allow(let_and_return))]
+    #[cfg_attr(feature = "cargo-clippy", allow(clippy::let_and_return))]
     {
         let _rc = RefCell::new(());
         let _bm = _rc.borrow_mut();

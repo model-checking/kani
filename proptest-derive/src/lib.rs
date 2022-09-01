@@ -6,6 +6,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Kani Contributors
+// See GitHub history for details.
 //! This is the API documentation for the `proptest-derive` crate. As this
 //! crate does not have an API _per se_, there isn't much to see here.
 //!
