@@ -135,6 +135,10 @@ impl KaniSession {
             flags.push(abs_type.into());
         }
 
+        if !self.args.no_randomize_layout {
+            flags.push("-Zrandomize-layout".into());
+        }
+
         flags.push("-C".into());
         flags.push("symbol-mangling-version=v0".into());
 

@@ -179,6 +179,10 @@ pub struct KaniArgs {
     /// Disable CBMC's slice formula which prevents values from being assigned to redundant variables in traces.
     #[structopt(long, hidden_short_help(true), requires("enable-unstable"))]
     pub no_slice_formula: bool,
+
+    /// Randomizes the layout, potentially helping to catch code that depends on a chosen layout and shouldn't.
+    #[structopt(long)]
+    pub no_randomize_layout: bool,
     /*
     The below is a "TODO list" of things not yet implemented from the kani_flags.py script.
 
