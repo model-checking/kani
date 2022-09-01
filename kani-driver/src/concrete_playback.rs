@@ -83,16 +83,15 @@ impl KaniSession {
     /// Add the unit test to the user's source code, format it, and short circuit if code already present.
     fn modify_src_code(
         &self,
-        src_path: &str,
+        src_path_as_str: &str,
         proof_harness_end_line: usize,
         concrete_playback: &UnitTest,
     ) -> Result<()> {
-        let src_file = File::open(src_path)
-            .with_context(|| format!("Couldn't open user's source code file `{src_path}`"))?;
+        // Write new source lines to a tmp file.
+        let src_file = File::open(src_path_as_str)
+            .with_context(|| format!("Couldn't open user's source code file `{src_path_as_str}`"))?;
         let src_buf_reader = BufReader::new(src_file);
-        // Write new source lines to a tmp file, and then rename it to the actual user's source file.
-        // Renames are usually automic, so we won't corrupt the user's source file during a crash.
-        let tmp_src_path = src_path.to_string() + ".concrete_playback_overwrite";
+        let tmp_src_path = src_path_as_str.to_string() + ".concrete_playback_overwrite";
         let tmp_src_file = File::create(&tmp_src_path)
             .with_context(|| format!("Couldn't create tmp source code file `{}`", tmp_src_path))?;
         let mut tmp_src_buf_writer = BufWriter::new(tmp_src_file);
@@ -119,48 +118,31 @@ impl KaniSession {
             if !self.args.quiet {
                 println!(
                     "Concrete playback unit test `{}/{}` already found in source code, so skipping modification.",
-                    src_path, concrete_playback.func_name,
+                    src_path_as_str, concrete_playback.func_name,
                 );
             }
             return Ok(());
         }
 
+        // Renames are usually automic, so we won't corrupt the user's source file during a crash.
         tmp_src_buf_writer.flush()?;
-        fs::rename(&tmp_src_path, src_path).with_context(|| {
+        fs::rename(&tmp_src_path, src_path_as_str).with_context(|| {
             format!(
-                "Couldn't rename tmp src file `{tmp_src_path}` to actual src file `{src_path}`."
+                "Couldn't rename tmp src file `{tmp_src_path}` to actual src file `{src_path_as_str}`."
             )
         })?;
 
         // Run rustfmt on just the inserted lines.
-        let source_path = Path::new(src_path);
-        let parent_dir_as_path = source_path.parent().with_context(|| {
-            format!("Expected source file `{}` to be in a directory", source_path.display())
-        })?;
-        let parent_dir_as_str = parent_dir_as_path.to_str().with_context(|| {
-            format!(
-                "Couldn't convert source file parent directory `{}` from  str",
-                parent_dir_as_path.display()
-            )
-        })?;
-        let src_file_name_as_osstr = source_path.file_name().with_context(|| {
-            format!("Couldn't get the file name from the source file `{}`", source_path.display())
-        })?;
-        let src_file_name_as_str = src_file_name_as_osstr.to_str().with_context(|| {
-            format!(
-                "Couldn't convert source code file name `{:?}` from OsStr to str",
-                src_file_name_as_osstr
-            )
-        })?;
-
         let concrete_playback_num_lines = concrete_playback.full_func.len();
         let unit_test_start_line = proof_harness_end_line + 1;
         let unit_test_end_line = unit_test_start_line + concrete_playback_num_lines - 1;
+        let src_path = Path::new(src_path_as_str);
+        let parent_dir_and_src_file = extract_parent_dir_and_src_file(src_path)?;
         let file_line_ranges = vec![FileLineRange {
-            file: src_file_name_as_str.to_string(),
+            file: parent_dir_and_src_file.src_file,
             line_range: Some((unit_test_start_line, unit_test_end_line)),
         }];
-        self.run_rustfmt(&file_line_ranges, Some(parent_dir_as_str))?;
+        self.run_rustfmt(&file_line_ranges, Some(&parent_dir_and_src_file.parent_dir))?;
         Ok(())
     }
 
@@ -220,6 +202,16 @@ impl KaniSession {
     }
 }
 
+struct FileLineRange {
+    file: String,
+    line_range: Option<(usize, usize)>,
+}
+
+struct UnitTest {
+    full_func: Vec<String>,
+    func_name: String,
+}
+
 const TAB: &str = "    ";
 
 /// Format a unit test for a number of concrete values.
@@ -269,14 +261,32 @@ fn format_concrete_vals(concrete_vals: &[ConcreteVal]) -> impl Iterator<Item = S
     })
 }
 
-struct FileLineRange {
-    file: String,
-    line_range: Option<(usize, usize)>,
+struct ParentDirAndSrcFile {
+    parent_dir: String,
+    src_file: String,
 }
 
-struct UnitTest {
-    full_func: Vec<String>,
-    func_name: String,
+/// Suppose `src_path` was `/path/to/file.txt`. This function extracts this into `/path/to` and `file.txt`.
+fn extract_parent_dir_and_src_file(src_path: &Path) -> Result<ParentDirAndSrcFile> {
+    let parent_dir_as_path = src_path.parent().with_context(|| {
+        format!("Expected source file `{}` to be in a directory", src_path.display())
+    })?;
+    let parent_dir = parent_dir_as_path.to_str().with_context(|| {
+        format!(
+            "Couldn't convert source file parent directory `{}` from  str",
+            parent_dir_as_path.display()
+        )
+    })?;
+    let src_file_name_as_osstr = src_path.file_name().with_context(|| {
+        format!("Couldn't get the file name from the source file `{}`", src_path.display())
+    })?;
+    let src_file = src_file_name_as_osstr.to_str().with_context(|| {
+        format!(
+            "Couldn't convert source code file name `{:?}` from OsStr to str",
+            src_file_name_as_osstr
+        )
+    })?;
+    Ok(ParentDirAndSrcFile { parent_dir: parent_dir.to_string(), src_file: src_file.to_string() })
 }
 
 /// Extract concrete values from the CBMC output processed items.
