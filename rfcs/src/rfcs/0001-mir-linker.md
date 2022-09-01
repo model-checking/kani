@@ -52,7 +52,7 @@ executable):
    This model includes everything reachable from the crate's public functions.
 2. After that, Kani links all models together by invoking `goto-cc`.
    This step will also link against Kani's `C` library.
-3. For every harness, Kani prunes the linked model to only include items reachable from the given harness.
+3. For every harness, Kani invokes `goto-instrument` to prune the linked model to only include items reachable from the given harness.
 4. Finally, Kani instruments and verify each harness model via `goto-program` and `cbmc` calls.
 
 After this RFC, the system flow would be slightly different:
