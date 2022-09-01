@@ -535,4 +535,13 @@ mod tests {
         assert_ne!(hash_base, hash_diff_concrete_byte);
         assert_ne!(hash_base, hash_diff_interp_val);
     }
+
+    #[test]
+    fn check_extract_parent_dir_and_src_file() {
+        let src_path_as_str = "/path/to/file.txt";
+        let src_path = Path::new(src_path_as_str);
+        let parent_dir_and_src_file = extract_parent_dir_and_src_file(src_path).unwrap();
+        assert_eq!(parent_dir_and_src_file.parent_dir, "/path/to");
+        assert_eq!(parent_dir_and_src_file.src_file, "file.txt");
+    }
 }
