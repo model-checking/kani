@@ -440,6 +440,12 @@ mod concrete_vals_extractor {
 
 #[cfg(test)]
 mod tests {
+    use cargo_metadata::Source;
+
+    use crate::cbmc_output_parser::{
+        CheckStatus, ParserItem, Property, SourceLocation, TraceData, TraceItem, TraceValue,
+    };
+
     use super::concrete_vals_extractor::*;
     use super::*;
 
@@ -543,5 +549,46 @@ mod tests {
         let parent_dir_and_src_file = extract_parent_dir_and_src_file(src_path).unwrap();
         assert_eq!(parent_dir_and_src_file.parent_dir, "/path/to");
         assert_eq!(parent_dir_and_src_file.src_file, "file.txt");
+    }
+
+    #[test]
+    fn check_concrete_vals_extractor() {
+        let processed_items = [ParserItem::Result {
+            result: vec![Property {
+                description: "".to_string(),
+                property: "assertion.1".to_string(),
+                status: CheckStatus::Failure,
+                reach: None,
+                source_location: SourceLocation {
+                    column: None,
+                    file: None,
+                    function: None,
+                    line: None,
+                },
+                trace: Some(vec![TraceItem {
+                    thread: 0,
+                    step_type: "assignment".to_string(),
+                    hidden: false,
+                    lhs: Some("goto_symex$$return_value".to_string()),
+                    source_location: Some(SourceLocation {
+                        column: None,
+                        file: None,
+                        function: Some("kani::any_raw_internal::<u8>".to_string()),
+                        line: None,
+                    }),
+                    value: Some(TraceValue {
+                        name: "".to_string(),
+                        binary: Some("0000001100000001".to_string()),
+                        data: Some(TraceData::NonBool("385".to_string())),
+                        width: Some(16),
+                    }),
+                }]),
+            }],
+        }];
+        let concrete_vals = extract_from_processed_items(&processed_items).unwrap();
+        let concrete_val = &concrete_vals[0];
+
+        assert_eq!(concrete_val.byte_arr, vec![1, 3]);
+        assert_eq!(concrete_val.interp_val, "385");
     }
 }
