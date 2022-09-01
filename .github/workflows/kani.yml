@@ -82,7 +82,7 @@ jobs:
 
       # On one OS only, build the documentation, too.
       - name: Build Documentation
-        run: ./docs/build-docs.sh
+        run: ./scripts/build-docs.sh
 
       # When we're pushed to main branch, only then actually publish the docs.
       - name: Publish Documentation
