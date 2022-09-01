@@ -438,7 +438,6 @@ mod concrete_vals_extractor {
     }
 }
 
-/*
 #[cfg(test)]
 mod tests {
     use super::concrete_vals_extractor::*;
@@ -447,19 +446,8 @@ mod tests {
     #[test]
     fn format_zero_concrete_vals() {
         let concrete_vals: [ConcreteVal; 0] = [];
-        let actual = format_concrete_vals(&concrete_vals);
-        assert_eq!(actual, "");
-    }
-
-    #[test]
-    fn format_one_concrete_val() {
-        let concrete_vals = [ConcreteVal { byte_arr: vec![0, 0], interp_val: "0".to_string() }];
-        let actual = format_concrete_vals(&concrete_vals);
-        let two_tab = TAB.repeat(2);
-        let expected = format!(
-            "{two_tab}// 0\n\
-            {two_tab}vec![0, 0]"
-        );
+        let actual: Vec<_> = format_concrete_vals(&concrete_vals).collect();
+        let expected: Vec<String> = Vec::new();
         assert_eq!(actual, expected);
     }
 
@@ -469,39 +457,82 @@ mod tests {
             ConcreteVal { byte_arr: vec![0, 0], interp_val: "0".to_string() },
             ConcreteVal { byte_arr: vec![0, 0, 0, 0, 0, 0, 0, 0], interp_val: "0l".to_string() },
         ];
-        let actual = format_concrete_vals(&concrete_vals);
+        let actual: Vec<_> = format_concrete_vals(&concrete_vals).collect();
         let two_tab = TAB.repeat(2);
-        let expected = format!(
-            "{two_tab}// 0\n\
-            {two_tab}vec![0, 0],\n\
-            {two_tab}// 0l\n\
-            {two_tab}vec![0, 0, 0, 0, 0, 0, 0, 0]"
-        );
+        let expected = vec![
+            format!("{two_tab}// 0"),
+            format!("{two_tab}vec![0, 0],"),
+            format!("{two_tab}// 0l"),
+            format!("{two_tab}vec![0, 0, 0, 0, 0, 0, 0, 0],"),
+        ];
         assert_eq!(actual, expected);
     }
 
-    struct UnitTestName {
+    struct SplitUnitTestName {
         before_hash: String,
         hash: String,
     }
 
-    /// Unit test names are "kani_exe_trace_{harness_name}_{hash}".
-    /// Split this into the "kani_exe_trace_{harness_name}" and "{hash}".
-    fn split_unit_test_name(unit_test_name: &str) -> UnitTestName {
+    /// Unit test names are formatted as "kani_concrete_playback_{harness_name}_{hash}".
+    /// This function splits the name into "kani_concrete_playback_{harness_name}" and "{hash}".
+    fn split_unit_test_name(unit_test_name: &str) -> SplitUnitTestName {
         let underscore_locs: Vec<_> = unit_test_name.match_indices('_').collect();
         let last_underscore_idx = underscore_locs[underscore_locs.len() - 1].0;
-        UnitTestName {
+        SplitUnitTestName {
             before_hash: unit_test_name[..last_underscore_idx].to_string(),
             hash: unit_test_name[last_underscore_idx + 1..].to_string(),
         }
     }
 
+    /// Since hashes can not be relied on in tests, this compares all parts of a unit test except the hash.
     #[test]
-    fn format_unit_test_overall_structure() {
+    fn format_unit_test_full_func() {
         let harness_name = "test_proof_harness";
         let concrete_vals = [ConcreteVal { byte_arr: vec![0, 0], interp_val: "0".to_string() }];
         let unit_test = format_unit_test(harness_name, &concrete_vals);
-        //let unit_test_name = split_unit_test_name(unit_test.)
+        let full_func = unit_test.full_func;
+        let split_unit_test_name = split_unit_test_name(&unit_test.func_name);
+        let two_tab = TAB.repeat(2);
+        let expected_after_func_name = vec![
+            format!("{TAB}let concrete_vals: Vec<Vec<u8>> = vec!["),
+            format!("{two_tab}// 0"),
+            format!("{two_tab}vec![0, 0],"),
+            format!("{TAB}];"),
+            format!("{TAB}kani::concrete_playback_run(concrete_vals, {harness_name});"),
+            "}".to_string(),
+        ];
+
+        assert_eq!(full_func[0], "#[test]");
+        assert_eq!(
+            split_unit_test_name.before_hash,
+            format!("kani_concrete_playback_{harness_name}")
+        );
+        assert_eq!(full_func[1], format!("fn {}() {{", unit_test.func_name));
+        assert_eq!(full_func[2..], expected_after_func_name);
+    }
+
+    /// Generates a unit test and returns its hash.
+    fn extract_hash_from_unit_test(harness_name: &str, concrete_vals: &[ConcreteVal]) -> String {
+        let unit_test = format_unit_test(harness_name, concrete_vals);
+        split_unit_test_name(&unit_test.func_name).hash
+    }
+
+    /// Two hashes should not be the same if either the harness_name or the concrete_vals changes.
+    #[test]
+    fn check_hashes_are_unique() {
+        let harness_name_1 = "test_proof_harness1";
+        let harness_name_2 = "test_proof_harness2";
+        let concrete_vals_1 = [ConcreteVal { byte_arr: vec![0, 0], interp_val: "0".to_string() }];
+        let concrete_vals_2 = [ConcreteVal { byte_arr: vec![1, 0], interp_val: "0".to_string() }];
+        let concrete_vals_3 = [ConcreteVal { byte_arr: vec![0, 0], interp_val: "1".to_string() }];
+
+        let hash_base = extract_hash_from_unit_test(harness_name_1, &concrete_vals_1);
+        let hash_diff_harness_name = extract_hash_from_unit_test(harness_name_2, &concrete_vals_1);
+        let hash_diff_concrete_byte = extract_hash_from_unit_test(harness_name_1, &concrete_vals_2);
+        let hash_diff_interp_val = extract_hash_from_unit_test(harness_name_1, &concrete_vals_3);
+
+        assert_ne!(hash_base, hash_diff_harness_name);
+        assert_ne!(hash_base, hash_diff_concrete_byte);
+        assert_ne!(hash_base, hash_diff_interp_val);
     }
 }
-*/
