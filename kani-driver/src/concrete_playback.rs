@@ -223,8 +223,38 @@ impl KaniSession {
     }
 }
 
-/// Generate a unit test from a list of concrete values.
+const TAB: &str = "    ";
+
+/// Format a unit test for a number of concrete values.
 fn format_unit_test(harness_name: &str, concrete_vals: &[ConcreteVal]) -> UnitTest {
+    let mut formatted_concrete_vals = format_concrete_vals(concrete_vals);
+
+    // Hash the generated concrete value string along with the proof harness name.
+    let mut hasher = DefaultHasher::new();
+    harness_name.hash(&mut hasher);
+    formatted_concrete_vals.hash(&mut hasher);
+    let hash = hasher.finish();
+
+    let unit_test_name = format!("kani_concrete_playback_{harness_name}_{hash}");
+    let mut unit_test_str_as_vec: Vec<String> = vec![
+        "#[test]".to_string(),
+        format!("fn {unit_test_name}() {{"),
+        format!("{TAB}let concrete_vals: Vec<Vec<u8>> = vec!["),
+    ];
+    // TODO: Try to convert this to iterator
+    unit_test_str_as_vec.append(&mut formatted_concrete_vals);
+    unit_test_str_as_vec.extend([
+        format!("{TAB}];"),
+        format!("{TAB}kani::concrete_playback_run(concrete_vals, {harness_name});"),
+        "}}".to_string(),
+    ]);
+    let unit_test_str = unit_test_str_as_vec.join("\n");
+
+    UnitTest { unit_test_str, unit_test_name }
+}
+
+/// Format an initializer expression for a number of concrete values.
+fn format_concrete_vals(concrete_vals: &[ConcreteVal]) -> Vec<String> {
     /*
     Given a number of byte vectors, format them as:
     // interp_concrete_val_1
@@ -232,37 +262,16 @@ fn format_unit_test(harness_name: &str, concrete_vals: &[ConcreteVal]) -> UnitTe
     // interp_concrete_val_2
     vec![concrete_val_2], ...
     */
-    let vec_whitespace = " ".repeat(8);
-    let vecs_as_str = concrete_vals
+    let two_tab = TAB.repeat(2);
+    concrete_vals
         .iter()
-        .map(|concrete_val| {
-            format!(
-                "{vec_whitespace}// {}\n{vec_whitespace}vec!{:?}",
-                concrete_val.interp_val, concrete_val.byte_arr
-            )
+        .flat_map(|concrete_val| {
+            [
+                format!("{two_tab}// {}", concrete_val.interp_val),
+                format!("{two_tab}vec!{:?}", concrete_val.byte_arr),
+            ]
         })
         .collect::<Vec<String>>()
-        .join(",\n");
-
-    // Hash the generated det val string along with the proof harness name.
-    let mut hasher = DefaultHasher::new();
-    harness_name.hash(&mut hasher);
-    vecs_as_str.hash(&mut hasher);
-    let hash = hasher.finish();
-
-    let concrete_playback_func_name = format!("kani_concrete_playback_{harness_name}_{hash}");
-    #[rustfmt::skip]
-    let concrete_playback = format!(
-"#[test]
-fn {concrete_playback_func_name}() {{
-    let concrete_vals: Vec<Vec<u8>> = vec![
-{vecs_as_str}
-    ];
-    kani::concrete_playback_run(concrete_vals, {harness_name});
-}}"
-    );
-
-    UnitTest { unit_test_str: concrete_playback, unit_test_name: concrete_playback_func_name }
 }
 
 struct FileLineRange {
@@ -421,5 +430,71 @@ mod concrete_vals_extractor {
             }
         }
         Ok(None)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::concrete_vals_extractor::*;
+    use super::*;
+
+    #[test]
+    fn format_zero_concrete_vals() {
+        let concrete_vals: [ConcreteVal; 0] = [];
+        let actual = format_concrete_vals(&concrete_vals);
+        assert_eq!(actual, "");
+    }
+
+    #[test]
+    fn format_one_concrete_val() {
+        let concrete_vals = [ConcreteVal { byte_arr: vec![0, 0], interp_val: "0".to_string() }];
+        let actual = format_concrete_vals(&concrete_vals);
+        let two_tab = TAB.repeat(2);
+        let expected = format!(
+            "{two_tab}// 0\n\
+            {two_tab}vec![0, 0]"
+        );
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn format_two_concrete_vals() {
+        let concrete_vals = [
+            ConcreteVal { byte_arr: vec![0, 0], interp_val: "0".to_string() },
+            ConcreteVal { byte_arr: vec![0, 0, 0, 0, 0, 0, 0, 0], interp_val: "0l".to_string() },
+        ];
+        let actual = format_concrete_vals(&concrete_vals);
+        let two_tab = TAB.repeat(2);
+        let expected = format!(
+            "{two_tab}// 0\n\
+            {two_tab}vec![0, 0],\n\
+            {two_tab}// 0l\n\
+            {two_tab}vec![0, 0, 0, 0, 0, 0, 0, 0]"
+        );
+        assert_eq!(actual, expected);
+    }
+
+    struct UnitTestName {
+        before_hash: String,
+        hash: String,
+    }
+
+    /// Unit test names are "kani_exe_trace_{harness_name}_{hash}".
+    /// Split this into the "kani_exe_trace_{harness_name}" and "{hash}".
+    fn split_unit_test_name(unit_test_name: &str) -> UnitTestName {
+        let underscore_locs: Vec<_> = unit_test_name.match_indices('_').collect();
+        let last_underscore_idx = underscore_locs[underscore_locs.len() - 1].0;
+        UnitTestName {
+            before_hash: unit_test_name[..last_underscore_idx].to_string(),
+            hash: unit_test_name[last_underscore_idx + 1..].to_string(),
+        }
+    }
+
+    #[test]
+    fn format_unit_test_overall_structure() {
+        let harness_name = "test_proof_harness";
+        let concrete_vals = [ConcreteVal { byte_arr: vec![0, 0], interp_val: "0".to_string() }];
+        let unit_test = format_unit_test(harness_name, &concrete_vals);
+        //let unit_test_name = split_unit_test_name(unit_test.)
     }
 }
