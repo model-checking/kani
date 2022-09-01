@@ -180,7 +180,9 @@ pub struct KaniArgs {
     #[structopt(long, hidden_short_help(true), requires("enable-unstable"))]
     pub no_slice_formula: bool,
 
-    /// Randomizes the layout, potentially helping to catch code that depends on a chosen layout and shouldn't.
+    /// Disable structure layout randomization. By default, Kani will randomize the layout of structures
+    /// that are not guaranteed by the compiler, helping to detect code that relies on properties that
+    /// are not guaranteed by the Rust language.
     #[structopt(long)]
     pub no_randomize_layout: bool,
     /*
