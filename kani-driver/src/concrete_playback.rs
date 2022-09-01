@@ -15,7 +15,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::ffi::OsString;
 use std::fs::{self, File};
 use std::hash::{Hash, Hasher};
-use std::io::{Read, Write};
+use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::Path;
 use std::process::Command;
 
@@ -53,11 +53,12 @@ impl KaniSession {
                 );
                 println!(
                     "Concrete playback unit test for `{}`:\n```\n{}\n```",
-                    &harness.mangled_name, &concrete_playback.unit_test_str
+                    harness.mangled_name,
+                    concrete_playback.full_func.join("\n")
                 );
                 println!(
                     "INFO: To automatically add the concrete playback unit test `{}` to the src code, run Kani with `--concrete-playback=InPlace`.",
-                    &concrete_playback.unit_test_name
+                    &concrete_playback.func_name
                 );
             }
 
@@ -65,7 +66,7 @@ impl KaniSession {
                 if !self.args.quiet {
                     println!(
                         "INFO: Now modifying the source code to include the concrete playback unit test `{}`.",
-                        &concrete_playback.unit_test_name
+                        &concrete_playback.func_name
                     );
                 }
                 self.modify_src_code(
@@ -86,53 +87,49 @@ impl KaniSession {
         proof_harness_end_line: usize,
         concrete_playback: &UnitTest,
     ) -> Result<()> {
-        let mut src_file = File::open(src_path)
+        let src_file = File::open(src_path)
             .with_context(|| format!("Couldn't open user's source code file `{src_path}`"))?;
-        let mut src_as_str = String::new();
-        src_file.read_to_string(&mut src_as_str).with_context(|| {
-            format!("Couldn't read user's source code file `{src_path}` as a string")
-        })?;
+        let src_buf_reader = BufReader::new(src_file);
+        // Write new source lines to a tmp file, and then rename it to the actual user's source file.
+        // Renames are usually automic, so we won't corrupt the user's source file during a crash.
+        let tmp_src_path = src_path.to_string() + ".concrete_playback_overwrite";
+        let tmp_src_file = File::create(&tmp_src_path)
+            .with_context(|| format!("Couldn't create tmp source code file `{}`", tmp_src_path))?;
+        let mut tmp_src_buf_writer = BufWriter::new(tmp_src_file);
+        let mut unit_test_already_in_src = false;
+        let mut curr_line_num = 0;
 
-        // Short circuit if unit test already in source code.
-        if src_as_str.contains(&concrete_playback.unit_test_name) {
+        for line_result in src_buf_reader.lines() {
+            if let Ok(line) = line_result {
+                if line.contains(&concrete_playback.func_name) {
+                    unit_test_already_in_src = true;
+                }
+                curr_line_num += 1;
+                writeln!(tmp_src_buf_writer, "{}", line)?;
+                if curr_line_num == proof_harness_end_line {
+                    for unit_test_line in concrete_playback.full_func.iter() {
+                        curr_line_num += 1;
+                        writeln!(tmp_src_buf_writer, "{}", unit_test_line)?;
+                    }
+                }
+            }
+        }
+
+        if unit_test_already_in_src {
             if !self.args.quiet {
                 println!(
                     "Concrete playback unit test `{}/{}` already found in source code, so skipping modification.",
-                    src_path, concrete_playback.unit_test_name,
+                    src_path, concrete_playback.func_name,
                 );
             }
             return Ok(());
         }
 
-        // Split the code into two different parts around the insertion point.
-        let src_newline_matches: Vec<_> = src_as_str.match_indices('\n').collect();
-        // If the proof harness ends on the last line of source code, there won't be a newline.
-        let insertion_pt = if proof_harness_end_line == src_newline_matches.len() + 1 {
-            src_as_str.len()
-        } else {
-            // Existing newline goes with 2nd src half. We also manually add newline before unit test.
-            src_newline_matches[proof_harness_end_line - 1].0
-        };
-        let src_before_concrete_playback = &src_as_str[..insertion_pt];
-        let src_after_concrete_playback = &src_as_str[insertion_pt..];
-
-        // Write new source lines to a tmp file, and then rename it to the actual user's source file.
-        // Renames are usually automic, so we won't corrupt the user's source file during a crash.
-        let tmp_src_path = src_path.to_string() + ".concrete_playback_overwrite";
-        let mut tmp_src_file = File::create(&tmp_src_path)
-            .with_context(|| format!("Couldn't create tmp source code file `{}`", tmp_src_path))?;
-        write!(
-            tmp_src_file,
-            "{}\n{}{}",
-            src_before_concrete_playback,
-            concrete_playback.unit_test_str,
-            src_after_concrete_playback
-        )
-        .with_context(|| {
-            format!("Couldn't write new src str into tmp src file `{tmp_src_path}`")
-        })?;
+        tmp_src_buf_writer.flush()?;
         fs::rename(&tmp_src_path, src_path).with_context(|| {
-            format!("Couldn't rename tmp src file `{tmp_src_path}` to actual src file `{src_path}`")
+            format!(
+                "Couldn't rename tmp src file `{tmp_src_path}` to actual src file `{src_path}`."
+            )
         })?;
 
         // Run rustfmt on just the inserted lines.
@@ -156,7 +153,7 @@ impl KaniSession {
             )
         })?;
 
-        let concrete_playback_num_lines = concrete_playback.unit_test_str.matches('\n').count() + 1;
+        let concrete_playback_num_lines = concrete_playback.full_func.len();
         let unit_test_start_line = proof_harness_end_line + 1;
         let unit_test_end_line = unit_test_start_line + concrete_playback_num_lines - 1;
         let file_line_ranges = vec![FileLineRange {
@@ -227,34 +224,35 @@ const TAB: &str = "    ";
 
 /// Format a unit test for a number of concrete values.
 fn format_unit_test(harness_name: &str, concrete_vals: &[ConcreteVal]) -> UnitTest {
-    let mut formatted_concrete_vals = format_concrete_vals(concrete_vals);
-
-    // Hash the generated concrete value string along with the proof harness name.
+    // Hash the concrete values along with the proof harness name.
     let mut hasher = DefaultHasher::new();
     harness_name.hash(&mut hasher);
-    formatted_concrete_vals.hash(&mut hasher);
+    concrete_vals.hash(&mut hasher);
     let hash = hasher.finish();
+    let func_name = format!("kani_concrete_playback_{harness_name}_{hash}");
 
-    let unit_test_name = format!("kani_concrete_playback_{harness_name}_{hash}");
-    let mut unit_test_str_as_vec: Vec<String> = vec![
+    let full_func: Vec<_> = [
         "#[test]".to_string(),
-        format!("fn {unit_test_name}() {{"),
+        format!("fn {func_name}() {{"),
         format!("{TAB}let concrete_vals: Vec<Vec<u8>> = vec!["),
-    ];
-    // TODO: Try to convert this to iterator
-    unit_test_str_as_vec.append(&mut formatted_concrete_vals);
-    unit_test_str_as_vec.extend([
-        format!("{TAB}];"),
-        format!("{TAB}kani::concrete_playback_run(concrete_vals, {harness_name});"),
-        "}}".to_string(),
-    ]);
-    let unit_test_str = unit_test_str_as_vec.join("\n");
+    ]
+    .into_iter()
+    .chain(format_concrete_vals(concrete_vals))
+    .chain(
+        [
+            format!("{TAB}];"),
+            format!("{TAB}kani::concrete_playback_run(concrete_vals, {harness_name});"),
+            "}".to_string(),
+        ]
+        .into_iter(),
+    )
+    .collect();
 
-    UnitTest { unit_test_str, unit_test_name }
+    UnitTest { full_func, func_name }
 }
 
 /// Format an initializer expression for a number of concrete values.
-fn format_concrete_vals(concrete_vals: &[ConcreteVal]) -> Vec<String> {
+fn format_concrete_vals(concrete_vals: &[ConcreteVal]) -> impl Iterator<Item = String> + '_ {
     /*
     Given a number of byte vectors, format them as:
     // interp_concrete_val_1
@@ -263,15 +261,12 @@ fn format_concrete_vals(concrete_vals: &[ConcreteVal]) -> Vec<String> {
     vec![concrete_val_2], ...
     */
     let two_tab = TAB.repeat(2);
-    concrete_vals
-        .iter()
-        .flat_map(|concrete_val| {
-            [
-                format!("{two_tab}// {}", concrete_val.interp_val),
-                format!("{two_tab}vec!{:?}", concrete_val.byte_arr),
-            ]
-        })
-        .collect::<Vec<String>>()
+    concrete_vals.iter().flat_map(move |concrete_val| {
+        [
+            format!("{two_tab}// {}", concrete_val.interp_val),
+            format!("{two_tab}vec!{:?},", concrete_val.byte_arr),
+        ]
+    })
 }
 
 struct FileLineRange {
@@ -280,8 +275,8 @@ struct FileLineRange {
 }
 
 struct UnitTest {
-    unit_test_str: String,
-    unit_test_name: String,
+    full_func: Vec<String>,
+    func_name: String,
 }
 
 /// Extract concrete values from the CBMC output processed items.
@@ -304,6 +299,7 @@ mod concrete_vals_extractor {
     };
     use anyhow::{bail, ensure, Context, Result};
 
+    #[derive(Hash)]
     pub struct ConcreteVal {
         pub byte_arr: Vec<u8>,
         pub interp_val: String,
@@ -433,6 +429,7 @@ mod concrete_vals_extractor {
     }
 }
 
+/*
 #[cfg(test)]
 mod tests {
     use super::concrete_vals_extractor::*;
@@ -498,3 +495,4 @@ mod tests {
         //let unit_test_name = split_unit_test_name(unit_test.)
     }
 }
+*/
