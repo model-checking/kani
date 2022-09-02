@@ -180,11 +180,15 @@ pub struct KaniArgs {
     #[structopt(long, hidden_short_help(true), requires("enable-unstable"))]
     pub no_slice_formula: bool,
 
-    /// Disable structure layout randomization. By default, Kani will randomize the layout of structures
-    /// that are not guaranteed by the compiler, helping to detect code that relies on properties that
-    /// are not guaranteed by the Rust language.
+    /// Randomize the layout of structures. This option can help catching code that relies on
+    /// a specific layout chosen by the compiler that is not guaranteed to exist in the future.
+    /// See the `-Zrandomize-layout` argument of the rust compiler.
     #[structopt(long)]
-    pub no_randomize_layout: bool,
+    pub randomize_layout: bool,
+
+    /// Specify the layout seed for the `--randomize-layout` option.
+    #[structopt(long, requires("randomize-layout"))]
+    pub layout_seed: Option<u64>,
     /*
     The below is a "TODO list" of things not yet implemented from the kani_flags.py script.
 
@@ -340,6 +344,22 @@ impl KaniArgs {
         let extra_unwind =
             self.cbmc_args.iter().any(|s| s.to_str().unwrap().starts_with("--unwind"));
         let natives_unwind = self.default_unwind.is_some() || self.unwind.is_some();
+
+        if self.randomize_layout && self.concrete_playback.is_some() {
+            let random_seed = if let Some(seed) = self.layout_seed {
+                format!(" -Zlayout-seed={}", seed)
+            } else {
+                String::new()
+            };
+
+            // `tracing` is not a dependency of `kani-driver`, so we println! here instead.
+            println!(
+                "Using concrete playback with --randomize-layout.\n\
+                The produced tests will have to be played with the same rustc arguments:\n\
+                -Zrandomize-layout{}",
+                random_seed
+            );
+        }
 
         // TODO: these conflicting flags reflect what's necessary to pass current tests unmodified.
         // We should consider improving the error messages slightly in a later pull request.

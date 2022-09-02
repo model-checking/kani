@@ -135,8 +135,12 @@ impl KaniSession {
             flags.push(abs_type.into());
         }
 
-        if !self.args.no_randomize_layout {
+        if self.args.randomize_layout {
             flags.push("-Zrandomize-layout".into());
+            if let Some(seed) = self.args.layout_seed {
+                let layout_seed_arg = format!("-Zlayout-seed={}", seed);
+                flags.push(layout_seed_arg.into())
+            }
         }
 
         flags.push("-C".into());

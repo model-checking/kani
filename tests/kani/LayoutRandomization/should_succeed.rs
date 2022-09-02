@@ -4,6 +4,8 @@
 // Kani now has -Zrandomize-layout activated by default.
 // This test checks that it doesn't affect repr(C) and Kani is still bit-precise
 
+// kani-flags: --randomize-layout
+
 macro_rules! make_structs {
   ($i:ident) => {
       #[repr(C)]

@@ -6,7 +6,8 @@
 // decided in a deterministic way.
 // With randomization, there is a very very high probability that it fails (1 - (1/2^64))
 
-//kani-verify-fail
+// kani-flags: --randomize-layout
+// kani-verify-fail
 
 macro_rules! make_structs {
     ($i:ident) => {
