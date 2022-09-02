@@ -28,10 +28,27 @@ jobs:
         uses: model-checking/kani@vVER.SION
 ```
 
+This will run `cargo kani --workspace` on the code you checked
+out. You can also provide a custom command for running Kani. For
+example, the below code runs 2 commands in sequence where the first
+command compiles the crate without running Kani, and the second runs
+Kani on specified packages.
 
-## Configuring Kani with flags
+```
+      - name: 'Run Kani on your code.'
+        uses: model-checking/kani@vVER.SION
+        with:
+          command: |
+            cargo kani --only-codegen
+            cargo kani -p mypackage-a -p mypackage-b
+```
 
-The GitHub Action itself does not take any flags that `cargo kani`
-would take. Instead, they should be configured in `Cargo.toml`. See
-["Configuration in Cargo.toml"](usage.md#configuration-in-cargotoml)
-for details.
+## FAQ
+- **Kani takes too long for my CI**: Try running Kani on a
+  [schedule](https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#schedule)
+  with desired frequency.
+- **Kani Silently Crashes with no logs**: Few possible reasons:
+  - Kani ran out of RAM. GitHub offers up to 7GB of RAM, but Kani may
+    use more. Run locally to confirm.
+  - GitHub terminates jobs longer than 6 hours.
+  - Otherwise, consider filing an issue [here](https://github.com/model-checking/kani/issues).

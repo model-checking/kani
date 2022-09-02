@@ -9,6 +9,12 @@ Kani verifies:
  * The absence of panics (e.g., `unwrap()` on `None` values)
  * The absence of some types of unexpected behavior (e.g., arithmetic overflows)
 
+## GitHub Action
+
+Use Kani in your CI with `model-checking/kani@vVERSION`. See [GitHub
+Action
+section](https://model-checking.github.io/kani/install-github-ci.html).
+
 ## Installation
 
 To install the latest version of Kani, run:

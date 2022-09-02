@@ -9,11 +9,17 @@ branding:
   icon: 'cloud'
   color: 'orange'
 
+inputs:
+  command:
+    description: 'Command to run.'
+    required: false
+    default: 'cargo kani --workspace'
+
 runs:
   using: 'docker'
   image: docker://ghcr.io/model-checking/kani-ubuntu-20.04:0.9.0
   args:
     - bash
     - '-c'
-    - 'PATH="/root/.cargo/bin:${PATH}"; cargo kani'
+    - 'set -e; PATH="/root/.cargo/bin:${PATH}"; ${{ inputs.command }}'
 
