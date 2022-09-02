@@ -181,7 +181,7 @@ pub struct KaniArgs {
     pub no_slice_formula: bool,
 
     /// Randomize the layout of structures. This option can help catching code that relies on
-    /// a specific layout chosen by the compiler that is not guaranteed to exist in the future.
+    /// a specific layout chosen by the compiler that is not guaranteed to be stable in the future.
     /// See the `-Zrandomize-layout` argument of the rust compiler.
     #[structopt(long)]
     pub randomize_layout: bool,
