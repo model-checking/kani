@@ -154,36 +154,10 @@ impl KaniSession {
         current_dir_opt: Option<&str>,
     ) -> Result<()> {
         let mut cmd = Command::new("rustfmt");
-        let mut args: Vec<OsString> = Vec::new();
-
-        // Deal with file line ranges.
-        let mut line_range_dicts: Vec<String> = Vec::new();
-        for file_line_range in file_line_ranges {
-            if let Some((start_line, end_line)) = file_line_range.line_range {
-                let src_file = &file_line_range.file;
-                let line_range_dict =
-                    format!("{{\"file\":\"{src_file}\",\"range\":[{start_line},{end_line}]}}");
-                line_range_dicts.push(line_range_dict);
-            }
-        }
-        if !line_range_dicts.is_empty() {
-            // `--file-lines` arg is currently unstable.
-            args.push("--unstable-features".into());
-            args.push("--file-lines".into());
-            let line_range_dicts_combined = format!("[{}]", line_range_dicts.join(","));
-            args.push(line_range_dicts_combined.into());
-        }
-
-        for file_line_range in file_line_ranges {
-            args.push((&file_line_range.file).into());
-        }
-
-        cmd.args(args);
-
+        cmd.args(rustfmt_args(file_line_ranges));
         if let Some(current_dir) = current_dir_opt {
             cmd.current_dir(current_dir);
         }
-
         if self.args.quiet { self.run_suppress(cmd) } else { self.run_terminal(cmd) }
             .context("Failed to rustfmt modified source code.")?;
         Ok(())
@@ -286,6 +260,31 @@ fn extract_parent_dir_and_src_file(src_path: &Path) -> Result<ParentDirAndSrcFil
         )
     })?;
     Ok(ParentDirAndSrcFile { parent_dir: parent_dir.to_string(), src_file: src_file.to_string() })
+}
+
+/// Generates the rustfmt args used for formatting specific lines inside specific files.
+fn rustfmt_args(file_line_ranges: &[FileLineRange]) -> Vec<OsString> {
+    let mut args: Vec<OsString> = Vec::new();
+    let mut line_range_dicts: Vec<String> = Vec::new();
+    for file_line_range in file_line_ranges {
+        if let Some((start_line, end_line)) = file_line_range.line_range {
+            let src_file = &file_line_range.file;
+            let line_range_dict =
+                format!("{{\"file\":\"{src_file}\",\"range\":[{start_line},{end_line}]}}");
+            line_range_dicts.push(line_range_dict);
+        }
+    }
+    if !line_range_dicts.is_empty() {
+        // `--file-lines` arg is currently unstable.
+        args.push("--unstable-features".into());
+        args.push("--file-lines".into());
+        let line_range_dicts_combined = format!("[{}]", line_range_dicts.join(","));
+        args.push(line_range_dicts_combined.into());
+    }
+    for file_line_range in file_line_ranges {
+        args.push((&file_line_range.file).into());
+    }
+    args
 }
 
 /// Extract concrete values from the CBMC output processed items.
@@ -537,6 +536,34 @@ mod tests {
         assert_ne!(hash_base, hash_diff_harness_name);
         assert_ne!(hash_base, hash_diff_concrete_byte);
         assert_ne!(hash_base, hash_diff_interp_val);
+    }
+
+    #[test]
+    fn check_rustfmt_args_no_line_ranges() {
+        let file_line_ranges = [FileLineRange { file: "file1".to_string(), line_range: None }];
+        let args = rustfmt_args(&file_line_ranges);
+        let expected: Vec<OsString> = vec!["file1".into()];
+        assert_eq!(args, expected);
+    }
+
+    #[test]
+    fn check_rustfmt_args_some_line_ranges() {
+        let file_line_ranges = [
+            FileLineRange { file: "file1".to_string(), line_range: None },
+            FileLineRange { file: "path/to/file2".to_string(), line_range: Some((1, 3)) },
+        ];
+        let args = rustfmt_args(&file_line_ranges);
+        let expected: Vec<OsString> = [
+            "--unstable-features",
+            "--file-lines",
+            "[{\"file\":\"path/to/file2\",\"range\":[1,3]}]",
+            "file1",
+            "path/to/file2",
+        ]
+        .into_iter()
+        .map(|arg| arg.into())
+        .collect();
+        assert_eq!(args, expected);
     }
 
     #[test]
