@@ -21,4 +21,4 @@ runs:
   args:
     - bash
     - '-c'
-    - 'set -e; PATH="/root/.cargo/bin:${PATH}"; ${{ inputs.command }}'
+    - 'set -e; HOME=/root; source $HOME/.bashrc; ${{ inputs.command }}'

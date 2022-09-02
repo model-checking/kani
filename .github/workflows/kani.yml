@@ -30,7 +30,7 @@ jobs:
 
 # We will keep using local version of Kani until the GH action
 # merges. See PR#1589 for progress.
-      - name: Setup Kani Dependencies
+      - name: Run Kani
         uses: ./.github/actions/kani
         with:
           command: |
