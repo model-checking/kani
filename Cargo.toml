@@ -12,4 +12,5 @@ members = [
 exclude = [
     "proptest/test-persistence-location/*",
     "proptest/examples",
+    "kani",
 ]
