@@ -196,6 +196,7 @@ struct UnitTest {
 }
 
 const TAB: &str = "    ";
+const TWO_TAB: &str = "        ";
 
 /// Format a unit test for a number of concrete values.
 fn format_unit_test(harness_name: &str, concrete_vals: &[ConcreteVal]) -> UnitTest {
@@ -236,11 +237,10 @@ fn format_concrete_vals(concrete_vals: &[ConcreteVal]) -> impl Iterator<Item = S
     // interp_concrete_val_2
     vec![concrete_val_2], ...
     */
-    let two_tab = TAB.repeat(2);
-    concrete_vals.iter().flat_map(move |concrete_val| {
+    concrete_vals.iter().flat_map(|concrete_val| {
         [
-            format!("{two_tab}// {}", concrete_val.interp_val),
-            format!("{two_tab}vec!{:?},", concrete_val.byte_arr),
+            format!("{TWO_TAB}// {}", concrete_val.interp_val),
+            format!("{TWO_TAB}vec!{:?},", concrete_val.byte_arr),
         ]
     })
 }
@@ -476,12 +476,11 @@ mod tests {
             ConcreteVal { byte_arr: vec![0, 0, 0, 0, 0, 0, 0, 0], interp_val: "0l".to_string() },
         ];
         let actual: Vec<_> = format_concrete_vals(&concrete_vals).collect();
-        let two_tab = TAB.repeat(2);
         let expected = vec![
-            format!("{two_tab}// 0"),
-            format!("{two_tab}vec![0, 0],"),
-            format!("{two_tab}// 0l"),
-            format!("{two_tab}vec![0, 0, 0, 0, 0, 0, 0, 0],"),
+            format!("{TWO_TAB}// 0"),
+            format!("{TWO_TAB}vec![0, 0],"),
+            format!("{TWO_TAB}// 0l"),
+            format!("{TWO_TAB}vec![0, 0, 0, 0, 0, 0, 0, 0],"),
         ];
         assert_eq!(actual, expected);
     }
@@ -510,11 +509,10 @@ mod tests {
         let unit_test = format_unit_test(harness_name, &concrete_vals);
         let full_func = unit_test.full_func;
         let split_unit_test_name = split_unit_test_name(&unit_test.func_name);
-        let two_tab = TAB.repeat(2);
         let expected_after_func_name = vec![
             format!("{TAB}let concrete_vals: Vec<Vec<u8>> = vec!["),
-            format!("{two_tab}// 0"),
-            format!("{two_tab}vec![0, 0],"),
+            format!("{TWO_TAB}// 0"),
+            format!("{TWO_TAB}vec![0, 0],"),
             format!("{TAB}];"),
             format!("{TAB}kani::concrete_playback_run(concrete_vals, {harness_name});"),
             "}".to_string(),
