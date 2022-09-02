@@ -37,9 +37,6 @@ pub const PRETTY_OUTPUT_FILES: &str = "pretty-json-files";
 /// Option used for suppressing global ASM error.
 pub const IGNORE_GLOBAL_ASM: &str = "ignore-global-asm";
 
-/// Option used for zero initilizing variables.
-pub const ZERO_INIT_VARS: &str = "zero-init-vars";
-
 /// Option name used to override the sysroot.
 pub const SYSROOT: &str = "sysroot";
 
@@ -56,7 +53,7 @@ const KANI_ARGS_FLAG: &str = "--kani-flags";
 
 /// Configure command options for the Kani compiler.
 pub fn parser<'a, 'b>() -> App<'a, 'b> {
-    app_from_crate!()
+    let app = app_from_crate!()
         .setting(AppSettings::TrailingVarArg) // This allow us to fwd commands to rustc.
         .setting(clap::AppSettings::AllowLeadingHyphen)
         .version_short("?")
@@ -145,12 +142,11 @@ pub fn parser<'a, 'b>() -> App<'a, 'b> {
             Arg::with_name(IGNORE_GLOBAL_ASM)
                 .long("--ignore-global-asm")
                 .help("Suppress error due to the existence of global_asm in a crate"),
-        )
-        .arg(
-            Arg::with_name(ZERO_INIT_VARS)
-                .long("--zero-init-vars")
-                .help("Zero initialize variables"),
-        )
+        );
+    #[cfg(feature = "unsound_experiments")]
+    let app = crate::unsound_experiments::arg_parser::add_unsound_experiments_to_parser(app);
+
+    app
 }
 
 /// Retrieves the arguments from the command line and process hack to incorporate CARGO arguments.

@@ -92,10 +92,11 @@ fn main() -> Result<(), &'static str> {
     queries.set_output_pretty_json(matches.is_present(parser::PRETTY_OUTPUT_FILES));
     queries.set_ignore_global_asm(matches.is_present(parser::IGNORE_GLOBAL_ASM));
     #[cfg(feature = "unsound_experiments")]
-    {
-        queries.get_unsound_experiments().lock().unwrap().zero_init_vars =
-            matches.is_present(parser::ZERO_INIT_VARS);
-    }
+    crate::unsound_experiments::arg_parser::add_unsound_experiment_args_to_queries(
+        &mut queries,
+        &matches,
+    );
+
     // Generate rustc args.
     let rustc_args = generate_rustc_args(&matches);
 

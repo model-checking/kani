@@ -3,8 +3,11 @@ use std::ffi::OsString;
 use structopt::StructOpt;
 #[derive(Debug, StructOpt)]
 pub struct UnsoundExperimentArgs {
-    /// Generate C file equivalent to inputted program.
-    /// This feature is unstable and it requires `--enable-unstable` to be used
+    /// Zero initilize variables.
+    /// This is useful for experiments to see whether assigning constant values produces better
+    /// performance by allowing CBMC to do more constant propegation.
+    /// Unfortunatly, it is unsafe to use for production code, since it may unsoundly hide bugs.
+    /// Marked as `unsound` to prevent use outside of experimental contexts.
     #[structopt(long, hidden_short_help(true), requires("enable-unstable"))]
     pub unsound_experiment_zero_init_vars: bool,
 }
@@ -13,7 +16,7 @@ impl UnsoundExperimentArgs {
     pub fn process_args(&self) -> Vec<OsString> {
         let mut flags = vec![];
         if self.unsound_experiment_zero_init_vars {
-            flags.push("--zero-init-vars".into());
+            flags.push("--unsound-experiment-zero-init-vars".into());
         }
         flags
     }
