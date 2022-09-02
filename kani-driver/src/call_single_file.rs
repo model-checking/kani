@@ -122,9 +122,7 @@ impl KaniSession {
         }
 
         #[cfg(feature = "unsound_experiments")]
-        if self.args.zero_init_vars {
-            flags.push("--zero-init-vars".into());
-        }
+        flags.extend(self.args.unsound_experiments.process_args());
 
         // Stratification point!
         // Above are arguments that should be parsed by kani-compiler

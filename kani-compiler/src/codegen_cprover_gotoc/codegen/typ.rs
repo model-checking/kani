@@ -677,9 +677,9 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Codegens the an initalizer for variables without one.
-    /// If the zero initilizer flag is set, does zero init (if possible).
-    /// Otherwise, returns `None` which leaves the variable uninitilized.
+    /// By default, returns `None` which leaves the variable uninitilized.
     /// In CBMC, this translates to a NONDET value.
+    /// In the future, we might want to replace this with `Poison`.
     #[cfg(not(feature = "unsound_experiments"))]
     pub fn codegen_default_initializer(&self, _e: &Expr) -> Option<Expr> {
         None

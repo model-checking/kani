@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: --enable-unstable --enable-unsound-experiments --zero-init-vars
+// kani-flags: --enable-unstable --unsound-experiment-zero-init-vars
 
 // Checks variables are zero_initialized when the flag is set
 #![feature(core_intrinsics)]

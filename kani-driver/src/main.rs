@@ -26,6 +26,9 @@ mod metadata;
 mod session;
 mod util;
 
+#[cfg(feature = "unsound_experiments")]
+mod unsound_experiments;
+
 fn main() -> Result<()> {
     match determine_invocation_type(Vec::from_iter(std::env::args_os())) {
         InvocationType::CargoKani(args) => cargokani_main(args),
