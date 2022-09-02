@@ -19,6 +19,8 @@
 //! For documentation on how to get started with proptest and general usage
 //! advice, please refer to the [Proptest Book](https://altsysrq.github.io/proptest-book/intro.html).
 
+#![allow(unused_imports)] // This crate is in middle of a migration. See issue #1618 for details.
+
 #![forbid(future_incompatible)]
 #![deny(missing_docs, bare_trait_objects)]
 #![no_std]
@@ -68,46 +70,44 @@ mod product_frunk;
 #[macro_use]
 mod product_tuple;
 
-#[macro_use]
+// #[macro_use]
 extern crate bitflags;
 #[cfg(feature = "bit-set")]
 extern crate bit_set;
 
-#[cfg(feature = "std")]
-#[macro_use]
-extern crate lazy_static;
-
-// Only required for the string module.
-#[cfg(feature = "std")]
-#[macro_use]
-extern crate quick_error;
-
-#[cfg(feature = "fork")]
-#[macro_use]
-extern crate rusty_fork;
-
-#[macro_use]
+// #[macro_use]
 mod macros;
 
-#[doc(hidden)]
-#[macro_use]
-pub mod sugar;
+// #[doc(hidden)]
+// #[macro_use]
+// pub mod sugar;
 
-pub mod arbitrary;
-pub mod array;
-pub mod bits;
-pub mod bool;
-pub mod char;
-pub mod collection;
-pub mod num;
-pub mod strategy;
-pub mod test_runner;
-pub mod tuple;
+// pub mod arbitrary;
+// pub mod array;
+// pub mod bits;
+// pub mod bool;
+// pub mod char;
+// pub mod collection;
+// pub mod num;
+// pub mod strategy;
+// pub mod test_runner;
+// pub mod tuple;
 
-pub mod option;
-pub mod result;
-pub mod sample;
-#[cfg(feature = "std")]
-pub mod string;
+// pub mod option;
+// pub mod result;
+// pub mod sample;
+// #[cfg(feature = "std")]
+// pub mod string;
 
-pub mod prelude;
+// pub mod prelude;
+
+#[cfg(test)]
+mod test_kani {
+    #[kani::proof]
+    fn trivial() {
+        let vector = vec![0;16];
+        let index = kani::any::<usize>() % vector.len();
+
+        assert_eq!(vector[index], 0);
+    }
+}

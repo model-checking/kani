@@ -1,0 +1,3 @@
+[submodule "kani"]
+	path = kani
+	url = https://github.com/model-checking/kani.git

@@ -8,7 +8,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-11, ubuntu-18.04, ubuntu-20.04]
+        os: [ubuntu-20.04]
     steps:
       - name: Checkout Kani
         uses: actions/checkout@v2
@@ -26,12 +26,15 @@ jobs:
           export RUST_BACKTRACE=1
           cargo build --workspace
 
-      - name: Run Tests
-        run: |
-          export RUST_BACKTRACE=1
-          cargo test -p proptest
+# We will keep using local version of Kani until the GH action
+# merges. See PR#1589 for progress.
+      - name: Setup Kani Dependencies
+        uses: ./.github/actions/kani
+        with:
+          command: |
+            cargo kani -p proptest --tests
 
-      - name: Run Tests
+      - name: Build Document
         run: |
           export RUST_BACKTRACE=1
           cargo doc --workspace --no-deps --exclude std
