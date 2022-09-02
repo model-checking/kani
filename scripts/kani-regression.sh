@@ -60,6 +60,8 @@ TESTS=(
 
 if [[ "" != "${KANI_ENABLE_UNSOUND_EXPERIMENTS-}" ]]; then
   TESTS+=("unsound_experiments kani")
+else 
+  TESTS+=("no_unsound_experiments expected")
 fi
 
 # Extract testing suite information and run compiletest
