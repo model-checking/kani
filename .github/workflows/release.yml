@@ -143,3 +143,9 @@ jobs:
             org.opencontainers.image.source=${{ github.repositoryUrl }}
             org.opencontainers.image.version=${{ needs.Release.outputs.version }}
             org.opencontainers.image.licenses=Apache-2.0 OR MIT
+
+      - name: Check action and image is updated.
+          uses: ${{ env.OWNER_LC }}/kani@${{ needs.Release.outputs.version }})
+          with:
+            command: |
+              (cargo kani --version | grep -F ${{ needs.Release.outputs.version }})
