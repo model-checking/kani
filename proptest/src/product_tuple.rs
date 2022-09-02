@@ -17,7 +17,7 @@
 //! loosely coupled with `frunk_core` so that only `lib.rs` has to be changed
 //! in the event that Rust gets tuple-variadic generics.
 
-#![allow(unused_macros)] // Merge in progress. See #1618 for details
+#![allow(unused_macros)] // Merge in progress. See #1608 for details
 
 macro_rules! product_type {
     ($factor: ty) => {

@@ -19,7 +19,7 @@
 //! For documentation on how to get started with proptest and general usage
 //! advice, please refer to the [Proptest Book](https://altsysrq.github.io/proptest-book/intro.html).
 
-#![allow(unused_imports)] // This crate is in middle of a migration. See issue #1618 for details.
+#![allow(unused_imports)] // This crate is in middle of a migration. See issue #1608 for details.
 #![forbid(future_incompatible)]
 #![deny(missing_docs, bare_trait_objects)]
 #![no_std]
