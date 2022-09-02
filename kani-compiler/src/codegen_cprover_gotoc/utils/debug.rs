@@ -81,7 +81,7 @@ impl<'tcx> GotocCtx<'tcx> {
             for l in mir.args_iter().chain(mir.vars_and_temps_iter()) {
                 debug!("let {:?}: {:?}", l, self.local_ty(l));
             }
-            for (bb, bbd) in mir.basic_blocks().iter_enumerated() {
+            for (bb, bbd) in mir.basic_blocks.iter_enumerated() {
                 debug!("block {:?}", bb);
                 for stmt in &bbd.statements {
                     debug!("{:?}", stmt);

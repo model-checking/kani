@@ -361,19 +361,9 @@ impl<'tcx> GotocCtx<'tcx> {
         macro_rules! codegen_size_align {
             ($which: ident) => {{
                 let tp_ty = instance.substs.type_at(0);
-                if tp_ty.is_generator() {
-                    let e = self.codegen_unimplemented_expr(
-                        "size or alignment of a generator type",
-                        cbmc_ret_ty,
-                        loc,
-                        "https://github.com/model-checking/kani/issues/1395",
-                    );
-                    self.codegen_expr_to_place(p, e)
-                } else {
-                    let arg = fargs.remove(0);
-                    let size_align = self.size_and_align_of_dst(tp_ty, arg);
-                    self.codegen_expr_to_place(p, size_align.$which)
-                }
+                let arg = fargs.remove(0);
+                let size_align = self.size_and_align_of_dst(tp_ty, arg);
+                self.codegen_expr_to_place(p, size_align.$which)
             }};
         }
 

@@ -1130,7 +1130,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     name: field_name,
                     typ: ctx.codegen_ty(field_ty),
                 });
-                offset += field_size;
+                offset = field_offset + field_size;
             }
             fields.extend(ctx.codegen_alignment_padding(
                 offset,
