@@ -5,5 +5,5 @@
 set -eux
 
 # Install Rust toolchain
-curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly \
+curl https://sh.rustup.rs -sSf | sh -s -- -y \
   && source  ~/.cargo/env
