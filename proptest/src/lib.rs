@@ -20,7 +20,6 @@
 //! advice, please refer to the [Proptest Book](https://altsysrq.github.io/proptest-book/intro.html).
 
 #![allow(unused_imports)] // This crate is in middle of a migration. See issue #1618 for details.
-
 #![forbid(future_incompatible)]
 #![deny(missing_docs, bare_trait_objects)]
 #![no_std]
@@ -70,7 +69,7 @@ mod product_frunk;
 #[macro_use]
 mod product_tuple;
 
-// #[macro_use]
+#[macro_use]
 extern crate bitflags;
 #[cfg(feature = "bit-set")]
 extern crate bit_set;
@@ -105,7 +104,7 @@ mod macros;
 mod test_kani {
     #[kani::proof]
     fn trivial() {
-        let vector = vec![0;16];
+        let vector = vec![0; 16];
         let index = kani::any::<usize>() % vector.len();
 
         assert_eq!(vector[index], 0);
