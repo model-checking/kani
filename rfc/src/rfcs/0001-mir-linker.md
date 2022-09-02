@@ -1,4 +1,4 @@
-- **Feature Name:** `MIR` Linker (mir_linker)
+- **Feature Name:** MIR Linker (mir_linker)
 - **RFC Tracking Issue**: <https://github.com/model-checking/kani/issues/1588>
 - **RFC PR:** <https://github.com/model-checking/kani/pull/1600>
 - **Status:** Under Review
@@ -8,7 +8,7 @@
 
 ## Summary
 
-Fix linking issues with the rust standard library in a scalable manner by only generating `goto-program` for
+Fix linking issues with the rust standard library in a scalable manner by only generating goto-program for
 code that is reachable from the user harnesses.
 
 ## User Impact
@@ -20,12 +20,12 @@ The approach introduced in this RFC will have the following secondary benefits.
 - Reduce spurious warnings about unsupported features for cases where the feature is not reachable from any harness.
 - In the verification mode, we will likely see a reduction on the compilation time and memory consumption
  by pruning the inputs of symtab2gb and goto-instrument.
-  - Linking against the standard library goto-models takes more than 5 GB which is not feasible with the current
-  GitHub workers.
+  - Compared to linking against the standard library goto-models that take more than 5 GB.
 - In a potential assessment mode, only analyze code that is reachable from all public items in the target crate.
 
-One downside is that our release bundle will be bigger.
-We are going to include compilation artifacts for the `std` and `kani` libraries.
+One downside is that if we decide to include a pre-compiled version of the std, our release bundle will double in size
+(See [Rational and Alternatives](0001-mir-linker.md#rational-and-alternatives)
+for more information on the size overhead).
 This will negatively impact the time taken to set up Kani
 (triggered by either the first time a user invokes `kani | cargo-kani` , or explicit invoke the subcommand `setup`).
 
@@ -33,35 +33,35 @@ This will negatively impact the time taken to set up Kani
 
 Once this RFC has been stabilized users shall use Kani in the same manner as they have been today.
 Until then, we wil add an unstable option `--mir-linker` to enable the cross-crate reachability analysis
-and the generation of the `goto-program` model only when compiling the target crate.
+and the generation of the goto-program only when compiling the target crate.
 
 Kani setup will likely take longer and more disk space as mentioned in the section above.
 This change will not be guarded by `--mir-linker` option above.
 
 ## Detailed Design
 
-In a nutshell, we will no longer generate a `goto-program` model for every crate we compile.
-Instead, we will generate the `MIR` for every crate, and we will generate only one `goto-program` model.
+In a nutshell, we will no longer generate a goto-program for every crate we compile.
+Instead, we will generate the MIR for every crate, and we will generate only one goto-program.
 This model will only include items reachable from the target crate's harnesses.
 
 The current system flow for a crate verification is the following (Kani here represents either `kani | cargo-kani`
 executable):
 
 1. Kani compiles the user crate as well as all its dependencies.
-   For every crate compiled, `kani-compiler` will generate a `goto-program` model.
+   For every crate compiled, `kani-compiler` will generate a goto-program.
    This model includes everything reachable from the crate's public functions.
 2. After that, Kani links all models together by invoking `goto-cc`.
    This step will also link against Kani's `C` library.
 3. For every harness, Kani invokes `goto-instrument` to prune the linked model to only include items reachable from the given harness.
-4. Finally, Kani instruments and verify each harness model via `goto-program` and `cbmc` calls.
+4. Finally, Kani instruments and verify each harness model via `goto-instrument` and `cbmc` calls.
 
 After this RFC, the system flow would be slightly different:
 
-1. Kani compiles the user crate dependencies up to the `MIR` translation.
-   I.e., for every crate compiled, `kani-compiler` will generate an artifact that includes the `MIR` representation
+1. Kani compiles the user crate dependencies up to the MIR translation.
+   I.e., for every crate compiled, `kani-compiler` will generate an artifact that includes the MIR representation
   of all items in the crate.
-2. Kani will generate the `goto-program` only while compiling the target user crate.
-  It will generate one `goto-program` model that includes all items reachable from any harness in the target crate.
+2. Kani will generate the goto-program only while compiling the target user crate.
+  It will generate one goto-program that includes all items reachable from any harness in the target crate.
 3. `goto-cc` will still be invoked to link the generated model against Kani's `C` library.
 4. Steps #3 and #4 above will be performed without any change.
 
@@ -70,11 +70,11 @@ This feature will require three main changes to Kani which are detailed in the s
 ### Kani's Sysroot
 
 Kani currently uses `rustup` sysroot to gather information from the standard library constructs.
-The artifacts from this `sysroot` include the `MIR` for generic items as well as for items that may be included in
+The artifacts from this `sysroot` include the MIR for generic items as well as for items that may be included in
 a crate compilation (e.g.: functions marked with `#[inline]` annotation).
-The artifacts do not include the `MIR` for items that have already been compiled to the `std` shared library.
+The artifacts do not include the MIR for items that have already been compiled to the `std` shared library.
 This leaves a gap that cannot be filled by the `kani-compiler`;
-thus, we are unable to translate these items into `goto-program`.
+thus, we are unable to translate these items into goto-program.
 
 In order to fulfill this gap, we must compile the standard library from scratch.
 This RFC proposes a similar method to what [`MIRI`](https://github.com/rust-lang/miri) implements.
@@ -87,7 +87,7 @@ and with the new sysroot.
 
 ### Cross-Crate Reachability Analysis
 
-`kani-compiler` will include a new `reachability` module to traverse over the local and external `MIR` items.
+`kani-compiler` will include a new `reachability` module to traverse over the local and external MIR items.
 This module will `monomorphize` all generic code as it's performing the traversal.
 
 The traversal logic will be customizable allowing different starting points to be used.
@@ -104,12 +104,13 @@ where:
 
  - `harnesses`: Use the local harnesses as the starting points for the reachability analysis.
  - `pub_fns`: Use the public local functions as the starting points for the reachability analysis.
- - `none`: This will be the default value if `--reachability` flag is not provided. It will basically skip
- reachability analysis (and `goto-program` generation).
-   `kani-compiler` will still generate artifacts with the crate's `MIR`.
+ - `none`: This will be the default value if `--reachability` flag is not provided. It will skip
+ reachability analysis. No goto-program will be generated.
+  This will be used to compile dependencies up to the MIR level.
+   `kani-compiler` will still generate artifacts with the crate's MIR.
  - `legacy`: Keep `kani-compiler` current behavior by using
    `rustc_monomorphizer::collect_and_partition_mono_items()` which respects the crate boundary.
-   This will generate a `goto-program` for each crate compiled by `kani-compiler`, and it will still have the same
+   This will generate a goto-program for each crate compiled by `kani-compiler`, and it will still have the same
    `std` linking issues.
 
 *This option will be removed as part of the `rfc` stabilization.
@@ -172,9 +173,13 @@ These APIs are used by other tools such as MIRI, so we don't see a high risk tha
 ### Alternatives
 
 The other options explored were:
-1. Pre-compile the standard library and ship the generated `*symtab.json` files.
-2. Pre-compile the standard library, convert them to `goto-programs` (via `symtab2gb`) and link them into
-   one single `goto-program` model. Ship the generated model.
+1. Pre-compile the standard library, and the kani library, and ship the generated `*symtab.json` files.
+2. Pre-compile the standard library, and the kani library, convert the standard library and dependencies to goto-program
+  (via`symtab2gb`) and link them into one single goto-program.
+  Ship the generated model.
+
+Both would still require shipping the compiler metadata (via `rlib` or `rmeta`) for the kani library, its
+dependencies, and `kani_macro.so`.
 
 Both alternatives are very similar. They only differ on the artifact that would be shipped.
 They require generating and shipping a custom `sysroot`;
@@ -202,8 +207,8 @@ the harness verification:
 | Stage                     | MIR Linker | Alternative |
 ----------------------------|------------|-------------|
 | compilation               |   22.2s    |    64.7s    |
-| `goto-program` generation |   2.4s     |    90.7s    |
-| `goto-program` linking    |   0.8s     |    33.2s    |
+| goto-program generation |   2.4s     |    90.7s    |
+| goto-program linking    |   0.8s     |    33.2s    |
 | code instrumentation      |   0.8s     |    33.1     |
 | verification              |   0.5s     |    8.5s     |
 
@@ -212,7 +217,7 @@ expertise that we don't have today.
 
 Every option would require a custom sysroot to either be built or shipped with Kani.
 The table below shows the size of the sysroot files for the alternative #2
-(`goto-program` files) vs compiler artifacts (`*.rmeta` files)
+(goto-program files) vs compiler artifacts (`*.rmeta` files)
 files with `-Z always-encode-mir` for `x86_64-unknown-linux-gnu` (on Ubuntu 18.04).
 
 | File Type      | Raw size | Compressed size |
@@ -231,10 +236,17 @@ These results were obtained by looking at the artifacts generated during the sam
 - Should we codegen all static items no matter what? Static objects can only be initialized via constant function.
   Thus, it shouldn't have any side effect.
   That relies on all constant initializers being evaluated during compilation.
+- What's the best way to handle `cargo kani --tests`?
+  We still want to restrict the reachability and codegen to the last compilation step.
+  Possible solutions that we considered so far:
+  1. Add a new value to `--reachability`, maybe "on-tests" or something like that.
+     This would behave as either "harness" or "none" depending whether RUSTFLAGS has `--tests`.
+  2. Change how we handle not having `--reachability` argument to also take into account the existence of `--tests`.
+
 
 ## Future possibilities
 
-- Split `goto-program` models into two or more items to optimize compilation result caching.
+- Split the goto-program into two or more items to optimize compilation result caching.
   - Dependencies: One model will include items from all the crate dependencies.
     This model will likely be more stable and require fewer updates.
   - Target crate: The model for all items in the target crate.
