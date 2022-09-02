@@ -87,34 +87,14 @@ impl KaniSession {
         proof_harness_end_line: usize,
         concrete_playback: &UnitTest,
     ) -> Result<()> {
-        // Write new source lines to a tmp file.
-        let src_file = File::open(src_path_as_str).with_context(|| {
-            format!("Couldn't open user's source code file `{src_path_as_str}`")
-        })?;
-        let src_buf_reader = BufReader::new(src_file);
         let tmp_src_path = src_path_as_str.to_string() + ".concrete_playback_overwrite";
-        let tmp_src_file = File::create(&tmp_src_path)
-            .with_context(|| format!("Couldn't create tmp source code file `{}`", tmp_src_path))?;
-        let mut tmp_src_buf_writer = BufWriter::new(tmp_src_file);
-        let mut unit_test_already_in_src = false;
-        let mut curr_line_num = 0;
+        let unit_test_already_in_src = write_new_src_to_tmp_file(
+            src_path_as_str,
+            &tmp_src_path,
+            proof_harness_end_line,
+            concrete_playback,
+        )?;
 
-        for line in src_buf_reader.lines().flatten() {
-            if line.contains(&concrete_playback.func_name) {
-                unit_test_already_in_src = true;
-            }
-            curr_line_num += 1;
-            writeln!(tmp_src_buf_writer, "{}", line)?;
-            if curr_line_num == proof_harness_end_line {
-                for unit_test_line in concrete_playback.full_func.iter() {
-                    curr_line_num += 1;
-                    writeln!(tmp_src_buf_writer, "{}", unit_test_line)?;
-                }
-            }
-        }
-
-        // Flush before we remove/rename the file.
-        tmp_src_buf_writer.flush()?;
         if unit_test_already_in_src {
             if !self.args.quiet {
                 println!(
@@ -126,6 +106,7 @@ impl KaniSession {
                 .with_context(|| format!("Couldn't remove tmp src file `{tmp_src_path}`."))?;
             return Ok(());
         }
+
         // Renames are usually automic, so we won't corrupt the user's source file during a crash.
         fs::rename(&tmp_src_path, src_path_as_str).with_context(|| {
             format!(
@@ -174,9 +155,39 @@ impl KaniSession {
     }
 }
 
-struct FileLineRange {
-    file: String,
-    line_range: Option<(usize, usize)>,
+/// Writes the new source code to a temporary file. Returns whether the unit test was already in the old source code.
+fn write_new_src_to_tmp_file(
+    src_path_as_str: &str,
+    tmp_src_path: &str,
+    proof_harness_end_line: usize,
+    concrete_playback: &UnitTest,
+) -> Result<bool> {
+    let src_file = File::open(src_path_as_str)
+        .with_context(|| format!("Couldn't open user's source code file `{src_path_as_str}`"))?;
+    let src_buf_reader = BufReader::new(src_file);
+    let tmp_src_file = File::create(&tmp_src_path)
+        .with_context(|| format!("Couldn't create tmp source code file `{}`", tmp_src_path))?;
+    let mut tmp_src_buf_writer = BufWriter::new(tmp_src_file);
+    let mut unit_test_already_in_src = false;
+    let mut curr_line_num = 0;
+
+    for line in src_buf_reader.lines().flatten() {
+        if line.contains(&concrete_playback.func_name) {
+            unit_test_already_in_src = true;
+        }
+        curr_line_num += 1;
+        writeln!(tmp_src_buf_writer, "{}", line)?;
+        if curr_line_num == proof_harness_end_line {
+            for unit_test_line in concrete_playback.full_func.iter() {
+                curr_line_num += 1;
+                writeln!(tmp_src_buf_writer, "{}", unit_test_line)?;
+            }
+        }
+    }
+
+    // Flush before we remove/rename the file.
+    tmp_src_buf_writer.flush()?;
+    Ok(unit_test_already_in_src)
 }
 
 struct UnitTest {
@@ -260,6 +271,11 @@ fn extract_parent_dir_and_src_file(src_path: &Path) -> Result<ParentDirAndSrcFil
         )
     })?;
     Ok(ParentDirAndSrcFile { parent_dir: parent_dir.to_string(), src_file: src_file.to_string() })
+}
+
+struct FileLineRange {
+    file: String,
+    line_range: Option<(usize, usize)>,
 }
 
 /// Generates the rustfmt args used for formatting specific lines inside specific files.
