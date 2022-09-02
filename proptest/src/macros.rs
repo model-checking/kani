@@ -14,6 +14,8 @@
 
 //! Macros for internal use to reduce boilerplate.
 
+#![allow(unused_macros)] // Merge in progress. See #1618 for details
+
 // Pervasive internal sugar
 macro_rules! mapfn {
     ($({#[$allmeta:meta]})* $(#[$meta:meta])* [$($vis:tt)*]
