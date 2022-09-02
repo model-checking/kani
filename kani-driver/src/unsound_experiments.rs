@@ -17,10 +17,19 @@ pub struct UnsoundExperimentArgs {
 
 impl UnsoundExperimentArgs {
     pub fn process_args(&self) -> Vec<OsString> {
+        self.print_warnings();
         let mut flags = vec![];
         if self.unsound_experiment_zero_init_vars {
             flags.push("--unsound-experiment-zero-init-vars".into());
         }
         flags
+    }
+
+    pub fn print_warnings(&self) {
+        if self.unsound_experiment_zero_init_vars {
+            eprintln!(
+                "Warning: using --unsound-experiment-zero-init-vars can lead to unsound results"
+            );
+        }
     }
 }

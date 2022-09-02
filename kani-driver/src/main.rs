@@ -183,6 +183,9 @@ impl KaniSession {
             );
         }
 
+        #[cfg(feature = "unsound_experiments")]
+        self.args.unsound_experiments.print_warnings();
+
         if !failed_harnesses.is_empty() {
             // Failure exit code without additional error message
             drop(self);
