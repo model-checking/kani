@@ -9,7 +9,7 @@ use crate::call_cbmc::VerificationStatus;
 use crate::cbmc_output_parser::VerificationOutput;
 use crate::session::KaniSession;
 use anyhow::{ensure, Context, Result};
-use concrete_vals_extractor::{extract_from_processed_items, ConcreteVal};
+use concrete_vals_extractor::{extract_harness_values, ConcreteVal};
 use kani_metadata::HarnessMetadata;
 use std::collections::hash_map::DefaultHasher;
 use std::ffi::OsString;
@@ -41,39 +41,46 @@ impl KaniSession {
         }
 
         if let Some(processed_items) = &verification_output.processed_items {
-            let concrete_vals = extract_from_processed_items(processed_items).expect(
-                "Something went wrong when trying to get concrete values from the CBMC output",
-            );
-            let concrete_playback = format_unit_test(&harness.mangled_name, &concrete_vals);
+            if let Some(concrete_vals) = extract_harness_values(processed_items) {
+                let concrete_playback = format_unit_test(&harness.mangled_name, &concrete_vals);
 
-            if *playback_mode == ConcretePlaybackMode::Print {
-                ensure!(
-                    !self.args.quiet,
-                    "With `--quiet` mode enabled, `--concrete-playback=print` mode can not print test cases."
-                );
-                println!(
-                    "Concrete playback unit test for `{}`:\n```\n{}\n```",
-                    &harness.mangled_name, &concrete_playback.unit_test_str
-                );
-                println!(
-                    "INFO: To automatically add the concrete playback unit test `{}` to the src code, run Kani with `--concrete-playback=InPlace`.",
-                    &concrete_playback.unit_test_name
-                );
-            }
-
-            if *playback_mode == ConcretePlaybackMode::InPlace {
-                if !self.args.quiet {
+                if *playback_mode == ConcretePlaybackMode::Print {
+                    ensure!(
+                        !self.args.quiet,
+                        "With `--quiet` mode enabled, `--concrete-playback=print` mode can not print test cases."
+                    );
                     println!(
-                        "INFO: Now modifying the source code to include the concrete playback unit test `{}`.",
+                        "Concrete playback unit test for `{}`:\n```\n{}\n```",
+                        &harness.pretty_name, &concrete_playback.unit_test_str
+                    );
+                    println!(
+                        "INFO: To automatically add the concrete playback unit test `{}` to the src code, run Kani with `--concrete-playback=InPlace`.",
                         &concrete_playback.unit_test_name
                     );
                 }
-                self.modify_src_code(
-                    &harness.original_file,
-                    harness.original_end_line,
-                    &concrete_playback,
-                )
-                .expect("Failed to modify source code");
+
+                if *playback_mode == ConcretePlaybackMode::InPlace {
+                    if !self.args.quiet {
+                        println!(
+                            "INFO: Now modifying the source code to include the concrete playback unit test `{}`.",
+                            &concrete_playback.unit_test_name
+                        );
+                    }
+                    self.modify_src_code(
+                        &harness.original_file,
+                        harness.original_end_line,
+                        &concrete_playback,
+                    )
+                    .expect("Failed to modify source code");
+                }
+            } else {
+                println!(
+                    concat!(
+                        "WARNING: `{}` failure cannot be reproduced by the concrete playback. ",
+                        "Only assertion failures are currently reproducible."
+                    ),
+                    harness.pretty_name
+                );
             }
         }
         Ok(())
@@ -290,89 +297,53 @@ struct UnitTest {
 ///     ..., ] }
 /// ```
 mod concrete_vals_extractor {
-    use crate::cbmc_output_parser::{
-        extract_property_class, CheckStatus, ParserItem, Property, TraceItem,
-    };
-    use anyhow::{bail, ensure, Context, Result};
+    use crate::cbmc_output_parser::{extract_property_class, CheckStatus, ParserItem, TraceItem};
 
     pub struct ConcreteVal {
         pub byte_arr: Vec<u8>,
         pub interp_val: String,
     }
 
-    /// The first-level extractor. Traverses processed items to find properties.
-    pub fn extract_from_processed_items(
-        processed_items: &[ParserItem],
-    ) -> Result<Vec<ConcreteVal>> {
-        let mut concrete_vals: Vec<ConcreteVal> = Vec::new();
-        let mut extracted_assert_fail = false;
-        let result_item = extract_result_from_processed_items(processed_items)?;
-        for property in result_item {
-            // Even after extracting an assert fail, we continue to call extract on more properties to provide
-            // better diagnostics to the user in case they expected even future checks to be extracted.
-            let old_extracted_assert_fail = extracted_assert_fail;
-            let new_concrete_vals = extract_from_property(property, &mut extracted_assert_fail)?;
-            if !old_extracted_assert_fail && extracted_assert_fail {
-                concrete_vals = new_concrete_vals;
-            }
-        }
-        Ok(concrete_vals)
-    }
+    /// Extract a set of concrete values that trigger one assertion failure.
+    /// This will return None if the failure is not related to a user assertion.
+    pub fn extract_harness_values(processed_items: &[ParserItem]) -> Option<Vec<ConcreteVal>> {
+        let result_item =
+            processed_items
+                .iter()
+                .find_map(|item| {
+                    if let ParserItem::Result { result } = item { Some(result) } else { None }
+                })
+                .expect("Missing CBMC result.");
 
-    /// Extracts the result item from all the processed items. No result item means that there is an error.
-    fn extract_result_from_processed_items(processed_items: &[ParserItem]) -> Result<&[Property]> {
-        for processed_item in processed_items {
-            if let ParserItem::Result { result } = processed_item {
-                return Ok(result);
-            }
-        }
-        bail!("No result item found in processed items.")
-    }
+        let mut failures = result_item.iter().filter(|prop| {
+            extract_property_class(prop).expect("Unexpected property class.") == "assertion"
+                && prop.status == CheckStatus::Failure
+        });
 
-    /// The second-level extractor. Traverses properties to find trace items.
-    fn extract_from_property(
-        property: &Property,
-        extracted_assert_fail: &mut bool,
-    ) -> Result<Vec<ConcreteVal>> {
-        let mut concrete_vals: Vec<ConcreteVal> = Vec::new();
-        let property_class =
-            extract_property_class(property).context("Incorrectly formatted property class.")?;
-        let property_is_assert = property_class == "assertion";
-        let status_is_failure = property.status == CheckStatus::Failure;
+        // Process the first assertion failure.
+        let first_failure = failures.next();
+        if let Some(property) = first_failure {
+            // Extract values for the first assertion that has failed.
+            let trace =
+                property.trace.as_ref().expect(&format!("Missing trace for {}", property.property));
+            let concrete_vals = trace.iter().filter_map(&extract_from_trace_item).collect();
 
-        if property_is_assert && status_is_failure {
-            if *extracted_assert_fail {
+            // Print warnings for all the other failures that were not handled in case they expected
+            // even future checks to be extracted.
+            for unhandled in failures {
                 println!(
                     "WARNING: Unable to extract concrete values from multiple failing assertions. Skipping property `{}` with description `{}`.",
-                    property.property, property.description,
+                    unhandled.property, unhandled.description,
                 );
-            } else {
-                *extracted_assert_fail = true;
-                println!(
-                    "INFO: Parsing concrete values from property `{}` with description `{}`.",
-                    property.property, property.description,
-                );
-                if let Some(trace) = &property.trace {
-                    for trace_item in trace {
-                        let concrete_val_opt = extract_from_trace_item(trace_item)
-                            .context("Failure in trace assignment expression:")?;
-                        if let Some(concrete_val) = concrete_val_opt {
-                            concrete_vals.push(concrete_val);
-                        }
-                    }
-                }
             }
-        } else if !property_is_assert && status_is_failure {
-            println!(
-                "WARNING: Unable to extract concrete values from failing non-assertion checks. Skipping property `{}` with description `{}`.",
-                property.property, property.description,
-            );
+            Some(concrete_vals)
+        } else {
+            None
         }
-        Ok(concrete_vals)
     }
 
     /// The third-level extractor. Extracts individual bytes from kani::any calls.
-    fn extract_from_trace_item(trace_item: &TraceItem) -> Result<Option<ConcreteVal>> {
+    fn extract_from_trace_item(trace_item: &TraceItem) -> Option<ConcreteVal> {
         if let (Some(lhs), Some(source_location), Some(value)) =
             (&trace_item.lhs, &trace_item.source_location, &trace_item.value)
         {
@@ -389,11 +360,9 @@ mod concrete_vals_extractor {
                 {
                     let declared_width = width_u64 as usize;
                     let actual_width = bit_concrete_val.len();
-                    ensure!(
-                        declared_width == actual_width,
-                        format!(
-                            "Declared width of {declared_width} doesn't equal actual width of {actual_width}"
-                        )
+                    assert_eq!(
+                        declared_width, actual_width,
+                        "Declared width of {declared_width} doesn't equal actual width of {actual_width}"
                     );
                     let mut next_num: Vec<u8> = Vec::new();
 
@@ -401,25 +370,23 @@ mod concrete_vals_extractor {
                     for i in (0..declared_width).step_by(8).rev() {
                         let str_chunk = &bit_concrete_val[i..i + 8];
                         let str_chunk_len = str_chunk.len();
-                        ensure!(
-                            str_chunk_len == 8,
-                            format!(
-                                "Tried to read a chunk of 8 bits of actually read {str_chunk_len} bits"
-                            )
+                        assert_eq!(
+                            str_chunk_len, 8,
+                            "Tried to read a chunk of 8 bits of actually read {str_chunk_len} bits"
                         );
-                        let next_byte = u8::from_str_radix(str_chunk, 2).with_context(|| {
-                            format!("Couldn't convert the string chunk `{str_chunk}` to u8")
-                        })?;
+                        let next_byte = u8::from_str_radix(str_chunk, 2).expect(&format!(
+                            "Couldn't convert the string chunk `{str_chunk}` to u8"
+                        ));
                         next_num.push(next_byte);
                     }
 
-                    return Ok(Some(ConcreteVal {
+                    return Some(ConcreteVal {
                         byte_arr: next_num,
                         interp_val: interp_concrete_val.to_string(),
-                    }));
+                    });
                 }
             }
         }
-        Ok(None)
+        None
     }
 }
