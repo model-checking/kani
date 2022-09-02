@@ -195,8 +195,8 @@ struct UnitTest {
     func_name: String,
 }
 
-const TAB: &str = "    ";
-const TWO_TAB: &str = "        ";
+const SPACES_4: &str = "    ";
+const SPACES_8: &str = "        ";
 
 /// Format a unit test for a number of concrete values.
 fn format_unit_test(harness_name: &str, concrete_vals: &[ConcreteVal]) -> UnitTest {
@@ -210,13 +210,13 @@ fn format_unit_test(harness_name: &str, concrete_vals: &[ConcreteVal]) -> UnitTe
     let func_before_concrete_vals = [
         "#[test]".to_string(),
         format!("fn {func_name}() {{"),
-        format!("{TAB}let concrete_vals: Vec<Vec<u8>> = vec!["),
+        format!("{SPACES_4}let concrete_vals: Vec<Vec<u8>> = vec!["),
     ]
     .into_iter();
     let formatted_concrete_vals = format_concrete_vals(concrete_vals);
     let func_after_concrete_vals = [
-        format!("{TAB}];"),
-        format!("{TAB}kani::concrete_playback_run(concrete_vals, {harness_name});"),
+        format!("{SPACES_4}];"),
+        format!("{SPACES_4}kani::concrete_playback_run(concrete_vals, {harness_name});"),
         "}".to_string(),
     ]
     .into_iter();
@@ -239,8 +239,8 @@ fn format_concrete_vals(concrete_vals: &[ConcreteVal]) -> impl Iterator<Item = S
     */
     concrete_vals.iter().flat_map(|concrete_val| {
         [
-            format!("{TWO_TAB}// {}", concrete_val.interp_val),
-            format!("{TWO_TAB}vec!{:?},", concrete_val.byte_arr),
+            format!("{SPACES_8}// {}", concrete_val.interp_val),
+            format!("{SPACES_8}vec!{:?},", concrete_val.byte_arr),
         ]
     })
 }
@@ -477,10 +477,10 @@ mod tests {
         ];
         let actual: Vec<_> = format_concrete_vals(&concrete_vals).collect();
         let expected = vec![
-            format!("{TWO_TAB}// 0"),
-            format!("{TWO_TAB}vec![0, 0],"),
-            format!("{TWO_TAB}// 0l"),
-            format!("{TWO_TAB}vec![0, 0, 0, 0, 0, 0, 0, 0],"),
+            format!("{SPACES_8}// 0"),
+            format!("{SPACES_8}vec![0, 0],"),
+            format!("{SPACES_8}// 0l"),
+            format!("{SPACES_8}vec![0, 0, 0, 0, 0, 0, 0, 0],"),
         ];
         assert_eq!(actual, expected);
     }
@@ -510,11 +510,11 @@ mod tests {
         let full_func = unit_test.full_func;
         let split_unit_test_name = split_unit_test_name(&unit_test.func_name);
         let expected_after_func_name = vec![
-            format!("{TAB}let concrete_vals: Vec<Vec<u8>> = vec!["),
-            format!("{TWO_TAB}// 0"),
-            format!("{TWO_TAB}vec![0, 0],"),
-            format!("{TAB}];"),
-            format!("{TAB}kani::concrete_playback_run(concrete_vals, {harness_name});"),
+            format!("{SPACES_4}let concrete_vals: Vec<Vec<u8>> = vec!["),
+            format!("{SPACES_8}// 0"),
+            format!("{SPACES_8}vec![0, 0],"),
+            format!("{SPACES_4}];"),
+            format!("{SPACES_4}kani::concrete_playback_run(concrete_vals, {harness_name});"),
             "}".to_string(),
         ];
 
