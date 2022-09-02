@@ -12,6 +12,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+        with:
+          submodules: 'recursive'
+
       - uses: EmbarkStudios/cargo-deny-action@v1
         with:
           arguments: --all-features --workspace
