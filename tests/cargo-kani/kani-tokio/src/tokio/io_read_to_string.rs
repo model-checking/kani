@@ -14,6 +14,7 @@ use tokio::io::AsyncReadExt;
 use tokio_test::assert_ok;
 use tokio_test::io::Builder;
 
+#[cfg(disabled)]
 #[kani::proof]
 #[kani::unwind(2)]
 async fn read_to_string() {
@@ -25,6 +26,7 @@ async fn read_to_string() {
     assert_eq!(buf[..], "hello world"[..]);
 }
 
+#[cfg(disabled)]
 #[kani::proof]
 #[kani::unwind(2)]
 async fn to_string_does_not_truncate_on_utf8_error() {
@@ -41,6 +43,7 @@ async fn to_string_does_not_truncate_on_utf8_error() {
     assert_eq!(s, "abc");
 }
 
+#[cfg(disabled)]
 #[kani::proof]
 #[kani::unwind(2)]
 async fn to_string_does_not_truncate_on_io_error() {
@@ -59,6 +62,7 @@ async fn to_string_does_not_truncate_on_io_error() {
     assert_eq!(s, "abc");
 }
 
+#[cfg(disabled)]
 #[kani::proof]
 #[kani::unwind(2)]
 async fn to_string_appends() {

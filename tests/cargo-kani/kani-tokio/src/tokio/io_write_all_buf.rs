@@ -18,6 +18,7 @@ use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+#[cfg(disabled)]
 #[kani::proof]
 #[kani::unwind(2)]
 async fn write_all_buf() {
@@ -61,6 +62,7 @@ async fn write_all_buf() {
     assert!(!buf.has_remaining());
 }
 
+#[cfg(disabled)]
 #[kani::proof]
 #[kani::unwind(2)]
 async fn write_buf_err() {

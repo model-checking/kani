@@ -13,6 +13,7 @@ use tokio::io::AsyncReadExt;
 use tokio_stream::iter;
 use tokio_util::io::StreamReader;
 
+#[cfg(disabled)]
 #[kani::proof]
 #[kani::unwind(2)]
 async fn test_stream_reader() -> std::io::Result<()> {

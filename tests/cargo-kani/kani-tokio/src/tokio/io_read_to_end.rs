@@ -14,6 +14,7 @@ use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncReadExt, ReadBuf};
 use tokio_test::assert_ok;
 
+#[cfg(disabled)]
 #[kani::proof]
 #[kani::unwind(2)]
 async fn read_to_end() {
@@ -74,6 +75,7 @@ impl AsyncRead for UninitTest {
     }
 }
 
+#[cfg(disabled)]
 #[kani::proof]
 #[kani::unwind(2)]
 async fn read_to_end_uninit() {

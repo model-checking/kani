@@ -11,6 +11,7 @@
 use tokio::time::{sleep_until, Duration, Instant};
 use tokio_test::block_on;
 
+#[cfg(disabled)]
 #[kani::proof]
 #[kani::unwind(2)]
 fn async_block() {
@@ -21,6 +22,7 @@ async fn five() -> u8 {
     5
 }
 
+#[cfg(disabled)]
 #[kani::proof]
 #[kani::unwind(2)]
 fn async_fn() {

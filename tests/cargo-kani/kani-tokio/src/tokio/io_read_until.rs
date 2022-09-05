@@ -13,6 +13,7 @@ use std::io::ErrorKind;
 use tokio::io::{AsyncBufReadExt, BufReader, Error};
 use tokio_test::{assert_ok, io::Builder};
 
+#[cfg(disabled)]
 #[kani::proof]
 #[kani::unwind(2)]
 async fn read_until() {
@@ -32,6 +33,7 @@ async fn read_until() {
     assert_eq!(buf, []);
 }
 
+#[cfg(disabled)]
 #[kani::proof]
 #[kani::unwind(2)]
 async fn read_until_not_all_ready() {
@@ -60,6 +62,7 @@ async fn read_until_not_all_ready() {
     assert_eq!(chunk, b"2");
 }
 
+#[cfg(disabled)]
 #[kani::proof]
 #[kani::unwind(2)]
 async fn read_until_fail() {

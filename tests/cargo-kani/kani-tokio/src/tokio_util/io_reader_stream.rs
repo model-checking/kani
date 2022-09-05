@@ -43,6 +43,7 @@ impl AsyncRead for Reader {
     }
 }
 
+#[cfg(disabled)]
 #[kani::proof]
 #[kani::unwind(2)]
 async fn correct_behavior_on_errors() {

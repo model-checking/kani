@@ -12,7 +12,8 @@
 use tokio::io::{AsyncBufReadExt, AsyncReadExt};
 
 // Kani does not support select yet
-// #[kani::proof]
+// #[cfg(disabled)]
+#[kani::proof]
 #[kani::unwind(2)]
 #[tokio::test]
 async fn empty_read_is_cooperative() {
@@ -30,7 +31,8 @@ async fn empty_read_is_cooperative() {
 }
 
 // Kani does not support select yet
-// #[kani::proof]
+// #[cfg(disabled)]
+#[kani::proof]
 #[kani::unwind(2)]
 #[tokio::test]
 async fn empty_buf_reads_are_cooperative() {

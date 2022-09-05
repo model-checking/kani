@@ -17,6 +17,7 @@ use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+#[cfg(disabled)]
 #[kani::proof]
 #[kani::unwind(2)]
 async fn write2() {

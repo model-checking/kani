@@ -16,6 +16,7 @@ use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+#[cfg(disabled)]
 #[kani::proof]
 #[kani::unwind(12)]
 async fn read_buf() {

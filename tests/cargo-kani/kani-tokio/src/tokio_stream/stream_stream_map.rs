@@ -30,6 +30,7 @@ macro_rules! assert_ready_none {
     };
 }
 
+#[cfg(disabled)]
 #[kani::proof]
 #[kani::unwind(2)]
 async fn empty() {

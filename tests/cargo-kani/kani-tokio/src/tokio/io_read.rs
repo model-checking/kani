@@ -72,7 +72,8 @@ impl AsyncRead for BadAsyncRead {
 }
 
 // Kani does not support should_panic
-// #[kani::proof]
+// #[cfg(disabled)]
+#[kani::proof]
 #[kani::unwind(2)]
 #[tokio::test]
 #[should_panic]

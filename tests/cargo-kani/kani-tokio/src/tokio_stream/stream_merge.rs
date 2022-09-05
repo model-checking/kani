@@ -11,6 +11,7 @@ use tokio_stream::{self as stream, Stream, StreamExt};
 use tokio_test::task;
 use tokio_test::{assert_pending, assert_ready};
 
+#[cfg(disabled)]
 #[kani::proof]
 #[kani::unwind(8)]
 async fn merge_sync_streams() {

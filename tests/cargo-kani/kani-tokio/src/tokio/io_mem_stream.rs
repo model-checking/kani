@@ -11,6 +11,7 @@
 
 use tokio::io::{duplex, AsyncReadExt, AsyncWriteExt};
 
+#[cfg(disabled)]
 #[kani::proof]
 #[kani::unwind(2)]
 async fn ping_pong() {
@@ -28,7 +29,8 @@ async fn ping_pong() {
 }
 
 // Kani does not support this one yet because it uses spawn
-// #[kani::proof]
+// #[cfg(disabled)]
+#[kani::proof]
 #[kani::unwind(2)]
 async fn across_tasks() {
     let (mut a, mut b) = duplex(32);
@@ -52,7 +54,8 @@ async fn across_tasks() {
 }
 
 // Kani does not support this one yet because it uses spawn
-// #[kani::proof]
+// #[cfg(disabled)]
+#[kani::proof]
 #[kani::unwind(2)]
 async fn disconnect() {
     let (mut a, mut b) = duplex(32);
@@ -76,7 +79,8 @@ async fn disconnect() {
 }
 
 // Kani does not support this one yet because it uses spawn
-// #[kani::proof]
+// #[cfg(disabled)]
+#[kani::proof]
 #[kani::unwind(2)]
 async fn disconnect_reader() {
     let (a, mut b) = duplex(2);
@@ -97,7 +101,8 @@ async fn disconnect_reader() {
 }
 
 // Kani does not support this one yet because it uses spawn
-// #[kani::proof]
+// #[cfg(disabled)]
+#[kani::proof]
 #[kani::unwind(2)]
 async fn max_write_size() {
     let (mut a, mut b) = duplex(32);
@@ -119,7 +124,8 @@ async fn max_write_size() {
 }
 
 // Kani does not support this one yet because it uses select
-// #[kani::proof]
+// #[cfg(disabled)]
+#[kani::proof]
 #[kani::unwind(2)]
 async fn duplex_is_cooperative() {
     let (mut tx, mut rx) = tokio::io::duplex(1024 * 8);

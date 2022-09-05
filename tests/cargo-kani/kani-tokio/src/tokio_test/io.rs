@@ -12,6 +12,7 @@ use std::io;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_test::io::Builder;
 
+#[cfg(disabled)]
 #[kani::proof]
 #[kani::unwind(2)]
 async fn read1() {
@@ -26,6 +27,7 @@ async fn read1() {
     assert_eq!(&buf[..n], b"world!");
 }
 
+#[cfg(disabled)]
 #[kani::proof]
 #[kani::unwind(2)]
 async fn read_error() {
@@ -48,6 +50,7 @@ async fn read_error() {
     assert_eq!(&buf[..n], b"world!");
 }
 
+#[cfg(disabled)]
 #[kani::proof]
 #[kani::unwind(2)]
 async fn write1() {
@@ -57,6 +60,7 @@ async fn write1() {
     mock.write_all(b"world!").await.expect("write 2");
 }
 
+#[cfg(disabled)]
 #[kani::proof]
 #[kani::unwind(2)]
 async fn write_error() {
