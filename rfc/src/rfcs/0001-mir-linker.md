@@ -97,7 +97,7 @@ The two options to be included in this RFC is starting from all local harnesses
 The `kani-compiler` behavior will be customizable via a new flag:
 
   ```
-  --reachability=[ harnesses | pub_fns |  none | legacy* ]
+  --reachability=[ harnesses | pub_fns |  none | legacy ]
   ```
 
 where:
@@ -112,8 +112,7 @@ where:
    `rustc_monomorphizer::collect_and_partition_mono_items()` which respects the crate boundary.
    This will generate a goto-program for each crate compiled by `kani-compiler`, and it will still have the same
    `std` linking issues.
-
-*This option will be removed as part of the `rfc` stabilization.
+   *This option will be removed as part of the `rfc` stabilization.*
 
 These flags will not be exposed to the final user.
 They will only be used for the communication between `kani-driver` and `kani-compiler`.
