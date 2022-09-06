@@ -220,7 +220,7 @@ fn adjust_simple_prj(tpath: &syn::TypePath) -> syn::TypePath {
         .qself
         .as_ref()
         .filter(|qp| qp.as_token.is_none())
-        .and_then(|qp| extract_path(&*qp.ty))
+        .and_then(|qp| extract_path(qp.ty.as_ref()))
         .filter(|tp| tp.qself.is_none())
         .map(|tp| &tp.path.segments);
 

@@ -9,4 +9,8 @@ members = [
     "proptest-derive",
 ]
 
-exclude = ["proptest/test-persistence-location/*"]
+exclude = [
+    "proptest/test-persistence-location/*",
+    "proptest/examples",
+    "kani",
+]

@@ -6,50 +6,51 @@
 [package]
 name = "proptest"
 version = "1.0.0"
-authors = ["Jason Lingle"]
+authors = ["Jason Lingle", "Kani Contributors"]
 license = "MIT/Apache-2.0"
 readme = "README.md"
-repository = "https://github.com/altsysrq/proptest"
+repository = "https://github.com/model-checking/kani"
 homepage = "https://altsysrq.github.io/proptest-book/proptest/index.html"
-documentation = "https://altsysrq.github.io/rustdoc/proptest/1.0.0/proptest/"
-keywords = ["property", "testing", "quickcheck", "fuzz", "hypothesis"]
+documentation = "https://model-checking.github.io/kani/"
+keywords = ["property", "model-checking", "verification"]
 categories = ["development-tools::testing"]
 edition = "2018"
 exclude = ["/gen-*.sh", "/readme-*.md"]
 
 description = """
 Hypothesis-like property-based testing and shrinking.
+
+This version has been modified by the Kani Developers to run proptests with Kani.
 """
 
 [features]
 
-default = ["std", "fork", "timeout", "bit-set", "break-dead-code"]
+default = ["std", "fork", "timeout", "break-dead-code"]
 # Everything in `default` that doesn't break code coverage builds
-default-code-coverage = ["std", "fork", "timeout", "bit-set"]
+default-code-coverage = ["std", "fork", "timeout" ]
 
 # Enables unstable features of Rust.
 unstable = []
 
 # Enables the use of standard-library dependent features
-std = ["rand/std", "byteorder/std", "lazy_static",
-       "quick-error", "regex-syntax", "num-traits/std"]
+std = []
 
 # For use in no_std environments with access to an allocator
 #alloc = ["hashmap_core"]
 alloc = []
 
 # Use a hardware random number generator (instead of static seed) for x86 no_std targets
-hardware-rng = ["x86"]
+hardware-rng = []
 
 # Enables use of the "fork" feature.
 #
 # Requires std.
-fork = ["std", "rusty-fork", "tempfile"]
+fork = ["std"]
 
 # Enables use of the "timeout" feature.
 #
 # Requires the "fork" feature.
-timeout = ["fork", "rusty-fork/timeout"]
+timeout = ["fork"]
 
 # Enables support for 64-bit atomic integers.
 # This is enabled by default. Some no_std environments do not support it and
@@ -63,27 +64,9 @@ break-dead-code = []
 [dependencies]
 bitflags = "1.0.1"
 
-# [dependencies.hashmap_core]
-# version = "0.1.5"
-# optional = true
-
-[dependencies.lazy_static]
-version = "1.2"
-optional = true
-
 [dependencies.num-traits]
 version = "0.2.2"
 default-features = false
-
-[dependencies.quick-error]
-version = "2.0.0"
-optional = true
-
-[dependencies.regex-syntax]
-# If you change this, make sure to also bump the `regex` dependency to a
-# version that also uses this version of regex-syntax.
-version = "0.6.0"
-optional = true
 
 [dependencies.bit-set]
 version = "0.5.0"
@@ -91,34 +74,5 @@ version = "0.5.0"
 # default-features = false
 optional = true
 
-[dependencies.rand]
-version = "0.8"
-default-features = false
-features = ["alloc"]
-
-[dependencies.rand_xorshift]
-version = "0.3"
-
-[dependencies.rand_chacha]
-version = "0.3"
-default-features = false
-
-[dependencies.byteorder]
-version = "1.2.3"
-default-features = false
-
-[dependencies.rusty-fork]
-version = "0.3.0"
-optional = true
-default-features = false
-
-[dependencies.tempfile]
-version = "3.0"
-optional = true
-
-[dependencies.x86]
-version = "0.51.0"
-optional = true
-
-[dev-dependencies]
-regex = "1.0"
+[target.'cfg(not(kani))'.dependencies]
+kani = { path = "../kani/library/kani" }

@@ -12,7 +12,6 @@ rustflags = [ # Global lints/warnings. Need to use underscore instead of -.
     # Resolve
     "-Aclippy::derive_partial_eq_without_eq",
     "-Aclippy::duration_subsec",
-    "-Aclippy::explicit_auto_deref",
     "-Aclippy::into_iter_on_ref",
     "-Aclippy::len_zero",
     "-Aclippy::let_unit_value",
