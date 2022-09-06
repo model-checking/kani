@@ -37,7 +37,7 @@ jobs:
             exit 1
           fi
           # Check the action script's tag.
-          if ! grep "image: docker://ghcr.io/model-checking/kani.*:${{ env.TAG_VERSION }}" action.yml; then
+          if ! grep -F "image: docker://ghcr.io/model-checking/kani-ubuntu-20.04:${{ env.TAG_VERSION }}" action.yml; then
             echo "Git tag ${{env.TAG_VERSION}} did not match version in action.yml"
             exit 1;
           fi
@@ -148,4 +148,4 @@ jobs:
           uses: ${{ env.OWNER_LC }}/kani@${{ needs.Release.outputs.version }})
           with:
             command: |
-              (cargo kani --version | grep -F ${{ needs.Release.outputs.version }})
+              [[ "$(cargo kani --version)" == 'cargo-kani ${{ needs.Release.outputs.version }}' ]]
