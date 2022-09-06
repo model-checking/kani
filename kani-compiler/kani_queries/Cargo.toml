@@ -8,5 +8,8 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 publish = false
 
+[features]
+unsound_experiments = []
+
 [dependencies]
 tracing = {version = "0.1"}

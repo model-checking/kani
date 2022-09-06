@@ -121,6 +121,9 @@ impl KaniSession {
             flags.push("--ignore-global-asm".into());
         }
 
+        #[cfg(feature = "unsound_experiments")]
+        flags.extend(self.args.unsound_experiments.process_args());
+
         // Stratification point!
         // Above are arguments that should be parsed by kani-compiler
         // Below are arguments that should be parsed by the rustc call
