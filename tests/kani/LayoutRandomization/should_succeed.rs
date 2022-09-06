@@ -1,10 +1,9 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// Kani now has -Zrandomize-layout activated by default.
-// This test checks that it doesn't affect repr(C) and Kani is still bit-precise
+// This test checks that `--randomize-layout` doesn't affect repr(C) and Kani is still bit-precise
 
-// kani-flags: --randomize-layout
+// kani-flags: --randomize-layout=0
 
 macro_rules! make_structs {
   ($i:ident) => {

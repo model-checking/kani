@@ -44,10 +44,8 @@ impl KaniSession {
             let concrete_vals = extract_from_processed_items(processed_items).expect(
                 "Something went wrong when trying to get concrete values from the CBMC output",
             );
-            let randomize_layout_seed =
-                if self.args.randomize_layout { Some(self.args.layout_seed) } else { None };
             let concrete_playback =
-                format_unit_test(&harness.mangled_name, &concrete_vals, randomize_layout_seed);
+                format_unit_test(&harness.mangled_name, &concrete_vals, self.args.randomize_layout);
 
             if *playback_mode == ConcretePlaybackMode::Print {
                 ensure!(
@@ -265,10 +263,10 @@ fn format_unit_test(
     let randomize_layout_message = match randomize_layout_seed {
         None => String::new(),
         Some(None) => {
-            "// This test has to be run with rustc option: -Zrandomize-layout\n    ".to_string()
+            "// This test has to be run with rustc option: -Z randomize-layout\n    ".to_string()
         }
         Some(Some(seed)) => format!(
-            "// This test has to be run with rust options: -Zrandomize-layout -Zlayout-seed={}\n    ",
+            "// This test has to be run with rust options: -Z randomize-layout -Z layout-seed={}\n    ",
             seed,
         ),
     };

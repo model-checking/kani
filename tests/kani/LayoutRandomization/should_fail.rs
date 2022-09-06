@@ -1,12 +1,11 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// Kani now has -Zrandomize-layout activated by default.
 // This test only succeeds on the layout of a structure being
 // decided in a deterministic way.
-// With randomization, there is a very very high probability that it fails (1 - (1/2^64))
+// With randomization, there is a very very high probability that it fails (1 - (1/2^100))
 
-// kani-flags: --randomize-layout
+// kani-flags: --randomize-layout=0
 // kani-verify-fail
 
 macro_rules! make_structs {

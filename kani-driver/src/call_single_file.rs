@@ -135,11 +135,12 @@ impl KaniSession {
             flags.push(abs_type.into());
         }
 
-        if self.args.randomize_layout {
-            flags.push("-Zrandomize-layout".into());
-            if let Some(seed) = self.args.layout_seed {
-                let layout_seed_arg = format!("-Zlayout-seed={}", seed);
-                flags.push(layout_seed_arg.into())
+        if let Some(seed_opt) = self.args.randomize_layout {
+            flags.push("-Z".into());
+            flags.push("randomize-layout".into());
+            if let Some(seed) = seed_opt {
+                flags.push("-Z".into());
+                flags.push(format!("layout-seed={}", seed).into());
             }
         }
 
