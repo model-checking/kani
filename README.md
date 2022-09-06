@@ -11,9 +11,10 @@ Kani verifies:
 
 ## GitHub Action
 
-Use Kani in your CI with `model-checking/kani@vVERSION`. See [GitHub
-Action
-section](https://model-checking.github.io/kani/install-github-ci.html).
+Use Kani in your CI with `model-checking/kani@VERSION`. See the
+[GitHub Action section in the Kani
+book](https://model-checking.github.io/kani/install-github-ci.html)
+for details.
 
 ## Installation
 
