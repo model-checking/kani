@@ -1,6 +1,9 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+#[cfg(feature = "unsound_experiments")]
+use crate::unsound_experiments::UnsoundExperimentArgs;
+
 use anyhow::bail;
 use clap::{arg_enum, Error, ErrorKind};
 use std::ffi::OsString;
@@ -94,6 +97,10 @@ pub struct KaniArgs {
 
     #[structopt(flatten)]
     pub checks: CheckArgs,
+
+    #[cfg(feature = "unsound_experiments")]
+    #[structopt(flatten)]
+    pub unsound_experiments: UnsoundExperimentArgs,
 
     /// Entry point for verification (symbol name).
     /// This is an unstable feature. Consider using --harness instead
