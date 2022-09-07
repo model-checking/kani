@@ -6,4 +6,5 @@
 
 # Kani RFCs
 
+- [0001-mir-linker](rfcs/0001-mir-linker.md)
 
