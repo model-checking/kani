@@ -145,7 +145,7 @@ jobs:
             org.opencontainers.image.licenses=Apache-2.0 OR MIT
 
       - name: Check action and image is updated.
-          uses: ${{ env.OWNER_LC }}/kani@${{ needs.Release.outputs.version }})
+          uses: ${{ env.OWNER_LC }}/kani@${{ needs.Release.outputs.version }}
           with:
             command: |
               [[ "$(cargo kani --version)" == 'cargo-kani ${{ needs.Release.outputs.version }}' ]]
