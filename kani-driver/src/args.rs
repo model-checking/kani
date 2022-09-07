@@ -61,7 +61,9 @@ pub struct KaniArgs {
     /// Keep temporary files generated throughout Kani process
     #[structopt(long, hidden_short_help(true))]
     pub keep_temps: bool,
-
+    /// Return list of harnesses as a JSON String
+    #[structopt(long, hidden(true), requires("enable-unstable"))]
+    pub list_harnesses: bool,
     /// Produce full debug information
     #[structopt(long)]
     pub debug: bool,

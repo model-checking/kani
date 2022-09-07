@@ -66,6 +66,11 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
 
     let mut failed_harnesses: Vec<&HarnessMetadata> = Vec::new();
 
+    if ctx.args.list_harnesses {
+        ctx.return_list_harnesses(&sorted_harnesses).unwrap();
+        return Ok(());
+    }
+
     for harness in &sorted_harnesses {
         let harness_filename = harness.pretty_name.replace("::", "-");
         let report_dir = report_base.join(format!("report-{}", harness_filename));
@@ -192,6 +197,14 @@ impl KaniSession {
             std::process::exit(1);
         }
 
+        Ok(())
+    }
+
+    fn return_list_harnesses(self, sorted_harnesses: &[HarnessMetadata]) -> Result<()> {
+        if !self.args.quiet && !self.args.visualize && sorted_harnesses.len() > 1 {
+            let v: String = serde_json::to_string_pretty(&sorted_harnesses)?;
+            println!("{}", v);
+        }
         Ok(())
     }
 }
