@@ -8,4 +8,4 @@ edition = "2021"
 [dependencies]
 
 [package.metadata.kani]
-flags = { list-harnesses=true, enable-unstable=true }
+flags = { print-harness-metadata=true, enable-unstable=true }

@@ -66,7 +66,7 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
 
     let mut failed_harnesses: Vec<&HarnessMetadata> = Vec::new();
 
-    if ctx.args.list_harnesses {
+    if ctx.args.print_harness_metadata {
         ctx.return_list_harnesses(&sorted_harnesses).unwrap();
         return Ok(());
     }
@@ -121,6 +121,11 @@ fn standalone_main() -> Result<()> {
     let report_base = ctx.args.target_dir.clone().unwrap_or(PathBuf::from("."));
 
     let mut failed_harnesses: Vec<&HarnessMetadata> = Vec::new();
+
+    if ctx.args.print_harness_metadata {
+        ctx.return_list_harnesses(&sorted_harnesses).unwrap();
+        return Ok(());
+    }
 
     for harness in &sorted_harnesses {
         let harness_filename = harness.pretty_name.replace("::", "-");
