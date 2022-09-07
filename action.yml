@@ -22,4 +22,3 @@ runs:
     - bash
     - '-c'
     - 'set -e; export HOME=/root USER=$(id -nu); source $HOME/.bashrc; ${{ inputs.command }}'
-
