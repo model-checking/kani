@@ -161,6 +161,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let c = self.current_fn_mut().get_and_incr_counter();
         let var =
             self.gen_stack_variable(c, &self.current_fn().name(), "temp", t, loc, false).to_expr();
+        let value = value.or_else(|| self.codegen_default_initializer(&var));
         let decl = Stmt::decl(var.clone(), value, loc);
         (var, decl)
     }
