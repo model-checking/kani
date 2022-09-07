@@ -1,0 +1,25 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+name: 'Kani Rust Verifier'
+description: 'Run the Kani Rust Verifier on a Rust Crate'
+author: 'Kani Contributors'
+
+branding:
+  icon: 'cloud'
+  color: 'orange'
+
+inputs:
+  command:
+    description: 'Command to run.'
+    required: false
+    default: 'cargo kani --workspace'
+
+runs:
+  using: 'docker'
+  image: docker://ghcr.io/model-checking/kani-ubuntu-20.04:0.10.0
+  args:
+    - bash
+    - '-c'
+    - 'set -e; export HOME=/root USER=$(id -nu); source $HOME/.bashrc; ${{ inputs.command }}'
+
