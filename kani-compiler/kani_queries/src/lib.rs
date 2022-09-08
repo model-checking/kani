@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(not(feature = "unsound_experiments"))]
 use std::sync::Mutex;
 use strum_macros::{AsRefStr, EnumString, EnumVariantNames};
 
