@@ -1136,6 +1136,8 @@ fn determine_verification_result(properties: &[Property]) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
     fn check_property_id_deserialization_general() {
         let prop_id_string = "\"alloc::raw_vec::RawVec::<u8>::allocate_in.sanity_check.1\"";
