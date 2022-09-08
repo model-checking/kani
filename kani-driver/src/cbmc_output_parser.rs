@@ -315,13 +315,6 @@ impl<'de> serde::Deserialize<'de> for PropertyId {
             _ => unreachable!("Found property which doesn't have 2 or 3 attributes"),
         };
         // Do more sanity checks, just in case.
-        if let Some(prop_class) = attributes_tuple.1 {
-            assert!(
-                prop_class.chars().all(|c| c.is_ascii_lowercase() || c == '_' || c == '-')
-                    || prop_class == "NaN",
-                "Found property class `{prop_class}` that doesn't match class format `{id_str}`",
-            );
-        }
         assert!(
             attributes_tuple.2.chars().all(|c| c.is_ascii_digit()),
             "Found property counter that doesn't match number format"
