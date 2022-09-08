@@ -74,31 +74,40 @@ extern crate bitflags;
 #[cfg(feature = "bit-set")]
 extern crate bit_set;
 
-// #[macro_use]
+#[cfg(feature = "std")]
+#[macro_use]
+extern crate lazy_static;
+
+// Only required for the string module.
+#[cfg(feature = "std")]
+#[macro_use]
+extern crate quick_error;
+
+#[macro_use]
 mod macros;
 
-// #[doc(hidden)]
-// #[macro_use]
-// pub mod sugar;
+#[doc(hidden)]
+#[macro_use]
+pub mod sugar;
 
-// pub mod arbitrary;
-// pub mod array;
-// pub mod bits;
-// pub mod bool;
-// pub mod char;
-// pub mod collection;
-// pub mod num;
-// pub mod strategy;
-// pub mod test_runner;
-// pub mod tuple;
+pub mod arbitrary;
+pub mod array;
+pub mod bits;
+pub mod bool;
+pub mod char;
+pub mod collection;
+pub mod num;
+pub mod strategy;
+pub mod test_runner;
+pub mod tuple;
 
-// pub mod option;
-// pub mod result;
-// pub mod sample;
-// #[cfg(feature = "std")]
-// pub mod string;
+pub mod option;
+pub mod result;
+pub mod sample;
+#[cfg(feature = "std")] // Turned off b/c of no Kani support. See  #1394
+pub mod string;
 
-// pub mod prelude;
+pub mod prelude;
 
 #[cfg(test)]
 mod test_kani {
