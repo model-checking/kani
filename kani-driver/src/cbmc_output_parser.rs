@@ -250,6 +250,10 @@ impl Property {
         write!(&mut fmt_str, "{id}")?;
         Ok(fmt_str)
     }
+
+    pub fn has_property_class_format(string: &str) -> bool {
+        string == "NaN" || string.chars().all(|c| c.is_ascii_lowercase() || c == '_' || c == '-')
+    }
 }
 
 impl<'de> serde::Deserialize<'de> for PropertyId {
@@ -284,11 +288,8 @@ impl<'de> serde::Deserialize<'de> for PropertyId {
         let attributes_tuple = match property_attributes.len() {
             // The general case, where we get all the attributes
             3 => {
-                if property_attributes[1]
-                    .chars()
-                    .all(|c| c.is_ascii_lowercase() || c == '_' || c == '-')
-                    || property_attributes[1] == "NaN"
-                {
+                // Since mangled function names may contain `.`, we check if
+                if Property::has_property_class_format(property_attributes[1]) {
                     let name = format!("{:#}", demangle(property_attributes[2]));
                     (Some(name), Some(property_attributes[1]), property_attributes[0])
                 } else {
@@ -299,15 +300,11 @@ impl<'de> serde::Deserialize<'de> for PropertyId {
                 }
             }
             2 => {
-                // The case where `property_attributes[1]` could be a function or a
-                // class. If `class_re` matches it, it's likely a class (functions
-                // are usually mangled names which contain many other symbols).
-                if property_attributes[1]
-                    .chars()
-                    .all(|c| c.is_ascii_lowercase() || c == '_' || c == '-')
-                    || property_attributes[1] == "NaN"
-                {
-                    // assert!(false);
+                // The case where `property_attributes[1]` could be a function
+                // or a class. If it has the class format, then it's likely a
+                // class (functions are usually mangled names which contain many
+                // other symbols).
+                if Property::has_property_class_format(property_attributes[1]) {
                     (None, Some(property_attributes[1]), property_attributes[0])
                 } else {
                     let name = format!("{:#}", demangle(property_attributes[1]));
