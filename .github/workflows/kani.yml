@@ -25,7 +25,26 @@ jobs:
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
         with:
-            os: ${{ matrix.os }}
+          os: ${{ matrix.os }}
+
+      - name: Build Kani
+        run: cargo build
+
+      - name: Execute Kani regression
+        run: ./scripts/kani-regression.sh
+
+  experimental-features-regression:
+    runs-on: ubuntu-20.04
+    env:
+      KANI_ENABLE_UNSOUND_EXPERIMENTS: 1
+    steps:
+      - name: Checkout Kani
+        uses: actions/checkout@v2
+
+      - name: Setup Kani Dependencies
+        uses: ./.github/actions/setup
+        with:
+          os: ubuntu-20.04
 
       - name: Build Kani
         run: cargo build
@@ -42,7 +61,7 @@ jobs:
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
         with:
-            os: ubuntu-20.04
+          os: ubuntu-20.04
 
       - name: Build Kani
         run: cargo build
@@ -61,7 +80,7 @@ jobs:
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
         with:
-            os: ubuntu-20.04
+          os: ubuntu-20.04
 
       - name: Build Kani
         run: cargo build
@@ -72,7 +91,7 @@ jobs:
       - name: Generate book runner report
         run: cargo run -p bookrunner
         env:
-            DOC_RUST_LANG_ORG_CHANNEL: nightly
+          DOC_RUST_LANG_ORG_CHANNEL: nightly
 
       - name: Print book runner text results
         run: cat build/output/latest/html/bookrunner.txt
@@ -82,7 +101,7 @@ jobs:
 
       # On one OS only, build the documentation, too.
       - name: Build Documentation
-        run: ./docs/build-docs.sh
+        run: ./scripts/build-docs.sh
 
       # When we're pushed to main branch, only then actually publish the docs.
       - name: Publish Documentation
@@ -110,13 +129,13 @@ jobs:
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
         with:
-            os: ${{ matrix.os }}
-      
+          os: ${{ matrix.os }}
+
       - name: Build release bundle
         run: |
           cargo run -p make-kani-release -- latest
           cargo package -p kani-verifier
-      
+
       - name: Build container test
         if: ${{ matrix.os == 'ubuntu-18.04' }}
         run: |

@@ -3,6 +3,15 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
+#[cfg(feature = "unsound_experiments")]
+mod unsound_experiments;
+
+#[cfg(feature = "unsound_experiments")]
+use {
+    crate::unsound_experiments::UnsoundExperiments,
+    std::sync::{Arc, Mutex},
+};
+
 pub trait UserInput {
     fn set_symbol_table_passes(&mut self, passes: Vec<String>);
     fn get_symbol_table_passes(&self) -> Vec<String>;
@@ -18,6 +27,9 @@ pub trait UserInput {
 
     fn set_ignore_global_asm(&mut self, global_asm: bool);
     fn get_ignore_global_asm(&self) -> bool;
+
+    #[cfg(feature = "unsound_experiments")]
+    fn get_unsound_experiments(&self) -> Arc<Mutex<UnsoundExperiments>>;
 }
 
 #[derive(Debug, Default)]
@@ -27,6 +39,8 @@ pub struct QueryDb {
     symbol_table_passes: Vec<String>,
     json_pretty_print: AtomicBool,
     ignore_global_asm: AtomicBool,
+    #[cfg(feature = "unsound_experiments")]
+    unsound_experiments: Arc<Mutex<UnsoundExperiments>>,
 }
 
 impl UserInput for QueryDb {
@@ -68,5 +82,10 @@ impl UserInput for QueryDb {
 
     fn get_ignore_global_asm(&self) -> bool {
         self.ignore_global_asm.load(Ordering::Relaxed)
+    }
+
+    #[cfg(feature = "unsound_experiments")]
+    fn get_unsound_experiments(&self) -> Arc<Mutex<UnsoundExperiments>> {
+        self.unsound_experiments.clone()
     }
 }

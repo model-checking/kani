@@ -26,6 +26,9 @@ mod metadata;
 mod session;
 mod util;
 
+#[cfg(feature = "unsound_experiments")]
+mod unsound_experiments;
+
 fn main() -> Result<()> {
     match determine_invocation_type(Vec::from_iter(std::env::args_os())) {
         InvocationType::CargoKani(args) => cargokani_main(args),
@@ -80,6 +83,7 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
         }
     }
 
+    ctx.inform_if_no_failed(&failed_harnesses);
     ctx.print_final_summary(&sorted_harnesses, &failed_harnesses)
 }
 
@@ -134,6 +138,7 @@ fn standalone_main() -> Result<()> {
         }
     }
 
+    ctx.inform_if_no_failed(&failed_harnesses);
     ctx.print_final_summary(&sorted_harnesses, &failed_harnesses)
 }
 
@@ -177,6 +182,9 @@ impl KaniSession {
                 harnesses.len()
             );
         }
+
+        #[cfg(feature = "unsound_experiments")]
+        self.args.unsound_experiments.print_warnings();
 
         if !failed_harnesses.is_empty() {
             // Failure exit code without additional error message
