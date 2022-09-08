@@ -26,7 +26,7 @@ use once_cell::sync::Lazy;
 use pathdiff::diff_paths;
 use regex::Regex;
 use rustc_demangle::demangle;
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use std::{
     collections::HashMap,
     env,
@@ -215,7 +215,8 @@ impl ParserItem {
 #[derive(Clone, Debug, Deserialize)]
 pub struct Property {
     pub description: String,
-    pub property: String,
+    #[serde(rename = "property")]
+    pub property_id: PropertyId,
     #[serde(rename = "sourceLocation")]
     pub source_location: SourceLocation,
     pub status: CheckStatus,
@@ -223,6 +224,97 @@ pub struct Property {
     pub trace: Option<Vec<TraceItem>>,
 }
 
+#[derive(Clone, Debug)]
+pub struct PropertyId {
+    pub fn_name: Option<String>,
+    pub class: Option<String>,
+    pub id: u32,
+}
+
+impl<'de> serde::Deserialize<'de> for PropertyId {
+    /// Gets all property attributes from the property ID.
+    ///
+    /// In general, property IDs have the format `<function>.<class>.<counter>`.
+    ///
+    /// However, there are cases where we only get two attributes:
+    ///  * `<class>.<counter>` (the function is a CBMC builtin)
+    ///  * `<function>.<counter>` (missing function definition)
+    ///
+    /// In these cases, we try to determine if the attribute is a function or not
+    /// based on its characters (we assume property classes are a combination
+    /// of lowercase letters and the characters `_` and `-`). But this is not completely
+    /// reliable. CBMC should be able to provide these attributes as separate fields
+    /// in the JSON output: <https://github.com/diffblue/cbmc/issues/7069>
+    fn deserialize<D>(d: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let id_str = String::deserialize(d)?;
+
+        // Handle a special case that doesn't respect any format. It appears at
+        // least in the test `tests/expected/dynamic-error-trait/main.rs` and its
+        // description is is: "recursion unwinding assertion"
+        if id_str == ".recursion" {
+            return Ok(PropertyId { fn_name: None, class: Some("recursion".to_owned()), id: 1 });
+        };
+
+        // Split the property name into three from the end, using `.` as the separator
+        let property_attributes: Vec<&str> = id_str.rsplitn(3, '.').collect();
+        let attributes_tuple = match property_attributes.len() {
+            // The general case, where we get all the attributes
+            3 => {
+                if property_attributes[1]
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c == '_' || c == '-')
+                    || property_attributes[1] == "NaN"
+                {
+                    let name = format!("{:#}", demangle(property_attributes[2]));
+                    (Some(name), Some(property_attributes[1]), property_attributes[0])
+                } else {
+                    let full_name =
+                        format!("{}.{}", property_attributes[2], property_attributes[1]);
+                    let name = format!("{:#}", demangle(&full_name));
+                    (Some(name), None, property_attributes[0])
+                }
+            }
+            2 => {
+                // The case where `property_attributes[1]` could be a function or a
+                // class. If `class_re` matches it, it's likely a class (functions
+                // are usually mangled names which contain many other symbols).
+                if property_attributes[1]
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c == '_' || c == '-')
+                    || property_attributes[1] == "NaN"
+                {
+                    // assert!(false);
+                    (None, Some(property_attributes[1]), property_attributes[0])
+                } else {
+                    let name = format!("{:#}", demangle(property_attributes[1]));
+                    (Some(name), None, property_attributes[0])
+                }
+            }
+            // The case we don't expect. It's best to fail with an informative message.
+            _ => unreachable!("Found property which doesn't have 2 or 3 attributes"),
+        };
+        // Do more sanity checks, just in case.
+        if let Some(prop_class) = attributes_tuple.1 {
+            assert!(
+                prop_class.chars().all(|c| c.is_ascii_lowercase() || c == '_' || c == '-')
+                    || prop_class == "NaN",
+                "Found property class `{prop_class}` that doesn't match class format `{id_str}`",
+            );
+        }
+        assert!(
+            attributes_tuple.2.chars().all(|c| c.is_ascii_digit()),
+            "Found property counter that doesn't match number format"
+        );
+        // Return tuple after converting counter from string into number.
+        // Safe to do because we've checked the format earlier.
+        let fn_name = attributes_tuple.0.map(|x| String::from(x));
+        let class = attributes_tuple.1.map(|x| String::from(x));
+        Ok(PropertyId { fn_name, class, id: attributes_tuple.2.parse().unwrap() })
+    }
+}
 /// Struct that represents a source location.
 ///
 /// Source locations may be completely empty, which is why
@@ -625,7 +717,7 @@ fn format_result(properties: &Vec<Property>, show_checks: bool) -> String {
     }
 
     for prop in properties {
-        let name = &prop.property;
+        let name = get_property_name(&prop).unwrap();
         let status = &prop.status;
         let description = &prop.description;
         let location = &prop.source_location;
@@ -848,9 +940,12 @@ fn modify_undefined_function_checks(mut properties: Vec<Property>) -> (Vec<Prope
 /// temporary variable in their descriptions.
 fn get_readable_description(property: &Property) -> String {
     let original = property.description.clone();
-    let class_id = extract_property_class(property).unwrap();
+    if get_property_class(property).is_none() {
+        return original;
+    }
+    let class_id = get_property_class(property).unwrap();
 
-    let description_alternatives = CBMC_ALT_DESCRIPTIONS.get(class_id);
+    let description_alternatives = CBMC_ALT_DESCRIPTIONS.get(&class_id as &str);
     if let Some(alt_descriptions) = description_alternatives {
         for (desc_to_match, opt_desc_to_replace) in alt_descriptions {
             if original.contains(desc_to_match) {
@@ -914,12 +1009,23 @@ fn remove_check_ids_from_description(mut properties: Vec<Property>) -> Vec<Prope
     properties
 }
 
-/// Extracts the property class from the property string.
-///
-/// Property strings have the format `([<function>.]<property_class_id>.<counter>)`
-pub fn extract_property_class(property: &Property) -> Option<&str> {
-    let property_class: Vec<&str> = property.property.rsplitn(3, '.').collect();
-    if property_class.len() > 1 { Some(property_class[1]) } else { None }
+pub fn get_property_class(property: &Property) -> Option<String> {
+    property.property_id.class.clone()
+}
+
+pub fn get_property_name(property: &Property) -> Result<String> {
+    use std::fmt::Write;
+    let mut fmt_str = String::new();
+    let prop_id = &property.property_id;
+    if let Some(name) = &prop_id.fn_name {
+        write!(&mut fmt_str, "{name}.")?;
+    }
+    if let Some(class) = &prop_id.class {
+        write!(&mut fmt_str, "{class}.")?;
+    }
+    let id = prop_id.id;
+    write!(&mut fmt_str, "{id}")?;
+    Ok(fmt_str)
 }
 
 /// Given a description, this splits properties into two groups:
@@ -948,7 +1054,8 @@ fn filter_sanity_checks(properties: Vec<Property>) -> Vec<Property> {
     properties
         .into_iter()
         .filter(|prop| {
-            !(extract_property_class(prop).unwrap() == "sanity_check"
+            !((get_property_class(prop).is_some()
+                && get_property_class(prop).unwrap() == "sanity_check")
                 && prop.status == CheckStatus::Success)
         })
         .collect()
@@ -962,8 +1069,10 @@ fn filter_ptr_checks(properties: Vec<Property>) -> Vec<Property> {
     properties
         .into_iter()
         .filter(|prop| {
-            !extract_property_class(prop).unwrap().contains("pointer_arithmetic")
-                && !extract_property_class(prop).unwrap().contains("pointer_primitives")
+            !(get_property_class(prop).is_some()
+                && get_property_class(prop).unwrap().contains("pointer_arithmetic"))
+                && !(get_property_class(prop).is_some()
+                    && get_property_class(prop).unwrap().contains("pointer_primitives"))
         })
         .collect()
 }
@@ -1031,4 +1140,107 @@ fn determine_verification_result(properties: &[Property]) -> bool {
     let number_failed_properties =
         properties.iter().filter(|prop| prop.status == CheckStatus::Failure).count();
     number_failed_properties == 0
+}
+
+#[test]
+fn check_property_id_deserialization_general() {
+    let prop_id_string = "\"alloc::raw_vec::RawVec::<u8>::allocate_in.sanity_check.1\"";
+    let prop_id_result: Result<PropertyId, serde_json::Error> =
+        serde_json::from_str(prop_id_string);
+    let prop_id = prop_id_result.unwrap();
+    assert_eq!(prop_id.fn_name, Some(String::from("alloc::raw_vec::RawVec::<u8>::allocate_in")));
+    assert_eq!(prop_id.class, Some(String::from("sanity_check")));
+    assert_eq!(prop_id.id, 1);
+
+    let dummy_prop = Property {
+        description: "".to_string(),
+        property_id: prop_id,
+        source_location: SourceLocation { function: None, file: None, column: None, line: None },
+        status: CheckStatus::Success,
+        reach: None,
+        trace: None,
+    };
+    assert_eq!(
+        get_property_name(&dummy_prop).unwrap(),
+        prop_id_string[1..prop_id_string.len() - 1]
+    );
+}
+
+#[test]
+fn check_property_id_deserialization_only_name() {
+    let prop_id_string = "\"alloc::raw_vec::RawVec::<u8>::allocate_in.1\"";
+    let prop_id_result: Result<PropertyId, serde_json::Error> =
+        serde_json::from_str(prop_id_string);
+    dbg!(&prop_id_result);
+    let prop_id = prop_id_result.unwrap();
+    assert_eq!(prop_id.fn_name, Some(String::from("alloc::raw_vec::RawVec::<u8>::allocate_in")));
+    assert_eq!(prop_id.class, None);
+    assert_eq!(prop_id.id, 1);
+
+    let dummy_prop = Property {
+        description: "".to_string(),
+        property_id: prop_id,
+        source_location: SourceLocation { function: None, file: None, column: None, line: None },
+        status: CheckStatus::Success,
+        reach: None,
+        trace: None,
+    };
+    assert_eq!(
+        get_property_name(&dummy_prop).unwrap(),
+        prop_id_string[1..prop_id_string.len() - 1]
+    );
+}
+
+#[test]
+fn check_property_id_deserialization_only_class() {
+    let prop_id_string = "\"assertion.1\"";
+    let prop_id_result: Result<PropertyId, serde_json::Error> =
+        serde_json::from_str(prop_id_string);
+    let prop_id = prop_id_result.unwrap();
+    assert_eq!(prop_id.fn_name, None);
+    assert_eq!(prop_id.class, Some(String::from("assertion")));
+    assert_eq!(prop_id.id, 1);
+
+    let dummy_prop = Property {
+        description: "".to_string(),
+        property_id: prop_id,
+        source_location: SourceLocation { function: None, file: None, column: None, line: None },
+        status: CheckStatus::Success,
+        reach: None,
+        trace: None,
+    };
+    assert_eq!(
+        get_property_name(&dummy_prop).unwrap(),
+        prop_id_string[1..prop_id_string.len() - 1]
+    );
+}
+
+#[test]
+fn check_property_id_deserialization_special() {
+    let prop_id_string = "\".recursion\"";
+    let prop_id_result: Result<PropertyId, serde_json::Error> =
+        serde_json::from_str(prop_id_string);
+    let prop_id = prop_id_result.unwrap();
+    assert_eq!(prop_id.fn_name, None);
+    assert_eq!(prop_id.class, Some(String::from("recursion")));
+    assert_eq!(prop_id.id, 1);
+
+    let dummy_prop = Property {
+        description: "".to_string(),
+        property_id: prop_id,
+        source_location: SourceLocation { function: None, file: None, column: None, line: None },
+        status: CheckStatus::Success,
+        reach: None,
+        trace: None,
+    };
+    assert_eq!(get_property_name(&dummy_prop).unwrap(), "recursion.1");
+}
+
+#[test]
+#[should_panic]
+fn check_property_id_deserialization_panics() {
+    let prop_id_string = "\"not_a_property_ID\"";
+    let prop_id_result: Result<PropertyId, serde_json::Error> =
+        serde_json::from_str(prop_id_string);
+    let _prop_id = prop_id_result.unwrap();
 }

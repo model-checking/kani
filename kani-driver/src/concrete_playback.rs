@@ -291,7 +291,7 @@ struct UnitTest {
 /// ```
 mod concrete_vals_extractor {
     use crate::cbmc_output_parser::{
-        extract_property_class, CheckStatus, ParserItem, Property, TraceItem,
+        get_property_class, get_property_name, CheckStatus, ParserItem, Property, TraceItem,
     };
     use anyhow::{bail, ensure, Context, Result};
 
@@ -336,7 +336,7 @@ mod concrete_vals_extractor {
     ) -> Result<Vec<ConcreteVal>> {
         let mut concrete_vals: Vec<ConcreteVal> = Vec::new();
         let property_class =
-            extract_property_class(property).context("Incorrectly formatted property class.")?;
+            get_property_class(property).context("Incorrectly formatted property class.")?;
         let property_is_assert = property_class == "assertion";
         let status_is_failure = property.status == CheckStatus::Failure;
 
@@ -344,13 +344,15 @@ mod concrete_vals_extractor {
             if *extracted_assert_fail {
                 println!(
                     "WARNING: Unable to extract concrete values from multiple failing assertions. Skipping property `{}` with description `{}`.",
-                    property.property, property.description,
+                    get_property_name(property).unwrap(),
+                    property.description,
                 );
             } else {
                 *extracted_assert_fail = true;
                 println!(
                     "INFO: Parsing concrete values from property `{}` with description `{}`.",
-                    property.property, property.description,
+                    get_property_name(property).unwrap(),
+                    property.description,
                 );
                 if let Some(trace) = &property.trace {
                     for trace_item in trace {
@@ -365,7 +367,8 @@ mod concrete_vals_extractor {
         } else if !property_is_assert && status_is_failure {
             println!(
                 "WARNING: Unable to extract concrete values from failing non-assertion checks. Skipping property `{}` with description `{}`.",
-                property.property, property.description,
+                get_property_name(property).unwrap(),
+                property.description,
             );
         }
         Ok(concrete_vals)
