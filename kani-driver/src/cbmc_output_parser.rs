@@ -231,6 +231,27 @@ pub struct PropertyId {
     pub id: u32,
 }
 
+impl Property {
+    pub fn property_class(&self) -> Option<String> {
+        self.property_id.class.clone()
+    }
+
+    pub fn property_name(&self) -> Result<String> {
+        use std::fmt::Write;
+        let mut fmt_str = String::new();
+        let prop_id = &self.property_id;
+        if let Some(name) = &prop_id.fn_name {
+            write!(&mut fmt_str, "{name}.")?;
+        }
+        if let Some(class) = &prop_id.class {
+            write!(&mut fmt_str, "{class}.")?;
+        }
+        let id = prop_id.id;
+        write!(&mut fmt_str, "{id}")?;
+        Ok(fmt_str)
+    }
+}
+
 impl<'de> serde::Deserialize<'de> for PropertyId {
     /// Gets all property attributes from the property ID.
     ///
@@ -315,6 +336,7 @@ impl<'de> serde::Deserialize<'de> for PropertyId {
         Ok(PropertyId { fn_name, class, id: attributes_tuple.2.parse().unwrap() })
     }
 }
+
 /// Struct that represents a source location.
 ///
 /// Source locations may be completely empty, which is why
@@ -717,7 +739,7 @@ fn format_result(properties: &Vec<Property>, show_checks: bool) -> String {
     }
 
     for prop in properties {
-        let name = get_property_name(&prop).unwrap();
+        let name = prop.property_name().unwrap();
         let status = &prop.status;
         let description = &prop.description;
         let location = &prop.source_location;
@@ -940,10 +962,10 @@ fn modify_undefined_function_checks(mut properties: Vec<Property>) -> (Vec<Prope
 /// temporary variable in their descriptions.
 fn get_readable_description(property: &Property) -> String {
     let original = property.description.clone();
-    if get_property_class(property).is_none() {
+    if property.property_class().is_none() {
         return original;
     }
-    let class_id = get_property_class(property).unwrap();
+    let class_id = property.property_class().unwrap();
 
     let description_alternatives = CBMC_ALT_DESCRIPTIONS.get(&class_id as &str);
     if let Some(alt_descriptions) = description_alternatives {
@@ -1009,25 +1031,6 @@ fn remove_check_ids_from_description(mut properties: Vec<Property>) -> Vec<Prope
     properties
 }
 
-pub fn get_property_class(property: &Property) -> Option<String> {
-    property.property_id.class.clone()
-}
-
-pub fn get_property_name(property: &Property) -> Result<String> {
-    use std::fmt::Write;
-    let mut fmt_str = String::new();
-    let prop_id = &property.property_id;
-    if let Some(name) = &prop_id.fn_name {
-        write!(&mut fmt_str, "{name}.")?;
-    }
-    if let Some(class) = &prop_id.class {
-        write!(&mut fmt_str, "{class}.")?;
-    }
-    let id = prop_id.id;
-    write!(&mut fmt_str, "{id}")?;
-    Ok(fmt_str)
-}
-
 /// Given a description, this splits properties into two groups:
 ///  1. Properties that don't contain the description
 ///  2. Properties that contain the description
@@ -1054,8 +1057,7 @@ fn filter_sanity_checks(properties: Vec<Property>) -> Vec<Property> {
     properties
         .into_iter()
         .filter(|prop| {
-            !((get_property_class(prop).is_some()
-                && get_property_class(prop).unwrap() == "sanity_check")
+            !((prop.property_class().is_some() && prop.property_class().unwrap() == "sanity_check")
                 && prop.status == CheckStatus::Success)
         })
         .collect()
@@ -1069,10 +1071,10 @@ fn filter_ptr_checks(properties: Vec<Property>) -> Vec<Property> {
     properties
         .into_iter()
         .filter(|prop| {
-            !(get_property_class(prop).is_some()
-                && get_property_class(prop).unwrap().contains("pointer_arithmetic"))
-                && !(get_property_class(prop).is_some()
-                    && get_property_class(prop).unwrap().contains("pointer_primitives"))
+            !(prop.property_class().is_some()
+                && prop.property_class().unwrap().contains("pointer_arithmetic"))
+                && !(prop.property_class().is_some()
+                    && prop.property_class().unwrap().contains("pointer_primitives"))
         })
         .collect()
 }
@@ -1160,10 +1162,7 @@ fn check_property_id_deserialization_general() {
         reach: None,
         trace: None,
     };
-    assert_eq!(
-        get_property_name(&dummy_prop).unwrap(),
-        prop_id_string[1..prop_id_string.len() - 1]
-    );
+    assert_eq!(dummy_prop.property_name().unwrap(), prop_id_string[1..prop_id_string.len() - 1]);
 }
 
 #[test]
@@ -1185,10 +1184,7 @@ fn check_property_id_deserialization_only_name() {
         reach: None,
         trace: None,
     };
-    assert_eq!(
-        get_property_name(&dummy_prop).unwrap(),
-        prop_id_string[1..prop_id_string.len() - 1]
-    );
+    assert_eq!(dummy_prop.property_name().unwrap(), prop_id_string[1..prop_id_string.len() - 1]);
 }
 
 #[test]
@@ -1209,10 +1205,7 @@ fn check_property_id_deserialization_only_class() {
         reach: None,
         trace: None,
     };
-    assert_eq!(
-        get_property_name(&dummy_prop).unwrap(),
-        prop_id_string[1..prop_id_string.len() - 1]
-    );
+    assert_eq!(dummy_prop.property_name().unwrap(), prop_id_string[1..prop_id_string.len() - 1]);
 }
 
 #[test]
@@ -1233,7 +1226,7 @@ fn check_property_id_deserialization_special() {
         reach: None,
         trace: None,
     };
-    assert_eq!(get_property_name(&dummy_prop).unwrap(), "recursion.1");
+    assert_eq!(dummy_prop.property_name().unwrap(), "recursion.1");
 }
 
 #[test]
