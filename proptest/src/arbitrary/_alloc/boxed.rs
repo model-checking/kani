@@ -18,7 +18,7 @@ use crate::std_facade::Box;
 
 wrap_from!(Box);
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod test {
     no_panic_test!(boxed => Box<u8>);
 }

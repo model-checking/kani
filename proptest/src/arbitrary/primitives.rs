@@ -38,7 +38,7 @@ arbitrary!(f64, f64::Any; {
 
 arbitrary!(char, char::CharStrategy<'static>; char::any());
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod test {
     no_panic_test!(
         bool => bool,

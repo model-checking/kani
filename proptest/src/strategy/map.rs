@@ -251,7 +251,7 @@ impl<S: ValueTree, O: fmt::Debug, F: Fn(S::Value, TestRng) -> O> ValueTree
 // Tests
 //==============================================================================
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod test {
     use std::collections::HashSet;
 

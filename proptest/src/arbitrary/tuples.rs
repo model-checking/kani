@@ -42,7 +42,7 @@ impl_tuple!(T0, T1, T2, T3, T4, T5, T6, T7);
 impl_tuple!(T0, T1, T2, T3, T4, T5, T6, T7, T8);
 impl_tuple!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9);
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod test {
     no_panic_test!(
         tuple_n10 => ((), bool, u8, u16, u32, u64, i8, i16, i32, i64)

@@ -470,7 +470,7 @@ pub fn float_to_weight(f: f64) -> (u32, u32) {
     (pos, neg)
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod test {
     use super::*;
     use crate::strategy::just::Just;

@@ -102,7 +102,7 @@ lift1!(['static] IntoIter<A>, Probability; base, args => {
     maybe_ok_weighted(args, base, Just(())).prop_map(Result::into_iter)
 });
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod test {
     no_panic_test!(
         result    => Result<u8, u16>,

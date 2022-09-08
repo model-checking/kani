@@ -452,7 +452,7 @@ macro_rules! float_any {
         #[must_use = "strategies do nothing unless used"]
         pub struct Any(FloatTypes);
 
-        #[cfg(test)]
+        #[cfg(all(test, not(kani)))]
         impl Any {
             pub(crate) fn from_bits(bits: u32) -> Self {
                 Any(FloatTypes::from_bits_truncate(bits))
@@ -855,7 +855,7 @@ macro_rules! float_bin_search {
 float_bin_search!(f32);
 float_bin_search!(f64);
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod test {
     use crate::strategy::*;
     use crate::test_runner::*;

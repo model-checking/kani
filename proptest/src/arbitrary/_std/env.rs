@@ -114,7 +114,7 @@ mod var_error {
     );
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod test {
     use super::*;
     use crate::num;

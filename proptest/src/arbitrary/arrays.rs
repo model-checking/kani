@@ -35,7 +35,7 @@ array!(
     22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32
 );
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod test {
     no_panic_test!(
         array_16 => [u8; 16]

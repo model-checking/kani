@@ -18,7 +18,7 @@ use core::marker::PhantomData;
 
 arbitrary!([T: ?Sized] PhantomData<T>; PhantomData);
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod test {
     no_panic_test!(phantom_data => PhantomData<u8>);
 }

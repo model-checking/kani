@@ -29,7 +29,7 @@ arbitrary!(Ordering, TupleUnion<(WAJO, WAJO, WAJO)>;
     ]
 );
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod test {
     no_panic_test!(
         reverse => Reverse<u8>,

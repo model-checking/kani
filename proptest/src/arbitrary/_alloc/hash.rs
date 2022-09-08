@@ -26,7 +26,7 @@ arbitrary!([H: Default + Hasher] BuildHasherDefault<H>; Default::default());
 #[cfg(feature = "std")]
 lazy_just!(DefaultHasher, Default::default; RandomState, Default::default);
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod test {
     #[cfg(feature = "std")]
     no_panic_test!(

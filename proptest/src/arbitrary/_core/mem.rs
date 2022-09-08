@@ -33,7 +33,7 @@ lift1!(['static] Discriminant<A>;
 // in any case so the use case is not great for this.
 //wrap_ctor!(ManuallyDrop);
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod test {
     #[derive(Copy, Clone, Debug)]
     struct DummyStruct;

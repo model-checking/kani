@@ -116,7 +116,7 @@ impl<S: ValueTree, F: Fn(&S::Value) -> bool> ValueTree for Filter<S, F> {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod test {
     use super::*;
 

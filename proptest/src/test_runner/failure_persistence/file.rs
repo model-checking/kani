@@ -418,7 +418,7 @@ lazy_static! {
     static ref PERSISTENCE_LOCK: RwLock<()> = RwLock::new(());
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod tests {
     use super::*;
 

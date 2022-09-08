@@ -142,7 +142,7 @@ impl<
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod test {
     use std::cmp::max;
 

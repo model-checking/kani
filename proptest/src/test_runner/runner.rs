@@ -789,7 +789,7 @@ fn init_replay(
 }
 
 #[cfg(TBD)]
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod test {
     use std::cell::Cell;
     use std::fs;

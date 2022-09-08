@@ -262,7 +262,7 @@ impl<S: Strategy, R: Strategy, F: Fn(S::Value) -> R> Strategy
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod test {
     use super::*;
 

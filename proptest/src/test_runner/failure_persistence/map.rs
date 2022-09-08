@@ -69,7 +69,7 @@ impl FailurePersistence for MapFailurePersistence {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod tests {
     use super::*;
     use crate::test_runner::failure_persistence::tests::*;

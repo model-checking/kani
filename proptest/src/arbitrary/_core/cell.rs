@@ -43,7 +43,7 @@ lazy_just!(BorrowMutError, || {
     }
 });
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod test {
     no_panic_test!(
         cell => Cell<u8>,

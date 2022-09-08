@@ -70,7 +70,7 @@ arbitrary!(DecodeUtf16Error, SFnPtrMap<Range<u16>, Self>;
         decode_utf16(once(x)).next().unwrap().unwrap_err())
 );
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod test {
     no_panic_test!(
         escape_debug => EscapeDebug,
