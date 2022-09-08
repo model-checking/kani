@@ -110,8 +110,7 @@ impl fmt::Display for RngAlgorithm {
 
 /// Proptest's random number generator.
 #[derive(Clone, Debug)]
-pub struct TestRng {
-}
+pub struct TestRng {}
 
 impl RngCore for TestRng {
     fn next_u32(&mut self) -> u32 {
@@ -207,7 +206,7 @@ impl Seed {
                         *dword = part.parse().ok()?;
                     }
 
-                    let mut seed = [0u8; 16];
+                    let seed = [0u8; 16];
                     Some(Seed::XorShift(seed))
                 }
 
@@ -258,8 +257,8 @@ impl Seed {
         }
 
         match *self {
-            Seed::XorShift(ref seed) => {
-                let mut dwords = [0u32; 4];
+            Seed::XorShift(_) => {
+                let dwords = [0u32; 4];
                 format!(
                     "{} {} {} {} {}",
                     RngAlgorithm::XorShift.persistence_key(),
@@ -324,10 +323,10 @@ impl TestRng {
     }
 
     /// Construct a default TestRng from entropy.
-    pub(crate) fn default_rng(algorithm: RngAlgorithm) -> Self {
+    pub(crate) fn default_rng(_: RngAlgorithm) -> Self {
         #[cfg(feature = "std")]
         {
-            Self { }
+            Self {}
         }
         #[cfg(all(
             not(feature = "std"),
@@ -422,8 +421,8 @@ impl TestRng {
     }
 
     /// Construct a TestRng from a given seed.
-    fn from_seed_internal(seed: Seed) -> Self {
-        Self {  }
+    fn from_seed_internal(_: Seed) -> Self {
+        Self {}
     }
 }
 

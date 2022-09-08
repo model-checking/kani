@@ -60,6 +60,7 @@ impl<T: Strategy> Union<T> {
         Self { options }
     }
 
+    #[allow(dead_code)] // Integration in progress, See #1608.
     pub(crate) fn try_new<E>(
         it: impl Iterator<Item = Result<T, E>>,
     ) -> Result<Self, E> {

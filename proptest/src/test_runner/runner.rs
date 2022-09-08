@@ -417,8 +417,8 @@ impl TestRunner {
     #[cfg(feature = "fork")]
     fn run_in_fork<S: Strategy>(
         &mut self,
-        strategy: &S,
-        test: impl Fn(S::Value) -> TestCaseResult,
+        _: &S,
+        _: impl Fn(S::Value) -> TestCaseResult,
     ) -> TestRunResult<S> {
         unreachable!()
     }
