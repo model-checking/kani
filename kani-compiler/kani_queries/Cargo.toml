@@ -13,3 +13,6 @@ unsound_experiments = []
 
 [dependencies]
 tracing = {version = "0.1"}
+strum = {version = "0.24.0"}
+strum_macros = {version = "0.24.0"}
+
