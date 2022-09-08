@@ -73,10 +73,6 @@ pub struct TestRunner {
     local_rejects: u32,
     global_rejects: u32,
     rng: TestRng,
-    flat_map_regens: Arc<AtomicUsize>,
-
-    local_reject_detail: RejectionDetail,
-    global_reject_detail: RejectionDetail,
 }
 
 impl fmt::Debug for TestRunner {
@@ -87,9 +83,6 @@ impl fmt::Debug for TestRunner {
             .field("local_rejects", &self.local_rejects)
             .field("global_rejects", &self.global_rejects)
             .field("rng", &"<TestRng>")
-            .field("flat_map_regens", &self.flat_map_regens)
-            .field("local_reject_detail", &self.local_reject_detail)
-            .field("global_reject_detail", &self.global_reject_detail)
             .finish()
     }
 }
@@ -102,13 +95,6 @@ impl fmt::Display for TestRunner {
              \tlocal rejects: {}\n",
             self.successes, self.local_rejects
         )?;
-        for (whence, count) in &self.local_reject_detail {
-            writeln!(f, "\t\t{} times at {}", count, whence)?;
-        }
-        writeln!(f, "\tglobal rejects: {}", self.global_rejects)?;
-        for (whence, count) in &self.global_reject_detail {
-            writeln!(f, "\t\t{} times at {}", count, whence)?;
-        }
 
         Ok(())
     }
@@ -334,9 +320,6 @@ impl TestRunner {
             local_rejects: 0,
             global_rejects: 0,
             rng: rng,
-            flat_map_regens: Arc::new(AtomicUsize::new(0)),
-            local_reject_detail: BTreeMap::new(),
-            global_reject_detail: BTreeMap::new(),
         }
     }
 
@@ -350,9 +333,6 @@ impl TestRunner {
             local_rejects: 0,
             global_rejects: 0,
             rng: self.new_rng(),
-            flat_map_regens: Arc::clone(&self.flat_map_regens),
-            local_reject_detail: BTreeMap::new(),
-            global_reject_detail: BTreeMap::new(),
         }
     }
 
@@ -398,11 +378,9 @@ impl TestRunner {
         strategy: &S,
         test: impl Fn(S::Value) -> TestCaseResult,
     ) -> TestRunResult<S> {
-        if self.config.fork() {
-            self.run_in_fork(strategy, test)
-        } else {
-            self.run_in_process(strategy, test)
-        }
+        let tree = strategy.new_tree(self).unwrap();
+        test(tree.current()).unwrap();
+        Ok(())
     }
 
     #[cfg(not(feature = "fork"))]
@@ -415,7 +393,7 @@ impl TestRunner {
     }
 
     #[cfg(feature = "fork")]
-    fn run_in_fork<S: Strategy>(
+    fn _run_in_fork<S: Strategy>(
         &mut self,
         _: &S,
         _: impl Fn(S::Value) -> TestCaseResult,
@@ -717,10 +695,6 @@ impl TestRunner {
             Err("Too many local rejects".into())
         } else {
             self.local_rejects += 1;
-            Self::insert_or_increment(
-                &mut self.local_reject_detail,
-                whence.into(),
-            );
             Ok(())
         }
     }
@@ -732,7 +706,6 @@ impl TestRunner {
             Err(TestError::Abort("Too many global rejects".into()))
         } else {
             self.global_rejects += 1;
-            Self::insert_or_increment(&mut self.global_reject_detail, whence);
             Ok(())
         }
     }
@@ -747,8 +720,7 @@ impl TestRunner {
     /// Increment the counter of flat map regenerations and return whether it
     /// is still under the configured limit.
     pub fn flat_map_regen(&self) -> bool {
-        self.flat_map_regens.fetch_add(1, SeqCst)
-            < self.config.max_flat_map_regens as usize
+        false
     }
 
     fn new_cache(&self) -> Box<dyn ResultCache> {
@@ -788,7 +760,24 @@ fn init_replay(
     (iter::empty(), ForkOutput::empty())
 }
 
-#[cfg(TBD)]
+#[cfg(test)]
+mod test {
+    use crate::strategy::{Strategy, Just};
+    use crate::test_runner::Config;
+
+    proptest! {
+        #[cfg_attr(kani, kani::proof)]
+        fn successfully_linked_proptest(_ in &Just(()) ) {
+            let config = Config::default();
+            assert_eq!(
+                config.cases,
+                256,
+                "Default .cases should be 256. Check: src/test_runner/config.rs"
+            );
+        }
+    }
+}
+
 #[cfg(all(test, not(kani)))]
 mod test {
     use std::cell::Cell;

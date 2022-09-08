@@ -269,13 +269,7 @@ macro_rules! prop_assume {
     };
 
     ($expr:expr, $fmt:tt $(, $fmt_arg:expr),* $(,)?) => {
-        if !$expr {
-            return ::core::result::Result::Err(
-                $crate::test_runner::TestCaseError::reject(
-                    format!(concat!("{}:{}:{}: ", $fmt),
-                            file!(), line!(), column!()
-                            $(, $fmt_arg)*)));
-        }
+        kani::assume($expr)
     };
 }
 
@@ -734,18 +728,15 @@ macro_rules! prop_compose {
 /// ```
 #[macro_export]
 macro_rules! prop_assert {
-    ($cond:expr) => {
+    ($cond:expr) => { {
         $crate::prop_assert!($cond, concat!("assertion failed: ", stringify!($cond)))
-    };
+    } };
 
-    ($cond:expr, $($fmt:tt)*) => {
-        if !$cond {
-            let message = format!($($fmt)*);
-            let message = format!("{} at {}:{}", message, file!(), line!());
-            return ::core::result::Result::Err(
-                $crate::test_runner::TestCaseError::fail(message));
-        }
-    };
+    ($cond:expr, $($fmt:tt)*) => { {
+        let message = format!($($fmt)*);
+        let message = format!("{} at {}:{}", message, file!(), line!());
+        assert!($cond, "{}", message);
+    } };
 }
 
 /// Similar to `assert_eq!` from std, but returns a test failure instead of
@@ -952,41 +943,29 @@ macro_rules! proptest_helper {
     (@_BODY $config:ident ($($parm:pat in $strategy:expr),+) [$($mod:tt)*] $body:expr) => {{
         $config.source_file = Some(file!());
         let mut runner = $crate::test_runner::TestRunner::new($config);
-        let names = $crate::proptest_helper!(@_WRAPSTR ($($parm),*));
-        match runner.run(
-            &$crate::strategy::Strategy::prop_map(
-                $crate::proptest_helper!(@_WRAP ($($strategy)*)),
-                |values| $crate::sugar::NamedArguments(names, values)),
-            $($mod)* |$crate::sugar::NamedArguments(
-                _, $crate::proptest_helper!(@_WRAPPAT ($($parm),*)))|
-            {
-                let _: () = $body;
+        runner.run(
+            &$crate::proptest_helper!(@_WRAP ($($strategy)*)),
+            |$crate::proptest_helper!(@_WRAPPAT ($($parm),*))| {
+                {
+                    $body
+                }
                 Ok(())
-            })
-        {
-            Ok(_) => (),
-            Err(e) => panic!("{}\n{}", e, runner),
-        }
+            }
+        ).unwrap();
     }};
     // build a property testing block that when executed, executes the full property test.
     (@_BODY2 $config:ident ($($arg:tt)+) [$($mod:tt)*] $body:expr) => {{
         $config.source_file = Some(file!());
         let mut runner = $crate::test_runner::TestRunner::new($config);
-        let names = $crate::proptest_helper!(@_EXT _STR ($($arg)*));
-        match runner.run(
-            &$crate::strategy::Strategy::prop_map(
-                $crate::proptest_helper!(@_EXT _STRAT ($($arg)*)),
-                |values| $crate::sugar::NamedArguments(names, values)),
-            $($mod)* |$crate::sugar::NamedArguments(
-                _, $crate::proptest_helper!(@_EXT _PAT ($($arg)*)))|
-            {
-                let _: () = $body;
+        runner.run(
+            &$crate::proptest_helper!(@_EXT _STRAT ($($arg)*)),
+            |$crate::proptest_helper!(@_EXT _PAT ($($arg)*))| {
+                {
+                    $body
+                }
                 Ok(())
-            })
-        {
-            Ok(_) => (),
-            Err(e) => panic!("{}\n{}", e, runner),
-        }
+            }
+        ).unwrap();
     }};
 
     // The logic below helps support `pat: type` in the proptest! macro.

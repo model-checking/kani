@@ -141,11 +141,6 @@ fn contextualize_config(mut result: Config) -> Config {
     result
 }
 
-#[cfg(not(feature = "std"))]
-fn contextualize_config(result: Config) -> Config {
-    result
-}
-
 fn default_default_config() -> Config {
     Config {
         cases: 256,
@@ -168,14 +163,6 @@ fn default_default_config() -> Config {
         rng_algorithm: RngAlgorithm::default(),
         _non_exhaustive: (),
     }
-}
-
-// The default config, computed by combining environment variables and
-// defaults.
-#[cfg(feature = "std")]
-lazy_static! {
-    static ref DEFAULT_CONFIG: Config =
-        contextualize_config(default_default_config());
 }
 
 /// Configuration for how a proptest test should be run.
@@ -480,14 +467,6 @@ impl Config {
     }
 }
 
-#[cfg(feature = "std")]
-impl Default for Config {
-    fn default() -> Self {
-        DEFAULT_CONFIG.clone()
-    }
-}
-
-#[cfg(not(feature = "std"))]
 impl Default for Config {
     fn default() -> Self {
         default_default_config()
