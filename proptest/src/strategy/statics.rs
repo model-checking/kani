@@ -219,7 +219,7 @@ pub(crate) fn static_map<S: Strategy, O: fmt::Debug>(
 // Tests
 //==============================================================================
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod test {
     use super::*;
 

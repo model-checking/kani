@@ -1150,7 +1150,7 @@ pub fn force_no_fork(config: &mut crate::test_runner::Config) {
 #[cfg(not(feature = "std"))]
 pub fn force_no_fork(_: &mut crate::test_runner::Config) {}
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod test {
     use crate::strategy::Just;
 
@@ -1472,7 +1472,7 @@ mod test_timeout {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod another_test {
     use crate::sugar;
 
@@ -1484,25 +1484,8 @@ mod another_test {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod ownership_tests {
-    #[cfg(feature = "std")]
-    proptest! {
-        #[test]
-        fn accept_ref_arg(ref s in "[0-9]") {
-            use crate::std_facade::String;
-            fn assert_string(_s: &String) {}
-            assert_string(s);
-        }
-
-        #[test]
-        fn accept_move_arg(s in "[0-9]") {
-            use crate::std_facade::String;
-            fn assert_string(_s: String) {}
-            assert_string(s);
-        }
-    }
-
     #[derive(Debug)]
     struct NotClone();
     const MK: fn() -> NotClone = NotClone;
@@ -1520,7 +1503,7 @@ mod ownership_tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod closure_tests {
     #[test]
     fn test_simple() {
@@ -1596,7 +1579,7 @@ mod closure_tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod any_tests {
     proptest! {
         #[test]

@@ -321,7 +321,7 @@ impl ValueTree for CharValueTree {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod test {
     use std::cmp::{max, min};
     use std::vec::Vec;

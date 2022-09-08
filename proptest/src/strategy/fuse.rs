@@ -149,7 +149,7 @@ impl<T: ValueTree> ValueTree for Fuse<T> {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod test {
     use super::*;
 

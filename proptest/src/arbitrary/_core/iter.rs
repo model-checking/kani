@@ -148,7 +148,7 @@ usize_mod!(Take, take);
 #[cfg(feature = "unstable")]
 usize_mod!(StepBy, step_by);
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod test {
     use super::*;
 

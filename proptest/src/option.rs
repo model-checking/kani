@@ -239,7 +239,7 @@ pub fn weighted<T: Strategy>(
     )))
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod test {
     use super::*;
 

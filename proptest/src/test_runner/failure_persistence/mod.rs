@@ -147,7 +147,7 @@ impl Clone for Box<dyn FailurePersistence> {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod tests {
     use super::PersistedSeed;
     use crate::test_runner::rng::Seed;

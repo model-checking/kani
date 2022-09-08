@@ -60,6 +60,7 @@ impl<T: Strategy> Union<T> {
         Self { options }
     }
 
+    #[allow(dead_code)] // Integration in progress, See #1608.
     pub(crate) fn try_new<E>(
         it: impl Iterator<Item = Result<T, E>>,
     ) -> Result<Self, E> {
@@ -470,7 +471,7 @@ pub fn float_to_weight(f: f64) -> (u32, u32) {
     (pos, neg)
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod test {
     use super::*;
     use crate::strategy::just::Just;

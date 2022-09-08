@@ -103,7 +103,7 @@ macro_rules! lazy_just {
 /// strategies is able to construct a value, therefore ensuring that
 /// no panic occurs is mostly sufficient. Shrinking for strategies that
 /// use special shrinking methods can be handled separately.
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 macro_rules! no_panic_test {
     ($($module: ident => $self: ty),+) => {
         $(

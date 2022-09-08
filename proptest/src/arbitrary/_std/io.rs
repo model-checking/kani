@@ -15,7 +15,7 @@
 //! Arbitrary implementations for `std::io`.
 
 use crate::std_facade::String;
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 use crate::std_facade::Vec;
 use std::io::ErrorKind::*;
 use std::io::*;
@@ -144,7 +144,7 @@ arbitrary!(Error, SMapped<(ErrorKind, Option<String>), Self>;
     )
 );
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod test {
 
     no_panic_test!(

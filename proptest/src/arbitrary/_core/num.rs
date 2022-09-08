@@ -44,7 +44,7 @@ arbitrary!(FpCategory,
     }
 );
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod test {
     no_panic_test!(
         parse_float_error => ParseFloatError,

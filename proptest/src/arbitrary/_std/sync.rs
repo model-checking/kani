@@ -148,7 +148,7 @@ arbitrary!([A: fmt::Debug] (SyncSender<A>, IntoIter<A>), SMapped<u16, Self>;
     })
 );
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod test {
     no_panic_test!(
         mutex => Mutex<u8>,

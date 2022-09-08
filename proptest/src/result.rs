@@ -251,7 +251,7 @@ pub fn maybe_err_weighted<T: Strategy, E: Strategy>(
     )))
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod test {
     use super::*;
 

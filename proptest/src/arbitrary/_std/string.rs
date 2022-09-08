@@ -310,7 +310,7 @@ fn gen_el_bytes(allow_null: bool) -> impl Strategy<Value = ELBytes> {
     .boxed()
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod test {
     no_panic_test!(
         string  => String,

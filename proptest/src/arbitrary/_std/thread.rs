@@ -64,7 +64,7 @@ arbitrary!([A: 'static + Send + Arbitrary<'a>] JoinHandle<A>,
 );
 */
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod test {
     no_panic_test!(
         builder => Builder

@@ -166,7 +166,7 @@ impl<V: ValueTree, F: Fn(V::Value) -> Option<O>, O: fmt::Debug> ValueTree
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod test {
     use super::*;
 

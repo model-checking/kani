@@ -50,7 +50,7 @@ arbitrary!(alloc::collections::CollectionAllocErr, TupleUnion<(WA<Just<Self>>, W
                        Just(alloc::collections::CollectionAllocErr::CapacityOverflow)]);
  */
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod test {
     multiplex_alloc!(::alloc::alloc, ::std::alloc);
 
