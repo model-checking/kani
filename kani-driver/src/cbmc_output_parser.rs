@@ -1144,96 +1144,134 @@ fn determine_verification_result(properties: &[Property]) -> bool {
     number_failed_properties == 0
 }
 
-#[test]
-fn check_property_id_deserialization_general() {
-    let prop_id_string = "\"alloc::raw_vec::RawVec::<u8>::allocate_in.sanity_check.1\"";
-    let prop_id_result: Result<PropertyId, serde_json::Error> =
-        serde_json::from_str(prop_id_string);
-    let prop_id = prop_id_result.unwrap();
-    assert_eq!(prop_id.fn_name, Some(String::from("alloc::raw_vec::RawVec::<u8>::allocate_in")));
-    assert_eq!(prop_id.class, Some(String::from("sanity_check")));
-    assert_eq!(prop_id.id, 1);
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn check_property_id_deserialization_general() {
+        let prop_id_string = "\"alloc::raw_vec::RawVec::<u8>::allocate_in.sanity_check.1\"";
+        let prop_id_result: Result<PropertyId, serde_json::Error> =
+            serde_json::from_str(prop_id_string);
+        let prop_id = prop_id_result.unwrap();
+        assert_eq!(
+            prop_id.fn_name,
+            Some(String::from("alloc::raw_vec::RawVec::<u8>::allocate_in"))
+        );
+        assert_eq!(prop_id.class, Some(String::from("sanity_check")));
+        assert_eq!(prop_id.id, 1);
 
-    let dummy_prop = Property {
-        description: "".to_string(),
-        property_id: prop_id,
-        source_location: SourceLocation { function: None, file: None, column: None, line: None },
-        status: CheckStatus::Success,
-        reach: None,
-        trace: None,
-    };
-    assert_eq!(dummy_prop.property_name().unwrap(), prop_id_string[1..prop_id_string.len() - 1]);
-}
+        let dummy_prop = Property {
+            description: "".to_string(),
+            property_id: prop_id,
+            source_location: SourceLocation {
+                function: None,
+                file: None,
+                column: None,
+                line: None,
+            },
+            status: CheckStatus::Success,
+            reach: None,
+            trace: None,
+        };
+        assert_eq!(
+            dummy_prop.property_name().unwrap(),
+            prop_id_string[1..prop_id_string.len() - 1]
+        );
+    }
 
-#[test]
-fn check_property_id_deserialization_only_name() {
-    let prop_id_string = "\"alloc::raw_vec::RawVec::<u8>::allocate_in.1\"";
-    let prop_id_result: Result<PropertyId, serde_json::Error> =
-        serde_json::from_str(prop_id_string);
-    dbg!(&prop_id_result);
-    let prop_id = prop_id_result.unwrap();
-    assert_eq!(prop_id.fn_name, Some(String::from("alloc::raw_vec::RawVec::<u8>::allocate_in")));
-    assert_eq!(prop_id.class, None);
-    assert_eq!(prop_id.id, 1);
+    #[test]
+    fn check_property_id_deserialization_only_name() {
+        let prop_id_string = "\"alloc::raw_vec::RawVec::<u8>::allocate_in.1\"";
+        let prop_id_result: Result<PropertyId, serde_json::Error> =
+            serde_json::from_str(prop_id_string);
+        dbg!(&prop_id_result);
+        let prop_id = prop_id_result.unwrap();
+        assert_eq!(
+            prop_id.fn_name,
+            Some(String::from("alloc::raw_vec::RawVec::<u8>::allocate_in"))
+        );
+        assert_eq!(prop_id.class, None);
+        assert_eq!(prop_id.id, 1);
 
-    let dummy_prop = Property {
-        description: "".to_string(),
-        property_id: prop_id,
-        source_location: SourceLocation { function: None, file: None, column: None, line: None },
-        status: CheckStatus::Success,
-        reach: None,
-        trace: None,
-    };
-    assert_eq!(dummy_prop.property_name().unwrap(), prop_id_string[1..prop_id_string.len() - 1]);
-}
+        let dummy_prop = Property {
+            description: "".to_string(),
+            property_id: prop_id,
+            source_location: SourceLocation {
+                function: None,
+                file: None,
+                column: None,
+                line: None,
+            },
+            status: CheckStatus::Success,
+            reach: None,
+            trace: None,
+        };
+        assert_eq!(
+            dummy_prop.property_name().unwrap(),
+            prop_id_string[1..prop_id_string.len() - 1]
+        );
+    }
 
-#[test]
-fn check_property_id_deserialization_only_class() {
-    let prop_id_string = "\"assertion.1\"";
-    let prop_id_result: Result<PropertyId, serde_json::Error> =
-        serde_json::from_str(prop_id_string);
-    let prop_id = prop_id_result.unwrap();
-    assert_eq!(prop_id.fn_name, None);
-    assert_eq!(prop_id.class, Some(String::from("assertion")));
-    assert_eq!(prop_id.id, 1);
+    #[test]
+    fn check_property_id_deserialization_only_class() {
+        let prop_id_string = "\"assertion.1\"";
+        let prop_id_result: Result<PropertyId, serde_json::Error> =
+            serde_json::from_str(prop_id_string);
+        let prop_id = prop_id_result.unwrap();
+        assert_eq!(prop_id.fn_name, None);
+        assert_eq!(prop_id.class, Some(String::from("assertion")));
+        assert_eq!(prop_id.id, 1);
 
-    let dummy_prop = Property {
-        description: "".to_string(),
-        property_id: prop_id,
-        source_location: SourceLocation { function: None, file: None, column: None, line: None },
-        status: CheckStatus::Success,
-        reach: None,
-        trace: None,
-    };
-    assert_eq!(dummy_prop.property_name().unwrap(), prop_id_string[1..prop_id_string.len() - 1]);
-}
+        let dummy_prop = Property {
+            description: "".to_string(),
+            property_id: prop_id,
+            source_location: SourceLocation {
+                function: None,
+                file: None,
+                column: None,
+                line: None,
+            },
+            status: CheckStatus::Success,
+            reach: None,
+            trace: None,
+        };
+        assert_eq!(
+            dummy_prop.property_name().unwrap(),
+            prop_id_string[1..prop_id_string.len() - 1]
+        );
+    }
 
-#[test]
-fn check_property_id_deserialization_special() {
-    let prop_id_string = "\".recursion\"";
-    let prop_id_result: Result<PropertyId, serde_json::Error> =
-        serde_json::from_str(prop_id_string);
-    let prop_id = prop_id_result.unwrap();
-    assert_eq!(prop_id.fn_name, None);
-    assert_eq!(prop_id.class, Some(String::from("recursion")));
-    assert_eq!(prop_id.id, 1);
+    #[test]
+    fn check_property_id_deserialization_special() {
+        let prop_id_string = "\".recursion\"";
+        let prop_id_result: Result<PropertyId, serde_json::Error> =
+            serde_json::from_str(prop_id_string);
+        let prop_id = prop_id_result.unwrap();
+        assert_eq!(prop_id.fn_name, None);
+        assert_eq!(prop_id.class, Some(String::from("recursion")));
+        assert_eq!(prop_id.id, 1);
 
-    let dummy_prop = Property {
-        description: "".to_string(),
-        property_id: prop_id,
-        source_location: SourceLocation { function: None, file: None, column: None, line: None },
-        status: CheckStatus::Success,
-        reach: None,
-        trace: None,
-    };
-    assert_eq!(dummy_prop.property_name().unwrap(), "recursion.1");
-}
+        let dummy_prop = Property {
+            description: "".to_string(),
+            property_id: prop_id,
+            source_location: SourceLocation {
+                function: None,
+                file: None,
+                column: None,
+                line: None,
+            },
+            status: CheckStatus::Success,
+            reach: None,
+            trace: None,
+        };
+        assert_eq!(dummy_prop.property_name().unwrap(), "recursion.1");
+    }
 
-#[test]
-#[should_panic]
-fn check_property_id_deserialization_panics() {
-    let prop_id_string = "\"not_a_property_ID\"";
-    let prop_id_result: Result<PropertyId, serde_json::Error> =
-        serde_json::from_str(prop_id_string);
-    let _prop_id = prop_id_result.unwrap();
+    #[test]
+    #[should_panic]
+    fn check_property_id_deserialization_panics() {
+        let prop_id_string = "\"not_a_property_ID\"";
+        let prop_id_result: Result<PropertyId, serde_json::Error> =
+            serde_json::from_str(prop_id_string);
+        let _prop_id = prop_id_result.unwrap();
+    }
 }
