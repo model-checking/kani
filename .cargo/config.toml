@@ -39,8 +39,4 @@ rustflags = [ # Global lints/warnings. Need to use underscore instead of -.
     "-Aclippy::upper_case_acronyms",
     "-Aclippy::useless_conversion",
     "-Aclippy::useless_format",
-
-    # Turned off to simplify merge: See #1608 for progress.
-    "-Adead_code",
-    "-Aunused_variables",
 ]
