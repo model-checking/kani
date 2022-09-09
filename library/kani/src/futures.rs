@@ -61,6 +61,7 @@ pub trait SchedulingStrategy {
 }
 
 impl<F: FnMut(usize) -> usize> SchedulingStrategy for F {
+    #[inline]
     fn pick_task(&mut self, num_tasks: usize) -> (usize, bool) {
         (self(num_tasks), false)
     }
@@ -73,6 +74,7 @@ pub struct RoundRobin {
 }
 
 impl SchedulingStrategy for RoundRobin {
+    #[inline]
     fn pick_task(&mut self, num_tasks: usize) -> (usize, bool) {
         self.index = (self.index + 1) % num_tasks;
         (self.index, false)
@@ -108,6 +110,7 @@ pub struct NondetFairScheduling {
 }
 
 impl NondetFairScheduling {
+    #[inline]
     pub fn new(limit: u8) -> Self {
         Self { counters: [limit; MAX_TASKS], limit }
     }
@@ -141,6 +144,7 @@ pub(crate) struct Scheduler {
 
 impl Scheduler {
     /// Creates a scheduler with an empty task list
+    #[inline]
     pub(crate) const fn new() -> Scheduler {
         const INIT: Option<BoxFuture> = None;
         Scheduler { tasks: [INIT; MAX_TASKS], num_tasks: 0, num_running: 0 }
@@ -217,7 +221,7 @@ pub fn spawn<F: Future<Output = ()> + Sync + 'static>(fut: F) -> JoinHandle {
 
 /// Polls the given future and the tasks it may spawn until all of them complete
 ///
-/// Contrary to block_on, this allows `spawn`ing other futures
+/// Contrary to [`block_on`], this allows `spawn`ing other futures
 #[inline] // to work around linking issue
 pub fn spawnable_block_on<F: Future<Output = ()> + Sync + 'static>(
     fut: F,
