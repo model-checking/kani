@@ -3,7 +3,7 @@
 
 [package]
 name = "kani-compiler"
-version = "0.9.0"
+version = "0.10.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 publish = false
@@ -35,6 +35,7 @@ tracing-tree = "0.2.0"
 default = ['cprover']
 cprover = ['ar', 'bitflags', 'cbmc', 'kani_metadata', 'libc', 'num', 'object', 'rustc-demangle', 'serde',
     'serde_json', "strum", "strum_macros"]
+unsound_experiments = ["kani_queries/unsound_experiments"]
 
 [package.metadata.rust-analyzer]
 # This package uses rustc crates.

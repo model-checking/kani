@@ -77,7 +77,8 @@ impl<'tcx> GotocCtx<'tcx> {
             // Index 0 represents the return value, which does not need to be
             // declared in the first block
             if lc.index() < 1 || lc.index() > mir.arg_count {
-                self.current_fn_mut().push_onto_block(Stmt::decl(sym_e, None, loc));
+                let init = self.codegen_default_initializer(&sym_e);
+                self.current_fn_mut().push_onto_block(Stmt::decl(sym_e, init, loc));
             }
         });
     }
@@ -112,7 +113,7 @@ impl<'tcx> GotocCtx<'tcx> {
             self.codegen_function_prelude();
             self.codegen_declare_variables();
 
-            mir.basic_blocks().iter_enumerated().for_each(|(bb, bbd)| self.codegen_block(bb, bbd));
+            mir.basic_blocks.iter_enumerated().for_each(|(bb, bbd)| self.codegen_block(bb, bbd));
 
             let loc = self.codegen_span(&mir.span);
             let stmts = self.current_fn_mut().extract_block();
@@ -354,10 +355,13 @@ impl<'tcx> GotocCtx<'tcx> {
 /// If the attribute is named `kanitool::name`, this extracts `name`
 fn kanitool_attr_name(attr: &ast::Attribute) -> Option<String> {
     match &attr.kind {
-        ast::AttrKind::Normal(ast::AttrItem { path: ast::Path { segments, .. }, .. }, _)
-            if (!segments.is_empty()) && segments[0].ident.as_str() == "kanitool" =>
-        {
-            Some(segments[1].ident.as_str().to_string())
+        ast::AttrKind::Normal(normal) => {
+            let segments = &normal.item.path.segments;
+            if (!segments.is_empty()) && segments[0].ident.as_str() == "kanitool" {
+                Some(segments[1].ident.as_str().to_string())
+            } else {
+                None
+            }
         }
         _ => None,
     }
