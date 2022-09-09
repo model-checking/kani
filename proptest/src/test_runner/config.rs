@@ -480,14 +480,6 @@ impl Config {
     }
 }
 
-#[cfg(feature = "std")]
-impl Default for Config {
-    fn default() -> Self {
-        DEFAULT_CONFIG.clone()
-    }
-}
-
-#[cfg(not(feature = "std"))]
 impl Default for Config {
     fn default() -> Self {
         default_default_config()

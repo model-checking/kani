@@ -262,6 +262,9 @@ macro_rules! proptest {
 /// message includes the point of invocation and the format message. `format`
 /// and `args` may be omitted to simply use the condition itself as the
 /// message.
+///
+/// Kani Adjustment: Use Kani::assume instead of rejecting randomly
+/// generated values.
 #[macro_export]
 macro_rules! prop_assume {
     ($expr:expr) => {
@@ -269,13 +272,7 @@ macro_rules! prop_assume {
     };
 
     ($expr:expr, $fmt:tt $(, $fmt_arg:expr),* $(,)?) => {
-        if !$expr {
-            return ::core::result::Result::Err(
-                $crate::test_runner::TestCaseError::reject(
-                    format!(concat!("{}:{}:{}: ", $fmt),
-                            file!(), line!(), column!()
-                            $(, $fmt_arg)*)));
-        }
+        kani::assume($expr)
     };
 }
 
@@ -732,6 +729,7 @@ macro_rules! prop_compose {
 /// #
 /// # fn main() { triangle_inequality(); }
 /// ```
+/// Kani Adjustment: Just use normal assert. No need to catch failure.
 #[macro_export]
 macro_rules! prop_assert {
     ($cond:expr) => {
@@ -739,12 +737,7 @@ macro_rules! prop_assert {
     };
 
     ($cond:expr, $($fmt:tt)*) => {
-        if !$cond {
-            let message = format!($($fmt)*);
-            let message = format!("{} at {}:{}", message, file!(), line!());
-            return ::core::result::Result::Err(
-                $crate::test_runner::TestCaseError::fail(message));
-        }
+        assert!($cond, $($fmt)*);
     };
 }
 
@@ -950,43 +943,34 @@ macro_rules! proptest_helper {
     };
     // build a property testing block that when executed, executes the full property test.
     (@_BODY $config:ident ($($parm:pat in $strategy:expr),+) [$($mod:tt)*] $body:expr) => {{
+        // Kani Adjustment: Since we don't need to match and print
+        // Error cases anymore, we just run and unwrap.
         $config.source_file = Some(file!());
         let mut runner = $crate::test_runner::TestRunner::new($config);
-        let names = $crate::proptest_helper!(@_WRAPSTR ($($parm),*));
-        match runner.run(
-            &$crate::strategy::Strategy::prop_map(
-                $crate::proptest_helper!(@_WRAP ($($strategy)*)),
-                |values| $crate::sugar::NamedArguments(names, values)),
-            $($mod)* |$crate::sugar::NamedArguments(
-                _, $crate::proptest_helper!(@_WRAPPAT ($($parm),*)))|
-            {
-                let _: () = $body;
+        runner.run(
+            &$crate::proptest_helper!(@_WRAP ($($strategy)*)),
+            |$crate::proptest_helper!(@_WRAPPAT ($($parm),*))| {
+                {
+                    $body
+                }
                 Ok(())
-            })
-        {
-            Ok(_) => (),
-            Err(e) => panic!("{}\n{}", e, runner),
-        }
+            }
+        ).unwrap();
     }};
     // build a property testing block that when executed, executes the full property test.
     (@_BODY2 $config:ident ($($arg:tt)+) [$($mod:tt)*] $body:expr) => {{
+        // Kani Adjustment: Same as @_BODY
         $config.source_file = Some(file!());
         let mut runner = $crate::test_runner::TestRunner::new($config);
-        let names = $crate::proptest_helper!(@_EXT _STR ($($arg)*));
-        match runner.run(
-            &$crate::strategy::Strategy::prop_map(
-                $crate::proptest_helper!(@_EXT _STRAT ($($arg)*)),
-                |values| $crate::sugar::NamedArguments(names, values)),
-            $($mod)* |$crate::sugar::NamedArguments(
-                _, $crate::proptest_helper!(@_EXT _PAT ($($arg)*)))|
-            {
-                let _: () = $body;
+        runner.run(
+            &$crate::proptest_helper!(@_EXT _STRAT ($($arg)*)),
+            |$crate::proptest_helper!(@_EXT _PAT ($($arg)*))| {
+                {
+                    $body
+                }
                 Ok(())
-            })
-        {
-            Ok(_) => (),
-            Err(e) => panic!("{}\n{}", e, runner),
-        }
+            }
+        ).unwrap();
     }};
 
     // The logic below helps support `pat: type` in the proptest! macro.
