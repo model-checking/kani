@@ -97,6 +97,7 @@ mod sysroot {
 
     use {
         quote::{format_ident, quote},
+        syn::parse::{Parse, ParseStream},
         syn::{parse_macro_input, ItemFn},
     };
 
@@ -126,7 +127,29 @@ mod sysroot {
         };
     }
 
+    struct ProofOptions {
+        schedule: Option<syn::Expr>,
+    }
+
+    impl Parse for ProofOptions {
+        fn parse(input: ParseStream) -> syn::Result<Self> {
+            if input.is_empty() {
+                Ok(ProofOptions { schedule: None })
+            } else {
+                let ident = input.parse::<syn::Ident>()?;
+                assert_eq!(
+                    ident, "schedule",
+                    "Only option `schedule` is allowed for #[kani::proof] on `async` functions."
+                );
+                let _ = input.parse::<syn::Token![=]>()?;
+                let schedule = Some(input.parse::<syn::Expr>()?);
+                Ok(ProofOptions { schedule })
+            }
+        }
+    }
+
     pub fn proof(attr: TokenStream, item: TokenStream) -> TokenStream {
+        let proof_options = parse_macro_input!(attr as ProofOptions);
         let fn_item = parse_macro_input!(item as ItemFn);
         let attrs = fn_item.attrs;
         let vis = fn_item.vis;
@@ -138,9 +161,11 @@ mod sysroot {
             #[kanitool::proof]
         );
 
-        assert!(attr.is_empty(), "#[kani::proof] does not take any arguments currently");
-
         if sig.asyncness.is_none() {
+            assert!(
+                proof_options.schedule.is_none(),
+                "#[kani::proof] only takes arguments for async functions for now"
+            );
             // Adds `#[kanitool::proof]` and other attributes
             quote!(
                 #kani_attributes
@@ -152,17 +177,20 @@ mod sysroot {
             // For async functions, it translates to a synchronous function that calls `kani::block_on`.
             // Specifically, it translates
             // ```ignore
-            // #[kani::async_proof]
+            // #[kani::proof]
             // #[attribute]
             // pub async fn harness() { ... }
             // ```
             // to
             // ```ignore
-            // #[kani::proof]
+            // #[kanitool::proof]
             // #[attribute]
             // pub fn harness() {
             //   async fn harness() { ... }
             //   kani::block_on(harness())
+            //   // OR
+            //   kani::spawnable_block_on(harness(), schedule)
+            //   // where `schedule` was provided as an argument to `#[kani::proof]`.
             // }
             // ```
             assert!(
@@ -172,12 +200,18 @@ mod sysroot {
             let mut modified_sig = sig.clone();
             modified_sig.asyncness = None;
             let fn_name = &sig.ident;
+            let schedule = proof_options.schedule;
+            let block_on_call = if let Some(schedule) = schedule {
+                quote!(kani::block_on_with_spawn(#fn_name(), #schedule))
+            } else {
+                quote!(kani::block_on(#fn_name()))
+            };
             quote!(
                 #kani_attributes
                 #(#attrs)*
                 #vis #modified_sig {
                     #sig #body
-                    kani::block_on(#fn_name())
+                    #block_on_call
                 }
             )
             .into()

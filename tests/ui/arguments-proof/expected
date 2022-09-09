@@ -1,1 +1,1 @@
-   = help: message: #[kani::proof] does not take any arguments
+Only option `schedule` is allowed for #[kani::proof] on `async` functions.

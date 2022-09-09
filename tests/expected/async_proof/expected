@@ -1,5 +1,5 @@
 error: custom attribute panicked
-#[kani::proof] does not take any arguments currently
+Only option `schedule` is allowed for #[kani::proof] on `async` functions.
 
 error: custom attribute panicked
 #[kani::proof] cannot be applied to async functions that take inputs for now
