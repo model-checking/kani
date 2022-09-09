@@ -108,14 +108,3 @@ pub mod sample;
 pub mod string;
 
 pub mod prelude;
-
-#[cfg(test)]
-mod test_kani {
-    #[kani::proof]
-    fn trivial() {
-        let vector = vec![0; 16];
-        let index = kani::any::<usize>() % vector.len();
-
-        assert_eq!(vector[index], 0);
-    }
-}
