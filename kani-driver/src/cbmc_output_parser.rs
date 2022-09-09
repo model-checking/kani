@@ -324,7 +324,11 @@ impl<'de> serde::Deserialize<'de> for PropertyId {
         // Return tuple after converting counter from string into number.
         // Safe to do because we've checked the format earlier.
         let class = String::from(attributes_tuple.1);
-        Ok(PropertyId { fn_name: attributes_tuple.0, class, id: attributes_tuple.2.parse().unwrap() })
+        Ok(PropertyId {
+            fn_name: attributes_tuple.0,
+            class,
+            id: attributes_tuple.2.parse().unwrap(),
+        })
     }
 }
 
