@@ -333,8 +333,7 @@ mod concrete_vals_extractor {
         extracted_assert_fail: &mut bool,
     ) -> Result<Vec<ConcreteVal>> {
         let mut concrete_vals: Vec<ConcreteVal> = Vec::new();
-        let property_class =
-            property.property_class().context("Incorrectly formatted property class.")?;
+        let property_class = property.property_class();
         let property_is_assert = property_class == "assertion";
         let status_is_failure = property.status == CheckStatus::Failure;
 

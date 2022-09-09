@@ -227,12 +227,12 @@ pub struct Property {
 #[derive(Clone, Debug)]
 pub struct PropertyId {
     pub fn_name: Option<String>,
-    pub class: Option<String>,
+    pub class: String,
     pub id: u32,
 }
 
 impl Property {
-    pub fn property_class(&self) -> Option<String> {
+    pub fn property_class(&self) -> String {
         self.property_id.class.clone()
     }
 
@@ -243,10 +243,9 @@ impl Property {
         if let Some(name) = &prop_id.fn_name {
             write!(&mut fmt_str, "{name}.")?;
         }
-        if let Some(class) = &prop_id.class {
-            write!(&mut fmt_str, "{class}.")?;
-        }
+        let class = &prop_id.class;
         let id = prop_id.id;
+        write!(&mut fmt_str, "{class}.")?;
         write!(&mut fmt_str, "{id}")?;
         Ok(fmt_str)
     }
@@ -280,7 +279,7 @@ impl<'de> serde::Deserialize<'de> for PropertyId {
         // least in the test `tests/expected/dynamic-error-trait/main.rs` and its
         // description is is: "recursion unwinding assertion"
         if id_str == ".recursion" {
-            return Ok(PropertyId { fn_name: None, class: Some("recursion".to_owned()), id: 1 });
+            return Ok(PropertyId { fn_name: None, class: "recursion".to_owned(), id: 1 });
         };
 
         // Split the property name into three from the end, using `.` as the separator
@@ -289,14 +288,17 @@ impl<'de> serde::Deserialize<'de> for PropertyId {
             // The general case, where we get all the attributes
             3 => {
                 // Since mangled function names may contain `.`, we check if
+                // `property_attributes[1]` has the class format. If it doesn't,
+                // it means we've split a function name, so we rebuild it and
+                // demangle it.
                 if Property::has_property_class_format(property_attributes[1]) {
                     let name = format!("{:#}", demangle(property_attributes[2]));
-                    (Some(name), Some(property_attributes[1]), property_attributes[0])
+                    (Some(name), property_attributes[1], property_attributes[0])
                 } else {
                     let full_name =
                         format!("{}.{}", property_attributes[2], property_attributes[1]);
                     let name = format!("{:#}", demangle(&full_name));
-                    (Some(name), None, property_attributes[0])
+                    (Some(name), "missing_definition", property_attributes[0])
                 }
             }
             2 => {
@@ -305,10 +307,10 @@ impl<'de> serde::Deserialize<'de> for PropertyId {
                 // class (functions are usually mangled names which contain many
                 // other symbols).
                 if Property::has_property_class_format(property_attributes[1]) {
-                    (None, Some(property_attributes[1]), property_attributes[0])
+                    (None, property_attributes[1], property_attributes[0])
                 } else {
                     let name = format!("{:#}", demangle(property_attributes[1]));
-                    (Some(name), None, property_attributes[0])
+                    (Some(name), "missing_definition", property_attributes[0])
                 }
             }
             // The case we don't expect. It's best to fail with an informative message.
@@ -952,10 +954,7 @@ fn modify_undefined_function_checks(mut properties: Vec<Property>) -> (Vec<Prope
 /// temporary variable in their descriptions.
 fn get_readable_description(property: &Property) -> String {
     let original = property.description.clone();
-    if property.property_class().is_none() {
-        return original;
-    }
-    let class_id = property.property_class().unwrap();
+    let class_id = property.property_class();
 
     let description_alternatives = CBMC_ALT_DESCRIPTIONS.get(&class_id as &str);
     if let Some(alt_descriptions) = description_alternatives {
@@ -1047,8 +1046,7 @@ fn filter_sanity_checks(properties: Vec<Property>) -> Vec<Property> {
     properties
         .into_iter()
         .filter(|prop| {
-            !((prop.property_class().is_some() && prop.property_class().unwrap() == "sanity_check")
-                && prop.status == CheckStatus::Success)
+            !(prop.property_class() == "sanity_check" && prop.status == CheckStatus::Success)
         })
         .collect()
 }
@@ -1061,10 +1059,8 @@ fn filter_ptr_checks(properties: Vec<Property>) -> Vec<Property> {
     properties
         .into_iter()
         .filter(|prop| {
-            !(prop.property_class().is_some()
-                && prop.property_class().unwrap().contains("pointer_arithmetic"))
-                && !(prop.property_class().is_some()
-                    && prop.property_class().unwrap().contains("pointer_primitives"))
+            !prop.property_class().contains("pointer_arithmetic")
+                && !prop.property_class().contains("pointer_primitives")
         })
         .collect()
 }
@@ -1148,7 +1144,7 @@ mod tests {
             prop_id.fn_name,
             Some(String::from("alloc::raw_vec::RawVec::<u8>::allocate_in"))
         );
-        assert_eq!(prop_id.class, Some(String::from("sanity_check")));
+        assert_eq!(prop_id.class, String::from("sanity_check"));
         assert_eq!(prop_id.id, 1);
 
         let dummy_prop = Property {
@@ -1181,7 +1177,7 @@ mod tests {
             prop_id.fn_name,
             Some(String::from("alloc::raw_vec::RawVec::<u8>::allocate_in"))
         );
-        assert_eq!(prop_id.class, None);
+        assert_eq!(prop_id.class, "missing_definition");
         assert_eq!(prop_id.id, 1);
 
         let dummy_prop = Property {
@@ -1199,7 +1195,7 @@ mod tests {
         };
         assert_eq!(
             dummy_prop.property_name().unwrap(),
-            prop_id_string[1..prop_id_string.len() - 1]
+            "alloc::raw_vec::RawVec::<u8>::allocate_in.missing_definition.1"
         );
     }
 
@@ -1210,7 +1206,7 @@ mod tests {
             serde_json::from_str(prop_id_string);
         let prop_id = prop_id_result.unwrap();
         assert_eq!(prop_id.fn_name, None);
-        assert_eq!(prop_id.class, Some(String::from("assertion")));
+        assert_eq!(prop_id.class, String::from("assertion"));
         assert_eq!(prop_id.id, 1);
 
         let dummy_prop = Property {
@@ -1239,7 +1235,7 @@ mod tests {
             serde_json::from_str(prop_id_string);
         let prop_id = prop_id_result.unwrap();
         assert_eq!(prop_id.fn_name, None);
-        assert_eq!(prop_id.class, Some(String::from("recursion")));
+        assert_eq!(prop_id.class, String::from("recursion"));
         assert_eq!(prop_id.id, 1);
 
         let dummy_prop = Property {
