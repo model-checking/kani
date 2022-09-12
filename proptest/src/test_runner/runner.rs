@@ -547,6 +547,7 @@ impl TestRunner {
 
     /// Update the state to account for a local rejection from `whence`, and
     /// return `Ok` if the caller should keep going or `Err` to abort.
+    /// Kani Note: This function will always succeed because Kani only runs once.
     pub fn reject_local(&mut self, _: impl Into<Reason>) -> Result<(), Reason> {
         if self.local_rejects >= self.config.max_local_rejects {
             Err("Too many local rejects".into())
@@ -558,6 +559,7 @@ impl TestRunner {
 
     /// Update the state to account for a global rejection from `whence`, and
     /// return `Ok` if the caller should keep going or `Err` to abort.
+    /// Kani Note: This function will always succeed because Kani only runs once.
     fn reject_global<T>(&mut self, _: Reason) -> Result<(), TestError<T>> {
         if self.global_rejects >= self.config.max_global_rejects {
             Err(TestError::Abort("Too many global rejects".into()))
@@ -567,8 +569,10 @@ impl TestRunner {
         }
     }
 
-    /// Increment the counter of flat map regenerations and return whether it
-    /// is still under the configured limit.
+    /// Increment the counter of flat map regenerations and return
+    /// whether it is still under the configured limit.  Kani Note:
+    /// This function will always return false because Kani does not
+    /// require this functionality,
     pub fn flat_map_regen(&self) -> bool {
         false
     }
