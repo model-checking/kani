@@ -587,7 +587,7 @@ mod test {
         #[cfg_attr(kani, kani::proof)]
         fn successfully_linked_proptest(_ in &Just(()) ) {
             let config = Config::default();
-            assert_eq!(
+            prop_assert_eq!(
                 config.cases,
                 256,
                 "Default .cases should be 256. Check: src/test_runner/config.rs"
