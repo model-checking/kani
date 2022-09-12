@@ -36,9 +36,6 @@ use crate::test_runner::replay;
 use crate::test_runner::result_cache::*;
 use crate::test_runner::rng::TestRng;
 
-#[cfg(feature = "fork")]
-const ENV_FORK_FILE: &'static str = "_PROPTEST_FORKFILE";
-
 const ALWAYS: u32 = 0;
 const SHOW_FALURES: u32 = 1;
 const TRACE: u32 = 2;
@@ -62,8 +59,6 @@ macro_rules! verbose_message {
         let _ = $level;
     };
 }
-
-type RejectionDetail = BTreeMap<Reason, u32>;
 
 /// State used when running a proptest test.
 #[derive(Clone)]
@@ -128,18 +123,8 @@ impl ForkOutput {
         }
     }
 
-    fn terminate(&mut self) {
-        if let Some(ref mut file) = self.file {
-            replay::terminate(file).expect("Failed to append to replay file");
-        }
-    }
-
     fn empty() -> Self {
         ForkOutput { file: None }
-    }
-
-    fn is_in_fork(&self) -> bool {
-        self.file.is_some()
     }
 }
 
@@ -383,131 +368,6 @@ impl TestRunner {
         Ok(())
     }
 
-    #[cfg(not(feature = "fork"))]
-    fn run_in_fork<S: Strategy>(
-        &mut self,
-        _: &S,
-        _: impl Fn(S::Value) -> TestCaseResult,
-    ) -> TestRunResult<S> {
-        unreachable!()
-    }
-
-    #[cfg(feature = "fork")]
-    fn run_in_fork<S: Strategy>(
-        &mut self,
-        _: &S,
-        _: impl Fn(S::Value) -> TestCaseResult,
-    ) -> TestRunResult<S> {
-        unreachable!()
-    }
-
-    fn run_in_process<S: Strategy>(
-        &mut self,
-        strategy: &S,
-        test: impl Fn(S::Value) -> TestCaseResult,
-    ) -> TestRunResult<S> {
-        let (replay_steps, fork_output) = init_replay(&mut self.rng);
-        self.run_in_process_with_replay(
-            strategy,
-            test,
-            replay_steps.into_iter(),
-            fork_output,
-        )
-    }
-
-    fn run_in_process_with_replay<S: Strategy>(
-        &mut self,
-        strategy: &S,
-        test: impl Fn(S::Value) -> TestCaseResult,
-        mut replay: impl Iterator<Item = TestCaseResult>,
-        mut fork_output: ForkOutput,
-    ) -> TestRunResult<S> {
-        let old_rng = self.rng.clone();
-
-        let persisted_failure_seeds: Vec<PersistedSeed> = self
-            .config
-            .failure_persistence
-            .as_ref()
-            .map(|f| f.load_persisted_failures2(self.config.source_file))
-            .unwrap_or_default();
-
-        let mut result_cache = self.new_cache();
-
-        for PersistedSeed(persisted_seed) in persisted_failure_seeds {
-            self.rng.set_seed(persisted_seed);
-            self.gen_and_run_case(
-                strategy,
-                &test,
-                &mut replay,
-                &mut *result_cache,
-                &mut fork_output,
-            )?;
-        }
-        self.rng = old_rng;
-
-        while self.successes < self.config.cases {
-            // Generate a new seed and make an RNG from that so that we know
-            // what seed to persist if this case fails.
-            let seed = self.rng.gen_get_seed();
-            let result = self.gen_and_run_case(
-                strategy,
-                &test,
-                &mut replay,
-                &mut *result_cache,
-                &mut fork_output,
-            );
-            if let Err(TestError::Fail(_, ref value)) = result {
-                if let Some(ref mut failure_persistence) =
-                    self.config.failure_persistence
-                {
-                    let source_file = &self.config.source_file;
-
-                    // Don't update the persistence file if we're a child
-                    // process. The parent relies on it remaining consistent
-                    // and will take care of updating it itself.
-                    if !fork_output.is_in_fork() {
-                        failure_persistence.save_persisted_failure2(
-                            *source_file,
-                            PersistedSeed(seed),
-                            value,
-                        );
-                    }
-                }
-            }
-
-            if let Err(e) = result {
-                fork_output.terminate();
-                return Err(e.into());
-            }
-        }
-
-        fork_output.terminate();
-        Ok(())
-    }
-
-    fn gen_and_run_case<S: Strategy>(
-        &mut self,
-        strategy: &S,
-        f: &impl Fn(S::Value) -> TestCaseResult,
-        replay: &mut impl Iterator<Item = TestCaseResult>,
-        result_cache: &mut dyn ResultCache,
-        fork_output: &mut ForkOutput,
-    ) -> TestRunResult<S> {
-        let case = unwrap_or!(strategy.new_tree(self), msg =>
-                return Err(TestError::Abort(msg)));
-
-        if self.run_one_with_replay(
-            case,
-            f,
-            replay,
-            result_cache,
-            fork_output,
-        )? {
-            self.successes += 1;
-        }
-        Ok(())
-    }
-
     /// Run one specific test case against this runner.
     ///
     /// If the test fails, finds the minimal failing test case. If the test
@@ -687,10 +547,8 @@ impl TestRunner {
 
     /// Update the state to account for a local rejection from `whence`, and
     /// return `Ok` if the caller should keep going or `Err` to abort.
-    pub fn reject_local(
-        &mut self,
-        whence: impl Into<Reason>,
-    ) -> Result<(), Reason> {
+    /// Kani Note: This function will always succeed because Kani only runs once.
+    pub fn reject_local(&mut self, _: impl Into<Reason>) -> Result<(), Reason> {
         if self.local_rejects >= self.config.max_local_rejects {
             Err("Too many local rejects".into())
         } else {
@@ -701,7 +559,8 @@ impl TestRunner {
 
     /// Update the state to account for a global rejection from `whence`, and
     /// return `Ok` if the caller should keep going or `Err` to abort.
-    fn reject_global<T>(&mut self, whence: Reason) -> Result<(), TestError<T>> {
+    /// Kani Note: This function will always succeed because Kani only runs once.
+    fn reject_global<T>(&mut self, _: Reason) -> Result<(), TestError<T>> {
         if self.global_rejects >= self.config.max_global_rejects {
             Err(TestError::Abort("Too many global rejects".into()))
         } else {
@@ -710,15 +569,10 @@ impl TestRunner {
         }
     }
 
-    /// Insert 1 or increment the rejection detail at key for whence.
-    fn insert_or_increment(into: &mut RejectionDetail, whence: Reason) {
-        into.entry(whence)
-            .and_modify(|count| *count += 1)
-            .or_insert(1);
-    }
-
-    /// Increment the counter of flat map regenerations and return whether it
-    /// is still under the configured limit.
+    /// Increment the counter of flat map regenerations and return
+    /// whether it is still under the configured limit.  Kani Note:
+    /// This function will always return false because Kani does not
+    /// require this functionality,
     pub fn flat_map_regen(&self) -> bool {
         false
     }
@@ -726,38 +580,6 @@ impl TestRunner {
     fn new_cache(&self) -> Box<dyn ResultCache> {
         (self.config.result_cache)()
     }
-}
-
-#[cfg(feature = "fork")]
-fn init_replay(rng: &mut TestRng) -> (Vec<TestCaseResult>, ForkOutput) {
-    use crate::test_runner::replay::{open_file, Replay, ReplayFileStatus::*};
-
-    if let Some(path) = env::var_os(ENV_FORK_FILE) {
-        let mut file = open_file(&path).expect("Failed to open replay file");
-        let loaded =
-            Replay::parse_from(&mut file).expect("Failed to read replay file");
-        match loaded {
-            InProgress(replay) => {
-                rng.set_seed(replay.seed);
-                (replay.steps, ForkOutput { file: Some(file) })
-            }
-
-            Terminated(_) => {
-                panic!("Replay file for child process is terminated?")
-            }
-
-            Corrupt => panic!("Replay file for child process is corrupt"),
-        }
-    } else {
-        (vec![], ForkOutput::empty())
-    }
-}
-
-#[cfg(not(feature = "fork"))]
-fn init_replay(
-    _rng: &mut TestRng,
-) -> (iter::Empty<TestCaseResult>, ForkOutput) {
-    (iter::empty(), ForkOutput::empty())
 }
 
 #[cfg(test)]

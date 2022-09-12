@@ -402,19 +402,6 @@ impl TestRng {
         Self::from_seed_internal(self.new_rng_seed())
     }
 
-    /// Overwrite the given TestRng with the provided seed.
-    pub(crate) fn set_seed(&mut self, seed: Seed) {
-        *self = Self::from_seed_internal(seed);
-    }
-
-    /// Generate a new randomized seed, set it to this TestRng,
-    /// and return the seed.
-    pub(crate) fn gen_get_seed(&mut self) -> Seed {
-        let seed = self.new_rng_seed();
-        self.set_seed(seed.clone());
-        seed
-    }
-
     /// Randomize a perturbed randomized seed from the given TestRng.
     pub(crate) fn new_rng_seed(&mut self) -> Seed {
         Seed::XorShift([0; 16])
