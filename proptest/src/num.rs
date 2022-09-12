@@ -19,22 +19,28 @@
 
 use crate::test_runner::TestRunner;
 use core::ops::Range;
-use rand::distributions::uniform::{SampleUniform, Uniform};
 use rand::distributions::{Distribution, Standard};
 
-pub(crate) fn sample_uniform<X: SampleUniform>(
-    run: &mut TestRunner,
+/// Produce an symbolic value from a range.
+pub(crate) fn sample_uniform<X: kani::Arbitrary + PartialOrd>(
+    _: &mut TestRunner,
     range: Range<X>,
 ) -> X {
-    Uniform::new(range.start, range.end).sample(run.rng())
+    let value: X = kani::any();
+    kani::assume(range.contains(&value));
+    value
 }
 
-pub(crate) fn sample_uniform_incl<X: SampleUniform>(
-    run: &mut TestRunner,
+/// Produce an symbolic value start and end values. End is inclusive.
+pub(crate) fn sample_uniform_incl<X: kani::Arbitrary + PartialOrd>(
+    _: &mut TestRunner,
     start: X,
     end: X,
 ) -> X {
-    Uniform::new_inclusive(start, end).sample(run.rng())
+    let value: X = kani::any();
+    kani::assume(value <= end);
+    kani::assume(value >= start);
+    value
 }
 
 macro_rules! int_any {
