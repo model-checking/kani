@@ -36,7 +36,7 @@ impl KaniSession {
         let outdir = target_dir.join(build_target).join("debug/deps");
 
         let mut kani_args = self.kani_specific_flags();
-        let mut rustc_args = self.kani_rustc_flags();
+        let rustc_args = self.kani_rustc_flags();
 
         let mut cargo_args: Vec<OsString> = vec!["rustc".into()];
         if self.args.tests {
@@ -69,7 +69,7 @@ impl KaniSession {
         }
 
         // Only joing them at the end. All kani flags must come first.
-        kani_args.append(&mut rustc_args);
+        kani_args.extend_from_slice(&rustc_args);
 
         let members = project_members(&self.args, &metadata);
         for member in members {
