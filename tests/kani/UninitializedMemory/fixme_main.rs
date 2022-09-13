@@ -11,4 +11,5 @@ fn main() {
         v.set_len(3);
     }
     let _b = v[0]; //< reading uninitialized memory
+    assert(false);
 }
