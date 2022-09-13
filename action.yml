@@ -21,5 +21,4 @@ runs:
   args:
     - bash
     - '-c'
-    - 'set -e; export HOME=/root USER=$(id -nu); source $HOME/.bashrc; ${{ inputs.command }}'
-
+    - 'set -e; export HOME=/root USER=$(id -nu) PATH=/root/.cargo/bin:$PATH; source $HOME/.bashrc; ${{ inputs.command }}'
