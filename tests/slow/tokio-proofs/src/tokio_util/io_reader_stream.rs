@@ -43,7 +43,7 @@ impl AsyncRead for Reader {
     }
 }
 
-#[cfg(disabled)]
+#[cfg(disabled)] // because it timed out after 2h
 #[kani::proof]
 #[kani::unwind(2)]
 async fn correct_behavior_on_errors() {

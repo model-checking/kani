@@ -11,8 +11,7 @@
 #![cfg(feature = "full")]
 use tokio::io::{AsyncBufReadExt, AsyncReadExt};
 
-// Kani does not support select yet
-#[cfg(disabled)]
+#[cfg(disabled)] // because Kani does not support select yet
 #[kani::proof]
 #[kani::unwind(2)]
 #[tokio::test]
@@ -30,8 +29,7 @@ async fn empty_read_is_cooperative() {
     }
 }
 
-// Kani does not support select yet
-#[cfg(disabled)]
+#[cfg(disabled)] // because Kani does not support select yet
 #[kani::proof]
 #[kani::unwind(2)]
 #[tokio::test]

@@ -11,7 +11,7 @@
 use tokio::time::{sleep_until, Duration, Instant};
 use tokio_test::block_on;
 
-#[cfg(disabled)]
+#[cfg(disabled)] // because epoll is missing
 #[kani::proof]
 #[kani::unwind(2)]
 fn async_block() {
@@ -22,7 +22,7 @@ async fn five() -> u8 {
     5
 }
 
-#[cfg(disabled)]
+#[cfg(disabled)] // because epoll is missing
 #[kani::proof]
 #[kani::unwind(2)]
 fn async_fn() {

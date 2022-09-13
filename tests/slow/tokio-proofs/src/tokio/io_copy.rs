@@ -17,7 +17,7 @@ use tokio_test::assert_ok;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-#[cfg(disabled)]
+#[cfg(disabled)] // because it timed out after 2h
 #[kani::proof]
 #[kani::unwind(2)]
 async fn copy() {
@@ -47,7 +47,7 @@ async fn copy() {
     assert_eq!(wr, b"hello world");
 }
 
-#[cfg(disabled)]
+#[cfg(disabled)] // because it timed out after 2h
 #[kani::proof]
 #[kani::unwind(2)]
 async fn proxy() {

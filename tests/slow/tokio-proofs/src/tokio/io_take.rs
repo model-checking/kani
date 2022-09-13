@@ -68,8 +68,7 @@ impl AsyncRead for BadReader {
     }
 }
 
-// Kani does not support should_panic
-#[cfg(disabled)]
+#[cfg(disabled)] //  because Kani does not support should_panic
 #[kani::proof]
 #[kani::unwind(2)]
 #[tokio::test]

@@ -33,7 +33,7 @@ trait AssertSend: Send {}
 impl AssertSend for mpsc::Sender<i32> {}
 impl AssertSend for mpsc::Receiver<i32> {}
 
-#[cfg(disabled)]
+#[cfg(disabled)] // because it timed out after 2h
 #[kani::proof]
 #[kani::unwind(2)]
 async fn send_recv_with_buffer() {
@@ -170,7 +170,7 @@ fn buffer_gteq_one() {
     mpsc::channel::<i32>(0);
 }
 
-#[cfg(disabled)]
+#[cfg(disabled)] // because it timed out after 2h
 #[kani::proof]
 #[kani::unwind(2)]
 async fn send_recv_unbounded() {
@@ -222,7 +222,7 @@ async fn send_recv_stream_unbounded() {
     assert_eq!(None, rx.next().await);
 }
 
-#[cfg(disabled)]
+#[cfg(disabled)] // because it timed out after 2h
 #[kani::proof]
 #[kani::unwind(2)]
 async fn no_t_bounds_buffer() {
@@ -240,7 +240,7 @@ async fn no_t_bounds_buffer() {
     assert!(rx.recv().await.is_some());
 }
 
-#[cfg(disabled)]
+#[cfg(disabled)] // because it timed out after 2h
 #[kani::proof]
 #[kani::unwind(2)]
 async fn no_t_bounds_unbounded() {
@@ -289,7 +289,7 @@ async fn send_recv_buffer_limited() {
     assert!(rx.recv().await.is_some());
 }
 
-#[cfg(disabled)]
+#[cfg(disabled)] // because it timed out after 2h
 #[kani::proof]
 #[kani::unwind(2)]
 async fn recv_close_gets_none_idle() {
@@ -331,7 +331,7 @@ async fn recv_close_gets_none_reserved() {
     assert!(rx.recv().await.is_none());
 }
 
-#[cfg(disabled)]
+#[cfg(disabled)] // because it timed out after 2h
 #[kani::proof]
 #[kani::unwind(2)]
 async fn tx_close_gets_none() {
@@ -339,7 +339,7 @@ async fn tx_close_gets_none() {
     assert!(rx.recv().await.is_none());
 }
 
-#[cfg(disabled)]
+#[cfg(disabled)] // because it timed out after 2h
 #[kani::proof]
 #[kani::unwind(2)]
 async fn try_send_fail() {
@@ -362,7 +362,7 @@ async fn try_send_fail() {
     assert!(rx.recv().await.is_none());
 }
 
-#[cfg(disabled)]
+#[cfg(disabled)] // because it timed out after 2h
 #[kani::proof]
 #[kani::unwind(2)]
 async fn try_send_fail_with_try_recv() {
@@ -385,7 +385,7 @@ async fn try_send_fail_with_try_recv() {
     assert_eq!(rx.try_recv(), Err(TryRecvError::Disconnected));
 }
 
-#[cfg(disabled)]
+#[cfg(disabled)] // because it timed out after 2h
 #[kani::proof]
 #[kani::unwind(2)]
 async fn try_reserve_fails() {
@@ -429,7 +429,7 @@ async fn drop_permit_releases_permit() {
     assert_ready_ok!(reserve2.poll());
 }
 
-#[cfg(disabled)]
+#[cfg(disabled)] // because it timed out after 2h
 #[kani::proof]
 #[kani::unwind(2)]
 async fn dropping_rx_closes_channel() {
@@ -443,7 +443,7 @@ async fn dropping_rx_closes_channel() {
     assert_eq!(1, Arc::strong_count(&msg));
 }
 
-#[cfg(disabled)]
+#[cfg(disabled)] // because it timed out after 2h
 #[kani::proof]
 #[kani::unwind(2)]
 fn dropping_rx_closes_channel_for_try() {
@@ -461,7 +461,7 @@ fn dropping_rx_closes_channel_for_try() {
     assert_eq!(1, Arc::strong_count(&msg));
 }
 
-#[cfg(disabled)]
+#[cfg(disabled)] // because it timed out after 2h
 #[kani::proof]
 #[kani::unwind(2)]
 fn unconsumed_messages_are_dropped() {
@@ -564,7 +564,7 @@ async fn permit_available_not_acquired_close() {
     assert!(rx.recv().await.is_none());
 }
 
-#[cfg(disabled)]
+#[cfg(disabled)] // because it timed out after 2h
 #[kani::proof]
 #[kani::unwind(2)]
 fn try_recv_bounded() {
@@ -628,7 +628,7 @@ fn try_recv_unbounded() {
     }
 }
 
-#[cfg(disabled)]
+#[cfg(disabled)] // because it timed out after 2h
 #[kani::proof]
 #[kani::unwind(2)]
 fn try_recv_close_while_empty_bounded() {
@@ -639,7 +639,7 @@ fn try_recv_close_while_empty_bounded() {
     assert_eq!(Err(TryRecvError::Disconnected), rx.try_recv());
 }
 
-#[cfg(disabled)]
+#[cfg(disabled)] // because it timed out after 2h
 #[kani::proof]
 #[kani::unwind(2)]
 fn try_recv_close_while_empty_unbounded() {
@@ -650,7 +650,7 @@ fn try_recv_close_while_empty_unbounded() {
     assert_eq!(Err(TryRecvError::Disconnected), rx.try_recv());
 }
 
-#[cfg(disabled)]
+#[cfg(disabled)] // because it timed out after 2h
 #[kani::proof]
 #[kani::unwind(2)]
 // #[tokio::test(start_paused = true)]

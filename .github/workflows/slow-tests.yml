@@ -3,7 +3,7 @@
 name: Kani's slow tests
 on:
   schedule:
-    - cron: "30 5 * * *"
+    - cron: "30 5 * * *" # Run this every day at 05:30 UTC
 
 env:
   RUST_BACKTRACE: 1

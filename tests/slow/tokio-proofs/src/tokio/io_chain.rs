@@ -12,7 +12,7 @@
 use tokio::io::AsyncReadExt;
 use tokio_test::assert_ok;
 
-#[cfg(disabled)]
+#[cfg(disabled)] // because it timed out after 2h
 #[kani::proof]
 #[kani::unwind(2)]
 async fn chain() {
