@@ -137,6 +137,11 @@ pub struct Config {
 
     /// Whether to rerun tests even if the inputs are unchanged.
     pub force_rerun: bool,
+
+    /// Allow us to run the regression with the mir linker enabled by default. For that, set
+    /// `RUSTFLAGS=--cfg=mir_linker` while compiling `compiletest`.
+    /// Remove this as part of https://github.com/model-checking/kani/issues/1677
+    pub mir_linker: bool,
 }
 
 #[derive(Debug, Clone)]

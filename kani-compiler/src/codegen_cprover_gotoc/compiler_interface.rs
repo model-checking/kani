@@ -3,10 +3,11 @@
 
 //! This file contains the code necessary to interface with the compiler backend
 
+use crate::codegen_cprover_gotoc::reachability::collect_reachable_items;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use bitflags::_core::any::Any;
 use cbmc::goto_program::{symtab_transformer, Location};
-use cbmc::InternedString;
+use cbmc::{InternedString, MachineModel};
 use kani_metadata::KaniMetadata;
 use kani_queries::{QueryDb, ReachabilityType, UserInput};
 use rustc_codegen_ssa::traits::CodegenBackend;
@@ -17,7 +18,7 @@ use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
 use rustc_middle::mir::mono::{CodegenUnit, MonoItem};
 use rustc_middle::ty::query::Providers;
-use rustc_middle::ty::{self, TyCtxt};
+use rustc_middle::ty::{self, Instance, TyCtxt};
 use rustc_session::config::{OutputFilenames, OutputType};
 use rustc_session::cstore::MetadataLoaderDyn;
 use rustc_session::Session;
@@ -60,95 +61,95 @@ impl CodegenBackend for GotocCodegenBackend {
         super::utils::init();
 
         check_target(tcx.sess);
-        check_options(tcx.sess, need_metadata_module, self.queries.clone());
+        check_options(tcx.sess, need_metadata_module);
 
-        let codegen_units: &'tcx [CodegenUnit<'_>] = tcx.collect_and_partition_mono_items(()).1;
-        let mut c = GotocCtx::new(tcx, self.queries.clone());
+        // Follow rustc naming convention (cx is abbrev for context).
+        // https://rustc-dev-guide.rust-lang.org/conventions.html#naming-conventions
+        let mut gcx = GotocCtx::new(tcx, self.queries.clone());
+        let items = codegen_items(tcx, &gcx);
+        if items.is_empty() {
+            // There's nothing to do.
+            return codegen_results(tcx, rustc_metadata, gcx.symbol_table.machine_model());
+        }
 
         // we first declare all functions
-        for cgu in codegen_units {
-            let items = cgu.items_in_deterministic_order(tcx);
-            for (item, _) in items {
-                match item {
-                    MonoItem::Fn(instance) => {
-                        c.call_with_panic_debug_info(
-                            |ctx| ctx.declare_function(instance),
-                            format!("declare_function: {}", c.readable_instance_name(instance)),
-                            instance.def_id(),
+        for item in &items {
+            match *item {
+                MonoItem::Fn(instance) => {
+                    gcx.call_with_panic_debug_info(
+                        |ctx| ctx.declare_function(instance),
+                        format!("declare_function: {}", gcx.readable_instance_name(instance)),
+                        instance.def_id(),
+                    );
+                }
+                MonoItem::Static(def_id) => {
+                    gcx.call_with_panic_debug_info(
+                        |ctx| ctx.declare_static(def_id, *item),
+                        format!("declare_static: {:?}", def_id),
+                        def_id,
+                    );
+                }
+                MonoItem::GlobalAsm(_) => {
+                    if !self.queries.get_ignore_global_asm() {
+                        let error_msg = format!(
+                            "Crate {} contains global ASM, which is not supported by Kani. Rerun with `--enable-unstable --ignore-global-asm` to suppress this error (**Verification results may be impacted**).",
+                            gcx.short_crate_name()
                         );
-                    }
-                    MonoItem::Static(def_id) => {
-                        c.call_with_panic_debug_info(
-                            |ctx| ctx.declare_static(def_id, item),
-                            format!("declare_static: {:?}", def_id),
-                            def_id,
+                        tcx.sess.err(&error_msg);
+                    } else {
+                        warn!(
+                            "Ignoring global ASM in crate {}. Verification results may be impacted.",
+                            gcx.short_crate_name()
                         );
-                    }
-                    MonoItem::GlobalAsm(_) => {
-                        if !self.queries.get_ignore_global_asm() {
-                            let error_msg = format!(
-                                "Crate {} contains global ASM, which is not supported by Kani. Rerun with `--enable-unstable --ignore-global-asm` to suppress this error (**Verification results may be impacted**).",
-                                c.short_crate_name()
-                            );
-                            tcx.sess.err(&error_msg);
-                        } else {
-                            warn!(
-                                "Ignoring global ASM in crate {}. Verification results may be impacted.",
-                                c.short_crate_name()
-                            );
-                        }
                     }
                 }
             }
         }
 
         // then we move on to codegen
-        for cgu in codegen_units {
-            let items = cgu.items_in_deterministic_order(tcx);
-            for (item, _) in items {
-                match item {
-                    MonoItem::Fn(instance) => {
-                        c.call_with_panic_debug_info(
-                            |ctx| ctx.codegen_function(instance),
-                            format!(
-                                "codegen_function: {}\n{}",
-                                c.readable_instance_name(instance),
-                                c.symbol_name(instance)
-                            ),
-                            instance.def_id(),
-                        );
-                    }
-                    MonoItem::Static(def_id) => {
-                        c.call_with_panic_debug_info(
-                            |ctx| ctx.codegen_static(def_id, item),
-                            format!("codegen_static: {:?}", def_id),
-                            def_id,
-                        );
-                    }
-                    MonoItem::GlobalAsm(_) => {} // We have already warned above
+        for item in items {
+            match item {
+                MonoItem::Fn(instance) => {
+                    gcx.call_with_panic_debug_info(
+                        |ctx| ctx.codegen_function(instance),
+                        format!(
+                            "codegen_function: {}\n{}",
+                            gcx.readable_instance_name(instance),
+                            gcx.symbol_name(instance)
+                        ),
+                        instance.def_id(),
+                    );
                 }
+                MonoItem::Static(def_id) => {
+                    gcx.call_with_panic_debug_info(
+                        |ctx| ctx.codegen_static(def_id, item),
+                        format!("codegen_static: {:?}", def_id),
+                        def_id,
+                    );
+                }
+                MonoItem::GlobalAsm(_) => {} // We have already warned above
             }
         }
 
         // Print compilation report.
-        print_report(&c, tcx);
+        print_report(&gcx, tcx);
 
         // perform post-processing symbol table passes
         let passes = self.queries.get_symbol_table_passes();
-        let symtab = symtab_transformer::do_passes(c.symbol_table, &passes);
+        let symtab = symtab_transformer::do_passes(gcx.symbol_table, &passes);
 
         // Map MIR types to GotoC types
         let type_map: BTreeMap<InternedString, InternedString> =
-            BTreeMap::from_iter(c.type_map.into_iter().map(|(k, v)| (k, v.to_string().into())));
+            BTreeMap::from_iter(gcx.type_map.into_iter().map(|(k, v)| (k, v.to_string().into())));
 
         // Get the vtable function pointer restrictions if requested
-        let vtable_restrictions = if c.vtable_ctx.emit_vtable_restrictions {
-            Some(c.vtable_ctx.get_virtual_function_restrictions())
+        let vtable_restrictions = if gcx.vtable_ctx.emit_vtable_restrictions {
+            Some(gcx.vtable_ctx.get_virtual_function_restrictions())
         } else {
             None
         };
 
-        let metadata = KaniMetadata { proof_harnesses: c.proof_harnesses };
+        let metadata = KaniMetadata { proof_harnesses: gcx.proof_harnesses.clone() };
 
         // No output should be generated if user selected no_codegen.
         if !tcx.sess.opts.unstable_opts.no_codegen && tcx.sess.opts.output_types.should_codegen() {
@@ -163,18 +164,7 @@ impl CodegenBackend for GotocCodegenBackend {
                 write_file(&base_filename, "restrictions.json", &restrictions, pretty);
             }
         }
-
-        let work_products = FxHashMap::<WorkProductId, WorkProduct>::default();
-        Box::new((
-            CodegenResults {
-                modules: vec![],
-                allocator_module: None,
-                metadata_module: None,
-                metadata: rustc_metadata,
-                crate_info: CrateInfo::new(tcx, symtab.machine_model().architecture.clone()),
-            },
-            work_products,
-        ))
+        codegen_results(tcx, rustc_metadata, symtab.machine_model())
     }
 
     fn join_codegen(
@@ -246,7 +236,7 @@ fn check_target(session: &Session) {
     session.abort_if_errors();
 }
 
-fn check_options(session: &Session, need_metadata_module: bool, queries: Rc<QueryDb>) {
+fn check_options(session: &Session, need_metadata_module: bool) {
     // The requirements for `min_global_align` and `endian` are needed to build
     // a valid CBMC machine model in function `machine_model_from_session` from
     // src/kani-compiler/src/codegen_cprover_gotoc/context/goto_ctx.rs
@@ -279,14 +269,6 @@ fn check_options(session: &Session, need_metadata_module: bool, queries: Rc<Quer
 
     if need_metadata_module {
         session.err("Kani cannot generate metadata module.");
-    }
-
-    if queries.get_reachability_analysis() != ReachabilityType::Legacy {
-        let err_msg = format!(
-            "Using {} reachability mode is still unsupported.",
-            queries.get_reachability_analysis().as_ref()
-        );
-        session.err(&err_msg);
     }
 
     session.abort_if_errors();
@@ -325,5 +307,67 @@ fn print_report<'tcx>(ctx: &GotocCtx, tcx: TyCtxt<'tcx>) {
         msg += "\nSee https://model-checking.github.io/kani/rust-feature-support.html for more \
         details.";
         tcx.sess.warn(&msg);
+    }
+}
+
+fn codegen_results(
+    tcx: TyCtxt,
+    rustc_metadata: EncodedMetadata,
+    machine: &MachineModel,
+) -> Box<dyn Any> {
+    let work_products = FxHashMap::<WorkProductId, WorkProduct>::default();
+    Box::new((
+        CodegenResults {
+            modules: vec![],
+            allocator_module: None,
+            metadata_module: None,
+            metadata: rustc_metadata,
+            crate_info: CrateInfo::new(tcx, machine.architecture.clone()),
+        },
+        work_products,
+    ))
+}
+
+/// Collect all harnesses in the current crate.
+fn collect_harnesses<'tcx>(tcx: TyCtxt<'tcx>, gcx: &GotocCtx) -> Vec<MonoItem<'tcx>> {
+    // Filter proof harnesses.
+    tcx.hir_crate_items(())
+        .items()
+        .filter_map(|hir_id| {
+            let def_id = hir_id.def_id.to_def_id();
+            gcx.is_proof_harness(def_id).then(|| MonoItem::Fn(Instance::mono(tcx, def_id)))
+        })
+        .collect()
+}
+
+/// Retrieve all items that need to be processed.
+fn codegen_items<'tcx>(tcx: TyCtxt<'tcx>, gcx: &GotocCtx) -> Vec<MonoItem<'tcx>> {
+    let reach = gcx.queries.get_reachability_analysis();
+    debug!(?reach, "starting_points");
+    match reach {
+        ReachabilityType::Legacy => {
+            // Use rustc monomorphizer to retrieve items to codegen.
+            let codegen_units: &'tcx [CodegenUnit<'_>] = tcx.collect_and_partition_mono_items(()).1;
+            codegen_units
+                .iter()
+                .flat_map(|cgu| cgu.items_in_deterministic_order(tcx))
+                .map(|(item, _)| item)
+                .collect()
+        }
+        ReachabilityType::Harnesses => {
+            // Cross-crate collecting of all items that are reachable from the crate harnesses.
+            let harnesses = collect_harnesses(tcx, gcx);
+            collect_reachable_items(tcx, &harnesses).into_iter().collect()
+        }
+        ReachabilityType::None => Vec::new(),
+        ReachabilityType::PubFns => {
+            // TODO: https://github.com/model-checking/kani/issues/1674
+            let err_msg = format!(
+                "Using {} reachability mode is still unsupported.",
+                ReachabilityType::PubFns.as_ref()
+            );
+            tcx.sess.err(&err_msg);
+            Vec::new()
+        }
     }
 }

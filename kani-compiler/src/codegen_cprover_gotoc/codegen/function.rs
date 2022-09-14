@@ -9,6 +9,8 @@ use cbmc::InternString;
 use kani_metadata::HarnessMetadata;
 use rustc_ast::ast;
 use rustc_ast::{Attribute, LitKind};
+use rustc_hir::def::DefKind;
+use rustc_hir::def_id::DefId;
 use rustc_middle::mir::{HasLocalDecls, Local};
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{self, Instance};
@@ -260,6 +262,27 @@ impl<'tcx> GotocCtx<'tcx> {
             )
         });
         self.reset_current_fn();
+    }
+
+    pub fn is_proof_harness(&self, def_id: DefId) -> bool {
+        let all_attributes = self.tcx.get_attrs_unchecked(def_id);
+        let (proof_attributes, _) = partition_kanitool_attributes(all_attributes);
+        if !proof_attributes.is_empty() {
+            let span = proof_attributes.first().unwrap().span;
+            if self.tcx.def_kind(def_id) != DefKind::Fn {
+                self.tcx
+                    .sess
+                    .span_err(span, "The kani::proof attribute can only be applied to functions.");
+            } else if self.tcx.generics_of(def_id).requires_monomorphization(self.tcx) {
+                self.tcx
+                    .sess
+                    .span_err(span, "The proof attribute cannot be applied to generic functions.");
+            }
+            self.tcx.sess.abort_if_errors();
+            true
+        } else {
+            false
+        }
     }
 
     /// This updates the goto context with any information that should be accumulated from a function's
