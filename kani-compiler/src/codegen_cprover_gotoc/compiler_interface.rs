@@ -8,7 +8,7 @@ use bitflags::_core::any::Any;
 use cbmc::goto_program::{symtab_transformer, Location};
 use cbmc::InternedString;
 use kani_metadata::KaniMetadata;
-use kani_queries::{QueryDb, UserInput};
+use kani_queries::{QueryDb, ReachabilityType, UserInput};
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_codegen_ssa::{CodegenResults, CrateInfo};
 use rustc_data_structures::fx::FxHashMap;
@@ -60,7 +60,7 @@ impl CodegenBackend for GotocCodegenBackend {
         super::utils::init();
 
         check_target(tcx.sess);
-        check_options(tcx.sess, need_metadata_module);
+        check_options(tcx.sess, need_metadata_module, self.queries.clone());
 
         let codegen_units: &'tcx [CodegenUnit<'_>] = tcx.collect_and_partition_mono_items(()).1;
         let mut c = GotocCtx::new(tcx, self.queries.clone());
@@ -246,7 +246,7 @@ fn check_target(session: &Session) {
     session.abort_if_errors();
 }
 
-fn check_options(session: &Session, need_metadata_module: bool) {
+fn check_options(session: &Session, need_metadata_module: bool, queries: Rc<QueryDb>) {
     // The requirements for `min_global_align` and `endian` are needed to build
     // a valid CBMC machine model in function `machine_model_from_session` from
     // src/kani-compiler/src/codegen_cprover_gotoc/context/goto_ctx.rs
@@ -279,6 +279,14 @@ fn check_options(session: &Session, need_metadata_module: bool) {
 
     if need_metadata_module {
         session.err("Kani cannot generate metadata module.");
+    }
+
+    if queries.get_reachability_analysis() != ReachabilityType::Legacy {
+        let err_msg = format!(
+            "Using {} reachability mode is still unsupported.",
+            queries.get_reachability_analysis().as_ref()
+        );
+        session.err(&err_msg);
     }
 
     session.abort_if_errors();
