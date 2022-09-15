@@ -8,7 +8,7 @@ use crate::args::ConcretePlaybackMode;
 use crate::call_cbmc::VerificationStatus;
 use crate::cbmc_output_parser::VerificationOutput;
 use crate::session::KaniSession;
-use anyhow::{ensure, Context, Result};
+use anyhow::{Context, Result};
 use concrete_vals_extractor::{extract_harness_values, ConcreteVal};
 use kani_metadata::HarnessMetadata;
 use std::collections::hash_map::DefaultHasher;
@@ -26,61 +26,52 @@ impl KaniSession {
         harness: &HarnessMetadata,
         verification_output: &VerificationOutput,
     ) -> Result<()> {
-        let playback_mode = match &self.args.concrete_playback {
+        let playback_mode = match self.args.concrete_playback {
             Some(playback_mode) => playback_mode,
             None => return Ok(()),
         };
-
-        ensure!(
-            self.args.output_format != crate::args::OutputFormat::Old,
-            "The Kani argument `--output-format old` is not supported with the concrete playback feature."
-        );
 
         if verification_output.status == VerificationStatus::Success {
             return Ok(());
         }
 
         if let Some(processed_items) = &verification_output.processed_items {
-            if let Some(concrete_vals) = extract_harness_values(processed_items) {
-                let concrete_playback = format_unit_test(&harness.mangled_name, &concrete_vals);
-
-                if *playback_mode == ConcretePlaybackMode::Print {
-                    ensure!(
-                        !self.args.quiet,
-                        "With `--quiet` mode enabled, `--concrete-playback=print` mode can not print test cases."
-                    );
-                    println!(
-                        "Concrete playback unit test for `{}`:\n```\n{}\n```",
-                        &harness.pretty_name, &concrete_playback.unit_test_str
-                    );
-                    println!(
-                        "INFO: To automatically add the concrete playback unit test `{}` to the src code, run Kani with `--concrete-playback=InPlace`.",
-                        &concrete_playback.unit_test_name
-                    );
-                }
-
-                if *playback_mode == ConcretePlaybackMode::InPlace {
-                    if !self.args.quiet {
-                        println!(
-                            "INFO: Now modifying the source code to include the concrete playback unit test `{}`.",
-                            &concrete_playback.unit_test_name
-                        );
-                    }
-                    self.modify_src_code(
-                        &harness.original_file,
-                        harness.original_end_line,
-                        &concrete_playback,
-                    )
-                    .expect("Failed to modify source code");
-                }
-            } else {
-                println!(
-                    concat!(
-                        "WARNING: `{}` failure cannot be reproduced by the concrete playback. ",
-                        "Only assertion failures are currently reproducible."
-                    ),
+            match extract_harness_values(processed_items) {
+                None => println!(
+                    "WARNING: Kani could not produce a concrete playback for `{}` because there \
+                    were no failing panic checks.",
                     harness.pretty_name
-                );
+                ),
+                Some(concrete_vals) => {
+                    let concrete_playback = format_unit_test(&harness.mangled_name, &concrete_vals);
+                    match playback_mode {
+                        ConcretePlaybackMode::Print => {
+                            println!(
+                                "Concrete playback unit test for `{}`:\n```\n{}\n```",
+                                &harness.pretty_name, &concrete_playback.unit_test_str
+                            );
+                            println!(
+                                "INFO: To automatically add the concrete playback unit test `{}` to the \
+                        src code, run Kani with `--concrete-playback=inplace`.",
+                                &concrete_playback.unit_test_name
+                            );
+                        }
+                        ConcretePlaybackMode::InPlace => {
+                            if !self.args.quiet {
+                                println!(
+                                    "INFO: Now modifying the source code to include the concrete playback unit test `{}`.",
+                                    &concrete_playback.unit_test_name
+                                );
+                            }
+                            self.modify_src_code(
+                                &harness.original_file,
+                                harness.original_end_line,
+                                &concrete_playback,
+                            )
+                            .expect("Failed to modify source code");
+                        }
+                    }
+                }
             }
         }
         Ok(())
@@ -342,7 +333,7 @@ mod concrete_vals_extractor {
         }
     }
 
-    /// The third-level extractor. Extracts individual bytes from kani::any calls.
+    /// Extracts individual bytes returned by kani::any() calls.
     fn extract_from_trace_item(trace_item: &TraceItem) -> Option<ConcreteVal> {
         if let (Some(lhs), Some(source_location), Some(value)) =
             (&trace_item.lhs, &trace_item.source_location, &trace_item.value)

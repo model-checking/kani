@@ -1,2 +1,2 @@
 Failed Checks: unwinding assertion loop 0
-WARNING: `check_unwind_fail` failure cannot be reproduced by the concrete playback. Only assertion failures are currently reproducible.
+WARNING: Kani could not produce a concrete playback for `check_unwind_fail` because there were no failing panic checks.
