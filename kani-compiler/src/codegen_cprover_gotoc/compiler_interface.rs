@@ -66,7 +66,7 @@ impl CodegenBackend for GotocCodegenBackend {
         // Follow rustc naming convention (cx is abbrev for context).
         // https://rustc-dev-guide.rust-lang.org/conventions.html#naming-conventions
         let mut gcx = GotocCtx::new(tcx, self.queries.clone());
-        let items = codegen_items(tcx, &gcx);
+        let items = collect_codegen_items(tcx, &gcx);
         if items.is_empty() {
             // There's nothing to do.
             return codegen_results(tcx, rustc_metadata, gcx.symbol_table.machine_model());
@@ -310,6 +310,7 @@ fn print_report<'tcx>(ctx: &GotocCtx, tcx: TyCtxt<'tcx>) {
     }
 }
 
+/// Return a struct that contains information about the codegen results as expected by `rustc`.
 fn codegen_results(
     tcx: TyCtxt,
     rustc_metadata: EncodedMetadata,
@@ -341,7 +342,7 @@ fn collect_harnesses<'tcx>(tcx: TyCtxt<'tcx>, gcx: &GotocCtx) -> Vec<MonoItem<'t
 }
 
 /// Retrieve all items that need to be processed.
-fn codegen_items<'tcx>(tcx: TyCtxt<'tcx>, gcx: &GotocCtx) -> Vec<MonoItem<'tcx>> {
+fn collect_codegen_items<'tcx>(tcx: TyCtxt<'tcx>, gcx: &GotocCtx) -> Vec<MonoItem<'tcx>> {
     let reach = gcx.queries.get_reachability_analysis();
     debug!(?reach, "starting_points");
     match reach {

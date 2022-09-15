@@ -355,7 +355,8 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
                 self.collect_instance(instance, true);
             }
             TerminatorKind::InlineAsm { .. } => {
-                // We don't support inline assembly. Skip for now.
+                // We don't support inline assembly. This shall be replaced by an unsupported
+                // construct during codegen.
             }
             TerminatorKind::Abort { .. } | TerminatorKind::Assert { .. } => {
                 // We generate code for this without invoking any lang item.
