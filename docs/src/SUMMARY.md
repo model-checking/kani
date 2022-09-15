@@ -3,6 +3,7 @@
 - [Getting started](./getting-started.md)
   - [Installation](./install-guide.md)
     - [Building from source](./build-from-source.md)
+    - [GitHub CI Action](./install-github-ci.md)
   - [Using Kani](./usage.md)
   - [Verification results](./verification-results.md)
   - [Debugging verification failures](./debugging-verification-failures.md)

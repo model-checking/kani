@@ -5,7 +5,9 @@ Kani offers an easy installation option on two platforms:
 * `x86_64-unknown-linux-gnu` (Most Linux distributions)
 * `x86_64-apple-darwin` (Intel Mac OS)
 
-Other platforms are either not yet supported or require instead that you [build from source](build-from-source.md).
+Other platforms are either not yet supported or require instead that
+you [build from source](build-from-source.md). To use Kani in your
+GitHub CI workflows, see [GitHub CI Action](./install-github-ci.md).
 
 ## Dependencies
 

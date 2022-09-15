@@ -2,6 +2,37 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(not(feature = "unsound_experiments"))]
+use std::sync::Mutex;
+use strum_macros::{AsRefStr, EnumString, EnumVariantNames};
+
+#[cfg(feature = "unsound_experiments")]
+mod unsound_experiments;
+
+#[cfg(feature = "unsound_experiments")]
+use {
+    crate::unsound_experiments::UnsoundExperiments,
+    std::sync::{Arc, Mutex},
+};
+
+#[derive(Debug, Clone, Copy, AsRefStr, EnumString, EnumVariantNames, PartialEq, Eq)]
+#[strum(serialize_all = "snake_case")]
+pub enum ReachabilityType {
+    /// Start the cross-crate reachability analysis from all harnesses in the local crate.
+    Harnesses,
+    /// Use standard rustc monomorphizer algorithm.
+    Legacy,
+    /// Don't perform any reachability analysis. This will skip codegen for this crate.
+    None,
+    /// Start the cross-crate reachability analysis from all public functions in the local crate.
+    PubFns,
+}
+
+impl Default for ReachabilityType {
+    fn default() -> Self {
+        ReachabilityType::None
+    }
+}
 
 pub trait UserInput {
     fn set_symbol_table_passes(&mut self, passes: Vec<String>);
@@ -18,6 +49,12 @@ pub trait UserInput {
 
     fn set_ignore_global_asm(&mut self, global_asm: bool);
     fn get_ignore_global_asm(&self) -> bool;
+
+    fn set_reachability_analysis(&mut self, reachability: ReachabilityType);
+    fn get_reachability_analysis(&self) -> ReachabilityType;
+
+    #[cfg(feature = "unsound_experiments")]
+    fn get_unsound_experiments(&self) -> Arc<Mutex<UnsoundExperiments>>;
 }
 
 #[derive(Debug, Default)]
@@ -27,6 +64,9 @@ pub struct QueryDb {
     symbol_table_passes: Vec<String>,
     json_pretty_print: AtomicBool,
     ignore_global_asm: AtomicBool,
+    reachability_analysis: Mutex<ReachabilityType>,
+    #[cfg(feature = "unsound_experiments")]
+    unsound_experiments: Arc<Mutex<UnsoundExperiments>>,
 }
 
 impl UserInput for QueryDb {
@@ -68,5 +108,18 @@ impl UserInput for QueryDb {
 
     fn get_ignore_global_asm(&self) -> bool {
         self.ignore_global_asm.load(Ordering::Relaxed)
+    }
+
+    fn set_reachability_analysis(&mut self, reachability: ReachabilityType) {
+        *self.reachability_analysis.get_mut().unwrap() = reachability;
+    }
+
+    fn get_reachability_analysis(&self) -> ReachabilityType {
+        *self.reachability_analysis.lock().unwrap()
+    }
+
+    #[cfg(feature = "unsound_experiments")]
+    fn get_unsound_experiments(&self) -> Arc<Mutex<UnsoundExperiments>> {
+        self.unsound_experiments.clone()
     }
 }

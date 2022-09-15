@@ -12,6 +12,7 @@ src = "src"
 site-url = "/kani/rfc/"
 git-repository-url = "https://github.com/model-checking/kani"
 edit-url-template = "https://github.com/model-checking/kani/edit/main/rfc/{path}"
+no-section-label = true
 
 [output.html.playground]
 runnable = false

@@ -36,6 +36,11 @@ jobs:
             echo "Git tag ${{env.TAG_VERSION}} did not match crate version ${{env.CRATE_VERSION}}"
             exit 1
           fi
+          # Check the action script's tag.
+          if ! grep -F "image: docker://ghcr.io/model-checking/kani-ubuntu-20.04:${{ env.TAG_VERSION }}" action.yml; then
+            echo "Git tag ${{env.TAG_VERSION}} did not match version in action.yml"
+            exit 1;
+          fi
 
       - name: Create release
         id: create_release
@@ -71,7 +76,7 @@ jobs:
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
         with:
-            os: ${{ matrix.os }}
+          os: ${{ matrix.os }}
 
       - name: Build release bundle
         run: |
@@ -138,3 +143,10 @@ jobs:
             org.opencontainers.image.source=${{ github.repositoryUrl }}
             org.opencontainers.image.version=${{ needs.Release.outputs.version }}
             org.opencontainers.image.licenses=Apache-2.0 OR MIT
+
+      # This check will not work until #1655 is completed.
+      # - name: Check action and image is updated.
+      #   uses: ./.
+      #   with:
+      #     command: |
+      #       [[ "$(cargo kani --version)" == 'cargo-kani ${{ needs.Release.outputs.version }}' ]]

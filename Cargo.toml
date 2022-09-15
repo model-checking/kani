@@ -3,7 +3,7 @@
 
 [package]
 name = "kani-verifier"
-version = "0.9.0"
+version = "0.10.0"
 edition = "2021"
 description = "A bit-precise model checker for Rust."
 readme = "README.md"
@@ -64,4 +64,5 @@ exclude = [
   "tests/cargo-kani",
   "tests/perf",
   "tests/cargo-ui",
+  "tests/slow",
 ]

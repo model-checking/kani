@@ -29,15 +29,17 @@ extern crate rustc_target;
 mod codegen_cprover_gotoc;
 mod parser;
 mod session;
+mod unsound_experiments;
 
 use crate::session::init_session;
 use clap::ArgMatches;
-use kani_queries::{QueryDb, UserInput};
+use kani_queries::{QueryDb, ReachabilityType, UserInput};
 use rustc_driver::{Callbacks, RunCompiler};
 use std::env;
 use std::ffi::OsStr;
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::str::FromStr as _;
 
 /// This function generates all rustc configurations required by our goto-c codegen.
 fn rustc_gotoc_flags(lib_path: &str) -> Vec<String> {
@@ -90,6 +92,14 @@ fn main() -> Result<(), &'static str> {
     queries.set_check_assertion_reachability(matches.is_present(parser::ASSERTION_REACH_CHECKS));
     queries.set_output_pretty_json(matches.is_present(parser::PRETTY_OUTPUT_FILES));
     queries.set_ignore_global_asm(matches.is_present(parser::IGNORE_GLOBAL_ASM));
+    queries.set_reachability_analysis(
+        ReachabilityType::from_str(matches.value_of(parser::REACHABILITY).unwrap()).unwrap(),
+    );
+    #[cfg(feature = "unsound_experiments")]
+    crate::unsound_experiments::arg_parser::add_unsound_experiment_args_to_queries(
+        &mut queries,
+        &matches,
+    );
 
     // Generate rustc args.
     let rustc_args = generate_rustc_args(&matches);
