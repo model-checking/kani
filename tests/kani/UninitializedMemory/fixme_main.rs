@@ -1,10 +1,11 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// At the moment, Kani is unable to detect the usage of uninitialized memory
-// See https://github.com/model-checking/kani/issues/920
-
 // kani-verify-fail
+
+// This tests demonstrates that Kani is unable to detect reads from
+// uninitialized memory, which is considered undefined behavior.
+// More details in https://github.com/model-checking/kani/issues/920
 
 #[kani::proof]
 fn main() {
