@@ -637,6 +637,8 @@ mod test {
             ..Config::default()
         });
 
+        // Due to kani-side limitations in kani::expect_fail, this test had to be modified. However
+        // it should be reverted once the issue is fixed. See #1679 for details.
         runner
             .run(&(0u32..1000), |v| {
                 prop_assert!(v < 1000);
