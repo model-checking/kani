@@ -30,6 +30,7 @@ use std::fmt::Write;
 use std::io::BufWriter;
 use std::iter::FromIterator;
 use std::path::Path;
+use std::process::Command;
 use std::rc::Rc;
 use tracing::{debug, warn};
 
@@ -152,6 +153,7 @@ impl CodegenBackend for GotocCodegenBackend {
             if let Some(restrictions) = vtable_restrictions {
                 write_file(&base_filename, "restrictions.json", &restrictions, pretty);
             }
+            symbol_table_to_gotoc(&tcx, &base_filename);
         }
         codegen_results(tcx, rustc_metadata, symtab.machine_model())
     }
@@ -386,5 +388,22 @@ fn collect_codegen_items<'tcx>(gcx: &GotocCtx<'tcx>) -> Vec<MonoItem<'tcx>> {
             tcx.sess.abort_if_errors();
             unreachable!("Session should've been aborted")
         }
+    }
+}
+
+fn symbol_table_to_gotoc(tcx: &TyCtxt, file: &Path) {
+    let output_filename = file.with_extension("symtab.out");
+    let input_filename = file.with_extension("symtab.json");
+
+    let args =
+        vec![input_filename.into_os_string(), "--out".into(), output_filename.into_os_string()];
+    // TODO get symtab2gb path from self
+    let mut cmd = Command::new("symtab2gb");
+    cmd.args(args);
+    if cmd.status().is_err() {
+        let err_msg =
+            format!("Failed symtab2gb on file {}.", file.with_extension("symtab.json").display());
+        tcx.sess.err(&err_msg);
+        tcx.sess.abort_if_errors();
     }
 }

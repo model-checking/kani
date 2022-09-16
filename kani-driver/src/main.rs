@@ -16,7 +16,6 @@ mod call_cbmc_viewer;
 mod call_goto_cc;
 mod call_goto_instrument;
 mod call_single_file;
-mod call_symtab;
 mod cbmc_output_parser;
 mod concrete_playback;
 mod harness_runner;
@@ -44,7 +43,9 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
 
     let mut goto_objs: Vec<PathBuf> = Vec::new();
     for symtab in &outputs.symtabs {
-        goto_objs.push(ctx.symbol_table_to_gotoc(symtab)?);
+        let goto_obj_filename = symtab.with_extension("out");
+        ctx.record_temporary_files(&[&goto_obj_filename]);
+        goto_objs.push(goto_obj_filename);
     }
 
     if ctx.args.only_codegen {
@@ -81,7 +82,8 @@ fn standalone_main() -> Result<()> {
 
     let outputs = ctx.compile_single_rust_file(&args.input)?;
 
-    let goto_obj = ctx.symbol_table_to_gotoc(&outputs.symtab)?;
+    let goto_obj = outputs.symtab.with_extension("out");
+    ctx.record_temporary_files(&[&goto_obj]);
 
     if ctx.args.only_codegen {
         return Ok(());
