@@ -121,6 +121,11 @@ pub struct KaniArgs {
     /// Kani will only compile the crate. No verification will be performed
     #[structopt(long, hidden_short_help(true))]
     pub only_codegen: bool,
+    /// Enables experimental MIR Linker. This option will affect how Kani prunes the code to be
+    /// analyzed. Please report any missing function issue found here:
+    /// <https://github.com/model-checking/kani/issues/new/choose>
+    #[structopt(long, hidden = true, requires("enable-unstable"))]
+    pub mir_linker: bool,
     /// Compiles Kani harnesses in all features of all packages selected on the command-line.
     #[structopt(long)]
     pub all_features: bool,
@@ -128,7 +133,7 @@ pub struct KaniArgs {
     #[structopt(long)]
     pub workspace: bool,
     /// Run Kani on the specified packages.
-    #[structopt(long, short)]
+    #[structopt(long, short, conflicts_with("workspace"))]
     pub package: Vec<String>,
 
     /// Specify the value used for loop unwinding in CBMC

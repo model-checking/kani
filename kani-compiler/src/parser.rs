@@ -5,7 +5,9 @@ use clap::{
     app_from_crate, crate_authors, crate_description, crate_name, crate_version, App, AppSettings,
     Arg,
 };
+use kani_queries::ReachabilityType;
 use std::env;
+use strum::VariantNames as _;
 
 /// Option name used to set log level.
 pub const LOG_LEVEL: &str = "log-level";
@@ -39,6 +41,10 @@ pub const IGNORE_GLOBAL_ASM: &str = "ignore-global-asm";
 
 /// Option name used to override the sysroot.
 pub const SYSROOT: &str = "sysroot";
+
+/// Option name used to select which reachability analysis to perform.
+pub const REACHABILITY: &str = "reachability";
+pub const REACHABILITY_FLAG: &str = "--reachability";
 
 /// Option name used to pass extra rustc-options.
 pub const RUSTC_OPTIONS: &str = "rustc-options";
@@ -134,6 +140,14 @@ pub fn parser<'a, 'b>() -> App<'a, 'b> {
                 .help("Check the reachability of every assertion."),
         )
         .arg(
+            Arg::with_name(REACHABILITY)
+                .long(REACHABILITY_FLAG)
+                .possible_values(ReachabilityType::VARIANTS)
+                .required(false)
+                .default_value(ReachabilityType::None.as_ref())
+                .help("Selects the type of reachability analysis to perform."),
+        )
+        .arg(
             Arg::with_name(PRETTY_OUTPUT_FILES)
                 .long("--pretty-json-files")
                 .help("Output json files in a more human-readable format (with spaces)."),
@@ -162,14 +176,24 @@ pub fn command_arguments(args: &Vec<String>) -> Vec<String> {
     assert!(!args.is_empty(), "Arguments should always include executable name");
     let has_kani_flags = args.iter().any(|arg| arg.eq(KANI_ARGS_FLAG));
     if has_kani_flags {
+        let mut filter_args = vec![KANI_ARGS_FLAG];
         let mut new_args: Vec<String> = Vec::new();
         new_args.push(args[0].clone());
+        // For cargo kani, --reachability is included as a rustc argument.
+        let reachability = args.iter().find(|arg| arg.starts_with(REACHABILITY_FLAG));
+        if let Some(value) = reachability {
+            new_args.push(value.clone());
+            filter_args.push(value)
+        }
+        // Add all the other kani specific arguments are inside $KANIFLAGS.
         let env_flags = env::var(KANIFLAGS_ENV_VAR).unwrap_or_default();
         new_args.extend(
             shell_words::split(&env_flags)
                 .expect(&format!("Cannot parse {} value '{}'", KANIFLAGS_ENV_VAR, env_flags)),
         );
-        new_args.extend(args[1..].iter().filter(|&arg| arg.ne(KANI_ARGS_FLAG)).cloned());
+        // Add the leftover arguments for rustc at the end.
+        new_args
+            .extend(args[1..].iter().filter(|&arg| !filter_args.contains(&arg.as_str())).cloned());
         new_args
     } else {
         args.clone()
