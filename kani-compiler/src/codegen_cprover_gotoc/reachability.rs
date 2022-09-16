@@ -391,6 +391,22 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
 ///
 impl<'tcx> MirVisitor<'tcx> for MonoItemsCollector<'tcx> {}
 
+/// Collect all items in the crate that matches the given predicate.
+pub fn filter_crate_items<F>(tcx: TyCtxt, predicate: F) -> Vec<MonoItem>
+where
+    F: FnMut(TyCtxt, DefId) -> bool,
+{
+    // Filter proof harnesses.
+    let mut filter = predicate;
+    tcx.hir_crate_items(())
+        .items()
+        .filter_map(|hir_id| {
+            let def_id = hir_id.def_id.to_def_id();
+            filter(tcx, def_id).then(|| MonoItem::Fn(Instance::mono(tcx, def_id)))
+        })
+        .collect()
+}
+
 /// This is the reachability starting point. We start from every static item and proof harnesses.
 pub fn collect_reachable_items<'tcx>(
     tcx: TyCtxt<'tcx>,

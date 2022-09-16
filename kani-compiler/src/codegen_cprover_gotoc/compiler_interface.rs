@@ -3,7 +3,7 @@
 
 //! This file contains the code necessary to interface with the compiler backend
 
-use crate::codegen_cprover_gotoc::reachability::collect_reachable_items;
+use crate::codegen_cprover_gotoc::reachability::{collect_reachable_items, filter_crate_items};
 use crate::codegen_cprover_gotoc::GotocCtx;
 use bitflags::_core::any::Any;
 use cbmc::goto_program::{symtab_transformer, Location};
@@ -14,11 +14,12 @@ use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_codegen_ssa::{CodegenResults, CrateInfo};
 use rustc_data_structures::fx::FxHashMap;
 use rustc_errors::ErrorGuaranteed;
+use rustc_hir::def::DefKind;
 use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
 use rustc_middle::mir::mono::{CodegenUnit, MonoItem};
 use rustc_middle::ty::query::Providers;
-use rustc_middle::ty::{self, Instance, TyCtxt};
+use rustc_middle::ty::{self, TyCtxt};
 use rustc_session::config::{OutputFilenames, OutputType};
 use rustc_session::cstore::MetadataLoaderDyn;
 use rustc_session::Session;
@@ -52,21 +53,22 @@ impl CodegenBackend for GotocCodegenBackend {
 
     fn provide_extern(&self, _providers: &mut ty::query::ExternProviders) {}
 
-    fn codegen_crate<'tcx>(
+    fn codegen_crate(
         &self,
-        tcx: TyCtxt<'tcx>,
+        tcx: TyCtxt,
         rustc_metadata: EncodedMetadata,
         need_metadata_module: bool,
     ) -> Box<dyn Any> {
         super::utils::init();
 
-        check_target(tcx.sess);
-        check_options(tcx.sess, need_metadata_module);
-
         // Follow rustc naming convention (cx is abbrev for context).
         // https://rustc-dev-guide.rust-lang.org/conventions.html#naming-conventions
         let mut gcx = GotocCtx::new(tcx, self.queries.clone());
-        let items = collect_codegen_items(tcx, &gcx);
+        check_target(tcx.sess);
+        check_options(tcx.sess, need_metadata_module);
+        check_crate_items(&gcx);
+
+        let items = collect_codegen_items(&gcx);
         if items.is_empty() {
             // There's nothing to do.
             return codegen_results(tcx, rustc_metadata, gcx.symbol_table.machine_model());
@@ -89,20 +91,7 @@ impl CodegenBackend for GotocCodegenBackend {
                         def_id,
                     );
                 }
-                MonoItem::GlobalAsm(_) => {
-                    if !self.queries.get_ignore_global_asm() {
-                        let error_msg = format!(
-                            "Crate {} contains global ASM, which is not supported by Kani. Rerun with `--enable-unstable --ignore-global-asm` to suppress this error (**Verification results may be impacted**).",
-                            gcx.short_crate_name()
-                        );
-                        tcx.sess.err(&error_msg);
-                    } else {
-                        warn!(
-                            "Ignoring global ASM in crate {}. Verification results may be impacted.",
-                            gcx.short_crate_name()
-                        );
-                    }
-                }
+                MonoItem::GlobalAsm(_) => {} // Ignore this. We have already warned about it.
             }
         }
 
@@ -149,7 +138,7 @@ impl CodegenBackend for GotocCodegenBackend {
             None
         };
 
-        let metadata = KaniMetadata { proof_harnesses: gcx.proof_harnesses.clone() };
+        let metadata = KaniMetadata { proof_harnesses: gcx.proof_harnesses };
 
         // No output should be generated if user selected no_codegen.
         if !tcx.sess.opts.unstable_opts.no_codegen && tcx.sess.opts.output_types.should_codegen() {
@@ -274,6 +263,34 @@ fn check_options(session: &Session, need_metadata_module: bool) {
     session.abort_if_errors();
 }
 
+/// Check that all crate items are supported and there's no misconfiguration.
+/// This method will exhaustively print any error / warning and it will abort at the end if any
+/// error was found.
+fn check_crate_items(gcx: &GotocCtx) {
+    let tcx = gcx.tcx;
+    for item in tcx.hir_crate_items(()).items() {
+        let def_id = item.def_id.to_def_id();
+        gcx.check_attributes(def_id);
+        if tcx.def_kind(def_id) == DefKind::GlobalAsm {
+            if !gcx.queries.get_ignore_global_asm() {
+                let error_msg = format!(
+                    "Crate {} contains global ASM, which is not supported by Kani. Rerun with \
+                    `--enable-unstable --ignore-global-asm` to suppress this error \
+                    (**Verification results may be impacted**).",
+                    gcx.short_crate_name()
+                );
+                tcx.sess.err(&error_msg);
+            } else {
+                warn!(
+                    "Ignoring global ASM in crate {}. Verification results may be impacted.",
+                    gcx.short_crate_name()
+                );
+            }
+        }
+    }
+    tcx.sess.abort_if_errors();
+}
+
 fn write_file<T>(base_filename: &Path, extension: &str, source: &T, pretty: bool)
 where
     T: serde::Serialize,
@@ -329,20 +346,9 @@ fn codegen_results(
     ))
 }
 
-/// Collect all harnesses in the current crate.
-fn collect_harnesses<'tcx>(tcx: TyCtxt<'tcx>, gcx: &GotocCtx) -> Vec<MonoItem<'tcx>> {
-    // Filter proof harnesses.
-    tcx.hir_crate_items(())
-        .items()
-        .filter_map(|hir_id| {
-            let def_id = hir_id.def_id.to_def_id();
-            gcx.is_proof_harness(def_id).then(|| MonoItem::Fn(Instance::mono(tcx, def_id)))
-        })
-        .collect()
-}
-
 /// Retrieve all items that need to be processed.
-fn collect_codegen_items<'tcx>(tcx: TyCtxt<'tcx>, gcx: &GotocCtx) -> Vec<MonoItem<'tcx>> {
+fn collect_codegen_items<'tcx>(gcx: &GotocCtx<'tcx>) -> Vec<MonoItem<'tcx>> {
+    let tcx = gcx.tcx;
     let reach = gcx.queries.get_reachability_analysis();
     debug!(?reach, "starting_points");
     match reach {
@@ -357,7 +363,7 @@ fn collect_codegen_items<'tcx>(tcx: TyCtxt<'tcx>, gcx: &GotocCtx) -> Vec<MonoIte
         }
         ReachabilityType::Harnesses => {
             // Cross-crate collecting of all items that are reachable from the crate harnesses.
-            let harnesses = collect_harnesses(tcx, gcx);
+            let harnesses = filter_crate_items(tcx, |_, def_id| gcx.is_proof_harness(def_id));
             collect_reachable_items(tcx, &harnesses).into_iter().collect()
         }
         ReachabilityType::None => Vec::new(),
@@ -368,7 +374,8 @@ fn collect_codegen_items<'tcx>(tcx: TyCtxt<'tcx>, gcx: &GotocCtx) -> Vec<MonoIte
                 ReachabilityType::PubFns.as_ref()
             );
             tcx.sess.err(&err_msg);
-            Vec::new()
+            tcx.sess.abort_if_errors();
+            unreachable!("Session should've been aborted")
         }
     }
 }
