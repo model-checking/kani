@@ -275,7 +275,8 @@ fn format_unit_test(
     let concrete_playback = format!(
 "#[test]
 fn {concrete_playback_func_name}() {{
-    {randomize_layout_message}let concrete_vals: Vec<Vec<u8>> = vec![
+    {randomize_layout_message}\
+    let concrete_vals: Vec<Vec<u8>> = vec![
 {vecs_as_str}
     ];
     kani::concrete_playback_run(concrete_vals, {harness_name});
