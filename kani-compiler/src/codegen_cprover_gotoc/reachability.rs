@@ -13,7 +13,9 @@
 //!   - For every static, collect initializer and drop functions.
 //!
 //! We have kept this module agnostic of any Kani code in case we can contribute this back to rustc.
+use rustc_data_structures::fingerprint::Fingerprint;
 use rustc_data_structures::fx::FxHashSet;
+use rustc_data_structures::stable_hasher::{HashStable, StableHasher};
 use rustc_middle::mir::interpret::{AllocId, ConstValue, ErrorHandled, GlobalAlloc, Scalar};
 use rustc_middle::mir::mono::MonoItem;
 use rustc_middle::mir::visit::Visitor as MirVisitor;
@@ -407,6 +409,16 @@ where
         .collect()
 }
 
+/// Convert a `MonoItem` into a stable `Fingerprint` which can be used as a stable hash across
+/// compilation sessions. This allow us to provide a stable deterministic order to codegen.
+fn to_fingerprint(tcx: TyCtxt, item: &MonoItem) -> Fingerprint {
+    tcx.with_stable_hashing_context(|mut hcx| {
+        let mut hasher = StableHasher::new();
+        item.hash_stable(&mut hcx, &mut hasher);
+        hasher.finish()
+    })
+}
+
 /// This is the reachability starting point. We start from every static item and proof harnesses.
 pub fn collect_reachable_items<'tcx>(
     tcx: TyCtxt<'tcx>,
@@ -422,7 +434,8 @@ pub fn collect_reachable_items<'tcx>(
     // This helps us to debug the code, but it also provides the user a good experience since the
     // order of the errors and warnings is stable.
     let mut sorted_items: Vec<_> = collector.collected.into_iter().collect();
-    sorted_items.sort_by_cached_key(|item| item.to_string());
+    sorted_items.sort_by_cached_key(|item| to_fingerprint(tcx, item));
+    sorted_items.iter().for_each(|item| println!("{:?}", item));
     sorted_items
 }
 
