@@ -3,6 +3,7 @@
 
 use anyhow::Result;
 use kani_metadata::HarnessMetadata;
+use rayon::prelude::*;
 use std::path::{Path, PathBuf};
 
 use crate::call_cbmc::VerificationStatus;
@@ -45,26 +46,37 @@ impl<'sess> HarnessRunner<'sess> {
     ) -> Result<Vec<HarnessResult<'a>>> {
         let sorted_harnesses = crate::metadata::sort_harnesses_by_loc(harnesses);
 
-        let mut results = vec![];
-
-        for harness in &sorted_harnesses {
-            let harness_filename = harness.pretty_name.replace("::", "-");
-            let report_dir = self.report_base.join(format!("report-{}", harness_filename));
-            let specialized_obj = specialized_harness_name(self.linked_obj, &harness_filename);
-            if !self.retain_specialized_harnesses {
-                let mut temps = self.sess.temporaries.borrow_mut();
-                temps.push(specialized_obj.to_owned());
+        let pool = {
+            let mut builder = rayon::ThreadPoolBuilder::new();
+            if let Some(x) = self.sess.args.jobs() {
+                builder = builder.num_threads(x);
             }
-            self.sess.run_goto_instrument(
-                self.linked_obj,
-                &specialized_obj,
-                self.symtabs,
-                &harness.mangled_name,
-            )?;
+            builder.build()?
+        };
 
-            let result = self.sess.check_harness(&specialized_obj, &report_dir, harness)?;
-            results.push(HarnessResult { harness, result });
-        }
+        let results = pool.install(|| -> Result<Vec<HarnessResult<'a>>> {
+            sorted_harnesses
+                .par_iter()
+                .map(|harness| -> Result<HarnessResult<'a>> {
+                    let harness_filename = harness.pretty_name.replace("::", "-");
+                    let report_dir = self.report_base.join(format!("report-{}", harness_filename));
+                    let specialized_obj =
+                        specialized_harness_name(self.linked_obj, &harness_filename);
+                    if !self.retain_specialized_harnesses {
+                        self.sess.record_temporary_files(&[&specialized_obj]);
+                    }
+                    self.sess.run_goto_instrument(
+                        self.linked_obj,
+                        &specialized_obj,
+                        self.symtabs,
+                        &harness.mangled_name,
+                    )?;
+
+                    let result = self.sess.check_harness(&specialized_obj, &report_dir, harness)?;
+                    Ok(HarnessResult { harness, result })
+                })
+                .collect::<Result<Vec<_>>>()
+        })?;
 
         Ok(results)
     }
