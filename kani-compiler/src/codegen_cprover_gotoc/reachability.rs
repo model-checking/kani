@@ -39,8 +39,6 @@ struct MonoItemsCollector<'tcx> {
     tcx: TyCtxt<'tcx>,
     /// Set of collected items used to avoid entering recursion loops.
     collected: FxHashSet<MonoItem<'tcx>>,
-    /// Keep items collected sorted by visiting order which should be more stable.
-    collected_sorted: Vec<MonoItem<'tcx>>,
     /// Items enqueued for visiting.
     queue: Vec<MonoItem<'tcx>>,
 }
@@ -60,7 +58,6 @@ impl<'tcx> MonoItemsCollector<'tcx> {
             let to_visit = self.queue.pop().unwrap();
             if !self.collected.contains(&to_visit) {
                 self.collected.insert(to_visit);
-                self.collected_sorted.push(to_visit);
                 match to_visit {
                     MonoItem::Fn(instance) => {
                         self.visit_fn(instance);
@@ -398,18 +395,19 @@ impl<'tcx> MirVisitor<'tcx> for MonoItemsCollector<'tcx> {}
 pub fn collect_reachable_items<'tcx>(
     tcx: TyCtxt<'tcx>,
     starting_points: &[MonoItem<'tcx>],
-) -> FxHashSet<MonoItem<'tcx>> {
+) -> Vec<MonoItem<'tcx>> {
     // For each harness, collect items using the same collector.
-    let mut collector = MonoItemsCollector {
-        tcx,
-        collected: FxHashSet::default(),
-        queue: vec![],
-        collected_sorted: vec![],
-    };
+    let mut collector = MonoItemsCollector { tcx, collected: FxHashSet::default(), queue: vec![] };
     for item in starting_points {
         collector.collect(*item);
     }
-    collector.collected
+
+    // Sort the result so code generation follows deterministic order.
+    // This helps us to debug the code, but it also provides the user a good experience since the
+    // order of the errors and warnings is stable.
+    let mut sorted_items: Vec<_> = collector.collected.into_iter().collect();
+    sorted_items.sort_by_cached_key(|item| item.to_string());
+    sorted_items
 }
 
 /// Return whether we should include the item into codegen.
