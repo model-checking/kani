@@ -5,14 +5,15 @@
 
 //! This file tests a hand-written spawn infrastructure and executor.
 //! This should be replaced with code from the Kani library as soon as the executor can get merged.
+//! Tracking issue: https://github.com/model-checking/kani/issues/1685
 
-use std::sync::{
-    atomic::{AtomicI64, Ordering},
-    Arc,
-};
 use std::{
     future::Future,
     pin::Pin,
+    sync::{
+        atomic::{AtomicI64, Ordering},
+        Arc,
+    },
     task::{Context, RawWaker, RawWakerVTable, Waker},
 };
 
@@ -34,20 +35,21 @@ const MAX_TASKS: usize = 16;
 
 type BoxFuture = Pin<Box<dyn Future<Output = ()> + Sync + 'static>>;
 
+/// Indicates to the scheduler whether it can `assume` that the returned task is running.
+/// This is useful if the task was picked nondeterministically using `any()`.
+pub enum SchedulingOptimization {
+    CanAssumeRunning,
+    CannotAssumeRunning,
+}
+
 /// Allows to parameterize how the scheduler picks the next task to poll in `spawnable_block_on`
 pub trait SchedulingStrategy {
     /// Picks the next task to be scheduled whenever the scheduler needs to pick a task to run next, and whether it can be assumed that the picked task is still running
     ///
     /// Tasks are numbered `0..num_tasks`.
-    /// For example, if pick_task(4) returns (2, true) than it picked the task with index 2 and allows Kani to `assume` that this task is still running.
+    /// For example, if pick_task(4) returns `(2, CanAssumeRunning)` than it picked the task with index 2 and allows Kani to `assume` that this task is still running.
     /// This is useful if the task is chosen nondeterministicall (`kani::any()`) and allows the verifier to discard useless execution branches (such as polling a completed task again).
-    fn pick_task(&mut self, num_tasks: usize) -> (usize, bool);
-}
-
-impl<F: FnMut(usize) -> usize> SchedulingStrategy for F {
-    fn pick_task(&mut self, num_tasks: usize) -> (usize, bool) {
-        (self(num_tasks), false)
-    }
+    fn pick_task(&mut self, num_tasks: usize) -> (usize, SchedulingOptimization);
 }
 
 /// Keeps cycling through the tasks in a deterministic order
@@ -57,9 +59,9 @@ pub struct RoundRobin {
 }
 
 impl SchedulingStrategy for RoundRobin {
-    fn pick_task(&mut self, num_tasks: usize) -> (usize, bool) {
+    fn pick_task(&mut self, num_tasks: usize) -> (usize, SchedulingOptimization) {
         self.index = (self.index + 1) % num_tasks;
-        (self.index, false)
+        (self.index, SchedulingOptimization::CannotAssumeRunning)
     }
 }
 
@@ -82,6 +84,7 @@ impl Scheduler {
         let index = self.num_tasks;
         self.tasks[index] = Some(Box::pin(fut));
         self.num_tasks += 1;
+        assert!(self.num_tasks < MAX_TASKS, "more than {} tasks", MAX_TASKS);
         self.num_running += 1;
         JoinHandle { index }
     }
@@ -101,7 +104,7 @@ impl Scheduler {
                     }
                     std::task::Poll::Pending => (),
                 }
-            } else if can_assume_running {
+            } else if let SchedulingOptimization::CanAssumeRunning = can_assume_running {
                 #[cfg(kani)]
                 kani::assume(false); // useful so that we can assume that a nondeterministically picked task is still running
             }
@@ -181,7 +184,7 @@ pub fn yield_now() -> impl Future<Output = ()> {
 
 #[kani::proof]
 #[kani::unwind(4)]
-fn deterministic_schedule() {
+fn arc_spawn_deterministic_test() {
     let x = Arc::new(AtomicI64::new(0)); // Surprisingly, Arc verified faster than Rc
     let x2 = x.clone();
     spawnable_block_on(
