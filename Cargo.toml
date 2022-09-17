@@ -64,4 +64,5 @@ exclude = [
   "tests/cargo-kani",
   "tests/perf",
   "tests/cargo-ui",
+  "tests/slow",
 ]
