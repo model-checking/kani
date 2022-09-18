@@ -8,7 +8,7 @@ use semver::{BuildMetadata, Prerelease, Version};
 fn check_version() {
     let next_major: u64 = kani::any();
     let next_minor: u64 = kani::any();
-    kani::assume(next_major.wrapping_add(next_minor) > 0);
+    kani::assume(next_major != 0 || next_minor != 0);
 
     // Check whether this requirement matches version 1.2.3-alpha.1 (no)
     let v0 = Version {
