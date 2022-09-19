@@ -3,7 +3,6 @@
 - **RFC PR:** *Link to original PR*
 - **Status:** Under Review
 - **Version:** 0
-- **Proof-of-concept:** *Optional field. If you have implemented a proof of concept, add a link here*
 
 ## Summary
 
@@ -36,14 +35,14 @@ fn mock_random<T: kani::Arbitrary>() -> T {
 }
 ```
 
-Under this substitution, Kani has a single check, which proves that the assertion can fail. Verification time is 0.03 seconds.
+Under this substitution, Kani has a single check, which proves that the assertion can fail. Verification time is 0.02 seconds.
 
 ## User Experience
 
 This feature is currently limited to stubbing functions; however, the hope is that the basic ideas and mechanisms will carry over to stubbing other features in the future (such as methods and types).
 
 Stubs will be specified per harness; that is, different harnesses can use different stubs (the reasoning being that users might want to mock different behavior for different harnesses).
-Users will specify stubs by attaching the `#[kani::stub_by(original, replacement)]` attribute to each harness function.
+Users will specify stubs by attaching the `#[kani::stub_by(<original>, <replacement>)]` attribute to each harness function.
 The attribute may be specified multiple times per harness, so that multiple (non-conflicting) stub pairings are supported.
 The arguments `original` and `replacement` give the names of functions, relative to the crate of the harness (*not* relative to the module of the harness).
 
@@ -81,27 +80,91 @@ To teach this feature, we will update the documentation with a section on functi
 
 ## Detailed Design
 
-This is the technical portion of the RFC. Please provide high level details of the implementation you have in mind:
+This feature will require substantial changes both to `kani-driver` and `kani-compiler`.
 
-- What are the main components that will be modified? (E.g.: changes to `kani-compiler`, `kani-driver`, metadata,
-  installation...)
-- How will they be modified? Any changes to how these components communicate?
-- Will this require any new dependency?
-- What corner cases do you anticipate?
+`kani-driver` will need to be responsible for determining which stubs are required for each harness, which will require moving the code for identifying harnesses from `kani-compiler` to `kani-driver`.
+After `kani-driver` has determined the set of stubs to use for each harness, it will invoke `kani-compiler` once for each set of stubs, passing the relevant stub pairings as command line arguments.
+The output of `kani-compiler` will be specialized to that stub set.
+After `kani-compiler` has finished compiling under a given stub set, `kani-driver` will run the harnesses that use that stub set.
+
+`kani-compiler` will be extended with a command line option specifying stub pairings, and a new MIR-to-MIR transformation that replaces the bodies of specified functions with their replacements.
+This can be achieved via `rustc`'s query mechanism: if the user wants to replace `foo` with `bar`, then when the compiler requests the MIR for `foo`, we instead return the MIR for `bar`.
+`kani-compiler` will be responsible for checking for the error conditions enumerated in the previous section.
 
 ## Rationale and alternatives
 
-- What are the pros and cons of this design?
-- What is the impact of not doing this?
-- What other designs have you considered? Why didn't you choose them?
+The lack of stubbing has a substantial negative impact on the usability of Kani: stubbing is a *de facto* necessity for verification tools.
+
+### Benefits
+
+- The current design provides the user with flexibility, as they can specify different sets of stubs to use for different harnesses.
+- Because stubs are specified by annotating the harness, the user is able to specify stubs for functions they do not have source access to (like library functions).
+This contrasts with annotating the function to be replaced.
+- The stub mappings are all located right by the harness, which makes it easy to understand which replacements are going to happen for each harness.
+
+### Risks
+
+- Allowing per-harness stubs complicates the architecture of Kani, as (according to the current design) it requires `kani-driver` to call `kani-compiler` multiple times.
+If stubs were uniformly applied, then we could get away with a single call to `kani-compiler`.
+
+### Alternative #1: Annotate stubs
+
+In this alternative, users add an attribute `#[kani::stub(<original>)]` to the stub function itself, saying which function it replaces:
+
+```rust
+#[cfg(kani)]
+#[kani::stub(rand::random)]
+fn mock_random<T: kani::Arbitrary>() -> T { ... }
+```
+
+The downside is that this stub must be uniformly applied across all harnesses and the stub specifications might be spread out across multiple files.
+
+### Alternative #2: Annotate harnesses and stubs 
+
+This alternative combines the proposed solution and Alternative #2.
+Users annotate the stub (as in Alternative #2) and specify for each harness which stubs to use using an annotation `#[kani::use_stubs(<stub>+)]` placed above the harness.
+
+This could be combined with modules, so that a module can be used to group stubs together, and then harnesses could pull in all the stubs in the module:
+
+```rust
+#[cfg(kani)]
+mod my_stubs {
+
+  #[kani::stub(foo)]
+  fn stub1() { ... }
+
+  #[kani::stub(bar)]
+  fn stub2() { ... }
+
+}
+
+#(cfg[kani])
+#[kani::proof]
+#[kani::use_stubs(my_stubs)]
+fn my_harness() { ... }
+```
+
+The benefit is that stubs are specified per harness, and (using modules) it might be possible to group stubs together.
+The downside is that multiple annotations are required and the stub mappings themselves are remote from the harness.
+
+### Alternative #3:  Specify stubs in a file 
+
+One alternative would be to specify stubs in a file that is passed to `kani-driver` via a command line option.
+Users would specify per-harness stub pairings in the file; JSON would be a possible format.
+Using a file would eliminate the need for `kani-driver` to extract harness information from the Rust source code; the rest of the implementation would stay the same.
+It would also allow the same harness to be run with different stub selections (by supplying a different file).
+The disadvantage is that the stub selection is remote from the harness itself.
 
 ## Open questions
 
-- Is there any part of the design that you expect to resolve through the RFC process?
-- What kind of user feedback do you expect to gather before stabilization? How will this impact your design?
-- Would there ever be the need to stub particular monomorphizations of functions, as opposed to the generic function?
+- Is it worth supporting per-harness stubs, given the extra complication (over using a single stub set for all harnesses)? Do we have good use cases for this?
+- How will the required updates to `kani-driver` (e.g., calling `kani-compiler` multiple times) mesh with efforts to parallelize `kani-driver`?
+- Would there ever be the need to stub a particular monomorphization of a function, as opposed to the polymorphic function?
+This would impact at what stage of the compiler we do the function replacements. 
 
 ## Future possibilities
 
-What are natural extensions and possible improvements that you predict for this feature that is out of the
-scope of this RFC? Feel free to brainstorm here.
+- It would increase the utility of stubbing if we supported stubs for features beyond functions, such as methods and types.
+The source code annotations and the interaction between `kani-driver` and `kani-compiler` could likely stay the same, although the underlying technical mechanisms in `kani-compiler` performing these substitutions might be significantly more complex.
+- It would probably make sense to provide a library of common stubs for users, since many applications might want to stub the same functions and mock the same behaviors (e.g., `rand::random` can be replaced with a function returning `kani::any`).
+- Users might reasonably want to use the same set of stubs across multiple harnesses; it might be useful to provide a mechanism for defining and referencing a stub group.
