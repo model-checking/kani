@@ -33,7 +33,7 @@ enum InstallType {
     /// We're operating in a a checked out repo that's been built locally.
     /// The path here is to the root of the repo.
     DevRepo(PathBuf),
-    /// We're operating from a release bundle (made with `make-kani-release`).
+    /// We're operating from a release bundle (made with `build-kani release`).
     /// The path here to where this release bundle has been unpacked.
     Release(PathBuf),
 }

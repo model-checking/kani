@@ -4,43 +4,50 @@
 //! This file is a glorified shell script for constructing a Kani release bundle.
 //! We use Rust here just to aid in making the "script" more robust.
 //!
-//! Run with `cargo run -p make-kani-release -- <version>` and this will produce
+//! Run with `cargo run -p build-kani -- release` and this will produce
 //! (e.g.) `kani-1.0-x86_64-unknown-linux-gnu.tar.gz`.
 
+mod parser;
+mod sysroot;
+
+use crate::sysroot::build_sysroot;
+use anyhow::{bail, Result};
+use clap::Parser;
 use std::{ffi::OsString, path::Path, process::Command};
 
-use anyhow::{bail, Result};
-
 fn main() -> Result<()> {
-    let version_string = parse_args()?;
-    let kani_string = format!("kani-{}", version_string);
-    let bundle_name = format!("{}-{}.tar.gz", kani_string, env!("TARGET"));
-    let dir = Path::new(&kani_string);
+    let args = parser::ArgParser::parse();
 
-    // Check everything is ready before we start copying files
-    prebundle(dir)?;
+    match args.subcommand {
+        parser::Commands::Dev => {
+            build_sysroot();
+            build_binaries(&[]);
+        }
+        parser::Commands::Release => {
+            let version_string = env!("CARGO_PKG_VERSION");
+            let kani_string = format!("kani-{}", version_string);
+            let bundle_name = format!("{}-{}.tar.gz", kani_string, env!("TARGET"));
+            let dir = Path::new(&kani_string);
 
-    std::fs::create_dir(dir)?;
+            // Check everything is ready before we start copying files
+            println!("-- Build release bundle {bundle_name}");
+            prebundle(dir)?;
 
-    bundle_kani(dir)?;
-    bundle_cbmc(dir)?;
-    // cbmc-viewer isn't bundled, it's pip install'd on first-time setup
+            std::fs::create_dir(dir)?;
 
-    create_release_bundle(dir, &bundle_name)?;
+            bundle_kani(dir)?;
+            bundle_cbmc(dir)?;
+            // cbmc-viewer isn't bundled, it's pip install'd on first-time setup
 
-    std::fs::remove_dir_all(dir)?;
+            create_release_bundle(dir, &bundle_name)?;
 
-    println!("\nSuccessfully built release bundle: {}", bundle_name);
-    Ok(())
-}
+            std::fs::remove_dir_all(dir)?;
 
-/// Parse command line arguments, and return the only thing we expect: a version string
-fn parse_args() -> Result<String> {
-    let args: Vec<_> = std::env::args().collect();
-    if args.len() != 2 {
-        bail!("Usage: cargo run -p make-kani-release -- <version>");
+            println!("\nSuccessfully built release bundle: {}", bundle_name);
+        }
     }
-    Ok(args[1].clone())
+
+    Ok(())
 }
 
 /// Ensures everything is good to go before we begin to build the release bundle.
@@ -61,10 +68,13 @@ fn prebundle(dir: &Path) -> Result<()> {
         bail!("Couldn't find the 'cbmc' binary to include in the release bundle.");
     }
 
-    // Before we begin, ensure Kani is built successfully in release mode.
-    Command::new("cargo").args(&["build", "--release"]).run()?;
-
+    build_binaries(&["--release"]);
     Ok(())
+}
+
+fn build_binaries(args: &[&str]) {
+    // Before we begin, ensure Kani is built successfully in release mode.
+    Command::new("cargo").arg("build").args(args).run().expect("Failed to build binaries.");
 }
 
 /// Copy Kani files into `dir`
@@ -105,7 +115,7 @@ fn bundle_cbmc(dir: &Path) -> Result<()> {
     // We depend on other scripts to set up our environment correctly first.
     // This means it's possible to erroneously use this script, which is not ideal. Fool-proof is best.
     // But the best fix would involve changing our CI process to do something like
-    // "make-kani-release" and then using *that* to run the test suite.
+    // "build-kani" and then using *that* to run the test suite.
     // That way, we could just specify here what versions to use, and not need it in other places.
 
     // I felt that would be too invasive of a change to make at this time, so we'll start
@@ -135,6 +145,7 @@ fn create_release_bundle(dir: &Path, bundle: &str) -> Result<()> {
 trait AutoRun {
     fn run(&mut self) -> Result<()>;
 }
+
 impl AutoRun for Command {
     fn run(&mut self) -> Result<()> {
         let status = self.status()?;
@@ -145,15 +156,40 @@ impl AutoRun for Command {
     }
 }
 
+fn expect_dir(path: &Path) -> Result<()> {
+    if !path.is_dir() {
+        bail!("{} isn't a directory", path.to_string_lossy());
+    }
+    Ok(())
+}
+
 /// Copy a single file to a directory
 fn cp(src: &Path, dst: &Path) -> Result<()> {
-    if !dst.is_dir() {
-        bail!("{} isn't a directory", dst.to_string_lossy());
-    }
+    println!("{:?} -> {:?}", src, dst);
+    expect_dir(dst)?;
     let dst = dst.join(src.file_name().unwrap());
     std::fs::copy(src, dst)?;
     Ok(())
 }
+
+/// Copy files from `src` to  `dst` that respect the given pattern.
+pub fn cp_files<P>(src: &Path, dst: &Path, predicate: P) -> Result<()>
+where
+    P: FnMut(&Path) -> bool,
+{
+    expect_dir(src)?;
+    expect_dir(dst)?;
+    println!("cp_files: {:?} -> {:?}", src, dst);
+    let mut filter = predicate;
+    for item in std::fs::read_dir(src)? {
+        let path = item?.path();
+        if filter(&path) {
+            cp(&path, dst)?;
+        }
+    }
+    Ok(())
+}
+
 /// Invoke `cp -r`
 fn cp_dir(src: &Path, dst: &Path) -> Result<()> {
     let mut cmd = OsString::from("cp -r ");

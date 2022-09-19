@@ -1,6 +1,22 @@
 # Copyright Kani Contributors
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
+# Command aliases
+[alias]
+# Build kani with development configuration.
+build-dev = "run -p build-kani -- dev"
+# Build kani release bundle.
+build-release = "run -p build-kani -- release"
+
+# Constants used by different processes.
+# These constants should be evaluated during compilation via `env!()`.
+[env]
+KANI_REPO_ROOT={value = "", relative = true}
+KANI_DEV_SYSROOT={value = "target/lib", relative = true}
+KANI_DEV_LIBS={value = "target/kani-libs", relative = true}
+KANI_SYSROOT="kani-sysroot"
+KANI_LIBS="lib"
+
 [target.'cfg(all())']
 rustflags = [ # Global lints/warnings. Need to use underscore instead of -.
 

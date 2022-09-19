@@ -2,13 +2,14 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
 [package]
-name = "make-kani-release"
-version = "0.1.0"
+name = "build-kani"
+version = "0.10.0"
 edition = "2021"
-description = "Contructs a Kani release bundle"
+description = "Builds Kani, Sysroot and release bundle."
 license = "MIT OR Apache-2.0"
 publish = false
 
 [dependencies]
 anyhow = "1"
+clap = { version = "3.1", features=["derive"] }
 which = "4"
