@@ -47,7 +47,7 @@ Users will specify stubs by attaching the `#[kani::stub_by(original, replacement
 The attribute may be specified multiple times per harness, so that multiple (non-conflicting) stub pairings are supported.
 The arguments `original` and `replacement` give the names of functions, relative to the crate of the harness (*not* relative to the module of the harness).
 
-For example, this code specifies that the function `mock_random` should be used in place of the function `rand::random` for the harness `check_random`:
+For example, this code specifies that the function `mock_random` should be used in place of the function `rand::random` and the function `my_mod::foo` should be used in place of the function `my_mod::bar` for the harness `my_mod::my_harness`:
 
 ```rust
 #[cfg(kani)]
@@ -57,19 +57,27 @@ fn mock_random<T: kani::Arbitrary>() -> T {
 
 mod my_mod {
 
+    fn foo(x: u32) -> u32 { ... }
+
+    fn bar(x: u32) -> u32 { ... }
+
     #[cfg(kani)]
     #[kani::proof]
     #[kani::stub_by(rand::random, mock_random)]
-    fn check_random() {
-        assert!(rand::random::<u32>() != 0);
-    }
+    #[kani::stub_by(my_mod::foo, my_mod::bar)]
+    fn my_harness() { ... }
 
 }
 ```
 
-Kani will exit with an error if a specified `replacement` stub does not exist or if the user specifies conflicting stubs for the same harness (i.e., if the same `original` function is mapped to multiple `replacement` functions).
+Kani will exit with an error if
+
+1. a specified `replacement` stub does not exist;
+2. the user specifies conflicting stubs for the same harness (i.e., if the same `original` function is mapped to multiple `replacement` functions); or
+3. the signature of the `replacement` function is not compatible with the signature of the `original` function.
 
 To teach this feature, we will update the documentation with a section on function stubbing, including simple examples showing how stubbing can help Kani handle code that currently cannot be verified.
+
 
 ## Detailed Design
 
