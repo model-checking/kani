@@ -296,6 +296,12 @@ impl<'test> TestCx<'test> {
         if "expected" != self.testpaths.file.file_name().unwrap() {
             cargo.args(["--harness", function_name]);
         }
+
+        if self.config.mir_linker {
+            // Allow us to run the regression with the mir linker enabled by default.
+            cargo.arg("--enable-unstable").arg("--mir-linker");
+        }
+
         let proc_res = self.compose_and_run(cargo);
         let expected = fs::read_to_string(self.testpaths.file.clone()).unwrap();
         self.verify_output(&proc_res, &expected);
@@ -315,6 +321,12 @@ impl<'test> TestCx<'test> {
         if !self.props.compile_flags.is_empty() {
             kani.env("RUSTFLAGS", self.props.compile_flags.join(" "));
         }
+
+        if self.config.mir_linker {
+            // Allow us to run the regression with the mir linker enabled by default.
+            kani.arg("--enable-unstable").arg("--mir-linker");
+        }
+
         // Pass the test path along with Kani and CBMC flags parsed from comments at the top of the test file.
         kani.arg(&self.testpaths.file).args(&self.props.kani_flags);
 

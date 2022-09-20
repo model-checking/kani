@@ -4,9 +4,10 @@
 name = "mir-linker"
 version = "0.1.0"
 edition = "2021"
+description = "Ensures that the mir-linker works accross crates"
 
 [dependencies]
-rand = "0.8.4"
+semver = "1.0"
 
 [package.metadata.kani]
 flags = { mir-linker=true, enable-unstable=true }

@@ -1,0 +1,2 @@
+Failed Checks: unwinding assertion loop 0
+WARNING: Kani could not produce a concrete playback for `check_unwind_fail` because there were no failing panic checks.

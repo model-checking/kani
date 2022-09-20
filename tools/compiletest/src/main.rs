@@ -221,6 +221,7 @@ pub fn parse_config(args: Vec<String>) -> Config {
         edition: matches.opt_str("edition"),
 
         force_rerun: matches.opt_present("force-rerun"),
+        mir_linker: cfg!(mir_linker),
     }
 }
 
@@ -239,6 +240,7 @@ pub fn log_config(config: &Config) {
     logv(c, format!("host: {}", config.host));
     logv(c, format!("verbose: {}", config.verbose));
     logv(c, format!("quiet: {}", config.quiet));
+    logv(c, format!("mir_linker: {}", config.mir_linker));
     logv(c, "\n".to_string());
 }
 
