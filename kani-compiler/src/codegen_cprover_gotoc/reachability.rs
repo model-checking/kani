@@ -432,7 +432,6 @@ pub fn collect_reachable_items<'tcx>(
     // order of the errors and warnings is stable.
     let mut sorted_items: Vec<_> = collector.collected.into_iter().collect();
     sorted_items.sort_by_cached_key(|item| to_fingerprint(tcx, item));
-    sorted_items.iter().for_each(|item| println!("{:?}", item));
     sorted_items
 }
 
@@ -474,7 +473,7 @@ fn should_codegen_locally<'tcx>(tcx: TyCtxt<'tcx>, instance: &Instance<'tcx>) ->
 ///
 /// TODO: Do we need to handle &Wrapper<dyn T1> to &dyn T2 or is that taken care of with super
 /// trait handling? What about CoerceUnsized trait?
-/// https://github.com/model-checking/kani/issues/1692
+/// <https://github.com/model-checking/kani/issues/1692>
 fn extract_trait_casting<'tcx>(
     tcx: TyCtxt<'tcx>,
     src_ty: Ty<'tcx>,
@@ -499,7 +498,7 @@ fn extract_trait_casting<'tcx>(
 /// This function extracts the pointee type of a regular pointer and std smart pointers.
 ///
 /// TODO: Refactor this to use `CustomCoerceUnsized` logic which includes custom smart pointers.
-/// https://github.com/model-checking/kani/issues/1694
+/// <https://github.com/model-checking/kani/issues/1694>
 ///
 /// E.g.: For `Rc<dyn T>` where the Rc definition is:
 /// ```
