@@ -40,3 +40,4 @@ else
   echo "***Kani perf tests failed."
 fi
 echo
+exit $exit_code
