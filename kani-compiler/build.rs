@@ -29,9 +29,4 @@ pub fn main() {
     // in a relative location for a symlink to the local rust toolchain
     let origin = if cfg!(target_os = "macos") { "@loader_path" } else { "$ORIGIN" };
     println!("cargo:rustc-link-arg-bin=kani-compiler=-Wl,-rpath,{}/../toolchain/lib", origin);
-
-    // Compile kani library and export KANI_LIB_PATH variable with its relative location.
-    let out_dir = env::var("OUT_DIR").unwrap();
-    let lib_out = path_str!([&out_dir, "lib"]);
-    println!("cargo:rustc-env=KANI_LIB_PATH={}", lib_out);
 }

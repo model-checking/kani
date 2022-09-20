@@ -15,8 +15,7 @@ pub struct ArgParser {
 #[derive(Eq, PartialEq, Subcommand)]
 pub enum Commands {
     /// Build kani binaries and sysroot for development.
-    /// TODO: Allow users to provide options to cargo. E.g.: Build release mode.
-    Dev,
-    /// Build kani release bundle.
-    Release,
+    BuildDev,
+    /// Build Kani's release bundle.
+    Bundle,
 }

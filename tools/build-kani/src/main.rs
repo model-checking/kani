@@ -10,7 +10,7 @@
 mod parser;
 mod sysroot;
 
-use crate::sysroot::build_sysroot;
+use crate::sysroot::{build_bin, build_lib, build_lib_legacy};
 use anyhow::{bail, Result};
 use clap::Parser;
 use std::{ffi::OsString, path::Path, process::Command};
@@ -19,11 +19,20 @@ fn main() -> Result<()> {
     let args = parser::ArgParser::parse();
 
     match args.subcommand {
-        parser::Commands::Dev => {
-            build_sysroot();
-            build_binaries(&[]);
+        parser::Commands::BuildDev => {
+            build_lib();
+            build_lib_legacy();
+            let mut out_dir = sysroot::kani_sysroot();
+            out_dir.push("bin");
+            build_bin(&[
+                "--bins",
+                "-Z",
+                "unstable-options",
+                "--out-dir",
+                out_dir.to_str().unwrap(),
+            ]);
         }
-        parser::Commands::Release => {
+        parser::Commands::Bundle => {
             let version_string = env!("CARGO_PKG_VERSION");
             let kani_string = format!("kani-{}", version_string);
             let bundle_name = format!("{}-{}.tar.gz", kani_string, env!("TARGET"));
@@ -68,13 +77,8 @@ fn prebundle(dir: &Path) -> Result<()> {
         bail!("Couldn't find the 'cbmc' binary to include in the release bundle.");
     }
 
-    build_binaries(&["--release"]);
+    build_bin(&["--release"]);
     Ok(())
-}
-
-fn build_binaries(args: &[&str]) {
-    // Before we begin, ensure Kani is built successfully in release mode.
-    Command::new("cargo").arg("build").args(args).run().expect("Failed to build binaries.");
 }
 
 /// Copy Kani files into `dir`
@@ -165,7 +169,6 @@ fn expect_dir(path: &Path) -> Result<()> {
 
 /// Copy a single file to a directory
 fn cp(src: &Path, dst: &Path) -> Result<()> {
-    println!("{:?} -> {:?}", src, dst);
     expect_dir(dst)?;
     let dst = dst.join(src.file_name().unwrap());
     std::fs::copy(src, dst)?;
@@ -179,7 +182,6 @@ where
 {
     expect_dir(src)?;
     expect_dir(dst)?;
-    println!("cp_files: {:?} -> {:?}", src, dst);
     let mut filter = predicate;
     for item in std::fs::read_dir(src)? {
         let path = item?.path();

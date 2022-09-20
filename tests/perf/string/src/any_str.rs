@@ -7,9 +7,9 @@
 //! I.e.: Currently, this should fail with missing function definition.
 
 #[kani::proof]
-#[kani::unwind(12)]
+#[kani::unwind(4)]
 fn check_abs() {
-    let data: [u8; 8] = kani::any();
+    let data: [u8; 3] = kani::any();
     let mut string = String::from_utf8_lossy(&data).to_string();
     let new_len = kani::any();
     kani::assume(new_len <= 2);
