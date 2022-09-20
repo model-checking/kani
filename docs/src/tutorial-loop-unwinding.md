@@ -27,11 +27,6 @@ VERIFICATION:- FAILED
 If we try removing this "unwind" annotation and re-running Kani, the result is worse: non-termination.
 Kani simply doesn't produce a result.
 
-> **NOTE**: Presently, [due to a bug](https://github.com/model-checking/kani/issues/493), this is especially bad: we don't see any output at all.
-> Kani is supposed to emit some log lines that might give some clue that an infinite loop is occurring.
-> If Kani doesn't terminate, it's most frequently the problem that this section covers.
-> The workaround is to use the technique we're demoing here: use `#[kani::unwind(1)]` to force termination of the loops, and work upwards from there.
-
 The problem we're struggling with is the technique Kani uses to verify code.
 We're not able to handle code with "unbounded" loops, and what "bounded" means can be quite subtle.
 It has to have a constant number of iterations that's _"obviously constant"_ enough for the verifier to actually figure this out.
