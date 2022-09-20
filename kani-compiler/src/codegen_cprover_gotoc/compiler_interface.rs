@@ -74,7 +74,7 @@ impl CodegenBackend for GotocCodegenBackend {
             return codegen_results(tcx, rustc_metadata, gcx.symbol_table.machine_model());
         }
 
-        // we first declare all functions
+        // we first declare all items
         for item in &items {
             match *item {
                 MonoItem::Fn(instance) => {
@@ -346,7 +346,16 @@ fn codegen_results(
     ))
 }
 
-/// Retrieve all items that need to be processed.
+/// Retrieve all items that need to be processed according to the selected reachability mode:
+///
+/// - Harnesses: Cross-crate collection of all reachable items starting from local harnesses.
+/// - None: Skip collection and codegen all together. This is used to compile dependencies.
+/// - Legacy: Use regular compiler collection that will collect local items, and a few cross
+/// crate items (such as generic functions and functions candidate to be inlined).
+///
+/// To be implemented:
+/// - PubFns: Cross-crate reachability analysis that use the local public fns as starting point.
+
 fn collect_codegen_items<'tcx>(gcx: &GotocCtx<'tcx>) -> Vec<MonoItem<'tcx>> {
     let tcx = gcx.tcx;
     let reach = gcx.queries.get_reachability_analysis();
