@@ -6,13 +6,13 @@
     - [GitHub CI Action](./install-github-ci.md)
   - [Using Kani](./usage.md)
   - [Verification results](./verification-results.md)
-  - [Debugging verification failures](./debugging-verification-failures.md)
 
 - [Tutorial](./kani-tutorial.md)
   - [First steps](./tutorial-first-steps.md)
   - [Failures that Kani can spot](./tutorial-kinds-of-failure.md)
   - [Loop unwinding](./tutorial-loop-unwinding.md)
   - [Nondeterministic variables](./tutorial-nondeterministic-variables.md)
+  - [Debugging verification failures](./debugging-verification-failures.md)
 
 - [Application](./application.md)
   - [Comparison with other tools](./tool-comparison.md)
