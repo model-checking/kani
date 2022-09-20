@@ -8,7 +8,7 @@ set -o nounset
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 KANI_DIR=$SCRIPT_DIR/..
 
-# Build Kani using release mode
+# Build Kani using release mode.
 cargo build --release
 
 PERF_DIR="${KANI_DIR}/tests/perf"
