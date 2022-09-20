@@ -62,6 +62,8 @@ fn rustc_gotoc_flags(lib_path: &str) -> Vec<String> {
         "trim-diagnostic-paths=no",
         "-Z",
         "human_readable_cgu_names",
+        "-Z",
+        "always-encode-mir",
         "--cfg=kani",
         "-Z",
         "crate-attr=feature(register_tool)",
@@ -128,11 +130,11 @@ impl Callbacks for KaniCallbacks {}
 
 /// Generate the arguments to pass to rustc_driver.
 fn generate_rustc_args(args: &ArgMatches) -> Vec<String> {
-    let mut gotoc_args =
+    let gotoc_args =
         rustc_gotoc_flags(args.value_of(parser::KANI_LIB).unwrap_or(std::env!("KANI_LIB_PATH")));
     let mut rustc_args = vec![String::from("rustc")];
     if args.is_present(parser::GOTO_C) {
-        rustc_args.append(&mut gotoc_args);
+        rustc_args.extend_from_slice(&gotoc_args);
     }
 
     if args.is_present(parser::RUSTC_VERSION) {
