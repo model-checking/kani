@@ -1,0 +1,21 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+[package]
+name = "kani_tokio"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = ["full"]
+full = []
+
+[dependencies]
+tokio = { version = "1.20", features = ["full"] }
+tokio-test = "0.4.0"
+tokio-stream = "0.1"
+futures = { version = "0.3.0", features = ["async-await"] }
+bytes = "1.2.1"
+tokio-util = { version = "0.7.3", features = ["io"] }
+async-stream = "0.3.3"
+# mockall = "0.11.1"
+# async-stream = "0.3"

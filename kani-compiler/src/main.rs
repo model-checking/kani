@@ -33,12 +33,13 @@ mod unsound_experiments;
 
 use crate::session::init_session;
 use clap::ArgMatches;
-use kani_queries::{QueryDb, UserInput};
+use kani_queries::{QueryDb, ReachabilityType, UserInput};
 use rustc_driver::{Callbacks, RunCompiler};
 use std::env;
 use std::ffi::OsStr;
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::str::FromStr as _;
 
 /// This function generates all rustc configurations required by our goto-c codegen.
 fn rustc_gotoc_flags(lib_path: &str) -> Vec<String> {
@@ -61,6 +62,8 @@ fn rustc_gotoc_flags(lib_path: &str) -> Vec<String> {
         "trim-diagnostic-paths=no",
         "-Z",
         "human_readable_cgu_names",
+        "-Z",
+        "always-encode-mir",
         "--cfg=kani",
         "-Z",
         "crate-attr=feature(register_tool)",
@@ -91,6 +94,9 @@ fn main() -> Result<(), &'static str> {
     queries.set_check_assertion_reachability(matches.is_present(parser::ASSERTION_REACH_CHECKS));
     queries.set_output_pretty_json(matches.is_present(parser::PRETTY_OUTPUT_FILES));
     queries.set_ignore_global_asm(matches.is_present(parser::IGNORE_GLOBAL_ASM));
+    queries.set_reachability_analysis(
+        ReachabilityType::from_str(matches.value_of(parser::REACHABILITY).unwrap()).unwrap(),
+    );
     #[cfg(feature = "unsound_experiments")]
     crate::unsound_experiments::arg_parser::add_unsound_experiment_args_to_queries(
         &mut queries,
@@ -124,11 +130,11 @@ impl Callbacks for KaniCallbacks {}
 
 /// Generate the arguments to pass to rustc_driver.
 fn generate_rustc_args(args: &ArgMatches) -> Vec<String> {
-    let mut gotoc_args =
+    let gotoc_args =
         rustc_gotoc_flags(args.value_of(parser::KANI_LIB).unwrap_or(std::env!("KANI_LIB_PATH")));
     let mut rustc_args = vec![String::from("rustc")];
     if args.is_present(parser::GOTO_C) {
-        rustc_args.append(&mut gotoc_args);
+        rustc_args.extend_from_slice(&gotoc_args);
     }
 
     if args.is_present(parser::RUSTC_VERSION) {

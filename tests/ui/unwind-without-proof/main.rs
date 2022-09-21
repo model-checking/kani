@@ -9,6 +9,7 @@
 #[kani::proof]
 fn main() {
     assert!(1 == 2);
+    harness();
 }
 
 #[kani::unwind(7)]
