@@ -113,7 +113,7 @@ jobs:
 
       - name: 'Build release bundle'
         run: |
-          cargo run -p make-kani-release -- ${{ needs.Release.outputs.version }}
+          cargo bundle
           cargo package -p kani-verifier
 
       - name: 'Login to GitHub Container Registry'
