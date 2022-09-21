@@ -229,7 +229,7 @@ impl KaniArgs {
 }
 
 arg_enum! {
-    #[derive(Debug, PartialEq, Eq)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq)]
     pub enum ConcretePlaybackMode {
         Print,
         InPlace,
@@ -350,6 +350,10 @@ impl CargoKaniArgs {
 }
 impl KaniArgs {
     pub fn validate(&self) {
+        self.validate_inner().or_else(|e| -> Result<(), ()> { e.exit() }).unwrap()
+    }
+
+    fn validate_inner(&self) -> Result<(), Error> {
         let extra_unwind =
             self.cbmc_args.iter().any(|s| s.to_str().unwrap().starts_with("--unwind"));
         let natives_unwind = self.default_unwind.is_some() || self.unwind.is_some();
@@ -373,19 +377,28 @@ impl KaniArgs {
         // TODO: these conflicting flags reflect what's necessary to pass current tests unmodified.
         // We should consider improving the error messages slightly in a later pull request.
         if natives_unwind && extra_unwind {
-            Error::with_description(
+            Err(Error::with_description(
                 "Conflicting flags: unwind flags provided to kani and in --cbmc-args.",
                 ErrorKind::ArgumentConflict,
-            )
-            .exit();
-        }
-
-        if self.cbmc_args.contains(&OsString::from("--function")) {
-            Error::with_description(
+            ))
+        } else if self.cbmc_args.contains(&OsString::from("--function")) {
+            Err(Error::with_description(
                 "Invalid flag: --function should be provided to Kani directly, not via --cbmc-args.",
                 ErrorKind::ArgumentConflict,
-            )
-            .exit();
+            ))
+        } else if self.quiet && self.concrete_playback == Some(ConcretePlaybackMode::Print) {
+            Err(Error::with_description(
+                "Conflicting options: --concrete-playback=print and --quiet.",
+                ErrorKind::ArgumentConflict,
+            ))
+        } else if self.concrete_playback.is_some() && self.output_format == OutputFormat::Old {
+            Err(Error::with_description(
+                "Conflicting options: --concrete-playback isn't compatible with \
+                --output-format=old.",
+                ErrorKind::ArgumentConflict,
+            ))
+        } else {
+            Ok(())
         }
     }
 }
@@ -484,5 +497,29 @@ mod tests {
     #[test]
     fn check_disable_slicing_unstable() {
         check_unstable_flag("--no-slice-formula")
+    }
+
+    #[test]
+    fn check_concrete_playback_unstable() {
+        check_unstable_flag("--concrete-playback inplace");
+        check_unstable_flag("--concrete-playback print");
+    }
+
+    /// Check if parsing the given argument string results in the given error.
+    fn expect_validation_error(arg: &str, err: ErrorKind) {
+        let args = StandaloneArgs::from_iter(arg.split_whitespace());
+        assert_eq!(args.common_opts.validate_inner().unwrap_err().kind, err);
+    }
+
+    #[test]
+    fn check_concrete_playback_conflicts() {
+        expect_validation_error(
+            "kani --concrete-playback=print --quiet --enable-unstable test.rs",
+            ErrorKind::ArgumentConflict,
+        );
+        expect_validation_error(
+            "kani --concrete-playback=inplace --output-format=old --enable-unstable test.rs",
+            ErrorKind::ArgumentConflict,
+        );
     }
 }
