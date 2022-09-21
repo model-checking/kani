@@ -30,7 +30,7 @@ ${SCRIPT_DIR}/kani-fmt.sh --check
 
 # Build all packages in the workspace
 if [[ "" != "${KANI_ENABLE_UNSOUND_EXPERIMENTS-}" ]]; then
-  cargo build-dev --features unsound_experiments
+  cargo build-dev -- --features unsound_experiments
 else
   cargo build-dev
 fi

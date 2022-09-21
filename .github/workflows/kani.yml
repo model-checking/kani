@@ -64,7 +64,7 @@ jobs:
           os: ubuntu-20.04
 
       - name: Build Kani using release mode
-        run: cargo build-dev --release
+        run: cargo build-dev -- --release
 
       - name: Execute Kani performance tests
         run: ./scripts/kani-perf.sh
@@ -133,7 +133,7 @@ jobs:
 
       - name: Build release bundle
         run: |
-          cargo run -p make-kani-release -- latest
+          cargo bundle -- latest
           cargo package -p kani-verifier
 
       - name: Build container test

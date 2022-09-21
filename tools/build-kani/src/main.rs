@@ -19,21 +19,18 @@ fn main() -> Result<()> {
     let args = parser::ArgParser::parse();
 
     match args.subcommand {
-        parser::Commands::BuildDev => {
+        parser::Commands::BuildDev(build_parser) => {
             build_lib();
             build_lib_legacy();
             let mut out_dir = sysroot::kani_sysroot();
             out_dir.push("bin");
-            build_bin(&[
-                "--bins",
-                "-Z",
-                "unstable-options",
-                "--out-dir",
-                out_dir.to_str().unwrap(),
-            ]);
+            let mut args =
+                vec!["--bins", "-Z", "unstable-options", "--out-dir", out_dir.to_str().unwrap()];
+            args.extend(build_parser.args.iter().map(&String::as_str));
+            build_bin(&args);
         }
-        parser::Commands::Bundle => {
-            let version_string = env!("CARGO_PKG_VERSION");
+        parser::Commands::Bundle(bundle_parser) => {
+            let version_string = bundle_parser.version;
             let kani_string = format!("kani-{}", version_string);
             let bundle_name = format!("{}-{}.tar.gz", kani_string, env!("TARGET"));
             let dir = Path::new(&kani_string);

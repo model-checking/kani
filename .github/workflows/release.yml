@@ -80,7 +80,7 @@ jobs:
 
       - name: Build release bundle
         run: |
-          cargo run -p make-kani-release -- ${{ needs.Release.outputs.version }}
+          cargo bundle
 
       - name: Upload artifact
         uses: actions/upload-release-asset@v1

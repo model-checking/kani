@@ -31,7 +31,7 @@ fn lib_extension() -> &'static str {
     ".so"
 }
 
-#[cfg(target_os = "mac_os")]
+#[cfg(target_os = "macos")]
 fn lib_extension() -> &'static str {
     ".dylib"
 }
@@ -120,7 +120,8 @@ pub fn build_lib_legacy() {
 
     //  Copy Kani libraries to inside the lib folder.
     let target_folder = Path::new(target_dir);
-    let kani_macros = path_buf!(target_folder, "debug", "libkani_macros.so");
+    let macro_lib = format!("libkani_macros{}", lib_extension());
+    let kani_macros = path_buf!(target_folder, "debug", macro_lib);
     cp(&kani_macros, &legacy_lib).unwrap();
 
     let kani_rlib_folder = path_buf!(target_folder, "debug");

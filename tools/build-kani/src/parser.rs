@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 //! This file contains a small parser for our build script.
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
 
 #[derive(Parser)]
 #[clap(name = "build-kani")]
@@ -12,10 +12,24 @@ pub struct ArgParser {
     pub subcommand: Commands,
 }
 
+#[derive(Args, Debug, Eq, PartialEq)]
+pub struct BuildDevParser {
+    /// Arguments to be passed down to cargo when building cargo binaries.
+    #[clap(value_name = "ARG", allow_hyphen_values = true)]
+    pub args: Vec<String>,
+}
+
+#[derive(Args, Debug, Eq, PartialEq)]
+pub struct BundleParser {
+    /// String version
+    #[clap(value_name = "VERSION", default_value(env!("CARGO_PKG_VERSION")))]
+    pub version: String,
+}
+
 #[derive(Eq, PartialEq, Subcommand)]
 pub enum Commands {
     /// Build kani binaries and sysroot for development.
-    BuildDev,
+    BuildDev(BuildDevParser),
     /// Build Kani's release bundle.
-    Bundle,
+    Bundle(BundleParser),
 }
