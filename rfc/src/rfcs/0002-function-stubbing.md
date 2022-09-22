@@ -119,8 +119,8 @@ If stubs were uniformly applied, then we could get away with a single call to `k
 
 ### Comparison to function contracts
 
-- Function contracts cannot be used on external code (**AARON**: why not?)
-- **TODO**
+- In many cases, stubs are more user-friendly than contracts. With contracts, it is necessary to explicitly provide information that is automatically captured in Rust (such as which memory is written).
+- The currently proposed function contract mechanism does not provide a way to put contracts on external functions. **[CHECK]**
 
 ### Alternative #1: Annotate stubbed functions
 
