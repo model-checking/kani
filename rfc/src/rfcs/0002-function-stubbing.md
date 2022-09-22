@@ -8,6 +8,8 @@
 
 This will feature will allow users to specify that certain functions should be replaced with mock functions (stubs) during verification.
 
+**TODO**: Extend the scope of this to include methods.
+
 ## User Impact
 
 We anticipate that stubbing will have a substantial positive impact on the usability of Kani. There are two main motivations for stubbing:
@@ -18,7 +20,9 @@ We anticipate that stubbing will have a substantial positive impact on the usabi
 
 In both cases, stubbing would enable users to verify code that cannot currently be verified by Kani (or at least not within a reasonable resource bound).
 
-As an example, consider verifying the following assertion (which can fail):
+### A Simple Example
+
+Consider verifying the following assertion (which can fail):
 
 ```rust
 assert!(rand::random::<u32>() != 0);
@@ -36,6 +40,10 @@ fn mock_random<T: kani::Arbitrary>() -> T {
 ```
 
 Under this substitution, Kani has a single check, which proves that the assertion can fail. Verification time is 0.02 seconds.
+
+### A Real-World Example
+
+**TODO**
 
 ## User Experience
 
@@ -93,13 +101,15 @@ This can be achieved via `rustc`'s query mechanism: if the user wants to replace
 
 ## Rationale and alternatives
 
+**TODO**: Emphasize more the ability to stub code that the user does not have source access to.
+
 The lack of stubbing has a substantial negative impact on the usability of Kani: stubbing is a *de facto* necessity for verification tools.
 
 ### Benefits
 
-- The current design provides the user with flexibility, as they can specify different sets of stubs to use for different harnesses.
 - Because stubs are specified by annotating the harness, the user is able to specify stubs for functions they do not have source access to (like library functions).
-This contrasts with annotating the function to be replaced.
+This contrasts with annotating the function to be replaced (such as with function contracts).
+- The current design provides the user with flexibility, as they can specify different sets of stubs to use for different harnesses.
 - The stub mappings are all located right by the harness, which makes it easy to understand which replacements are going to happen for each harness.
 
 ### Risks
@@ -107,7 +117,18 @@ This contrasts with annotating the function to be replaced.
 - Allowing per-harness stubs complicates the architecture of Kani, as (according to the current design) it requires `kani-driver` to call `kani-compiler` multiple times.
 If stubs were uniformly applied, then we could get away with a single call to `kani-compiler`.
 
-### Alternative #1: Annotate stubs
+### Comparison to function contracts
+
+- Function contracts cannot be used on external code (**AARON**: why not?)
+- **TODO**
+
+### Alternative #1: Annotate stubbed functions
+
+In this alternative, users add an attribute `#[kani::stub_by(<replacement>)]` to the function that should be replaced.
+This approach is similar to annotating a function with a contract specifying its behavior (the stub acts like a programmatic contract).
+The major downside with this approach is that it would not be possible to stub external code. We see this as a likely use case that needs to be supported: users will want to replace `std` library functions or functions from arbitrary external crates.
+
+### Alternative #2: Annotate stubs
 
 In this alternative, users add an attribute `#[kani::stub(<original>)]` to the stub function itself, saying which function it replaces:
 
@@ -118,8 +139,9 @@ fn mock_random<T: kani::Arbitrary>() -> T { ... }
 ```
 
 The downside is that this stub must be uniformly applied across all harnesses and the stub specifications might be spread out across multiple files.
+It would also require an extra layer of indirection to use a function as a stub if the user does not have source code access to it.
 
-### Alternative #2: Annotate harnesses and stubs 
+### Alternative #3: Annotate harnesses and stubs 
 
 This alternative combines the proposed solution and Alternative #2.
 Users annotate the stub (as in Alternative #2) and specify for each harness which stubs to use using an annotation `#[kani::use_stubs(<stub>+)]` placed above the harness.
@@ -147,7 +169,7 @@ fn my_harness() { ... }
 The benefit is that stubs are specified per harness, and (using modules) it might be possible to group stubs together.
 The downside is that multiple annotations are required and the stub mappings themselves are remote from the harness.
 
-### Alternative #3:  Specify stubs in a file 
+### Alternative #4:  Specify stubs in a file 
 
 One alternative would be to specify stubs in a file that is passed to `kani-driver` via a command line option.
 Users would specify per-harness stub pairings in the file; JSON would be a possible format.
