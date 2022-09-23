@@ -335,7 +335,7 @@ mod test {
     use crate::test_runner::Config;
 
     proptest! {
-	#![proptest_config(ProptestConfig::with_cases(10))]
+    #![proptest_config(ProptestConfig::with_cases(10))]
         #[test]
         #[cfg_attr(kani, kani::proof)]
         fn successfully_linked_proptest(_ in &Just(()) ) {
