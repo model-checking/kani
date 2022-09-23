@@ -94,6 +94,7 @@ name = "build-kani"
 version = "0.10.0"
 dependencies = [
  "anyhow",
+ "cargo_metadata",
  "clap 3.2.22",
  "which",
 ]

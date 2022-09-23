@@ -13,9 +13,11 @@
 //! Note: We don't cross-compile. Target is the same as the host.
 
 use crate::{cp, cp_files, AutoRun};
+use cargo_metadata::Message;
 use std::fs;
+use std::io::BufReader;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Child, Command, Stdio};
 
 macro_rules! path_buf {
     // The arguments are expressions that can be pushed to the PathBuf.
@@ -40,6 +42,9 @@ pub fn kani_sysroot() -> PathBuf {
     PathBuf::from(env!("KANI_SYSROOT"))
 }
 
+/// Build the `lib/` folder for the new sysroot.
+/// This will include Kani's libraries as well as the standard libraries compiled with --emit-mir.
+/// TODO: Don't copy Kani's libstd.
 pub fn build_lib() {
     // Run cargo build with -Z build-std
     let target = env!("TARGET");
@@ -70,12 +75,19 @@ pub fn build_lib() {
         "host.rustflags=[\"--cfg=kani\"]",
         "--target",
         target,
+        "--message-format",
+        "json-diagnostic-rendered-ansi",
     ];
-    Command::new("cargo")
+    let mut cmd = Command::new("cargo")
         .env("CARGO_ENCODED_RUSTFLAGS", ["--cfg=kani", "-Z", "always-encode-mir"].join("\x1f"))
         .args(args)
-        .run()
-        .expect("Failed to build Kani libraries.");
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("Failed to run `cargo build`.");
+
+    // Remove kani "std" library leftover.
+    filter_kani_std(&mut cmd);
+    let _ = cmd.wait().expect("Couldn't get cargo's exit status");
 
     // Create sysroot folder.
     let sysroot_lib = path_buf!(kani_sysroot(), "lib");
@@ -98,6 +110,40 @@ pub fn build_lib() {
     let dst_path = path_buf!(sysroot_lib, "rustlib", target, "lib");
     fs::create_dir_all(&dst_path).unwrap();
     cp_files(&src_path, &dst_path, &is_rlib).unwrap();
+}
+
+/// Kani's "std" library may cause a name conflict with the rust standard library. We remove it
+/// from the `deps/` folder, since we already store it outside of the `deps/` folder.
+/// For that, we retrieve its location from cargo build output.
+fn filter_kani_std(cargo_cmd: &mut Child) {
+    let reader = BufReader::new(cargo_cmd.stdout.take().unwrap());
+    for message in Message::parse_stream(reader) {
+        match message.unwrap() {
+            Message::CompilerMessage(msg) => {
+                // Print message as cargo would.
+                println!("{:?}", msg)
+            }
+            Message::CompilerArtifact(artifact) => {
+                // Remote the `rlib` and `rmeta` kept in the deps folder.
+                if artifact.target.name == "std"
+                    && artifact.target.src_path.starts_with(env!("KANI_REPO_ROOT"))
+                {
+                    let rmeta = artifact.filenames.iter().find(|p| p.extension() == Some("rmeta"));
+                    let mut glob = PathBuf::from(rmeta.unwrap());
+                    glob.set_extension("*");
+                    Command::new("rm").arg("-f").arg(glob.as_os_str()).run().unwrap();
+                }
+            }
+            Message::BuildScriptExecuted(_script) => {
+                // do nothing
+            }
+            Message::BuildFinished(_finished) => {
+                // do nothing
+            }
+            // Non-exhaustive enum.
+            _ => (),
+        }
+    }
 }
 
 /// Build Kani libraries using the regular rust toolchain standard libraries.

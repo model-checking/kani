@@ -38,6 +38,8 @@ use kani_queries::{QueryDb, ReachabilityType, UserInput};
 use rustc_driver::{Callbacks, RunCompiler};
 use std::env;
 use std::ffi::OsStr;
+use std::fs::File;
+use std::io::Write;
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -79,6 +81,17 @@ fn rustc_gotoc_flags(lib_path: &str) -> Vec<String> {
     args.iter().map(|s| s.to_string()).collect()
 }
 
+/// This function generates all rustc configurations required by regular codegen.
+/// This is because we may use a custom sysroot.
+fn rustc_llvm_flags() -> Vec<String> {
+    // The option below provides a mechanism by which definitions in the
+    // standard library can be overriden. See
+    // https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp/topic/.E2.9C.94.20Globally.20override.20an.20std.20macro/near/268873354
+    // for more details.
+    let args = vec!["-C", "panic=abort", "-Z", "unstable-options", "-Z", "panic_abort_tests=yes"];
+    args.iter().map(|s| s.to_string()).collect()
+}
+
 /// Main function. Configure arguments and run the compiler.
 fn main() -> Result<(), &'static str> {
     let args = parser::command_arguments(&env::args().collect());
@@ -117,6 +130,9 @@ fn main() -> Result<(), &'static str> {
             feature in order to use --goto-c argument.");
         }
     }
+    let mut log_file = File::options().append(true).create(true).open("kani.log").unwrap();
+    write!(log_file, "Run {:?}\n{:?}", env::args(), rustc_args).unwrap();
+    log_file.flush().unwrap();
     compiler.run().or(Err("Failed to compile crate."))
 }
 
@@ -143,18 +159,20 @@ fn kani_root() -> PathBuf {
 
 /// Generate the arguments to pass to rustc_driver.
 fn generate_rustc_args(args: &ArgMatches) -> Vec<String> {
-    let mut default_path = kani_root();
-    if args.reachability_type() == ReachabilityType::Legacy {
-        default_path.push("legacy-lib")
-    } else {
-        default_path.push("lib");
-    }
-    let gotoc_args = rustc_gotoc_flags(
-        args.value_of(parser::KANI_LIB).unwrap_or(default_path.to_str().unwrap()),
-    );
     let mut rustc_args = vec![String::from("rustc")];
     if args.is_present(parser::GOTO_C) {
+        let mut default_path = kani_root();
+        if args.reachability_type() == ReachabilityType::Legacy {
+            default_path.push("legacy-lib")
+        } else {
+            default_path.push("lib");
+        }
+        let gotoc_args = rustc_gotoc_flags(
+            args.value_of(parser::KANI_LIB).unwrap_or(default_path.to_str().unwrap()),
+        );
         rustc_args.extend_from_slice(&gotoc_args);
+    } else {
+        rustc_args.extend(rustc_llvm_flags().into_iter());
     }
 
     if args.is_present(parser::RUSTC_VERSION) {
@@ -227,7 +245,9 @@ fn sysroot_path(args: &ArgMatches) -> PathBuf {
     let sysroot_arg = args.value_of(parser::SYSROOT);
     let path = if let Some(s) = sysroot_arg {
         PathBuf::from(s)
-    } else if args.reachability_type() == ReachabilityType::Legacy {
+    } else if args.reachability_type() == ReachabilityType::Legacy
+        || !args.is_present(parser::GOTO_C)
+    {
         toolchain_sysroot_path()
     } else {
         kani_root()
