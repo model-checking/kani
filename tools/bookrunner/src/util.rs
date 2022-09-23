@@ -149,7 +149,7 @@ pub fn parse_test_header(path: &Path) -> TestProps {
 /// Adds Kani to the current `PATH` environment variable.
 pub fn add_kani_to_path() {
     let cwd = env::current_dir().unwrap();
-    let kani_bin = cwd.join("target").join("debug");
+    let kani_bin = cwd.join("target").join("kani").join("bin");
     let kani_scripts = cwd.join("scripts");
     env::set_var(
         "PATH",
