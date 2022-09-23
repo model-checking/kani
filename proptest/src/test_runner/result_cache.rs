@@ -12,6 +12,9 @@
 // Modifications Copyright Kani Contributors
 // See GitHub history for details.
 
+// Merge in progress: See #1608
+#![allow(dead_code)]
+
 use crate::std_facade::fmt;
 use crate::std_facade::Box;
 #[cfg(feature = "std")]

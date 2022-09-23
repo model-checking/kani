@@ -12,6 +12,11 @@
 // Modifications Copyright Kani Contributors
 // See GitHub history for details.
 
+// Merge in progress: See #1608
+#![allow(dead_code)]
+#![allow(unused_variables)]
+#![allow(unused_macros)]
+
 use crate::std_facade::{Arc, String, ToOwned, Vec};
 use core::result::Result;
 use core::{fmt, str, u8};

@@ -12,6 +12,11 @@
 // Modifications Copyright Kani Contributors
 // See GitHub history for details.
 
+// Merge in progress: See #1608
+#![allow(dead_code)]
+#![allow(unused_variables)]
+#![allow(unused_macros)]
+
 use crate::std_facade::Box;
 use core::u32;
 
@@ -24,11 +29,8 @@ use std::fmt;
 #[cfg(feature = "std")]
 use std::str::FromStr;
 
-use crate::test_runner::result_cache::{noop_result_cache, ResultCache};
 use crate::test_runner::rng::RngAlgorithm;
-use crate::test_runner::FailurePersistence;
 #[cfg(feature = "std")]
-use crate::test_runner::FileFailurePersistence;
 
 fn default_default_config() -> Config {
     Config {
@@ -36,7 +38,6 @@ fn default_default_config() -> Config {
         max_local_rejects: 65_536,
         max_global_rejects: 1024,
         max_flat_map_regens: 1_000_000,
-        failure_persistence: None,
         source_file: None,
         test_name: None,
         #[cfg(feature = "fork")]
@@ -46,7 +47,6 @@ fn default_default_config() -> Config {
         #[cfg(feature = "std")]
         max_shrink_time: 0,
         max_shrink_iters: u32::MAX,
-        result_cache: noop_result_cache,
         #[cfg(feature = "std")]
         verbose: 0,
         rng_algorithm: RngAlgorithm::default(),
@@ -87,19 +87,6 @@ pub struct Config {
     /// The default is 1_000_000, which can be overridden by setting the
     /// `PROPTEST_MAX_FLAT_MAP_REGENS` environment variable.
     pub max_flat_map_regens: u32,
-
-    /// Indicates whether and how to persist failed test results.
-    ///
-    /// When compiling with "std" feature (i.e. the standard library is available), the default
-    /// is `Some(Box::new(FileFailurePersistence::SourceParallel("proptest-regressions")))`.
-    ///
-    /// Without the standard library, the default is `None`, and no persistence occurs.
-    ///
-    /// See the docs of [`FileFailurePersistence`](enum.FileFailurePersistence.html)
-    /// and [`MapFailurePersistence`](struct.MapFailurePersistence.html) for more information.
-    ///
-    /// The default cannot currently be overridden by an environment variable.
-    pub failure_persistence: Option<Box<dyn FailurePersistence>>,
 
     /// File location of the current test, relevant for persistence
     /// and debugging.
@@ -183,24 +170,6 @@ pub struct Config {
     /// The default is `std::u32::MAX`, which can be overridden by setting the
     /// `PROPTEST_MAX_SHRINK_ITERS` environment variable.
     pub max_shrink_iters: u32,
-
-    /// A function to create new result caches.
-    ///
-    /// The default is to do no caching. The easiest way to enable caching is
-    /// to set this field to `basic_result_cache` (though that is currently
-    /// only available with the `std` feature).
-    ///
-    /// This is useful for strategies which have a tendency to produce
-    /// duplicate values, or for tests where shrinking can take a very long
-    /// time due to exploring the same output multiple times.
-    ///
-    /// When caching is enabled, generated values themselves are not stored, so
-    /// this does not pose a risk of memory exhaustion for large test inputs
-    /// unless using extraordinarily large test case counts.
-    ///
-    /// Caching incurs its own overhead, and may very well make your test run
-    /// more slowly.
-    pub result_cache: fn() -> Box<dyn ResultCache>,
 
     /// Set to non-zero values to cause proptest to emit human-targeted
     /// messages to stderr as it runs.

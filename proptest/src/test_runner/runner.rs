@@ -12,6 +12,11 @@
 // Modifications Copyright Kani Contributors
 // See GitHub history for details.
 
+// Merge in progress: See #1608
+#![allow(dead_code)]
+#![allow(unused_variables)]
+#![allow(unused_macros)]
+
 use crate::std_facade::{Arc, BTreeMap, Box, String, Vec};
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering::SeqCst;
@@ -29,11 +34,8 @@ use std::fs;
 use crate::strategy::*;
 use crate::test_runner::config::*;
 use crate::test_runner::errors::*;
-use crate::test_runner::failure_persistence::PersistedSeed;
 use crate::test_runner::reason::*;
-#[cfg(feature = "fork")]
-use crate::test_runner::replay;
-use crate::test_runner::result_cache::*;
+
 use crate::test_runner::rng::TestRng;
 
 const ALWAYS: u32 = 0;
@@ -110,18 +112,9 @@ struct ForkOutput {
 
 #[cfg(feature = "fork")]
 impl ForkOutput {
-    fn append(&mut self, result: &TestCaseResult) {
-        if let Some(ref mut file) = self.file {
-            replay::append(file, result)
-                .expect("Failed to append to replay file");
-        }
-    }
+    fn append(&mut self, result: &TestCaseResult) {}
 
-    fn ping(&mut self) {
-        if let Some(ref mut file) = self.file {
-            replay::ping(file).expect("Failed to append to replay file");
-        }
-    }
+    fn ping(&mut self) {}
 
     fn empty() -> Self {
         ForkOutput { file: None }
@@ -170,93 +163,6 @@ where
 
     let result = test(case);
     result_cache.put(cache_key, &result);
-    result
-}
-
-#[cfg(feature = "std")]
-fn call_test<V, F, R>(
-    runner: &mut TestRunner,
-    case: V,
-    test: &F,
-    replay: &mut R,
-    result_cache: &mut dyn ResultCache,
-    fork_output: &mut ForkOutput,
-) -> TestCaseResult
-where
-    V: fmt::Debug,
-    F: Fn(V) -> TestCaseResult,
-    R: Iterator<Item = TestCaseResult>,
-{
-    use std::time;
-
-    let timeout = runner.config.timeout();
-
-    if let Some(result) = replay.next() {
-        return result;
-    }
-
-    // Now that we're about to start a new test (as far as the replay system is
-    // concerned), ping the replay file so the parent process can determine
-    // that we made it this far.
-    fork_output.ping();
-
-    verbose_message!(runner, TRACE, "Next test input: {:?}", case);
-
-    let cache_key = result_cache.key(&ResultCacheKey::new(&case));
-    if let Some(result) = result_cache.get(cache_key) {
-        verbose_message!(
-            runner,
-            TRACE,
-            "Test input hit cache, skipping execution"
-        );
-        return result.clone();
-    }
-
-    let time_start = time::Instant::now();
-
-    let mut result = unwrap_or!(
-        panic::catch_unwind(AssertUnwindSafe(|| test(case))),
-        what => Err(TestCaseError::Fail(
-            what.downcast::<&'static str>().map(|s| (*s).into())
-                .or_else(|what| what.downcast::<String>().map(|b| (*b).into()))
-                .or_else(|what| what.downcast::<Box<str>>().map(|b| (*b).into()))
-                .unwrap_or_else(|_| "<unknown panic value>".into()))));
-
-    // If there is a timeout and we exceeded it, fail the test here so we get
-    // consistent behaviour. (The parent process cannot precisely time the test
-    // cases itself.)
-    if timeout > 0 && result.is_ok() {
-        let elapsed = time_start.elapsed();
-        let elapsed_millis = elapsed.as_secs() as u32 * 1000
-            + elapsed.subsec_nanos() / 1_000_000;
-
-        if elapsed_millis > timeout {
-            result = Err(TestCaseError::fail(format!(
-                "Timeout of {} ms exceeded: test took {} ms",
-                timeout, elapsed_millis
-            )));
-        }
-    }
-
-    result_cache.put(cache_key, &result);
-    fork_output.append(&result);
-
-    match result {
-        Ok(()) => verbose_message!(runner, TRACE, "Test case passed"),
-        Err(TestCaseError::Reject(ref reason)) => verbose_message!(
-            runner,
-            SHOW_FALURES,
-            "Test case rejected: {}",
-            reason
-        ),
-        Err(TestCaseError::Fail(ref reason)) => verbose_message!(
-            runner,
-            SHOW_FALURES,
-            "Test case failed: {}",
-            reason
-        ),
-    }
-
     result
 }
 
@@ -382,167 +288,8 @@ impl TestRunner {
         case: V,
         test: impl Fn(V::Value) -> TestCaseResult,
     ) -> Result<bool, TestError<V::Value>> {
-        let mut result_cache = self.new_cache();
-        self.run_one_with_replay(
-            case,
-            test,
-            &mut iter::empty::<TestCaseResult>().fuse(),
-            &mut *result_cache,
-            &mut ForkOutput::empty(),
-        )
-    }
-
-    fn run_one_with_replay<V: ValueTree>(
-        &mut self,
-        mut case: V,
-        test: impl Fn(V::Value) -> TestCaseResult,
-        replay: &mut impl Iterator<Item = TestCaseResult>,
-        result_cache: &mut dyn ResultCache,
-        fork_output: &mut ForkOutput,
-    ) -> Result<bool, TestError<V::Value>> {
-        let result = call_test(
-            self,
-            case.current(),
-            &test,
-            replay,
-            result_cache,
-            fork_output,
-        );
-
-        match result {
-            Ok(_) => Ok(true),
-            Err(TestCaseError::Fail(why)) => {
-                let why = self
-                    .shrink(&mut case, test, replay, result_cache, fork_output)
-                    .unwrap_or(why);
-                Err(TestError::Fail(why, case.current()))
-            }
-            Err(TestCaseError::Reject(whence)) => {
-                self.reject_global(whence)?;
-                Ok(false)
-            }
-        }
-    }
-
-    fn shrink<V: ValueTree>(
-        &mut self,
-        case: &mut V,
-        test: impl Fn(V::Value) -> TestCaseResult,
-        replay: &mut impl Iterator<Item = TestCaseResult>,
-        result_cache: &mut dyn ResultCache,
-        fork_output: &mut ForkOutput,
-    ) -> Option<Reason> {
-        #[cfg(feature = "std")]
-        use std::time;
-
-        let mut last_failure = None;
-        let mut iterations = 0;
-        #[cfg(feature = "std")]
-        let start_time = time::Instant::now();
-
-        if case.simplify() {
-            loop {
-                #[cfg(feature = "std")]
-                let timed_out = if self.config.max_shrink_time > 0 {
-                    let elapsed = start_time.elapsed();
-                    let elapsed_ms = elapsed
-                        .as_secs()
-                        .saturating_mul(1000)
-                        .saturating_add(elapsed.subsec_millis().into());
-                    if elapsed_ms > self.config.max_shrink_time as u64 {
-                        Some(elapsed_ms)
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                };
-                #[cfg(not(feature = "std"))]
-                let timed_out: Option<u64> = None;
-
-                let bail = if iterations >= self.config.max_shrink_iters() {
-                    #[cfg(feature = "std")]
-                    const CONTROLLER: &str =
-                        "the PROPTEST_MAX_SHRINK_ITERS environment \
-                         variable or ProptestConfig.max_shrink_iters";
-                    #[cfg(not(feature = "std"))]
-                    const CONTROLLER: &str = "ProptestConfig.max_shrink_iters";
-                    verbose_message!(
-                        self,
-                        ALWAYS,
-                        "Aborting shrinking after {} iterations (set {} \
-                         to a large(r) value to shrink more; current \
-                         configuration: {} iterations)",
-                        CONTROLLER,
-                        self.config.max_shrink_iters(),
-                        iterations
-                    );
-                    true
-                } else if let Some(ms) = timed_out {
-                    #[cfg(feature = "std")]
-                    const CONTROLLER: &str =
-                        "the PROPTEST_MAX_SHRINK_TIME environment \
-                         variable or ProptestConfig.max_shrink_time";
-                    #[cfg(feature = "std")]
-                    let current = self.config.max_shrink_time;
-                    #[cfg(not(feature = "std"))]
-                    const CONTROLLER: &str = "(not configurable in no_std)";
-                    #[cfg(not(feature = "std"))]
-                    let current = 0;
-                    verbose_message!(
-                        self,
-                        ALWAYS,
-                        "Aborting shrinking after taking too long: {} ms \
-                         (set {} to a large(r) value to shrink more; current \
-                         configuration: {} ms)",
-                        ms,
-                        CONTROLLER,
-                        current
-                    );
-                    true
-                } else {
-                    false
-                };
-
-                if bail {
-                    // Move back to the most recent failing case
-                    while case.complicate() {
-                        fork_output.append(&Ok(()));
-                    }
-                    break;
-                }
-
-                iterations += 1;
-
-                let result = call_test(
-                    self,
-                    case.current(),
-                    &test,
-                    replay,
-                    result_cache,
-                    fork_output,
-                );
-
-                match result {
-                    // Rejections are effectively a pass here,
-                    // since they indicate that any behaviour of
-                    // the function under test is acceptable.
-                    Ok(_) | Err(TestCaseError::Reject(..)) => {
-                        if !case.complicate() {
-                            break;
-                        }
-                    }
-                    Err(TestCaseError::Fail(why)) => {
-                        last_failure = Some(why);
-                        if !case.simplify() {
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-
-        last_failure
+        test(case.current()).unwrap();
+        Ok(true)
     }
 
     /// Update the state to account for a local rejection from `whence`, and
@@ -576,10 +323,6 @@ impl TestRunner {
     pub fn flat_map_regen(&self) -> bool {
         false
     }
-
-    fn new_cache(&self) -> Box<dyn ResultCache> {
-        (self.config.result_cache)()
-    }
 }
 
 #[cfg(test)]
@@ -590,7 +333,6 @@ mod test {
     use super::*;
     use crate::strategy::{Just, Strategy};
     use crate::test_runner::Config;
-    use crate::test_runner::{FileFailurePersistence, RngAlgorithm, TestRng};
 
     proptest! {
         #[test]

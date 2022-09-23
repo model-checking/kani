@@ -95,8 +95,11 @@ impl<T: Strategy> Union<T> {
                 <= u64::from(u32::MAX),
             "Union weights overflow u32"
         );
-        let options: Vec<WA<T>> =
-            options.into_iter().filter(|(w, _)| w > &0).map(|(w, v)| (w, Arc::new(v))).collect();
+        let options: Vec<WA<T>> = options
+            .into_iter()
+            .filter(|(w, _)| w > &0)
+            .map(|(w, v)| (w, Arc::new(v)))
+            .collect();
         assert!(!options.is_empty());
         Self { options }
     }
