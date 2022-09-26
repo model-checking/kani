@@ -38,8 +38,6 @@ use kani_queries::{QueryDb, ReachabilityType, UserInput};
 use rustc_driver::{Callbacks, RunCompiler};
 use std::env;
 use std::ffi::OsStr;
-use std::fs::File;
-use std::io::Write;
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -130,9 +128,6 @@ fn main() -> Result<(), &'static str> {
             feature in order to use --goto-c argument.");
         }
     }
-    let mut log_file = File::options().append(true).create(true).open("kani.log").unwrap();
-    write!(log_file, "Run {:?}\n{:?}", env::args(), rustc_args).unwrap();
-    log_file.flush().unwrap();
     compiler.run().or(Err("Failed to compile crate."))
 }
 
