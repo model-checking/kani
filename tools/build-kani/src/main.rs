@@ -10,7 +10,9 @@
 mod parser;
 mod sysroot;
 
-use crate::sysroot::{build_bin, build_lib, build_lib_legacy};
+use crate::sysroot::{
+    build_bin, build_lib, build_lib_legacy, kani_sysroot_legacy_lib, kani_sysroot_lib,
+};
 use anyhow::{bail, Result};
 use clap::Parser;
 use std::{ffi::OsString, path::Path, process::Command};
@@ -22,12 +24,7 @@ fn main() -> Result<()> {
         parser::Commands::BuildDev(build_parser) => {
             build_lib();
             build_lib_legacy();
-            let mut out_dir = sysroot::kani_sysroot();
-            out_dir.push("bin");
-            let mut args =
-                vec!["--bins", "-Z", "unstable-options", "--out-dir", out_dir.to_str().unwrap()];
-            args.extend(build_parser.args.iter().map(&String::as_str));
-            build_bin(&args);
+            build_bin(&build_parser.args);
         }
         parser::Commands::Bundle(bundle_parser) => {
             let version_string = bundle_parser.version;
@@ -74,7 +71,11 @@ fn prebundle(dir: &Path) -> Result<()> {
         bail!("Couldn't find the 'cbmc' binary to include in the release bundle.");
     }
 
+    // Before we begin, ensure Kani is built successfully in release mode.
     build_bin(&["--release"]);
+    // And that libraries have been built too.
+    build_lib();
+    build_lib_legacy();
     Ok(())
 }
 
@@ -100,11 +101,15 @@ fn bundle_kani(dir: &Path) -> Result<()> {
     cp_dir(Path::new("./library/kani_macros"), &library)?;
     cp_dir(Path::new("./library/std"), &library)?;
 
-    // 4. Record the exact toolchain we use
+    // 4. Pre-compiled library files
+    cp_dir(&kani_sysroot_lib(), dir)?;
+    cp_dir(&kani_sysroot_legacy_lib(), dir)?;
+
+    // 5. Record the exact toolchain we use
     std::fs::write(dir.join("rust-toolchain-version"), env!("RUSTUP_TOOLCHAIN"))?;
 
     // 5. Include a licensing note
-    cp(Path::new("tools/make-kani-release/license-notes.txt"), dir)?;
+    cp(Path::new("tools/build-kani/license-notes.txt"), dir)?;
 
     Ok(())
 }

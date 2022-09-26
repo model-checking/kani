@@ -14,6 +14,7 @@
 
 use crate::{cp, cp_files, AutoRun};
 use cargo_metadata::Message;
+use std::ffi::OsStr;
 use std::fs;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
@@ -38,8 +39,29 @@ fn lib_extension() -> &'static str {
     ".dylib"
 }
 
+/// Returns the path to Kani sysroot. I.e.: folder where we store pre-compiled binaries and
+/// libraries.
 pub fn kani_sysroot() -> PathBuf {
     PathBuf::from(env!("KANI_SYSROOT"))
+}
+
+/// Returns the path to where Kani and std pre-compiled libraries are stored.
+pub fn kani_sysroot_lib() -> PathBuf {
+    path_buf!(kani_sysroot(), "lib")
+}
+
+/// Returns the path to where Kani pre-compiled library are stored.
+///
+/// The legacy libraries are compiled on the top of rustup sysroot. Using it results in missing
+/// symbols. This is still needed though because when we use the rust monomorphizer as our
+/// reachability algorithm, the resulting boundaries are different than the new sysroot.
+pub fn kani_sysroot_legacy_lib() -> PathBuf {
+    path_buf!(kani_sysroot(), "legacy-lib")
+}
+
+/// Returns the path to where Kani's pre-compiled binaries are stored.
+pub fn kani_sysroot_bin() -> PathBuf {
+    path_buf!(kani_sysroot(), "bin")
 }
 
 /// Build the `lib/` folder for the new sysroot.
@@ -90,7 +112,7 @@ pub fn build_lib() {
     let _ = cmd.wait().expect("Couldn't get cargo's exit status");
 
     // Create sysroot folder.
-    let sysroot_lib = path_buf!(kani_sysroot(), "lib");
+    let sysroot_lib = kani_sysroot_lib();
     sysroot_lib.exists().then(|| fs::remove_dir_all(&sysroot_lib));
     fs::create_dir_all(&sysroot_lib).expect(&format!("Failed to create {:?}", sysroot_lib));
 
@@ -160,7 +182,7 @@ pub fn build_lib_legacy() {
         .expect("Failed to build Kani libraries.");
 
     // Create sysroot folder.
-    let legacy_lib = path_buf!(kani_sysroot(), "legacy-lib");
+    let legacy_lib = kani_sysroot_legacy_lib();
     legacy_lib.exists().then(|| fs::remove_dir_all(&legacy_lib));
     fs::create_dir_all(&legacy_lib).expect(&format!("Failed to create {:?}", legacy_lib));
 
@@ -178,7 +200,16 @@ fn is_rlib(path: &Path) -> bool {
     path.is_file() && String::from(path.file_name().unwrap().to_string_lossy()).ends_with(".rlib")
 }
 
-pub fn build_bin(args: &[&str]) {
-    // Before we begin, ensure Kani is built successfully in release mode.
-    Command::new("cargo").arg("build").args(args).run().expect("Failed to build binaries.");
+/// Extra arguments to be given to "cargo build" while building Kani's binaries.
+/// Note that the following arguments are always provided:
+/// --bins -Z unstable-options --out-dir $KANI_SYSROOT/bin/
+pub fn build_bin<T: AsRef<OsStr>>(extra_args: &[T]) {
+    let out_dir = kani_sysroot_bin();
+    let args = ["--bins", "-Z", "unstable-options", "--out-dir", out_dir.to_str().unwrap()];
+    Command::new("cargo")
+        .arg("build")
+        .args(args)
+        .args(extra_args)
+        .run()
+        .expect("Failed to build binaries.");
 }

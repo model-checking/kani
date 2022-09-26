@@ -36,22 +36,20 @@ pub fn setup(use_local_bundle: Option<OsString>) -> Result<()> {
     let kani_dir = kani_dir();
     let os = os_info::get();
 
-    println!("[0/6] Running Kani first-time setup...");
+    println!("[0/5] Running Kani first-time setup...");
 
-    println!("[1/6] Ensuring the existence of: {}", kani_dir.display());
+    println!("[1/5] Ensuring the existence of: {}", kani_dir.display());
     std::fs::create_dir_all(&kani_dir)?;
 
     setup_kani_bundle(&kani_dir, use_local_bundle)?;
 
-    let toolchain_version = setup_rust_toolchain(&kani_dir)?;
+    setup_rust_toolchain(&kani_dir)?;
 
     setup_python_deps(&kani_dir, &os)?;
 
-    setup_build_kani_prelude(&kani_dir, toolchain_version)?;
-
     os_hacks::setup_os_hacks(&kani_dir, &os)?;
 
-    println!("[6/6] Successfully completed Kani first-time setup.");
+    println!("[5/5] Successfully completed Kani first-time setup.");
 
     Ok(())
 }
@@ -62,7 +60,7 @@ fn setup_kani_bundle(kani_dir: &Path, use_local_bundle: Option<OsString>) -> Res
     let base_dir = kani_dir.parent().expect("No base directory?");
 
     if let Some(pathstr) = use_local_bundle {
-        println!("[2/6] Installing local Kani bundle: {}", pathstr.to_string_lossy());
+        println!("[2/5] Installing local Kani bundle: {}", pathstr.to_string_lossy());
         let path = Path::new(&pathstr).canonicalize()?;
         // When given a local bundle, it's often "-latest" but we expect "-1.0" or something.
         // tar supports "stripping" the first directory from the bundle, so do that and
@@ -75,7 +73,7 @@ fn setup_kani_bundle(kani_dir: &Path, use_local_bundle: Option<OsString>) -> Res
             .run()?;
     } else {
         let filename = download_filename();
-        println!("[2/6] Downloading Kani release bundle: {}", &filename);
+        println!("[2/5] Downloading Kani release bundle: {}", &filename);
         fail_if_unsupported_target()?;
         let bundle = base_dir.join(filename);
         Command::new("curl")
@@ -97,7 +95,7 @@ fn setup_rust_toolchain(kani_dir: &Path) -> Result<String> {
     // Currently this means we require the bundle to have been unpacked first!
     let toolchain_version = std::fs::read_to_string(kani_dir.join("rust-toolchain-version"))
         .context("Reading release bundle rust-toolchain-version")?;
-    println!("[3/6] Installing rust toolchain version: {}", &toolchain_version);
+    println!("[3/5] Installing rust toolchain version: {}", &toolchain_version);
     Command::new("rustup").args(&["toolchain", "install", &toolchain_version]).run()?;
 
     let toolchain = home::rustup_home()?.join("toolchains").join(&toolchain_version);
@@ -108,7 +106,7 @@ fn setup_rust_toolchain(kani_dir: &Path) -> Result<String> {
 
 /// Install into the pyroot the python dependencies we need
 fn setup_python_deps(kani_dir: &Path, os: &os_info::Info) -> Result<()> {
-    println!("[4/6] Installing Kani python dependencies...");
+    println!("[4/5] Installing Kani python dependencies...");
     let pyroot = kani_dir.join("pyroot");
 
     // TODO: this is a repetition of versions from kani/kani-dependencies
@@ -129,46 +127,6 @@ fn setup_python_deps(kani_dir: &Path, os: &os_info::Info) -> Result<()> {
         .args(pkg_versions)
         .run()?;
 
-    Ok(())
-}
-
-/// Build the Kani prelude libaries locally
-fn setup_build_kani_prelude(kani_dir: &Path, toolchain_version: String) -> Result<()> {
-    println!("[5/6] Building Kani library prelude...");
-    // We need a workspace to build them in, otherwise repeated builds generate different hashes and `kani` can't find `kani_macros`
-    let contents = "[workspace]\nmembers = [\"kani\",\"kani_macros\",\"std\"]";
-    std::fs::write(kani_dir.join("library").join("Cargo.toml"), contents)?;
-
-    // A little helper for invoking Cargo repeatedly here
-    let cargo = |crate_name: &str| -> Result<()> {
-        let manifest = format!("library/{}/Cargo.toml", crate_name);
-        Command::new("cargo")
-            .args(&[
-                &format!("+{}", toolchain_version),
-                "build",
-                "-Z",
-                "unstable-options",
-                "--manifest-path",
-                &manifest,
-                "--out-dir",
-                "lib",
-                "--target-dir",
-                "target",
-            ])
-            .current_dir(&kani_dir)
-            // https://doc.rust-lang.org/cargo/reference/environment-variables.html
-            .env("CARGO_ENCODED_RUSTFLAGS", "--cfg=kani")
-            .run()
-            .with_context(|| format!("Failed to build Kani prelude library {}", crate_name))
-    };
-
-    // We seem to need 3 invocations because of the behavior of the `--out-dir` flag.
-    // It only seems to produce the requested artifact, not its dependencies.
-    cargo("kani")?;
-    cargo("kani_macros")?;
-    cargo("std")?;
-
-    std::fs::remove_dir_all(kani_dir.join("target"))?;
     Ok(())
 }
 
