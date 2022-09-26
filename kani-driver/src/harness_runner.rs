@@ -9,33 +9,44 @@ use crate::call_cbmc::VerificationStatus;
 use crate::session::KaniSession;
 use crate::util::specialized_harness_name;
 
-pub(crate) struct HarnessRunnerSession<'sess> {
+/// A HarnessRunner is responsible for checking all proof harnesses. The data in this structure represents
+/// "background information" that the controlling driver (e.g. cargo-kani or kani) computed.
+///
+/// This struct is basically just a nicer way of passing many arguments to [`Self::check_all_harnesses`]
+pub(crate) struct HarnessRunner<'sess> {
     /// The underlying kani session
     pub sess: &'sess KaniSession,
     /// The build CBMC goto binary for the "whole program" (will be specialized to each proof harness)
     pub linked_obj: &'sess Path,
     /// The directory we should output cbmc-viewer reports to
     pub report_base: &'sess Path,
-    /// A behavior difference between `kani` and `cargo kani`: `cargo kani` never deleted the specialized goto binaries
+    /// An unfortunate behavior difference between `kani` and `cargo kani`: `cargo kani` never deletes the specialized goto binaries, while `kani` does unless `--keep-temps` is provided
     pub retain_specialized_harnesses: bool,
 
     /// The collection of symtabs that went into the goto binary
-    /// (TODO: this is only for --gen-c, which possibly should not be done here?)
+    /// (TODO: this is only for --gen-c, which possibly should not be done here (i.e. not from within harness running)?
+    ///        <https://github.com/model-checking/kani/pull/1684>)
     pub symtabs: &'sess [PathBuf],
 }
 
+/// The result of checking a single harness. This both hangs on to the harness metadata
+/// (as a means to identify which harness), and provides that harness's verification result.
 pub(crate) struct HarnessResult<'sess> {
     pub harness: &'sess HarnessMetadata,
     pub result: VerificationStatus,
 }
 
+/// The results of checking all harnesses. In addition to keeping the result information
+/// in more detail per-harness, the harnesses are partitioned into `successes` and `failures`.
 #[derive(Default)]
 pub(crate) struct HarnessResults<'sess> {
     pub successes: Vec<HarnessResult<'sess>>,
     pub failures: Vec<HarnessResult<'sess>>,
 }
 
-impl<'sess> HarnessRunnerSession<'sess> {
+impl<'sess> HarnessRunner<'sess> {
+    /// Given a [`HarnessRunner`] (to abstract over how these harnesses were generated), this runs
+    /// the proof-checking process for each harness in `harnesses`.
     pub(crate) fn check_all_harnesses<'a>(
         &self,
         harnesses: &'a [HarnessMetadata],
@@ -73,6 +84,7 @@ impl<'sess> HarnessRunnerSession<'sess> {
 }
 
 impl KaniSession {
+    /// Run the verification process for a single harness
     pub(crate) fn check_harness(
         &self,
         binary: &Path,
@@ -92,6 +104,11 @@ impl KaniSession {
         }
     }
 
+    /// Concludes a session by printing a summary report and exiting the process with an
+    /// error code (if applicable).
+    ///
+    /// Note: Takes `self` "by ownership". This function wants to be able to drop before
+    /// exiting with an error code, if needed.
     pub(crate) fn print_final_summary(self, results: &HarnessResults) -> Result<()> {
         let succeeding = results.successes.len();
         let failing = results.failures.len();

@@ -61,7 +61,7 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     let harnesses = ctx.determine_targets(&metadata)?;
     let report_base = ctx.args.target_dir.clone().unwrap_or(PathBuf::from("target"));
 
-    let runner = harness_runner::HarnessRunnerSession {
+    let runner = harness_runner::HarnessRunner {
         sess: &ctx,
         linked_obj: &linked_obj,
         report_base: &report_base,
@@ -102,7 +102,7 @@ fn standalone_main() -> Result<()> {
     let harnesses = ctx.determine_targets(&metadata)?;
     let report_base = ctx.args.target_dir.clone().unwrap_or(PathBuf::from("."));
 
-    let runner = harness_runner::HarnessRunnerSession {
+    let runner = harness_runner::HarnessRunner {
         sess: &ctx,
         linked_obj: &linked_obj,
         report_base: &report_base,
