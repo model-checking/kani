@@ -36,24 +36,16 @@ pub(crate) struct HarnessResult<'sess> {
     pub result: VerificationStatus,
 }
 
-/// The results of checking all harnesses. In addition to keeping the result information
-/// in more detail per-harness, the harnesses are partitioned into `successes` and `failures`.
-#[derive(Default)]
-pub(crate) struct HarnessResults<'sess> {
-    pub successes: Vec<HarnessResult<'sess>>,
-    pub failures: Vec<HarnessResult<'sess>>,
-}
-
 impl<'sess> HarnessRunner<'sess> {
     /// Given a [`HarnessRunner`] (to abstract over how these harnesses were generated), this runs
     /// the proof-checking process for each harness in `harnesses`.
     pub(crate) fn check_all_harnesses<'a>(
         &self,
         harnesses: &'a [HarnessMetadata],
-    ) -> Result<HarnessResults<'a>> {
+    ) -> Result<Vec<HarnessResult<'a>>> {
         let sorted_harnesses = crate::metadata::sort_harnesses_by_loc(harnesses);
 
-        let mut results = HarnessResults::default();
+        let mut results = vec![];
 
         for harness in &sorted_harnesses {
             let harness_filename = harness.pretty_name.replace("::", "-");
@@ -71,12 +63,7 @@ impl<'sess> HarnessRunner<'sess> {
             )?;
 
             let result = self.sess.check_harness(&specialized_obj, &report_dir, harness)?;
-            let wrapped_result = HarnessResult { harness, result };
-            if wrapped_result.result == VerificationStatus::Failure {
-                results.failures.push(wrapped_result);
-            } else {
-                results.successes.push(wrapped_result);
-            }
+            results.push(HarnessResult { harness, result });
         }
 
         Ok(results)
@@ -109,15 +96,25 @@ impl KaniSession {
     ///
     /// Note: Takes `self` "by ownership". This function wants to be able to drop before
     /// exiting with an error code, if needed.
-    pub(crate) fn print_final_summary(self, results: &HarnessResults) -> Result<()> {
-        let succeeding = results.successes.len();
-        let failing = results.failures.len();
+    pub(crate) fn print_final_summary(self, results: &[HarnessResult<'_>]) -> Result<()> {
+        let (successes, failures): (Vec<_>, Vec<_>) =
+            results.iter().partition(|r| r.result == VerificationStatus::Success);
+
+        let succeeding = successes.len();
+        let failing = failures.len();
         let total = succeeding + failing;
+
+        if self.args.concrete_playback.is_some() && !self.args.quiet && failures.is_empty() {
+            println!(
+                "INFO: The concrete playback feature never generated unit tests because there were no failing harnesses."
+            )
+        }
+
         if !self.args.quiet && !self.args.visualize && total > 1 {
             if failing > 0 {
                 println!("Summary:");
             }
-            for failure in results.failures.iter() {
+            for failure in failures.iter() {
                 println!("Verification failed for - {}", failure.harness.pretty_name);
             }
 

@@ -71,7 +71,6 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
 
     let results = runner.check_all_harnesses(&harnesses)?;
 
-    ctx.inform_if_no_failed(&results);
     ctx.print_final_summary(&results)
 }
 
@@ -112,7 +111,6 @@ fn standalone_main() -> Result<()> {
 
     let results = runner.check_all_harnesses(&harnesses)?;
 
-    ctx.inform_if_no_failed(&results);
     ctx.print_final_summary(&results)
 }
 

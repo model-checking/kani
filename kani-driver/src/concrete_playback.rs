@@ -7,7 +7,6 @@
 use crate::args::ConcretePlaybackMode;
 use crate::call_cbmc::VerificationStatus;
 use crate::cbmc_output_parser::VerificationOutput;
-use crate::harness_runner::HarnessResults;
 use crate::session::KaniSession;
 use anyhow::{Context, Result};
 use concrete_vals_extractor::{extract_harness_values, ConcreteVal};
@@ -209,16 +208,6 @@ impl KaniSession {
             self.run_terminal(cmd).context("Failed to rustfmt modified source code")?;
         }
         Ok(())
-    }
-
-    /// Helper function to inform the user that they tried to generate concrete playback unit tests when there were no failing harnesses.
-    pub(crate) fn inform_if_no_failed(&self, results: &HarnessResults) {
-        if self.args.concrete_playback.is_some() && !self.args.quiet && results.failures.is_empty()
-        {
-            println!(
-                "INFO: The concrete playback feature never generated unit tests because there were no failing harnesses."
-            )
-        }
     }
 }
 
