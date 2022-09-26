@@ -1,4 +1,3 @@
 error: Crate crate_with_global_asm contains global ASM, which is not supported by Kani. Rerun with `--enable-unstable --ignore-global-asm` to suppress this error (**Verification results may be impacted**).
-Error: "Failed to compile crate."
 error: could not compile `crate_with_global_asm` due to previous error
 Error: cargo exited with status exit status: 101

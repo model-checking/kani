@@ -9,6 +9,8 @@ use cbmc::InternString;
 use kani_metadata::HarnessMetadata;
 use rustc_ast::ast;
 use rustc_ast::{Attribute, LitKind};
+use rustc_hir::def::DefKind;
+use rustc_hir::def_id::DefId;
 use rustc_middle::mir::{HasLocalDecls, Local};
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{self, Instance};
@@ -262,14 +264,47 @@ impl<'tcx> GotocCtx<'tcx> {
         self.reset_current_fn();
     }
 
-    /// This updates the goto context with any information that should be accumulated from a function's
-    /// attributes.
-    ///
-    /// Handle all attributes i.e. `#[kani::x]` (which kani_macros translates to `#[kanitool::x]` for us to handle here)
-    fn handle_kanitool_attributes(&mut self) {
-        let all_attributes = self.tcx.get_attrs_unchecked(self.current_fn().instance().def_id());
+    pub fn is_proof_harness(&self, def_id: DefId) -> bool {
+        let all_attributes = self.tcx.get_attrs_unchecked(def_id);
+        let (proof_attributes, _) = partition_kanitool_attributes(all_attributes);
+        if !proof_attributes.is_empty() {
+            let span = proof_attributes.first().unwrap().span;
+            if self.tcx.def_kind(def_id) != DefKind::Fn {
+                self.tcx
+                    .sess
+                    .span_err(span, "The kani::proof attribute can only be applied to functions.");
+            } else if self.tcx.generics_of(def_id).requires_monomorphization(self.tcx) {
+                self.tcx
+                    .sess
+                    .span_err(span, "The proof attribute cannot be applied to generic functions.");
+            }
+            self.tcx.sess.abort_if_errors();
+            true
+        } else {
+            false
+        }
+    }
+
+    // Check that all attributes assigned to an item is valid.
+    pub fn check_attributes(&self, def_id: DefId) {
+        let all_attributes = self.tcx.get_attrs_unchecked(def_id);
         let (proof_attributes, other_attributes) = partition_kanitool_attributes(all_attributes);
-        if proof_attributes.is_empty() && !other_attributes.is_empty() {
+        if !proof_attributes.is_empty() {
+            let span = proof_attributes.first().unwrap().span;
+            if self.tcx.def_kind(def_id) != DefKind::Fn {
+                self.tcx
+                    .sess
+                    .span_err(span, "The kani::proof attribute can only be applied to functions.");
+            } else if self.tcx.generics_of(def_id).requires_monomorphization(self.tcx) {
+                self.tcx
+                    .sess
+                    .span_err(span, "The proof attribute cannot be applied to generic functions.");
+            } else if proof_attributes.len() > 1 {
+                self.tcx
+                    .sess
+                    .span_warn(proof_attributes[0].span, "Only one '#[kani::proof]' allowed");
+            }
+        } else if !other_attributes.is_empty() {
             self.tcx.sess.span_err(
                 other_attributes[0].1.span,
                 format!(
@@ -278,12 +313,16 @@ impl<'tcx> GotocCtx<'tcx> {
                 )
                 .as_str(),
             );
-            return;
         }
-        if proof_attributes.len() > 1 {
-            // No return because this only requires a warning
-            self.tcx.sess.span_warn(proof_attributes[0].span, "Only one '#[kani::proof]' allowed");
-        }
+    }
+
+    /// This updates the goto context with any information that should be accumulated from a function's
+    /// attributes.
+    ///
+    /// Handle all attributes i.e. `#[kani::x]` (which kani_macros translates to `#[kanitool::x]` for us to handle here)
+    fn handle_kanitool_attributes(&mut self) {
+        let all_attributes = self.tcx.get_attrs_unchecked(self.current_fn().instance().def_id());
+        let (proof_attributes, other_attributes) = partition_kanitool_attributes(all_attributes);
         if !proof_attributes.is_empty() {
             self.create_proof_harness(other_attributes);
         }

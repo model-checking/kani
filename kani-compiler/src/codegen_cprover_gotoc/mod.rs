@@ -5,6 +5,7 @@ mod codegen;
 mod compiler_interface;
 mod context;
 mod overrides;
+mod reachability;
 mod utils;
 
 pub use compiler_interface::GotocCodegenBackend;
