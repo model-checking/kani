@@ -13,7 +13,7 @@ inputs:
   command:
     description: 'Command to run.'
     required: false
-    default: 'cargo-kani'
+    default: 'cargo-kani --workspace'
 
 runs:
   using: "composite"
