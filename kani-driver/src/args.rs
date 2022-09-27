@@ -191,6 +191,13 @@ pub struct KaniArgs {
     /// Disable CBMC's slice formula which prevents values from being assigned to redundant variables in traces.
     #[structopt(long, hidden_short_help(true), requires("enable-unstable"))]
     pub no_slice_formula: bool,
+
+    /// Randomize the layout of structures. This option can help catching code that relies on
+    /// a specific layout chosen by the compiler that is not guaranteed to be stable in the future.
+    /// If a value is given, it will be used as the seed for randomization
+    /// See the `-Z randomize-layout` and `-Z layout-seed` arguments of the rust compiler.
+    #[structopt(long)]
+    pub randomize_layout: Option<Option<u64>>,
     /*
     The below is a "TODO list" of things not yet implemented from the kani_flags.py script.
 
@@ -350,6 +357,22 @@ impl KaniArgs {
         let extra_unwind =
             self.cbmc_args.iter().any(|s| s.to_str().unwrap().starts_with("--unwind"));
         let natives_unwind = self.default_unwind.is_some() || self.unwind.is_some();
+
+        if self.randomize_layout.is_some() && self.concrete_playback.is_some() {
+            let random_seed = if let Some(seed) = self.randomize_layout.unwrap() {
+                format!(" -Z layout-seed={}", seed)
+            } else {
+                String::new()
+            };
+
+            // `tracing` is not a dependency of `kani-driver`, so we println! here instead.
+            println!(
+                "Using concrete playback with --randomize-layout.\n\
+                The produced tests will have to be played with the same rustc arguments:\n\
+                -Z randomize-layout{}",
+                random_seed
+            );
+        }
 
         // TODO: these conflicting flags reflect what's necessary to pass current tests unmodified.
         // We should consider improving the error messages slightly in a later pull request.

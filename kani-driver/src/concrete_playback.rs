@@ -43,7 +43,11 @@ impl KaniSession {
                     harness.pretty_name
                 ),
                 Some(concrete_vals) => {
-                    let concrete_playback = format_unit_test(&harness.mangled_name, &concrete_vals);
+                    let concrete_playback = format_unit_test(
+                        &harness.mangled_name,
+                        &concrete_vals,
+                        self.args.randomize_layout,
+                    );
                     match playback_mode {
                         ConcretePlaybackMode::Print => {
                             println!(
@@ -212,7 +216,14 @@ impl KaniSession {
 }
 
 /// Generate a unit test from a list of concrete values.
-fn format_unit_test(harness_name: &str, concrete_vals: &[ConcreteVal]) -> UnitTest {
+/// `randomize_layout_seed` is `None` when layout is not randomized,
+/// `Some(None)` when layout is randomized without seed, and
+/// `Some(Some(seed))` when layout is randomized with the seed `seed`.
+fn format_unit_test(
+    harness_name: &str,
+    concrete_vals: &[ConcreteVal],
+    randomize_layout_seed: Option<Option<u64>>,
+) -> UnitTest {
     /*
     Given a number of byte vectors, format them as:
     // interp_concrete_val_1
@@ -239,10 +250,23 @@ fn format_unit_test(harness_name: &str, concrete_vals: &[ConcreteVal]) -> UnitTe
     let hash = hasher.finish();
 
     let concrete_playback_func_name = format!("kani_concrete_playback_{harness_name}_{hash}");
+
+    let randomize_layout_message = match randomize_layout_seed {
+        None => String::new(),
+        Some(None) => {
+            "// This test has to be run with rustc option: -Z randomize-layout\n    ".to_string()
+        }
+        Some(Some(seed)) => format!(
+            "// This test has to be run with rust options: -Z randomize-layout -Z layout-seed={}\n    ",
+            seed,
+        ),
+    };
+
     #[rustfmt::skip]
     let concrete_playback = format!(
 "#[test]
 fn {concrete_playback_func_name}() {{
+    {randomize_layout_message}\
     let concrete_vals: Vec<Vec<u8>> = vec![
 {vecs_as_str}
     ];
@@ -278,7 +302,7 @@ struct UnitTest {
 ///     ..., ] }
 /// ```
 mod concrete_vals_extractor {
-    use crate::cbmc_output_parser::{extract_property_class, CheckStatus, ParserItem, TraceItem};
+    use crate::cbmc_output_parser::{CheckStatus, ParserItem, TraceItem};
 
     pub struct ConcreteVal {
         pub byte_arr: Vec<u8>,
@@ -297,16 +321,17 @@ mod concrete_vals_extractor {
                 .expect("Missing CBMC result.");
 
         let mut failures = result_item.iter().filter(|prop| {
-            extract_property_class(prop).expect("Unexpected property class.") == "assertion"
-                && prop.status == CheckStatus::Failure
+            prop.property_class() == "assertion" && prop.status == CheckStatus::Failure
         });
 
         // Process the first assertion failure.
         let first_failure = failures.next();
         if let Some(property) = first_failure {
             // Extract values for the first assertion that has failed.
-            let trace =
-                property.trace.as_ref().expect(&format!("Missing trace for {}", property.property));
+            let trace = property
+                .trace
+                .as_ref()
+                .expect(&format!("Missing trace for {}", property.property_name().unwrap()));
             let concrete_vals = trace.iter().filter_map(&extract_from_trace_item).collect();
 
             // Print warnings for all the other failures that were not handled in case they expected
@@ -314,7 +339,8 @@ mod concrete_vals_extractor {
             for unhandled in failures {
                 println!(
                     "WARNING: Unable to extract concrete values from multiple failing assertions. Skipping property `{}` with description `{}`.",
-                    unhandled.property, unhandled.description,
+                    unhandled.property_name().unwrap(),
+                    unhandled.description,
                 );
             }
             Some(concrete_vals)
