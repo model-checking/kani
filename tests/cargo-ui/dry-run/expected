@@ -4,7 +4,7 @@ symtab2gb
 goto-cc 
 goto-cc
 --function harness
-debug/deps/cbmc-for-harness.out
+debug/deps/cbmc-linked.for-harness.out
 goto-instrument --add-library 
 goto-instrument --generate-function-body-options assert-false-assume-false --generate-function-body .* --drop-unused-functions 
 goto-instrument --ensure-one-backedge-per-target 
