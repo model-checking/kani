@@ -1,4 +1,4 @@
-- **Feature Name:** Function stubbing (`function_stubbing`)
+- **Feature Name:** Function and method stubbing (`function_stubbing`)
 - **Feature Request Issue:** [model-checking#1695](https://github.com/model-checking/kani/issues/1695)
 - **RFC PR:** *Link to original PR*
 - **Status:** Under Review
@@ -6,21 +6,20 @@
 
 ## Summary
 
-This will feature will allow users to specify that certain functions should be replaced with mock functions (stubs) during verification.
-
-**TODO**: Extend the scope of this to include methods.
+This will feature will allow users to specify that certain functions and methods should be replaced with mock functions (stubs) during verification.
 
 ## User Impact
 
 We anticipate that stubbing will have a substantial positive impact on the usability of Kani. There are two main motivations for stubbing:
 
-
-1. Users might need to stub functions containing features that Kani does not support, such as inline assembly.
-2. Users might need to stub functions containing code that Kani supports in principle, but which in practice leads to bad verification performance.
+1. Users might need to stub functions/methods containing features that Kani does not support, such as inline assembly.
+2. Users might need to stub functions/methods containing code that Kani supports in principle, but which in practice leads to bad verification performance.
 
 In both cases, stubbing would enable users to verify code that cannot currently be verified by Kani (or at least not within a reasonable resource bound).
 
 ### A Simple Example
+
+**Categorize this example somehow; like why does it currently fail?**
 
 Consider verifying the following assertion (which can fail):
 
@@ -41,13 +40,20 @@ fn mock_random<T: kani::Arbitrary>() -> T {
 
 Under this substitution, Kani has a single check, which proves that the assertion can fail. Verification time is 0.02 seconds.
 
+### Mocking IO
+
+- `std::fs::read`
+- `std::fs::write`
+- `std::fs::File`
+
 ### A Real-World Example
 
-**TODO**
+**TODO; hopefully something from Tokio**
 
 ## User Experience
 
-This feature is currently limited to stubbing functions; however, the hope is that the basic ideas and mechanisms will carry over to stubbing other features in the future (such as methods and types).
+This feature is currently limited to stubbing functions and methods.
+We anticipate that the user experience we propose here could also be used when stubbing types, although the underlying technical approach might have to change.
 
 Stubs will be specified per harness; that is, different harnesses can use different stubs (the reasoning being that users might want to mock different behavior for different harnesses).
 Users will specify stubs by attaching the `#[kani::stub_by(<original>, <replacement>)]` attribute to each harness function.
@@ -77,16 +83,53 @@ mod my_mod {
 }
 ```
 
-Kani will exit with an error if
+### Stub Sets
+
+As a convenience, users will also be able to specify sets of stubs that can be applied to multiple harnesses.
+First, users write a "dummy" function with the name of the stub set, annotate it with the `#[kani::stub_set]` attribute, and add the desired stub pairings as further attributes:
+
+```rust
+#[cfg(kani)]
+#[kani::stub_set]
+#[kani::stub_by(std::fs::read, my_read)]
+#[kani::stub_by(std::fs::write, my_write)]
+fn my_io_stubs() {}
+```
+
+When declaring a harness, users can use the `#[kani::use_stub_set(<stub_set_name>)]` attribute to apply the stub set:
+
+```rust
+#[cfg(kani)]
+#[kani::proof]
+#[kani::use_stub_set(my_io_stubs)]
+fn my_harness() { ... }
+```
+
+The same mechanism can be used to union together stub sets:
+
+```rust
+#[cfg(kani)]
+#[kani::stub_set]
+#[kani::use_stub_set(my_io_stubs)]
+#[kani::use_stub_set(other_stub_set)]
+fn all_my_stubs() {}
+```
+
+### Error Conditions
+
+Given a set of (`original`, `replacement`) pairs, Kani will exit with an error if
 
 1. a specified `replacement` stub does not exist;
 2. the user specifies conflicting stubs for the same harness (i.e., if the same `original` function is mapped to multiple `replacement` functions); or
 3. the signature of the `replacement` function is not compatible with the signature of the `original` function.
 
+### Pedagogy
+
 To teach this feature, we will update the documentation with a section on function stubbing, including simple examples showing how stubbing can help Kani handle code that currently cannot be verified.
 
-
 ## Detailed Design
+
+**Update: reduce the scope of this to avoid substantial changes to `kani-driver`**
 
 This feature will require substantial changes both to `kani-driver` and `kani-compiler`.
 
@@ -188,5 +231,6 @@ This would impact at what stage of the compiler we do the function replacements.
 
 - It would increase the utility of stubbing if we supported stubs for features beyond functions, such as methods and types.
 The source code annotations and the interaction between `kani-driver` and `kani-compiler` could likely stay the same, although the underlying technical mechanisms in `kani-compiler` performing these substitutions might be significantly more complex.
+**Update**
 - It would probably make sense to provide a library of common stubs for users, since many applications might want to stub the same functions and mock the same behaviors (e.g., `rand::random` can be replaced with a function returning `kani::any`).
 - Users might reasonably want to use the same set of stubs across multiple harnesses; it might be useful to provide a mechanism for defining and referencing a stub group.
