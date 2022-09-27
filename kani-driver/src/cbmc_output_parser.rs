@@ -3,7 +3,7 @@
 
 //! Module for parsing CBMC's JSON output. In general, this output follows
 //! the structure:
-//! ```
+//! ```text
 //! [
 //!     Program,
 //!     Message,

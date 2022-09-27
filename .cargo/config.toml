@@ -1,6 +1,26 @@
 # Copyright Kani Contributors
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
+# Command aliases
+[alias]
+# Build kani with development configuration.
+build-dev = "run -p build-kani -- build-dev"
+# Build kani release bundle.
+bundle = "run -p build-kani -- bundle"
+
+# Constants used by different processes.
+# These constants should be evaluated during compilation via `env!()`.
+[env]
+# Path to the repository root.
+KANI_REPO_ROOT={value = "", relative = true}
+# Path to the sysroot build. This folder will contain a bin/ and a lib/ folder.
+KANI_SYSROOT ={value = "target/kani", relative = true}
+# Target for building Kani's libraries. Their configuration is different than the binary build, so we must use
+# something different than regular `target/`.
+KANI_BUILD_LIBS ={value = "target/build-libs", relative = true}
+# Build Kani library without `build-std`.
+KANI_LEGACY_LIBS ={value = "target/legacy-libs", relative = true}
+
 [target.'cfg(all())']
 rustflags = [ # Global lints/warnings. Need to use underscore instead of -.
 

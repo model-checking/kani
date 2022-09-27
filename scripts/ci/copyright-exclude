@@ -17,4 +17,4 @@ ignore
 kani-dependencies
 scripts/ci/copyright-exclude
 tests/remote-target-lists/.*
-tools/make-kani-release/license-notes.txt
+tools/build-kani/license-notes.txt
