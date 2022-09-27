@@ -213,16 +213,6 @@ impl KaniSession {
         }
         Ok(())
     }
-
-    /// Helper function to inform the user that they tried to generate concrete playback unit tests when there were no failing harnesses.
-    pub fn inform_if_no_failed(&self, failed_harnesses: &[&HarnessMetadata]) {
-        if self.args.concrete_playback.is_some() && !self.args.quiet && failed_harnesses.is_empty()
-        {
-            println!(
-                "INFO: The concrete playback feature never generated unit tests because there were no failing harnesses."
-            )
-        }
-    }
 }
 
 /// Generate a unit test from a list of concrete values.
