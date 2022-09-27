@@ -13,12 +13,25 @@ inputs:
   command:
     description: 'Command to run.'
     required: false
-    default: 'cargo kani --workspace'
+    default: 'cargo-kani'
 
 runs:
-  using: 'docker'
-  image: docker://ghcr.io/model-checking/kani-ubuntu-20.04:0.11.0
-  args:
-    - bash
-    - '-c'
-    - 'set -e; export HOME=/root USER=$(id -nu) PATH=/root/.cargo/bin:$PATH; source $HOME/.bashrc; ${{ inputs.command }}'
+  using: "composite"
+  steps:
+    - name: Install Kani
+      shell: bash
+      run: |
+        export KANI_VERSION="0.11.0"; \
+        export KANI_SCRIPT_FOLDER="https://raw.githubusercontent.com/model-checking/kani/kani-${KANI_VERSION}/scripts/setup"; \
+        curl "${KANI_SCRIPT_FOLDER}/ubuntu/install_deps.sh" | bash ; \
+        curl "${KANI_SCRIPT_FOLDER}/install_rustup.sh" | bash  ; \
+        source  ~/.cargo/env; \
+        cargo install --locked kani-verifier; \
+        cargo-kani setup;
+
+    - name: Run Kani
+      shell: bash
+      run: | 
+        source  ~/.cargo/env; \
+        ${{ inputs.command }}
+
