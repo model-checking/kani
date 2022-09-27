@@ -1,3 +1,3 @@
-CBMC_VERSION="5.65.1"
+CBMC_VERSION="5.66.0"
 # If you update this version number, remember to bump it in `src/setup.rs` too
 CBMC_VIEWER_VERSION="3.6"

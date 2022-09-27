@@ -3,7 +3,7 @@
 
 [package]
 name = "kani_queries"
-version = "0.10.0"
+version = "0.11.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 publish = false
@@ -13,3 +13,6 @@ unsound_experiments = []
 
 [dependencies]
 tracing = {version = "0.1"}
+strum = {version = "0.24.0"}
+strum_macros = {version = "0.24.0"}
+

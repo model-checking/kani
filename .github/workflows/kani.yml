@@ -63,8 +63,8 @@ jobs:
         with:
           os: ubuntu-20.04
 
-      - name: Build Kani
-        run: cargo build
+      - name: Build Kani using release mode
+        run: cargo build --release
 
       - name: Execute Kani performance tests
         run: ./scripts/kani-perf.sh
