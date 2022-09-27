@@ -83,6 +83,10 @@ mod my_mod {
 }
 ```
 
+### Accessing Private Fields in Method Stubs
+
+**TODO**
+
 ### Stub Sets
 
 As a convenience, users will also be able to specify sets of stubs that can be applied to multiple harnesses.
@@ -129,9 +133,12 @@ To teach this feature, we will update the documentation with a section on functi
 
 ## Detailed Design
 
-**Update: reduce the scope of this to avoid substantial changes to `kani-driver`**
+We discuss both the design in its full form and a simplified version appropriate for a first step.
+We anticipate that this design will evolve and be iterated upon.
 
-This feature will require substantial changes both to `kani-driver` and `kani-compiler`.
+### Full form
+
+In its full form, we expect that this feature will require substantial changes both to `kani-driver` and `kani-compiler`.
 
 `kani-driver` will need to be responsible for determining which stubs are required for each harness, which will require moving the code for identifying harnesses from `kani-compiler` to `kani-driver`.
 After `kani-driver` has determined the set of stubs to use for each harness, it will invoke `kani-compiler` once for each set of stubs, passing the relevant stub pairings as command line arguments.
@@ -142,11 +149,15 @@ After `kani-compiler` has finished compiling under a given stub set, `kani-drive
 This can be achieved via `rustc`'s query mechanism: if the user wants to replace `foo` with `bar`, then when the compiler requests the MIR for `foo`, we instead return the MIR for `bar`.
 `kani-compiler` will be responsible for checking for the error conditions enumerated in the previous section.
 
-## Rationale and alternatives
+### First step
 
-**TODO**: Emphasize more the ability to stub code that the user does not have source access to.
+As a first step, we will require that stubbing will only be enabled if Kani is also run with the `--harness` flag.
+Since there is only a single stub set in this situation, `kani-driver` needs to run `kani-compiler` only once.
 
-The lack of stubbing has a substantial negative impact on the usability of Kani: stubbing is a *de facto* necessity for verification tools.
+## Rationale and alternatives: user experience
+
+Stubbing is a *de facto* necessity for verification tools, and the lack of stubbing has a negative impact on the usability of Kani.
+**TODO**: Argue why stubbing functions/methods is enough/a good start
 
 ### Benefits
 
@@ -212,7 +223,7 @@ fn my_harness() { ... }
 The benefit is that stubs are specified per harness, and (using modules) it might be possible to group stubs together.
 The downside is that multiple annotations are required and the stub mappings themselves are remote from the harness.
 
-### Alternative #4:  Specify stubs in a file 
+### Alternative #4: Specify stubs in a file 
 
 One alternative would be to specify stubs in a file that is passed to `kani-driver` via a command line option.
 Users would specify per-harness stub pairings in the file; JSON would be a possible format.
@@ -220,17 +231,57 @@ Using a file would eliminate the need for `kani-driver` to extract harness infor
 It would also allow the same harness to be run with different stub selections (by supplying a different file).
 The disadvantage is that the stub selection is remote from the harness itself.
 
+## Rationale and alternatives: stubbing mechanism
+
+Our approach is based on a MIR-to-MIR transformation.
+The advantages are that it operates over a relatively simple intermediate representation and `rustc` has good support for plugging in MIR-to-MIR transformations, so it would not require any changes to `rustc` itself.
+At this stage of the compiler, names have been fully resolved, and there is no problem with swapping in the body of a function defined in one crate for a function defined in another.
+
+The major downside with the MIR-to-MIR transformation is that it does not appear to be possible to stub types at that stage (there is no way to change the definition of a type through the MIR).
+Thus, our proposed approach will not be a fully general stubbing solution.
+However, it can be used as part of a portfolio of stubbing approaches, where users stub local types using conditional compilation (see Alternative #1), and Kani provides a modified version of the standard library with verification-friendly versions of types like `std::vec::Vec`.
+
+### Alternative #1: Conditional compilation
+
+In this baseline alternative, we do not provide any stubbing mechanism at all.
+Instead, users can effectively stub local code (functions, methods, and types) using conditional compilation.
+For example, they could specify using `#[cfg(kani)]` to turn off the original definition and turn on the replacement definition when Kani is running, similarly to the ghost state approach taken in the [Tokio Bytes proof](https://model-checking.github.io/kani-verifier-blog/2022/08/17/using-the-kani-rust-verifier-on-tokio-bytes.html).
+
+The disadvantage with this approach is that it does not provide any way to stub external code, which is one of the main motivations of our proposed approach.
+
+### Alternative #2: Source-to-source transformation
+
+In this alternative, we rewrite the source code before it even gets to the compiler.
+The advantage with this approach is that it is very flexible, allowing us to stub functions, methods, and types, either by directly replacing them, or appending their replacements and injecting appropriate conditional compilation guards.
+
+The downside with this approach is that it requires all source code to be available.
+It also might be difficult to inject code in a way that names are correctly resolved (e.g., if the replacement code comes from a different crate).
+Also, source code is difficult to work with, and includes things like unexpanded macros.
+
+On the last two points, we might be able to take advantage of an existing source analysis platform like `rust-analyzer` (which has facilities like structural search replace), but this would add more (potentially fragile) dependencies to Kani.
+
+### Alternative #3: AST-to-AST or HIR-to-HIR transformation
+
+In this alternative, we implement stubbing by rewriting the AST or [High-Level IR (HIR)](https://rustc-dev-guide.rust-lang.org/hir.html) of the program.
+The HIR is a more compiler-friendly version of the AST; it is what is used for type checking.
+To swap out a function, method, or type at this level, it looks like it would be necessary to add another pass to `rustc` that takes the initial AST/HIR and produces a new AST/HIR with the appropriate replacements.
+
+The advantage with this approach is, like source transformations, it would be very flexible.
+The downside is that it would require modifying `rustc` (as far as we know, there is not an API for plugging in a new AST/HIR pass), and would also require performing the transformations at a very syntactic level: although the AST/HIR would likely be easier to work with than source code directly, it is still very close to the source code and not very abstract.
+Furthermore, it would require that we have access to the AST/HIR for all external code, and--provided we supported stubbing across crate boundaries--we would need to figure out how to inject the AST/HIR from one crate into another (the AST/HIR is usually just constructed for the crate currently being compiled).
+
 ## Open questions
 
 - Is it worth supporting per-harness stubs, given the extra complication (over using a single stub set for all harnesses)? Do we have good use cases for this?
-- How will the required updates to `kani-driver` (e.g., calling `kani-compiler` multiple times) mesh with efforts to parallelize `kani-driver`?
+- How will the required updates to `kani-driver` (e.g., potentially calling `kani-compiler` multiple times) mesh with efforts to parallelize `kani-driver`?
 - Would there ever be the need to stub a particular monomorphization of a function, as opposed to the polymorphic function?
-This would impact at what stage of the compiler we do the function replacements. 
+- What does it mean for the replacement function/method to be "compatible" with the original one?
+Requiring the replacement's type to be a subtype of the original type is likely stronger than what we want.
+For example, if the original function is polymorphic but monomorphized to only a single type, then it seems okay to replace it with a function that matches the monomorphized type.
+- When a user stubs a method and wants access to private fields, is there some way we can hide the `std::mem::transmute` ugliness?
 
 ## Future possibilities
 
-- It would increase the utility of stubbing if we supported stubs for features beyond functions, such as methods and types.
-The source code annotations and the interaction between `kani-driver` and `kani-compiler` could likely stay the same, although the underlying technical mechanisms in `kani-compiler` performing these substitutions might be significantly more complex.
-**Update**
+- It would increase the utility of stubbing if we supported stubs for types.
+The source code annotations could likely stay the same, although the underlying technical mechanisms in `kani-compiler` performing these substitutions might be significantly more complex.
 - It would probably make sense to provide a library of common stubs for users, since many applications might want to stub the same functions and mock the same behaviors (e.g., `rand::random` can be replaced with a function returning `kani::any`).
-- Users might reasonably want to use the same set of stubs across multiple harnesses; it might be useful to provide a mechanism for defining and referencing a stub group.
