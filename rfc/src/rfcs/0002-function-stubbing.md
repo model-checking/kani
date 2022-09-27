@@ -1,5 +1,5 @@
 - **Feature Name:** Function and method stubbing (`function_stubbing`)
-- **Feature Request Issue:** [model-checking#1695](https://github.com/model-checking/kani/issues/1695)
+- **Feature Request Issue:** <https://github.com/model-checking/kani/issues/1695>
 - **RFC PR:** <https://github.com/model-checking/kani/pull/1723> 
 - **Status:** Under Review
 - **Version:** 0
