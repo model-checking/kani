@@ -3,6 +3,7 @@
 - **RFC PR:** *Link to original PR*
 - **Status:** Under Review
 - **Version:** 0
+- **Proof-of-concept:** https://github.com/aaronbembenek-aws/kani/tree/mir_transform
 
 ## Summary
 
