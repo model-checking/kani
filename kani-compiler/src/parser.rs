@@ -3,10 +3,11 @@
 
 use clap::{
     app_from_crate, crate_authors, crate_description, crate_name, crate_version, App, AppSettings,
-    Arg,
+    Arg, ArgMatches,
 };
 use kani_queries::ReachabilityType;
 use std::env;
+use std::str::FromStr;
 use strum::VariantNames as _;
 
 /// Option name used to set log level.
@@ -161,6 +162,17 @@ pub fn parser<'a, 'b>() -> App<'a, 'b> {
     let app = crate::unsound_experiments::arg_parser::add_unsound_experiments_to_parser(app);
 
     app
+}
+
+pub trait KaniCompilerParser {
+    fn reachability_type(&self) -> ReachabilityType;
+}
+
+impl<'a> KaniCompilerParser for ArgMatches<'a> {
+    fn reachability_type(&self) -> ReachabilityType {
+        self.value_of(REACHABILITY)
+            .map_or(ReachabilityType::None, |arg| ReachabilityType::from_str(arg).unwrap())
+    }
 }
 
 /// Retrieves the arguments from the command line and process hack to incorporate CARGO arguments.

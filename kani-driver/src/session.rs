@@ -21,9 +21,6 @@ pub struct KaniSession {
     /// The location we found the Kani C stub .c files
     pub kani_c_stubs: PathBuf,
 
-    /// The location we found our pre-built libraries
-    pub kani_rlib: Option<PathBuf>,
-
     /// The temporary files we littered that need to be cleaned up at the end of execution
     pub temporaries: RefCell<Vec<PathBuf>>,
 }
@@ -33,7 +30,7 @@ enum InstallType {
     /// We're operating in a a checked out repo that's been built locally.
     /// The path here is to the root of the repo.
     DevRepo(PathBuf),
-    /// We're operating from a release bundle (made with `make-kani-release`).
+    /// We're operating from a release bundle (made with `build-kani release`).
     /// The path here to where this release bundle has been unpacked.
     Release(PathBuf),
 }
@@ -47,7 +44,6 @@ impl KaniSession {
             kani_compiler: install.kani_compiler()?,
             kani_lib_c: install.kani_lib_c()?,
             kani_c_stubs: install.kani_c_stubs()?,
-            kani_rlib: install.kani_rlib()?,
             temporaries: RefCell::new(vec![]),
         })
     }
@@ -168,9 +164,10 @@ fn bin_folder() -> Result<PathBuf> {
 
 impl InstallType {
     pub fn new() -> Result<Self> {
-        // Case 1: We've checked out the development repo and we're built under `target/`
+        // Case 1: We've checked out the development repo and we're built under `target/kani`
         let mut path = bin_folder()?;
-        if path.ends_with("target/debug") || path.ends_with("target/release") {
+        if path.ends_with("target/kani/bin") {
+            path.pop();
             path.pop();
             path.pop();
 
@@ -207,21 +204,6 @@ impl InstallType {
 
     pub fn kani_c_stubs(&self) -> Result<PathBuf> {
         self.base_path_with("library/kani/stubs/C")
-    }
-
-    pub fn kani_rlib(&self) -> Result<Option<PathBuf>> {
-        match self {
-            Self::DevRepo(_repo) => {
-                // Awkwardly, there is not an easy way to determine the location of these outputs
-                // So we let kani-compiler default to hard-coding them for development builds.
-                Ok(None)
-            }
-            Self::Release(release) => {
-                // First-time setup should place these here. Note `lib` not `library` for built artifacts.
-                let path = release.join("lib");
-                Ok(Some(expect_path(path)?))
-            }
-        }
     }
 
     /// A common case is that our repo and release bundle have the same `subpath`

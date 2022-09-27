@@ -31,15 +31,15 @@ mod parser;
 mod session;
 mod unsound_experiments;
 
+use crate::parser::KaniCompilerParser;
 use crate::session::init_session;
 use clap::ArgMatches;
 use kani_queries::{QueryDb, ReachabilityType, UserInput};
 use rustc_driver::{Callbacks, RunCompiler};
-use std::env;
 use std::ffi::OsStr;
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::str::FromStr as _;
+use std::{env, fs};
 
 /// This function generates all rustc configurations required by our goto-c codegen.
 fn rustc_gotoc_flags(lib_path: &str) -> Vec<String> {
@@ -94,9 +94,7 @@ fn main() -> Result<(), &'static str> {
     queries.set_check_assertion_reachability(matches.is_present(parser::ASSERTION_REACH_CHECKS));
     queries.set_output_pretty_json(matches.is_present(parser::PRETTY_OUTPUT_FILES));
     queries.set_ignore_global_asm(matches.is_present(parser::IGNORE_GLOBAL_ASM));
-    queries.set_reachability_analysis(
-        ReachabilityType::from_str(matches.value_of(parser::REACHABILITY).unwrap()).unwrap(),
-    );
+    queries.set_reachability_analysis(matches.reachability_type());
     #[cfg(feature = "unsound_experiments")]
     crate::unsound_experiments::arg_parser::add_unsound_experiment_args_to_queries(
         &mut queries,
@@ -128,12 +126,35 @@ struct KaniCallbacks {}
 /// Use default function implementations.
 impl Callbacks for KaniCallbacks {}
 
+/// The Kani root folder has all binaries inside bin/ and libraries inside lib/.
+/// This folder can also be used as a rustc sysroot.
+fn kani_root() -> PathBuf {
+    match env::current_exe() {
+        Ok(exe_path) => {
+            let mut path = fs::canonicalize(&exe_path).unwrap_or(exe_path);
+            // Current folder (bin/)
+            path.pop();
+            // Top folder
+            path.pop();
+            path
+        }
+        Err(e) => panic!("Failed to get current exe path: {e}"),
+    }
+}
+
 /// Generate the arguments to pass to rustc_driver.
 fn generate_rustc_args(args: &ArgMatches) -> Vec<String> {
-    let gotoc_args =
-        rustc_gotoc_flags(args.value_of(parser::KANI_LIB).unwrap_or(std::env!("KANI_LIB_PATH")));
     let mut rustc_args = vec![String::from("rustc")];
     if args.is_present(parser::GOTO_C) {
+        let mut default_path = kani_root();
+        if args.reachability_type() == ReachabilityType::Legacy {
+            default_path.push("legacy-lib")
+        } else {
+            default_path.push("lib");
+        }
+        let gotoc_args = rustc_gotoc_flags(
+            args.value_of(parser::KANI_LIB).unwrap_or(default_path.to_str().unwrap()),
+        );
         rustc_args.extend_from_slice(&gotoc_args);
     }
 
@@ -148,7 +169,7 @@ fn generate_rustc_args(args: &ArgMatches) -> Vec<String> {
     if let Some(extra_flags) = args.values_of_os(parser::RUSTC_OPTIONS) {
         extra_flags.for_each(|arg| rustc_args.push(convert_arg(arg)));
     }
-    let sysroot = sysroot_path(args.value_of(parser::SYSROOT));
+    let sysroot = sysroot_path(args);
     rustc_args.push(String::from("--sysroot"));
     rustc_args.push(convert_arg(sysroot.as_os_str()));
     tracing::debug!(?rustc_args, "Compile");
@@ -170,34 +191,53 @@ fn convert_arg(arg: &OsStr) -> String {
 /// and not located under the rust sysroot.
 ///
 /// We do know the actual name of the toolchain we need, however.
-/// So if we don't have `--sysroot`, then we look for our toolchain
-/// in the usual place for rustup.
+/// We look for our toolchain in the usual place for rustup.
 ///
 /// We previously used to pass `--sysroot` in `KANIFLAGS` from `kani-driver`,
 /// but this failed to have effect when building a `build.rs` file.
 /// This wasn't used anywhere but passing down here, so we've just migrated
 /// the code to find the sysroot path directly into this function.
-fn sysroot_path(sysroot_arg: Option<&str>) -> PathBuf {
+///
+/// This function will soon be removed.
+#[deprecated]
+fn toolchain_sysroot_path() -> PathBuf {
     // rustup sets some environment variables during build, but this is not clearly documented.
     // https://github.com/rust-lang/rustup/blob/master/src/toolchain.rs (search for RUSTUP_HOME)
     // We're using RUSTUP_TOOLCHAIN here, which is going to be set by our `rust-toolchain.toml` file.
     // This is a *compile-time* constant, not a dynamic lookup at runtime, so this is reliable.
     let toolchain = env!("RUSTUP_TOOLCHAIN");
 
-    let path = if let Some(s) = sysroot_arg {
-        PathBuf::from(s)
-    } else {
-        // We use the home crate to do a *runtime* determination of where rustup toolchains live
-        let rustup = home::rustup_home().expect("Couldn't find RUSTUP_HOME");
-        rustup.join("toolchains").join(toolchain)
-    };
-    // If we ever have a problem with the above not being good enough, we can consider a third heuristic
-    // for finding our sysroot: readlink() on `../toolchain` from the location of our executable.
-    // At time of writing this would only work for release, not development, however, so I'm not going
-    // with this option yet. It would eliminate the need for the `home` crate however.
+    // We use the home crate to do a *runtime* determination of where rustup toolchains live
+    let rustup = home::rustup_home().expect("Couldn't find RUSTUP_HOME");
+    let path = rustup.join("toolchains").join(toolchain);
 
     if !path.exists() {
         panic!("Couldn't find Kani Rust toolchain {}. Tried: {}", toolchain, path.display());
+    }
+    path
+}
+
+/// Get the sysroot relative to the binary location.
+///
+/// Kani uses a custom sysroot. The `std` library and dependencies are compiled in debug mode and
+/// include the entire MIR definitions needed by Kani.
+///
+/// We do provide a `--sysroot` option that users may want to use instead.
+#[allow(deprecated)]
+fn sysroot_path(args: &ArgMatches) -> PathBuf {
+    let sysroot_arg = args.value_of(parser::SYSROOT);
+    let path = if let Some(s) = sysroot_arg {
+        PathBuf::from(s)
+    } else if args.reachability_type() == ReachabilityType::Legacy
+        || !args.is_present(parser::GOTO_C)
+    {
+        toolchain_sysroot_path()
+    } else {
+        kani_root()
+    };
+
+    if !path.exists() {
+        panic!("Couldn't find Kani Rust toolchain {:?}.", path.display());
     }
     tracing::debug!(?path, ?sysroot_arg, "Sysroot path.");
     path

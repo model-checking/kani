@@ -106,11 +106,6 @@ impl KaniSession {
     pub fn kani_specific_flags(&self) -> Vec<OsString> {
         let mut flags = vec![OsString::from("--goto-c")];
 
-        if let Some(rlib) = &self.kani_rlib {
-            flags.push("--kani-lib".into());
-            flags.push(rlib.into());
-        }
-
         if self.args.debug {
             flags.push("--log-level=debug".into());
         } else if self.args.verbose {
