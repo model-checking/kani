@@ -334,7 +334,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             if !(typ.is_trait() || typ.is_box()) {
                                 warn!(self_type=?typ, "Unsupported drop of unsized");
                                 return self.codegen_unimplemented_stmt(
-                                    format!("Unsupported drop unsized struct: {:?}", typ).as_str(),
+                                    format!("drop unsized struct for {:?}", typ).as_str(),
                                     loc,
                                     "https://github.com/model-checking/kani/issues/1072",
                                 );
@@ -383,7 +383,11 @@ impl<'tcx> GotocCtx<'tcx> {
                             func.call(args).as_stmt(loc)
                         } else {
                             self.codegen_unimplemented_stmt(
-                                format!("drop_in_place call for {:?}", func).as_str(),
+                                format!(
+                                    "drop_in_place call for {}",
+                                    self.readable_instance_name(drop_instance)
+                                )
+                                .as_str(),
                                 loc,
                                 "https://github.com/model-checking/kani/issues/426",
                             )

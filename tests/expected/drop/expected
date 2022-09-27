@@ -7,10 +7,10 @@ Description: "assertion failed: self.id == 1"\
 in function <DummyImpl as std::ops::Drop>::drop
 
 Status: FAILURE\
-Description: "Unsupported drop unsized struct: Wrapper<dyn DummyTrait> is not currently supported by Kani. Please post your example at https://github.com/model-checking/kani/issues/1072"
+Description: "drop unsized struct for Wrapper<dyn DummyTrait> is not currently supported by Kani. Please post your example at https://github.com/model-checking/kani/issues/1072"
 
 
-Failed Checks: Unsupported drop unsized struct: Wrapper<dyn DummyTrait> is not currently supported by Kani. Please post your example at https://github.com/model-checking/kani/issues/1072
+Failed Checks: drop unsized struct for Wrapper<dyn DummyTrait> is not currently supported by Kani. Please post your example at https://github.com/model-checking/kani/issues/1072
 
 VERIFICATION:- FAILED
 

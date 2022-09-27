@@ -836,7 +836,7 @@ impl<'tcx> GotocCtx<'tcx> {
             let drop_sym = self.ensure(&drop_sym_name, |ctx, name| {
                 // Function body
                 let unimplemented = ctx.codegen_unimplemented_stmt(
-                    format!("drop_in_place for {}", drop_sym_name).as_str(),
+                    format!("drop_in_place for {}", drop_instance).as_str(),
                     Location::none(),
                     "https://github.com/model-checking/kani/issues/281",
                 );
