@@ -312,7 +312,7 @@ struct UnitTest {
 ///     ..., ] }
 /// ```
 mod concrete_vals_extractor {
-    use crate::cbmc_output_parser::{extract_property_class, CheckStatus, ParserItem, TraceItem};
+    use crate::cbmc_output_parser::{CheckStatus, ParserItem, TraceItem};
 
     pub struct ConcreteVal {
         pub byte_arr: Vec<u8>,
@@ -331,16 +331,17 @@ mod concrete_vals_extractor {
                 .expect("Missing CBMC result.");
 
         let mut failures = result_item.iter().filter(|prop| {
-            extract_property_class(prop).expect("Unexpected property class.") == "assertion"
-                && prop.status == CheckStatus::Failure
+            prop.property_class() == "assertion" && prop.status == CheckStatus::Failure
         });
 
         // Process the first assertion failure.
         let first_failure = failures.next();
         if let Some(property) = first_failure {
             // Extract values for the first assertion that has failed.
-            let trace =
-                property.trace.as_ref().expect(&format!("Missing trace for {}", property.property));
+            let trace = property
+                .trace
+                .as_ref()
+                .expect(&format!("Missing trace for {}", property.property_name().unwrap()));
             let concrete_vals = trace.iter().filter_map(&extract_from_trace_item).collect();
 
             // Print warnings for all the other failures that were not handled in case they expected
@@ -348,7 +349,8 @@ mod concrete_vals_extractor {
             for unhandled in failures {
                 println!(
                     "WARNING: Unable to extract concrete values from multiple failing assertions. Skipping property `{}` with description `{}`.",
-                    unhandled.property, unhandled.description,
+                    unhandled.property_name().unwrap(),
+                    unhandled.description,
                 );
             }
             Some(concrete_vals)
