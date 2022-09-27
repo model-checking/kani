@@ -83,10 +83,6 @@ mod my_mod {
 }
 ```
 
-### Accessing Private Fields in Method Stubs
-
-**TODO**
-
 ### Stub Sets
 
 As a convenience, users will also be able to specify sets of stubs that can be applied to multiple harnesses.
@@ -119,9 +115,44 @@ The same mechanism can be used to union together stub sets:
 fn all_my_stubs() {}
 ```
 
+### Accessing Private Fields in Method Stubs
+
+When stubbing a method, users might need to access private fields within the struct.
+Because users are writing stubs in Rust and are subject to Rust's restrictions, they cannot access private fields directly.
+Instead, they have to create a mock struct that has the same layout as the original struct, but with public fields, and then use `std::mem::transmute` to cast between them.
+
+```rust
+struct Foo {
+    x: u32,
+}
+
+impl Foo {
+    pub fn m(&self) -> u32 {
+        0
+    }
+}
+
+struct MockFoo {
+    pub x: u32,
+}
+
+fn mock_m(foo: &Foo) {
+    let mock: &MockFoo = unsafe { std::mem::transmute(foo) };
+    return mock.x;
+}
+
+#[cfg(kani)]
+#[kani::proof]
+#[kani::stub_by(Foo::m, mock_m)]
+fn my_harness() { ... }
+```
+
+We acknowledge that this approach is both slightly clunky and brittle, since it requires knowing the layout of the original struct (which could change) and depends on `rustc` producing the same layout for both structs (which is not guaranteed unless both are annotated with `repr(C)`).
+It is an open question whether we can provide a mechanism to hide some of this ugliness from the user, or at least error if, say, the struct layouts differ.
+
 ### Error Conditions
 
-Given a set of (`original`, `replacement`) pairs, Kani will exit with an error if
+Given a set of `original`-`replacement` pairs, Kani will exit with an error if
 
 1. a specified `replacement` stub does not exist;
 2. the user specifies conflicting stubs for the same harness (i.e., if the same `original` function is mapped to multiple `replacement` functions); or
@@ -129,7 +160,7 @@ Given a set of (`original`, `replacement`) pairs, Kani will exit with an error i
 
 ### Pedagogy
 
-To teach this feature, we will update the documentation with a section on function stubbing, including simple examples showing how stubbing can help Kani handle code that currently cannot be verified.
+To teach this feature, we will update the documentation with a section on function and method stubbing, including simple examples showing how stubbing can help Kani handle code that currently cannot be verified.
 
 ## Detailed Design
 
@@ -157,7 +188,6 @@ Since there is only a single stub set in this situation, `kani-driver` needs to 
 ## Rationale and alternatives: user experience
 
 Stubbing is a *de facto* necessity for verification tools, and the lack of stubbing has a negative impact on the usability of Kani.
-**TODO**: Argue why stubbing functions/methods is enough/a good start
 
 ### Benefits
 
@@ -239,7 +269,9 @@ At this stage of the compiler, names have been fully resolved, and there is no p
 
 The major downside with the MIR-to-MIR transformation is that it does not appear to be possible to stub types at that stage (there is no way to change the definition of a type through the MIR).
 Thus, our proposed approach will not be a fully general stubbing solution.
-However, it can be used as part of a portfolio of stubbing approaches, where users stub local types using conditional compilation (see Alternative #1), and Kani provides a modified version of the standard library with verification-friendly versions of types like `std::vec::Vec`.
+However, it is technically feasible and relatively clean, and provides benefits over having no stubbing at all (as can be seen in the examples in the first part of this document).
+
+Furthermore, it can be used as part of a portfolio of stubbing approaches, where users stub local types using conditional compilation (see Alternative #1), and Kani provides a modified version of the standard library with verification-friendly versions of types like `std::vec::Vec`.
 
 ### Alternative #1: Conditional compilation
 
@@ -279,9 +311,10 @@ Furthermore, it would require that we have access to the AST/HIR for all externa
 Requiring the replacement's type to be a subtype of the original type is likely stronger than what we want.
 For example, if the original function is polymorphic but monomorphized to only a single type, then it seems okay to replace it with a function that matches the monomorphized type.
 - When a user stubs a method and wants access to private fields, is there some way we can hide the `std::mem::transmute` ugliness?
+Can we error if the mock struct's layout differs from the original struct's?
 
 ## Future possibilities
 
 - It would increase the utility of stubbing if we supported stubs for types.
-The source code annotations could likely stay the same, although the underlying technical mechanisms in `kani-compiler` performing these substitutions might be significantly more complex.
+The source code annotations could likely stay the same, although the underlying technical approach performing these substitutions might be significantly more complex.
 - It would probably make sense to provide a library of common stubs for users, since many applications might want to stub the same functions and mock the same behaviors (e.g., `rand::random` can be replaced with a function returning `kani::any`).
