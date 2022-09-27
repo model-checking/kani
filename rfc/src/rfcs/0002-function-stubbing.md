@@ -17,7 +17,10 @@ We anticipate that stubbing will have a substantial positive impact on the usabi
 
 In both cases, stubbing would enable users to verify code that cannot currently be verified by Kani (or at least not within a reasonable resource bound).
 
-### A Simple Example
+In what follows, we give three examples of stubbing being put to work.
+Each of these examples runs on a prototype version of the stubbing mechanism we propose (except that the prototype does not support stubbing annotations; instead, it reads stubbing pairs from a file).
+
+### Mocking Randomization
 
 **Categorize this example somehow; like why does it currently fail?**
 
@@ -46,9 +49,55 @@ Under this substitution, Kani has a single check, which proves that the assertio
 - `std::fs::write`
 - `std::fs::File`
 
-### A Real-World Example
+### Mocking Vec
 
-**TODO; hopefully something from Tokio**
+[Issue 1673](https://github.com/model-checking/kani/issues/1673) documents that Kani performs poorly on the following program:
+
+```rust
+const N: usize = 9;
+
+#[cfg_attr(kani, kani::proof, kani::unwind(10))]
+fn vec_harness() {
+    let mut v: Vec<String> = Vec::new();
+    for _i in 0..N {
+        v.push(String::from("ABC"));
+    }
+    assert_eq!(v.len(), N);
+    let index: usize = kani::any();
+    kani::assume(index < v.len());
+    let x = &v[index];
+    assert_eq!(*x, "ABC");
+}
+```
+
+On my laptop, it takes 400 seconds to complete.
+The issue reports that performance is much improved if `Vec::new()` is replaced with `Vec::with_capacity(N)`.
+Using stubbing, we can perform this transformation without modifying the harness's code:
+
+```rust
+const N: usize = 9;
+
+fn mock_vec_new<T>() -> Vec<T> {
+    Vec::with_capacity(N)
+}
+
+#[cfg_attr(kani, kani::proof, kani::unwind(10))]
+#[cfg_attr(kani, kani::stub_by(std::vec::Vec::<T>::new, mock_vec_new))]
+fn vec_harness() {
+    let mut v: Vec<String> = Vec::new();
+    for _i in 0..N {
+        v.push(String::from("ABC"));
+    }
+    assert_eq!(v.len(), N);
+    let index: usize = kani::any();
+    kani::assume(index < v.len());
+    let x = &v[index];
+    assert_eq!(*x, "ABC");
+}
+```
+
+The harness now runs in 17 seconds (23x speedup).
+What is intriguing is that, with stubbing, we can make this substitution not only in the harness (where we could have always done it by hand), but also everywhere else in the code base, including external code that we could not have otherwise modified.
 
 ## User Experience
 
