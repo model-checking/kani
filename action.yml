@@ -26,7 +26,7 @@ runs:
         curl "${KANI_SCRIPT_FOLDER}/ubuntu/install_deps.sh" | bash ; \
         curl "${KANI_SCRIPT_FOLDER}/install_rustup.sh" | bash  ; \
         source  ~/.cargo/env; \
-        cargo install --locked kani-verifier; \
+        cargo install --version $KANI_VERSION --locked kani-verifier; \
         cargo-kani setup;
 
     - name: Run Kani
