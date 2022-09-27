@@ -15,7 +15,7 @@ bundle = "run -p build-kani -- bundle"
 KANI_REPO_ROOT={value = "", relative = true}
 # Path to the sysroot build. This folder will contain a bin/ and a lib/ folder.
 KANI_SYSROOT ={value = "target/kani", relative = true}
-# Target for the building Kani's libraries. Their configuration are different than the binary build, so we must use
+# Target for building Kani's libraries. Their configuration is different than the binary build, so we must use
 # something different than regular `target/`.
 KANI_BUILD_LIBS ={value = "target/build-libs", relative = true}
 # Build Kani library without `build-std`.

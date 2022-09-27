@@ -136,7 +136,7 @@ pub fn build_lib() {
 
 /// Kani's "std" library may cause a name conflict with the rust standard library. We remove it
 /// from the `deps/` folder, since we already store it outside of the `deps/` folder.
-/// For that, we retrieve its location from cargo build output.
+/// For that, we retrieve its location from `cargo build` output.
 fn filter_kani_std(cargo_cmd: &mut Child) {
     let reader = BufReader::new(cargo_cmd.stdout.take().unwrap());
     for message in Message::parse_stream(reader) {
@@ -146,7 +146,7 @@ fn filter_kani_std(cargo_cmd: &mut Child) {
                 println!("{:?}", msg)
             }
             Message::CompilerArtifact(artifact) => {
-                // Remote the `rlib` and `rmeta` kept in the deps folder.
+                // Remove the `rlib` and `rmeta` files for our `std` library from the deps folder.
                 if artifact.target.name == "std"
                     && artifact.target.src_path.starts_with(env!("KANI_REPO_ROOT"))
                 {
@@ -200,9 +200,11 @@ fn is_rlib(path: &Path) -> bool {
     path.is_file() && String::from(path.file_name().unwrap().to_string_lossy()).ends_with(".rlib")
 }
 
-/// Extra arguments to be given to "cargo build" while building Kani's binaries.
+/// Extra arguments to be given to `cargo build` while building Kani's binaries.
 /// Note that the following arguments are always provided:
-/// --bins -Z unstable-options --out-dir $KANI_SYSROOT/bin/
+/// ```bash
+/// cargo build --bins -Z unstable-options --out-dir $KANI_SYSROOT/bin/
+/// ```
 pub fn build_bin<T: AsRef<OsStr>>(extra_args: &[T]) {
     let out_dir = kani_sysroot_bin();
     let args = ["--bins", "-Z", "unstable-options", "--out-dir", out_dir.to_str().unwrap()];

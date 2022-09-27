@@ -36,10 +36,10 @@ use crate::session::init_session;
 use clap::ArgMatches;
 use kani_queries::{QueryDb, ReachabilityType, UserInput};
 use rustc_driver::{Callbacks, RunCompiler};
-use std::env;
 use std::ffi::OsStr;
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::{env, fs};
 
 /// This function generates all rustc configurations required by our goto-c codegen.
 fn rustc_gotoc_flags(lib_path: &str) -> Vec<String> {
@@ -76,17 +76,6 @@ fn rustc_gotoc_flags(lib_path: &str) -> Vec<String> {
         "--extern",
         kani_std_wrapper.as_str(),
     ];
-    args.iter().map(|s| s.to_string()).collect()
-}
-
-/// This function generates all rustc configurations required by regular codegen.
-/// This is because we may use a custom sysroot.
-fn rustc_llvm_flags() -> Vec<String> {
-    // The option below provides a mechanism by which definitions in the
-    // standard library can be overriden. See
-    // https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp/topic/.E2.9C.94.20Globally.20override.20an.20std.20macro/near/268873354
-    // for more details.
-    let args = vec!["-C", "panic=abort", "-Z", "unstable-options", "-Z", "panic_abort_tests=yes"];
     args.iter().map(|s| s.to_string()).collect()
 }
 
@@ -141,12 +130,13 @@ impl Callbacks for KaniCallbacks {}
 /// This folder can also be used as a rustc sysroot.
 fn kani_root() -> PathBuf {
     match env::current_exe() {
-        Ok(mut exe_path) => {
+        Ok(exe_path) => {
+            let mut path = fs::canonicalize(&exe_path).unwrap_or(exe_path);
             // Current folder (bin/)
-            exe_path.pop();
+            path.pop();
             // Top folder
-            exe_path.pop();
-            exe_path
+            path.pop();
+            path
         }
         Err(e) => panic!("Failed to get current exe path: {e}"),
     }
@@ -166,8 +156,6 @@ fn generate_rustc_args(args: &ArgMatches) -> Vec<String> {
             args.value_of(parser::KANI_LIB).unwrap_or(default_path.to_str().unwrap()),
         );
         rustc_args.extend_from_slice(&gotoc_args);
-    } else {
-        rustc_args.extend(rustc_llvm_flags().into_iter());
     }
 
     if args.is_present(parser::RUSTC_VERSION) {
