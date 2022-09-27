@@ -43,7 +43,11 @@ impl KaniSession {
                     harness.pretty_name
                 ),
                 Some(concrete_vals) => {
-                    let concrete_playback = format_unit_test(&harness.mangled_name, &concrete_vals);
+                    let concrete_playback = format_unit_test(
+                        &harness.mangled_name,
+                        &concrete_vals,
+                        self.args.randomize_layout,
+                    );
                     match playback_mode {
                         ConcretePlaybackMode::Print => {
                             println!(
@@ -222,7 +226,14 @@ impl KaniSession {
 }
 
 /// Generate a unit test from a list of concrete values.
-fn format_unit_test(harness_name: &str, concrete_vals: &[ConcreteVal]) -> UnitTest {
+/// `randomize_layout_seed` is `None` when layout is not randomized,
+/// `Some(None)` when layout is randomized without seed, and
+/// `Some(Some(seed))` when layout is randomized with the seed `seed`.
+fn format_unit_test(
+    harness_name: &str,
+    concrete_vals: &[ConcreteVal],
+    randomize_layout_seed: Option<Option<u64>>,
+) -> UnitTest {
     /*
     Given a number of byte vectors, format them as:
     // interp_concrete_val_1
@@ -249,10 +260,23 @@ fn format_unit_test(harness_name: &str, concrete_vals: &[ConcreteVal]) -> UnitTe
     let hash = hasher.finish();
 
     let concrete_playback_func_name = format!("kani_concrete_playback_{harness_name}_{hash}");
+
+    let randomize_layout_message = match randomize_layout_seed {
+        None => String::new(),
+        Some(None) => {
+            "// This test has to be run with rustc option: -Z randomize-layout\n    ".to_string()
+        }
+        Some(Some(seed)) => format!(
+            "// This test has to be run with rust options: -Z randomize-layout -Z layout-seed={}\n    ",
+            seed,
+        ),
+    };
+
     #[rustfmt::skip]
     let concrete_playback = format!(
 "#[test]
 fn {concrete_playback_func_name}() {{
+    {randomize_layout_message}\
     let concrete_vals: Vec<Vec<u8>> = vec![
 {vecs_as_str}
     ];
