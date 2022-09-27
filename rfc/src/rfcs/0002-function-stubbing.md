@@ -18,11 +18,11 @@ We anticipate that stubbing will have a substantial positive impact on the usabi
 In both cases, stubbing would enable users to verify code that cannot currently be verified by Kani (or at least not within a reasonable resource bound).
 
 In what follows, we give three examples of stubbing being put to work.
-Each of these examples runs on a prototype version of the stubbing mechanism we propose (except that the prototype does not support stubbing annotations; instead, it reads stubbing pairs from a file).
+Each of these examples runs on a prototype version of the stubbing mechanism we propose (except that the prototype does not support stub-related annotations; instead, it reads the stub mapping from a file).
 
 ### Mocking Randomization
 
-**Categorize this example somehow; like why does it currently fail?**
+**TODO: Clean up this section; add example stubbing method rand::Rng::gen**
 
 Consider verifying the following assertion (which can fail):
 
@@ -45,13 +45,16 @@ Under this substitution, Kani has a single check, which proves that the assertio
 
 ### Mocking IO
 
-- `std::fs::read`
-- `std::fs::write`
+**TODO: build out this section**
+
+- `std::fs::read` (currently can do)
+- `std::fs::write` (currently can do)
 - `std::fs::File`
+- Stub code containing inline assembly? 
 
-### Mocking Vec
+### Mocking `Vec`
 
-[Issue 1673](https://github.com/model-checking/kani/issues/1673) documents that Kani performs poorly on the following program:
+[Issue 1673](https://github.com/model-checking/kani/issues/1673) documents that Kani performs poorly on the following program (both in terms of memory and speed):
 
 ```rust
 const N: usize = 9;
@@ -78,11 +81,11 @@ Using stubbing, we can perform this transformation without modifying the harness
 const N: usize = 9;
 
 fn mock_vec_new<T>() -> Vec<T> {
-    Vec::with_capacity(N)
+    Vec::with_capacity(100)
 }
 
 #[cfg_attr(kani, kani::proof, kani::unwind(10))]
-#[cfg_attr(kani, kani::stub_by(std::vec::Vec::<T>::new, mock_vec_new))]
+#[cfg_attr(kani, kani::stub_by("std::vec::Vec::<T>::new", "mock_vec_new"))]
 fn vec_harness() {
     let mut v: Vec<String> = Vec::new();
     for _i in 0..N {
@@ -96,16 +99,18 @@ fn vec_harness() {
 }
 ```
 
-The harness now runs in 17 seconds (23x speedup).
-What is intriguing is that, with stubbing, we can make this substitution not only in the harness (where we could have always done it by hand), but also everywhere else in the code base, including external code that we could not have otherwise modified.
+The harness now runs in 19 seconds (21x speedup).
+
+**What is intriguing is that, with stubbing, we can make this substitution not only in the harness (where we could have always done it by hand), but also everywhere else in the codebase, including external code that we could not have otherwise modified.**
+This could have a major impact on verification performance if a crate's external dependencies use `Vec`.
 
 ## User Experience
 
 This feature is currently limited to stubbing functions and methods.
-We anticipate that the user experience we propose here could also be used when stubbing types, although the underlying technical approach might have to change.
+We anticipate that the annotations we propose here could also be used when stubbing types, although the underlying technical approach might have to change.
 
 Stubs will be specified per harness; that is, different harnesses can use different stubs (the reasoning being that users might want to mock different behavior for different harnesses).
-Users will specify stubs by attaching the `#[kani::stub_by(<original>, <replacement>)]` attribute to each harness function.
+Users will specify stubs by attaching the `#[kani::stub_by("<original>", "<replacement>")]` attribute to each harness function.
 The attribute may be specified multiple times per harness, so that multiple (non-conflicting) stub pairings are supported.
 The arguments `original` and `replacement` give the names of functions, relative to the crate of the harness (*not* relative to the module of the harness).
 
@@ -125,8 +130,8 @@ mod my_mod {
 
     #[cfg(kani)]
     #[kani::proof]
-    #[kani::stub_by(rand::random, mock_random)]
-    #[kani::stub_by(my_mod::foo, my_mod::bar)]
+    #[kani::stub_by("rand::random", "mock_random")]
+    #[kani::stub_by("my_mod::foo", "my_mod::bar")]
     fn my_harness() { ... }
 
 }
@@ -140,27 +145,27 @@ First, users write a "dummy" function with the name of the stub set, annotate it
 ```rust
 #[cfg(kani)]
 #[kani::stub_set]
-#[kani::stub_by(std::fs::read, my_read)]
-#[kani::stub_by(std::fs::write, my_write)]
+#[kani::stub_by("std::fs::read", "my_read")]
+#[kani::stub_by("std::fs::write", "my_write")]
 fn my_io_stubs() {}
 ```
 
-When declaring a harness, users can use the `#[kani::use_stub_set(<stub_set_name>)]` attribute to apply the stub set:
+When declaring a harness, users can use the `#[kani::use_stub_set("<stub_set_name>")]` attribute to apply the stub set:
 
 ```rust
 #[cfg(kani)]
 #[kani::proof]
-#[kani::use_stub_set(my_io_stubs)]
+#[kani::use_stub_set("my_io_stubs")]
 fn my_harness() { ... }
 ```
 
-The same mechanism can be used to union together stub sets:
+The same mechanism can be used to aggregate stub sets:
 
 ```rust
 #[cfg(kani)]
 #[kani::stub_set]
-#[kani::use_stub_set(my_io_stubs)]
-#[kani::use_stub_set(other_stub_set)]
+#[kani::use_stub_set("my_io_stubs")]
+#[kani::use_stub_set("other_stub_set")]
 fn all_my_stubs() {}
 ```
 
@@ -192,7 +197,7 @@ fn mock_m(foo: &Foo) {
 
 #[cfg(kani)]
 #[kani::proof]
-#[kani::stub_by(Foo::m, mock_m)]
+#[kani::stub_by("Foo::m", "mock_m")]
 fn my_harness() { ... }
 ```
 
@@ -249,11 +254,13 @@ This contrasts with annotating the function to be replaced (such as with functio
 
 - Allowing per-harness stubs complicates the architecture of Kani, as (according to the current design) it requires `kani-driver` to call `kani-compiler` multiple times.
 If stubs were uniformly applied, then we could get away with a single call to `kani-compiler`.
+- Users can always write stubs that do not correctly correspond to program behavior, and so a successful verification does not actually mean the program is bug-free.
+This is similar to other specification bugs. 
 
 ### Comparison to function contracts
 
 - In many cases, stubs are more user-friendly than contracts. With contracts, it is necessary to explicitly provide information that is automatically captured in Rust (such as which memory is written).
-- The currently proposed function contract mechanism does not provide a way to put contracts on external functions. **[CHECK]**
+- The [currently proposed function contract mechanism](https://github.com/model-checking/kani/tree/features/function-contracts) does not provide a way to put contracts on external functions.
 
 ### Alternative #1: Annotate stubbed functions
 
@@ -267,7 +274,7 @@ In this alternative, users add an attribute `#[kani::stub(<original>)]` to the s
 
 ```rust
 #[cfg(kani)]
-#[kani::stub(rand::random)]
+#[kani::stub("rand::random")]
 fn mock_random<T: kani::Arbitrary>() -> T { ... }
 ```
 
@@ -285,17 +292,17 @@ This could be combined with modules, so that a module can be used to group stubs
 #[cfg(kani)]
 mod my_stubs {
 
-  #[kani::stub(foo)]
+  #[kani::stub("foo")]
   fn stub1() { ... }
 
-  #[kani::stub(bar)]
+  #[kani::stub("bar")]
   fn stub2() { ... }
 
 }
 
 #(cfg[kani])
 #[kani::proof]
-#[kani::use_stubs(my_stubs)]
+#[kani::use_stubs("my_stubs")]
 fn my_harness() { ... }
 ```
 
