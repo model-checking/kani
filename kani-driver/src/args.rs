@@ -148,8 +148,8 @@ pub struct KaniArgs {
     // consumes everything
     pub cbmc_args: Vec<OsString>,
 
-    #[structopt(short, long, requires("enable-unstable"))]
-    // consumes everything
+    /// Number of parallel jobs, defaults to 1
+    #[structopt(short, long, hidden = true, requires("enable-unstable"))]
     pub jobs: Option<Option<usize>>,
 
     // Hide option till https://github.com/model-checking/kani/issues/697 is
