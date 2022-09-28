@@ -58,66 +58,13 @@ fn random_cannot_be_zero() {
 
 Under this substitution, Kani has a single check, which proves that the assertion can fail. Verification time is 0.02 seconds.
 
-### Mocking IO
+### Mocking System Calls
 
-**TODO: build out this section**
+**TODO**
 
-- `std::fs::read` (currently can do)
-- `std::fs::write` (currently can do)
-- `std::fs::File`
-- Stub code containing inline assembly? 
+### Mocking Deserialization
 
-### Mocking `Vec`
-
-[Issue 1673](https://github.com/model-checking/kani/issues/1673) documents that Kani performs poorly on the following program (both in terms of memory and speed):
-
-```rust
-const N: usize = 9;
-
-#[cfg_attr(kani, kani::proof, kani::unwind(10))]
-fn vec_harness() {
-    let mut v: Vec<String> = Vec::new();
-    for _i in 0..N {
-        v.push(String::from("ABC"));
-    }
-    assert_eq!(v.len(), N);
-    let index: usize = kani::any();
-    kani::assume(index < v.len());
-    let x = &v[index];
-    assert_eq!(*x, "ABC");
-}
-```
-
-On my laptop, it takes 400 seconds to complete.
-The issue reports that performance is much improved if `Vec::new()` is replaced with `Vec::with_capacity(N)`.
-Using stubbing, we can perform this transformation without modifying the harness's code:
-
-```rust
-const N: usize = 9;
-
-fn mock_vec_new<T>() -> Vec<T> {
-    Vec::with_capacity(100)
-}
-
-#[cfg_attr(kani, kani::proof, kani::unwind(10))]
-#[cfg_attr(kani, kani::stub_by("std::vec::Vec::<T>::new", "mock_vec_new"))]
-fn vec_harness() {
-    let mut v: Vec<String> = Vec::new();
-    for _i in 0..N {
-        v.push(String::from("ABC"));
-    }
-    assert_eq!(v.len(), N);
-    let index: usize = kani::any();
-    kani::assume(index < v.len());
-    let x = &v[index];
-    assert_eq!(*x, "ABC");
-}
-```
-
-The harness now runs in 19 seconds (21x speedup).
-
-**What is intriguing is that, with stubbing, we can make this substitution not only in the harness (where we could have always done it by hand), but also everywhere else in the codebase, including external code that we could not have otherwise modified.**
-This could have a major impact on verification performance if a crate's external dependencies use `Vec`.
+**TODO**
 
 ## User Experience
 
