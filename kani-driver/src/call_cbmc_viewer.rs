@@ -23,12 +23,7 @@ impl KaniSession {
         let coverage_filename = alter_extension(file, "coverage.xml");
         let property_filename = alter_extension(file, "property.xml");
 
-        {
-            let mut temps = self.temporaries.borrow_mut();
-            temps.push(results_filename.clone());
-            temps.push(coverage_filename.clone());
-            temps.push(property_filename.clone());
-        }
+        self.record_temporary_files(&[&results_filename, &coverage_filename, &property_filename]);
 
         self.cbmc_variant(file, &["--xml-ui", "--trace"], &results_filename, harness_metadata)?;
         self.cbmc_variant(

@@ -88,10 +88,7 @@ fn standalone_main() -> Result<()> {
     }
 
     let linked_obj = util::alter_extension(&args.input, "out");
-    {
-        let mut temps = ctx.temporaries.borrow_mut();
-        temps.push(linked_obj.to_owned());
-    }
+    ctx.record_temporary_files(&[&linked_obj]);
     ctx.link_goto_binary(&[goto_obj], &linked_obj)?;
     if let Some(restriction) = outputs.restrictions {
         ctx.apply_vtable_restrictions(&linked_obj, &restriction)?;

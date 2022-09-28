@@ -4,10 +4,10 @@
 use crate::args::KaniArgs;
 use crate::util::render_command;
 use anyhow::{bail, Context, Result};
-use std::cell::RefCell;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
+use std::sync::Mutex;
 
 /// Contains information about the execution environment and arguments that affect operations
 pub struct KaniSession {
@@ -22,7 +22,7 @@ pub struct KaniSession {
     pub kani_c_stubs: PathBuf,
 
     /// The temporary files we littered that need to be cleaned up at the end of execution
-    pub temporaries: RefCell<Vec<PathBuf>>,
+    pub temporaries: Mutex<Vec<PathBuf>>,
 }
 
 /// Represents where we detected Kani, with helper methods for using that information to find critical paths
@@ -44,15 +44,22 @@ impl KaniSession {
             kani_compiler: install.kani_compiler()?,
             kani_lib_c: install.kani_lib_c()?,
             kani_c_stubs: install.kani_c_stubs()?,
-            temporaries: RefCell::new(vec![]),
+            temporaries: Mutex::new(vec![]),
         })
+    }
+
+    pub fn record_temporary_files(&self, temps: &[&Path]) {
+        // unwrap safety: will panic this thread if another thread panicked *while holding the lock.*
+        // This is vanishingly unlikely, and even then probably the right thing to do
+        let mut t = self.temporaries.lock().unwrap();
+        t.extend(temps.iter().map(|p| (*p).to_owned()));
     }
 }
 
 impl Drop for KaniSession {
     fn drop(&mut self) {
         if !self.args.keep_temps && !self.args.dry_run {
-            let temporaries = self.temporaries.borrow();
+            let temporaries = self.temporaries.lock().unwrap();
 
             for file in temporaries.iter() {
                 // If it fails, we don't care, skip it
