@@ -20,27 +20,39 @@ We anticipate that stubbing will have a substantial positive impact on the usabi
 In all cases, stubbing would enable users to verify code that cannot currently be verified by Kani (or at least not within a reasonable resource bound).
 Stubbing might also be helpful in the development of Kani, as it would make it possible to run experiments like "Will Kani get better performance if we replace all instances of `Vec::new` in the codebase with `Vec::with_capacity?`" (following [Issue 1673](https://github.com/model-checking/kani/issues/1673)).
 
-In what follows, we give XXX examples of stubbing being put to work, using the annotations we propose in this RFC.
+In what follows, we give XXX examples of stubbing external code, using the annotations we propose in this RFC.
 We are able to run each of these examples on a modified version of Kani using a proof-of-concept MIR-to-MIR transformation implementing stubbing (the prototype does not support stub-related annotations; instead, it reads the stub mapping from a file).
+These examples are the types of functions/methods that are commonly stubbed in other verification and analysis projects.
 
 ### Mocking Randomization
 
-**TODO: Clean up this section; add example stubbing method rand::Rng::gen**
-
-Consider verifying the following assertion (which can fail):
+The crate [`rand`](https://crates.io/crates/rand) has been downloaded 150M times.
+However, Kani cannot currently handle code that uses it.
+Consider this example:
 
 ```rust
-assert!(rand::random::<u32>() != 0);
+#[cfg(kani)]
+#[kani::proof]
+fn random_cannot_be_zero() {
+    assert_ne!(rand::random::<u32>(), 0);
+}
 ```
 
-Currently, running Kani on this leads to 1503 checks: one is a failure because of a missing definition, and the other 1502 are undetermined. That is, Kani is currently unable to prove that this assertion can fail. Verification time is 0.52 seconds.
+For unwind values less than 2, Kani encounters an unwinding assertion error (there is a loop used to seed the random number generator); if we set an unwind value of 2, Kani fails to finish in 5 minutes.
 
-Using stubbing, we can specify that the function `rand::random` should be replaced with the function `mock_random`, which we can define as
+Using stubbing, we can specify that the function `rand::random` should be replaced with a mocked version:
 
 ```rust
 #[cfg(kani)]
 fn mock_random<T: kani::Arbitrary>() -> T {
     kani::any()
+}
+
+#[cfg(kani)]
+#[kani::proof]
+#[kani::stub_by("rand::random", "mock_random")]
+fn random_cannot_be_zero() {
+    assert_ne!(rand::random::<u32>(), 0);
 }
 ```
 
