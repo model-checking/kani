@@ -11,15 +11,17 @@ This will feature will allow users to specify that certain functions and methods
 
 ## User Impact
 
-We anticipate that stubbing will have a substantial positive impact on the usability of Kani. There are two main motivations for stubbing:
+We anticipate that stubbing will have a substantial positive impact on the usability of Kani:
 
 1. Users might need to stub functions/methods containing features that Kani does not support, such as inline assembly.
-2. Users might need to stub functions/methods containing code that Kani supports in principle, but which in practice leads to bad verification performance.
+2. Users might need to stub functions/methods containing code that Kani supports in principle, but which in practice leads to bad verification performance (for example, if it contains loops).
+3. Users could use stubbing to perform compositional reasoning: prove the behavior of a function/method `f`, and then in other proofs use a stub of `f` that mocks that behavior but is less complex.
 
-In both cases, stubbing would enable users to verify code that cannot currently be verified by Kani (or at least not within a reasonable resource bound).
+In all cases, stubbing would enable users to verify code that cannot currently be verified by Kani (or at least not within a reasonable resource bound).
+Stubbing might also be helpful in the development of Kani, as it would make it possible to run experiments like "Will Kani get better performance if we replace all instances of `Vec::new` in the codebase with `Vec::with_capacity?`" (following [Issue 1673](https://github.com/model-checking/kani/issues/1673)).
 
-In what follows, we give three examples of stubbing being put to work.
-Each of these examples runs on a prototype version of the stubbing mechanism we propose (except that the prototype does not support stub-related annotations; instead, it reads the stub mapping from a file).
+In what follows, we give XXX examples of stubbing being put to work, using the annotations we propose in this RFC.
+We are able to run each of these examples on a modified version of Kani using a proof-of-concept MIR-to-MIR transformation implementing stubbing (the prototype does not support stub-related annotations; instead, it reads the stub mapping from a file).
 
 ### Mocking Randomization
 
@@ -249,7 +251,8 @@ Stubbing is a *de facto* necessity for verification tools, and the lack of stubb
 - Because stubs are specified by annotating the harness, the user is able to specify stubs for functions they do not have source access to (like library functions).
 This contrasts with annotating the function to be replaced (such as with function contracts).
 - The current design provides the user with flexibility, as they can specify different sets of stubs to use for different harnesses.
-- The stub mappings are all located right by the harness, which makes it easy to understand which replacements are going to happen for each harness.
+This is important if users are trying to perform compositional reasoning using stubbing, since in some harnesses a function/method should be verified, in in other harnesses its behavior should be assumed.
+- The stub selections are located adjacent to the harness, which makes it easy to understand which replacements are going to happen for each harness.
 
 ### Risks
 
@@ -262,6 +265,7 @@ This is similar to other specification bugs.
 
 - In many cases, stubs are more user-friendly than contracts. With contracts, it is necessary to explicitly provide information that is automatically captured in Rust (such as which memory is written).
 - The [currently proposed function contract mechanism](https://github.com/model-checking/kani/tree/features/function-contracts) does not provide a way to put contracts on external functions.
+This is one of the key motivations for stubbing.
 
 ### Alternative #1: Annotate stubbed functions
 
