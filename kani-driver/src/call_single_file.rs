@@ -33,15 +33,14 @@ impl KaniSession {
         let restrictions_filename = alter_extension(file, "restrictions.json");
         let rlib_filename = guess_rlib_name(file);
 
-        {
-            let mut temps = self.temporaries.borrow_mut();
-            temps.push(rlib_filename);
-            temps.push(output_filename.clone());
-            temps.push(typemap_filename);
-            temps.push(metadata_filename.clone());
-            if self.args.restrict_vtable() {
-                temps.push(restrictions_filename.clone());
-            }
+        self.record_temporary_files(&[
+            &rlib_filename,
+            &output_filename,
+            &typemap_filename,
+            &metadata_filename,
+        ]);
+        if self.args.restrict_vtable() {
+            self.record_temporary_files(&[&restrictions_filename]);
         }
 
         let mut kani_args = self.kani_specific_flags();

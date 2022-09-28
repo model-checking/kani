@@ -148,6 +148,10 @@ pub struct KaniArgs {
     // consumes everything
     pub cbmc_args: Vec<OsString>,
 
+    /// Number of parallel jobs, defaults to 1
+    #[structopt(short, long, hidden = true, requires("enable-unstable"))]
+    pub jobs: Option<Option<usize>>,
+
     // Hide option till https://github.com/model-checking/kani/issues/697 is
     // fixed.
     /// Use abstractions for the standard library.
@@ -224,6 +228,15 @@ impl KaniArgs {
             None
         } else {
             Some(DEFAULT_OBJECT_BITS)
+        }
+    }
+
+    /// Computes how many threads should be used to verify harnesses.
+    pub fn jobs(&self) -> Option<usize> {
+        match self.jobs {
+            None => Some(1),          // no argument, default 1
+            Some(None) => None,       // -j
+            Some(Some(x)) => Some(x), // -j=x
         }
     }
 }
@@ -365,7 +378,6 @@ impl KaniArgs {
                 String::new()
             };
 
-            // `tracing` is not a dependency of `kani-driver`, so we println! here instead.
             println!(
                 "Using concrete playback with --randomize-layout.\n\
                 The produced tests will have to be played with the same rustc arguments:\n\
@@ -377,29 +389,47 @@ impl KaniArgs {
         // TODO: these conflicting flags reflect what's necessary to pass current tests unmodified.
         // We should consider improving the error messages slightly in a later pull request.
         if natives_unwind && extra_unwind {
-            Err(Error::with_description(
+            return Err(Error::with_description(
                 "Conflicting flags: unwind flags provided to kani and in --cbmc-args.",
                 ErrorKind::ArgumentConflict,
-            ))
-        } else if self.cbmc_args.contains(&OsString::from("--function")) {
-            Err(Error::with_description(
+            ));
+        }
+        if self.cbmc_args.contains(&OsString::from("--function")) {
+            return Err(Error::with_description(
                 "Invalid flag: --function should be provided to Kani directly, not via --cbmc-args.",
                 ErrorKind::ArgumentConflict,
-            ))
-        } else if self.quiet && self.concrete_playback == Some(ConcretePlaybackMode::Print) {
-            Err(Error::with_description(
+            ));
+        }
+        if self.quiet && self.concrete_playback == Some(ConcretePlaybackMode::Print) {
+            return Err(Error::with_description(
                 "Conflicting options: --concrete-playback=print and --quiet.",
                 ErrorKind::ArgumentConflict,
-            ))
-        } else if self.concrete_playback.is_some() && self.output_format == OutputFormat::Old {
-            Err(Error::with_description(
+            ));
+        }
+        if self.concrete_playback.is_some() && self.output_format == OutputFormat::Old {
+            return Err(Error::with_description(
                 "Conflicting options: --concrete-playback isn't compatible with \
                 --output-format=old.",
                 ErrorKind::ArgumentConflict,
-            ))
-        } else {
-            Ok(())
+            ));
         }
+        if self.concrete_playback.is_some() && self.jobs() != Some(1) {
+            // Concrete playback currently embeds a lot of assumptions about the order in which harnesses get called.
+            return Err(Error::with_description(
+                "Conflicting options: --concrete-playback isn't compatible with --jobs.",
+                ErrorKind::ArgumentConflict,
+            ));
+        }
+        if self.jobs.is_some() && self.output_format != OutputFormat::Terse {
+            // More verbose output formats make it hard to interpret output right now when run in parallel.
+            // This can be removed when we change up how results are printed.
+            return Err(Error::with_description(
+                "Conflicting options: --jobs requires `--output-format=terse`",
+                ErrorKind::ArgumentConflict,
+            ));
+        }
+
+        Ok(())
     }
 }
 

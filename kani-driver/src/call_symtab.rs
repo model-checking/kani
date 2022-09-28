@@ -12,10 +12,7 @@ impl KaniSession {
     pub fn symbol_table_to_gotoc(&self, file: &Path) -> Result<PathBuf> {
         let output_filename = file.with_extension("out");
 
-        {
-            let mut temps = self.temporaries.borrow_mut();
-            temps.push(output_filename.clone());
-        }
+        self.record_temporary_files(&[&output_filename]);
 
         let args = vec![
             file.to_owned().into_os_string(),
