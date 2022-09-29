@@ -69,7 +69,7 @@ pub struct KaniArgs {
     #[structopt(long, short)]
     pub quiet: bool,
     /// Output processing stages and commands, along with minor debug information
-    #[structopt(long, short, default_value_if("debug", None, "true"))]
+    #[structopt(long, short, default_value_if("debug", None, "true"), min_values(0))]
     pub verbose: bool,
     /// Enable usage of unstable options
     #[structopt(long, hidden_short_help(true))]
