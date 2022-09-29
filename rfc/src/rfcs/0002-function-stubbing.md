@@ -27,7 +27,7 @@ These examples are the types of functions/methods that are commonly stubbed in o
 ### Mocking Randomization
 
 The crate [`rand`](https://crates.io/crates/rand) has been downloaded 150M times.
-However, Kani cannot currently handle code that uses it.
+However, Kani cannot currently handle code that uses it (Kani users have run into this; see <https://github.com/model-checking/kani/issues/1727>).
 Consider this example:
 
 ```rust
@@ -64,7 +64,87 @@ Under this substitution, Kani has a single check, which proves that the assertio
 
 ### Mocking Deserialization
 
-**TODO**
+```rust
+fn parse_put_vsock(body: &Body) -> Result<ParsedRequest, Error> {
+    METRICS.put_api_requests.vsock_count.inc();
+    let vsock_cfg = serde_json::from_slice::<VsockDeviceConfig>(body.raw()).map_err(|err| {
+        METRICS.put_api_requests.vsock_fails.inc();
+        err
+    })?;
+
+    // Check for the presence of deprecated `vsock_id` field.
+    let mut deprecation_message = None;
+    if vsock_cfg.vsock_id.is_some() {
+        // vsock_id field in request is deprecated.
+        METRICS.deprecated_api.deprecated_http_api_calls.inc();
+        deprecation_message = Some("PUT /vsock: vsock_id field is deprecated.");
+    }
+
+    // Construct the `ParsedRequest` object.
+    let mut parsed_req = ParsedRequest::new_sync(VmmAction::SetVsockDevice(vsock_cfg));
+    // If `vsock_id` was present, set the deprecation message in `parsing_info`.
+    if let Some(msg) = deprecation_message {
+        parsed_req.parsing_info().append_deprecation_message(msg);
+    }
+
+    Ok(parsed_req)
+}
+```
+
+```
+#[cfg(kani)]
+fn symbolic_string(len: usize) -> String {
+    let mut v: Vec<u8> = Vec::with_capacity(len);
+    for _ in 0..len {
+        v.push(kani::any());
+    }
+    unsafe { String::from_utf8_unchecked(v) }
+}
+
+#[cfg(kani)]
+fn mock_deserialize(_data: &[u8]) -> serde_json::Result<VsockDeviceConfig> {
+    let str_len = 0;
+    let vsock_id = if kani::any() {
+        None
+    } else {
+        Some(symbolic_string(str_len))
+    };
+    let guest_cid = kani::any();
+    let uds_path = symbolic_string(str_len);
+    let dev = VsockDeviceConfig {
+        vsock_id,
+        guest_cid,
+        uds_path,
+    };
+    Ok(dev)
+}
+
+#[cfg(kani)]
+fn get_vsock_device_config(action: RequestAction) -> Option<VsockDeviceConfig> {
+    match action {
+        RequestAction::Sync(vmm_action) => match *vmm_action {
+            VmmAction::SetVsockDevice(dev) => Some(dev),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+#[cfg(kani)]
+#[kani::proof]
+fn test_deprecation_vsock_id_consistent() {
+    // We are going to mock the parsing of this body, so might as well use an empty one.
+    let body: Vec<u8> = Vec::new();
+    if let Ok(res) = parse_put_vsock(&Body::new(body)) {
+        let (action, mut parsing_info) = res.into_parts();
+        let config = get_vsock_device_config(action).unwrap();
+        assert_eq!(
+            config.vsock_id.is_some(),
+            parsing_info.take_deprecation_message().is_some()
+        );
+    }
+}
+```
 
 ## User Experience
 
