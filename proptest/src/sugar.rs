@@ -162,7 +162,7 @@ macro_rules! proptest {
         $(
             $(#[$meta])*
             fn $test_name() {
-                let mut config = $config.clone();
+                let mut config = <$crate::test_runner::Config as Default>::default();
                 config.test_name = Some(
                     concat!(module_path!(), "::", stringify!($test_name)));
                 $crate::proptest_helper!(@_BODY config ($($parm in $strategy),+) [] $body);
@@ -177,7 +177,7 @@ macro_rules! proptest {
         $(
             $(#[$meta])*
             fn $test_name() {
-                let mut config = $config.clone();
+                let mut config = <$crate::test_runner::Config as Default>::default();
                 config.test_name = Some(
                     concat!(module_path!(), "::", stringify!($test_name)));
                 $crate::proptest_helper!(@_BODY2 config ($($arg)+) [] $body);

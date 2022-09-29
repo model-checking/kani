@@ -44,6 +44,7 @@ fn jpe() -> JoinPathsError {
 
 // Algorithm from: https://stackoverflow.com/questions/47749164
 #[cfg(any(target_os = "windows", test))]
+#[allow(dead_code)] // Unused b/c of merge: see #1608.
 fn make_utf16_invalid(buf: &mut [u16], p: usize) {
     // Verify that length is non-empty.
     // An empty string is always valid UTF-16.
