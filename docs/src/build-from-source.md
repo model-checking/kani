@@ -57,7 +57,7 @@ source $HOME/.cargo/env
 Build the Kani package:
 
 ```
-cargo build
+cargo build-dev
 ```
 
 Then, optionally, run the regression tests:
@@ -66,7 +66,7 @@ Then, optionally, run the regression tests:
 ./scripts/kani-regression.sh
 ```
 
-This script has a lot of noisy output, but on a successful run you'll see:
+This script has a lot of noisy output, but on a successful run you'll see at the end of the execution:
 
 ```
 All Kani regression tests completed successfully.

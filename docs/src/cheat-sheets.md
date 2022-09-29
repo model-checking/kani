@@ -10,10 +10,9 @@ development purposes.
 
 ```bash
 # Error "'rustc' panicked at 'failed to lookup `SourceFile` in new context'"
-# or similar error?
-# Clean `kani-compiler` and re-build:
-cargo clean -p kani-compiler
-cargo build -p kani-compiler
+# or similar error? Uncomment the line below and to clean all build artifacts.
+# cargo clean
+cargo build-dev
 ```
 
 ### Test
