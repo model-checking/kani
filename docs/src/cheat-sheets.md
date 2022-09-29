@@ -10,8 +10,9 @@ development purposes.
 
 ```bash
 # Error "'rustc' panicked at 'failed to lookup `SourceFile` in new context'"
-# or similar error? Uncomment the line below and to clean all build artifacts.
-# cargo clean
+# or similar error? Cleaning artifacts might help.
+# Otherwise, comment the line below.
+cargo clean
 cargo build-dev
 ```
 
