@@ -272,21 +272,14 @@ To teach this feature, we will update the documentation with a section on functi
 
 ## Detailed Design
 
-We discuss both the design in its full form and a simplified version appropriate for a first step.
-We anticipate that this design will evolve and be iterated upon.
-
-### Full form
-
 We expect that this feature will require changes primarily to `kani-compiler`.
 Before doing code generation, `kani-compiler` already collects harnesses; we will extend this to also collect stub mapping information.
+We will update `kani-compiler` to generate multiple sets of code, one per set of stubs.
 We will plug in a new MIR-to-MIR transformation that replaces the bodies of specified functions with their replacements.
 This can be achieved via `rustc`'s query mechanism: if the user wants to replace `foo` with `bar`, then when the compiler requests the MIR for `foo`, we instead return the MIR for `bar`.
 `kani-compiler` will also be responsible for checking for the error conditions previously enumerated.
 
-### First step
-
-As a first step, we will require that stubbing will only be enabled if Kani is also run with the `--harness` flag.
-Since there is only a single stub set in this situation, `kani-driver` needs to run `kani-compiler` only once.
+We anticipate that this design will evolve and be iterated upon.
 
 ## Rationale and alternatives: user experience
 
