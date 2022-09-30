@@ -274,8 +274,8 @@ To teach this feature, we will update the documentation with a section on functi
 
 We expect that this feature will require changes primarily to `kani-compiler`.
 Before doing code generation, `kani-compiler` already collects harnesses; we will extend this to also collect stub mapping information.
-We will update `kani-compiler` to generate multiple sets of code, one per set of stubs.
-We will plug in a new MIR-to-MIR transformation that replaces the bodies of specified functions with their replacements.
+Since stubs are specified on a per-harness basis, we need to generate multiple versions of code if all harnesses do not agree on their stub mappings; accordingly, we will update `kani-compiler` to generate multiple versions of code as appropriate. 
+To do the stubbing, we will plug in a new MIR-to-MIR transformation that replaces the bodies of specified functions with their replacements.
 This can be achieved via `rustc`'s query mechanism: if the user wants to replace `foo` with `bar`, then when the compiler requests the MIR for `foo`, we instead return the MIR for `bar`.
 `kani-compiler` will also be responsible for checking for the error conditions previously enumerated.
 
