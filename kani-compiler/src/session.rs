@@ -81,7 +81,7 @@ fn hier_logs(args: &ArgMatches, filter: EnvFilter) {
     let subscriber = Registry::default().with(filter);
     let subscriber = subscriber.with(
         HierarchicalLayer::default()
-            .with_writer(std::io::stdout)
+            .with_writer(std::io::stderr)
             .with_indent_lines(true)
             .with_ansi(use_colors)
             .with_targets(true)
