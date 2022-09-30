@@ -20,13 +20,14 @@ We anticipate that stubbing will have a substantial positive impact on the usabi
 In all cases, stubbing would enable users to verify code that cannot currently be verified by Kani (or at least not within a reasonable resource bound).
 Stubbing might also be helpful in the development of Kani, as it would make it possible to run experiments like "Will Kani get better performance if we replace all instances of `Vec::new` in the codebase with `Vec::with_capacity?`" (following [Issue 1673](https://github.com/model-checking/kani/issues/1673)).
 
-In what follows, we give XXX examples of stubbing external code, using the annotations we propose in this RFC.
+In what follows, we give two examples of stubbing external code, using the annotations we propose in this RFC.
 We are able to run each of these examples on a modified version of Kani using a proof-of-concept MIR-to-MIR transformation implementing stubbing (the prototype does not support stub-related annotations; instead, it reads the stub mapping from a file).
-These examples are the types of functions/methods that are commonly stubbed in other verification and analysis projects.
+These examples -- involving randomization and deserialization -- are the types of functions/methods that are commonly stubbed in other verification and analysis projects.
+Other common examples that we should be able to handle include system calls and timer functions.
 
 ### Mocking Randomization
 
-The crate [`rand`](https://crates.io/crates/rand) has been downloaded 150M times.
+The crate [`rand`](https://crates.io/crates/rand) is widely used (150M downloads).
 However, Kani cannot currently handle code that uses it (Kani users have run into this; see <https://github.com/model-checking/kani/issues/1727>).
 Consider this example:
 
@@ -58,11 +59,9 @@ fn random_cannot_be_zero() {
 
 Under this substitution, Kani has a single check, which proves that the assertion can fail. Verification time is 0.02 seconds.
 
-### Mocking System Calls
-
-**TODO**
-
 ### Mocking Deserialization
+
+In this example, we mock a [serde_json](https://crates.io/crates/serde_json) (96M downloads) deserialization method so that we can prove a property about the following [Firecracker function](https://github.com/firecracker-microvm/firecracker/blob/01eba51ded2f5439da91a2d73280f579651b067c/src/api_server/src/request/vsock.rs#L11) that parses a configuration from some raw data:
 
 ```rust
 fn parse_put_vsock(body: &Body) -> Result<ParsedRequest, Error> {
@@ -76,7 +75,8 @@ fn parse_put_vsock(body: &Body) -> Result<ParsedRequest, Error> {
     let mut deprecation_message = None;
     if vsock_cfg.vsock_id.is_some() {
         // vsock_id field in request is deprecated.
-        METRICS.deprecated_api.deprecated_http_api_calls.inc();
+        // XXX We needed to comment this out to get it complete in a reasonable time
+        // METRICS.deprecated_api.deprecated_http_api_calls.inc();
         deprecation_message = Some("PUT /vsock: vsock_id field is deprecated.");
     }
 
@@ -91,7 +91,42 @@ fn parse_put_vsock(body: &Body) -> Result<ParsedRequest, Error> {
 }
 ```
 
+In our proof, we commented out one line in the function that updates statistics (and that seems to lead to bad solver performance), and manually mocked some of the Firecracker types with simpler versions to reduce the number of dependencies we had to pull in (e.g., we removed some enum variants, unused struct fields).
+With these changes, we were able to prove that the configuration data has a vsock ID if and only if the parsing metadata includes a deprecation message: 
+
+```rust
+#[cfg(kani)]
+fn get_vsock_device_config(action: RequestAction) -> Option<VsockDeviceConfig> {
+    match action {
+        RequestAction::Sync(vmm_action) => match *vmm_action {
+            VmmAction::SetVsockDevice(dev) => Some(dev),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+#[cfg(kani)]
+#[kani::proof]
+#[kani::unwind(5)]
+#[kani::stub_py("serde_json::deserialize_slice", "mock_deserialize")]
+fn test_deprecation_vsock_id_consistent() {
+    // We are going to mock the parsing of this body, so might as well use an empty one.
+    let body: Vec<u8> = Vec::new();
+    if let Ok(res) = parse_put_vsock(&Body::new(body)) {
+        let (action, mut parsing_info) = res.into_parts();
+        let config = get_vsock_device_config(action).unwrap();
+        assert_eq!(
+            config.vsock_id.is_some(),
+            parsing_info.take_deprecation_message().is_some()
+        );
+    }
+}
 ```
+
+Crucially, we did this by stubbing out `serde_json::from_slice` and replacing it with our mock version below, which ignores its input and creates a "symbolic" configuration struct:
+
+```rust
 #[cfg(kani)]
 fn symbolic_string(len: usize) -> String {
     let mut v: Vec<u8> = Vec::with_capacity(len);
@@ -103,7 +138,7 @@ fn symbolic_string(len: usize) -> String {
 
 #[cfg(kani)]
 fn mock_deserialize(_data: &[u8]) -> serde_json::Result<VsockDeviceConfig> {
-    let str_len = 0;
+    let str_len = 4;
     let vsock_id = if kani::any() {
         None
     } else {
@@ -118,33 +153,9 @@ fn mock_deserialize(_data: &[u8]) -> serde_json::Result<VsockDeviceConfig> {
     };
     Ok(dev)
 }
-
-#[cfg(kani)]
-fn get_vsock_device_config(action: RequestAction) -> Option<VsockDeviceConfig> {
-    match action {
-        RequestAction::Sync(vmm_action) => match *vmm_action {
-            VmmAction::SetVsockDevice(dev) => Some(dev),
-            _ => None,
-        },
-        _ => None,
-    }
-}
-
-#[cfg(kani)]
-#[kani::proof]
-fn test_deprecation_vsock_id_consistent() {
-    // We are going to mock the parsing of this body, so might as well use an empty one.
-    let body: Vec<u8> = Vec::new();
-    if let Ok(res) = parse_put_vsock(&Body::new(body)) {
-        let (action, mut parsing_info) = res.into_parts();
-        let config = get_vsock_device_config(action).unwrap();
-        assert_eq!(
-            config.vsock_id.is_some(),
-            parsing_info.take_deprecation_message().is_some()
-        );
-    }
-}
 ```
+
+The proof takes 226 seconds to complete.
 
 ## User Experience
 
