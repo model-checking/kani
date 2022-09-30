@@ -1,5 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+#![feature(let_chains)]
 
 use anyhow::Result;
 use args_toml::join_args;

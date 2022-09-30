@@ -544,6 +544,13 @@ impl Expr {
         Self::double_constant(c)
     }
 
+    /// `if (c) { t } else { e }`
+    pub fn if_then_else_expr(c: Expr, t: Expr, e: Expr) -> Self {
+        assert!(c.typ().is_bool());
+        assert!(t.typ() == e.typ());
+        expr!(If { c, t, e }, t.typ().clone())
+    }
+
     pub fn empty_union(typ: Type, st: &SymbolTable) -> Self {
         assert!(typ.is_union() || typ.is_union_tag());
         assert!(typ.lookup_components(st).unwrap().is_empty());
