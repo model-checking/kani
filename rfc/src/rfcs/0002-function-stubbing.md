@@ -203,6 +203,7 @@ First, users write a "dummy" function with the name of the stub set, annotate it
 fn my_io_stubs() {}
 ```
 
+(It is likely that this could also be hidden behind a more ergonomic macro, that creates an empty function with the appropriate annotations.)
 When declaring a harness, users can use the `#[kani::use_stub_set("<stub_set_name>")]` attribute to apply the stub set:
 
 ```rust
@@ -276,16 +277,11 @@ We anticipate that this design will evolve and be iterated upon.
 
 ### Full form
 
-In its full form, we expect that this feature will require substantial changes both to `kani-driver` and `kani-compiler`.
-
-`kani-driver` will need to be responsible for determining which stubs are required for each harness, which will require moving the code for identifying harnesses from `kani-compiler` to `kani-driver`.
-After `kani-driver` has determined the set of stubs to use for each harness, it will invoke `kani-compiler` once for each set of stubs, passing the relevant stub pairings as command line arguments.
-The output of `kani-compiler` will be specialized to that stub set.
-After `kani-compiler` has finished compiling under a given stub set, `kani-driver` will run the harnesses that use that stub set.
-
-`kani-compiler` will be extended with a command line option specifying stub pairings, and a new MIR-to-MIR transformation that replaces the bodies of specified functions with their replacements.
+We expect that this feature will require changes primarily to `kani-compiler`.
+Before doing code generation, `kani-compiler` already collects harnesses; we will extend this to also collect stub mapping information.
+We will plug in a new MIR-to-MIR transformation that replaces the bodies of specified functions with their replacements.
 This can be achieved via `rustc`'s query mechanism: if the user wants to replace `foo` with `bar`, then when the compiler requests the MIR for `foo`, we instead return the MIR for `bar`.
-`kani-compiler` will be responsible for checking for the error conditions enumerated in the previous section.
+`kani-compiler` will also be responsible for checking for the error conditions previously enumerated.
 
 ### First step
 
@@ -306,8 +302,6 @@ This is important if users are trying to perform compositional reasoning using s
 
 ### Risks
 
-- Allowing per-harness stubs complicates the architecture of Kani, as (according to the current design) it requires `kani-driver` to call `kani-compiler` multiple times.
-If stubs were uniformly applied, then we could get away with a single call to `kani-compiler`.
 - Users can always write stubs that do not correctly correspond to program behavior, and so a successful verification does not actually mean the program is bug-free.
 This is similar to other specification bugs. 
 
@@ -415,8 +409,6 @@ Furthermore, it would require that we have access to the AST/HIR for all externa
 
 ## Open questions
 
-- Is it worth supporting per-harness stubs, given the extra complication (over using a single stub set for all harnesses)? Do we have good use cases for this?
-- How will the required updates to `kani-driver` (e.g., potentially calling `kani-compiler` multiple times) mesh with efforts to parallelize `kani-driver`?
 - Would there ever be the need to stub a particular monomorphization of a function, as opposed to the polymorphic function?
 - What does it mean for the replacement function/method to be "compatible" with the original one?
 Requiring the replacement's type to be a subtype of the original type is likely stronger than what we want.
