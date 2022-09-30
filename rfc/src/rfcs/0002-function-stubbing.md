@@ -7,7 +7,7 @@
 
 ## Summary
 
-This will feature will allow users to specify that certain functions and methods should be replaced with mock functions (stubs) during verification.
+Allow users to specify that certain functions and methods should be replaced with mock functions (stubs) during verification.
 
 ## User Impact
 
