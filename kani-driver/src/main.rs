@@ -44,7 +44,6 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     let mut goto_objs: Vec<PathBuf> = Vec::new();
     for symtab in &outputs.symtabs {
         let goto_obj_filename = symtab.with_extension("out");
-        ctx.record_temporary_files(&[&goto_obj_filename]);
         goto_objs.push(goto_obj_filename);
     }
 
