@@ -223,41 +223,6 @@ The same mechanism can be used to aggregate stub sets:
 fn all_my_stubs() {}
 ```
 
-### Accessing Private Fields in Method Stubs
-
-When stubbing a method, users might need to access private fields within the struct.
-Because users are writing stubs in Rust and are subject to Rust's restrictions, they cannot access private fields directly.
-Instead, they have to create a mock struct that has the same layout as the original struct, but with public fields, and then use `std::mem::transmute` to cast between them.
-
-```rust
-struct Foo {
-    x: u32,
-}
-
-impl Foo {
-    pub fn m(&self) -> u32 {
-        0
-    }
-}
-
-struct MockFoo {
-    pub x: u32,
-}
-
-fn mock_m(foo: &Foo) {
-    let mock: &MockFoo = unsafe { std::mem::transmute(foo) };
-    return mock.x;
-}
-
-#[cfg(kani)]
-#[kani::proof]
-#[kani::stub_by("Foo::m", "mock_m")]
-fn my_harness() { ... }
-```
-
-We acknowledge that this approach is both slightly clunky and brittle, since it requires knowing the layout of the original struct (which could change) and depends on `rustc` producing the same layout for both structs (which is not guaranteed unless both are annotated with `repr(C)`).
-It is an open question whether we can provide a mechanism to hide some of this ugliness from the user, or at least error if, say, the struct layouts differ.
-
 ### Error Conditions
 
 Given a set of `original`-`replacement` pairs, Kani will exit with an error if
@@ -406,8 +371,8 @@ Furthermore, it would require that we have access to the AST/HIR for all externa
 - What does it mean for the replacement function/method to be "compatible" with the original one?
 Requiring the replacement's type to be a subtype of the original type is likely stronger than what we want.
 For example, if the original function is polymorphic but monomorphized to only a single type, then it seems okay to replace it with a function that matches the monomorphized type.
-- When a user stubs a method and wants access to private fields, is there some way we can hide the `std::mem::transmute` ugliness?
-Can we error if the mock struct's layout differs from the original struct's?
+- How can we allow a user to stub a method and access private fields of `self`?
+This should be possible using `std::mem::transmute`, but can we hide this from the user, and make it less brittle?
 
 ## Future possibilities
 
