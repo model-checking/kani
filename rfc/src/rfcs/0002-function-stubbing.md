@@ -14,15 +14,16 @@ Allow users to specify that certain functions and methods should be replaced wit
 We anticipate that stubbing will have a substantial positive impact on the usability of Kani:
 
 1. Users might need to stub functions/methods containing features that Kani does not support, such as inline assembly.
-2. Users might need to stub functions/methods containing code that Kani supports in principle, but which in practice leads to bad verification performance (for example, if it contains loops).
-3. Users could use stubbing to perform compositional reasoning: prove the behavior of a function/method `f`, and then in other proofs use a stub of `f` that mocks that behavior but is less complex.
+2. Users might need to stub functions/methods containing code that Kani supports in principle, but which in practice leads to bad verification performance (for example, if it contains deserialization code).
+3. Users could use stubbing to perform compositional reasoning: prove the behavior of a function/method `f`, and then in other proofs---that call `f` indirectly---use a stub of `f` that mocks that behavior but is less complex.
 
 In all cases, stubbing would enable users to verify code that cannot currently be verified by Kani (or at least not within a reasonable resource bound).
-Stubbing might also be helpful in the development of Kani, as it would make it possible to run experiments like "Will Kani get better performance if we replace all instances of `Vec::new` in the codebase with `Vec::with_capacity?`" (following [Issue 1673](https://github.com/model-checking/kani/issues/1673)).
+Even without stubbing types, the ability to stub functions/methods can help provide verification-friendly abstractions for standard data structures.
+For example, [Issue 1673](https://github.com/model-checking/kani/issues/1673) suggests that some Kani proofs run more quickly if `Vec::new` is replaced with `Vec::with_capacity`; function stubbing would allow us to make this substitution everywhere in a codebase (and not just in the proof harness).
 
 In what follows, we give two examples of stubbing external code, using the annotations we propose in this RFC.
 We are able to run each of these examples on a modified version of Kani using a proof-of-concept MIR-to-MIR transformation implementing stubbing (the prototype does not support stub-related annotations; instead, it reads the stub mapping from a file).
-These examples -- involving randomization and deserialization -- are the types of functions/methods that are commonly stubbed in other verification and analysis projects.
+These examples---involving randomization and deserialization---are the types of functions/methods that are commonly stubbed in other verification and program analysis projects.
 Other common examples that we should be able to handle include system calls and timer functions.
 
 ### Mocking Randomization
@@ -39,7 +40,7 @@ fn random_cannot_be_zero() {
 }
 ```
 
-For unwind values less than 2, Kani encounters an unwinding assertion error (there is a loop used to seed the random number generator); if we set an unwind value of 2, Kani fails to finish in 5 minutes.
+For unwind values less than 2, Kani encounters an unwinding assertion error (there is a loop used to seed the random number generator); if we set an unwind value of 2, Kani fails to terminate in 5 minutes.
 
 Using stubbing, we can specify that the function `rand::random` should be replaced with a mocked version:
 
@@ -75,8 +76,7 @@ fn parse_put_vsock(body: &Body) -> Result<ParsedRequest, Error> {
     let mut deprecation_message = None;
     if vsock_cfg.vsock_id.is_some() {
         // vsock_id field in request is deprecated.
-        // XXX We needed to comment this out to get it complete in a reasonable time
-        // METRICS.deprecated_api.deprecated_http_api_calls.inc();
+        METRICS.deprecated_api.deprecated_http_api_calls.inc();
         deprecation_message = Some("PUT /vsock: vsock_id field is deprecated.");
     }
 
@@ -91,7 +91,7 @@ fn parse_put_vsock(body: &Body) -> Result<ParsedRequest, Error> {
 }
 ```
 
-In our proof, we commented out one line in the function that updates statistics (and that seems to lead to bad solver performance), and manually mocked some of the Firecracker types with simpler versions to reduce the number of dependencies we had to pull in (e.g., we removed some enum variants, unused struct fields).
+We manually mocked some of the Firecracker types with simpler versions to reduce the number of dependencies we had to pull in (e.g., we removed some enum variants, unused struct fields).
 With these changes, we were able to prove that the configuration data has a vsock ID if and only if the parsing metadata includes a deprecation message: 
 
 ```rust
@@ -108,8 +108,8 @@ fn get_vsock_device_config(action: RequestAction) -> Option<VsockDeviceConfig> {
 
 #[cfg(kani)]
 #[kani::proof]
-#[kani::unwind(5)]
-#[kani::stub_py("serde_json::deserialize_slice", "mock_deserialize")]
+#[kani::unwind(2)]
+#[kani::stub_by("serde_json::deserialize_slice", "mock_deserialize")]
 fn test_deprecation_vsock_id_consistent() {
     // We are going to mock the parsing of this body, so might as well use an empty one.
     let body: Vec<u8> = Vec::new();
@@ -138,14 +138,14 @@ fn symbolic_string(len: usize) -> String {
 
 #[cfg(kani)]
 fn mock_deserialize(_data: &[u8]) -> serde_json::Result<VsockDeviceConfig> {
-    let str_len = 4;
+    const STR_LEN: usize = 1;
     let vsock_id = if kani::any() {
         None
     } else {
-        Some(symbolic_string(str_len))
+        Some(symbolic_string(STR_LEN))
     };
     let guest_cid = kani::any();
-    let uds_path = symbolic_string(str_len);
+    let uds_path = symbolic_string(STR_LEN);
     let dev = VsockDeviceConfig {
         vsock_id,
         guest_cid,
@@ -155,17 +155,22 @@ fn mock_deserialize(_data: &[u8]) -> serde_json::Result<VsockDeviceConfig> {
 }
 ```
 
-The proof takes 226 seconds to complete.
+The proof takes 170 seconds to complete (using Kissat as the backend SAT solver for CBMC).
 
 ## User Experience
 
 This feature is currently limited to stubbing functions and methods.
 We anticipate that the annotations we propose here could also be used when stubbing types, although the underlying technical approach might have to change.
 
-Stubs will be specified per harness; that is, different harnesses can use different stubs (the reasoning being that users might want to mock different behavior for different harnesses).
-Users will specify stubs by attaching the `#[kani::stub_by("<original>", "<replacement>")]` attribute to each harness function.
+Stubs will be specified per harness; that is, different harnesses can use different stubs.
+This is one of the main design points.
+Users might want to mock the behavior of a function within one proof harness, and then mock it a different way for another harness, or even use the original function definition.
+It would be overly restrictive to impose the same stub definitions across all proof harnesses.
+A good example of this is compositional reasoning: in some harnesses, we want to prove properties of a particular function (and so want to use its actual implementation), and in other harnesses we want to assume that that function has those properties.
+
+Users will specify stubs by attaching the `#[kani::stub_by(<original>, <replacement>)]` attribute to each harness function.
+The arguments `original` and `replacement` give the names of functions (as string literals), relative to the crate of the harness (*not* relative to the module of the harness).
 The attribute may be specified multiple times per harness, so that multiple (non-conflicting) stub pairings are supported.
-The arguments `original` and `replacement` give the names of functions, relative to the crate of the harness (*not* relative to the module of the harness).
 
 For example, this code specifies that the function `mock_random` should be used in place of the function `rand::random` and the function `my_mod::foo` should be used in place of the function `my_mod::bar` for the harness `my_mod::my_harness`:
 
@@ -196,10 +201,9 @@ As a convenience, we will provide a macro `kani::stub_set` that allows users to 
 
 ```rust
 kani::stub_set! {
-    my_io_stubs {
-        stub_by("std::fs::read", "my_read")
-        stub_by("std::fs::write", "my_write")
-    }
+    my_io_stubs,
+    stub_by("std::fs::read", "my_read"),
+    stub_by("std::fs::write", "my_write"),
 }
 ```
 
@@ -215,11 +219,10 @@ fn my_harness() { ... }
 A similar mechanism can be used to aggregate stub sets:
 
 ```rust
-kani::stub_set! {
-    all_my_stubs {
-        use_stub_set("my_io_stubs")
-        use_stub_set("my_other_stubs")
-    }
+kani::stub_set!() {
+    all_my_stubs,
+    use_stub_set("my_io_stubs"),
+    use_stub_set("my_other_stubs"),
 }
 ```
 
@@ -255,19 +258,22 @@ Stubbing is a *de facto* necessity for verification tools, and the lack of stubb
 - Because stubs are specified by annotating the harness, the user is able to specify stubs for functions they do not have source access to (like library functions).
 This contrasts with annotating the function to be replaced (such as with function contracts).
 - The current design provides the user with flexibility, as they can specify different sets of stubs to use for different harnesses.
-This is important if users are trying to perform compositional reasoning using stubbing, since in some harnesses a function/method should be verified, in in other harnesses its behavior should be assumed.
+This is important if users are trying to perform compositional reasoning using stubbing, since in some harnesses a function/method should be fully verified, in in other harnesses its behavior should be mocked.
 - The stub selections are located adjacent to the harness, which makes it easy to understand which replacements are going to happen for each harness.
 
 ### Risks
 
 - Users can always write stubs that do not correctly correspond to program behavior, and so a successful verification does not actually mean the program is bug-free.
-This is similar to other specification bugs. 
+This is similar to other specification bugs.
+All the stubbing code will be available, so it is possible to inspect the assumptions it makes.
 
 ### Comparison to function contracts
 
-- In many cases, stubs are more user-friendly than contracts. With contracts, it is necessary to explicitly provide information that is automatically captured in Rust (such as which memory is written).
-- The [currently proposed function contract mechanism](https://github.com/model-checking/kani/tree/features/function-contracts) does not provide a way to put contracts on external functions.
+- The [currently proposed function contract mechanism](https://github.com/model-checking/kani/tree/features/function-contracts) does not provide a way to specify contracts on external functions.
 This is one of the key motivations for stubbing.
+- In many cases, stubs are more user-friendly than contracts.
+With contracts, it is sometimes necessary to explicitly provide information that is automatically captured in Rust (such as which memory is written).
+Furthermore, contract predicates constitute a DSL of their own that needs to be learned; using stubbing, we can stick to using just Rust.
 
 ### Alternative #1: Annotate stubbed functions
 
@@ -357,13 +363,13 @@ On the last two points, we might be able to take advantage of an existing source
 
 ### Alternative #3: AST-to-AST or HIR-to-HIR transformation
 
-In this alternative, we implement stubbing by rewriting the AST or [High-Level IR (HIR)](https://rustc-dev-guide.rust-lang.org/hir.html) of the program.
+In this alternative, we implement stubbing by rewriting the [AST](https://rustc-dev-guide.rust-lang.org/syntax-intro.html) or [High-Level IR (HIR)](https://rustc-dev-guide.rust-lang.org/hir.html) of the program.
 The HIR is a more compiler-friendly version of the AST; it is what is used for type checking.
 To swap out a function, method, or type at this level, it looks like it would be necessary to add another pass to `rustc` that takes the initial AST/HIR and produces a new AST/HIR with the appropriate replacements.
 
 The advantage with this approach is, like source transformations, it would be very flexible.
 The downside is that it would require modifying `rustc` (as far as we know, there is not an API for plugging in a new AST/HIR pass), and would also require performing the transformations at a very syntactic level: although the AST/HIR would likely be easier to work with than source code directly, it is still very close to the source code and not very abstract.
-Furthermore, it would require that we have access to the AST/HIR for all external code, and--provided we supported stubbing across crate boundaries--we would need to figure out how to inject the AST/HIR from one crate into another (the AST/HIR is usually just constructed for the crate currently being compiled).
+Furthermore, it would require that we have access to the AST/HIR for all external code, and---provided we supported stubbing across crate boundaries---we would need to figure out how to inject the AST/HIR from one crate into another (the AST/HIR is usually just constructed for the crate currently being compiled).
 
 ## Open questions
 
