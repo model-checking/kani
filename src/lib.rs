@@ -12,8 +12,6 @@
 //! binaries will download the appropriate Kani release bundle and invoke
 //! the "real" `kani` and `cargo-kani` binaries.
 
-#![warn(clippy::all, clippy::cargo)]
-
 mod cmd;
 mod os_hacks;
 mod setup;
