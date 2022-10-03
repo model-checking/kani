@@ -355,9 +355,9 @@ The disadvantage with this approach is that it does not provide any way to stub 
 In this alternative, we rewrite the source code before it even gets to the compiler.
 The advantage with this approach is that it is very flexible, allowing us to stub functions, methods, and types, either by directly replacing them, or appending their replacements and injecting appropriate conditional compilation guards.
 
-The downside with this approach is that it requires all source code to be available.
+This approach entails less user effort than Alternative #1, but it has the same downside that it requires all source code to be available.
 It also might be difficult to inject code in a way that names are correctly resolved (e.g., if the replacement code comes from a different crate).
-Also, source code is difficult to work with, and includes things like unexpanded macros.
+Also, source code is difficult to work with (e.g., unexpanded macros).
 
 On the last two points, we might be able to take advantage of an existing source analysis platform like `rust-analyzer` (which has facilities like structural search replace), but this would add more (potentially fragile) dependencies to Kani.
 
