@@ -40,7 +40,7 @@ fn random_cannot_be_zero() {
 }
 ```
 
-For unwind values less than 2, Kani encounters an unwinding assertion error (there is a loop used to seed the random number generator); if we set an unwind value of 2, Kani fails to terminate in 5 minutes.
+For unwind values less than 2, Kani encounters an unwinding assertion error (there is a loop used to seed the random number generator); if we set an unwind value of 2, Kani fails to terminate within 5 minutes.
 
 Using stubbing, we can specify that the function `rand::random` should be replaced with a mocked version:
 
@@ -146,12 +146,12 @@ fn mock_deserialize(_data: &[u8]) -> serde_json::Result<VsockDeviceConfig> {
     };
     let guest_cid = kani::any();
     let uds_path = symbolic_string(STR_LEN);
-    let dev = VsockDeviceConfig {
+    let config = VsockDeviceConfig {
         vsock_id,
         guest_cid,
         uds_path,
     };
-    Ok(dev)
+    Ok(config)
 }
 ```
 
@@ -378,7 +378,7 @@ Furthermore, it would require that we have access to the AST/HIR for all externa
 Requiring the replacement's type to be a subtype of the original type is likely stronger than what we want.
 For example, if the original function is polymorphic but monomorphized to only a single type, then it seems okay to replace it with a function that matches the monomorphized type.
 - How can we allow a user to stub a method and access private fields of `self`?
-This should be possible using `std::mem::transmute`, but can we hide this from the user, and make it less brittle?
+This should be possible using `std::mem::transmute`, but can we hide this from the user and make it less brittle?
 
 ## Future possibilities
 
