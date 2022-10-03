@@ -122,7 +122,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             StatementKind::StorageLive(_) => Stmt::skip(location), // TODO: fix me
             StatementKind::StorageDead(_) => Stmt::skip(location), // TODO: fix me
-            mir::StatementKind::Intrinsic(box NonDivergingIntrinsic::CopyNonOverlapping(
+            StatementKind::Intrinsic(box NonDivergingIntrinsic::CopyNonOverlapping(
                 mir::CopyNonOverlapping { ref src, ref dst, ref count },
             )) => {
                 // Pack the operands and their types, then call `codegen_copy`

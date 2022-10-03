@@ -1020,7 +1020,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let place_type = self.place_ty(p);
         let res_type = self.codegen_ty(place_type);
         let eq_expr = a.eq(b);
-        let cmp_expr = Expr::if_then_else_expr(eq_expr, res_type.one(), res_type.zero());
+        let cmp_expr = eq_expr.ternary(res_type.one(), res_type.zero());
         self.codegen_expr_to_place(p, cmp_expr)
     }
 
