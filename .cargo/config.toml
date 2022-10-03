@@ -28,4 +28,8 @@ rustflags = [ # Global lints/warnings. Need to use underscore instead of -.
     "-Aclippy::expect_fun_call",
     "-Aclippy::or_fun_call",
     "-Aclippy::new_without_default",
+
+    # New lints that we are not compliant yet
+    "-Aclippy::needless-borrow",
+    "-Aclippy::bool-to-int-with-if",
 ]

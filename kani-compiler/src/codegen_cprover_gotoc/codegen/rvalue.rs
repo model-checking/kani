@@ -504,7 +504,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 TagEncoding::Direct => {
                     self.codegen_discriminant_field(e, ty).cast_to(self.codegen_ty(res_ty))
                 }
-                TagEncoding::Niche { dataful_variant, niche_variants, niche_start } => {
+                TagEncoding::Niche { untagged_variant, niche_variants, niche_start } => {
                     // This code follows the logic in the ssa codegen backend:
                     // https://github.com/rust-lang/rust/blob/fee75fbe11b1fad5d93c723234178b2a329a3c03/compiler/rustc_codegen_ssa/src/mir/place.rs#L247
                     // See also the cranelift backend:
@@ -550,7 +550,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     };
                     is_niche.ternary(
                         niche_discr,
-                        Expr::int_constant(dataful_variant.as_u32(), result_type),
+                        Expr::int_constant(untagged_variant.as_u32(), result_type),
                     )
                 }
             },
