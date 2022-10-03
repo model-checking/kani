@@ -17,6 +17,7 @@ mod call_goto_cc;
 mod call_goto_instrument;
 mod call_single_file;
 mod cbmc_output_parser;
+mod cbmc_property_renderer;
 mod concrete_playback;
 mod harness_runner;
 mod metadata;

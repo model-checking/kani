@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 //! Module for parsing CBMC's JSON output. In general, this output follows
-//! the structure:
+//! the structure (corresponding to [`ParserItem`] below):
+//!
 //! ```text
 //! [
 //!     Program,
@@ -14,172 +15,27 @@
 //!     ProverStatus
 //! ]
 //! ```
+//!
 //! The parser included in this file reads from buffered input line by line, and
 //! determines if an item can be processed after reading certain lines.
 //!
 //! The rest of code in this file is related to result postprocessing.
 
-use crate::{args::OutputFormat, call_cbmc::VerificationStatus};
+// NOTE: This module should be entirely "about" CBMC, so we should need to import
+// anything from other modules of this crate, these should only be std + dependencies.
 use anyhow::Result;
 use console::style;
-use once_cell::sync::Lazy;
 use pathdiff::diff_paths;
-use regex::Regex;
 use rustc_demangle::demangle;
 use serde::{Deserialize, Deserializer};
-use std::{
-    collections::HashMap,
-    env,
-    io::{BufRead, BufReader},
-    path::PathBuf,
-    process::{Child, ChildStdout},
-};
 
-type CbmcAltDescriptions = HashMap<&'static str, Vec<(&'static str, Option<&'static str>)>>;
+use std::env;
+use std::io::{BufRead, BufReader};
+use std::os::unix::process::ExitStatusExt;
+use std::path::PathBuf;
+use std::process::{Child, ChildStdout};
 
-/// Hash map that relates property classes with descriptions, used by
-/// `get_readable_description` to provide user friendly descriptions.
-/// See the comment in `get_readable_description` for more information on
-/// how this data structure is used.
-static CBMC_ALT_DESCRIPTIONS: Lazy<CbmcAltDescriptions> = Lazy::new(|| {
-    let mut map = HashMap::new();
-    map.insert("error_label", vec![]);
-    map.insert("division-by-zero", vec![("division by zero", None)]);
-    map.insert("enum-range-check", vec![("enum range check", None)]);
-    map.insert(
-        "undefined-shift",
-        vec![
-            ("shift distance is negative", None),
-            ("shift distance too large", None),
-            ("shift operand is negative", None),
-            ("shift of non-integer type", None),
-        ],
-    );
-    map.insert(
-        "overflow",
-        vec![
-            ("result of signed mod is not representable", None),
-            ("arithmetic overflow on signed type conversion", None),
-            ("arithmetic overflow on signed division", None),
-            ("arithmetic overflow on signed unary minus", None),
-            ("arithmetic overflow on signed shl", None),
-            ("arithmetic overflow on unsigned unary minus", None),
-            ("arithmetic overflow on signed +", Some("arithmetic overflow on signed addition")),
-            ("arithmetic overflow on signed -", Some("arithmetic overflow on signed subtraction")),
-            (
-                "arithmetic overflow on signed *",
-                Some("arithmetic overflow on signed multiplication"),
-            ),
-            ("arithmetic overflow on unsigned +", Some("arithmetic overflow on unsigned addition")),
-            (
-                "arithmetic overflow on unsigned -",
-                Some("arithmetic overflow on unsigned subtraction"),
-            ),
-            (
-                "arithmetic overflow on unsigned *",
-                Some("arithmetic overflow on unsigned multiplication"),
-            ),
-            ("arithmetic overflow on floating-point typecast", None),
-            ("arithmetic overflow on floating-point division", None),
-            ("arithmetic overflow on floating-point addition", None),
-            ("arithmetic overflow on floating-point subtraction", None),
-            ("arithmetic overflow on floating-point multiplication", None),
-            ("arithmetic overflow on unsigned to signed type conversion", None),
-            ("arithmetic overflow on float to signed integer type conversion", None),
-            ("arithmetic overflow on signed to unsigned type conversion", None),
-            ("arithmetic overflow on unsigned to unsigned type conversion", None),
-            ("arithmetic overflow on float to unsigned integer type conversion", None),
-        ],
-    );
-    map.insert(
-        "NaN",
-        vec![
-            ("NaN on +", Some("NaN on addition")),
-            ("NaN on -", Some("NaN on subtraction")),
-            ("NaN on /", Some("NaN on division")),
-            ("NaN on *", Some("NaN on multiplication")),
-        ],
-    );
-    map.insert("pointer", vec![("same object violation", None)]);
-    map.insert(
-        "pointer_arithmetic",
-        vec![
-            ("pointer relation: deallocated dynamic object", None),
-            ("pointer relation: dead object", None),
-            ("pointer relation: pointer NULL", None),
-            ("pointer relation: pointer invalid", None),
-            ("pointer relation: pointer outside dynamic object bounds", None),
-            ("pointer relation: pointer outside object bounds", None),
-            ("pointer relation: invalid integer address", None),
-            ("pointer arithmetic: deallocated dynamic object", None),
-            ("pointer arithmetic: dead object", None),
-            ("pointer arithmetic: pointer NULL", None),
-            ("pointer arithmetic: pointer invalid", None),
-            ("pointer arithmetic: pointer outside dynamic object bounds", None),
-            ("pointer arithmetic: pointer outside object bounds", None),
-            ("pointer arithmetic: invalid integer address", None),
-        ],
-    );
-    map.insert(
-        "pointer_dereference",
-        vec![
-            (
-                "dereferenced function pointer must be",
-                Some("dereference failure: invalid function pointer"),
-            ),
-            ("dereference failure: pointer NULL", None),
-            ("dereference failure: pointer invalid", None),
-            ("dereference failure: deallocated dynamic object", None),
-            ("dereference failure: dead object", None),
-            ("dereference failure: pointer outside dynamic object bounds", None),
-            ("dereference failure: pointer outside object bounds", None),
-            ("dereference failure: invalid integer address", None),
-        ],
-    );
-    // These are very hard to understand without more context.
-    map.insert(
-        "pointer_primitives",
-        vec![
-            ("pointer invalid", None),
-            ("deallocated dynamic object", Some("pointer to deallocated dynamic object")),
-            ("dead object", Some("pointer to dead object")),
-            ("pointer outside dynamic object bounds", None),
-            ("pointer outside object bounds", None),
-            ("invalid integer address", None),
-        ],
-    );
-    map.insert(
-        "array_bounds",
-        vec![
-            ("lower bound", Some("index out of bounds")),
-            // This one is redundant:
-            // ("dynamic object upper bound", Some("access out of bounds")),
-            (
-                "upper bound",
-                Some("index out of bounds: the length is less than or equal to the given index"),
-            ),
-        ],
-    );
-    map.insert(
-        "bit_count",
-        vec![
-            ("count trailing zeros is undefined for value zero", None),
-            ("count leading zeros is undefined for value zero", None),
-        ],
-    );
-    map.insert("memory-leak", vec![("dynamically allocated memory never freed", None)]);
-    // These pre-conditions should not print temporary variables since they are embedded in the libc implementation.
-    // They are added via `__CPROVER_precondition`.
-    // map.insert("precondition_instance": vec![]);
-    map
-});
-
-const UNSUPPORTED_CONSTRUCT_DESC: &str = "is not currently supported by Kani";
-const UNWINDING_ASSERT_DESC: &str = "unwinding assertion loop";
-const DEFAULT_ASSERTION: &str = "assertion";
-const REACH_CHECK_DESC: &str = "[KANI_REACHABILITY_CHECK]";
-
-/// Enum that represents a parser item.
+/// A parser item is a top-level unit of output from the CBMC json format.
 /// See the parser for more information on how they are processed.
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
@@ -201,14 +57,7 @@ pub enum ParserItem {
     },
 }
 
-impl ParserItem {
-    /// Determines if an item must be skipped or not.
-    fn must_be_skipped(&self) -> bool {
-        matches!(&self, ParserItem::Message { message_text, .. } if message_text.starts_with("Building error trace") || message_text.starts_with("VERIFICATION"))
-    }
-}
-
-/// Struct that represents a property.
+/// Struct that represents a single property in the set of CBMC results.
 ///
 /// Note: `reach` is not part of the parsed data, but it's useful to annotate
 /// its reachability status.
@@ -224,6 +73,7 @@ pub struct Property {
     pub trace: Option<Vec<TraceItem>>,
 }
 
+/// CBMC's somewhat-ish consistent format for naming properties.
 #[derive(Clone, Debug)]
 pub struct PropertyId {
     pub fn_name: Option<String>,
@@ -236,18 +86,13 @@ impl Property {
         self.property_id.class.clone()
     }
 
-    pub fn property_name(&self) -> Result<String> {
-        use std::fmt::Write;
-        let mut fmt_str = String::new();
-        let prop_id = &self.property_id;
-        if let Some(name) = &prop_id.fn_name {
-            write!(&mut fmt_str, "{name}.")?;
+    pub fn property_name(&self) -> String {
+        let class = &self.property_id.class;
+        let id = self.property_id.id;
+        match &self.property_id.fn_name {
+            Some(fn_name) => format!("{fn_name}.{class}.{id}"),
+            None => format!("{class}.{id}"),
         }
-        let class = &prop_id.class;
-        let id = prop_id.id;
-        write!(&mut fmt_str, "{class}.")?;
-        write!(&mut fmt_str, "{id}")?;
-        Ok(fmt_str)
     }
 
     pub fn has_property_class_format(string: &str) -> bool {
@@ -332,7 +177,7 @@ impl<'de> serde::Deserialize<'de> for PropertyId {
     }
 }
 
-/// Struct that represents a source location.
+/// Struct that represents a CBMC source location.
 ///
 /// Source locations may be completely empty, which is why
 /// all members are optional.
@@ -346,7 +191,7 @@ pub struct SourceLocation {
 
 impl SourceLocation {
     /// Determines if fundamental parts of a source location are missing.
-    fn is_missing(&self) -> bool {
+    pub fn is_missing(&self) -> bool {
         self.file.is_none() && self.function.is_none()
     }
 }
@@ -365,31 +210,25 @@ impl SourceLocation {
 ///    specified.
 ///  * Lines and columns are only formatted if they were specified and preceding
 ///    attribute was formatted.
-///
-/// TODO: We could `write!` to `f` directly
-/// <https://github.com/model-checking/kani/issues/1480>
 impl std::fmt::Display for SourceLocation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use std::fmt::Write;
-        let mut fmt_str = String::new();
         if let Some(file) = self.file.clone() {
             let file_path = filepath(file);
-            write!(&mut fmt_str, "{file_path}")?;
+            write!(f, "{file_path}")?;
             if let Some(line) = self.line.clone() {
-                write!(&mut fmt_str, ":{line}")?;
+                write!(f, ":{line}")?;
                 if let Some(column) = self.column.clone() {
-                    write!(&mut fmt_str, ":{column}")?;
+                    write!(f, ":{column}")?;
                 }
             }
         } else {
-            write!(&mut fmt_str, "Unknown file")?;
+            write!(f, "Unknown file")?;
         }
         if let Some(function) = self.function.clone() {
             let demangled_function = demangle(&function);
-            write!(&mut fmt_str, " in function {:#}", demangled_function)?;
+            write!(f, " in function {:#}", demangled_function)?;
         }
-
-        write! {f, "{}", fmt_str}
+        Ok(())
     }
 }
 
@@ -443,11 +282,10 @@ pub enum TraceData {
 
 impl std::fmt::Display for TraceData {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let trace_data_str = match self {
-            Self::NonBool(trace_data) => trace_data.to_string(),
-            Self::Bool(trace_data) => trace_data.to_string(),
-        };
-        write! {f, "{}", trace_data_str}
+        match self {
+            Self::NonBool(trace_data) => write!(f, "{}", trace_data),
+            Self::Bool(trace_data) => write!(f, "{}", trace_data),
+        }
     }
 }
 
@@ -468,7 +306,7 @@ impl std::fmt::Display for CheckStatus {
             CheckStatus::Unreachable => style("UNREACHABLE").yellow(),
             CheckStatus::Undetermined => style("UNDETERMINED").yellow(),
         };
-        write! {f, "{}", check_str}
+        write!(f, "{}", check_str)
     }
 }
 
@@ -491,13 +329,17 @@ enum Action {
 ///
 /// The parser reads the output line by line. A line may trigger one action, and
 /// the action may return a parsed item.
+///
+/// There is a feature request for serde_json which would obsolete this if
+/// it ever lands: <https://github.com/serde-rs/json/issues/404>
+/// (Would provide a streaming iterator over a json array.)
 struct Parser<'a, 'b> {
     pub input_so_far: String,
     pub buffer: &'a mut BufReader<&'b mut ChildStdout>,
 }
 
 impl<'a, 'b> Parser<'a, 'b> {
-    pub fn new(buffer: &'a mut BufReader<&'b mut ChildStdout>) -> Self {
+    fn new(buffer: &'a mut BufReader<&'b mut ChildStdout>) -> Self {
         Parser { input_so_far: String::new(), buffer }
     }
 
@@ -565,7 +407,7 @@ impl<'a, 'b> Parser<'a, 'b> {
 
     /// Processes a line to determine if an action must be triggered.
     /// The action may result in a `ParserItem`, which is then returned.
-    pub fn process_line(&mut self, input: String) -> Option<ParserItem> {
+    fn process_line(&mut self, input: String) -> Option<ParserItem> {
         self.add_to_input(input.clone());
         let action_required = self.triggers_action(input);
         if let Some(action) = action_required {
@@ -603,534 +445,44 @@ impl<'a, 'b> Iterator for Parser<'a, 'b> {
     }
 }
 
-/// Processes a `ParserItem`. In general, all items are returned as they are,
-/// except for:
-///  * Error messages, which may be edited.
-///  * Verification results, which must be postprocessed.
-fn process_item(
-    item: ParserItem,
-    extra_ptr_checks: bool,
-    verification_result: &mut bool,
-) -> ParserItem {
-    match item {
-        ParserItem::Result { result } => {
-            let (postprocessed_result, overall_status) =
-                postprocess_result(result, extra_ptr_checks);
-            *verification_result = overall_status;
-            ParserItem::Result { result: postprocessed_result }
-        }
-        ParserItem::Message { ref message_type, .. } if message_type == "ERROR" => {
-            postprocess_error_message(item)
-        }
-        item => item,
-    }
-}
-
-/// Edits an error message.
-///
-/// At present, we only know one case where CBMC emits an error message, related
-/// to `--object-bits` being too low. The message is edited to show Kani
-/// options.
-fn postprocess_error_message(message: ParserItem) -> ParserItem {
-    if let ParserItem::Message { ref message_text, message_type: _ } = message && message_text.contains("use the `--object-bits n` option") {
-        ParserItem::Message {
-            message_text: message_text.replace("--object-bits ", "--enable-unstable --cbmc-args --object-bits "),
-            message_type: String::from("ERROR") }
-    } else {
-        message
-    }
-}
-
 /// The verification output, as extracted by the CBMC output parser.
 pub struct VerificationOutput {
-    pub status: VerificationStatus,
+    pub process_status: i32,
     pub processed_items: Option<Vec<ParserItem>>,
 }
 
 /// The main function to process CBMC's output.
 ///
-/// First, we create a reader on CBMC's `stdout`, which is required for the
-/// parser. Then, we iterate over all the items coming from the parser. In
-/// general, items are first processed (this may or may not transform the item),
-/// then formatted (according to the output format) and printed. The
-/// verification status (i.e., the returned value) depends on processing the
-/// verification results.
+/// This streams CBMC's output to be processed item-by-item with `eager_filter`.
+///
+/// In general, a filter will pre-process an item (this may or may not transform the item),
+/// then formatted (according to the output format) and print.
+///
+/// The cbmc process status is returned, along with the (post-filter) items.
 pub fn process_cbmc_output(
     mut process: Child,
-    extra_ptr_checks: bool,
-    output_format: &OutputFormat,
-) -> VerificationOutput {
+    eager_filter: impl FnMut(ParserItem) -> Option<ParserItem>,
+) -> Result<VerificationOutput> {
     let stdout = process.stdout.as_mut().unwrap();
     let mut stdout_reader = BufReader::new(stdout);
     let parser = Parser::new(&mut stdout_reader);
-    let mut result = false;
-    let processed_items: Vec<_> = parser
-        .filter_map(|item| {
-            // Some items (e.g., messages) are skipped.
-            // We could also process them and decide to skip later.
-            if item.must_be_skipped() {
-                return None;
-            }
-            let processed_item = process_item(item, extra_ptr_checks, &mut result);
-            // Both formatting and printing could be handled by objects which
-            // implement a trait `Printer`.
-            let formatted_item = format_item(&processed_item, output_format);
-            if let Some(fmt_item) = formatted_item {
-                println!("{}", fmt_item);
-            }
-            // TODO: Record processed items and dump them into a JSON file
-            // <https://github.com/model-checking/kani/issues/942>
-            Some(processed_item)
-        })
-        .collect();
-    let status = if result { VerificationStatus::Success } else { VerificationStatus::Failure };
-    VerificationOutput { status, processed_items: Some(processed_items) }
-}
+    // This should run until stdout is closed (which should mean the process exited)
+    let processed_items: Vec<_> = parser.filter_map(eager_filter).collect();
+    // This will get us the process's exit code
+    let status = process.wait()?;
 
-/// Returns an optional formatted item based on the output format
-fn format_item(item: &ParserItem, output_format: &OutputFormat) -> Option<String> {
-    match output_format {
-        OutputFormat::Old => todo!(),
-        OutputFormat::Regular => format_item_regular(item),
-        OutputFormat::Terse => format_item_terse(item),
-    }
-}
-
-/// Formats an item using the regular output format
-fn format_item_regular(item: &ParserItem) -> Option<String> {
-    match item {
-        ParserItem::Program { program } => Some(program.to_string()),
-        ParserItem::Message { message_text, .. } => Some(message_text.to_string()),
-        ParserItem::Result { result } => Some(format_result(result, true)),
-        _ => None,
-    }
-}
-
-/// Formats an item using the terse output format
-fn format_item_terse(item: &ParserItem) -> Option<String> {
-    match item {
-        ParserItem::Result { result } => Some(format_result(result, false)),
-        _ => None,
-    }
-}
-
-/// Formats a result item (i.e., the complete set of verification checks).
-/// This could be split into two functions for clarity, but at the moment
-/// it uses the flag `show_checks` which depends on the output format.
-///
-/// TODO: We could `write!` to `result_str` instead
-/// <https://github.com/model-checking/kani/issues/1480>
-fn format_result(properties: &Vec<Property>, show_checks: bool) -> String {
-    let mut result_str = String::new();
-    let mut number_tests_failed = 0;
-    let mut number_tests_unreachable = 0;
-    let mut number_tests_undetermined = 0;
-    let mut failed_tests: Vec<&Property> = vec![];
-
-    let mut index = 1;
-
-    if show_checks {
-        result_str.push_str("\nRESULTS:\n");
-    }
-
-    for prop in properties {
-        let name = prop.property_name().unwrap();
-        let status = &prop.status;
-        let description = &prop.description;
-        let location = &prop.source_location;
-
-        match status {
-            CheckStatus::Failure => {
-                number_tests_failed += 1;
-                failed_tests.push(prop);
-            }
-            CheckStatus::Undetermined => {
-                number_tests_undetermined += 1;
-            }
-            CheckStatus::Unreachable => {
-                number_tests_unreachable += 1;
-            }
-            _ => (),
-        }
-
-        if show_checks {
-            let check_id = format!("Check {}: {}\n", index, name);
-            let status_msg = format!("\t - Status: {}\n", status);
-            let description_msg = format!("\t - Description: \"{}\"\n", description);
-
-            result_str.push_str(&check_id);
-            result_str.push_str(&status_msg);
-            result_str.push_str(&description_msg);
-
-            if !location.is_missing() {
-                let location_msg = format!("\t - Location: {}\n", location);
-                result_str.push_str(&location_msg);
-            }
-            result_str.push('\n');
-        }
-
-        index += 1;
-    }
-
-    if show_checks {
-        result_str.push_str("\nSUMMARY:");
-    } else {
-        result_str.push_str("\nVERIFICATION RESULT:");
-    }
-
-    let summary = format!("\n ** {} of {} failed", number_tests_failed, properties.len());
-    result_str.push_str(&summary);
-
-    let mut other_status = Vec::<String>::new();
-    if number_tests_undetermined > 0 {
-        let undetermined_str = format!("{} undetermined", number_tests_undetermined);
-        other_status.push(undetermined_str);
-    }
-    if number_tests_unreachable > 0 {
-        let unreachable_str = format!("{} unreachable", number_tests_unreachable);
-        other_status.push(unreachable_str);
-    }
-    if !other_status.is_empty() {
-        result_str.push_str(" (");
-        result_str.push_str(&other_status.join(","));
-        result_str.push(')');
-    }
-    result_str.push('\n');
-
-    for prop in failed_tests {
-        let failure_message = build_failure_message(prop.description.clone(), &prop.trace.clone());
-        result_str.push_str(&failure_message);
-    }
-
-    let verification_result =
-        if number_tests_failed == 0 { style("SUCCESSFUL").green() } else { style("FAILED").red() };
-    let overall_result = format!("\nVERIFICATION:- {}\n", verification_result);
-    result_str.push_str(&overall_result);
-
-    // Ideally, we should generate two `ParserItem::Message` and push them
-    // into the parser iterator so they are the next messages to be processed.
-    // However, we haven't figured out the best way to do this for now.
-    // <https://github.com/model-checking/kani/issues/1432>
-    if has_check_failure(properties, UNSUPPORTED_CONSTRUCT_DESC) {
-        result_str.push_str(
-            "** WARNING: A Rust construct that is not currently supported \
-        by Kani was found to be reachable. Check the results for \
-        more details.",
-        );
-    }
-    if has_check_failure(properties, UNWINDING_ASSERT_DESC) {
-        result_str.push_str("[Kani] info: Verification output shows one or more unwinding failures.\n\
-        [Kani] tip: Consider increasing the unwinding value or disabling `--unwinding-assertions`.\n");
-    }
-
-    result_str
-}
-
-/// Attempts to build a message for a failed property with as much detailed
-/// information on the source location as possible.
-fn build_failure_message(description: String, trace: &Option<Vec<TraceItem>>) -> String {
-    let backup_failure_message = format!("Failed Checks: {}\n", description);
-    if trace.is_none() {
-        return backup_failure_message;
-    }
-    let failure_trace = trace.clone().unwrap();
-
-    let failure_source_wrap = failure_trace[failure_trace.len() - 1].source_location.clone();
-    if failure_source_wrap.is_none() {
-        return backup_failure_message;
-    }
-    let failure_source = failure_source_wrap.unwrap();
-
-    if failure_source.file.is_some()
-        && failure_source.function.is_some()
-        && failure_source.line.is_some()
-    {
-        let failure_file = failure_source.file.unwrap();
-        let failure_function = failure_source.function.unwrap();
-        let failure_line = failure_source.line.unwrap();
-        return format!(
-            "Failed Checks: {}\n File: \"{}\", line {}, in {}\n",
-            description, failure_file, failure_line, failure_function
-        );
-    }
-    backup_failure_message
-}
-
-/// Postprocess verification results to check for certain cases (e.g. a reachable unsupported construct or a failed
-/// unwinding assertion), and update the results of impacted checks accordingly.
-///
-/// This postprocessing follows the same steps:
-///     1. Change all "SUCCESS" results to "UNDETERMINED" if the reachability check
-///     for a Rust construct that is not currently supported by Kani failed, since
-///     the missing exploration of execution paths through the unsupported construct
-///     may hide failures
-///     2. Change a check's result from "SUCCESS" to "UNREACHABLE" if its
-///     reachability check's result was "SUCCESS"
-///     3. Change results from "SUCCESS" to "UNDETERMINED" if an unwinding
-///     assertion failed, since the insufficient unwinding may cause some execution
-///     paths to be left unexplored.
-///
-///     Additionally, print a message at the end of the output that indicates if any
-///     of the special cases above was hit.
-pub fn postprocess_result(
-    properties: Vec<Property>,
-    extra_ptr_checks: bool,
-) -> (Vec<Property>, bool) {
-    // First, determine if there are reachable unsupported constructs or unwinding assertions
-    let has_reachable_unsupported_constructs =
-        has_check_failure(&properties, UNSUPPORTED_CONSTRUCT_DESC);
-    let has_failed_unwinding_asserts = has_check_failure(&properties, UNWINDING_ASSERT_DESC);
-    // Then, determine if there are reachable undefined functions, and change
-    // their description to highlight this fact
-    let (properties_with_undefined, has_reachable_undefined_functions) =
-        modify_undefined_function_checks(properties);
-    // Split all properties into two groups: Regular properties and reachability checks
-    let (properties_without_reachs, reach_checks) = filter_reach_checks(properties_with_undefined);
-    // Filter out successful sanity checks introduced during compilation
-    let properties_without_sanity_checks = filter_sanity_checks(properties_without_reachs);
-    // Annotate properties with the results from reachability checks
-    let properties_annotated =
-        annotate_properties_with_reach_results(properties_without_sanity_checks, reach_checks);
-    // Remove reachability check IDs from regular property descriptions
-    let properties_without_ids = remove_check_ids_from_description(properties_annotated);
-
-    // Filter out extra pointer checks if needed
-    let properties_filtered = if !extra_ptr_checks {
-        filter_ptr_checks(properties_without_ids)
-    } else {
-        properties_without_ids
+    let process_status = match (status.code(), status.signal()) {
+        // normal unix exit codes (cbmc uses currently 0-10)
+        // https://github.com/diffblue/cbmc/blob/develop/src/util/exit_codes.h
+        (Some(x), _) => x,
+        // process exited with signal (e.g. OOM-killed)
+        // bash/zsh have a convention for translating signal number to exit code:
+        (_, Some(x)) => 128 + x,
+        // I think this shouldn't happen? either exit or signal, right?
+        (None, None) => unreachable!("Process exited with neither status code nor signal?"),
     };
-    let has_fundamental_failures = has_reachable_unsupported_constructs
-        || has_failed_unwinding_asserts
-        || has_reachable_undefined_functions;
-    // Update the status of properties according to reachability checks, among other things
-    let properties_updated =
-        update_properties_with_reach_status(properties_filtered, has_fundamental_failures);
 
-    let overall_result = determine_verification_result(&properties_updated);
-    (properties_updated, overall_result)
-}
-
-/// Determines if there is property with status `FAILURE` and the given description
-fn has_check_failure(properties: &Vec<Property>, description: &str) -> bool {
-    for prop in properties {
-        if prop.status == CheckStatus::Failure && prop.description.contains(description) {
-            return true;
-        }
-    }
-    false
-}
-
-/// Replaces the description of all properties from functions with a missing
-/// definition.
-fn modify_undefined_function_checks(mut properties: Vec<Property>) -> (Vec<Property>, bool) {
-    let mut has_unknown_location_checks = false;
-    for mut prop in &mut properties {
-        if let Some(function) = &prop.source_location.function
-            && prop.description == DEFAULT_ASSERTION
-            && prop.source_location.file.is_none()
-        {
-            // Missing functions come with mangled names.
-            // `demangle` produces the demangled version if it's a mangled name.
-            let modified_description = format!("Function `{:#}` with missing definition is unreachable", demangle(function));
-            prop.description = modified_description;
-            if prop.status == CheckStatus::Failure {
-                has_unknown_location_checks = true;
-            }
-        };
-    }
-    (properties, has_unknown_location_checks)
-}
-
-/// Returns a user friendly property description.
-///
-/// `CBMC_ALT_DESCRIPTIONS` is a hash map where:
-///  * The key is a property class.
-///  * The value is a vector of pairs. In each of these pairs, the first member
-///    is a description used to match (with method `contains`) on the original
-///    property. If a match is found, we inspect the second member:
-///     * If it's `None`, we replace the original property with the description
-///       used to match.
-///     * If it's `Some(string)`, we replace the original property with `string`.
-///
-/// For CBMC checks, this will ensure that check failures do not include any
-/// temporary variable in their descriptions.
-fn get_readable_description(property: &Property) -> String {
-    let original = property.description.clone();
-    let class_id = property.property_class();
-
-    let description_alternatives = CBMC_ALT_DESCRIPTIONS.get(&class_id as &str);
-    if let Some(alt_descriptions) = description_alternatives {
-        for (desc_to_match, opt_desc_to_replace) in alt_descriptions {
-            if original.contains(desc_to_match) {
-                if let Some(desc_to_replace) = opt_desc_to_replace {
-                    return desc_to_replace.to_string();
-                } else {
-                    return desc_to_match.to_string();
-                }
-            }
-        }
-    }
-    original
-}
-
-/// Performs a last pass to update all properties as follows:
-///  1. Descriptions are replaced with more readable ones.
-///  2. If there were failures that made the verification result unreliable
-///     (e.g., a reachable unsupported construct), changes all `SUCCESS` results
-///     to `UNDETERMINED`.
-///  3. If there weren't such failures, it updates all results with a `SUCCESS`
-///     reachability check to `UNREACHABLE`.
-fn update_properties_with_reach_status(
-    mut properties: Vec<Property>,
-    has_fundamental_failures: bool,
-) -> Vec<Property> {
-    for prop in properties.iter_mut() {
-        prop.description = get_readable_description(prop);
-        if has_fundamental_failures {
-            if prop.status == CheckStatus::Success {
-                prop.status = CheckStatus::Undetermined;
-            }
-        } else if prop.reach.is_some() && prop.reach.unwrap() == CheckStatus::Success {
-            let description = &prop.description;
-            assert!(
-                prop.status == CheckStatus::Success,
-                "** ERROR: Expecting the unreachable property \"{}\" to have a status of \"SUCCESS\"",
-                description
-            );
-            prop.status = CheckStatus::Unreachable
-        }
-    }
-    properties
-}
-
-/// Some Kani-generated asserts have a unique ID in their description of the form:
-/// ```
-/// [KANI_CHECK_ID_<crate-fn-name>_<index>]
-/// ```
-/// e.g.:
-/// ```
-/// [KANI_CHECK_ID_foo.6875c808::foo_0] assertion failed: x % 2 == 0
-/// ```
-/// This function removes those IDs from the property's description so that
-/// they're not shown to the user. The removal of the IDs should only be done
-/// after all ID-based post-processing is done.
-fn remove_check_ids_from_description(mut properties: Vec<Property>) -> Vec<Property> {
-    let check_id_pat = Regex::new(r"\[KANI_CHECK_ID_([^\]]*)\] ").unwrap();
-    for prop in properties.iter_mut() {
-        prop.description = check_id_pat.replace(&prop.description, "").to_string();
-    }
-    properties
-}
-
-/// Given a description, this splits properties into two groups:
-///  1. Properties that don't contain the description
-///  2. Properties that contain the description
-fn filter_properties(properties: Vec<Property>, message: &str) -> (Vec<Property>, Vec<Property>) {
-    let mut filtered_properties = Vec::<Property>::new();
-    let mut removed_properties = Vec::<Property>::new();
-    for prop in properties {
-        if prop.description.contains(message) {
-            removed_properties.push(prop);
-        } else {
-            filtered_properties.push(prop);
-        }
-    }
-    (filtered_properties, removed_properties)
-}
-
-/// Filters reachability checks with `filter_properties`
-fn filter_reach_checks(properties: Vec<Property>) -> (Vec<Property>, Vec<Property>) {
-    filter_properties(properties, REACH_CHECK_DESC)
-}
-
-/// Filters out Kani-generated sanity checks with a `SUCCESS` status
-fn filter_sanity_checks(properties: Vec<Property>) -> Vec<Property> {
-    properties
-        .into_iter()
-        .filter(|prop| {
-            !(prop.property_class() == "sanity_check" && prop.status == CheckStatus::Success)
-        })
-        .collect()
-}
-
-/// Filters out properties related to extra pointer checks
-///
-/// Our support for primitives and overflow pointer checks is unstable and
-/// can result in lots of spurious failures. By default, we filter them out.
-fn filter_ptr_checks(properties: Vec<Property>) -> Vec<Property> {
-    properties
-        .into_iter()
-        .filter(|prop| {
-            !prop.property_class().contains("pointer_arithmetic")
-                && !prop.property_class().contains("pointer_primitives")
-        })
-        .collect()
-}
-
-/// When assertion reachability checks are turned on, Kani prefixes each
-/// assert's description with an ID of the following form:
-/// ```
-/// [KANI_CHECK_ID_<crate-name>_<index-of-check>]
-/// ```
-/// e.g.:
-/// ```
-/// [KANI_CHECK_ID_foo.6875c808::foo_0] assertion failed: x % 2 == 0
-/// ```
-/// In addition, the description of each reachability check that it generates
-/// includes the ID of the assert for which we want to check its reachability.
-/// The description of a reachability check uses the following template:
-/// ```
-/// [KANI_REACHABILITY_CHECK] <ID of original assert>
-/// ```
-/// e.g.:
-/// ```
-/// [KANI_REACHABILITY_CHECK] KANI_CHECK_ID_foo.6875c808::foo_0
-/// ```
-/// This function first collects all data from reachability checks. Then,
-/// it updates the reachability status for all properties accordingly.
-fn annotate_properties_with_reach_results(
-    mut properties: Vec<Property>,
-    reach_checks: Vec<Property>,
-) -> Vec<Property> {
-    let mut reach_map: HashMap<String, CheckStatus> = HashMap::new();
-    let reach_desc_pat = Regex::new("KANI_CHECK_ID_.*_([0-9])*").unwrap();
-    // Collect data (ID, status) from reachability checks
-    for reach_check in reach_checks {
-        let description = reach_check.description;
-        // Capture the ID in the reachability check
-        let check_id =
-            reach_desc_pat.captures(description.as_str()).unwrap().get(0).unwrap().as_str();
-        let check_id_str = format!("[{}]", check_id);
-        // Get the status and insert into `reach_map`
-        let status = reach_check.status;
-        let res_ins = reach_map.insert(check_id_str, status);
-        assert!(res_ins.is_none());
-    }
-
-    for prop in properties.iter_mut() {
-        let description = &prop.description;
-        let check_marker_pat = Regex::new(r"\[KANI_CHECK_ID_([^\]]*)\]").unwrap();
-        if check_marker_pat.is_match(description) {
-            // Capture the ID in the property
-            let prop_match_id =
-                check_marker_pat.captures(description.as_str()).unwrap().get(0).unwrap().as_str();
-            // Get the status associated to the ID we captured
-            let reach_status_opt = reach_map.get(&prop_match_id.to_string());
-            // Update the reachability status of the property
-            if let Some(reach_status) = reach_status_opt {
-                prop.reach = Some(*reach_status);
-            }
-        }
-    }
-    properties
-}
-
-/// Gets the overall verification result (i.e., failure if any properties show failure)
-fn determine_verification_result(properties: &[Property]) -> bool {
-    let number_failed_properties =
-        properties.iter().filter(|prop| prop.status == CheckStatus::Failure).count();
-    number_failed_properties == 0
+    Ok(VerificationOutput { process_status, processed_items: Some(processed_items) })
 }
 
 #[cfg(test)]
@@ -1163,10 +515,7 @@ mod tests {
             reach: None,
             trace: None,
         };
-        assert_eq!(
-            dummy_prop.property_name().unwrap(),
-            prop_id_string[1..prop_id_string.len() - 1]
-        );
+        assert_eq!(dummy_prop.property_name(), prop_id_string[1..prop_id_string.len() - 1]);
     }
 
     #[test]
@@ -1197,7 +546,7 @@ mod tests {
             trace: None,
         };
         assert_eq!(
-            dummy_prop.property_name().unwrap(),
+            dummy_prop.property_name(),
             "alloc::raw_vec::RawVec::<u8>::allocate_in.missing_definition.1"
         );
     }
@@ -1225,10 +574,7 @@ mod tests {
             reach: None,
             trace: None,
         };
-        assert_eq!(
-            dummy_prop.property_name().unwrap(),
-            prop_id_string[1..prop_id_string.len() - 1]
-        );
+        assert_eq!(dummy_prop.property_name(), prop_id_string[1..prop_id_string.len() - 1]);
     }
 
     #[test]
@@ -1254,7 +600,7 @@ mod tests {
             reach: None,
             trace: None,
         };
-        assert_eq!(dummy_prop.property_name().unwrap(), "recursion.1");
+        assert_eq!(dummy_prop.property_name(), "recursion.1");
     }
 
     #[test]
