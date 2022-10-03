@@ -9,7 +9,7 @@
 
 Allow users to specify that certain functions and methods should be replaced with mock functions (stubs) during verification.
 
-## User Impact
+## User impact
 
 We anticipate that stubbing will have a substantial positive impact on the usability of Kani:
 
@@ -26,7 +26,7 @@ We are able to run each of these examples on a modified version of Kani using a 
 These examples---involving randomization and deserialization---are the types of functions/methods that are commonly stubbed in other verification and program analysis projects.
 Other common examples that we should be able to handle include system calls and timer functions.
 
-### Mocking Randomization
+### Mocking randomization
 
 The crate [`rand`](https://crates.io/crates/rand) is widely used (150M downloads).
 However, Kani cannot currently handle code that uses it (Kani users have run into this; see <https://github.com/model-checking/kani/issues/1727>).
@@ -60,7 +60,7 @@ fn random_cannot_be_zero() {
 
 Under this substitution, Kani has a single check, which proves that the assertion can fail. Verification time is 0.02 seconds.
 
-### Mocking Deserialization
+### Mocking deserialization
 
 In this example, we mock a [serde_json](https://crates.io/crates/serde_json) (96M downloads) deserialization method so that we can prove a property about the following [Firecracker function](https://github.com/firecracker-microvm/firecracker/blob/01eba51ded2f5439da91a2d73280f579651b067c/src/api_server/src/request/vsock.rs#L11) that parses a configuration from some raw data:
 
@@ -157,7 +157,7 @@ fn mock_deserialize(_data: &[u8]) -> serde_json::Result<VsockDeviceConfig> {
 
 The proof takes 170 seconds to complete (using Kissat as the backend SAT solver for CBMC).
 
-## User Experience
+## User experience
 
 This feature is currently limited to stubbing functions and methods.
 We anticipate that the annotations we propose here could also be used when stubbing types, although the underlying technical approach might have to change.
@@ -195,7 +195,7 @@ mod my_mod {
 }
 ```
 
-### Stub Sets
+### Stub sets
 
 As a convenience, we will provide a macro `kani::stub_set` that allows users to specify sets of stubs that can be applied to multiple harnesses:
 
@@ -226,7 +226,7 @@ kani::stub_set!() {
 }
 ```
 
-### Error Conditions
+### Error conditions
 
 Given a set of `original`-`replacement` pairs, Kani will exit with an error if
 
@@ -238,7 +238,7 @@ Given a set of `original`-`replacement` pairs, Kani will exit with an error if
 
 To teach this feature, we will update the documentation with a section on function and method stubbing, including simple examples showing how stubbing can help Kani handle code that currently cannot be verified.
 
-## Detailed Design
+## Detailed design
 
 We expect that this feature will require changes primarily to `kani-compiler`.
 Before doing code generation, `kani-compiler` already collects harnesses; we will extend this to also collect stub mapping information.
