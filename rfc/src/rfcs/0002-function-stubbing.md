@@ -192,18 +192,17 @@ mod my_mod {
 
 ### Stub Sets
 
-As a convenience, users will also be able to specify sets of stubs that can be applied to multiple harnesses.
-First, users write a "dummy" function with the name of the stub set, annotate it with the `#[kani::stub_set]` attribute, and add the desired stub pairings as further attributes:
+As a convenience, we will provide a macro `kani::stub_set` that allows users to specify sets of stubs that can be applied to multiple harnesses:
 
 ```rust
-#[cfg(kani)]
-#[kani::stub_set]
-#[kani::stub_by("std::fs::read", "my_read")]
-#[kani::stub_by("std::fs::write", "my_write")]
-fn my_io_stubs() {}
+kani::stub_set! {
+    my_io_stubs {
+        stub_by("std::fs::read", "my_read")
+        stub_by("std::fs::write", "my_write")
+    }
+}
 ```
 
-(It is likely that this could also be hidden behind a more ergonomic macro, that creates an empty function with the appropriate annotations.)
 When declaring a harness, users can use the `#[kani::use_stub_set("<stub_set_name>")]` attribute to apply the stub set:
 
 ```rust
@@ -213,14 +212,15 @@ When declaring a harness, users can use the `#[kani::use_stub_set("<stub_set_nam
 fn my_harness() { ... }
 ```
 
-The same mechanism can be used to aggregate stub sets:
+A similar mechanism can be used to aggregate stub sets:
 
 ```rust
-#[cfg(kani)]
-#[kani::stub_set]
-#[kani::use_stub_set("my_io_stubs")]
-#[kani::use_stub_set("other_stub_set")]
-fn all_my_stubs() {}
+kani::stub_set! {
+    all_my_stubs {
+        use_stub_set("my_io_stubs")
+        use_stub_set("my_other_stubs")
+    }
+}
 ```
 
 ### Error Conditions
