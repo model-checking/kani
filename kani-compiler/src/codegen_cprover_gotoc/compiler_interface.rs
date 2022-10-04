@@ -20,7 +20,7 @@ use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
 use rustc_middle::mir::mono::{CodegenUnit, MonoItem};
 use rustc_middle::mir::write_mir_pretty;
 use rustc_middle::ty::query::Providers;
-use rustc_middle::ty::{self, TyCtxt};
+use rustc_middle::ty::{self, InstanceDef, TyCtxt};
 use rustc_session::config::{OutputFilenames, OutputType};
 use rustc_session::cstore::MetadataLoaderDyn;
 use rustc_session::Session;
@@ -31,6 +31,7 @@ use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::fs::File;
 use std::io::BufWriter;
+use std::io::Write as IoWrite;
 use std::iter::FromIterator;
 use std::path::Path;
 use std::process::Command;
@@ -422,11 +423,19 @@ fn symbol_table_to_gotoc(tcx: &TyCtxt, file: &Path) {
 fn dump_mir_items(tcx: TyCtxt, items: &[MonoItem]) {
     /// Convert MonoItem into a DefId.
     /// Skip stuff that we cannot generate the MIR items.
-    fn to_def_id(item: &MonoItem) -> Option<DefId> {
+    fn visible_item<'tcx>(item: &MonoItem<'tcx>) -> Option<(MonoItem<'tcx>, DefId)> {
         match item {
-            // Exclude FnShims and others.
-            MonoItem::Fn(instance) => instance.def.def_id_if_not_guaranteed_local_codegen(),
-            MonoItem::Static(def_id) => Some(*def_id),
+            // Exclude FnShims and others that cannot be dumped.
+            MonoItem::Fn(instance)
+                if matches!(
+                    instance.def,
+                    InstanceDef::FnPtrShim(..) | InstanceDef::ClosureOnceShim { .. }
+                ) =>
+            {
+                None
+            }
+            MonoItem::Fn(instance) => Some((*item, instance.def_id())),
+            MonoItem::Static(def_id) => Some((*item, *def_id)),
             MonoItem::GlobalAsm(_) => None,
         }
     }
@@ -439,8 +448,8 @@ fn dump_mir_items(tcx: TyCtxt, items: &[MonoItem]) {
         let mut writer = BufWriter::new(out_file);
 
         // For each def_id, dump their MIR
-        for def_id in items.iter().filter_map(to_def_id) {
-            tracing::error!(?def_id, "dump");
+        for (item, def_id) in items.iter().filter_map(visible_item) {
+            writeln!(writer, "// Item: {:?}", item).unwrap();
             write_mir_pretty(tcx, Some(def_id), &mut writer).unwrap();
         }
     }
