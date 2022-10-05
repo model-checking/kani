@@ -6,6 +6,7 @@ use kani_metadata::HarnessMetadata;
 use rayon::prelude::*;
 use std::path::{Path, PathBuf};
 
+use crate::args::OutputFormat;
 use crate::call_cbmc::{VerificationResult, VerificationStatus};
 use crate::session::KaniSession;
 use crate::util::specialized_harness_name;
@@ -101,7 +102,13 @@ impl KaniSession {
         } else {
             let result = self.run_cbmc(binary, harness)?;
 
-            if !self.args.quiet {
+            // When quiet, we don't want to print anything at all.
+            // When dry-run, we don't have real results to print.
+            // When output is old, we also don't have real results to print.
+            if !self.args.quiet
+                && !self.args.dry_run
+                && self.args.output_format != OutputFormat::Old
+            {
                 println!("{}", result.render(&self.args.output_format));
             }
 

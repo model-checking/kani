@@ -448,7 +448,7 @@ impl<'a, 'b> Iterator for Parser<'a, 'b> {
 /// The verification output, as extracted by the CBMC output parser.
 pub struct VerificationOutput {
     pub process_status: i32,
-    pub processed_items: Option<Vec<ParserItem>>,
+    pub processed_items: Vec<ParserItem>,
 }
 
 /// The main function to process CBMC's output.
@@ -477,12 +477,30 @@ pub fn process_cbmc_output(
         (Some(x), _) => x,
         // process exited with signal (e.g. OOM-killed)
         // bash/zsh have a convention for translating signal number to exit code:
+        // https://tldp.org/LDP/abs/html/exitcodes.html
         (_, Some(x)) => 128 + x,
         // I think this shouldn't happen? either exit or signal, right?
         (None, None) => unreachable!("Process exited with neither status code nor signal?"),
     };
 
-    Ok(VerificationOutput { process_status, processed_items: Some(processed_items) })
+    Ok(VerificationOutput { process_status, processed_items })
+}
+
+/// Takes (by ownership) a vector of messages, and returns that vector with the `Result`
+/// (if any) removed from it and returned separately.
+pub fn extract_results(mut items: Vec<ParserItem>) -> (Vec<ParserItem>, Option<Vec<Property>>) {
+    let result_idx = items.iter().position(|x| matches!(x, ParserItem::Result { .. }));
+    if let Some(result_idx) = result_idx {
+        let result = items.remove(result_idx);
+        if let ParserItem::Result { result } = result {
+            (items, Some(result))
+        } else {
+            unreachable!() // We filtered for this to be true
+        }
+    } else {
+        // No results
+        (items, None)
+    }
 }
 
 #[cfg(test)]

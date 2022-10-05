@@ -160,7 +160,12 @@ impl ParserItem {
     }
 }
 
-pub fn kani_property_filter(
+/// This is called "live" as CBMC output is streamed in, and we
+/// filter and transform it into the format we expect.
+///
+/// This will output "messages" live as they stream in if `output_format` is
+/// set to `regular` but will otherwise not print.
+pub fn kani_cbmc_output_filter(
     item: ParserItem,
     extra_ptr_checks: bool,
     output_format: &OutputFormat,

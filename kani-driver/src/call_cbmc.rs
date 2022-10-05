@@ -11,9 +11,9 @@ use std::time::{Duration, Instant};
 
 use crate::args::{KaniArgs, OutputFormat};
 use crate::cbmc_output_parser::{
-    process_cbmc_output, CheckStatus, ParserItem, Property, VerificationOutput,
+    extract_results, process_cbmc_output, CheckStatus, ParserItem, Property, VerificationOutput,
 };
-use crate::cbmc_property_renderer::{format_result, kani_property_filter};
+use crate::cbmc_property_renderer::{format_result, kani_cbmc_output_filter};
 use crate::session::KaniSession;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -23,13 +23,12 @@ pub enum VerificationStatus {
 }
 
 /// Our (kani-driver) notions of CBMC results.
-///
-/// `messages` will have `Result` removed, and that can instead be found directly in `results`.
 #[derive(Debug)]
 pub struct VerificationResult {
     /// Whether verification should be considered to have succeeded, or have failed.
     pub status: VerificationStatus,
-    /// The parsed output, message by message, of CBMC. `Result` has been removed, however.
+    /// The parsed output, message by message, of CBMC. However, the `Result` message has been
+    /// removed and is available in `results` instead.
     pub messages: Option<Vec<ParserItem>>,
     /// The `Result` properties in detail.
     pub results: Option<Vec<Property>>,
@@ -67,7 +66,7 @@ impl KaniSession {
             let cbmc_process_opt = self.run_piped(cmd)?;
             if let Some(cbmc_process) = cbmc_process_opt {
                 let output = process_cbmc_output(cbmc_process, |i| {
-                    kani_property_filter(
+                    kani_cbmc_output_filter(
                         i,
                         self.args.extra_pointer_checks,
                         &self.args.output_format,
@@ -76,7 +75,8 @@ impl KaniSession {
 
                 VerificationResult::from(output, start_time)
             } else {
-                VerificationResult::mock_failure()
+                // None is only ever returned when it's a dry run
+                VerificationResult::mock_success()
             }
         };
 
@@ -194,63 +194,47 @@ impl VerificationResult {
     ///   2. Positively checking for the presence of results.
     ///       (Do not mistake lack of results for success: report it as failure.)
     fn from(output: VerificationOutput, start_time: Instant) -> VerificationResult {
-        if let Some(mut items) = output.processed_items {
-            let result_idx = items.iter().position(|x| matches!(x, ParserItem::Result { .. }));
-            if let Some(result_idx) = result_idx {
-                let result = items.remove(result_idx);
-                if let ParserItem::Result { result } = result {
-                    let number_failed_properties =
-                        result.iter().filter(|prop| prop.status == CheckStatus::Failure).count();
-                    let status = if number_failed_properties == 0 {
-                        VerificationStatus::Success
-                    } else {
-                        VerificationStatus::Failure
-                    };
-                    VerificationResult {
-                        status,
-                        messages: Some(items),
-                        results: Some(result),
-                        exit_status: output.process_status,
-                        runtime: start_time.elapsed(),
-                    }
-                } else {
-                    unreachable!() // We filtered for this to be true
-                }
-            } else {
-                // We never got results from CBMC - also shouldn't really happen unless something went wrong
-                VerificationResult {
-                    status: VerificationStatus::Failure,
-                    messages: Some(items),
-                    results: None,
-                    exit_status: output.process_status,
-                    runtime: start_time.elapsed(),
-                }
+        let runtime = start_time.elapsed();
+        let (items, results) = extract_results(output.processed_items);
+
+        if let Some(results) = results {
+            VerificationResult {
+                status: determine_status_from_properties(&results),
+                messages: Some(items),
+                results: Some(results),
+                exit_status: output.process_status,
+                runtime,
             }
         } else {
-            // We don't have ANY messages to report - shouldn't really happen unless something went wrong
+            // We never got results from CBMC - something went wrong (e.g. crash) so it's failure
             VerificationResult {
                 status: VerificationStatus::Failure,
-                messages: None,
+                messages: Some(items),
                 results: None,
                 exit_status: output.process_status,
-                runtime: start_time.elapsed(),
+                runtime,
             }
         }
     }
+
     pub fn mock_success() -> VerificationResult {
         VerificationResult {
             status: VerificationStatus::Success,
             messages: None,
             results: None,
-            exit_status: 42,
+            exit_status: 42, // on success, exit code is ignored, so put something weird here
             runtime: Duration::from_secs(0),
         }
     }
+
     fn mock_failure() -> VerificationResult {
         VerificationResult {
             status: VerificationStatus::Failure,
             messages: None,
             results: None,
+            // on failure, exit codes in theory might be used,
+            // but `mock_failure` should never be used in a context where they will,
+            // so again use something weird:
             exit_status: 42,
             runtime: Duration::from_secs(0),
         }
@@ -269,6 +253,16 @@ impl VerificationResult {
                 self.exit_status, verification_result
             )
         }
+    }
+}
+
+fn determine_status_from_properties(properties: &[Property]) -> VerificationStatus {
+    let number_failed_properties =
+        properties.iter().filter(|prop| prop.status == CheckStatus::Failure).count();
+    if number_failed_properties == 0 {
+        VerificationStatus::Success
+    } else {
+        VerificationStatus::Failure
     }
 }
 
