@@ -256,6 +256,7 @@ impl VerificationResult {
     }
 }
 
+/// We decide if verificaiton succeeded based on properties, not (typically) on exit code
 fn determine_status_from_properties(properties: &[Property]) -> VerificationStatus {
     let number_failed_properties =
         properties.iter().filter(|prop| prop.status == CheckStatus::Failure).count();
