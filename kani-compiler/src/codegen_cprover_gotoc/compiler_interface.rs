@@ -32,7 +32,7 @@ use std::iter::FromIterator;
 use std::path::Path;
 use std::process::Command;
 use std::rc::Rc;
-use tracing::{debug, warn};
+use tracing::{debug, error, warn};
 
 #[derive(Clone)]
 pub struct GotocCodegenBackend {
@@ -405,7 +405,12 @@ fn symbol_table_to_gotoc(tcx: &TyCtxt, file: &Path) {
     cmd.args(args);
     debug!("calling: `{:?} {:?}`", cmd.get_program(), cmd.get_args());
 
-    if cmd.status().is_err() {
+    let result = cmd
+        .output()
+        .expect(&format!("Failed to generate goto model for {}", input_filename.display()));
+    if !result.status.success() {
+        error!("Symtab error output:\n{}", String::from_utf8_lossy(&result.stderr));
+        error!("Symtab output:\n{}", String::from_utf8_lossy(&result.stdout));
         let err_msg = format!(
             "Failed to generate goto model:\n\tsymtab2gb failed on file {}.",
             input_filename.display()
