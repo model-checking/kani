@@ -142,7 +142,10 @@ impl KaniSession {
     }
 
     /// Run a job and pipe its output to this process.
-    /// Returns an error if the process could not be spawned
+    /// Returns an error if the process could not be spawned.
+    ///
+    /// NOTE: Unlike other `run_` functions, this function does not attempt to indicate
+    /// the process exit code, you need to remember to check this yourself.
     pub fn run_piped(&self, mut cmd: Command) -> Result<Option<Child>> {
         if self.args.verbose || self.args.dry_run {
             println!("{}", render_command(&cmd).to_string_lossy());
@@ -151,14 +154,12 @@ impl KaniSession {
             }
         }
         // Run the process as a child process
-        let process = cmd.stdout(Stdio::piped()).spawn();
+        let process = cmd
+            .stdout(Stdio::piped())
+            .spawn()
+            .context(format!("Failed to invoke {}", cmd.get_program().to_string_lossy()))?;
 
-        // Render the command if the process could not be spawned
-        if process.is_err() {
-            bail!("Could not spawn process `{}`", render_command(&cmd).to_string_lossy());
-        }
-        // Return the child process handle
-        Ok(Some(process.unwrap()))
+        Ok(Some(process))
     }
 }
 
