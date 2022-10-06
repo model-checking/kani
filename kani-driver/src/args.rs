@@ -45,6 +45,7 @@ pub struct CargoKaniArgs {
 // cargo-kani takes optional subcommands to request specialized behavior
 #[derive(Debug, StructOpt)]
 pub enum CargoKaniSubcommand {
+    #[structopt(setting(structopt::clap::AppSettings::Hidden))]
     Assess,
 }
 
@@ -54,7 +55,7 @@ pub enum CargoKaniSubcommand {
 pub struct KaniArgs {
     /// Temporary option to trigger assess mode for out test suite
     /// where we are able to add options but not subcommands
-    #[structopt(long, hidden = true)]
+    #[structopt(long, hidden = true, requires("enable-unstable"))]
     pub assess: bool,
 
     /// Generate visualizer report to <target-dir>/report/html/index.html
