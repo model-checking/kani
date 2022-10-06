@@ -73,18 +73,6 @@ export RUSTC="$KANI_DIR/target/kani/bin/kani-compiler"
 # Compile rust to iRep
 $WRAPPER cargo build --verbose -Z build-std --lib --target $TARGET
 
-# Runs a command, but suppresses output unless it fails
-function go {
-  OUTPUT=$("$@" 2>&1) || (echo "$OUTPUT" && exit 1)
-}
-
-# Generate goto-program. This will make sure the representation is well formed.
-cd target/${TARGET}/debug/deps
-for symtab in *.symtab.json; do
-    echo "======== File: $symtab"
-    go symtab2gb ${symtab} --out ${symtab}.out
-done
-
 echo
 echo "Finished Kani codegen for the Rust standard library successfully..."
 echo
