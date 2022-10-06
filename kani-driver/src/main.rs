@@ -3,6 +3,7 @@
 #![feature(let_chains)]
 
 use anyhow::Result;
+use args::CargoKaniSubcommand;
 use args_toml::join_args;
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -41,7 +42,7 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     args.validate();
     let ctx = session::KaniSession::new(args.common_opts)?;
 
-    if let Some(args::CargoKaniSubcommand::Assess) = args.command {
+    if matches!(args.command, Some(CargoKaniSubcommand::Assess)) || ctx.args.assess {
         // Run the alternative command instead
         return assess::cargokani_assess_main(ctx);
     }

@@ -51,6 +51,11 @@ pub enum CargoKaniSubcommand {
 // anything above is "local" to "main"'s control flow.
 #[derive(Debug, StructOpt)]
 pub struct KaniArgs {
+    /// Temporary option to trigger assess mode for out test suite
+    /// where we are able to add options but not subcommands
+    #[structopt(long, hidden = true)]
+    pub assess: bool,
+
     /// Generate visualizer report to <target-dir>/report/html/index.html
     #[structopt(long)]
     pub visualize: bool,
