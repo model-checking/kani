@@ -42,6 +42,7 @@ pub struct CargoKaniArgs {
     pub common_opts: KaniArgs,
 }
 
+// cargo-kani takes optional subcommands to request specialized behavior
 #[derive(Debug, StructOpt)]
 pub enum CargoKaniSubcommand {
     Assess,

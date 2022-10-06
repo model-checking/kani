@@ -123,6 +123,7 @@ impl<'tcx> GotocCtx<'tcx> {
             self.symbol_table.update_fn_declaration_with_definition(&name, body);
 
             self.handle_kanitool_attributes();
+            self.record_test_metadata();
         }
         self.reset_current_fn();
     }
@@ -316,14 +317,9 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    /// This updates the goto context with any information that should be accumulated from a function's
-    /// attributes.
-    ///
-    /// Handle all attributes i.e. `#[kani::x]` (which kani_macros translates to `#[kanitool::x]` for us to handle here)
-    fn handle_kanitool_attributes(&mut self) {
+    /// Records test harness closures for KaniMetadata
+    fn record_test_metadata(&mut self) {
         let def_id = self.current_fn().instance().def_id();
-        let all_attributes = self.tcx.get_attrs_unchecked(def_id);
-
         if def_id.is_local() {
             let local_def_id = def_id.expect_local();
             let hir_id = self.tcx.hir().local_def_id_to_hir_id(local_def_id);
@@ -353,6 +349,15 @@ impl<'tcx> GotocCtx<'tcx> {
                 })
             }
         }
+    }
+
+    /// This updates the goto context with any information that should be accumulated from a function's
+    /// attributes.
+    ///
+    /// Handle all attributes i.e. `#[kani::x]` (which kani_macros translates to `#[kanitool::x]` for us to handle here)
+    fn handle_kanitool_attributes(&mut self) {
+        let def_id = self.current_fn().instance().def_id();
+        let all_attributes = self.tcx.get_attrs_unchecked(def_id);
         let (proof_attributes, other_attributes) = partition_kanitool_attributes(all_attributes);
         if !proof_attributes.is_empty() {
             self.create_proof_harness(other_attributes);

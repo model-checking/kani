@@ -117,6 +117,7 @@ fn merge_kani_metadata(files: Vec<KaniMetadata>) -> KaniMetadata {
         // Note that we're taking ownership of the original vec, and so we can move the data into the new data structure.
         result.proof_harnesses.extend(md.proof_harnesses);
         // TODO: these should be merged via a map to aggregate them all
+        // https://github.com/model-checking/kani/issues/1758
         result.unsupported_features.extend(md.unsupported_features);
         result.test_harnesses.extend(md.test_harnesses);
     }

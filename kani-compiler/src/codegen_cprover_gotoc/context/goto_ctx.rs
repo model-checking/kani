@@ -102,6 +102,11 @@ impl<'tcx> GotocCtx<'tcx> {
         self.current_fn.as_mut().unwrap()
     }
 
+    /// Maps the goto-context "unsupported features" data into the
+    /// KaniMetadata "unsupported features" format.
+    ///
+    /// These are different because the KaniMetadata is a flat serializable list,
+    /// while we need a more richly structured HashMap in the goto context.
     pub(crate) fn unsupported_metadata(&self) -> Vec<UnsupportedFeature> {
         self.unsupported_constructs
             .iter()
