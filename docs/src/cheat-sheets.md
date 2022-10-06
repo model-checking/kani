@@ -68,6 +68,12 @@ kani --keep-temps file.rs
 kani --gen-c file.rs
 ```
 
+```bash
+# Generate a ${INPUT}.kani.mir file with a human friendly MIR dump
+# for all items that are compiled to the respective goto-program.
+RUSTFLAGS="--emit mir" kani ${INPUT}.rs
+```
+
 ## CBMC
 
 ```bash
