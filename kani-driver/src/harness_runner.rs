@@ -6,7 +6,8 @@ use kani_metadata::HarnessMetadata;
 use rayon::prelude::*;
 use std::path::{Path, PathBuf};
 
-use crate::call_cbmc::VerificationStatus;
+use crate::args::OutputFormat;
+use crate::call_cbmc::{VerificationResult, VerificationStatus};
 use crate::session::KaniSession;
 use crate::util::specialized_harness_name;
 
@@ -34,7 +35,7 @@ pub(crate) struct HarnessRunner<'sess> {
 /// (as a means to identify which harness), and provides that harness's verification result.
 pub(crate) struct HarnessResult<'sess> {
     pub harness: &'sess HarnessMetadata,
-    pub result: VerificationStatus,
+    pub result: VerificationResult,
 }
 
 impl<'sess> HarnessRunner<'sess> {
@@ -89,7 +90,7 @@ impl KaniSession {
         binary: &Path,
         report_dir: &Path,
         harness: &HarnessMetadata,
-    ) -> Result<VerificationStatus> {
+    ) -> Result<VerificationResult> {
         if !self.args.quiet {
             println!("Checking harness {}...", harness.pretty_name);
         }
@@ -97,9 +98,21 @@ impl KaniSession {
         if self.args.visualize {
             self.run_visualize(binary, report_dir, harness)?;
             // Strictly speaking, we're faking success here. This is more "no error"
-            Ok(VerificationStatus::Success)
+            Ok(VerificationResult::mock_success())
         } else {
-            self.run_cbmc(binary, harness)
+            let result = self.run_cbmc(binary, harness)?;
+
+            // When quiet, we don't want to print anything at all.
+            // When dry-run, we don't have real results to print.
+            // When output is old, we also don't have real results to print.
+            if !self.args.quiet
+                && !self.args.dry_run
+                && self.args.output_format != OutputFormat::Old
+            {
+                println!("{}", result.render(&self.args.output_format));
+            }
+
+            Ok(result)
         }
     }
 
@@ -110,7 +123,7 @@ impl KaniSession {
     /// exiting with an error code, if needed.
     pub(crate) fn print_final_summary(self, results: &[HarnessResult<'_>]) -> Result<()> {
         let (successes, failures): (Vec<_>, Vec<_>) =
-            results.iter().partition(|r| r.result == VerificationStatus::Success);
+            results.iter().partition(|r| r.result.status == VerificationStatus::Success);
 
         let succeeding = successes.len();
         let failing = failures.len();
