@@ -383,14 +383,9 @@ fn collect_codegen_items<'tcx>(gcx: &GotocCtx<'tcx>) -> Vec<MonoItem<'tcx>> {
         }
         ReachabilityType::None => Vec::new(),
         ReachabilityType::PubFns => {
-            // TODO: https://github.com/model-checking/kani/issues/1674
-            let err_msg = format!(
-                "Using {} reachability mode is still unsupported.",
-                ReachabilityType::PubFns.as_ref()
-            );
-            tcx.sess.err(&err_msg);
-            tcx.sess.abort_if_errors();
-            unreachable!("Session should've been aborted")
+            let local_reachable =
+                filter_crate_items(tcx, |_, def_id| tcx.is_reachable_non_generic(def_id));
+            collect_reachable_items(tcx, &local_reachable).into_iter().collect()
         }
     }
 }
