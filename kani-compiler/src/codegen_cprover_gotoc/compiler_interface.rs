@@ -129,6 +129,8 @@ impl CodegenBackend for GotocCodegenBackend {
         // Print compilation report.
         print_report(&gcx, tcx);
 
+        let unsupported_features = gcx.unsupported_metadata();
+
         // perform post-processing symbol table passes
         let passes = self.queries.get_symbol_table_passes();
         let symtab = symtab_transformer::do_passes(gcx.symbol_table, &passes);
@@ -144,7 +146,11 @@ impl CodegenBackend for GotocCodegenBackend {
             None
         };
 
-        let metadata = KaniMetadata { proof_harnesses: gcx.proof_harnesses };
+        let metadata = KaniMetadata {
+            proof_harnesses: gcx.proof_harnesses,
+            unsupported_features,
+            test_harnesses: gcx.test_harnesses,
+        };
 
         // No output should be generated if user selected no_codegen.
         if !tcx.sess.opts.unstable_opts.no_codegen && tcx.sess.opts.output_types.should_codegen() {
