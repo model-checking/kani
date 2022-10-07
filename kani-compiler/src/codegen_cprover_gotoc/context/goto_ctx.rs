@@ -115,6 +115,9 @@ impl<'tcx> GotocCtx<'tcx> {
                 locations: location
                     .iter()
                     .map(|l| {
+                        // We likely (and should) have no instances of
+                        // calling `codegen_unimplemented` without file/line.
+                        // So while we map out of `Option` here, we expect them to always be `Some`
                         (
                             l.filename().unwrap_or_default(),
                             l.start_line().map(|x| x.to_string()).unwrap_or_default(),

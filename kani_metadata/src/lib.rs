@@ -23,6 +23,7 @@ pub struct KaniMetadata {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UnsupportedFeature {
+    // We could replace this with an enum: https://github.com/model-checking/kani/issues/1765
     /// A string identifying the feature.
     pub feature: String,
     /// A list of locations (file, line) where this unsupported feature can be found.

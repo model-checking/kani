@@ -43,6 +43,14 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     let ctx = session::KaniSession::new(args.common_opts)?;
 
     if matches!(args.command, Some(CargoKaniSubcommand::Assess)) || ctx.args.assess {
+        // --assess requires --enable-unstable, but the subcommand needs manual checking
+        if !ctx.args.enable_unstable {
+            clap::Error::with_description(
+                "Assess is unstable and requires 'cargo kani --enable-unstable assess'",
+                clap::ErrorKind::MissingRequiredArgument,
+            )
+            .exit()
+        }
         // Run the alternative command instead
         return assess::cargokani_assess_main(ctx);
     }

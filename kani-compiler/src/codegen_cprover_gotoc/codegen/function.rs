@@ -123,7 +123,7 @@ impl<'tcx> GotocCtx<'tcx> {
             self.symbol_table.update_fn_declaration_with_definition(&name, body);
 
             self.handle_kanitool_attributes();
-            self.record_test_metadata();
+            self.record_test_harness_metadata();
         }
         self.reset_current_fn();
     }
@@ -317,8 +317,14 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    /// Records test harness closures for KaniMetadata
-    fn record_test_metadata(&mut self) {
+    /// We record test harness information in kani-metadata, just like we record
+    /// proof harness information. This is used to support e.g. cargo-kani assess.
+    ///
+    /// Note that we do not actually spot the function that was annotated by `#[test]`
+    /// but instead the closure that gets put into the "test description" that macro
+    /// expands into. (See comment below) This ends up being preferrable, actually,
+    /// as it add asserts for tests that return `Result` types.
+    fn record_test_harness_metadata(&mut self) {
         let def_id = self.current_fn().instance().def_id();
         if def_id.is_local() {
             let local_def_id = def_id.expect_local();

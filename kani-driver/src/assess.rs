@@ -28,28 +28,34 @@ fn assess_table_new() -> Table {
     table
 }
 
+/// Internal data type for constructing the unsupported features table
+#[derive(Default)]
+struct UnsupportedFeaturesTableData {
+    crates_impacted: usize,
+    instances_of_use: usize,
+}
 fn unsupported_features_table(metadata: &KaniMetadata) -> Table {
     // Map "unsupported feature name" -> (crates impacted, instance of use)
-    let mut counts: HashMap<String, (usize, usize)> = HashMap::new();
+    let mut counts: HashMap<String, UnsupportedFeaturesTableData> = HashMap::new();
 
     for item in &metadata.unsupported_features {
         // key is unsupported feature name
         let mut key = item.feature.clone();
         // There are several "feature for <instance of use>" unsupported features.
-        // We aggregate those here by reducing it to just "feature"
+        // We aggregate those here by reducing it to just "feature".
+        // We should replace this with an enum: https://github.com/model-checking/kani/issues/1765
         if let Some((prefix, _)) = key.split_once(" for ") {
             key = prefix.to_string();
         }
         let entry = counts.entry(key).or_default();
-        // crates impacted:
-        entry.0 += 1;
-        // instances of use:
-        entry.1 += item.locations.len();
+        entry.crates_impacted += 1;
+        entry.instances_of_use += item.locations.len();
     }
 
     // Sort descending by number of crates impacted by this missing feature
-    let mut sorted_counts: Vec<(String, (usize, usize))> = counts.into_iter().collect();
-    sorted_counts.sort_by_key(|i| usize::MAX - i.1.0);
+    let mut sorted_counts: Vec<(String, UnsupportedFeaturesTableData)> =
+        counts.into_iter().collect();
+    sorted_counts.sort_by_key(|(_, data)| usize::MAX - data.crates_impacted);
 
     {
         use comfy_table::*;
@@ -64,8 +70,12 @@ fn unsupported_features_table(metadata: &KaniMetadata) -> Table {
         table.column_mut(1).unwrap().set_cell_alignment(CellAlignment::Right);
         table.column_mut(2).unwrap().set_cell_alignment(CellAlignment::Right);
 
-        for item in sorted_counts {
-            table.add_row(vec![item.0, item.1.0.to_string(), item.1.1.to_string()]);
+        for (feature, data) in sorted_counts {
+            table.add_row(vec![
+                feature,
+                data.crates_impacted.to_string(),
+                data.instances_of_use.to_string(),
+            ]);
         }
 
         table
@@ -92,7 +102,7 @@ fn failure_reasons_table(results: &[HarnessResult]) -> Table {
 
     // Sort descending by number of failures for this reason
     let mut sorted_counts: Vec<(String, usize)> = counts.into_iter().collect();
-    sorted_counts.sort_by_key(|i| usize::MAX - i.1);
+    sorted_counts.sort_by_key(|(_, count)| usize::MAX - count);
 
     {
         use comfy_table::*;
@@ -106,8 +116,8 @@ fn failure_reasons_table(results: &[HarnessResult]) -> Table {
             .set_constraint(ColumnConstraint::UpperBoundary(Width::Fixed(80)));
         table.column_mut(1).unwrap().set_cell_alignment(CellAlignment::Right);
 
-        for item in sorted_counts {
-            table.add_row(vec![item.0, item.1.to_string()]);
+        for (class, count) in sorted_counts {
+            table.add_row(vec![class, count.to_string()]);
         }
 
         table
@@ -161,6 +171,7 @@ pub(crate) fn cargokani_assess_main(mut ctx: KaniSession) -> Result<()> {
     // An interesting thing to print here would be "number of crates without any warnings"
     // however this will have to wait until a refactoring of how we aggregate metadata
     // from multiple crates together here.
+    // tracking for that: https://github.com/model-checking/kani/issues/1758
     println!("Analyzed {} crates", crate_count);
 
     if !metadata.unsupported_features.is_empty() {
