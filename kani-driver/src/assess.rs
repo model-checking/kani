@@ -34,7 +34,24 @@ struct UnsupportedFeaturesTableData {
     crates_impacted: usize,
     instances_of_use: usize,
 }
-fn unsupported_features_table(metadata: &KaniMetadata) -> Table {
+
+/// Reports unsupported features, in descending order of number of crates impacted.
+///
+/// The feature names come directly from the `operation_name` listed in `codegen_unimplemented`
+///
+/// For example:
+///
+/// ```text
+/// ===================================================
+///  Unsupported feature        |   Crates | Instances
+///                             | impacted |    of use
+/// ----------------------------+----------+-----------
+///  'simd_or' intrinsic        |        4 |         5
+///  try                        |        2 |        17
+///  drop_in_place              |        2 |         2
+/// ===================================================
+/// ```
+fn build_unsupported_features_table(metadata: &KaniMetadata) -> Table {
     // Map "unsupported feature name" -> (crates impacted, instance of use)
     let mut counts: HashMap<String, UnsupportedFeaturesTableData> = HashMap::new();
 
@@ -82,7 +99,28 @@ fn unsupported_features_table(metadata: &KaniMetadata) -> Table {
     }
 }
 
-fn failure_reasons_table(results: &[HarnessResult]) -> Table {
+/// Reports the most common "failure reasons" for tests run by assess.
+///
+/// The reasons are presently just a combination of "property classes"
+/// from failed CBMC properties. This is only really meaningful to us,
+/// and could use significant improvement for customers. In fact,
+/// this particular data set might *only* be interesting to us as
+/// developers of 'assess', and not customers, once we get fewer failures
+/// and the heuristics for "promising tests" are improved.
+///
+/// Example:
+///
+/// ```text
+/// ================================================
+///  Reason for failure           | Number of tests
+/// ------------------------------+-----------------
+///  unwind                       |              61
+///  success                      |               6
+///  assertion                    |               4
+///  assertion + overflow         |               2
+/// ================================================
+/// ```
+fn build_failure_reasons_table(results: &[HarnessResult]) -> Table {
     // Map "Reason for failure" -> (Number of tests)
     let mut counts: HashMap<String, usize> = HashMap::new();
 
@@ -124,7 +162,24 @@ fn failure_reasons_table(results: &[HarnessResult]) -> Table {
     }
 }
 
-fn promising_tests_table(results: &[HarnessResult]) -> Table {
+/// Reports the "test harnesses" most likely to be easily turned into proof harnesses.
+///
+/// This presently is very naive and just reports successful harnesses, however
+/// there is significant potential here to make use of improved heuristics,
+/// and to find a way to *sort* these harnesses.
+///
+/// Example:
+/// ```text
+/// =============================================================================
+///  Candidate for proof harness                           | Location
+/// -------------------------------------------------------+---------------------
+///  float::tests::f64_edge_cases                          | src/float.rs:226
+///  float::tests::f32_edge_cases                          | src/float.rs:184
+///  integer::tests::test_integers                         | src/integer.rs:171
+///  other::tests::test_misc                               | src/other.rs:284
+/// =============================================================================
+/// ```
+fn build_promising_tests_table(results: &[HarnessResult]) -> Table {
     {
         use comfy_table::*;
 
@@ -175,7 +230,7 @@ pub(crate) fn cargokani_assess_main(mut ctx: KaniSession) -> Result<()> {
     println!("Analyzed {} crates", crate_count);
 
     if !metadata.unsupported_features.is_empty() {
-        println!("{}", unsupported_features_table(&metadata));
+        println!("{}", build_unsupported_features_table(&metadata));
     } else {
         println!("No crates contained Rust features unsupported by Kani");
     }
@@ -217,10 +272,10 @@ pub(crate) fn cargokani_assess_main(mut ctx: KaniSession) -> Result<()> {
     // 1. "Reason for failure" map harness to reason, aggredate together
     //    e.g.  successs   6
     //          unwind     234
-    println!("{}", failure_reasons_table(&results));
+    println!("{}", build_failure_reasons_table(&results));
     // 2. "Test cases that might be good proof harness starting points"
     //    e.g.  All Successes and maybe Assertions?
-    println!("{}", promising_tests_table(&results));
+    println!("{}", build_promising_tests_table(&results));
 
     Ok(())
 }
