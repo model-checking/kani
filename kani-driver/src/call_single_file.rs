@@ -45,7 +45,11 @@ impl KaniSession {
 
         let mut kani_args = self.kani_specific_flags();
         if self.args.mir_linker {
-            kani_args.push("--reachability=harnesses".into());
+            if self.args.function.is_some() {
+                kani_args.push("--reachability=pub_fns".into());
+            } else {
+                kani_args.push("--reachability=harnesses".into());
+            }
         } else {
             kani_args.push("--reachability=legacy".into());
         }
