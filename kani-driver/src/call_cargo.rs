@@ -62,7 +62,11 @@ impl KaniSession {
         if self.args.mir_linker {
             // Only provide reachability flag to the target package.
             pkg_args.push("--".into());
-            pkg_args.push("--reachability=harnesses".into());
+            if self.args.function.is_some() {
+                pkg_args.push("--reachability=pub_fns".into());
+            } else {
+                pkg_args.push("--reachability=harnesses".into());
+            }
         } else {
             // Pass legacy reachability to the target package and its dependencies.
             kani_args.push("--reachability=legacy".into());
