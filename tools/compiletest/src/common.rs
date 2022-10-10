@@ -79,9 +79,6 @@ pub enum PanicStrategy {
 /// Configuration for compiletest
 #[derive(Debug, Clone)]
 pub struct Config {
-    /// The path to the directory where the Kani executable is located
-    pub kani_dir_path: PathBuf,
-
     /// The directory containing the tests to run
     pub src_base: PathBuf,
 
@@ -106,16 +103,6 @@ pub struct Config {
 
     /// Write out a parseable log of tests that were run
     pub logfile: Option<PathBuf>,
-
-    /// Flags to pass to the compiler when building for the host
-    pub host_rustcflags: Option<String>,
-
-    /// Flags to pass to the compiler when building for the target
-    pub target_rustcflags: Option<String>,
-
-    /// What panic strategy the target is built with.  Unwind supports Abort, but
-    /// not vice versa.
-    pub target_panic: PanicStrategy,
 
     /// Target system to be tested
     pub target: String,
