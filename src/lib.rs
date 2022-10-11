@@ -107,16 +107,22 @@ fn prepend_search_path(paths: &[PathBuf], original: Option<OsString>) -> Result<
     }
 }
 
-/// `rustup` set dynamic linker paths, it's not fully clear why. `rustup run` exists, which may aid
-/// in running rust binaries that dynamically link to the rust standard library. This might be why.
-/// All toolchain binaries have `RUNPATH` set, so it's not needed by e.g. rustc. (Same for Kani)
+/// `rustup` sets dynamic linker paths when it proxies to the target Rust toolchain. It's not fully
+/// clear why. `rustup run` exists, which may aid in running Rust binaries that dynamically link to
+/// the Rust standard library with `-C prefer-dynamic`. This might be why. All toolchain binaries
+/// have `RUNPATH` set, so it's not needed by e.g. rustc. (Same for Kani)
 ///
-/// However, this causes problems for us when the default rust toolchain is nightly. Then
+/// However, this causes problems for us when the default Rust toolchain is nightly. Then
 /// `LD_LIBRARY_PATH` is set to a nightly `lib` that may contain a different version of
-/// `librustc_driver-*.so`. This manifests in errors like:
+/// `librustc_driver-*.so` that might have the same name. This takes priority over the `RUNPATH` of
+/// `kani-compiler` and causes the linker to use a slightly different version of rustc than Kani
+/// was built against. This manifests in errors like:
 /// `kani-compiler: symbol lookup error: ... undefined symbol`
 ///
-/// Consequently, let's strip anything that looks like a toolchain from our environment.
+/// Consequently, let's remove from our linking environment anything that looks like a toolchain
+/// path that rustup set. Then we can safely invoke our binaries. Note also that we update
+/// `PATH` in [`exec`] to include our favored Rust toolchain, so we won't re-drive `rustup` when
+/// `kani-driver` later invokes `cargo`.
 fn fixup_dynamic_linking_environment() {
     #[cfg(not(target_os = "macos"))]
     pub const LOADER_PATH: &str = "LD_LIBRARY_PATH";
@@ -124,9 +130,9 @@ fn fixup_dynamic_linking_environment() {
     pub const LOADER_PATH: &str = "DYLD_FALLBACK_LIBRARY_PATH";
 
     if let Some(paths) = env::var_os(LOADER_PATH) {
+        // unwrap safety: we're just filtering, so it should always succeed
         let new_val =
             env::join_paths(env::split_paths(&paths).filter(unlike_toolchain_path)).unwrap();
-        // unwrap safety: we're just filtering, so it should always succeed
         env::set_var(LOADER_PATH, new_val);
     }
 }
