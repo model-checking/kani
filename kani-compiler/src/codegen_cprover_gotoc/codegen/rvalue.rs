@@ -204,7 +204,7 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_rvalue_repeat(
         &mut self,
         op: &Operand<'tcx>,
-        sz: &ty::Const<'tcx>,
+        sz: ty::Const<'tcx>,
         res_ty: Ty<'tcx>,
         loc: Location,
     ) -> Expr {
@@ -393,7 +393,10 @@ impl<'tcx> GotocCtx<'tcx> {
         debug!(?rv, "codegen_rvalue");
         match rv {
             Rvalue::Use(p) => self.codegen_operand(p),
-            Rvalue::Repeat(op, sz) => self.codegen_rvalue_repeat(op, sz, res_ty, loc),
+            Rvalue::Repeat(op, sz) => {
+                let sz = self.monomorphize(*sz);
+                self.codegen_rvalue_repeat(op, sz, res_ty, loc)
+            }
             Rvalue::Ref(_, _, p) | Rvalue::AddressOf(_, p) => self.codegen_rvalue_ref(p, res_ty),
             Rvalue::Len(p) => self.codegen_rvalue_len(p),
             // Rust has begun distinguishing "ptr -> num" and "num -> ptr" (providence-relevant casts) but we do not yet:
