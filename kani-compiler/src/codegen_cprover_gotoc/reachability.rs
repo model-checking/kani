@@ -436,7 +436,13 @@ pub fn collect_reachable_items<'tcx>(
 }
 
 /// Return whether we should include the item into codegen.
-/// We don't include foreign items and items that don't have MIR.
+/// - We only skip foreign items.
+///
+/// Note: Ideally, we should be able to assert that the MIR for non-foreign items are available via
+/// call to `tcx.is_mir_available (def_id)`.
+/// However, we found an issue where this function was returning `false` for a mutable static
+/// item with constant initializer from an upstream crate.
+/// See <https://github.com/model-checking/kani/issues/1760> for an example.
 fn should_codegen_locally<'tcx>(tcx: TyCtxt<'tcx>, instance: &Instance<'tcx>) -> bool {
     if let Some(def_id) = instance.def.def_id_if_not_guaranteed_local_codegen() {
         // We cannot codegen foreign items.
