@@ -10,7 +10,7 @@
 
 extern crate test;
 
-use crate::common::{output_base_dir, output_relative_path, PanicStrategy};
+use crate::common::{output_base_dir, output_relative_path};
 use crate::common::{Config, Mode, TestPaths};
 use crate::util::{logv, top_level};
 use getopts::Options;
@@ -57,19 +57,7 @@ fn add_kani_to_path() {
 
 pub fn parse_config(args: Vec<String>) -> Config {
     let mut opts = Options::new();
-    opts.optopt("", "compile-lib-path", "path to host shared libraries", "PATH")
-        .optopt("", "run-lib-path", "path to target shared libraries", "PATH")
-        .optopt("", "rustc-path", "path to rustc to use for compiling", "PATH")
-        .optopt("", "kani-dir-path", "path to directory where kani is located", "PATH")
-        .optopt("", "rustdoc-path", "path to rustdoc to use for compiling", "PATH")
-        .optopt("", "rust-demangler-path", "path to rust-demangler to use in tests", "PATH")
-        .optopt("", "lldb-python", "path to python to use for doc tests", "PATH")
-        .optopt("", "docck-python", "path to python to use for doc tests", "PATH")
-        .optopt("", "jsondocck-path", "path to jsondocck to use for doc tests", "PATH")
-        .optopt("", "valgrind-path", "path to Valgrind executable for Valgrind tests", "PROGRAM")
-        .optflag("", "force-valgrind", "fail if Valgrind tests cannot be run under Valgrind")
-        .optopt("", "run-clang-based-tests-with", "path to Clang executable", "PATH")
-        .optopt("", "llvm-filecheck", "path to LLVM's FileCheck binary", "DIR")
+    opts
         .optopt("", "src-base", "directory to scan for test files", "PATH")
         .optopt("", "build-base", "directory to deposit test outputs", "PATH")
         .optopt(
@@ -85,67 +73,14 @@ pub fn parse_config(args: Vec<String>) -> Config {
             "which suite of compile tests to run. used for nicer error reporting.",
             "SUITE",
         )
-        .optopt(
-            "",
-            "pass",
-            "force {check,build,run}-pass tests to this mode.",
-            "check | build | run",
-        )
-        .optopt("", "run", "whether to execute run-* tests", "auto | always | never")
         .optflag("", "ignored", "run tests marked as ignored")
         .optflag("", "exact", "filters match exactly")
-        .optopt(
-            "",
-            "runtool",
-            "supervisor program to run tests under \
-             (eg. emulator, valgrind)",
-            "PROGRAM",
-        )
-        .optmulti("", "host-rustcflags", "flags to pass to rustc for host", "FLAGS")
-        .optmulti("", "target-rustcflags", "flags to pass to rustc for target", "FLAGS")
-        .optopt("", "target-panic", "what panic strategy the target supports", "unwind | abort")
         .optflag("", "verbose", "run tests verbosely, showing all output")
-        .optflag(
-            "",
-            "bless",
-            "overwrite stderr/stdout files instead of complaining about a mismatch",
-        )
         .optflag("", "quiet", "print one character per test instead of one line")
         .optopt("", "color", "coloring: auto, always, never", "WHEN")
         .optopt("", "logfile", "file to log test execution to", "FILE")
         .optopt("", "target", "the target to build for", "TARGET")
         .optopt("", "host", "the host to build for", "HOST")
-        .optopt("", "cdb", "path to CDB to use for CDB debuginfo tests", "PATH")
-        .optopt("", "gdb", "path to GDB to use for GDB debuginfo tests", "PATH")
-        .optopt("", "lldb-version", "the version of LLDB used", "VERSION STRING")
-        .optopt("", "llvm-version", "the version of LLVM used", "VERSION STRING")
-        .optflag("", "system-llvm", "is LLVM the system LLVM")
-        .optopt("", "android-cross-path", "Android NDK standalone path", "PATH")
-        .optopt("", "adb-path", "path to the android debugger", "PATH")
-        .optopt("", "adb-test-dir", "path to tests for the android debugger", "PATH")
-        .optopt("", "lldb-python-dir", "directory containing LLDB's python module", "PATH")
-        .optopt("", "cc", "path to a C compiler", "PATH")
-        .optopt("", "cxx", "path to a C++ compiler", "PATH")
-        .optopt("", "cflags", "flags for the C compiler", "FLAGS")
-        .optopt("", "ar", "path to an archiver", "PATH")
-        .optopt("", "linker", "path to a linker", "PATH")
-        .optopt("", "llvm-components", "list of LLVM components built in", "LIST")
-        .optopt("", "llvm-bin-dir", "Path to LLVM's `bin` directory", "PATH")
-        .optopt("", "nodejs", "the name of nodejs", "PATH")
-        .optopt("", "npm", "the name of npm", "PATH")
-        .optopt("", "remote-test-client", "path to the remote test client", "PATH")
-        .optopt(
-            "",
-            "compare-mode",
-            "mode describing what file the actual ui output will be compared to",
-            "COMPARE MODE",
-        )
-        .optflag(
-            "",
-            "rustfix-coverage",
-            "enable this to generate a Rustfix coverage file, which is saved in \
-                `./<build_base>/rustfix_missing_coverage.txt`",
-        )
         .optflag("", "force-rerun", "rerun tests even if the inputs are unchanged")
         .optflag("h", "help", "show this message")
         .optopt("", "edition", "default Rust edition", "EDITION");
@@ -197,7 +132,6 @@ pub fn parse_config(args: Vec<String>) -> Config {
     let mode = matches.opt_str("mode").unwrap().parse().expect("invalid mode");
 
     Config {
-        kani_dir_path: opt_path(matches, "kani-dir-path", &["target/debug"]),
         src_base,
         build_base: opt_path(matches, "build-base", &["build", "tests", suite.as_str()]),
         mode,
@@ -206,20 +140,12 @@ pub fn parse_config(args: Vec<String>) -> Config {
         filters: matches.free.clone(),
         filter_exact: matches.opt_present("exact"),
         logfile: matches.opt_str("logfile").map(|s| PathBuf::from(&s)),
-        host_rustcflags: Some(matches.opt_strs("host-rustcflags").join(" ")),
-        target_rustcflags: Some(matches.opt_strs("target-rustcflags").join(" ")),
-        target_panic: match matches.opt_str("target-panic").as_deref() {
-            Some("unwind") | None => PanicStrategy::Unwind,
-            Some("abort") => PanicStrategy::Abort,
-            _ => panic!("unknown `--target-panic` option `{}` given", mode),
-        },
         target,
         host: opt_str2(matches.opt_str("host")),
         verbose: matches.opt_present("verbose"),
         quiet: matches.opt_present("quiet"),
         color,
         edition: matches.opt_str("edition"),
-
         force_rerun: matches.opt_present("force-rerun"),
         mir_linker: cfg!(mir_linker),
     }
@@ -234,8 +160,6 @@ pub fn log_config(config: &Config) {
     logv(c, format!("run_ignored: {}", config.run_ignored));
     logv(c, format!("filters: {:?}", config.filters));
     logv(c, format!("filter_exact: {}", config.filter_exact));
-    logv(c, format!("host-rustcflags: {}", opt_str(&config.host_rustcflags)));
-    logv(c, format!("target-rustcflags: {}", opt_str(&config.target_rustcflags)));
     logv(c, format!("target: {}", config.target));
     logv(c, format!("host: {}", config.host));
     logv(c, format!("verbose: {}", config.verbose));
