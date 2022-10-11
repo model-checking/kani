@@ -133,6 +133,9 @@ fn fixup_dynamic_linking_environment() {
 
 /// Determines if a path looks unlike a toolchain library path. These often looks like:
 /// `/home/user/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib`
+// Ignore this lint (recommending Path instead of PathBuf),
+// we want to take the right argument type for use in `filter` above.
+#[allow(clippy::ptr_arg)]
 fn unlike_toolchain_path(path: &PathBuf) -> bool {
     let mut components = path.iter().rev();
 
