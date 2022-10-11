@@ -5,7 +5,7 @@
 // Check that this doesn't trigger a fake loop. See issue #636.
 #[kani::proof]
 fn main() {
-    let x: bool = kani::nondet();
+    let x: bool = kani::any();
     if x {
         assert!(1 + 1 == 1);
     }

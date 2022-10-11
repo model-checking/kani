@@ -35,14 +35,29 @@ pub struct StandaloneArgs {
     setting = structopt::clap::AppSettings::AllArgsOverrideSelf
 )]
 pub struct CargoKaniArgs {
+    #[structopt(subcommand)]
+    pub command: Option<CargoKaniSubcommand>,
+
     #[structopt(flatten)]
     pub common_opts: KaniArgs,
+}
+
+// cargo-kani takes optional subcommands to request specialized behavior
+#[derive(Debug, StructOpt)]
+pub enum CargoKaniSubcommand {
+    #[structopt(setting(structopt::clap::AppSettings::Hidden))]
+    Assess,
 }
 
 // Common arguments for invoking Kani. This gets put into KaniContext, whereas
 // anything above is "local" to "main"'s control flow.
 #[derive(Debug, StructOpt)]
 pub struct KaniArgs {
+    /// Temporary option to trigger assess mode for out test suite
+    /// where we are able to add options but not subcommands
+    #[structopt(long, hidden = true, requires("enable-unstable"))]
+    pub assess: bool,
+
     /// Generate visualizer report to <target-dir>/report/html/index.html
     #[structopt(long)]
     pub visualize: bool,
