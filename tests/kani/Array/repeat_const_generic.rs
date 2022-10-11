@@ -23,6 +23,6 @@ mod proofs {
     #[kani::proof]
     fn hope_kani_does_not_crash() {
         let x = Foo::<32>::new();
-        assert!(x.len() == 32);
+        assert!(x.field.len() == 32);
     }
 }
