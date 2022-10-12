@@ -18,21 +18,25 @@ use rustc_hir::def::DefKind;
 use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
 use rustc_middle::mir::mono::{CodegenUnit, MonoItem};
+use rustc_middle::mir::write_mir_pretty;
 use rustc_middle::ty::query::Providers;
-use rustc_middle::ty::{self, TyCtxt};
+use rustc_middle::ty::{self, InstanceDef, TyCtxt};
 use rustc_session::config::{OutputFilenames, OutputType};
 use rustc_session::cstore::MetadataLoaderDyn;
 use rustc_session::Session;
+use rustc_span::def_id::DefId;
 use rustc_target::abi::Endian;
 use rustc_target::spec::PanicStrategy;
 use std::collections::BTreeMap;
 use std::fmt::Write;
+use std::fs::File;
 use std::io::BufWriter;
+use std::io::Write as IoWrite;
 use std::iter::FromIterator;
 use std::path::Path;
 use std::process::Command;
 use std::rc::Rc;
-use tracing::{debug, warn};
+use tracing::{debug, error, warn};
 
 #[derive(Clone)]
 pub struct GotocCodegenBackend {
@@ -74,6 +78,7 @@ impl CodegenBackend for GotocCodegenBackend {
             // There's nothing to do.
             return codegen_results(tcx, rustc_metadata, gcx.symbol_table.machine_model());
         }
+        dump_mir_items(tcx, &items);
 
         // we first declare all items
         for item in &items {
@@ -124,6 +129,8 @@ impl CodegenBackend for GotocCodegenBackend {
         // Print compilation report.
         print_report(&gcx, tcx);
 
+        let unsupported_features = gcx.unsupported_metadata();
+
         // perform post-processing symbol table passes
         let passes = self.queries.get_symbol_table_passes();
         let symtab = symtab_transformer::do_passes(gcx.symbol_table, &passes);
@@ -139,7 +146,11 @@ impl CodegenBackend for GotocCodegenBackend {
             None
         };
 
-        let metadata = KaniMetadata { proof_harnesses: gcx.proof_harnesses };
+        let metadata = KaniMetadata {
+            proof_harnesses: gcx.proof_harnesses,
+            unsupported_features,
+            test_harnesses: gcx.test_harnesses,
+        };
 
         // No output should be generated if user selected no_codegen.
         if !tcx.sess.opts.unstable_opts.no_codegen && tcx.sess.opts.output_types.should_codegen() {
@@ -299,7 +310,7 @@ where
 {
     let filename = base_filename.with_extension(extension);
     debug!("output to {:?}", filename);
-    let out_file = ::std::fs::File::create(&filename).unwrap();
+    let out_file = File::create(&filename).unwrap();
     let writer = BufWriter::new(out_file);
     if pretty {
         serde_json::to_writer_pretty(writer, &source).unwrap();
@@ -357,7 +368,6 @@ fn codegen_results(
 ///
 /// To be implemented:
 /// - PubFns: Cross-crate reachability analysis that use the local public fns as starting point.
-
 fn collect_codegen_items<'tcx>(gcx: &GotocCtx<'tcx>) -> Vec<MonoItem<'tcx>> {
     let tcx = gcx.tcx;
     let reach = gcx.queries.get_reachability_analysis();
@@ -379,14 +389,11 @@ fn collect_codegen_items<'tcx>(gcx: &GotocCtx<'tcx>) -> Vec<MonoItem<'tcx>> {
         }
         ReachabilityType::None => Vec::new(),
         ReachabilityType::PubFns => {
-            // TODO: https://github.com/model-checking/kani/issues/1674
-            let err_msg = format!(
-                "Using {} reachability mode is still unsupported.",
-                ReachabilityType::PubFns.as_ref()
-            );
-            tcx.sess.err(&err_msg);
-            tcx.sess.abort_if_errors();
-            unreachable!("Session should've been aborted")
+            let entry_fn = tcx.entry_fn(()).map(|(id, _)| id);
+            let local_reachable = filter_crate_items(tcx, |_, def_id| {
+                tcx.is_reachable_non_generic(def_id) || entry_fn == Some(def_id)
+            });
+            collect_reachable_items(tcx, &local_reachable).into_iter().collect()
         }
     }
 }
@@ -405,12 +412,53 @@ fn symbol_table_to_gotoc(tcx: &TyCtxt, file: &Path) {
     cmd.args(args);
     debug!("calling: `{:?} {:?}`", cmd.get_program(), cmd.get_args());
 
-    if cmd.status().is_err() {
+    let result = cmd
+        .output()
+        .expect(&format!("Failed to generate goto model for {}", input_filename.display()));
+    if !result.status.success() {
+        error!("Symtab error output:\n{}", String::from_utf8_lossy(&result.stderr));
+        error!("Symtab output:\n{}", String::from_utf8_lossy(&result.stdout));
         let err_msg = format!(
             "Failed to generate goto model:\n\tsymtab2gb failed on file {}.",
             input_filename.display()
         );
         tcx.sess.err(&err_msg);
         tcx.sess.abort_if_errors();
+    }
+}
+
+/// Print MIR for the reachable items if the `--emit mir` option was provided to rustc.
+fn dump_mir_items(tcx: TyCtxt, items: &[MonoItem]) {
+    /// Convert MonoItem into a DefId.
+    /// Skip stuff that we cannot generate the MIR items.
+    fn visible_item<'tcx>(item: &MonoItem<'tcx>) -> Option<(MonoItem<'tcx>, DefId)> {
+        match item {
+            // Exclude FnShims and others that cannot be dumped.
+            MonoItem::Fn(instance)
+                if matches!(
+                    instance.def,
+                    InstanceDef::FnPtrShim(..) | InstanceDef::ClosureOnceShim { .. }
+                ) =>
+            {
+                None
+            }
+            MonoItem::Fn(instance) => Some((*item, instance.def_id())),
+            MonoItem::Static(def_id) => Some((*item, *def_id)),
+            MonoItem::GlobalAsm(_) => None,
+        }
+    }
+
+    if tcx.sess.opts.output_types.contains_key(&OutputType::Mir) {
+        // Create output buffer.
+        let outputs = tcx.output_filenames(());
+        let path = outputs.output_path(OutputType::Mir).with_extension("kani.mir");
+        let out_file = File::create(&path).unwrap();
+        let mut writer = BufWriter::new(out_file);
+
+        // For each def_id, dump their MIR
+        for (item, def_id) in items.iter().filter_map(visible_item) {
+            writeln!(writer, "// Item: {:?}", item).unwrap();
+            write_mir_pretty(tcx, Some(def_id), &mut writer).unwrap();
+        }
     }
 }

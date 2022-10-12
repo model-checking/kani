@@ -254,9 +254,18 @@ impl VerificationResult {
             )
         }
     }
+
+    /// Find the failed properties from this verification run
+    pub fn failed_properties(&self) -> Vec<&Property> {
+        if let Some(properties) = &self.results {
+            properties.iter().filter(|prop| prop.status == CheckStatus::Failure).collect()
+        } else {
+            vec![]
+        }
+    }
 }
 
-/// We decide if verificaiton succeeded based on properties, not (typically) on exit code
+/// We decide if verification succeeded based on properties, not (typically) on exit code
 fn determine_status_from_properties(properties: &[Property]) -> VerificationStatus {
     let number_failed_properties =
         properties.iter().filter(|prop| prop.status == CheckStatus::Failure).count();

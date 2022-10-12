@@ -435,20 +435,17 @@ fn to_fingerprint(tcx: TyCtxt, item: &MonoItem) -> Fingerprint {
 }
 
 /// Return whether we should include the item into codegen.
-/// We don't include foreign items and items that don't have MIR.
+/// - We only skip foreign items.
+///
+/// Note: Ideally, we should be able to assert that the MIR for non-foreign items are available via
+/// call to `tcx.is_mir_available (def_id)`.
+/// However, we found an issue where this function was returning `false` for a mutable static
+/// item with constant initializer from an upstream crate.
+/// See <https://github.com/model-checking/kani/issues/1760> for an example.
 fn should_codegen_locally<'tcx>(tcx: TyCtxt<'tcx>, instance: &Instance<'tcx>) -> bool {
     if let Some(def_id) = instance.def.def_id_if_not_guaranteed_local_codegen() {
-        if tcx.is_foreign_item(def_id) {
-            // We cannot codegen foreign items.
-            false
-        } else {
-            // TODO: This should either be an assert or a warning.
-            // Need to compile std with --always-encode-mir first though.
-            // https://github.com/model-checking/kani/issues/1605
-            // assert!(tcx.is_mir_available(def_id), "no MIR available for {:?}", def_id);
-            (!tcx.is_mir_available(def_id)).then(|| warn!(?def_id, "Missing MIR"));
-            tcx.is_mir_available(def_id)
-        }
+        // We cannot codegen foreign items.
+        !tcx.is_foreign_item(def_id)
     } else {
         // This will include things like VTableShim and other stuff. See the method
         // def_id_if_not_guaranteed_local_codegen for the full list.
@@ -552,30 +549,26 @@ fn custom_coerce_unsize_info<'tcx>(
 
 /// Scans the allocation type and collect static objects.
 fn collect_alloc_items<'tcx>(tcx: TyCtxt<'tcx>, alloc_id: AllocId) -> Vec<MonoItem> {
+    trace!(alloc=?tcx.global_alloc(alloc_id), ?alloc_id, "collect_alloc_items");
     let mut items = vec![];
     match tcx.global_alloc(alloc_id) {
         GlobalAlloc::Static(def_id) => {
+            // This differ from rustc's collector since rustc does not include static from
+            // upstream crates.
             assert!(!tcx.is_thread_local_static(def_id));
             let instance = Instance::mono(tcx, def_id);
-            should_codegen_locally(tcx, &instance).then(|| {
-                trace!(?def_id, "global_alloc");
-                items.push(MonoItem::Static(def_id))
-            });
+            should_codegen_locally(tcx, &instance).then(|| items.push(MonoItem::Static(def_id)));
         }
         GlobalAlloc::Function(instance) => {
-            should_codegen_locally(tcx, &instance).then(|| {
-                trace!(?alloc_id, ?instance, "global_alloc");
-                items.push(MonoItem::Fn(instance.polymorphize(tcx)))
-            });
+            should_codegen_locally(tcx, &instance)
+                .then(|| items.push(MonoItem::Fn(instance.polymorphize(tcx))));
         }
         GlobalAlloc::Memory(alloc) => {
-            trace!(?alloc_id, "global_alloc memory");
             items.extend(
                 alloc.inner().provenance().values().flat_map(|id| collect_alloc_items(tcx, *id)),
             );
         }
         GlobalAlloc::VTable(ty, trait_ref) => {
-            trace!(?alloc_id, "global_alloc vtable");
             let vtable_id = tcx.vtable_allocation((ty, trait_ref));
             items.append(&mut collect_alloc_items(tcx, vtable_id));
         }
