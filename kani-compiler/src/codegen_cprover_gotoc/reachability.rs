@@ -453,19 +453,30 @@ fn should_codegen_locally<'tcx>(tcx: TyCtxt<'tcx>, instance: &Instance<'tcx>) ->
     }
 }
 
-/// Extract the pair (from_ty, to_ty) for a unsized cast.
+/// Extract the pair (`T`, `U`) for a unsized coercion where type `T` implements `Unsize<U>`.
+/// I.e., `U` is either a trait or a slice.
+/// For more details, please refer to:
+/// <https://doc.rust-lang.org/reference/type-coercions.html#unsized-coercions>
+///
+/// This is used to determine the vtable implementation that must be tracked by the fat pointer.
 ///
 /// For example, if `&u8` is being converted to `&dyn Debug`, this method would return:
 /// `(u8, dyn Debug)`.
 ///
-/// This method also handles nested cases and `std` smart pointers. E.g.:
-///
-/// Conversion between `Rc<Wrapper<String>>` into `Rc<Wrapper<dyn Debug>>` should return:
-/// `(String, dyn Debug)`
-///
-/// TODO: Do we need to handle &Wrapper<dyn T1> to &dyn T2 or is that taken care of with super
-/// trait handling?
-/// <https://github.com/model-checking/kani/issues/1692>
+/// There are a few interesting cases (references / pointers are handled the same way):
+/// 1. Coercion between `&T` to `&U`.
+///    - This is the base case.
+///    - In this case, we extract the type that is pointed to.
+/// 2. Coercion between smart pointers like `Rc<T>` to `Rc<U>`.
+///    - Smart pointers implement the `CoerceUnsize` trait.
+///    - Use CustomCoerceUnsized information to traverse the smart pointer structure and find the
+///      underlying pointer.
+///    - Use base case to extract `T` and `U`.
+/// 3. Coercion between `&Wrapper<T>` to `&Wrapper<U>`.
+///    - Apply base case to extract the pair `(Wrapper<T>, Wrapper<U>)`.
+///    - Extract the tail element of the struct which are of type `T` and `U`, respectively.
+/// 4. Coercion between smart pointers of wrapper structs.
+///    - Apply the logic from item 2 then item 3.
 fn extract_trait_casting<'tcx>(
     tcx: TyCtxt<'tcx>,
     src_ty: Ty<'tcx>,
@@ -475,24 +486,27 @@ fn extract_trait_casting<'tcx>(
     let mut src_inner_ty = src_ty;
     let mut dst_inner_ty = dst_ty;
     (src_inner_ty, dst_inner_ty) = loop {
-        // Extract pointee types that form the base of the conversion.
+        // Extract the pointee types from pointers (including smart pointers) that form the base of
+        // the conversion.
         match (&src_inner_ty.kind(), &dst_inner_ty.kind()) {
             (&ty::Adt(src_def, src_substs), &ty::Adt(dst_def, dst_substs))
                 if !src_def.is_box() || !dst_def.is_box() =>
             {
+                // Handle smart pointers by using CustomCoerceUnsized to find the field being
+                // coerced.
                 assert_eq!(src_def, dst_def);
+                let src_fields = &src_def.non_enum_variant().fields;
+                let dst_fields = &dst_def.non_enum_variant().fields;
+                assert_eq!(src_fields.len(), dst_fields.len());
 
                 let CustomCoerceUnsized::Struct(coerce_index) =
                     custom_coerce_unsize_info(tcx, src_inner_ty, dst_inner_ty);
-
-                let src_fields = &src_def.non_enum_variant().fields;
-                let dst_fields = &dst_def.non_enum_variant().fields;
-
-                assert!(coerce_index < src_fields.len() && src_fields.len() == dst_fields.len());
+                assert!(coerce_index < src_fields.len());
 
                 src_inner_ty = src_fields[coerce_index].ty(tcx, src_substs);
                 dst_inner_ty = dst_fields[coerce_index].ty(tcx, dst_substs);
             }
+            // Base case is always a pointer (Box, raw_pointer or reference).
             _ => break (extract_pointer(src_inner_ty), extract_pointer(dst_inner_ty)),
         }
     };
