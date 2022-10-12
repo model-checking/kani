@@ -43,7 +43,7 @@ Other common examples that we should be able to handle include system calls and 
 ### Mocking randomization
 
 The crate [`rand`](https://crates.io/crates/rand) is widely used (150M downloads).
-However, Kani cannot currently handle code that uses it (Kani users have run into this; see <https://github.com/model-checking/kani/issues/1727>).
+However, Kani cannot currently handle code that uses it (Kani users have run into this; see [Issue 1727](<https://github.com/model-checking/kani/issues/1727>).
 Consider this example:
 
 ```rust
@@ -211,8 +211,7 @@ mod my_mod {
 ```
 
 We will support the stubbing of private functions and methods.
-This provides the flexibility that users will demand.
-On the other hand, it can also lead to brittle proofs: private functions/methods can change or disappear in even minor version upgrades (thanks to refactoring), and so proofs that depend on them might have a high maintenance burden.
+While this provides flexibility that we believe will be necessary in practice, it can also lead to brittle proofs: private functions/methods can change or disappear in even minor version upgrades (thanks to refactoring), and so proofs that depend on them might have a high maintenance burden.
 In the documentation, we will discourage stubbing private functions/methods except if absolutely necessary.
 
 ### Stub sets
@@ -352,7 +351,7 @@ The downside is that multiple annotations are required and the stub mappings the
 There are also several issues that would need to be resolved:
 
 - How do you mock multiple functions with the same stub?
-(Especially if, say, harness A wants to use `stub1` to mock `foo`, and harness B wants to use `stub1` to mock `bar`.)
+(Say harness A wants to use `stub1` to mock `foo`, and harness B wants to use `stub1` to mock `bar`.)
 - How do you combine stub sets defined via modules? Would you use the module hierarchy?
 - If you use modules to define stub sets, are these modules regular modules or not?
 In particular, given that modules can contain other constructs than functions, how should we interpret the extra stuff?
@@ -361,7 +360,7 @@ In particular, given that modules can contain other constructs than functions, h
 
 One alternative would be to specify stubs in a file that is passed to `kani-driver` via a command line option.
 Users would specify per-harness stub pairings in the file; JSON would be a possible format.
-Using a file would eliminate the need for `kani-driver` to extract harness information from the Rust source code; the rest of the implementation would stay the same.
+Using a file would eliminate the need for `kani-compiler` to do an extra pass to extract harness information from the Rust source code before doing code generation; the rest of the implementation would stay the same.
 It would also allow the same harness to be run with different stub selections (by supplying a different file).
 The disadvantage is that the stub selection is remote from the harness itself.
 
@@ -376,7 +375,7 @@ The major downside with the MIR-to-MIR transformation is that it does not appear
 Thus, our proposed approach will not be a fully general stubbing solution.
 However, it is technically feasible and relatively clean, and provides benefits over having no stubbing at all (as can be seen in the examples in the first part of this document).
 
-Furthermore, it can be used as part of a portfolio of stubbing approaches, where users stub local types using conditional compilation (see Alternative #1), and Kani provides a modified version of the standard library with verification-friendly versions of types like `std::vec::Vec`.
+Furthermore, it could be used as part of a portfolio of stubbing approaches, where users stub local types using conditional compilation (see Alternative #1), and Kani provides a modified version of the standard library with verification-friendly versions of types like `std::vec::Vec`.
 
 ### Alternative #1: Conditional compilation
 
@@ -427,7 +426,7 @@ One possibility would be writing proofs about stubs (possibly relating their beh
 - It would increase the utility of stubbing if we supported stubs for types.
 The source code annotations could likely stay the same, although the underlying technical approach performing these substitutions might be significantly more complex.
 - It would probably make sense to provide a library of common stubs for users, since many applications might want to stub the same functions and mock the same behaviors (e.g., `rand::random` can be replaced with a function returning `kani::any`).
-- How can we provide good user experience for accessing private fields of `self` in methods?
+- How can we provide a good user experience for accessing private fields of `self` in methods?
 It is possible to do so using `std::mem::transmute` (see below); this is clunky and error-prone, and it would be good to provide better support for users.
 
   ```rust
@@ -452,5 +451,5 @@ It is possible to do so using `std::mem::transmute` (see below); this is clunky 
   
   #[cfg(kani)]
   #[kani::proof]
-  #[kani::stub_by("Foo::m", "mock_m")]
+  #[kani::stub_by(Foo::m, mock_m)]
   fn my_harness() { ... }```
