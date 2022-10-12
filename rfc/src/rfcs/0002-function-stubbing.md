@@ -9,9 +9,23 @@
 
 Allow users to specify that certain functions and methods should be replaced with mock functions (stubs) during verification.
 
+### Scope
+
+In scope:
+
+- Replacing function bodies
+- Replacing method bodies (which means that the new method body will be executed, whether the method is invoked directly or through a vtable)
+
+Out of scope:
+
+- Replacing type definitions
+- Replacing macro definitions
+- Mocking traits
+- Mocking intrinsics
+
 ## User impact
 
-We anticipate that stubbing will have a substantial positive impact on the usability of Kani:
+We anticipate that function/method stubbing will have a substantial positive impact on the usability of Kani:
 
 1. Users might need to stub functions/methods containing features that Kani does not support, such as inline assembly.
 2. Users might need to stub functions/methods containing code that Kani supports in principle, but which in practice leads to bad verification performance (for example, if it contains deserialization code).
@@ -169,7 +183,8 @@ It would be overly restrictive to impose the same stub definitions across all pr
 A good example of this is compositional reasoning: in some harnesses, we want to prove properties of a particular function (and so want to use its actual implementation), and in other harnesses we want to assume that that function has those properties.
 
 Users will specify stubs by attaching the `#[kani::stub_by(<original>, <replacement>)]` attribute to each harness function.
-The arguments `original` and `replacement` give the names of functions (as string literals), relative to the crate of the harness (*not* relative to the module of the harness).
+The arguments `original` and `replacement` give the names of functions (as string literals).
+They will be resolved using Rust's standard name resolution rules; this includes supporting imports like `use foo::bar as baz`.
 The attribute may be specified multiple times per harness, so that multiple (non-conflicting) stub pairings are supported.
 
 For example, this code specifies that the function `mock_random` should be used in place of the function `rand::random` and the function `my_mod::foo` should be used in place of the function `my_mod::bar` for the harness `my_mod::my_harness`:
@@ -188,12 +203,17 @@ mod my_mod {
 
     #[cfg(kani)]
     #[kani::proof]
-    #[kani::stub_by("rand::random", "mock_random")]
-    #[kani::stub_by("my_mod::foo", "my_mod::bar")]
+    #[kani::stub_by("rand::random", "super::mock_random")]
+    #[kani::stub_by("foo", "bar")]
     fn my_harness() { ... }
 
 }
 ```
+
+We will support the stubbing of private functions and methods.
+This provides the flexibility that users will demand.
+On the other hand, it can also lead to brittle proofs: private functions/methods can change or disappear in even minor version upgrades (thanks to refactoring), and so proofs that depend on them might have a high maintenance burden.
+In the documentation, we will discourage stubbing private functions/methods except if absolutely necessary.
 
 ### Stub sets
 
@@ -216,6 +236,8 @@ When declaring a harness, users can use the `#[kani::use_stub_set("<stub_set_nam
 fn my_harness() { ... }
 ```
 
+The name of the stub set will be resolved through the module path (i.e., they are not global symbols), using Rust's standard name resolution rules.
+
 A similar mechanism can be used to aggregate stub sets:
 
 ```rust
@@ -230,22 +252,28 @@ kani::stub_set!() {
 
 Given a set of `original`-`replacement` pairs, Kani will exit with an error if
 
-1. a specified `replacement` stub does not exist;
-2. the user specifies conflicting stubs for the same harness (i.e., if the same `original` function is mapped to multiple `replacement` functions); or
-3. the signature of the `replacement` function is not compatible with the signature of the `original` function.
+1. a specified `original` function/method does not exist;
+2. a specified `replacement` stub does not exist;
+3. the user specifies conflicting stubs for the same harness (e.g., if the same `original` function is mapped to multiple `replacement` functions); or
+4. the signature of the `replacement` stub is not compatible with the signature of the `original` function/method.
 
 ### Pedagogy
 
-To teach this feature, we will update the documentation with a section on function and method stubbing, including simple examples showing how stubbing can help Kani handle code that currently cannot be verified.
+To teach this feature, we will update the documentation with a section on function and method stubbing, including simple examples showing how stubbing can help Kani handle code that currently cannot be verified, as well as a guide to best practices for stubbing.
 
 ## Detailed design
 
-We expect that this feature will require changes primarily to `kani-compiler`.
-Before doing code generation, `kani-compiler` already collects harnesses; we will extend this to also collect stub mapping information.
+We expect that this feature will require changes primarily to `kani-compiler`, with some less invasive changes to `kani-driver`.
+We will modify `kani-compiler` to collects stub mapping information (from the harness attributes) before code generation.
 Since stubs are specified on a per-harness basis, we need to generate multiple versions of code if all harnesses do not agree on their stub mappings; accordingly, we will update `kani-compiler` to generate multiple versions of code as appropriate. 
 To do the stubbing, we will plug in a new MIR-to-MIR transformation that replaces the bodies of specified functions with their replacements.
 This can be achieved via `rustc`'s query mechanism: if the user wants to replace `foo` with `bar`, then when the compiler requests the MIR for `foo`, we instead return the MIR for `bar`.
 `kani-compiler` will also be responsible for checking for the error conditions previously enumerated.
+
+We will also need to update the metadata that `kani-compiler` generates, so that it maps each harness to the generated code that has the right stub mapping for that harness (since there will be multiple versions of generated code).
+The metadata will also list the stubs applied in each harness.
+`kani-driver` will need to be updated to process this new type of metadata and invoke the correct generated code for each harness.
+We can also update the results report to include the stubs that were used.
 
 We anticipate that this design will evolve and be iterated upon.
 
@@ -320,7 +348,14 @@ fn my_harness() { ... }
 ```
 
 The benefit is that stubs are specified per harness, and (using modules) it might be possible to group stubs together.
-The downside is that multiple annotations are required and the stub mappings themselves are remote from the harness.
+The downside is that multiple annotations are required and the stub mappings themselves are remote from the harness (at the harness you would know what stub is being used, but not what it is replacing).
+There are also several issues that would need to be resolved:
+
+- How do you mock multiple functions with the same stub?
+(Especially if, say, harness A wants to use `stub1` to mock `foo`, and harness B wants to use `stub1` to mock `bar`.)
+- How do you combine stub sets defined via modules? Would you use the module hierarchy?
+- If you use modules to define stub sets, are these modules regular modules or not?
+In particular, given that modules can contain other constructs than functions, how should we interpret the extra stuff?
 
 ### Alternative #4: Specify stubs in a file 
 
@@ -333,8 +368,9 @@ The disadvantage is that the stub selection is remote from the harness itself.
 ## Rationale and alternatives: stubbing mechanism
 
 Our approach is based on a MIR-to-MIR transformation.
-The advantages are that it operates over a relatively simple intermediate representation and `rustc` has good support for plugging in MIR-to-MIR transformations, so it would not require any changes to `rustc` itself.
+Some advantages are that it operates over a relatively simple intermediate representation and `rustc` has good support for plugging in MIR-to-MIR transformations, so it would not require any changes to `rustc` itself.
 At this stage of the compiler, names have been fully resolved, and there is no problem with swapping in the body of a function defined in one crate for a function defined in another.
+Another benefit is that it should be possible to extend the compiler to integrate `--concrete-playback` with the abstractions (although doing so is out of scope for the current proposal).
 
 The major downside with the MIR-to-MIR transformation is that it does not appear to be possible to stub types at that stage (there is no way to change the definition of a type through the MIR).
 Thus, our proposed approach will not be a fully general stubbing solution.
@@ -369,7 +405,7 @@ To swap out a function, method, or type at this level, it looks like it would be
 
 The advantage with this approach is, like source transformations, it would be very flexible.
 The downside is that it would require modifying `rustc` (as far as we know, there is not an API for plugging in a new AST/HIR pass), and would also require performing the transformations at a very syntactic level: although the AST/HIR would likely be easier to work with than source code directly, it is still very close to the source code and not very abstract.
-Furthermore, it would require that we have access to the AST/HIR for all external code, and---provided we supported stubbing across crate boundaries---we would need to figure out how to inject the AST/HIR from one crate into another (the AST/HIR is usually just constructed for the crate currently being compiled).
+Furthermore, provided we supported stubbing across crate boundaries, it seems like we would run into a sequencing issue: if we were trying to stub a function in a dependency, we might not know until after we have compiled that dependency that we need to modify its AST/HIR; furthermore, even if we were aware of this, the replacement AST/HIR code would not be available at that time (the AST/HIR is usually just constructed for the crate currently being compiled).
 
 ## Open questions
 
@@ -377,11 +413,44 @@ Furthermore, it would require that we have access to the AST/HIR for all externa
 - What does it mean for the replacement function/method to be "compatible" with the original one?
 Requiring the replacement's type to be a subtype of the original type is likely stronger than what we want.
 For example, if the original function is polymorphic but monomorphized to only a single type, then it seems okay to replace it with a function that matches the monomorphized type.
-- How can we allow a user to stub a method and access private fields of `self`?
-This should be possible using `std::mem::transmute`, but can we hide this from the user and make it less brittle?
+- How can the user verify that the stub is an abstraction of the original function/method?
+Sometimes it might be important that a stub is an overapproximation or underapproximation of the replaced code. 
+One possibility would be writing proofs about stubs (possibly relating their behavior to that of the code they are replacing).
+
+## Limitations
+
+- Our proposed approach will not work with `--concrete-playback` (for now).
+- We are only able to apply abstractions to some dependencies if the user enables the MIR linker.
 
 ## Future possibilities
 
 - It would increase the utility of stubbing if we supported stubs for types.
 The source code annotations could likely stay the same, although the underlying technical approach performing these substitutions might be significantly more complex.
 - It would probably make sense to provide a library of common stubs for users, since many applications might want to stub the same functions and mock the same behaviors (e.g., `rand::random` can be replaced with a function returning `kani::any`).
+- How can we provide good user experience for accessing private fields of `self` in methods?
+It is possible to do so using `std::mem::transmute` (see below); this is clunky and error-prone, and it would be good to provide better support for users.
+
+  ```rust
+  struct Foo {
+      x: u32,
+  }
+  
+  impl Foo {
+      pub fn m(&self) -> u32 {
+          0
+      }
+  }
+  
+  struct MockFoo {
+      pub x: u32,
+  }
+  
+  fn mock_m(foo: &Foo) {
+      let mock: &MockFoo = unsafe { std::mem::transmute(foo) };
+      return mock.x;
+  }
+  
+  #[cfg(kani)]
+  #[kani::proof]
+  #[kani::stub_by("Foo::m", "mock_m")]
+  fn my_harness() { ... }```
