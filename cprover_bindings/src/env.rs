@@ -15,6 +15,13 @@ fn int_constant<T>(name: &str, value: T) -> Symbol
 where
     T: Into<BigInt>,
 {
+    Symbol::constant(name, name, name, Expr::int_constant(value, Type::integer()), Location::none())
+}
+
+fn int_constant_c_int<T>(name: &str, value: T) -> Symbol
+where
+    T: Into<BigInt>,
+{
     Symbol::constant(name, name, name, Expr::int_constant(value, Type::c_int()), Location::none())
 }
 
@@ -23,7 +30,7 @@ fn int_constant_from_bool(name: &str, value: bool) -> Symbol {
         name,
         name,
         name,
-        Expr::int_constant(if value { 1 } else { 0 }, Type::c_int()),
+        Expr::int_constant(if value { 1 } else { 0 }, Type::integer()),
         Location::none(),
     )
 }
@@ -58,7 +65,7 @@ pub fn machine_model_symbols(mm: &MachineModel) -> Vec<Symbol> {
         ),
         int_constant("__CPROVER_architecture_wchar_t_width", mm.wchar_t_width),
         int_constant("__CPROVER_architecture_word_size", mm.word_size),
-        int_constant("__CPROVER_rounding_mode", mm.rounding_mode),
+        int_constant_c_int("__CPROVER_rounding_mode", mm.rounding_mode),
     ]
 }
 

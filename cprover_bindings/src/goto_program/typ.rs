@@ -46,6 +46,8 @@ pub enum Type {
     IncompleteStruct { tag: InternedString },
     /// `union x {}`
     IncompleteUnion { tag: InternedString },
+    /// `integer`
+    Integer,
     /// CBMC specific. `typ x[__CPROVER_infinity()]`
     InfiniteArray { typ: Box<Type> },
     /// `typ*`
@@ -163,6 +165,7 @@ impl DatatypeComponent {
             | Double
             | FlexibleArray { .. }
             | Float
+            | Integer
             | Pointer { .. }
             | Signedbv { .. }
             | Struct { .. }
@@ -286,6 +289,7 @@ impl Type {
             CInteger(CIntType::Bool) => Some(mm.bool_width),
             CInteger(CIntType::Char) => Some(mm.char_width),
             CInteger(CIntType::Int) => Some(mm.int_width),
+            Integer => Some(mm.int_width),
             Signedbv { width } | Unsignedbv { width } => Some(*width),
             _ => None,
         }
@@ -343,6 +347,7 @@ impl Type {
             IncompleteStruct { .. } => unreachable!("IncompleteStruct doesn't have a sizeof"),
             IncompleteUnion { .. } => unreachable!("IncompleteUnion doesn't have a sizeof"),
             InfiniteArray { .. } => unreachable!("InfiniteArray doesn't have a sizeof"),
+            Integer => st.machine_model().int_width,
             Pointer { .. } => st.machine_model().pointer_width,
             Signedbv { width } => *width,
             Struct { components, .. } => {
@@ -527,7 +532,7 @@ impl Type {
     pub fn is_integer(&self) -> bool {
         let concrete = self.unwrap_typedef();
         match concrete {
-            CInteger(_) | Signedbv { .. } | Unsignedbv { .. } => true,
+            CInteger(_) | Integer | Signedbv { .. } | Unsignedbv { .. } => true,
             _ => false,
         }
     }
@@ -540,6 +545,7 @@ impl Type {
             | CInteger(_)
             | Double
             | Float
+            | Integer
             | Pointer { .. }
             | Signedbv { .. }
             | Struct { .. }
@@ -595,6 +601,7 @@ impl Type {
             | Double
             | Empty
             | Float
+            | Integer
             | Pointer { .. }
             | Signedbv { .. }
             | Unsignedbv { .. } => true,
@@ -877,6 +884,7 @@ impl Type {
             | CInteger(_)
             | Double
             | Float
+            | Integer
             | Pointer { .. }
             | Signedbv { .. }
             | Struct { .. }
@@ -1023,6 +1031,10 @@ impl Type {
     pub fn infinite_array_of(self) -> Self {
         assert!(self.typecheck_array_elem(), "Can't make infinite array of type {:?}", self);
         InfiniteArray { typ: Box::new(self) }
+    }
+
+    pub fn integer() -> Self {
+        Integer
     }
 
     /// self *
@@ -1256,6 +1268,7 @@ impl Type {
             | CInteger(_)
             | Double
             | Float
+            | Integer
             | Pointer { .. }
             | Signedbv { .. }
             | Unsignedbv { .. } => self.zero(),
@@ -1364,6 +1377,7 @@ impl Type {
             Type::InfiniteArray { typ } => {
                 format!("infinite_array_of_{}", typ.to_identifier())
             }
+            Type::Integer => "integer".to_string(),
             Type::Pointer { typ } => format!("pointer_to_{}", typ.to_identifier()),
             Type::Signedbv { width } => format!("signed_bv_{}", width),
             Type::Struct { tag, .. } => format!("struct_{}", tag),

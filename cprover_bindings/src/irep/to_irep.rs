@@ -655,6 +655,7 @@ impl ToIrep for Type {
                     named_sub: linear_map![(IrepId::Size, infinity)],
                 }
             }
+            Type::Integer => Irep::just_id(IrepId::Integer),
             Type::Pointer { typ } => Irep {
                 id: IrepId::Pointer,
                 sub: vec![typ.to_irep(mm)],
