@@ -531,6 +531,7 @@ fn extract_pointee(typ: Ty) -> Option<Ty> {
 
 /// Get information about an unsized coercion.
 /// This code was extracted from `rustc_monomorphize` crate.
+/// <https://github.com/rust-lang/rust/blob/4891d57f7aab37b5d6a84f2901c0bb8903111d53/compiler/rustc_monomorphize/src/lib.rs#L25-L46>
 fn custom_coerce_unsize_info<'tcx>(
     tcx: TyCtxt<'tcx>,
     source_ty: Ty<'tcx>,
