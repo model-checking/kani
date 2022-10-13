@@ -389,8 +389,10 @@ fn collect_codegen_items<'tcx>(gcx: &GotocCtx<'tcx>) -> Vec<MonoItem<'tcx>> {
         }
         ReachabilityType::None => Vec::new(),
         ReachabilityType::PubFns => {
-            let local_reachable =
-                filter_crate_items(tcx, |_, def_id| tcx.is_reachable_non_generic(def_id));
+            let entry_fn = tcx.entry_fn(()).map(|(id, _)| id);
+            let local_reachable = filter_crate_items(tcx, |_, def_id| {
+                tcx.is_reachable_non_generic(def_id) || entry_fn == Some(def_id)
+            });
             collect_reachable_items(tcx, &local_reachable).into_iter().collect()
         }
     }
