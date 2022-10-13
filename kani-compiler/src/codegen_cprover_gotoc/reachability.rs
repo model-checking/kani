@@ -506,35 +506,27 @@ fn extract_trait_casting<'tcx>(
                 src_inner_ty = src_fields[coerce_index].ty(tcx, src_substs);
                 dst_inner_ty = dst_fields[coerce_index].ty(tcx, dst_substs);
             }
-            // Base case is always a pointer (Box, raw_pointer or reference).
-            _ => break (extract_pointer(src_inner_ty), extract_pointer(dst_inner_ty)),
+            _ => {
+                // Base case is always a pointer (Box, raw_pointer or reference).
+                let src_pointee = extract_pointee(src_inner_ty).expect(&format!(
+                    "Expected source to be a pointer. Found {:?} instead",
+                    src_inner_ty
+                ));
+                let dst_pointee = extract_pointee(dst_inner_ty).expect(&format!(
+                    "Expected destination to be a pointer. Found {:?} instead",
+                    dst_inner_ty
+                ));
+                break (src_pointee, dst_pointee);
+            }
         }
     };
 
-    if has_vtable_metadata(tcx, src_inner_ty) {
-        (src_inner_ty, dst_inner_ty)
-    } else {
-        tcx.struct_lockstep_tails_erasing_lifetimes(
-            src_inner_ty,
-            dst_inner_ty,
-            ParamEnv::reveal_all(),
-        )
-    }
+    tcx.struct_lockstep_tails_erasing_lifetimes(src_inner_ty, dst_inner_ty, ParamEnv::reveal_all())
 }
 
-/// Extract pointer from builtin pointer types.
-fn extract_pointer(typ: Ty) -> Ty {
-    if let Some(TypeAndMut { ty, .. }) = typ.builtin_deref(true) {
-        ty
-    } else {
-        unreachable!("Expected pointer type, found: {:?}", typ);
-    }
-}
-
-/// Check if the type has metadata.
-fn has_vtable_metadata<'tcx>(tcx: TyCtxt<'tcx>, mir_type: Ty<'tcx>) -> bool {
-    let (metadata, _) = mir_type.ptr_metadata_ty(tcx, |ty| ty);
-    metadata != tcx.types.unit && metadata != tcx.types.usize
+/// Extract pointee type from builtin pointer types.
+fn extract_pointee(typ: Ty) -> Option<Ty> {
+    typ.builtin_deref(true).map(|TypeAndMut { ty, .. }| ty)
 }
 
 /// Get information about an unsized coercion.
