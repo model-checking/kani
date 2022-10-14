@@ -49,6 +49,13 @@ impl KaniSession {
         cargo_args.push("--target-dir".into());
         cargo_args.push(target_dir.into());
 
+        if self.args.tests {
+            // Use test profile in order to pull dev-dependencies and compile using `--test`.
+            // Initially the plan was to use `--tests` but that brings in multiple targets.
+            cargo_args.push("--profile".into());
+            cargo_args.push("test".into());
+        }
+
         if self.args.verbose {
             cargo_args.push("-v".into());
         }
