@@ -66,7 +66,7 @@ fn mock_random<T: kani::Arbitrary>() -> T {
 
 #[cfg(kani)]
 #[kani::proof]
-#[kani::stub_by(rand::random, mock_random)]
+#[kani::stub(rand::random, mock_random)]
 fn random_cannot_be_zero() {
     assert_ne!(rand::random::<u32>(), 0);
 }
@@ -123,7 +123,7 @@ fn get_vsock_device_config(action: RequestAction) -> Option<VsockDeviceConfig> {
 #[cfg(kani)]
 #[kani::proof]
 #[kani::unwind(2)]
-#[kani::stub_by(serde_json::deserialize_slice, mock_deserialize)]
+#[kani::stub(serde_json::deserialize_slice, mock_deserialize)]
 fn test_deprecation_vsock_id_consistent() {
     // We are going to mock the parsing of this body, so might as well use an empty one.
     let body: Vec<u8> = Vec::new();
@@ -182,7 +182,7 @@ Users might want to mock the behavior of a function within one proof harness, an
 It would be overly restrictive to impose the same stub definitions across all proof harnesses.
 A good example of this is compositional reasoning: in some harnesses, we want to prove properties of a particular function (and so want to use its actual implementation), and in other harnesses we want to assume that that function has those properties.
 
-Users will specify stubs by attaching the `#[kani::stub_by(<original>, <replacement>)]` attribute to each harness function.
+Users will specify stubs by attaching the `#[kani::stub(<original>, <replacement>)]` attribute to each harness function.
 The arguments `original` and `replacement` give the names of functions/methods.
 They will be resolved using Rust's standard name resolution rules; this includes supporting imports like `use foo::bar as baz`.
 The attribute may be specified multiple times per harness, so that multiple (non-conflicting) stub pairings are supported.
@@ -203,8 +203,8 @@ mod my_mod {
 
     #[cfg(kani)]
     #[kani::proof]
-    #[kani::stub_by(rand::random, super::mock_random)]
-    #[kani::stub_by(foo, bar)]
+    #[kani::stub(rand::random, super::mock_random)]
+    #[kani::stub(foo, bar)]
     fn my_harness() { ... }
 
 }
@@ -221,8 +221,8 @@ As a convenience, we will provide a macro `kani::stub_set` that allows users to 
 ```rust
 kani::stub_set! {
     my_io_stubs,
-    stub_by(std::fs::read, my_read),
-    stub_by(std::fs::write, my_write),
+    stub(std::fs::read, my_read),
+    stub(std::fs::write, my_write),
 }
 ```
 
@@ -310,11 +310,11 @@ The major downside with this approach is that it would not be possible to stub e
 
 ### Alternative #2: Annotate stubs
 
-In this alternative, users add an attribute `#[kani::stub(<original>)]` to the stub function itself, saying which function it replaces:
+In this alternative, users add an attribute `#[kani::stub_of(<original>)]` to the stub function itself, saying which function it replaces:
 
 ```rust
 #[cfg(kani)]
-#[kani::stub(rand::random)]
+#[kani::stub_of(rand::random)]
 fn mock_random<T: kani::Arbitrary>() -> T { ... }
 ```
 
@@ -332,15 +332,15 @@ This could be combined with modules, so that a module can be used to group stubs
 #[cfg(kani)]
 mod my_stubs {
 
-  #[kani::stub(foo)]
+  #[kani::stub_of(foo)]
   fn stub1() { ... }
 
-  #[kani::stub(bar)]
+  #[kani::stub_of(bar)]
   fn stub2() { ... }
 
 }
 
-#(cfg[kani])
+#[cfg(kani)]
 #[kani::proof]
 #[kani::use_stubs(my_stubs)]
 fn my_harness() { ... }
@@ -451,5 +451,5 @@ It is possible to do so using `std::mem::transmute` (see below); this is clunky 
   
   #[cfg(kani)]
   #[kani::proof]
-  #[kani::stub_by(Foo::m, mock_m)]
+  #[kani::stub(Foo::m, mock_m)]
   fn my_harness() { ... }```
