@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 /// The structure of `.kani-metadata.json` files, which are emitted for each crate
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KaniMetadata {
-    /// The proof harnesses (#[kani::proof]) found in this crate.
+    /// The proof harnesses (`#[kani::proof]`) found in this crate.
     pub proof_harnesses: Vec<HarnessMetadata>,
     /// The features found in this crate that Kani does not support.
     /// (These general translate to `assert(false)` so we can still attempt verification.)

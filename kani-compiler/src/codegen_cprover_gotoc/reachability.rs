@@ -29,8 +29,8 @@ use rustc_middle::ty::adjustment::CustomCoerceUnsized;
 use rustc_middle::ty::adjustment::PointerCast;
 use rustc_middle::ty::TypeAndMut;
 use rustc_middle::ty::{
-    self, Closure, ClosureKind, Const, ConstKind, Instance, InstanceDef, ParamEnv, TraitRef, Ty,
-    TyCtxt, TyKind, TypeFoldable, VtblEntry,
+    self, Closure, ClosureKind, ConstKind, Instance, InstanceDef, ParamEnv, TraitRef, Ty, TyCtxt,
+    TyKind, TypeFoldable, VtblEntry,
 };
 use rustc_span::def_id::DefId;
 use tracing::{debug, debug_span, trace, warn};
@@ -337,22 +337,7 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
             ConstantKind::Val(const_val, _) => const_val,
             ConstantKind::Ty(ct) => match ct.kind() {
                 ConstKind::Value(v) => self.tcx.valtree_to_const_val((ct.ty(), v)),
-                ConstKind::Unevaluated(un_eval) => {
-                    // Thread local fall into this category.
-                    match self.tcx.const_eval_resolve(ParamEnv::reveal_all(), un_eval, None) {
-                        // The `monomorphize` call should have evaluated that constant already.
-                        Ok(const_val) => const_val,
-                        Err(ErrorHandled::TooGeneric) => span_bug!(
-                            self.body.source_info(location).span,
-                            "Unexpected polymorphic constant: {:?}",
-                            literal
-                        ),
-                        Err(error) => {
-                            warn!(?error, "Error already reported");
-                            return;
-                        }
-                    }
-                }
+                ConstKind::Unevaluated(_) => unreachable!(),
                 // Nothing to do
                 ConstKind::Param(..) | ConstKind::Infer(..) | ConstKind::Error(..) => return,
 
@@ -361,13 +346,24 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
                     unreachable!("Unexpected constant type {:?} ({:?})", ct, ct.kind())
                 }
             },
+            ConstantKind::Unevaluated(un_eval, _) => {
+                // Thread local fall into this category.
+                match self.tcx.const_eval_resolve(ParamEnv::reveal_all(), un_eval, None) {
+                    // The `monomorphize` call should have evaluated that constant already.
+                    Ok(const_val) => const_val,
+                    Err(ErrorHandled::TooGeneric) => span_bug!(
+                        self.body.source_info(location).span,
+                        "Unexpected polymorphic constant: {:?}",
+                        literal
+                    ),
+                    Err(error) => {
+                        warn!(?error, "Error already reported");
+                        return;
+                    }
+                }
+            }
         };
         self.collect_const_value(val);
-    }
-
-    fn visit_const(&mut self, constant: Const<'tcx>, location: Location) {
-        trace!(?constant, ?location, "visit_const");
-        self.super_const(constant);
     }
 
     /// Collect function calls.

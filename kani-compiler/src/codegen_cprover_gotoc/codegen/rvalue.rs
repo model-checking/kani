@@ -402,7 +402,12 @@ impl<'tcx> GotocCtx<'tcx> {
             // Rust has begun distinguishing "ptr -> num" and "num -> ptr" (providence-relevant casts) but we do not yet:
             // Should we? Tracking ticket: https://github.com/model-checking/kani/issues/1274
             Rvalue::Cast(
-                CastKind::Misc
+                CastKind::IntToInt
+                | CastKind::FloatToFloat
+                | CastKind::FloatToInt
+                | CastKind::IntToFloat
+                | CastKind::FnPtrToPtr
+                | CastKind::PtrToPtr
                 | CastKind::PointerExposeAddress
                 | CastKind::PointerFromExposedAddress,
                 e,
@@ -410,6 +415,15 @@ impl<'tcx> GotocCtx<'tcx> {
             ) => {
                 let t = self.monomorphize(*t);
                 self.codegen_misc_cast(e, t)
+            }
+            Rvalue::Cast(CastKind::DynStar, _, _) => {
+                let ty = self.codegen_ty(res_ty);
+                self.codegen_unimplemented_expr(
+                    "CastKind::DynStar",
+                    ty,
+                    loc,
+                    "https://github.com/model-checking/kani/issues/1784",
+                )
             }
             Rvalue::Cast(CastKind::Pointer(k), e, t) => {
                 let t = self.monomorphize(*t);
@@ -636,7 +650,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // this is a noop in the case dst_subt is a Projection or Opaque type
                 dst_subt = self.tcx.normalize_erasing_regions(ty::ParamEnv::reveal_all(), dst_subt);
                 match dst_subt.kind() {
-                    ty::Slice(_) | ty::Str | ty::Dynamic(_, _) => {
+                    ty::Slice(_) | ty::Str | ty::Dynamic(_, _, _) => {
                         //TODO: this does the wrong thing on Strings/fixme_boxed_str.rs
                         // if we cast to slice or string, then we know the source is also a slice or string,
                         // so there shouldn't be anything to do
