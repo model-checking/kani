@@ -16,6 +16,8 @@ pub struct SingleOutputs {
     pub outdir: PathBuf,
     /// The *.symtab.json written.
     pub symtab: PathBuf,
+    /// The *.symtab.out binary written by symtab2gb (run from kani-compiler)
+    pub goto_obj: PathBuf,
     /// The vtable restrictions files, if any.
     pub restrictions: Option<PathBuf>,
     /// The kani-metadata.json file written by kani-compiler.
@@ -27,7 +29,8 @@ impl KaniSession {
     pub fn compile_single_rust_file(&self, file: &Path) -> Result<SingleOutputs> {
         let outdir =
             file.canonicalize()?.parent().context("File doesn't exist in a directory?")?.to_owned();
-        let output_filename = alter_extension(file, "symtab.json");
+        let symtab_filename = alter_extension(file, "symtab.json");
+        let goto_obj_filename = symtab_filename.with_extension("out");
         let typemap_filename = alter_extension(file, "type_map.json");
         let metadata_filename = alter_extension(file, "kani-metadata.json");
         let restrictions_filename = alter_extension(file, "restrictions.json");
@@ -35,7 +38,8 @@ impl KaniSession {
 
         self.record_temporary_files(&[
             &rlib_filename,
-            &output_filename,
+            &symtab_filename,
+            &goto_obj_filename,
             &typemap_filename,
             &metadata_filename,
         ]);
@@ -94,7 +98,8 @@ impl KaniSession {
 
         Ok(SingleOutputs {
             outdir,
-            symtab: output_filename,
+            symtab: symtab_filename,
+            goto_obj: goto_obj_filename,
             metadata: metadata_filename,
             restrictions: if self.args.restrict_vtable() {
                 Some(restrictions_filename)
