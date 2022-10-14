@@ -404,8 +404,11 @@ impl<'tcx> GotocCtx<'tcx> {
             }};
         }
 
-        if let Some(stripped) = intrinsic.strip_prefix("simd_shuffle") {
-            let _n: u64 = stripped.parse().unwrap();
+        if let Some(_stripped) = intrinsic.strip_prefix("simd_shuffle") {
+            // TODO: can be empty now (i.e. `simd_shuffle` instead of `simd_shuffle8`)
+            // `parse` fails on empty, so comment that bit of code out.
+            // To re-enable this we'll need to investigate how size is computed now.
+            // let n: u64 = stripped.parse().unwrap();
             return unstable_codegen!(self.codegen_intrinsic_simd_shuffle(
                 fargs,
                 p,

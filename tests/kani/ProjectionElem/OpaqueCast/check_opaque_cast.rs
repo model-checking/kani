@@ -1,11 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-//
 // Modifications Copyright Kani Contributors
 // See GitHub history for details.
-//
-// NOTE: The initial fix for this has been reverted from rustc. I'm keeping this test here so we
-// will know when it has been reverted back.
-// kani-check-fail
 
 //! Tests that check handling of opaque casts. Tests were adapted from the rustc repository.
 
