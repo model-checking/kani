@@ -63,7 +63,7 @@ impl<'tcx> GotocCtx<'tcx> {
         ty: Ty<'tcx>,
         span: Option<&Span>,
     ) -> Expr {
-        debug!("The literal was a Unevaluated");
+        debug!(?unevaluated, "codegen_const_unevaluated");
         let const_val =
             self.tcx.const_eval_resolve(ty::ParamEnv::reveal_all(), unevaluated, None).unwrap();
         self.codegen_const_value(const_val, ty, span)
@@ -76,7 +76,7 @@ impl<'tcx> GotocCtx<'tcx> {
         match lit.kind() {
             // A `ConstantKind::Ty(ConstKind::Unevaluated)` should no longer show up
             // and should be a `ConstantKind::Unevaluated` instead (and thus handled
-            // in `codegen_constant` not here.)
+            // at the level of `codegen_constant` instead of `codegen_const`.)
             ConstKind::Unevaluated(_) => unreachable!(),
 
             ConstKind::Value(valtree) => {
