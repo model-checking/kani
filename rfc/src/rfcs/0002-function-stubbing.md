@@ -363,7 +363,7 @@ It is possible to do so using `std::mem::transmute` (see below); this is clunky 
   fn my_harness() { ... }
   ```
 
-## Appendix: An extended example
+## Appendix: an extended example
 
 In this example, we mock a [serde_json](https://crates.io/crates/serde_json) (96M downloads) deserialization method so that we can prove a property about the following [Firecracker function](https://github.com/firecracker-microvm/firecracker/blob/01eba51ded2f5439da91a2d73280f579651b067c/src/api_server/src/request/vsock.rs#L11) that parses a configuration from some raw data:
 
