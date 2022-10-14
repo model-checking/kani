@@ -1,0 +1,9 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+[package]
+name = "in_src_harness"
+version = "0.1.0"
+edition = "2021"
+description = "Package with a harness that is co-located with the library code"
+
+[dependencies]

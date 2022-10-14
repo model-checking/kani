@@ -4,7 +4,7 @@
 use crate::args::KaniArgs;
 use crate::session::KaniSession;
 use anyhow::{Context, Result};
-use cargo_metadata::{Metadata, MetadataCommand};
+use cargo_metadata::{Metadata, MetadataCommand, Package};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -26,7 +26,7 @@ impl KaniSession {
     /// Calls `cargo_build` to generate `*.symtab.json` files in `target_dir`
     pub fn cargo_build(&self) -> Result<CargoOutputs> {
         let build_target = env!("TARGET"); // see build.rs
-        let metadata = MetadataCommand::new().exec().expect("Failed to get cargo metadata.");
+        let metadata = MetadataCommand::new().exec().context("Failed to get cargo metadata.")?;
         let target_dir = self
             .args
             .target_dir
@@ -39,10 +39,6 @@ impl KaniSession {
         let rustc_args = self.kani_rustc_flags();
 
         let mut cargo_args: Vec<OsString> = vec!["rustc".into()];
-        if self.args.tests {
-            cargo_args.push("--tests".into());
-        }
-
         if self.args.all_features {
             cargo_args.push("--all-features".into());
         }
@@ -77,15 +73,18 @@ impl KaniSession {
 
         let members = project_members(&self.args, &metadata);
         for member in members {
-            let mut cmd = Command::new("cargo");
-            cmd.args(&cargo_args)
-                .args(vec!["-p", &member])
-                .args(&pkg_args)
-                .env("RUSTC", &self.kani_compiler)
-                .env("RUSTFLAGS", "--kani-flags")
-                .env("KANIFLAGS", &crate::util::join_osstring(&kani_args, " "));
+            for target_select in package_targets(&self.args, member) {
+                let mut cmd = Command::new("cargo");
+                cmd.args(&cargo_args)
+                    .args(vec!["-p", &member.name])
+                    .args(&target_select)
+                    .args(&pkg_args)
+                    .env("RUSTC", &self.kani_compiler)
+                    .env("RUSTFLAGS", "--kani-flags")
+                    .env("KANIFLAGS", &crate::util::join_osstring(&kani_args, " "));
 
-            self.run_terminal(cmd)?;
+                self.run_terminal(cmd)?;
+            }
         }
 
         if self.args.dry_run {
@@ -123,15 +122,42 @@ fn glob(path: &Path) -> Result<Vec<PathBuf>> {
 ///   - I.e.: Do whatever cargo does when there's no default_members.
 ///   - This is because `default_members` is not available in cargo metadata.
 ///     See <https://github.com/rust-lang/cargo/issues/8033>.
-fn project_members(args: &KaniArgs, metadata: &Metadata) -> Vec<String> {
+fn project_members<'a, 'b>(args: &'a KaniArgs, metadata: &'b Metadata) -> Vec<&'b Package> {
     if !args.package.is_empty() {
-        args.package.clone()
+        args.package
+            .iter()
+            .map(|pkg_name| {
+                metadata
+                    .packages
+                    .iter()
+                    .find(|pkg| pkg.name == *pkg_name)
+                    .expect(&format!("Cannot find package '{}'", pkg_name))
+            })
+            .collect()
     } else {
         match (args.workspace, metadata.root_package()) {
-            (true, _) | (_, None) => {
-                metadata.workspace_members.iter().map(|id| metadata[id].name.clone()).collect()
-            }
-            (_, Some(root_pkg)) => vec![root_pkg.name.clone()],
+            (true, _) | (_, None) => metadata.workspace_packages(),
+            (_, Some(root_pkg)) => vec![root_pkg],
         }
     }
+}
+
+/// Extract the targets inside a package.
+/// If `--tests` is given, the list of targets will include any integration tests.
+fn package_targets(args: &KaniArgs, package: &Package) -> Vec<Vec<String>> {
+    package
+        .targets
+        .iter()
+        .filter_map(|target| {
+            if target.kind.contains(&String::from("bin")) {
+                Some(vec![String::from("--bin"), target.name.clone()])
+            } else if target.kind.contains(&String::from("lib")) {
+                Some(vec![String::from("--lib")])
+            } else if target.kind.contains(&String::from("test")) && args.tests {
+                Some(vec![String::from("--test"), target.name.clone()])
+            } else {
+                None
+            }
+        })
+        .collect()
 }
