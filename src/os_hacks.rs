@@ -15,7 +15,7 @@ use os_info::Info;
 use crate::cmd::AutoRun;
 
 pub fn should_apply_ubuntu_18_04_python_hack(os: &os_info::Info) -> Result<bool> {
-    if os.os_type() == os_info::Type::Ubuntu {
+    if os.os_type() != os_info::Type::Ubuntu {
         return Ok(false);
     }
     // Check both versions: https://github.com/stanislav-tkach/os_info/issues/318
