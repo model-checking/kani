@@ -91,7 +91,7 @@ The arguments `original` and `replacement` give the names of functions/methods.
 They will be resolved using Rust's standard name resolution rules; this includes supporting imports like `use foo::bar as baz`.
 The attribute may be specified multiple times per harness, so that multiple (non-conflicting) stub pairings are supported.
 
-For example, this code specifies that the function `mock_random` should be used in place of the function `rand::random` and the function `my_mod::foo` should be used in place of the function `my_mod::bar` for the harness `my_mod::my_harness`:
+For example, this code specifies that the function `mock_random` should be used in place of the function `rand::random` and the function `my_mod::bar` should be used in place of the function `my_mod::foo` for the harness `my_mod::my_harness`:
 
 ```rust
 #[cfg(kani)]
@@ -144,7 +144,7 @@ The name of the stub set will be resolved through the module path (i.e., they ar
 A similar mechanism can be used to aggregate stub sets:
 
 ```rust
-kani::stub_set!() {
+kani::stub_set! {
     all_my_stubs,
     use_stub_set(my_io_stubs),
     use_stub_set(my_other_stubs),
@@ -200,11 +200,15 @@ All the stubbing code will be available, so it is possible to inspect the assump
 
 ### Comparison to function contracts
 
-- The [currently proposed function contract mechanism](https://github.com/model-checking/kani/tree/features/function-contracts) does not provide a way to specify contracts on external functions.
-This is one of the key motivations for stubbing.
 - In many cases, stubs are more user-friendly than contracts.
 With contracts, it is sometimes necessary to explicitly provide information that is automatically captured in Rust (such as which memory is written).
 Furthermore, contract predicates constitute a DSL of their own that needs to be learned; using stubbing, we can stick to using just Rust.
+- Function contracts sometimes come with a mechanism for verifying that a function satisfies its contract (for example, [CBMC provides this](http://www.cprover.org/cprover-manual/contracts/functions/)).
+While we do not plan to provide such a feature, it is possible to emulate this by writing proof harnesses comparing the behavior of the original function and the stub.
+Furthermore, our approach provides additional flexibility, as it is not always actually desirable for a stub to be an overapproximation of the function (e.g., we might want the stub to exhibit a certain behavior within a particular harness) or to have a consistent behavior across all harnesses.
+- The [currently proposed function contract mechanism](https://github.com/model-checking/kani/tree/features/function-contracts) does not provide a way to specify contracts on external functions.
+In principle, it would be possible to extend it to do so.
+Doing so would require some additional UX design decisions (e.g., "How do users specify this?"); with stubbing there does not need to be a distinction between local and external functions.
 
 ### Alternative #1: Annotate stubbed functions
 
