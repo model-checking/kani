@@ -78,13 +78,13 @@ impl KaniSession {
         // Only joing them at the end. All kani flags must come first.
         kani_args.extend_from_slice(&rustc_args);
 
-        let members = project_members(&self.args, &metadata);
-        for member in members {
-            for target_select in package_targets(&self.args, member) {
+        let packages = packages_to_verify(&self.args, &metadata);
+        for package in packages {
+            for target in package_targets(&self.args, package) {
                 let mut cmd = Command::new("cargo");
                 cmd.args(&cargo_args)
-                    .args(vec!["-p", &member.name])
-                    .args(&target_select)
+                    .args(vec!["-p", &package.name])
+                    .args(&target.to_args())
                     .args(&pkg_args)
                     .env("RUSTC", &self.kani_compiler)
                     .env("RUSTFLAGS", "--kani-flags")
@@ -129,7 +129,7 @@ fn glob(path: &Path) -> Result<Vec<PathBuf>> {
 ///   - I.e.: Do whatever cargo does when there's no default_members.
 ///   - This is because `default_members` is not available in cargo metadata.
 ///     See <https://github.com/rust-lang/cargo/issues/8033>.
-fn project_members<'a, 'b>(args: &'a KaniArgs, metadata: &'b Metadata) -> Vec<&'b Package> {
+fn packages_to_verify<'a, 'b>(args: &'a KaniArgs, metadata: &'b Metadata) -> Vec<&'b Package> {
     if !args.package.is_empty() {
         args.package
             .iter()
@@ -149,19 +149,37 @@ fn project_members<'a, 'b>(args: &'a KaniArgs, metadata: &'b Metadata) -> Vec<&'
     }
 }
 
+/// Possible verification targets.
+enum VerificationTarget {
+    Bin(String),
+    Lib,
+    Test(String),
+}
+
+impl VerificationTarget {
+    /// Convert to cargo argument that select the specific target.
+    fn to_args(&self) -> Vec<String> {
+        match self {
+            VerificationTarget::Test(name) => vec![String::from("--test"), name.clone()],
+            VerificationTarget::Bin(name) => vec![String::from("--bin"), name.clone()],
+            VerificationTarget::Lib => vec![String::from("--lib")],
+        }
+    }
+}
+
 /// Extract the targets inside a package.
 /// If `--tests` is given, the list of targets will include any integration tests.
-fn package_targets(args: &KaniArgs, package: &Package) -> Vec<Vec<String>> {
+fn package_targets(args: &KaniArgs, package: &Package) -> Vec<VerificationTarget> {
     package
         .targets
         .iter()
         .filter_map(|target| {
             if target.kind.contains(&String::from("bin")) {
-                Some(vec![String::from("--bin"), target.name.clone()])
+                Some(VerificationTarget::Bin(target.name.clone()))
             } else if target.kind.contains(&String::from("lib")) {
-                Some(vec![String::from("--lib")])
+                Some(VerificationTarget::Lib)
             } else if target.kind.contains(&String::from("test")) && args.tests {
-                Some(vec![String::from("--test"), target.name.clone()])
+                Some(VerificationTarget::Test(target.name.clone()))
             } else {
                 None
             }
