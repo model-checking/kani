@@ -26,8 +26,7 @@ cd $KANI_DIR/firecracker/src/devices/src/virtio/
 # Disable warnings until https://github.com/model-checking/kani/issues/573 is fixed
 export RUSTC_LOG=error
 export RUST_BACKTRACE=1
-# Kani cannot locate Cargo.toml correctly: https://github.com/model-checking/kani/issues/717
-cargo kani --only-codegen
+cargo kani --only-codegen --legacy-linker
 
 echo
 echo "Finished Firecracker codegen regression successfully..."

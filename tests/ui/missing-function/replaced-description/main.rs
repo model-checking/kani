@@ -1,8 +1,9 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// Checks if the description for undefined functions has been updated to
-// "Function with missing definition is unreachable"
+// kani-flags: --legacy-linker
+//! Checks if the description for undefined functions has been updated to
+//! "Function with missing definition is unreachable"
 
 #[kani::proof]
 fn main() {

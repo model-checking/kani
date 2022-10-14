@@ -136,11 +136,20 @@ pub struct KaniArgs {
     /// Kani will only compile the crate. No verification will be performed
     #[structopt(long, hidden_short_help(true))]
     pub only_codegen: bool,
-    /// Enables experimental MIR Linker. This option will affect how Kani prunes the code to be
-    /// analyzed. Please report any missing function issue found here:
-    /// <https://github.com/model-checking/kani/issues/new/choose>
-    #[structopt(long, hidden = true, requires("enable-unstable"))]
+
+    /// Disable the new MIR Linker. Using this option may result in missing symbols from the
+    /// `std` library. See <https://github.com/model-checking/kani/issues/1213> for more details.
+    #[structopt(long)]
+    pub legacy_linker: bool,
+
+    /// Enable the new MIR Linker. This is already the default option and it will be removed once
+    /// the linker is stable.
+    /// The MIR Linker affects how Kani prunes the code to be analyzed. It also fixes previous
+    /// issues with missing `std` function definitions.
+    /// See <https://model-checking.github.io/kani/rfc/rfcs/0001-mir-linker.html> for more details.
+    #[structopt(long, conflicts_with("legacy_linker"))]
     pub mir_linker: bool,
+
     /// Compiles Kani harnesses in all features of all packages selected on the command-line.
     #[structopt(long)]
     pub all_features: bool,
