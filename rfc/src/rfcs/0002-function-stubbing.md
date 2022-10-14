@@ -78,7 +78,7 @@ Under this substitution, Kani has a single check, which proves that the assertio
 ## User experience
 
 This feature is currently limited to stubbing functions and methods.
-We anticipate that the annotations we propose here could also be used when stubbing types, although the underlying technical approach might have to change.
+We anticipate that the annotations we propose here could also be used for stubbing types, although the underlying technical approach might have to change.
 
 Stubs will be specified per harness; that is, different harnesses can use different stubs.
 This is one of the main design points.
