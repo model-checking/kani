@@ -97,8 +97,7 @@ fn standalone_main() -> Result<()> {
 
     let outputs = ctx.compile_single_rust_file(&args.input)?;
 
-    let goto_obj = outputs.symtab.with_extension("out");
-    ctx.record_temporary_files(&[&goto_obj]);
+    let goto_obj = outputs.goto_obj;
 
     if ctx.args.only_codegen {
         return Ok(());
