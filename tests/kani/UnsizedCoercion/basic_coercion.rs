@@ -11,5 +11,6 @@ use defs::*;
 fn check_base_coercion() {
     let id = kani::any();
     let inner = Inner { id };
+    // Coerce `&Inner` to `&dyn Identity` which means we add a vtable ref to a fat pointer.
     assert_eq!(id_from_dyn(&inner), id.into());
 }

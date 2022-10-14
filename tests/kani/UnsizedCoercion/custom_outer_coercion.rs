@@ -16,6 +16,8 @@ pub struct MyPtr<'a, T: ?Sized> {
     ptr: &'a T,
 }
 
+/// Implement `CoerceUnsized` type which allow us to convert MyPtr<Struct> to MyPtr<dyn Trait>.
+/// <https://doc.rust-lang.org/std/ops/trait.CoerceUnsized.html>
 impl<'a, T: ?Sized + Unsize<U>, U: ?Sized> CoerceUnsized<MyPtr<'a, U>> for MyPtr<'a, T> {}
 
 impl<'a, T: ?Sized> Deref for MyPtr<'a, T> {

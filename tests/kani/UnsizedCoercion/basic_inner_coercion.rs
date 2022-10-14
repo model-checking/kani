@@ -11,6 +11,8 @@ use defs::*;
 fn check_inner_dyn_coercion() {
     let inner_id = kani::any();
     let outer_id = kani::any();
+    // Generate a fat pointer with a pointer to the vtable for `impl Identity for Inner`.
     let outer: &Outer<dyn Identity> = &Outer { inner: Inner { id: inner_id }, outer_id };
+    // Create a new fat pointer to inner using the metadata from outer fat pointer.
     assert_eq!(id_from_dyn(&outer.inner), inner_id.into());
 }
