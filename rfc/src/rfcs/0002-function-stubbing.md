@@ -35,10 +35,11 @@ In all cases, stubbing would enable users to verify code that cannot currently b
 Even without stubbing types, the ability to stub functions/methods can help provide verification-friendly abstractions for standard data structures.
 For example, [Issue 1673](https://github.com/model-checking/kani/issues/1673) suggests that some Kani proofs run more quickly if `Vec::new` is replaced with `Vec::with_capacity`; function stubbing would allow us to make this substitution everywhere in a codebase (and not just in the proof harness).
 
-In what follows, we give two examples of stubbing external code, using the annotations we propose in this RFC.
-We are able to run each of these examples on a modified version of Kani using a proof-of-concept MIR-to-MIR transformation implementing stubbing (the prototype does not support stub-related annotations; instead, it reads the stub mapping from a file).
-These examples---involving randomization and deserialization---are the types of functions/methods that are commonly stubbed in other verification and program analysis projects.
-Other common examples that we should be able to handle include system calls and timer functions.
+In what follows, we give an example of stubbing external code, using the annotations we propose in this RFC.
+We are able to run this example on a modified version of Kani using a proof-of-concept MIR-to-MIR transformation implementing stubbing (the prototype does not support stub-related annotations; instead, it reads the stub mapping from a file).
+This example stubs out a function that returns a random number.
+This is the type of function that is commonly stubbed in other verification and program analysis projects, along with system calls, timer functions, logging calls, and deserialization methods---all of which we should be able to handle.
+See the appendix at the end of this RFC for an extended example involving stubbing out a deserialization method.
 
 ### Mocking randomization
 
@@ -73,103 +74,6 @@ fn random_cannot_be_zero() {
 ```
 
 Under this substitution, Kani has a single check, which proves that the assertion can fail. Verification time is 0.02 seconds.
-
-### Mocking deserialization
-
-In this example, we mock a [serde_json](https://crates.io/crates/serde_json) (96M downloads) deserialization method so that we can prove a property about the following [Firecracker function](https://github.com/firecracker-microvm/firecracker/blob/01eba51ded2f5439da91a2d73280f579651b067c/src/api_server/src/request/vsock.rs#L11) that parses a configuration from some raw data:
-
-```rust
-fn parse_put_vsock(body: &Body) -> Result<ParsedRequest, Error> {
-    METRICS.put_api_requests.vsock_count.inc();
-    let vsock_cfg = serde_json::from_slice::<VsockDeviceConfig>(body.raw()).map_err(|err| {
-        METRICS.put_api_requests.vsock_fails.inc();
-        err
-    })?;
-
-    // Check for the presence of deprecated `vsock_id` field.
-    let mut deprecation_message = None;
-    if vsock_cfg.vsock_id.is_some() {
-        // vsock_id field in request is deprecated.
-        METRICS.deprecated_api.deprecated_http_api_calls.inc();
-        deprecation_message = Some("PUT /vsock: vsock_id field is deprecated.");
-    }
-
-    // Construct the `ParsedRequest` object.
-    let mut parsed_req = ParsedRequest::new_sync(VmmAction::SetVsockDevice(vsock_cfg));
-    // If `vsock_id` was present, set the deprecation message in `parsing_info`.
-    if let Some(msg) = deprecation_message {
-        parsed_req.parsing_info().append_deprecation_message(msg);
-    }
-
-    Ok(parsed_req)
-}
-```
-
-We manually mocked some of the Firecracker types with simpler versions to reduce the number of dependencies we had to pull in (e.g., we removed some enum variants, unused struct fields).
-With these changes, we were able to prove that the configuration data has a vsock ID if and only if the parsing metadata includes a deprecation message: 
-
-```rust
-#[cfg(kani)]
-fn get_vsock_device_config(action: RequestAction) -> Option<VsockDeviceConfig> {
-    match action {
-        RequestAction::Sync(vmm_action) => match *vmm_action {
-            VmmAction::SetVsockDevice(dev) => Some(dev),
-            _ => None,
-        },
-        _ => None,
-    }
-}
-
-#[cfg(kani)]
-#[kani::proof]
-#[kani::unwind(2)]
-#[kani::stub(serde_json::deserialize_slice, mock_deserialize)]
-fn test_deprecation_vsock_id_consistent() {
-    // We are going to mock the parsing of this body, so might as well use an empty one.
-    let body: Vec<u8> = Vec::new();
-    if let Ok(res) = parse_put_vsock(&Body::new(body)) {
-        let (action, mut parsing_info) = res.into_parts();
-        let config = get_vsock_device_config(action).unwrap();
-        assert_eq!(
-            config.vsock_id.is_some(),
-            parsing_info.take_deprecation_message().is_some()
-        );
-    }
-}
-```
-
-Crucially, we did this by stubbing out `serde_json::from_slice` and replacing it with our mock version below, which ignores its input and creates a "symbolic" configuration struct:
-
-```rust
-#[cfg(kani)]
-fn symbolic_string(len: usize) -> String {
-    let mut v: Vec<u8> = Vec::with_capacity(len);
-    for _ in 0..len {
-        v.push(kani::any());
-    }
-    unsafe { String::from_utf8_unchecked(v) }
-}
-
-#[cfg(kani)]
-fn mock_deserialize(_data: &[u8]) -> serde_json::Result<VsockDeviceConfig> {
-    const STR_LEN: usize = 1;
-    let vsock_id = if kani::any() {
-        None
-    } else {
-        Some(symbolic_string(STR_LEN))
-    };
-    let guest_cid = kani::any();
-    let uds_path = symbolic_string(STR_LEN);
-    let config = VsockDeviceConfig {
-        vsock_id,
-        guest_cid,
-        uds_path,
-    };
-    Ok(config)
-}
-```
-
-The proof takes 170 seconds to complete (using Kissat as the backend SAT solver for CBMC).
 
 ## User experience
 
@@ -452,4 +356,102 @@ It is possible to do so using `std::mem::transmute` (see below); this is clunky 
   #[cfg(kani)]
   #[kani::proof]
   #[kani::stub(Foo::m, mock_m)]
-  fn my_harness() { ... }```
+  fn my_harness() { ... }
+  ```
+
+## Appendix: An extended example
+
+In this example, we mock a [serde_json](https://crates.io/crates/serde_json) (96M downloads) deserialization method so that we can prove a property about the following [Firecracker function](https://github.com/firecracker-microvm/firecracker/blob/01eba51ded2f5439da91a2d73280f579651b067c/src/api_server/src/request/vsock.rs#L11) that parses a configuration from some raw data:
+
+```rust
+fn parse_put_vsock(body: &Body) -> Result<ParsedRequest, Error> {
+    METRICS.put_api_requests.vsock_count.inc();
+    let vsock_cfg = serde_json::from_slice::<VsockDeviceConfig>(body.raw()).map_err(|err| {
+        METRICS.put_api_requests.vsock_fails.inc();
+        err
+    })?;
+
+    // Check for the presence of deprecated `vsock_id` field.
+    let mut deprecation_message = None;
+    if vsock_cfg.vsock_id.is_some() {
+        // vsock_id field in request is deprecated.
+        METRICS.deprecated_api.deprecated_http_api_calls.inc();
+        deprecation_message = Some("PUT /vsock: vsock_id field is deprecated.");
+    }
+
+    // Construct the `ParsedRequest` object.
+    let mut parsed_req = ParsedRequest::new_sync(VmmAction::SetVsockDevice(vsock_cfg));
+    // If `vsock_id` was present, set the deprecation message in `parsing_info`.
+    if let Some(msg) = deprecation_message {
+        parsed_req.parsing_info().append_deprecation_message(msg);
+    }
+
+    Ok(parsed_req)
+}
+```
+
+We manually mocked some of the Firecracker types with simpler versions to reduce the number of dependencies we had to pull in (e.g., we removed some enum variants, unused struct fields).
+With these changes, we were able to prove that the configuration data has a vsock ID if and only if the parsing metadata includes a deprecation message: 
+
+```rust
+#[cfg(kani)]
+fn get_vsock_device_config(action: RequestAction) -> Option<VsockDeviceConfig> {
+    match action {
+        RequestAction::Sync(vmm_action) => match *vmm_action {
+            VmmAction::SetVsockDevice(dev) => Some(dev),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+#[cfg(kani)]
+#[kani::proof]
+#[kani::unwind(2)]
+#[kani::stub(serde_json::deserialize_slice, mock_deserialize)]
+fn test_deprecation_vsock_id_consistent() {
+    // We are going to mock the parsing of this body, so might as well use an empty one.
+    let body: Vec<u8> = Vec::new();
+    if let Ok(res) = parse_put_vsock(&Body::new(body)) {
+        let (action, mut parsing_info) = res.into_parts();
+        let config = get_vsock_device_config(action).unwrap();
+        assert_eq!(
+            config.vsock_id.is_some(),
+            parsing_info.take_deprecation_message().is_some()
+        );
+    }
+}
+```
+
+Crucially, we did this by stubbing out `serde_json::from_slice` and replacing it with our mock version below, which ignores its input and creates a "symbolic" configuration struct:
+
+```rust
+#[cfg(kani)]
+fn symbolic_string(len: usize) -> String {
+    let mut v: Vec<u8> = Vec::with_capacity(len);
+    for _ in 0..len {
+        v.push(kani::any());
+    }
+    unsafe { String::from_utf8_unchecked(v) }
+}
+
+#[cfg(kani)]
+fn mock_deserialize(_data: &[u8]) -> serde_json::Result<VsockDeviceConfig> {
+    const STR_LEN: usize = 1;
+    let vsock_id = if kani::any() {
+        None
+    } else {
+        Some(symbolic_string(STR_LEN))
+    };
+    let guest_cid = kani::any();
+    let uds_path = symbolic_string(STR_LEN);
+    let config = VsockDeviceConfig {
+        vsock_id,
+        guest_cid,
+        uds_path,
+    };
+    Ok(config)
+}
+```
+
+The proof takes 170 seconds to complete (using Kissat as the backend SAT solver for CBMC).
