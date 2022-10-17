@@ -90,11 +90,17 @@ fn setup_kani_bundle(kani_dir: &Path, use_local_bundle: Option<OsString>) -> Res
     Ok(())
 }
 
+/// Reads the Rust toolchain version that Kani was built against from the file in
+/// the Kani release bundle (unpacked in `kani_dir`).
+pub(crate) fn get_rust_toolchain_version(kani_dir: &Path) -> Result<String> {
+    std::fs::read_to_string(kani_dir.join("rust-toolchain-version"))
+        .context("Reading release bundle rust-toolchain-version")
+}
+
 /// Install the Rust toolchain version we require
 fn setup_rust_toolchain(kani_dir: &Path) -> Result<String> {
     // Currently this means we require the bundle to have been unpacked first!
-    let toolchain_version = std::fs::read_to_string(kani_dir.join("rust-toolchain-version"))
-        .context("Reading release bundle rust-toolchain-version")?;
+    let toolchain_version = get_rust_toolchain_version(kani_dir)?;
     println!("[3/5] Installing rust toolchain version: {}", &toolchain_version);
     Command::new("rustup").args(&["toolchain", "install", &toolchain_version]).run()?;
 
@@ -112,11 +118,7 @@ fn setup_python_deps(kani_dir: &Path, os: &os_info::Info) -> Result<()> {
     // TODO: this is a repetition of versions from kani/kani-dependencies
     let pkg_versions = &["cbmc-viewer==3.6"];
 
-    if os.os_type() == os_info::Type::Ubuntu
-        // Check both versions: https://github.com/stanislav-tkach/os_info/issues/318
-        && (*os.version() == os_info::Version::Semantic(18, 4, 0)
-            || *os.version() == os_info::Version::Custom("18.04".into()))
-    {
+    if os_hacks::should_apply_ubuntu_18_04_python_hack(os)? {
         os_hacks::setup_python_deps_on_ubuntu_18_04(&pyroot, pkg_versions)?;
         return Ok(());
     }

@@ -1,8 +1,8 @@
 - **Feature Name:** MIR Linker (mir_linker)
 - **RFC Tracking Issue**: <https://github.com/model-checking/kani/issues/1588>
 - **RFC PR:** <https://github.com/model-checking/kani/pull/1600>
-- **Status:** In Progress
-- **Version:** 1
+- **Status:** Unstable
+- **Version:** 2
 
 -------------------
 
@@ -236,8 +236,8 @@ These results were obtained by looking at the artifacts generated during the sam
   Thus, it shouldn't have any side effect.
   That relies on all constant initializers being evaluated during compilation.
 - ~~What's the best way to handle `cargo kani --tests`?~~
-  We will use similar mechanism to regular Kani runs:
-  - `cargo rustc --tests -- --reachability=harnesses`
+  For now, we are going to use the test profile and iterate over all the targets available in the crate:
+  - `cargo rustc --profile test -- --reachability=harnesses`
 
 
 ## Future possibilities

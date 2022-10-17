@@ -555,7 +555,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// We follow the order from the `TyCtxt::COMMON_VTABLE_ENTRIES`.
     fn trait_vtable_field_types(&mut self, t: ty::Ty<'tcx>) -> Vec<DatatypeComponent> {
         let mut vtable_base = common_vtable_fields(self.trait_vtable_drop_type(t));
-        if let ty::Dynamic(binder, _region) = t.kind() {
+        if let ty::Dynamic(binder, _, _) = t.kind() {
             // The virtual methods on the trait ref. Some auto traits have no methods.
             if let Some(principal) = binder.principal() {
                 let poly = principal.with_self_ty(self.tcx, t);
@@ -710,7 +710,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// codegen for types. it finds a C type which corresponds to a rust type.
     /// that means [ty] has to be monomorphized before calling this function.
     ///
-    /// check [rustc_middle::ty::layout::LayoutCx::layout_of_uncached] for LLVM codegen
+    /// check `rustc_ty_utils::layout::layout_of_uncached` for LLVM codegen
     ///
     /// also c.f. <https://www.ralfj.de/blog/2020/04/04/layout-debugging.html>
     ///      c.f. <https://rust-lang.github.io/unsafe-code-guidelines/introduction.html>
