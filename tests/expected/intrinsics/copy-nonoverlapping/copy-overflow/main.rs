@@ -1,8 +1,14 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-
-// Checks that `copy_nonoverlapping` triggers an overflow failure if the `count`
-// argument can overflow a `usize`
+// kani-flags: --legacy-linker
+//! Checks that `copy_nonoverlapping` triggers an overflow failure if the `count`
+//! argument can overflow a `usize`
+//!
+//! When enabling "--mir-linker", the error we currently get is:
+//! > Failed checks: Called `Option::unwrap()` on a `None` value
+//! This happens because of std debug checks. The `is_nonoverlapping` check has a
+//! `checked_mul().unwrap()` that fails in the overflow scenario.
+//! See <https://github.com/model-checking/kani/issues/1740> for more details.
 #[kani::proof]
 fn test_copy_nonoverlapping_unaligned() {
     let arr: [i32; 3] = [0, 1, 0];
