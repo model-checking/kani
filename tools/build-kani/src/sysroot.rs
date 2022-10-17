@@ -93,6 +93,10 @@ pub fn build_lib() {
         "dev",
         "--config",
         "profile.dev.panic=\"abort\"",
+        // Disable debug assertions for now as a mitigation for
+        // https://github.com/model-checking/kani/issues/1740
+        "--config",
+        "profile.dev.debug-assertions=false",
         "--config",
         "host.rustflags=[\"--cfg=kani\"]",
         "--target",
@@ -126,7 +130,6 @@ pub fn build_lib() {
     cp_files(&kani_rlib_folder, &sysroot_lib, &is_rlib).unwrap();
 
     // Copy `std` libraries and dependencies to sysroot folder following expected path format.
-    // TODO: Create a macro for all these push.
     let src_path = path_buf!(target_folder, target, "debug", "deps");
 
     let dst_path = path_buf!(sysroot_lib, "rustlib", target, "lib");
