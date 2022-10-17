@@ -11,6 +11,4 @@ edition = "2021"
 [dependencies]
 
 [package.metadata.kani]
-# Integration tests are not working with the MIR Linker
-# https://github.com/model-checking/kani/issues/1764
-flags = { tests=true, legacy-linker=true }
+flags = { tests=true }

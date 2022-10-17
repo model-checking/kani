@@ -139,7 +139,7 @@ pub struct KaniArgs {
 
     /// Disable the new MIR Linker. Using this option may result in missing symbols from the
     /// `std` library. See <https://github.com/model-checking/kani/issues/1213> for more details.
-    #[structopt(long)]
+    #[structopt(long, hidden = true)]
     pub legacy_linker: bool,
 
     /// Enable the new MIR Linker. This is already the default option and it will be removed once
@@ -147,7 +147,7 @@ pub struct KaniArgs {
     /// The MIR Linker affects how Kani prunes the code to be analyzed. It also fixes previous
     /// issues with missing `std` function definitions.
     /// See <https://model-checking.github.io/kani/rfc/rfcs/0001-mir-linker.html> for more details.
-    #[structopt(long, conflicts_with("legacy_linker"))]
+    #[structopt(long, conflicts_with("legacy_linker"), hidden = true)]
     pub mir_linker: bool,
 
     /// Compiles Kani harnesses in all features of all packages selected on the command-line.
