@@ -313,13 +313,6 @@ impl<'tcx> GotocCtx<'tcx> {
             ($f:ident) => {{ codegen_intrinsic_binop!($f) }};
         }
 
-        // Intrinsics which encode a pointer comparison (e.g., `ptr_guaranteed_eq`).
-        // These behave as regular pointer comparison at runtime:
-        // https://doc.rust-lang.org/beta/std/primitive.pointer.html#method.guaranteed_eq
-        macro_rules! codegen_ptr_guaranteed_cmp {
-            ($f:ident) => {{ self.binop(p, fargs, |a, b| a.$f(b).cast_to(Type::c_bool())) }};
-        }
-
         // Intrinsics which encode a simple binary operation
         macro_rules! codegen_intrinsic_binop {
             ($f:ident) => {{ self.binop(p, fargs, |a, b| a.$f(b)) }};
@@ -411,8 +404,11 @@ impl<'tcx> GotocCtx<'tcx> {
             }};
         }
 
-        if let Some(stripped) = intrinsic.strip_prefix("simd_shuffle") {
-            let _n: u64 = stripped.parse().unwrap();
+        if let Some(_stripped) = intrinsic.strip_prefix("simd_shuffle") {
+            // TODO: can be empty now (i.e. `simd_shuffle` instead of `simd_shuffle8`)
+            // `parse` fails on empty, so comment that bit of code out.
+            // To re-enable this we'll need to investigate how size is computed now.
+            // let n: u64 = stripped.parse().unwrap();
             return unstable_codegen!(self.codegen_intrinsic_simd_shuffle(
                 fargs,
                 p,
@@ -596,8 +592,7 @@ impl<'tcx> GotocCtx<'tcx> {
             "powif32" => unstable_codegen!(codegen_simple_intrinsic!(Powif)),
             "powif64" => unstable_codegen!(codegen_simple_intrinsic!(Powi)),
             "pref_align_of" => codegen_intrinsic_const!(),
-            "ptr_guaranteed_eq" => codegen_ptr_guaranteed_cmp!(eq),
-            "ptr_guaranteed_ne" => codegen_ptr_guaranteed_cmp!(neq),
+            "ptr_guaranteed_cmp" => self.codegen_ptr_guaranteed_cmp(fargs, p),
             "ptr_offset_from" => self.codegen_ptr_offset_from(fargs, p, loc),
             "ptr_offset_from_unsigned" => self.codegen_ptr_offset_from_unsigned(fargs, p, loc),
             "raw_eq" => self.codegen_intrinsic_raw_eq(instance, fargs, p, loc),
@@ -1010,6 +1005,26 @@ impl<'tcx> GotocCtx<'tcx> {
             copy_if_nontrivial.as_stmt(loc)
         };
         Stmt::block(vec![src_align_check, dst_align_check, overflow_check, copy_expr], loc)
+    }
+
+    // In some contexts (e.g., compilation-time evaluation),
+    // `ptr_guaranteed_cmp` compares two pointers and returns:
+    //  * 2 if the result is unknown.
+    //  * 1 if they are guaranteed to be equal.
+    //  * 0 if they are guaranteed to be not equal.
+    // But at runtime, this intrinsic behaves as a regular pointer comparison.
+    // Therefore, we return 1 if the pointers are equal and 0 otherwise.
+    //
+    // This intrinsic replaces `ptr_guaranteed_eq` and `ptr_guaranteed_ne`:
+    // https://doc.rust-lang.org/beta/std/primitive.pointer.html#method.guaranteed_eq
+    fn codegen_ptr_guaranteed_cmp(&mut self, mut fargs: Vec<Expr>, p: &Place<'tcx>) -> Stmt {
+        let a = fargs.remove(0);
+        let b = fargs.remove(0);
+        let place_type = self.place_ty(p);
+        let res_type = self.codegen_ty(place_type);
+        let eq_expr = a.eq(b);
+        let cmp_expr = eq_expr.ternary(res_type.one(), res_type.zero());
+        self.codegen_expr_to_place(p, cmp_expr)
     }
 
     /// Computes the offset from a pointer.

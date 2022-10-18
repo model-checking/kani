@@ -36,6 +36,9 @@ if [ -d $HTML_DIR ]; then
     # Replace artifacts by examples under test
     BOOKS_DIR=$KANI_DIR/tests/bookrunner/books
     rm -r src/bookrunner/artifacts
+    # Remove any json files that Kani might've left behind due to crash or timeout.
+    find $BOOKS_DIR -name '*.json' -exec rm {} \;
+    find $BOOKS_DIR -name '*.out' -exec rm {} \;
     cp -r $BOOKS_DIR src/bookrunner/artifacts
     # Update paths in HTML report
     python $KANI_DIR/scripts/ci/update_bookrunner_report.py src/bookrunner/index.html new_index.html

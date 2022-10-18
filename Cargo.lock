@@ -91,7 +91,7 @@ dependencies = [
 
 [[package]]
 name = "build-kani"
-version = "0.11.0"
+version = "0.13.0"
 dependencies = [
  "anyhow",
  "cargo_metadata",
@@ -191,6 +191,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "comfy-table"
+version = "6.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "121d8a5b0346092c18a4b2fd6f620d7a06f0eb7ac0a45860939a0884bc579c56"
+dependencies = [
+ "crossterm",
+ "strum",
+ "strum_macros",
+ "unicode-width",
+]
+
+[[package]]
 name = "compiletest"
 version = "0.0.0"
 dependencies = [
@@ -221,7 +233,7 @@ dependencies = [
 
 [[package]]
 name = "cprover_bindings"
-version = "0.11.0"
+version = "0.13.0"
 dependencies = [
  "lazy_static",
  "linear-map",
@@ -265,26 +277,49 @@ dependencies = [
 
 [[package]]
 name = "crossbeam-epoch"
-version = "0.9.10"
+version = "0.9.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "045ebe27666471bb549370b4b0b3e51b07f56325befa4284db65fc89c02511b1"
+checksum = "f916dfc5d356b0ed9dae65f1db9fc9770aa2851d2662b988ccf4fe3516e86348"
 dependencies = [
  "autocfg",
  "cfg-if",
  "crossbeam-utils",
  "memoffset",
- "once_cell",
  "scopeguard",
 ]
 
 [[package]]
 name = "crossbeam-utils"
-version = "0.8.11"
+version = "0.8.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "51887d4adc7b564537b15adcfb307936f8075dfcd5f00dde9a9f1d29383682bc"
+checksum = "edbafec5fa1f196ca66527c1b12c2ec4745ca14b50f1ad8f9f6f720b55d11fac"
 dependencies = [
  "cfg-if",
- "once_cell",
+]
+
+[[package]]
+name = "crossterm"
+version = "0.23.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2102ea4f781910f8a5b98dd061f4c2023f479ce7bb1236330099ceb5a93cf17"
+dependencies = [
+ "bitflags",
+ "crossterm_winapi",
+ "libc",
+ "mio",
+ "parking_lot",
+ "signal-hook",
+ "signal-hook-mio",
+ "winapi",
+]
+
+[[package]]
+name = "crossterm_winapi"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2ae1b35a484aa10e07fe0638d02301c5ad24de82d310ccbd2f3693da5f09bf1c"
+dependencies = [
+ "winapi",
 ]
 
 [[package]]
@@ -394,14 +429,14 @@ checksum = "6c8af84674fe1f223a982c933a0ee1086ac4d4052aa0fb8060c12c6ad838e754"
 
 [[package]]
 name = "kani"
-version = "0.11.0"
+version = "0.13.0"
 dependencies = [
  "kani_macros",
 ]
 
 [[package]]
 name = "kani-compiler"
-version = "0.11.0"
+version = "0.13.0"
 dependencies = [
  "ar",
  "atty",
@@ -427,11 +462,12 @@ dependencies = [
 
 [[package]]
 name = "kani-driver"
-version = "0.11.0"
+version = "0.13.0"
 dependencies = [
  "anyhow",
  "cargo_metadata",
  "clap 2.34.0",
+ "comfy-table",
  "console",
  "glob",
  "kani_metadata",
@@ -448,7 +484,7 @@ dependencies = [
 
 [[package]]
 name = "kani-verifier"
-version = "0.11.0"
+version = "0.13.0"
 dependencies = [
  "anyhow",
  "home",
@@ -457,7 +493,7 @@ dependencies = [
 
 [[package]]
 name = "kani_macros"
-version = "0.11.0"
+version = "0.13.0"
 dependencies = [
  "quote",
  "syn",
@@ -465,7 +501,7 @@ dependencies = [
 
 [[package]]
 name = "kani_metadata"
-version = "0.11.0"
+version = "0.13.0"
 dependencies = [
  "cprover_bindings",
  "serde",
@@ -473,7 +509,7 @@ dependencies = [
 
 [[package]]
 name = "kani_queries"
-version = "0.11.0"
+version = "0.13.0"
 dependencies = [
  "strum",
  "strum_macros",
@@ -543,6 +579,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5aa361d4faea93603064a027415f07bd8e1d5c88c9fbf68bf56a285428fd79ce"
 dependencies = [
  "autocfg",
+]
+
+[[package]]
+name = "mio"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "57ee1c23c7c63b0c9250c339ffdc69255f110b298b901b9f6c82547b7b87caaf"
+dependencies = [
+ "libc",
+ "log",
+ "wasi",
+ "windows-sys",
 ]
 
 [[package]]
@@ -917,6 +965,36 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "24188a676b6ae68c3b2cb3a01be17fbf7240ce009799bb56d5b1409051e78fde"
 
 [[package]]
+name = "signal-hook"
+version = "0.3.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a253b5e89e2698464fc26b545c9edceb338e18a89effeeecfea192c3025be29d"
+dependencies = [
+ "libc",
+ "signal-hook-registry",
+]
+
+[[package]]
+name = "signal-hook-mio"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "29ad2e15f37ec9a6cc544097b78a1ec90001e9f71b81338ca39f430adaca99af"
+dependencies = [
+ "libc",
+ "mio",
+ "signal-hook",
+]
+
+[[package]]
+name = "signal-hook-registry"
+version = "1.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e51e73328dc4ac0c7ccbda3a494dfa03df1de2f46018127f60c693f2648455b0"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "smallvec"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -924,7 +1002,7 @@ checksum = "2fd0db749597d91ff862fd1d55ea87f7855a744a8425a64695b6fca237d1dad1"
 
 [[package]]
 name = "std"
-version = "0.11.0"
+version = "0.13.0"
 dependencies = [
  "kani",
 ]

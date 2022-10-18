@@ -26,8 +26,9 @@ cd $KANI_DIR/firecracker/src/devices/src/virtio/
 # Disable warnings until https://github.com/model-checking/kani/issues/573 is fixed
 export RUSTC_LOG=error
 export RUST_BACKTRACE=1
-# Kani cannot locate Cargo.toml correctly: https://github.com/model-checking/kani/issues/717
-cargo kani --only-codegen
+# Use the legacy linker for now since we want to maximize the code that we are compiling from firecracker.
+# The MIR Linker will by default only collect code relevant to proof harnesses, however, firecracker has none.
+cargo kani --only-codegen --legacy-linker
 
 echo
 echo "Finished Firecracker codegen regression successfully..."

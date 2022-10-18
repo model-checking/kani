@@ -4,7 +4,7 @@
 use crate::args::KaniArgs;
 use crate::session::KaniSession;
 use anyhow::{Context, Result};
-use cargo_metadata::{Metadata, MetadataCommand};
+use cargo_metadata::{Metadata, MetadataCommand, Package};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -26,7 +26,7 @@ impl KaniSession {
     /// Calls `cargo_build` to generate `*.symtab.json` files in `target_dir`
     pub fn cargo_build(&self) -> Result<CargoOutputs> {
         let build_target = env!("TARGET"); // see build.rs
-        let metadata = MetadataCommand::new().exec().expect("Failed to get cargo metadata.");
+        let metadata = MetadataCommand::new().exec().context("Failed to get cargo metadata.")?;
         let target_dir = self
             .args
             .target_dir
@@ -39,10 +39,6 @@ impl KaniSession {
         let rustc_args = self.kani_rustc_flags();
 
         let mut cargo_args: Vec<OsString> = vec!["rustc".into()];
-        if self.args.tests {
-            cargo_args.push("--tests".into());
-        }
-
         if self.args.all_features {
             cargo_args.push("--all-features".into());
         }
@@ -53,16 +49,27 @@ impl KaniSession {
         cargo_args.push("--target-dir".into());
         cargo_args.push(target_dir.into());
 
+        if self.args.tests {
+            // Use test profile in order to pull dev-dependencies and compile using `--test`.
+            // Initially the plan was to use `--tests` but that brings in multiple targets.
+            cargo_args.push("--profile".into());
+            cargo_args.push("test".into());
+        }
+
         if self.args.verbose {
             cargo_args.push("-v".into());
         }
 
         // Arguments that will only be passed to the target package.
         let mut pkg_args: Vec<OsString> = vec![];
-        if self.args.mir_linker {
+        if !self.args.legacy_linker {
             // Only provide reachability flag to the target package.
             pkg_args.push("--".into());
-            pkg_args.push("--reachability=harnesses".into());
+            if self.args.function.is_some() {
+                pkg_args.push("--reachability=pub_fns".into());
+            } else {
+                pkg_args.push("--reachability=harnesses".into());
+            }
         } else {
             // Pass legacy reachability to the target package and its dependencies.
             kani_args.push("--reachability=legacy".into());
@@ -71,17 +78,20 @@ impl KaniSession {
         // Only joing them at the end. All kani flags must come first.
         kani_args.extend_from_slice(&rustc_args);
 
-        let members = project_members(&self.args, &metadata);
-        for member in members {
-            let mut cmd = Command::new("cargo");
-            cmd.args(&cargo_args)
-                .args(vec!["-p", &member])
-                .args(&pkg_args)
-                .env("RUSTC", &self.kani_compiler)
-                .env("RUSTFLAGS", "--kani-flags")
-                .env("KANIFLAGS", &crate::util::join_osstring(&kani_args, " "));
+        let packages = packages_to_verify(&self.args, &metadata);
+        for package in packages {
+            for target in package_targets(&self.args, package) {
+                let mut cmd = Command::new("cargo");
+                cmd.args(&cargo_args)
+                    .args(vec!["-p", &package.name])
+                    .args(&target.to_args())
+                    .args(&pkg_args)
+                    .env("RUSTC", &self.kani_compiler)
+                    .env("RUSTFLAGS", "--kani-flags")
+                    .env("KANIFLAGS", &crate::util::join_osstring(&kani_args, " "));
 
-            self.run_terminal(cmd)?;
+                self.run_terminal(cmd)?;
+            }
         }
 
         if self.args.dry_run {
@@ -119,15 +129,60 @@ fn glob(path: &Path) -> Result<Vec<PathBuf>> {
 ///   - I.e.: Do whatever cargo does when there's no default_members.
 ///   - This is because `default_members` is not available in cargo metadata.
 ///     See <https://github.com/rust-lang/cargo/issues/8033>.
-fn project_members(args: &KaniArgs, metadata: &Metadata) -> Vec<String> {
+fn packages_to_verify<'a, 'b>(args: &'a KaniArgs, metadata: &'b Metadata) -> Vec<&'b Package> {
     if !args.package.is_empty() {
-        args.package.clone()
+        args.package
+            .iter()
+            .map(|pkg_name| {
+                metadata
+                    .packages
+                    .iter()
+                    .find(|pkg| pkg.name == *pkg_name)
+                    .expect(&format!("Cannot find package '{}'", pkg_name))
+            })
+            .collect()
     } else {
         match (args.workspace, metadata.root_package()) {
-            (true, _) | (_, None) => {
-                metadata.workspace_members.iter().map(|id| metadata[id].name.clone()).collect()
-            }
-            (_, Some(root_pkg)) => vec![root_pkg.name.clone()],
+            (true, _) | (_, None) => metadata.workspace_packages(),
+            (_, Some(root_pkg)) => vec![root_pkg],
         }
     }
+}
+
+/// Possible verification targets.
+enum VerificationTarget {
+    Bin(String),
+    Lib,
+    Test(String),
+}
+
+impl VerificationTarget {
+    /// Convert to cargo argument that select the specific target.
+    fn to_args(&self) -> Vec<String> {
+        match self {
+            VerificationTarget::Test(name) => vec![String::from("--test"), name.clone()],
+            VerificationTarget::Bin(name) => vec![String::from("--bin"), name.clone()],
+            VerificationTarget::Lib => vec![String::from("--lib")],
+        }
+    }
+}
+
+/// Extract the targets inside a package.
+/// If `--tests` is given, the list of targets will include any integration tests.
+fn package_targets(args: &KaniArgs, package: &Package) -> Vec<VerificationTarget> {
+    package
+        .targets
+        .iter()
+        .filter_map(|target| {
+            if target.kind.contains(&String::from("bin")) {
+                Some(VerificationTarget::Bin(target.name.clone()))
+            } else if target.kind.contains(&String::from("lib")) {
+                Some(VerificationTarget::Lib)
+            } else if target.kind.contains(&String::from("test")) && args.tests {
+                Some(VerificationTarget::Test(target.name.clone()))
+            } else {
+                None
+            }
+        })
+        .collect()
 }

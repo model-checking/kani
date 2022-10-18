@@ -3,7 +3,7 @@
 
 [package]
 name = "kani-driver"
-version = "0.11.0"
+version = "0.13.0"
 edition = "2021"
 description = "Build a project with Kani and run all proof harnesses"
 license = "MIT OR Apache-2.0"
@@ -31,6 +31,7 @@ regex = "1.6"
 rustc-demangle = "0.1.21"
 pathdiff = "0.2.1"
 rayon = "1.5.3"
+comfy-table = "6.0.0"
 
 # A good set of suggested dependencies can be found in rustup:
 # https://github.com/rust-lang/rustup/blob/master/Cargo.toml

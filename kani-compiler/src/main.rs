@@ -12,6 +12,7 @@
 #![feature(box_patterns)]
 #![feature(once_cell)]
 #![feature(rustc_private)]
+#![feature(more_qualified_paths)]
 extern crate rustc_ast;
 extern crate rustc_codegen_ssa;
 extern crate rustc_data_structures;

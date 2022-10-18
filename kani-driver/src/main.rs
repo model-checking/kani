@@ -1,23 +1,25 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+#![feature(let_chains)]
 
 use anyhow::Result;
+use args::CargoKaniSubcommand;
 use args_toml::join_args;
-
 use std::ffi::OsString;
 use std::path::PathBuf;
 use structopt::StructOpt;
 
 mod args;
 mod args_toml;
+mod assess;
 mod call_cargo;
 mod call_cbmc;
 mod call_cbmc_viewer;
 mod call_goto_cc;
 mod call_goto_instrument;
 mod call_single_file;
-mod call_symtab;
 mod cbmc_output_parser;
+mod cbmc_property_renderer;
 mod concrete_playback;
 mod harness_runner;
 mod metadata;
@@ -40,11 +42,25 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     args.validate();
     let ctx = session::KaniSession::new(args.common_opts)?;
 
+    if matches!(args.command, Some(CargoKaniSubcommand::Assess)) || ctx.args.assess {
+        // --assess requires --enable-unstable, but the subcommand needs manual checking
+        if !ctx.args.enable_unstable {
+            clap::Error::with_description(
+                "Assess is unstable and requires 'cargo kani --enable-unstable assess'",
+                clap::ErrorKind::MissingRequiredArgument,
+            )
+            .exit()
+        }
+        // Run the alternative command instead
+        return assess::cargokani_assess_main(ctx);
+    }
+
     let outputs = ctx.cargo_build()?;
 
     let mut goto_objs: Vec<PathBuf> = Vec::new();
     for symtab in &outputs.symtabs {
-        goto_objs.push(ctx.symbol_table_to_gotoc(symtab)?);
+        let goto_obj_filename = symtab.with_extension("out");
+        goto_objs.push(goto_obj_filename);
     }
 
     if ctx.args.only_codegen {
@@ -81,7 +97,7 @@ fn standalone_main() -> Result<()> {
 
     let outputs = ctx.compile_single_rust_file(&args.input)?;
 
-    let goto_obj = ctx.symbol_table_to_gotoc(&outputs.symtab)?;
+    let goto_obj = outputs.goto_obj;
 
     if ctx.args.only_codegen {
         return Ok(());

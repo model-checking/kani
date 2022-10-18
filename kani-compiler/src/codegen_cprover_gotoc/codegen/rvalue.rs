@@ -204,7 +204,7 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_rvalue_repeat(
         &mut self,
         op: &Operand<'tcx>,
-        sz: &ty::Const<'tcx>,
+        sz: ty::Const<'tcx>,
         res_ty: Ty<'tcx>,
         loc: Location,
     ) -> Expr {
@@ -393,13 +393,21 @@ impl<'tcx> GotocCtx<'tcx> {
         debug!(?rv, "codegen_rvalue");
         match rv {
             Rvalue::Use(p) => self.codegen_operand(p),
-            Rvalue::Repeat(op, sz) => self.codegen_rvalue_repeat(op, sz, res_ty, loc),
+            Rvalue::Repeat(op, sz) => {
+                let sz = self.monomorphize(*sz);
+                self.codegen_rvalue_repeat(op, sz, res_ty, loc)
+            }
             Rvalue::Ref(_, _, p) | Rvalue::AddressOf(_, p) => self.codegen_rvalue_ref(p, res_ty),
             Rvalue::Len(p) => self.codegen_rvalue_len(p),
             // Rust has begun distinguishing "ptr -> num" and "num -> ptr" (providence-relevant casts) but we do not yet:
             // Should we? Tracking ticket: https://github.com/model-checking/kani/issues/1274
             Rvalue::Cast(
-                CastKind::Misc
+                CastKind::IntToInt
+                | CastKind::FloatToFloat
+                | CastKind::FloatToInt
+                | CastKind::IntToFloat
+                | CastKind::FnPtrToPtr
+                | CastKind::PtrToPtr
                 | CastKind::PointerExposeAddress
                 | CastKind::PointerFromExposedAddress,
                 e,
@@ -407,6 +415,15 @@ impl<'tcx> GotocCtx<'tcx> {
             ) => {
                 let t = self.monomorphize(*t);
                 self.codegen_misc_cast(e, t)
+            }
+            Rvalue::Cast(CastKind::DynStar, _, _) => {
+                let ty = self.codegen_ty(res_ty);
+                self.codegen_unimplemented_expr(
+                    "CastKind::DynStar",
+                    ty,
+                    loc,
+                    "https://github.com/model-checking/kani/issues/1784",
+                )
             }
             Rvalue::Cast(CastKind::Pointer(k), e, t) => {
                 let t = self.monomorphize(*t);
@@ -504,7 +521,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 TagEncoding::Direct => {
                     self.codegen_discriminant_field(e, ty).cast_to(self.codegen_ty(res_ty))
                 }
-                TagEncoding::Niche { dataful_variant, niche_variants, niche_start } => {
+                TagEncoding::Niche { untagged_variant, niche_variants, niche_start } => {
                     // This code follows the logic in the ssa codegen backend:
                     // https://github.com/rust-lang/rust/blob/fee75fbe11b1fad5d93c723234178b2a329a3c03/compiler/rustc_codegen_ssa/src/mir/place.rs#L247
                     // See also the cranelift backend:
@@ -550,7 +567,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     };
                     is_niche.ternary(
                         niche_discr,
-                        Expr::int_constant(dataful_variant.as_u32(), result_type),
+                        Expr::int_constant(untagged_variant.as_u32(), result_type),
                     )
                 }
             },
@@ -633,7 +650,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // this is a noop in the case dst_subt is a Projection or Opaque type
                 dst_subt = self.tcx.normalize_erasing_regions(ty::ParamEnv::reveal_all(), dst_subt);
                 match dst_subt.kind() {
-                    ty::Slice(_) | ty::Str | ty::Dynamic(_, _) => {
+                    ty::Slice(_) | ty::Str | ty::Dynamic(_, _, _) => {
                         //TODO: this does the wrong thing on Strings/fixme_boxed_str.rs
                         // if we cast to slice or string, then we know the source is also a slice or string,
                         // so there shouldn't be anything to do

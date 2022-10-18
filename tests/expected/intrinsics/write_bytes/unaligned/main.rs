@@ -1,10 +1,9 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// Checks that `write_bytes` fails when `dst` is not aligned.
-
-// This test is a modified version of the example in
-// https://doc.rust-lang.org/std/ptr/fn.write_bytes.html
+//! Checks that `write_bytes` fails when `dst` is not aligned.
+//! This test is a modified version of the example in
+//! https://doc.rust-lang.org/std/ptr/fn.write_bytes.html
 use std::intrinsics::write_bytes;
 
 #[kani::proof]

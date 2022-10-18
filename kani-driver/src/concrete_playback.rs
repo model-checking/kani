@@ -5,8 +5,7 @@
 //! generating concrete playback unit tests, and adding them to the user's source code.
 
 use crate::args::ConcretePlaybackMode;
-use crate::call_cbmc::VerificationStatus;
-use crate::cbmc_output_parser::VerificationOutput;
+use crate::call_cbmc::{VerificationResult, VerificationStatus};
 use crate::session::KaniSession;
 use anyhow::{Context, Result};
 use concrete_vals_extractor::{extract_harness_values, ConcreteVal};
@@ -24,19 +23,19 @@ impl KaniSession {
     pub fn gen_and_add_concrete_playback(
         &self,
         harness: &HarnessMetadata,
-        verification_output: &VerificationOutput,
+        verification_result: &VerificationResult,
     ) -> Result<()> {
         let playback_mode = match self.args.concrete_playback {
             Some(playback_mode) => playback_mode,
             None => return Ok(()),
         };
 
-        if verification_output.status == VerificationStatus::Success {
+        if verification_result.status == VerificationStatus::Success {
             return Ok(());
         }
 
-        if let Some(processed_items) = &verification_output.processed_items {
-            match extract_harness_values(processed_items) {
+        if let Some(result_items) = &verification_result.results {
+            match extract_harness_values(result_items) {
                 None => println!(
                     "WARNING: Kani could not produce a concrete playback for `{}` because there \
                     were no failing panic checks.",
@@ -302,7 +301,7 @@ struct UnitTest {
 ///     ..., ] }
 /// ```
 mod concrete_vals_extractor {
-    use crate::cbmc_output_parser::{CheckStatus, ParserItem, TraceItem};
+    use crate::cbmc_output_parser::{CheckStatus, Property, TraceItem};
 
     pub struct ConcreteVal {
         pub byte_arr: Vec<u8>,
@@ -311,16 +310,8 @@ mod concrete_vals_extractor {
 
     /// Extract a set of concrete values that trigger one assertion failure.
     /// This will return None if the failure is not related to a user assertion.
-    pub fn extract_harness_values(processed_items: &[ParserItem]) -> Option<Vec<ConcreteVal>> {
-        let result_item =
-            processed_items
-                .iter()
-                .find_map(|item| {
-                    if let ParserItem::Result { result } = item { Some(result) } else { None }
-                })
-                .expect("Missing CBMC result.");
-
-        let mut failures = result_item.iter().filter(|prop| {
+    pub fn extract_harness_values(result_items: &[Property]) -> Option<Vec<ConcreteVal>> {
+        let mut failures = result_items.iter().filter(|prop| {
             prop.property_class() == "assertion" && prop.status == CheckStatus::Failure
         });
 
@@ -331,7 +322,7 @@ mod concrete_vals_extractor {
             let trace = property
                 .trace
                 .as_ref()
-                .expect(&format!("Missing trace for {}", property.property_name().unwrap()));
+                .expect(&format!("Missing trace for {}", property.property_name()));
             let concrete_vals = trace.iter().filter_map(&extract_from_trace_item).collect();
 
             // Print warnings for all the other failures that were not handled in case they expected
@@ -339,7 +330,7 @@ mod concrete_vals_extractor {
             for unhandled in failures {
                 println!(
                     "WARNING: Unable to extract concrete values from multiple failing assertions. Skipping property `{}` with description `{}`.",
-                    unhandled.property_name().unwrap(),
+                    unhandled.property_name(),
                     unhandled.description,
                 );
             }
