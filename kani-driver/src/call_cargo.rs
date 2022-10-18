@@ -62,7 +62,7 @@ impl KaniSession {
 
         // Arguments that will only be passed to the target package.
         let mut pkg_args: Vec<OsString> = vec![];
-        if self.args.mir_linker {
+        if !self.args.legacy_linker {
             // Only provide reachability flag to the target package.
             pkg_args.push("--".into());
             if self.args.function.is_some() {

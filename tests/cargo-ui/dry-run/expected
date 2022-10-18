@@ -1,4 +1,5 @@
-KANIFLAGS="--goto-c --log-level=warn --assertion-reach-checks --reachability=legacy -C symbol-mangling-version=v0" RUSTC=
+KANIFLAGS="--goto-c
+RUSTC=
 RUSTFLAGS="--kani-flags" cargo rustc
 goto-cc 
 goto-cc

@@ -1,7 +1,10 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// Checks that `copy` fails when `dst` is not aligned.
+// kani-flags: --legacy-linker
+//! The MIR linker errors are not quite user friendly. For more details, see
+//! <https://github.com/model-checking/kani/issues/1740>
+//! Checks that `copy` fails when `dst` is not aligned.
 #[kani::proof]
 fn test_copy_unaligned() {
     let arr: [i32; 3] = [0, 1, 0];
