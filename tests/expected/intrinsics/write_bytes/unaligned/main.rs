@@ -1,9 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// kani-flags: --legacy-linker
-//! The MIR linker errors are not quite user friendly. For more details, see
-//! <https://github.com/model-checking/kani/issues/1740>
 //! Checks that `write_bytes` fails when `dst` is not aligned.
 //! This test is a modified version of the example in
 //! https://doc.rust-lang.org/std/ptr/fn.write_bytes.html
