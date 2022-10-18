@@ -24,7 +24,7 @@ jobs:
           os: ${{ matrix.os }}
 
       - name: Build Kani
-        run: cargo build
+        run: cargo build-dev
 
       - name: Run Kani's slow tests
         run: ./scripts/kani-slow-tests.sh
