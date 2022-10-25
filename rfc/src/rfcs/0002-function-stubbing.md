@@ -123,11 +123,10 @@ In the documentation, we will discourage stubbing private functions/methods exce
 As a convenience, we will provide a macro `kani::stub_set` that allows users to specify sets of stubs that can be applied to multiple harnesses:
 
 ```rust
-kani::stub_set! {
-    my_io_stubs,
+kani::stub_set!(my_io_stubs(
     stub(std::fs::read, my_read),
     stub(std::fs::write, my_write),
-}
+));
 ```
 
 When declaring a harness, users can use the `#[kani::use_stub_set(<stub_set_name>)]` attribute to apply the stub set:
@@ -144,11 +143,10 @@ The name of the stub set will be resolved through the module path (i.e., they ar
 A similar mechanism can be used to aggregate stub sets:
 
 ```rust
-kani::stub_set! {
-    all_my_stubs,
+kani::stub_set!(all_my_stubs(
     use_stub_set(my_io_stubs),
     use_stub_set(my_other_stubs),
-}
+));
 ```
 
 ### Error conditions
