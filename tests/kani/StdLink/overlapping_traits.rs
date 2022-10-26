@@ -1,5 +1,7 @@
-// Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Kani Contributors
+// See GitHub history for details.
 
 //! This test is to check how Kani handle some std functions. The original issue was:
 //! <https://github.com/model-checking/kani/issues/564>
@@ -33,7 +35,6 @@ impl AgeWidget for Form {
 }
 
 #[kani::proof]
-#[kani::unwind(10)]
 pub fn main() {
     let form = Form { username: "rustacean".to_owned(), age: 28 };
 

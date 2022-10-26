@@ -1,12 +1,12 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// This test takes too long with all the std symbols. Use --legacy-linker for now.
+// The original harness takes too long so we introduced a simplified version to run in CI.
 // kani-flags: --harness simplified
 
 //! This is a regression test for size_and_align_of_dst computing the
 //! size and alignment of a dynamically-sized type like
 //! Arc<Mutex<dyn Subscriber>>.
-//! This is a slightly simplified version of the original harness from:
+//! We added a simplified version of the original harness from:
 //! <https://github.com/model-checking/kani/issues/426>
 
 use std::sync::Arc;
