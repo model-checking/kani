@@ -216,7 +216,12 @@ pub(crate) fn cargokani_assess_main(mut ctx: KaniSession) -> Result<()> {
     ctx.args.unwind = Some(1);
     ctx.args.tests = true;
     ctx.args.output_format = crate::args::OutputFormat::Terse;
-    ctx.args.jobs = Some(None); // -j, num_cpu
+    ctx.args.codegen_pub_fns = true;
+    if ctx.args.jobs.is_none() {
+        // assess will default to fully parallel instead of single-threaded.
+        // can be overridden with e.g. `cargo kani --enable-unstable -j 8 assess`
+        ctx.args.jobs = Some(None); // -j, num_cpu
+    }
 
     let outputs = ctx.cargo_build()?;
     let metadata = ctx.collect_kani_metadata(&outputs.metadata)?;
@@ -269,10 +274,14 @@ pub(crate) fn cargokani_assess_main(mut ctx: KaniSession) -> Result<()> {
     let results = runner.check_all_harnesses(&harnesses)?;
 
     // two tables we want to print:
-    // 1. "Reason for failure" map harness to reason, aggredate together
+    // 1. "Reason for failure" will count reasons why harnesses did not succeed
     //    e.g.  successs   6
     //          unwind     234
     println!("{}", build_failure_reasons_table(&results));
+
+    // TODO: Should add another interesting table: Count the actually hit constructs (e.g. 'try', 'InlineAsm', etc)
+    // The above table will just say "unsupported_construct   6" without telling us which constructs.
+
     // 2. "Test cases that might be good proof harness starting points"
     //    e.g.  All Successes and maybe Assertions?
     println!("{}", build_promising_tests_table(&results));

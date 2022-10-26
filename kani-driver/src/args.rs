@@ -137,6 +137,12 @@ pub struct KaniArgs {
     #[structopt(long, hidden_short_help(true))]
     pub only_codegen: bool,
 
+    /// Include all publicly-visible symbols in the generated goto binary, not just those reachable from
+    /// a proof harness. Useful when attempting to verify things that were not annotated with kani
+    /// proof attributes.
+    #[structopt(long, hidden = true, requires("enable-unstable"))]
+    pub codegen_pub_fns: bool,
+
     /// Disable the new MIR Linker. Using this option may result in missing symbols from the
     /// `std` library. See <https://github.com/model-checking/kani/issues/1213> for more details.
     #[structopt(long, hidden = true)]
@@ -242,16 +248,29 @@ impl KaniArgs {
         // if we flip the default, this will become: !self.no_restrict_vtable
     }
 
+    /// Assertion reachability checks should be disabled when running with --visualize
     pub fn assertion_reach_checks(&self) -> bool {
-        // Turn them off when visualizing an error trace.
         !self.no_assertion_reach_checks && !self.visualize
     }
 
+    /// Suppress our default value, if the user has supplied it explicitly in --cbmc-args
     pub fn cbmc_object_bits(&self) -> Option<u32> {
         if self.cbmc_args.contains(&OsString::from("--object-bits")) {
             None
         } else {
             Some(DEFAULT_OBJECT_BITS)
+        }
+    }
+
+    /// Determine which symbols Kani should codegen (i.e. by slicing away symbols
+    /// that are considered unreachable.)
+    pub fn reachability_mode(&self) -> ReachabilityMode {
+        if self.legacy_linker {
+            ReachabilityMode::Legacy
+        } else if self.function.is_some() || self.codegen_pub_fns {
+            ReachabilityMode::AllPubFns
+        } else {
+            ReachabilityMode::ProofHarnesses
         }
     }
 
@@ -263,6 +282,12 @@ impl KaniArgs {
             Some(Some(x)) => Some(x), // -j=x
         }
     }
+}
+
+pub enum ReachabilityMode {
+    Legacy,
+    ProofHarnesses,
+    AllPubFns,
 }
 
 arg_enum! {
