@@ -506,10 +506,10 @@ impl<'tcx> GotocCtx<'tcx> {
         self.codegen_ty(typ).to_pointer()
     }
 
-    /// A reference to a Struct<dyn T> { .., data: T} is translated to
+    /// A reference to a Struct\<dyn T\> { .., data: T} is translated to
     /// struct RefToTrait {
-    ///     Struct<dyn T>* data;
-    ///     Metadata<dyn T>* vtable;
+    ///     Struct\<dyn T\>* data;
+    ///     Metadata\<dyn T\>* vtable;
     /// }
     /// Note: T is a `typedef` but data represents the space in memory occupied by
     /// the concrete type. We just don't know its size during compilation time.
@@ -1264,8 +1264,8 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Dynamic function calls first parameter is self which must be one of the following:
     ///
     /// As of Jul 2022:
-    /// P = &Self | &mut Self | Box<Self> | Rc<Self> | Arc<Self>
-    /// S = P | Pin<P>
+    /// P = &Self | &mut Self | Box\<Self\> | Rc\<Self\> | Arc\<Self\>
+    /// S = P | Pin\<P\>
     ///
     /// See <https://doc.rust-lang.org/reference/items/traits.html#object-safety> for more details.
     fn codegen_dynamic_function_sig(&mut self, sig: PolyFnSig<'tcx>) -> Type {

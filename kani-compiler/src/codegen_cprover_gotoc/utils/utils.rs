@@ -90,7 +90,7 @@ impl<'tcx> GotocCtx<'tcx> {
         RAW_PTR_FROM_BOX.iter().fold(box_expr, |expr, name| expr.member(name, &self.symbol_table))
     }
 
-    /// Box<T> initializer
+    /// Box\<T\> initializer
     ///
     /// Traverse over the Box representation and only initialize the raw_ptr field. All other
     /// members are left uninitialized.
@@ -177,7 +177,7 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    /// Best effort check if the struct represents a std::ptr::NonNull<T>.
+    /// Best effort check if the struct represents a std::ptr::NonNull\<T\>.
     ///
     /// This assumes the following structure. Any changes to this will break this code.
     /// ```
