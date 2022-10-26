@@ -1264,7 +1264,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Dynamic function calls first parameter is self which must be one of the following:
     ///
     /// As of Jul 2022:
-    /// `P = &Self | &mut Self | Box<Self> | Rc<Self> | Arc<Self>
+    /// `P = &Self | &mut Self | Box<Self> | Rc<Self> | Arc<Self>`
     /// `S = P | Pin<P>`
     ///
     /// See <https://doc.rust-lang.org/reference/items/traits.html#object-safety> for more details.
