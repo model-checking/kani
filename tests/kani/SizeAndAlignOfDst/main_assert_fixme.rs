@@ -1,12 +1,13 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// This test takes too long with all the std symbols. Use --legacy-linker for now.
-// kani-flags: --legacy-linker
+// The original harness takes too long so we introduced a simplified version to run in CI.
+// kani-flags: --harness simplified
 
 //! This is a regression test for size_and_align_of_dst computing the
 //! size and alignment of a dynamically-sized type like
 //! Arc<Mutex<dyn Subscriber>>.
-//! https://github.com/model-checking/kani/issues/426
+//! We added a simplified version of the original harness from:
+//! <https://github.com/model-checking/kani/issues/426>
 
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -38,8 +39,16 @@ impl Subscriber for DummySubscriber {
 }
 
 #[kani::proof]
+#[kani::unwind(2)]
+fn simplified() {
+    let s: Arc<Mutex<dyn Subscriber>> = Arc::new(Mutex::new(DummySubscriber::new()));
+    let data = s.lock().unwrap();
+    assert!(data.get() == 0);
+}
+
+#[kani::proof]
 #[kani::unwind(1)]
-fn main() {
+fn original() {
     let s: Arc<Mutex<dyn Subscriber>> = Arc::new(Mutex::new(DummySubscriber::new()));
     let mut data = s.lock().unwrap();
     data.increment();
