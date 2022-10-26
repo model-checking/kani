@@ -56,4 +56,4 @@ See our [security disclosure instructions](.github/SECURITY.md) for more details
 
 Kani is distributed under the terms of both the MIT license and the Apache License (Version 2.0).
 See [LICENSE-APACHE](LICENSE-APACHE) and [LICENSE-MIT](LICENSE-MIT) for details.
-We will ask you to confirm the licensing of your contribution.
+By submitting a pull request, you confirm that your contribution is made under the terms of the Apache 2.0 and MIT licenses.
