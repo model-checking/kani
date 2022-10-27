@@ -7,8 +7,11 @@
 #include <stdio.h>
 #include <string.h>
 
+// Note: the Kani compiler changes `void` return types to the empty tuple `()`
+// AKA `VoidUnit`. Because of that, we need to declare its type `struct Unit`
+// and the extern instance `VoidUnit` here.
 struct Unit;
-struct Unit VoidUnit;
+extern struct Unit VoidUnit;
 
 size_t my_add(size_t num, ...)
 {

@@ -8,6 +8,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+// Note: the Kani compiler changes `void` return types to the empty tuple `()`
+// AKA `VoidUnit`. Because of that, we need to declare its type `struct Unit`
+// and the extern instance `VoidUnit` here.
+struct Unit;
+extern struct Unit VoidUnit;
+
 // `assert` then `assume`
 #define __KANI_assert(cond, msg)            \
     do {                                    \
@@ -56,8 +62,7 @@ uint8_t *__rust_alloc_zeroed(size_t size, size_t align)
     __KANI_assert(__KANI_is_nonzero_power_of_two(align), "Alignment is power of two");
     return calloc(1, size);
 }
-struct Unit;
-struct Unit VoidUnit;
+
 // This is a C implementation of the __rust_dealloc function.
 // https://stdrs.dev/nightly/x86_64-unknown-linux-gnu/alloc/alloc/fn.__rust_dealloc.html
 // It has the following Rust signature:
