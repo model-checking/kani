@@ -77,7 +77,7 @@ pub trait Transformer: Sized {
         transformed_typ.array_of(*size)
     }
 
-    /// Transforms a CPROVER integer type (`__CPROVER_bool x`)
+    /// Transforms a CPROVER boolean type (`__CPROVER_bool x`)
     fn transform_type_bool(&mut self) -> Type {
         Type::bool()
     }
