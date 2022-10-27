@@ -65,6 +65,8 @@ pub fn machine_model_symbols(mm: &MachineModel) -> Vec<Symbol> {
         ),
         int_constant("__CPROVER_architecture_wchar_t_width", mm.wchar_t_width),
         int_constant("__CPROVER_architecture_word_size", mm.word_size),
+        // `__CPROVER_rounding_mode` doesn't use `integer` type.
+        // More details in <https://github.com/diffblue/cbmc/issues/7282>
         int_constant_c_int("__CPROVER_rounding_mode", mm.rounding_mode),
     ]
 }
