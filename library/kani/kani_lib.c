@@ -8,9 +8,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-// Note: the Kani compiler changes `void` return types to the empty tuple `()`
-// AKA `VoidUnit`. Because of that, we need to declare its type `struct Unit`
-// and the extern instance `VoidUnit` here.
+/// Mapping unit to `void` works for functions with no return type but not for
+/// variables with type unit. We treat both uniformly by declaring an empty
+/// struct type: `struct Unit {}` and a global variable `struct Unit VoidUnit`
+/// returned by all void functions (both declared by the Kani compiler).
 struct Unit;
 extern struct Unit VoidUnit;
 

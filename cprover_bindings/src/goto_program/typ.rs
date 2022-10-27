@@ -46,7 +46,7 @@ pub enum Type {
     IncompleteStruct { tag: InternedString },
     /// `union x {}`
     IncompleteUnion { tag: InternedString },
-    /// `integer`
+    /// `integer`: A machine independent integer
     Integer,
     /// CBMC specific. `typ x[__CPROVER_infinity()]`
     InfiniteArray { typ: Box<Type> },
@@ -289,7 +289,6 @@ impl Type {
             CInteger(CIntType::Bool) => Some(mm.bool_width),
             CInteger(CIntType::Char) => Some(mm.char_width),
             CInteger(CIntType::Int) => Some(mm.int_width),
-            Integer => Some(mm.int_width),
             Signedbv { width } | Unsignedbv { width } => Some(*width),
             _ => None,
         }
@@ -347,7 +346,7 @@ impl Type {
             IncompleteStruct { .. } => unreachable!("IncompleteStruct doesn't have a sizeof"),
             IncompleteUnion { .. } => unreachable!("IncompleteUnion doesn't have a sizeof"),
             InfiniteArray { .. } => unreachable!("InfiniteArray doesn't have a sizeof"),
-            Integer => st.machine_model().int_width,
+            Integer => unreachable!("Integer doesn't have a sizeof"),
             Pointer { .. } => st.machine_model().pointer_width,
             Signedbv { width } => *width,
             Struct { components, .. } => {
