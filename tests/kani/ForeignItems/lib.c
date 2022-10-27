@@ -54,7 +54,11 @@ struct Foo2 {
 
 uint32_t S = 12;
 
-struct Unit update_static() { S++; return VoidUnit; }
+struct Unit update_static()
+{
+    S++;
+    return VoidUnit;
+}
 
 uint32_t takes_int(uint32_t i) { return i + 2; }
 
@@ -69,7 +73,11 @@ uint32_t takes_ptr_option(uint32_t *p)
     }
 }
 
-struct Unit mutates_ptr(uint32_t *p) { *p -= 1; return VoidUnit; }
+struct Unit mutates_ptr(uint32_t *p)
+{
+    *p -= 1;
+    return VoidUnit;
+}
 
 uint32_t name_in_c(uint32_t i) { return i + 2; }
 
