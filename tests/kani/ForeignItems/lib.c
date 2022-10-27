@@ -7,6 +7,9 @@
 #include <stdio.h>
 #include <string.h>
 
+struct Unit;
+struct Unit VoidUnit;
+
 size_t my_add(size_t num, ...)
 {
     va_list argp;
@@ -48,7 +51,7 @@ struct Foo2 {
 
 uint32_t S = 12;
 
-void update_static() { S++; }
+struct Unit update_static() { S++; return VoidUnit; }
 
 uint32_t takes_int(uint32_t i) { return i + 2; }
 
@@ -63,7 +66,7 @@ uint32_t takes_ptr_option(uint32_t *p)
     }
 }
 
-void mutates_ptr(uint32_t *p) { *p -= 1; }
+struct Unit mutates_ptr(uint32_t *p) { *p -= 1; return VoidUnit; }
 
 uint32_t name_in_c(uint32_t i) { return i + 2; }
 

@@ -56,7 +56,8 @@ uint8_t *__rust_alloc_zeroed(size_t size, size_t align)
     __KANI_assert(__KANI_is_nonzero_power_of_two(align), "Alignment is power of two");
     return calloc(1, size);
 }
-
+struct Unit;
+struct Unit VoidUnit;
 // This is a C implementation of the __rust_dealloc function.
 // https://stdrs.dev/nightly/x86_64-unknown-linux-gnu/alloc/alloc/fn.__rust_dealloc.html
 // It has the following Rust signature:
@@ -67,7 +68,7 @@ uint8_t *__rust_alloc_zeroed(size_t size, size_t align)
 // definition.
 // For safety, refer to the documentation of GlobalAlloc::dealloc:
 // https://doc.rust-lang.org/std/alloc/trait.GlobalAlloc.html#tymethod.dealloc
-void __rust_dealloc(uint8_t *ptr, size_t size, size_t align)
+struct Unit __rust_dealloc(uint8_t *ptr, size_t size, size_t align)
 {
     // TODO: Ensure we are doing the right thing with align
     // https://github.com/model-checking/kani/issues/1168
@@ -76,6 +77,7 @@ void __rust_dealloc(uint8_t *ptr, size_t size, size_t align)
     __KANI_assert(__CPROVER_OBJECT_SIZE(ptr) == size,
                   "rust_dealloc must be called on an object whose allocated size matches its layout");
     free(ptr);
+    return VoidUnit;
 }
 
 // This is a C implementation of the __rust_realloc function that has the following signature:
