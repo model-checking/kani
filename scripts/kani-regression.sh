@@ -70,8 +70,6 @@ for testp in "${TESTS[@]}"; do
   suite=${testl[0]}
   mode=${testl[1]}
   echo "Check compiletest suite=$suite mode=$mode"
-  # Note: `cargo-kani` tests fail if we do not add `$(pwd)` to `--build-base`
-  # Tracking issue: https://github.com/model-checking/kani/issues/755
   cargo run -p compiletest --quiet -- --suite $suite --mode $mode --quiet
 done
 
