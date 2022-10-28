@@ -1,6 +1,5 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -9,6 +8,8 @@
 void  free(void *ptr);
 void *memcpy(void *dst, const void *src, size_t n);
 void *calloc(size_t nmemb, size_t size);
+
+typedef __CPROVER_bool bool;
 
 // `assert` then `assume`
 #define __KANI_assert(cond, msg)            \
