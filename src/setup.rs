@@ -20,10 +20,7 @@ const TARGET: &str = env!("TARGET");
 
 /// Where Kani has been installed. Typically `~/.kani/kani-1.x/`
 pub fn kani_dir() -> PathBuf {
-    home::home_dir()
-        .expect("Couldn't find home dir?")
-        .join(".kani")
-        .join(format!("kani-{VERSION}"))
+    home::home_dir().expect("Couldn't find home dir?").join(".kani").join(format!("kani-{VERSION}"))
 }
 
 /// Fast check to see if we look setup already

@@ -752,8 +752,7 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Array(et, len) => {
                 let evaluated_len = len.try_eval_usize(self.tcx, self.param_env()).unwrap();
                 let array_name = format!("[{}; {evaluated_len}]", self.ty_mangled_name(*et));
-                let array_pretty_name =
-                    format!("[{}; {evaluated_len}]", self.ty_pretty_name(*et));
+                let array_pretty_name = format!("[{}; {evaluated_len}]", self.ty_pretty_name(*et));
                 // wrap arrays into struct so that one can take advantage of struct copy in C
                 //
                 // struct [T; n] {

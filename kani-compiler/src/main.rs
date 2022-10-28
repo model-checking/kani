@@ -180,9 +180,7 @@ fn generate_rustc_args(args: &ArgMatches) -> Vec<String> {
 /// Convert an argument from OsStr to String.
 /// If conversion fails, panic with a custom message.
 fn convert_arg(arg: &OsStr) -> String {
-    arg.to_str()
-        .expect(format!("[Error] Cannot parse argument \"{arg:?}\".").as_str())
-        .to_string()
+    arg.to_str().expect(format!("[Error] Cannot parse argument \"{arg:?}\".").as_str()).to_string()
 }
 
 /// Get the sysroot, for our specific version of Rust nightly.
