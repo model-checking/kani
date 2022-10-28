@@ -50,7 +50,7 @@ impl<'tcx> GotocCtx<'tcx> {
             let body = vec![
                 self.codegen_assert_assume_false(
                     PropertyClass::SafetyCheck,
-                    format!("Reached unstable vtable comparison '{:?}'", op).as_str(),
+                    format!("Reached unstable vtable comparison '{op:?}'").as_str(),
                     loc,
                 ),
                 ret_type.nondet().as_stmt(loc).with_location(loc),
@@ -853,7 +853,7 @@ impl<'tcx> GotocCtx<'tcx> {
             let drop_sym = self.ensure(&drop_sym_name, |ctx, name| {
                 // Function body
                 let unimplemented = ctx.codegen_unimplemented_stmt(
-                    format!("drop_in_place for {}", drop_instance).as_str(),
+                    format!("drop_in_place for {drop_instance}").as_str(),
                     Location::none(),
                     "https://github.com/model-checking/kani/issues/281",
                 );
@@ -918,7 +918,7 @@ impl<'tcx> GotocCtx<'tcx> {
         };
         let check = Expr::eq(cbmc_size, vt_size);
         let assert_msg =
-            format!("Correct CBMC vtable size for {:?} (MIR type {:?})", ty, operand_type.kind());
+            format!("Correct CBMC vtable size for {ty:?} (MIR type {:?})", operand_type.kind());
         let size_assert = self.codegen_sanity(check, &assert_msg, Location::none());
         Stmt::block(vec![decl, size_assert], Location::none())
     }
@@ -935,7 +935,7 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Dynamic(..) => dst_mir_type,
             _ => unimplemented!("Cannot codegen_vtable for type {:?}", dst_mir_type.kind()),
         };
-        assert!(trait_type.is_trait(), "VTable trait type {} must be a trait type", trait_type);
+        assert!(trait_type.is_trait(), "VTable trait type {trait_type} must be a trait type");
         let binders = match trait_type.kind() {
             ty::Dynamic(binders, ..) => binders,
             _ => unimplemented!("Cannot codegen_vtable for type {:?}", dst_mir_type.kind()),
@@ -944,7 +944,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let src_name = self.ty_mangled_name(src_mir_type);
         // The name needs to be the same as inserted in typ.rs
         let vtable_name = self.vtable_name(trait_type).intern();
-        let vtable_impl_name = format!("{}_impl_for_{}", vtable_name, src_name);
+        let vtable_impl_name = format!("{vtable_name}_impl_for_{src_name}");
 
         self.ensure_global_var(
             vtable_impl_name,

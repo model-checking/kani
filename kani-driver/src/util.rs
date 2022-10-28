@@ -79,7 +79,7 @@ pub fn render_command(cmd: &Command) -> OsString {
 
 /// Generate the filename for a specialized harness from the base linked object
 pub fn specialized_harness_name(linked_obj: &Path, harness_filename: &str) -> PathBuf {
-    alter_extension(linked_obj, &format!("for-{}.out", harness_filename))
+    alter_extension(linked_obj, &format!("for-{harness_filename}.out"))
 }
 
 #[cfg(test)]

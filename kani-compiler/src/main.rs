@@ -181,7 +181,7 @@ fn generate_rustc_args(args: &ArgMatches) -> Vec<String> {
 /// If conversion fails, panic with a custom message.
 fn convert_arg(arg: &OsStr) -> String {
     arg.to_str()
-        .expect(format!("[Error] Cannot parse argument \"{:?}\".", arg).as_str())
+        .expect(format!("[Error] Cannot parse argument \"{arg:?}\".").as_str())
         .to_string()
 }
 
@@ -213,7 +213,7 @@ fn toolchain_sysroot_path() -> PathBuf {
     let path = rustup.join("toolchains").join(toolchain);
 
     if !path.exists() {
-        panic!("Couldn't find Kani Rust toolchain {}. Tried: {}", toolchain, path.display());
+        panic!("Couldn't find Kani Rust toolchain {toolchain}. Tried: {}", path.display());
     }
     path
 }

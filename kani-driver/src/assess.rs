@@ -227,7 +227,7 @@ pub(crate) fn cargokani_assess_main(mut ctx: KaniSession) -> Result<()> {
     // however this will have to wait until a refactoring of how we aggregate metadata
     // from multiple crates together here.
     // tracking for that: https://github.com/model-checking/kani/issues/1758
-    println!("Analyzed {} crates", crate_count);
+    println!("Analyzed {crate_count} crates");
 
     if !metadata.unsupported_features.is_empty() {
         println!("{}", build_unsupported_features_table(&metadata));

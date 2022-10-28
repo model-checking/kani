@@ -180,7 +180,7 @@ pub fn kani_cbmc_output_filter(
     // implement a trait `Printer`.
     let formatted_item = format_item(&processed_item, output_format);
     if let Some(fmt_item) = formatted_item {
-        println!("{}", fmt_item);
+        println!("{fmt_item}");
     }
     // TODO: Record processed items and dump them into a JSON file
     // <https://github.com/model-checking/kani/issues/942>
@@ -267,16 +267,16 @@ pub fn format_result(properties: &Vec<Property>, show_checks: bool) -> String {
         }
 
         if show_checks {
-            let check_id = format!("Check {}: {}\n", index, name);
-            let status_msg = format!("\t - Status: {}\n", status);
-            let description_msg = format!("\t - Description: \"{}\"\n", description);
+            let check_id = format!("Check {index}: {name}\n");
+            let status_msg = format!("\t - Status: {status}\n");
+            let description_msg = format!("\t - Description: \"{description}\"\n");
 
             result_str.push_str(&check_id);
             result_str.push_str(&status_msg);
             result_str.push_str(&description_msg);
 
             if !location.is_missing() {
-                let location_msg = format!("\t - Location: {}\n", location);
+                let location_msg = format!("\t - Location: {location}\n");
                 result_str.push_str(&location_msg);
             }
             result_str.push('\n');
@@ -291,16 +291,16 @@ pub fn format_result(properties: &Vec<Property>, show_checks: bool) -> String {
         result_str.push_str("\nVERIFICATION RESULT:");
     }
 
-    let summary = format!("\n ** {} of {} failed", number_tests_failed, properties.len());
+    let summary = format!("\n ** {number_tests_failed} of {} failed", properties.len());
     result_str.push_str(&summary);
 
     let mut other_status = Vec::<String>::new();
     if number_tests_undetermined > 0 {
-        let undetermined_str = format!("{} undetermined", number_tests_undetermined);
+        let undetermined_str = format!("{number_tests_undetermined} undetermined");
         other_status.push(undetermined_str);
     }
     if number_tests_unreachable > 0 {
-        let unreachable_str = format!("{} unreachable", number_tests_unreachable);
+        let unreachable_str = format!("{number_tests_unreachable} unreachable");
         other_status.push(unreachable_str);
     }
     if !other_status.is_empty() {
@@ -317,7 +317,7 @@ pub fn format_result(properties: &Vec<Property>, show_checks: bool) -> String {
 
     let verification_result =
         if number_tests_failed == 0 { style("SUCCESSFUL").green() } else { style("FAILED").red() };
-    let overall_result = format!("\nVERIFICATION:- {}\n", verification_result);
+    let overall_result = format!("\nVERIFICATION:- {verification_result}\n");
     result_str.push_str(&overall_result);
 
     // Ideally, we should generate two `ParserItem::Message` and push them
@@ -342,7 +342,7 @@ pub fn format_result(properties: &Vec<Property>, show_checks: bool) -> String {
 /// Attempts to build a message for a failed property with as much detailed
 /// information on the source location as possible.
 fn build_failure_message(description: String, trace: &Option<Vec<TraceItem>>) -> String {
-    let backup_failure_message = format!("Failed Checks: {}\n", description);
+    let backup_failure_message = format!("Failed Checks: {description}\n");
     if trace.is_none() {
         return backup_failure_message;
     }
@@ -622,7 +622,7 @@ fn annotate_properties_with_reach_results(
         // Capture the ID in the reachability check
         let check_id =
             reach_desc_pat.captures(description.as_str()).unwrap().get(0).unwrap().as_str();
-        let check_id_str = format!("[{}]", check_id);
+        let check_id_str = format!("[{check_id}]");
         // Get the status and insert into `reach_map`
         let status = reach_check.status;
         let res_ins = reach_map.insert(check_id_str, status);

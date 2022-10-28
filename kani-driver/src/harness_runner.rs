@@ -60,7 +60,7 @@ impl<'sess> HarnessRunner<'sess> {
                 .par_iter()
                 .map(|harness| -> Result<HarnessResult<'a>> {
                     let harness_filename = harness.pretty_name.replace("::", "-");
-                    let report_dir = self.report_base.join(format!("report-{}", harness_filename));
+                    let report_dir = self.report_base.join(format!("report-{harness_filename}"));
                     let specialized_obj =
                         specialized_harness_name(self.linked_obj, &harness_filename);
                     if !self.retain_specialized_harnesses {

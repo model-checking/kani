@@ -226,7 +226,7 @@ impl std::fmt::Display for SourceLocation {
         }
         if let Some(function) = self.function.clone() {
             let demangled_function = demangle(&function);
-            write!(f, " in function {:#}", demangled_function)?;
+            write!(f, " in function {demangled_function:#}")?;
         }
         Ok(())
     }
@@ -283,8 +283,8 @@ pub enum TraceData {
 impl std::fmt::Display for TraceData {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::NonBool(trace_data) => write!(f, "{}", trace_data),
-            Self::Bool(trace_data) => write!(f, "{}", trace_data),
+            Self::NonBool(trace_data) => write!(f, "{trace_data}"),
+            Self::Bool(trace_data) => write!(f, "{trace_data}"),
         }
     }
 }
@@ -306,7 +306,7 @@ impl std::fmt::Display for CheckStatus {
             CheckStatus::Unreachable => style("UNREACHABLE").yellow(),
             CheckStatus::Undetermined => style("UNDETERMINED").yellow(),
         };
-        write!(f, "{}", check_str)
+        write!(f, "{check_str}")
     }
 }
 
@@ -438,7 +438,7 @@ impl<'a, 'b> Iterator for Parser<'a, 'b> {
                     }
                 }
                 Err(error) => {
-                    panic!("Error: Got error {} while parsing the output.", error);
+                    panic!("Error: Got error {error} while parsing the output.");
                 }
             }
         }

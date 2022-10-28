@@ -23,7 +23,7 @@ pub fn kani_dir() -> PathBuf {
     home::home_dir()
         .expect("Couldn't find home dir?")
         .join(".kani")
-        .join(format!("kani-{}", VERSION))
+        .join(format!("kani-{VERSION}"))
 }
 
 /// Fast check to see if we look setup already
@@ -138,14 +138,14 @@ fn setup_python_deps(kani_dir: &Path, os: &os_info::Info) -> Result<()> {
 
 /// The filename of the release bundle
 fn download_filename() -> String {
-    format!("kani-{}-{}.tar.gz", VERSION, TARGET)
+    format!("kani-{VERSION}-{TARGET}.tar.gz")
 }
 
 /// The download URL for this version of Kani
 fn download_url() -> String {
-    let tag: &str = &format!("kani-{}", VERSION);
+    let tag: &str = &format!("kani-{VERSION}");
     let file: &str = &download_filename();
-    format!("https://github.com/model-checking/kani/releases/download/{}/{}", tag, file)
+    format!("https://github.com/model-checking/kani/releases/download/{tag}/{file}")
 }
 
 /// Give users a better error message than "404" if we're on an unsupported platform.

@@ -134,7 +134,7 @@ fn setup_nixos_patchelf(kani_dir: &Path) -> Result<()> {
     let rpath_raw = std::str::from_utf8(&rpath_output.stdout)?;
     // The output is in quotes, remove them:
     let rpath_prefix = rpath_raw.trim().trim_matches('"');
-    let rpath = format!("{}/lib", rpath_prefix);
+    let rpath = format!("{rpath_prefix}/lib");
 
     let patch_interp = |file: &Path| -> Result<()> {
         Command::new("patchelf").args(&["--set-interpreter", interp]).arg(file).run()
