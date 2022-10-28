@@ -103,19 +103,19 @@ impl NameTransformer {
         let suffix = suffix.map(fix_name);
 
         // Add `tag-` back in if it was present
-        let with_prefix = format!("{}{}", prefix, name);
+        let with_prefix = format!("{prefix}{name}");
 
         // Reattach the variable name
         let result = match suffix {
             None => with_prefix,
-            Some(suffix) => format!("{}::{}", with_prefix, suffix),
+            Some(suffix) => format!("{with_prefix}::{suffix}"),
         };
 
         // Ensure result has not been used before
         let result = if self.used_names.contains(&result) {
             let mut suffix = 0;
             loop {
-                let result = format!("{}_{}", result, suffix);
+                let result = format!("{result}_{suffix}");
                 if !self.used_names.contains(&result) {
                     break result;
                 }

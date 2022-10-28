@@ -72,7 +72,7 @@ impl Tree {
             return Ok(());
         }
         // Write `p` spaces into the formatter.
-        f.write_fmt(format_args!("{:1$}", "", p))?;
+        f.write_fmt(format_args!("{:p$}", ""))?;
         f.write_str(&self.data.name)?;
         if self.data.num_pass > 0 {
             f.write_fmt(format_args!(" ✔️ {}", self.data.num_pass))?;

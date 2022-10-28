@@ -70,8 +70,8 @@ impl<'test> TestCx<'test> {
 
     fn compose_and_run(&self, mut command: Command) -> ProcRes {
         let cmdline = {
-            let cmdline = format!("{:?}", command);
-            logv(self.config, format!("executing {}", cmdline));
+            let cmdline = format!("{command:?}");
+            logv(self.config, format!("executing {cmdline}"));
             cmdline
         };
 
@@ -102,10 +102,10 @@ impl<'test> TestCx<'test> {
     }
 
     fn dump_output(&self, out: &str, err: &str) {
-        let revision = if let Some(r) = self.revision { format!("{}.", r) } else { String::new() };
+        let revision = if let Some(r) = self.revision { format!("{r}.") } else { String::new() };
 
-        self.dump_output_file(out, &format!("{}out", revision));
-        self.dump_output_file(err, &format!("{}err", revision));
+        self.dump_output_file(out, &format!("{revision}out"));
+        self.dump_output_file(err, &format!("{revision}err"));
         self.maybe_dump_to_stdout(out, err);
     }
 
@@ -143,17 +143,17 @@ impl<'test> TestCx<'test> {
     fn maybe_dump_to_stdout(&self, out: &str, err: &str) {
         if self.config.verbose {
             println!("------stdout------------------------------");
-            println!("{}", out);
+            println!("{out}");
             println!("------stderr------------------------------");
-            println!("{}", err);
+            println!("{err}");
             println!("------------------------------------------");
         }
     }
 
     fn error(&self, err: &str) {
         match self.revision {
-            Some(rev) => println!("\nerror in revision `{}`: {}", rev, err),
-            None => println!("\nerror: {}", err),
+            Some(rev) => println!("\nerror in revision `{rev}`: {err}"),
+            None => println!("\nerror: {err}"),
         }
     }
 
@@ -215,7 +215,7 @@ impl<'test> TestCx<'test> {
             let lines = TestCx::verify_expect_fail(&proc_res.stdout);
             if !lines.is_empty() {
                 self.fatal_proc_rec(
-                    &format!("test failed: expected failure in lines {:?}, got success", lines),
+                    &format!("test failed: expected failure in lines {lines:?}, got success"),
                     &proc_res,
                 )
             }
@@ -448,7 +448,7 @@ pub struct ProcRes {
 impl ProcRes {
     pub fn fatal(&self, err: Option<&str>, on_failure: impl FnOnce()) -> ! {
         if let Some(e) = err {
-            println!("\nerror: {}", e);
+            println!("\nerror: {e}");
         }
         print!(
             "\

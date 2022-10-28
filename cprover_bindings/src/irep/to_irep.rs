@@ -347,7 +347,7 @@ impl ToIrep for Location {
             Location::BuiltinFunction { line, function_name } => Irep::just_named_sub(linear_map![
                 (
                     IrepId::File,
-                    Irep::just_string_id(format!("<builtin-library-{}>", function_name)),
+                    Irep::just_string_id(format!("<builtin-library-{function_name}>")),
                 ),
                 (IrepId::Function, Irep::just_string_id(function_name.to_string())),
             ])

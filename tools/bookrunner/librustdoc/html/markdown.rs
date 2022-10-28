@@ -316,7 +316,7 @@ impl LangString {
                     } {
                         if let Some(extra) = extra {
                             extra.error_invalid_codeblock_attr(
-                                &format!("unknown attribute `{}`. Did you mean `{}`?", x, flag),
+                                &format!("unknown attribute `{x}`. Did you mean `{flag}`?"),
                                 help,
                             );
                         }

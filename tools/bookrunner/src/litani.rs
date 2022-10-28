@@ -209,7 +209,7 @@ impl Litani {
         job.args([
             "add-job",
             "--command",
-            &format!("{}{:?}", new_envs, command),
+            &format!("{new_envs}{command:?}"),
             "--description",
             description,
             "--pipeline-name",
