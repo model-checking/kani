@@ -1,12 +1,12 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-#include<stdbool.h>
-#include<stddef.h>
-#include<stdint.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
 // Declare functions instead of importing more headers in order to avoid conflicting definitions.
 // See https://github.com/model-checking/kani/issues/1774 for more details.
-void free(void *ptr);
+void  free(void *ptr);
 void *memcpy(void *dst, const void *src, size_t n);
 void *calloc(size_t nmemb, size_t size);
 
