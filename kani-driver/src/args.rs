@@ -397,7 +397,7 @@ impl KaniArgs {
 
         if self.randomize_layout.is_some() && self.concrete_playback.is_some() {
             let random_seed = if let Some(seed) = self.randomize_layout.unwrap() {
-                format!(" -Z layout-seed={}", seed)
+                format!(" -Z layout-seed={seed}")
             } else {
                 String::new()
             };
@@ -508,13 +508,13 @@ mod tests {
     }
 
     fn parse_unstable_disabled(args: &str) -> Result<ArgMatches<'_>, Error> {
-        let args = format!("kani file.rs {}", args);
+        let args = format!("kani file.rs {args}");
         let app = StandaloneArgs::clap();
         app.get_matches_from_safe(args.split(' '))
     }
 
     fn parse_unstable_enabled(args: &str) -> Result<ArgMatches<'_>, Error> {
-        let args = format!("kani --enable-unstable file.rs {}", args);
+        let args = format!("kani --enable-unstable file.rs {args}");
         let app = StandaloneArgs::clap();
         app.get_matches_from_safe(args.split(' '))
     }

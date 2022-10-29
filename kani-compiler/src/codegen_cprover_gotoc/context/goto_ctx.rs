@@ -171,8 +171,8 @@ impl<'tcx> GotocCtx<'tcx> {
         loc: Location,
         is_param: bool,
     ) -> Symbol {
-        let base_name = format!("{}_{}", prefix, c);
-        let name = format!("{}::1::{}", fname, base_name);
+        let base_name = format!("{prefix}_{c}");
+        let name = format!("{fname}::1::{base_name}");
         let symbol = Symbol::variable(name, base_name, t, loc).with_is_parameter(is_param);
         self.symbol_table.insert(symbol.clone());
         symbol
@@ -327,7 +327,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 .instance_mir(instance.def)
                 .basic_blocks
                 .indices()
-                .map(|bb| format!("{:?}", bb))
+                .map(|bb| format!("{bb:?}"))
                 .collect(),
         ));
     }
@@ -339,14 +339,14 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn next_global_name(&mut self) -> String {
         let c = self.global_var_count;
         self.global_var_count += 1;
-        format!("{}::global::{}::", self.full_crate_name(), c)
+        format!("{}::global::{c}::", self.full_crate_name())
     }
 
     pub fn next_check_id(&mut self) -> String {
         // check id is KANI_CHECK_ID_<crate_name>_<counter>
         let c = self.global_checks_count;
         self.global_checks_count += 1;
-        format!("KANI_CHECK_ID_{}_{}", self.full_crate_name, c)
+        format!("KANI_CHECK_ID_{}_{c}", self.full_crate_name)
     }
 }
 
@@ -496,7 +496,7 @@ fn machine_model_from_session(sess: &Session) -> MachineModel {
             }
         }
         _ => {
-            panic!("Unsupported architecture: {}", architecture);
+            panic!("Unsupported architecture: {architecture}");
         }
     }
 }

@@ -201,7 +201,7 @@ pub fn command_arguments(args: &Vec<String>) -> Vec<String> {
         let env_flags = env::var(KANIFLAGS_ENV_VAR).unwrap_or_default();
         new_args.extend(
             shell_words::split(&env_flags)
-                .expect(&format!("Cannot parse {} value '{}'", KANIFLAGS_ENV_VAR, env_flags)),
+                .expect(&format!("Cannot parse {KANIFLAGS_ENV_VAR} value '{env_flags}'")),
         );
         // Add the leftover arguments for rustc at the end.
         new_args
@@ -234,7 +234,7 @@ mod parser_test {
     #[test]
     fn test_cargo_kani_hack_noop() {
         let args = ["kani-compiler", "some/path"];
-        let args = args.map(|v| String::from(v));
+        let args = args.map(String::from);
         let new_args = command_arguments(&Vec::from(args.clone()));
         assert_eq!(args.as_slice(), new_args.as_slice());
     }
@@ -243,7 +243,7 @@ mod parser_test {
     fn test_cargo_kani_hack_no_args() {
         env::remove_var(KANIFLAGS_ENV_VAR);
         let args = ["kani-compiler", "some/path", "--kani-flags"];
-        let args = args.map(|v| String::from(v));
+        let args = args.map(String::from);
         let new_args = command_arguments(&Vec::from(args.clone()));
         assert_eq!(new_args.len(), 2, "New args should not include --kani-flags");
         assert_eq!(new_args[0], args[0]);

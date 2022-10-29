@@ -13,7 +13,7 @@ use tracing::*;
 pub fn logv(config: &Config, s: String) {
     debug!("{}", s);
     if config.verbose {
-        println!("{}", s);
+        println!("{s}");
     }
 }
 

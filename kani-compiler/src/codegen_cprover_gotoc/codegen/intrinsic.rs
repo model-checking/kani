@@ -129,7 +129,7 @@ impl<'tcx> GotocCtx<'tcx> {
             ),
             _ => self.codegen_fatal_error(
                 PropertyClass::UnsupportedConstruct,
-                &format!("Unsupported intrinsic {}", intrinsic),
+                &format!("Unsupported intrinsic {intrinsic}"),
                 span,
             ),
         }
@@ -718,8 +718,8 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> Stmt {
         let arg1 = fargs.remove(0);
         let arg2 = fargs.remove(0);
-        let msg1 = format!("first argument for {} is finite", intrinsic);
-        let msg2 = format!("second argument for {} is finite", intrinsic);
+        let msg1 = format!("first argument for {intrinsic} is finite");
+        let msg2 = format!("second argument for {intrinsic} is finite");
         let loc = self.codegen_span_option(span);
         let finite_check1 = self.codegen_assert_assume(
             arg1.is_finite(),
@@ -809,7 +809,7 @@ impl<'tcx> GotocCtx<'tcx> {
         if layout.abi.is_uninhabited() {
             return self.codegen_fatal_error(
                 PropertyClass::SafetyCheck,
-                &format!("attempted to instantiate uninhabited type `{}`", ty),
+                &format!("attempted to instantiate uninhabited type `{ty}`"),
                 span,
             );
         }
@@ -819,7 +819,7 @@ impl<'tcx> GotocCtx<'tcx> {
         if intrinsic == "assert_zero_valid" && !self.tcx.permits_zero_init(layout) {
             return self.codegen_fatal_error(
                 PropertyClass::SafetyCheck,
-                &format!("attempted to zero-initialize type `{}`, which is invalid", ty),
+                &format!("attempted to zero-initialize type `{ty}`, which is invalid"),
                 span,
             );
         }
@@ -827,7 +827,7 @@ impl<'tcx> GotocCtx<'tcx> {
         if intrinsic == "assert_uninit_valid" && !self.tcx.permits_uninit_init(layout) {
             return self.codegen_fatal_error(
                 PropertyClass::SafetyCheck,
-                &format!("attempted to leave type `{}` uninitialized, which is invalid", ty),
+                &format!("attempted to leave type `{ty}` uninitialized, which is invalid"),
                 span,
             );
         }
@@ -1180,7 +1180,7 @@ impl<'tcx> GotocCtx<'tcx> {
         ret_ty: Ty<'tcx>,
         p: &Place<'tcx>,
     ) -> Stmt {
-        assert!(fargs.len() == 1, "transmute had unexpected arguments {:?}", fargs);
+        assert!(fargs.len() == 1, "transmute had unexpected arguments {fargs:?}");
         let arg = fargs.remove(0);
         let cbmc_ret_ty = self.codegen_ty(ret_ty);
         let expr = arg.transmute_to(cbmc_ret_ty, &self.symbol_table);
@@ -1344,7 +1344,7 @@ impl<'tcx> GotocCtx<'tcx> {
         cbmc_ret_ty: Type,
         loc: Location,
     ) -> Stmt {
-        assert!(fargs.len() == 3, "simd_insert had unexpected arguments {:?}", fargs);
+        assert!(fargs.len() == 3, "simd_insert had unexpected arguments {fargs:?}");
         let vec = fargs.remove(0);
         let index = fargs.remove(0);
         let newval = fargs.remove(0);
@@ -1377,7 +1377,7 @@ impl<'tcx> GotocCtx<'tcx> {
         cbmc_ret_ty: Type,
         n: u64,
     ) -> Stmt {
-        assert!(fargs.len() == 3, "simd_shuffle had unexpected arguments {:?}", fargs);
+        assert!(fargs.len() == 3, "simd_shuffle had unexpected arguments {fargs:?}");
         // vector, size n: translated as vector types which cbmc treats as arrays
         let vec1 = fargs.remove(0);
         let vec2 = fargs.remove(0);
@@ -1520,7 +1520,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let size_of_elem = Expr::int_constant(layout.size.bytes(), res_ty);
         let size_of_count_elems = count.mul_overflow(size_of_elem);
         let message =
-            format!("{}: attempt to compute number in bytes which would overflow", intrinsic);
+            format!("{intrinsic}: attempt to compute number in bytes which would overflow");
         let assert_stmt = self.codegen_assert_assume(
             size_of_count_elems.overflowed.not(),
             PropertyClass::ArithmeticOverflow,

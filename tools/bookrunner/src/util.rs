@@ -68,19 +68,19 @@ impl TestProps {
 impl Display for TestProps {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         if let Some(fail_step) = &self.fail_step {
-            f.write_fmt(format_args!("// kani-{}-fail\n", fail_step))?;
+            f.write_fmt(format_args!("// kani-{fail_step}-fail\n"))?;
         }
         if !self.rustc_args.is_empty() {
             f.write_str("// compile-flags:")?;
             for arg in &self.rustc_args {
-                f.write_fmt(format_args!(" {}", arg))?;
+                f.write_fmt(format_args!(" {arg}"))?;
             }
             f.write_char('\n')?;
         }
         if !self.kani_args.is_empty() {
             f.write_str("// kani-flags:")?;
             for arg in &self.kani_args {
-                f.write_fmt(format_args!(" {}", arg))?;
+                f.write_fmt(format_args!(" {arg}"))?;
             }
             f.write_char('\n')?;
         }
@@ -110,7 +110,7 @@ fn try_parse_fail_step(cur_fail_step: Option<FailStep>, line: &str) -> Option<Fa
 /// Parses strings of the form `<name>-flags: ...` and returns the list of
 /// arguments.
 fn try_parse_args(cur_args: Vec<String>, name: &str, line: &str) -> Vec<String> {
-    let name = format!("{}-flags:", name);
+    let name = format!("{name}-flags:");
     let mut split = line.split(&name).skip(1);
     let args: Vec<String> = if let Some(rest) = split.next() {
         rest.split_whitespace().map(String::from).collect()

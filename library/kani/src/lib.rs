@@ -121,7 +121,7 @@ fn any_raw_inner<T>() -> T {
 #[rustc_diagnostic_item = "KaniExpectFail"]
 pub fn expect_fail(_cond: bool, _message: &'static str) {
     if cfg!(feature = "concrete_playback") {
-        assert!(!_cond, "kani::expect_fail does not hold: {}", _message);
+        assert!(!_cond, "kani::expect_fail does not hold: {_message}");
     }
 }
 

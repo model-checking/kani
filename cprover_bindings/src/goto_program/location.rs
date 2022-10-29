@@ -77,14 +77,14 @@ impl Location {
         match self {
             Location::None => "<none>".to_string(),
             Location::BuiltinFunction { function_name, line: Some(line) } => {
-                format!("<{}>:{}", function_name, line)
+                format!("<{function_name}>:{line}")
             }
             Location::BuiltinFunction { function_name, line: None } => {
-                format!("<{}>", function_name)
+                format!("<{function_name}>")
             }
-            Location::Loc { file, start_line: line, .. } => format!("{}:{}", file, line),
+            Location::Loc { file, start_line: line, .. } => format!("{file}:{line}"),
             Location::Property { file, line, .. } => {
-                format!("<{:?}>:{}", file, line)
+                format!("<{file:?}>:{line}")
             }
             Location::PropertyUnknownLocation { .. } => "<none>".to_string(),
         }

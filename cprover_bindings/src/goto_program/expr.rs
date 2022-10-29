@@ -258,7 +258,7 @@ pub fn arithmetic_overflow_result_type(operand_type: Type) -> Type {
     assert!(operand_type.is_integer());
     // give the struct the name "overflow_result_<type>", e.g.
     // "overflow_result_Unsignedbv"
-    let name: InternedString = format!("overflow_result_{:?}", operand_type).into();
+    let name: InternedString = format!("overflow_result_{operand_type:?}").into();
     Type::struct_type(
         name,
         vec![
@@ -411,7 +411,7 @@ macro_rules! expr {
 impl Expr {
     /// `&self`
     pub fn address_of(self) -> Self {
-        assert!(self.can_take_address_of(), "Can't take address of {:?}", self);
+        assert!(self.can_take_address_of(), "Can't take address of {self:?}");
         expr!(AddressOf(self), self.typ.clone().to_pointer())
     }
 
@@ -484,7 +484,7 @@ impl Expr {
 
     /// `(typ) self`.
     pub fn cast_to(self, typ: Type) -> Self {
-        assert!(self.can_cast_to(&typ), "Can't cast\n\n{:?} ({:?})\n\n{:?}", self, self.typ, typ);
+        assert!(self.can_cast_to(&typ), "Can't cast\n\n{self:?} ({:?})\n\n{typ:?}", self.typ);
         if self.typ == typ {
             self
         } else if typ.is_bool() {
@@ -1379,7 +1379,7 @@ impl Expr {
         } else if self.typ().is_array_like() {
             self.index_array(idx)
         } else {
-            panic!("Can't index: {:?}", self)
+            panic!("Can't index: {self:?}")
         }
     }
 

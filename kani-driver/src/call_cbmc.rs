@@ -249,8 +249,8 @@ impl VerificationResult {
         } else {
             let verification_result = console::style("FAILED").red();
             format!(
-                "\nCBMC failed with status {}\nVERIFICATION:- {}\n",
-                self.exit_status, verification_result
+                "\nCBMC failed with status {}\nVERIFICATION:- {verification_result}\n",
+                self.exit_status
             )
         }
     }
