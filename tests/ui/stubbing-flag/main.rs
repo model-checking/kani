@@ -6,9 +6,5 @@
 //! This tests that the --enable-stubbing and --harness flags flow from Kani driver to Kani compiler
 //! (and that we warn that no actual stubbing is being performed).
 
-fn foo() {}
-
-fn bar() {}
-
 #[kani::proof]
 fn main() {}
