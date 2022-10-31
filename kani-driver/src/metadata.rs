@@ -108,10 +108,18 @@ fn read_kani_metadata(path: &Path) -> Result<KaniMetadata> {
 
 /// Consumes a vector of parsed metadata, and produces a combined structure
 fn merge_kani_metadata(files: Vec<KaniMetadata>) -> KaniMetadata {
-    let mut result = KaniMetadata { proof_harnesses: Vec::new() };
+    let mut result = KaniMetadata {
+        proof_harnesses: vec![],
+        unsupported_features: vec![],
+        test_harnesses: vec![],
+    };
     for md in files {
         // Note that we're taking ownership of the original vec, and so we can move the data into the new data structure.
         result.proof_harnesses.extend(md.proof_harnesses);
+        // TODO: these should be merged via a map to aggregate them all
+        // https://github.com/model-checking/kani/issues/1758
+        result.unsupported_features.extend(md.unsupported_features);
+        result.test_harnesses.extend(md.test_harnesses);
     }
     result
 }
@@ -121,7 +129,11 @@ impl KaniSession {
     pub fn collect_kani_metadata(&self, files: &[PathBuf]) -> Result<KaniMetadata> {
         if self.args.dry_run {
             // Mock an answer
-            Ok(KaniMetadata { proof_harnesses: vec![generate_mock_harness()] })
+            Ok(KaniMetadata {
+                proof_harnesses: vec![generate_mock_harness()],
+                unsupported_features: vec![],
+                test_harnesses: vec![],
+            })
         } else {
             // TODO: one possible future improvement here would be to return some kind of Lazy
             // value, that only computes this metadata if it turns out we need it.
@@ -155,8 +167,8 @@ impl KaniSession {
 /// appearing harnesses get processed earlier.
 /// This is necessary for the concrete playback feature (with in-place unit test modification)
 /// because it guarantees that injected unit tests will not change the location of to-be-processed harnesses.
-pub fn sort_harnesses_by_loc(harnesses: &[HarnessMetadata]) -> Vec<HarnessMetadata> {
-    let mut harnesses_clone = harnesses.to_vec();
+pub fn sort_harnesses_by_loc(harnesses: &[HarnessMetadata]) -> Vec<&HarnessMetadata> {
+    let mut harnesses_clone: Vec<_> = harnesses.iter().by_ref().collect();
     harnesses_clone.sort_unstable_by(|harness1, harness2| {
         harness1
             .original_file

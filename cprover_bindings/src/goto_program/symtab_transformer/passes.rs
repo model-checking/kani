@@ -19,7 +19,7 @@ pub fn do_passes(mut symtab: SymbolTable, pass_names: &[String]) -> SymbolTable 
                 NameTransformer::transform(&symtab)
             }
             "identity" => IdentityTransformer::transform(&symtab),
-            _ => panic!("Invalid symbol table transformation: {}", pass_name),
+            _ => panic!("Invalid symbol table transformation: {pass_name}"),
         }
     }
 

@@ -4,10 +4,10 @@
 use crate::args::KaniArgs;
 use crate::util::render_command;
 use anyhow::{bail, Context, Result};
-use std::cell::RefCell;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
+use std::sync::Mutex;
 
 /// Contains information about the execution environment and arguments that affect operations
 pub struct KaniSession {
@@ -21,11 +21,8 @@ pub struct KaniSession {
     /// The location we found the Kani C stub .c files
     pub kani_c_stubs: PathBuf,
 
-    /// The location we found our pre-built libraries
-    pub kani_rlib: Option<PathBuf>,
-
     /// The temporary files we littered that need to be cleaned up at the end of execution
-    pub temporaries: RefCell<Vec<PathBuf>>,
+    pub temporaries: Mutex<Vec<PathBuf>>,
 }
 
 /// Represents where we detected Kani, with helper methods for using that information to find critical paths
@@ -33,7 +30,7 @@ enum InstallType {
     /// We're operating in a a checked out repo that's been built locally.
     /// The path here is to the root of the repo.
     DevRepo(PathBuf),
-    /// We're operating from a release bundle (made with `make-kani-release`).
+    /// We're operating from a release bundle (made with `build-kani release`).
     /// The path here to where this release bundle has been unpacked.
     Release(PathBuf),
 }
@@ -47,16 +44,22 @@ impl KaniSession {
             kani_compiler: install.kani_compiler()?,
             kani_lib_c: install.kani_lib_c()?,
             kani_c_stubs: install.kani_c_stubs()?,
-            kani_rlib: install.kani_rlib()?,
-            temporaries: RefCell::new(vec![]),
+            temporaries: Mutex::new(vec![]),
         })
+    }
+
+    pub fn record_temporary_files(&self, temps: &[&Path]) {
+        // unwrap safety: will panic this thread if another thread panicked *while holding the lock.*
+        // This is vanishingly unlikely, and even then probably the right thing to do
+        let mut t = self.temporaries.lock().unwrap();
+        t.extend(temps.iter().map(|p| (*p).to_owned()));
     }
 }
 
 impl Drop for KaniSession {
     fn drop(&mut self) {
         if !self.args.keep_temps && !self.args.dry_run {
-            let temporaries = self.temporaries.borrow();
+            let temporaries = self.temporaries.lock().unwrap();
 
             for file in temporaries.iter() {
                 // If it fails, we don't care, skip it
@@ -139,7 +142,10 @@ impl KaniSession {
     }
 
     /// Run a job and pipe its output to this process.
-    /// Returns an error if the process could not be spawned
+    /// Returns an error if the process could not be spawned.
+    ///
+    /// NOTE: Unlike other `run_` functions, this function does not attempt to indicate
+    /// the process exit code, you need to remember to check this yourself.
     pub fn run_piped(&self, mut cmd: Command) -> Result<Option<Child>> {
         if self.args.verbose || self.args.dry_run {
             println!("{}", render_command(&cmd).to_string_lossy());
@@ -148,14 +154,12 @@ impl KaniSession {
             }
         }
         // Run the process as a child process
-        let process = cmd.stdout(Stdio::piped()).spawn();
+        let process = cmd
+            .stdout(Stdio::piped())
+            .spawn()
+            .context(format!("Failed to invoke {}", cmd.get_program().to_string_lossy()))?;
 
-        // Render the command if the process could not be spawned
-        if process.is_err() {
-            bail!("Could not spawn process `{}`", render_command(&cmd).to_string_lossy());
-        }
-        // Return the child process handle
-        Ok(Some(process.unwrap()))
+        Ok(Some(process))
     }
 }
 
@@ -168,9 +172,10 @@ fn bin_folder() -> Result<PathBuf> {
 
 impl InstallType {
     pub fn new() -> Result<Self> {
-        // Case 1: We've checked out the development repo and we're built under `target/`
+        // Case 1: We've checked out the development repo and we're built under `target/kani`
         let mut path = bin_folder()?;
-        if path.ends_with("target/debug") || path.ends_with("target/release") {
+        if path.ends_with("target/kani/bin") {
+            path.pop();
             path.pop();
             path.pop();
 
@@ -207,21 +212,6 @@ impl InstallType {
 
     pub fn kani_c_stubs(&self) -> Result<PathBuf> {
         self.base_path_with("library/kani/stubs/C")
-    }
-
-    pub fn kani_rlib(&self) -> Result<Option<PathBuf>> {
-        match self {
-            Self::DevRepo(_repo) => {
-                // Awkwardly, there is not an easy way to determine the location of these outputs
-                // So we let kani-compiler default to hard-coding them for development builds.
-                Ok(None)
-            }
-            Self::Release(release) => {
-                // First-time setup should place these here. Note `lib` not `library` for built artifacts.
-                let path = release.join("lib");
-                Ok(Some(expect_path(path)?))
-            }
-        }
     }
 
     /// A common case is that our repo and release bundle have the same `subpath`

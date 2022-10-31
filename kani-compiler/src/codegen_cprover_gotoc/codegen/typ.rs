@@ -204,7 +204,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             }
                         }
                     }
-                    write!(out, "{:indent$}}}", "", indent = indent)?;
+                    write!(out, "{:indent$}}}", "")?;
                 }
                 Type::StructTag(tag) => {
                     let ty = &ctx.symbol_table.lookup(*tag).unwrap().typ;
@@ -213,7 +213,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 Type::TypeDef { name, typ } => {
                     write!(out, "typedef {{ {name}: ")?;
                     debug_write_type(ctx, typ, out, indent + 2)?;
-                    write!(out, "{:indent$}}}", "", indent = indent)?;
+                    write!(out, "{:indent$}}}", "")?;
                 }
                 Type::Union { tag, components } => {
                     let pretty_name = if let Some(symbol) = ctx.symbol_table.lookup(aggr_tag(*tag))
@@ -240,7 +240,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             }
                         }
                     }
-                    write!(out, "{:indent$}}}", "", indent = indent)?;
+                    write!(out, "{:indent$}}}", "")?;
                 }
                 Type::UnionTag(tag) => {
                     let ty = &ctx.symbol_table.lookup(*tag).unwrap().typ;
@@ -506,10 +506,10 @@ impl<'tcx> GotocCtx<'tcx> {
         self.codegen_ty(typ).to_pointer()
     }
 
-    /// A reference to a Struct<dyn T> { .., data: T} is translated to
+    /// A reference to a `Struct<dyn T>` { .., data: T} is translated to
     /// struct RefToTrait {
-    ///     Struct<dyn T>* data;
-    ///     Metadata<dyn T>* vtable;
+    ///     `Struct<dyn T>* data`;
+    ///     `Metadata<dyn T>* vtable;`
     /// }
     /// Note: T is a `typedef` but data represents the space in memory occupied by
     /// the concrete type. We just don't know its size during compilation time.
@@ -555,7 +555,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// We follow the order from the `TyCtxt::COMMON_VTABLE_ENTRIES`.
     fn trait_vtable_field_types(&mut self, t: ty::Ty<'tcx>) -> Vec<DatatypeComponent> {
         let mut vtable_base = common_vtable_fields(self.trait_vtable_drop_type(t));
-        if let ty::Dynamic(binder, _region) = t.kind() {
+        if let ty::Dynamic(binder, _, _) = t.kind() {
             // The virtual methods on the trait ref. Some auto traits have no methods.
             if let Some(principal) = binder.principal() {
                 let poly = principal.with_self_ty(self.tcx, t);
@@ -591,7 +591,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Gives the name for a trait, i.e., `dyn T`. This does not work for `&dyn T`.
     pub fn normalized_trait_name(&self, t: Ty<'tcx>) -> String {
-        assert!(t.is_trait(), "Type {} must be a trait type (a dynamic type)", t);
+        assert!(t.is_trait(), "Type {t} must be a trait type (a dynamic type)");
         self.ty_mangled_name(t).to_string()
     }
 
@@ -639,7 +639,7 @@ impl<'tcx> GotocCtx<'tcx> {
             _ => {
                 // This hash is documented to be the same no matter the crate context
                 let id_u64 = self.tcx.type_id_hash(t);
-                format!("_{}", id_u64).intern()
+                format!("_{id_u64}").intern()
             }
         }
     }
@@ -708,9 +708,9 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// codegen for types. it finds a C type which corresponds to a rust type.
-    /// that means [ty] has to be monomorphized.
+    /// that means [ty] has to be monomorphized before calling this function.
     ///
-    /// check [rustc_middle::ty::layout::LayoutCx::layout_of_uncached] for LLVM codegen
+    /// check `rustc_ty_utils::layout::layout_of_uncached` for LLVM codegen
     ///
     /// also c.f. <https://www.ralfj.de/blog/2020/04/04/layout-debugging.html>
     ///      c.f. <https://rust-lang.github.io/unsafe-code-guidelines/introduction.html>
@@ -751,9 +751,8 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Foreign(defid) => self.codegen_foreign(ty, *defid),
             ty::Array(et, len) => {
                 let evaluated_len = len.try_eval_usize(self.tcx, self.param_env()).unwrap();
-                let array_name = format!("[{}; {}]", self.ty_mangled_name(*et), evaluated_len);
-                let array_pretty_name =
-                    format!("[{}; {}]", self.ty_pretty_name(*et), evaluated_len);
+                let array_name = format!("[{}; {evaluated_len}]", self.ty_mangled_name(*et));
+                let array_pretty_name = format!("[{}; {evaluated_len}]", self.ty_pretty_name(*et));
                 // wrap arrays into struct so that one can take advantage of struct copy in C
                 //
                 // struct [T; n] {
@@ -861,7 +860,7 @@ impl<'tcx> GotocCtx<'tcx> {
         if current_offset < next_offset {
             // We need to pad to the next offset
             let padding_size = next_offset - current_offset;
-            let name = format!("$pad{}", idx);
+            let name = format!("$pad{idx}");
             Some(DatatypeComponent::padding(&name, padding_size.bits()))
         } else {
             None
@@ -1264,8 +1263,8 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Dynamic function calls first parameter is self which must be one of the following:
     ///
     /// As of Jul 2022:
-    /// P = &Self | &mut Self | Box<Self> | Rc<Self> | Arc<Self>
-    /// S = P | Pin<P>
+    /// `P = &Self | &mut Self | Box<Self> | Rc<Self> | Arc<Self>`
+    /// `S = P | Pin<P>`
     ///
     /// See <https://doc.rust-lang.org/reference/items/traits.html#object-safety> for more details.
     fn codegen_dynamic_function_sig(&mut self, sig: PolyFnSig<'tcx>) -> Type {
@@ -1418,13 +1417,13 @@ impl<'tcx> GotocCtx<'tcx> {
         subst: &'tcx InternalSubsts<'tcx>,
     ) -> Type {
         let pretty_name = self.ty_pretty_name(ty);
-        self.ensure_struct(self.ty_mangled_name(ty), pretty_name, |ctx, name| {
-            // variants appearing in source code (in source code order)
-            let source_variants = &adtdef.variants();
-            let layout = ctx.layout_of(ty);
-            // variants appearing in mir code
-            match &layout.variants {
-                Variants::Single { index } => {
+        // variants appearing in source code (in source code order)
+        let source_variants = &adtdef.variants();
+        let layout = self.layout_of(ty);
+        // variants appearing in mir code
+        match &layout.variants {
+            Variants::Single { index } => {
+                self.ensure_struct(self.ty_mangled_name(ty), pretty_name, |gcx, _| {
                     match source_variants.get(*index) {
                         None => {
                             // an empty enum with no variants (its value cannot be instantiated)
@@ -1432,18 +1431,20 @@ impl<'tcx> GotocCtx<'tcx> {
                         }
                         Some(variant) => {
                             // a single enum is pretty much like a struct
-                            let layout = ctx.layout_of(ty).layout;
-                            ctx.codegen_variant_struct_fields(variant, subst, &layout, Size::ZERO)
+                            let layout = gcx.layout_of(ty).layout;
+                            gcx.codegen_variant_struct_fields(variant, subst, &layout, Size::ZERO)
                         }
                     }
-                }
-                Variants::Multiple { tag_encoding, variants, tag_field, .. } => {
-                    // Contrary to generators, currently enums have only one field (the discriminant), the rest are in the variants:
-                    assert!(layout.fields.count() <= 1);
-                    // Contrary to generators, the discriminant is the first (and only) field for enums:
-                    assert_eq!(*tag_field, 0);
-                    match tag_encoding {
-                        TagEncoding::Direct => {
+                })
+            }
+            Variants::Multiple { tag_encoding, variants, tag_field, .. } => {
+                // Contrary to generators, currently enums have only one field (the discriminant), the rest are in the variants:
+                assert!(layout.fields.count() <= 1);
+                // Contrary to generators, the discriminant is the first (and only) field for enums:
+                assert_eq!(*tag_field, 0);
+                match tag_encoding {
+                    TagEncoding::Direct => {
+                        self.ensure_struct(self.ty_mangled_name(ty), pretty_name, |gcx, name| {
                             // For direct encoding of tags, we generate a type with two fields:
                             // ```
                             // struct tag-<> { // enum type
@@ -1455,22 +1456,22 @@ impl<'tcx> GotocCtx<'tcx> {
                             // (`#[repr]`) and it represents which variant is being used.
                             // The `cases` field is a union of all variant types where the name
                             // of each union field is the name of the corresponding discriminant.
-                            let discr_t = ctx.codegen_enum_discr_typ(ty);
-                            let int = ctx.codegen_ty(discr_t);
-                            let discr_offset = ctx.layout_of(discr_t).size;
+                            let discr_t = gcx.codegen_enum_discr_typ(ty);
+                            let int = gcx.codegen_ty(discr_t);
+                            let discr_offset = gcx.layout_of(discr_t).size;
                             let initial_offset =
-                                ctx.variant_min_offset(variants).unwrap_or(discr_offset);
+                                gcx.variant_min_offset(variants).unwrap_or(discr_offset);
                             let mut fields = vec![DatatypeComponent::field("case", int)];
                             if let Some(padding) =
-                                ctx.codegen_struct_padding(discr_offset, initial_offset, 0)
+                                gcx.codegen_struct_padding(discr_offset, initial_offset, 0)
                             {
                                 fields.push(padding);
                             }
-                            let union_name = format!("{}-union", name);
-                            let union_pretty_name = format!("{}-union", pretty_name);
+                            let union_name = format!("{name}-union");
+                            let union_pretty_name = format!("{pretty_name}-union");
                             fields.push(DatatypeComponent::field(
                                 "cases",
-                                ctx.ensure_union(&union_name, &union_pretty_name, |ctx, name| {
+                                gcx.ensure_union(&union_name, &union_pretty_name, |ctx, name| {
                                     ctx.codegen_enum_cases(
                                         name,
                                         pretty_name,
@@ -1482,45 +1483,56 @@ impl<'tcx> GotocCtx<'tcx> {
                                 }),
                             ));
                             fields
-                        }
-                        TagEncoding::Niche { dataful_variant, .. } => {
-                            // Enumerations with multiple variants and niche encoding have a
-                            // specific format that can be used to optimize its layout and reduce
-                            // memory consumption.
-                            //
-                            // These enumerations have one and only one variant with non-ZST
-                            // fields which is referred to by the `dataful_variant` index. Their
-                            // final size and alignment is equal to the one from the
-                            // `dataful_variant`. All other variants either don't have any field
-                            // or all fields types are ZST.
-                            //
-                            // Because of that, we can represent these enums as simple structures
-                            // where each field represent one variant. This allows them to be
-                            // referred to correctly.
-                            //
-                            // Note: I tried using a union instead but it had a significant runtime
-                            // penalty.
-                            tracing::trace!(
-                                ?name,
-                                ?variants,
-                                ?dataful_variant,
-                                ?tag_encoding,
-                                ?subst,
-                                "codegen_enum: Niche"
-                            );
-                            ctx.codegen_enum_cases(
-                                name,
-                                pretty_name,
-                                adtdef,
-                                subst,
-                                variants,
-                                Size::ZERO,
-                            )
-                        }
+                        })
+                    }
+                    TagEncoding::Niche { .. } => {
+                        self.codegen_enum_niche(ty, adtdef, subst, variants)
                     }
                 }
             }
-        })
+        }
+    }
+
+    /// Codegen an enumeration that is encoded using niche optimization.
+    ///
+    /// Enumerations with multiple variants and niche encoding have a
+    /// specific format that can be used to optimize its layout and reduce
+    /// memory consumption.
+    ///
+    /// The niche is a location in the entire type where some bit pattern
+    /// isn't valid. The compiler uses the `untagged_variant` index to
+    /// access this field.
+    /// The final size and alignment is also equal to the one from the
+    /// `untagged_variant`. All other variants either don't have any field,
+    /// or their size is smaller than the `untagged_variant`.
+    /// See <https://github.com/rust-lang/rust/issues/46213> for more details.
+    ///
+    /// Because of that, we usually represent these enums as simple unions
+    /// where each field represent one variant. This allows them to be
+    /// referred to correctly.
+    ///
+    /// The one exception is the case where only one variant has data.
+    /// We use a struct instead because it is more performant.
+    fn codegen_enum_niche(
+        &mut self,
+        ty: Ty<'tcx>,
+        adtdef: &'tcx AdtDef,
+        subst: &'tcx InternalSubsts<'tcx>,
+        variants: &IndexVec<VariantIdx, Layout>,
+    ) -> Type {
+        let non_zst_count = variants.iter().filter(|layout| layout.size().bytes() > 0).count();
+        let mangled_name = self.ty_mangled_name(ty);
+        let pretty_name = self.ty_pretty_name(ty);
+        tracing::trace!(?pretty_name, ?variants, ?subst, ?non_zst_count, "codegen_enum: Niche");
+        if non_zst_count > 1 {
+            self.ensure_union(mangled_name, pretty_name, |gcx, name| {
+                gcx.codegen_enum_cases(name, pretty_name, adtdef, subst, variants, Size::ZERO)
+            })
+        } else {
+            self.ensure_struct(mangled_name, pretty_name, |gcx, name| {
+                gcx.codegen_enum_cases(name, pretty_name, adtdef, subst, variants, Size::ZERO)
+            })
+        }
     }
 
     pub(crate) fn variant_min_offset(
@@ -1647,8 +1659,8 @@ impl<'tcx> GotocCtx<'tcx> {
         variant: &Layout,
         initial_offset: Size,
     ) -> Type {
-        let case_name = format!("{}::{}", name, case.name);
-        let pretty_name = format!("{}::{}", pretty_name, case.name);
+        let case_name = format!("{name}::{}", case.name);
+        let pretty_name = format!("{pretty_name}::{}", case.name);
         debug!("handling variant {}: {:?}", case_name, case);
         self.ensure_struct(&case_name, &pretty_name, |tcx, _| {
             tcx.codegen_variant_struct_fields(case, subst, variant, initial_offset)

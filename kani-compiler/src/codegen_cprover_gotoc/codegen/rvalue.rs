@@ -50,7 +50,7 @@ impl<'tcx> GotocCtx<'tcx> {
             let body = vec![
                 self.codegen_assert_assume_false(
                     PropertyClass::SafetyCheck,
-                    format!("Reached unstable vtable comparison '{:?}'", op).as_str(),
+                    format!("Reached unstable vtable comparison '{op:?}'").as_str(),
                     loc,
                 ),
                 ret_type.nondet().as_stmt(loc).with_location(loc),
@@ -204,7 +204,7 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_rvalue_repeat(
         &mut self,
         op: &Operand<'tcx>,
-        sz: &ty::Const<'tcx>,
+        sz: ty::Const<'tcx>,
         res_ty: Ty<'tcx>,
         loc: Location,
     ) -> Expr {
@@ -393,13 +393,21 @@ impl<'tcx> GotocCtx<'tcx> {
         debug!(?rv, "codegen_rvalue");
         match rv {
             Rvalue::Use(p) => self.codegen_operand(p),
-            Rvalue::Repeat(op, sz) => self.codegen_rvalue_repeat(op, sz, res_ty, loc),
+            Rvalue::Repeat(op, sz) => {
+                let sz = self.monomorphize(*sz);
+                self.codegen_rvalue_repeat(op, sz, res_ty, loc)
+            }
             Rvalue::Ref(_, _, p) | Rvalue::AddressOf(_, p) => self.codegen_rvalue_ref(p, res_ty),
             Rvalue::Len(p) => self.codegen_rvalue_len(p),
             // Rust has begun distinguishing "ptr -> num" and "num -> ptr" (providence-relevant casts) but we do not yet:
             // Should we? Tracking ticket: https://github.com/model-checking/kani/issues/1274
             Rvalue::Cast(
-                CastKind::Misc
+                CastKind::IntToInt
+                | CastKind::FloatToFloat
+                | CastKind::FloatToInt
+                | CastKind::IntToFloat
+                | CastKind::FnPtrToPtr
+                | CastKind::PtrToPtr
                 | CastKind::PointerExposeAddress
                 | CastKind::PointerFromExposedAddress,
                 e,
@@ -407,6 +415,15 @@ impl<'tcx> GotocCtx<'tcx> {
             ) => {
                 let t = self.monomorphize(*t);
                 self.codegen_misc_cast(e, t)
+            }
+            Rvalue::Cast(CastKind::DynStar, _, _) => {
+                let ty = self.codegen_ty(res_ty);
+                self.codegen_unimplemented_expr(
+                    "CastKind::DynStar",
+                    ty,
+                    loc,
+                    "https://github.com/model-checking/kani/issues/1784",
+                )
             }
             Rvalue::Cast(CastKind::Pointer(k), e, t) => {
                 let t = self.monomorphize(*t);
@@ -504,7 +521,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 TagEncoding::Direct => {
                     self.codegen_discriminant_field(e, ty).cast_to(self.codegen_ty(res_ty))
                 }
-                TagEncoding::Niche { dataful_variant, niche_variants, niche_start } => {
+                TagEncoding::Niche { untagged_variant, niche_variants, niche_start } => {
                     // This code follows the logic in the ssa codegen backend:
                     // https://github.com/rust-lang/rust/blob/fee75fbe11b1fad5d93c723234178b2a329a3c03/compiler/rustc_codegen_ssa/src/mir/place.rs#L247
                     // See also the cranelift backend:
@@ -550,7 +567,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     };
                     is_niche.ternary(
                         niche_discr,
-                        Expr::int_constant(dataful_variant.as_u32(), result_type),
+                        Expr::int_constant(untagged_variant.as_u32(), result_type),
                     )
                 }
             },
@@ -633,7 +650,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // this is a noop in the case dst_subt is a Projection or Opaque type
                 dst_subt = self.tcx.normalize_erasing_regions(ty::ParamEnv::reveal_all(), dst_subt);
                 match dst_subt.kind() {
-                    ty::Slice(_) | ty::Str | ty::Dynamic(_, _) => {
+                    ty::Slice(_) | ty::Str | ty::Dynamic(_, _, _) => {
                         //TODO: this does the wrong thing on Strings/fixme_boxed_str.rs
                         // if we cast to slice or string, then we know the source is also a slice or string,
                         // so there shouldn't be anything to do
@@ -836,7 +853,7 @@ impl<'tcx> GotocCtx<'tcx> {
             let drop_sym = self.ensure(&drop_sym_name, |ctx, name| {
                 // Function body
                 let unimplemented = ctx.codegen_unimplemented_stmt(
-                    format!("drop_in_place for {}", drop_sym_name).as_str(),
+                    format!("drop_in_place for {drop_instance}").as_str(),
                     Location::none(),
                     "https://github.com/model-checking/kani/issues/281",
                 );
@@ -901,7 +918,7 @@ impl<'tcx> GotocCtx<'tcx> {
         };
         let check = Expr::eq(cbmc_size, vt_size);
         let assert_msg =
-            format!("Correct CBMC vtable size for {:?} (MIR type {:?})", ty, operand_type.kind());
+            format!("Correct CBMC vtable size for {ty:?} (MIR type {:?})", operand_type.kind());
         let size_assert = self.codegen_sanity(check, &assert_msg, Location::none());
         Stmt::block(vec![decl, size_assert], Location::none())
     }
@@ -918,7 +935,7 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Dynamic(..) => dst_mir_type,
             _ => unimplemented!("Cannot codegen_vtable for type {:?}", dst_mir_type.kind()),
         };
-        assert!(trait_type.is_trait(), "VTable trait type {} must be a trait type", trait_type);
+        assert!(trait_type.is_trait(), "VTable trait type {trait_type} must be a trait type");
         let binders = match trait_type.kind() {
             ty::Dynamic(binders, ..) => binders,
             _ => unimplemented!("Cannot codegen_vtable for type {:?}", dst_mir_type.kind()),
@@ -927,7 +944,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let src_name = self.ty_mangled_name(src_mir_type);
         // The name needs to be the same as inserted in typ.rs
         let vtable_name = self.vtable_name(trait_type).intern();
-        let vtable_impl_name = format!("{}_impl_for_{}", vtable_name, src_name);
+        let vtable_impl_name = format!("{vtable_name}_impl_for_{src_name}");
 
         self.ensure_global_var(
             vtable_impl_name,

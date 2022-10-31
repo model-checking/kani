@@ -9,7 +9,7 @@ use rustc_ast::ast::Mutability;
 use rustc_middle::mir::interpret::{
     read_target_uint, AllocId, Allocation, ConstValue, GlobalAlloc, Scalar,
 };
-use rustc_middle::mir::{Constant, ConstantKind, Operand};
+use rustc_middle::mir::{Constant, ConstantKind, Operand, UnevaluatedConst};
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{self, Const, ConstKind, FloatTy, Instance, IntTy, Ty, Uint, UintTy};
 use rustc_span::def_id::DefId;
@@ -47,12 +47,26 @@ impl<'tcx> GotocCtx<'tcx> {
 
     fn codegen_constant(&mut self, c: &Constant<'tcx>) -> Expr {
         trace!(constant=?c, "codegen_constant");
-        let const_ = match self.monomorphize(c.literal) {
-            ConstantKind::Ty(ct) => ct,
-            ConstantKind::Val(val, ty) => return self.codegen_const_value(val, ty, Some(&c.span)),
-        };
+        let span = Some(&c.span);
+        match self.monomorphize(c.literal) {
+            ConstantKind::Ty(ct) => self.codegen_const(ct, span),
+            ConstantKind::Val(val, ty) => self.codegen_const_value(val, ty, span),
+            ConstantKind::Unevaluated(unevaluated, ty) => {
+                self.codegen_const_unevaluated(unevaluated, ty, span)
+            }
+        }
+    }
 
-        self.codegen_const(const_, Some(&c.span))
+    fn codegen_const_unevaluated(
+        &mut self,
+        unevaluated: UnevaluatedConst<'tcx>,
+        ty: Ty<'tcx>,
+        span: Option<&Span>,
+    ) -> Expr {
+        debug!(?unevaluated, "codegen_const_unevaluated");
+        let const_val =
+            self.tcx.const_eval_resolve(ty::ParamEnv::reveal_all(), unevaluated, None).unwrap();
+        self.codegen_const_value(const_val, ty, span)
     }
 
     pub fn codegen_const(&mut self, lit: Const<'tcx>, span: Option<&Span>) -> Expr {
@@ -60,15 +74,10 @@ impl<'tcx> GotocCtx<'tcx> {
         let lit = self.monomorphize(lit);
 
         match lit.kind() {
-            // evaluate constant if it has no been evaluated yet
-            ConstKind::Unevaluated(unevaluated) => {
-                debug!("The literal was a Unevaluated");
-                let const_val = self
-                    .tcx
-                    .const_eval_resolve(ty::ParamEnv::reveal_all(), unevaluated, None)
-                    .unwrap();
-                self.codegen_const_value(const_val, lit.ty(), span)
-            }
+            // A `ConstantKind::Ty(ConstKind::Unevaluated)` should no longer show up
+            // and should be a `ConstantKind::Unevaluated` instead (and thus handled
+            // at the level of `codegen_constant` instead of `codegen_const`.)
+            ConstKind::Unevaluated(_) => unreachable!(),
 
             ConstKind::Value(valtree) => {
                 let value = self.tcx.valtree_to_const_val((lit.ty(), valtree));
@@ -376,7 +385,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // Full (mangled) crate name added so that allocations from different
                 // crates do not conflict. The name alone is insufficient because Rust
                 // allows different versions of the same crate to be used.
-                let name = format!("{}::{:?}", self.full_crate_name(), alloc_id);
+                let name = format!("{}::{alloc_id:?}", self.full_crate_name());
                 self.codegen_allocation(alloc.inner(), |_| name.clone(), Some(name.clone()))
             }
             GlobalAlloc::VTable(ty, trait_ref) => {
@@ -384,7 +393,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // requires a bit more logic to get information about the allocation.
                 let alloc_id = self.tcx.vtable_allocation((ty, trait_ref));
                 let alloc = self.tcx.global_alloc(alloc_id).unwrap_memory();
-                let name = format!("{}::{:?}", self.full_crate_name(), alloc_id);
+                let name = format!("{}::{alloc_id:?}", self.full_crate_name());
                 self.codegen_allocation(alloc.inner(), |_| name.clone(), Some(name.clone()))
             }
         };
@@ -466,12 +475,12 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     fn codegen_allocation_data(&mut self, alloc: &'tcx Allocation) -> Vec<AllocData<'tcx>> {
-        let mut alloc_vals = Vec::with_capacity(alloc.relocations().len() + 1);
+        let mut alloc_vals = Vec::with_capacity(alloc.provenance().len() + 1);
         let pointer_size =
             Size::from_bytes(self.symbol_table.machine_model().pointer_width_in_bytes());
 
         let mut next_offset = Size::ZERO;
-        for &(offset, alloc_id) in alloc.relocations().iter() {
+        for &(offset, alloc_id) in alloc.provenance().iter() {
             if offset > next_offset {
                 let bytes = alloc.inspect_with_uninit_and_ptr_outside_interpreter(
                     next_offset.bytes_usize()..offset.bytes_usize(),
@@ -520,7 +529,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Codegen alloc as a static global variable with initial value
     fn codegen_alloc_in_memory(&mut self, alloc: &'tcx Allocation, name: String) {
         debug!("codegen_alloc_in_memory name: {}", name);
-        let struct_name = &format!("{}::struct", name);
+        let struct_name = &format!("{name}::struct");
 
         // The declaration of a static variable may have one type and the constant initializer for
         // a static variable may have a different type. This is because Rust uses bit patterns for

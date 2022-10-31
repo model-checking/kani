@@ -54,7 +54,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     pub fn unsupported_msg(item: &str, url: Option<&str>) -> String {
-        let mut s = format!("{} is not currently supported by Kani", item);
+        let mut s = format!("{item} is not currently supported by Kani");
         if let Some(url) = url {
             s.push_str(". Please post your example at ");
             s.push_str(url);
@@ -90,7 +90,7 @@ impl<'tcx> GotocCtx<'tcx> {
         RAW_PTR_FROM_BOX.iter().fold(box_expr, |expr, name| expr.member(name, &self.symbol_table))
     }
 
-    /// Box<T> initializer
+    /// `Box<T>` initializer
     ///
     /// Traverse over the Box representation and only initialize the raw_ptr field. All other
     /// members are left uninitialized.
@@ -151,7 +151,7 @@ impl<'tcx> GotocCtx<'tcx> {
             match c.name().to_string().as_str() {
                 "0" => self.assert_is_rust_unique_pointer_like(&c.typ()),
                 "1" => self.assert_is_rust_global_alloc_like(&c.typ()),
-                _ => panic!("Unexpected component {} in {:?}", c.name(), t),
+                _ => panic!("Unexpected component {} in {t:?}", c.name()),
             }
         }
     }
@@ -172,12 +172,12 @@ impl<'tcx> GotocCtx<'tcx> {
             match c.name().to_string().as_str() {
                 "_marker" => self.assert_is_rust_phantom_data_like(&c.typ()),
                 "pointer" => self.assert_is_non_null_like(&c.typ()),
-                _ => panic!("Unexpected component {} in {:?}", c.name(), t),
+                _ => panic!("Unexpected component {} in {t:?}", c.name()),
             }
         }
     }
 
-    /// Best effort check if the struct represents a std::ptr::NonNull<T>.
+    /// Best effort check if the struct represents a `std::ptr::NonNull<T>`.
     ///
     /// This assumes the following structure. Any changes to this will break this code.
     /// ```

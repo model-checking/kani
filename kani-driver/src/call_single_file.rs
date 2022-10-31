@@ -16,6 +16,8 @@ pub struct SingleOutputs {
     pub outdir: PathBuf,
     /// The *.symtab.json written.
     pub symtab: PathBuf,
+    /// The *.symtab.out binary written by symtab2gb (run from kani-compiler)
+    pub goto_obj: PathBuf,
     /// The vtable restrictions files, if any.
     pub restrictions: Option<PathBuf>,
     /// The kani-metadata.json file written by kani-compiler.
@@ -27,36 +29,45 @@ impl KaniSession {
     pub fn compile_single_rust_file(&self, file: &Path) -> Result<SingleOutputs> {
         let outdir =
             file.canonicalize()?.parent().context("File doesn't exist in a directory?")?.to_owned();
-        let output_filename = alter_extension(file, "symtab.json");
+        let symtab_filename = alter_extension(file, "symtab.json");
+        let goto_obj_filename = symtab_filename.with_extension("out");
         let typemap_filename = alter_extension(file, "type_map.json");
         let metadata_filename = alter_extension(file, "kani-metadata.json");
         let restrictions_filename = alter_extension(file, "restrictions.json");
         let rlib_filename = guess_rlib_name(file);
 
-        {
-            let mut temps = self.temporaries.borrow_mut();
-            temps.push(rlib_filename);
-            temps.push(output_filename.clone());
-            temps.push(typemap_filename);
-            temps.push(metadata_filename.clone());
-            if self.args.restrict_vtable() {
-                temps.push(restrictions_filename.clone());
-            }
+        self.record_temporary_files(&[
+            &rlib_filename,
+            &symtab_filename,
+            &goto_obj_filename,
+            &typemap_filename,
+            &metadata_filename,
+        ]);
+        if self.args.restrict_vtable() {
+            self.record_temporary_files(&[&restrictions_filename]);
         }
 
-        let mut args = self.kani_rustc_flags();
+        let mut kani_args = self.kani_specific_flags();
+        if self.args.legacy_linker {
+            kani_args.push("--reachability=legacy".into());
+        } else if self.args.function.is_some() {
+            kani_args.push("--reachability=pub_fns".into());
+        } else {
+            kani_args.push("--reachability=harnesses".into());
+        }
 
+        let mut rustc_args = self.kani_rustc_flags();
         // kani-compiler workaround part 1/2: *.symtab.json gets generated in the local
         // directory, instead of based on file name like we expect.
         // So let we'll `cd` to that directory and here we only pass filename.
-        args.push(file.file_name().unwrap().into());
+        rustc_args.push(file.file_name().unwrap().into());
 
         if self.args.tests {
             // e.g. `tests/kani/Options/check_tests.rs` will fail because it already has it
             // so this is a hacky workaround
             let t = "--test".into();
-            if !args.contains(&t) {
-                args.push(t);
+            if !rustc_args.contains(&t) {
+                rustc_args.push(t);
             }
         } else {
             // If we specifically request "--function main" then don't override crate type
@@ -64,13 +75,15 @@ impl KaniSession {
                 // We only run against proof harnesses normally, and this change
                 // 1. Means we do not require a `fn main` to exist
                 // 2. Don't forget it also changes visibility rules.
-                args.push("--crate-type".into());
-                args.push("lib".into());
+                rustc_args.push("--crate-type".into());
+                rustc_args.push("lib".into());
             }
         }
 
+        // Note that the order of arguments is important. Kani specific flags should precede
+        // rustc ones.
         let mut cmd = Command::new(&self.kani_compiler);
-        cmd.args(args);
+        cmd.args(kani_args).args(rustc_args);
 
         // kani-compiler workaround: part 2/2: change directory for the subcommand
         cmd.current_dir(&outdir);
@@ -83,7 +96,8 @@ impl KaniSession {
 
         Ok(SingleOutputs {
             outdir,
-            symtab: output_filename,
+            symtab: symtab_filename,
+            goto_obj: goto_obj_filename,
             metadata: metadata_filename,
             restrictions: if self.args.restrict_vtable() {
                 Some(restrictions_filename)
@@ -93,20 +107,13 @@ impl KaniSession {
         })
     }
 
-    /// These arguments are passed directly here for single file runs,
-    /// but are also used by call_cargo to pass as the env var KANIFLAGS.
-    pub fn kani_rustc_flags(&self) -> Vec<OsString> {
+    /// These arguments are arguments passed to kani-compiler that are `kani` specific.
+    /// These are also used by call_cargo to pass as the env var KANIFLAGS.
+    pub fn kani_specific_flags(&self) -> Vec<OsString> {
         let mut flags = vec![OsString::from("--goto-c")];
-
-        if let Some(rlib) = &self.kani_rlib {
-            flags.push("--kani-lib".into());
-            flags.push(rlib.into());
-        }
 
         if self.args.debug {
             flags.push("--log-level=debug".into());
-        } else if self.args.verbose {
-            flags.push("--log-level=info".into());
         } else {
             flags.push("--log-level=warn".into());
         }
@@ -124,11 +131,13 @@ impl KaniSession {
         #[cfg(feature = "unsound_experiments")]
         flags.extend(self.args.unsound_experiments.process_args());
 
-        // Stratification point!
-        // Above are arguments that should be parsed by kani-compiler
-        // Below are arguments that should be parsed by the rustc call
-        // We need to ensure these are in-order due to the way kani-compiler parses arguments. :(
+        flags
+    }
 
+    /// These arguments are arguments passed to kani-compiler that are `rustc` specific.
+    /// These are also used by call_cargo to pass as the env var KANIFLAGS.
+    pub fn kani_rustc_flags(&self) -> Vec<OsString> {
+        let mut flags = Vec::<OsString>::new();
         if self.args.use_abs {
             flags.push("-Z".into());
             flags.push("force-unstable-if-unmarked=yes".into()); // ??
@@ -136,6 +145,15 @@ impl KaniSession {
             flags.push("--cfg".into());
             let abs_type = format!("abs_type={}", self.args.abs_type.to_string().to_lowercase());
             flags.push(abs_type.into());
+        }
+
+        if let Some(seed_opt) = self.args.randomize_layout {
+            flags.push("-Z".into());
+            flags.push("randomize-layout".into());
+            if let Some(seed) = seed_opt {
+                flags.push("-Z".into());
+                flags.push(format!("layout-seed={seed}").into());
+            }
         }
 
         flags.push("-C".into());

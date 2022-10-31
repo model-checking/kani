@@ -1,0 +1,30 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+name: Kani's slow tests
+on:
+  schedule:
+    - cron: "30 5 * * *" # Run this every day at 05:30 UTC
+
+env:
+  RUST_BACKTRACE: 1
+
+jobs:
+  regression:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-11, ubuntu-18.04, ubuntu-20.04]
+    steps:
+      - name: Checkout Kani
+        uses: actions/checkout@v2
+
+      - name: Setup Kani Dependencies
+        uses: ./.github/actions/setup
+        with:
+          os: ${{ matrix.os }}
+
+      - name: Build Kani
+        run: cargo build-dev
+
+      - name: Run Kani's slow tests
+        run: ./scripts/kani-slow-tests.sh

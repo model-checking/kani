@@ -22,7 +22,7 @@ KANI_DIR=$SCRIPT_DIR/..
 export KANI_FAIL_ON_UNEXPECTED_DESCRIPTION="true"
 
 # Required dependencies
-check-cbmc-version.py --major 5 --minor 65
+check-cbmc-version.py --major 5 --minor 67
 check-cbmc-viewer-version.py --major 3 --minor 5
 
 # Formatting check
@@ -30,9 +30,9 @@ ${SCRIPT_DIR}/kani-fmt.sh --check
 
 # Build all packages in the workspace
 if [[ "" != "${KANI_ENABLE_UNSOUND_EXPERIMENTS-}" ]]; then
-  cargo build --features unsound_experiments
+  cargo build-dev -- --features unsound_experiments
 else
-  cargo build
+  cargo build-dev
 fi
 
 # Unit tests
@@ -70,8 +70,6 @@ for testp in "${TESTS[@]}"; do
   suite=${testl[0]}
   mode=${testl[1]}
   echo "Check compiletest suite=$suite mode=$mode"
-  # Note: `cargo-kani` tests fail if we do not add `$(pwd)` to `--build-base`
-  # Tracking issue: https://github.com/model-checking/kani/issues/755
   cargo run -p compiletest --quiet -- --suite $suite --mode $mode --quiet
 done
 

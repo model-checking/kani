@@ -17,8 +17,8 @@ inputs:
 
 runs:
   using: 'docker'
-  image: docker://ghcr.io/model-checking/kani-ubuntu-20.04:0.10.0
+  image: docker://ghcr.io/model-checking/kani-ubuntu-20.04:0.13.0
   args:
     - bash
     - '-c'
-    - 'set -e; export HOME=/root USER=$(id -nu); source $HOME/.bashrc; ${{ inputs.command }}'
+    - 'set -e; export HOME=/root USER=$(id -nu) PATH=/root/.cargo/bin:$PATH; source $HOME/.bashrc; ${{ inputs.command }}'

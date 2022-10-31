@@ -1,0 +1,19 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+# Create a workspace with three independent libraries that have integration tests.
+# The `in_src_harness` has a proof harness co-located with the code.
+# The `integ_harness` has a proof harness co-located with an integration test.
+# The `all_harness` has proof harnesses with src and integration tests.
+[workspace]
+members = [
+  "in_src_harness",
+  "integ_harness",
+  "all_harness",
+]
+
+[workspace.metadata.kani.flags]
+workspace = true
+tests = true
+enable-unstable=true
+mir-linker=true

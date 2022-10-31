@@ -208,9 +208,9 @@ impl<'tcx> TypeOrVariant<'tcx> {
     pub fn expect_type(&self) -> Ty<'tcx> {
         match self {
             TypeOrVariant::Type(t) => *t,
-            TypeOrVariant::Variant(v) => panic!("expect a type but variant is found: {:?}", v),
+            TypeOrVariant::Variant(v) => panic!("expect a type but variant is found: {v:?}"),
             TypeOrVariant::GeneratorVariant(v) => {
-                panic!("expect a type but generator variant is found: {:?}", v)
+                panic!("expect a type but generator variant is found: {v:?}")
             }
         }
     }
@@ -218,10 +218,10 @@ impl<'tcx> TypeOrVariant<'tcx> {
     #[allow(dead_code)]
     pub fn expect_variant(&self) -> &'tcx VariantDef {
         match self {
-            TypeOrVariant::Type(t) => panic!("expect a variant but type is found: {:?}", t),
+            TypeOrVariant::Type(t) => panic!("expect a variant but type is found: {t:?}"),
             TypeOrVariant::Variant(v) => v,
             TypeOrVariant::GeneratorVariant(v) => {
-                panic!("expect a variant but generator variant found {:?}", v)
+                panic!("expect a variant but generator variant found {v:?}")
             }
         }
     }
@@ -547,6 +547,13 @@ impl<'tcx> GotocCtx<'tcx> {
                     self,
                 )
             }
+            ProjectionElem::OpaqueCast(ty) => ProjectedPlace::try_new(
+                before.goto_expr.cast_to(self.codegen_ty(ty)),
+                TypeOrVariant::Type(ty),
+                before.fat_ptr_goto_expr,
+                before.fat_ptr_mir_typ,
+                self,
+            ),
         }
     }
 

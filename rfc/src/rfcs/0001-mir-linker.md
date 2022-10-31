@@ -1,8 +1,8 @@
 - **Feature Name:** MIR Linker (mir_linker)
 - **RFC Tracking Issue**: <https://github.com/model-checking/kani/issues/1588>
 - **RFC PR:** <https://github.com/model-checking/kani/pull/1600>
-- **Status:** Under Review
-- **Version:** 0
+- **Status:** Unstable
+- **Version:** 2
 
 -------------------
 
@@ -235,12 +235,9 @@ These results were obtained by looking at the artifacts generated during the sam
 - Should we codegen all static items no matter what? Static objects can only be initialized via constant function.
   Thus, it shouldn't have any side effect.
   That relies on all constant initializers being evaluated during compilation.
-- What's the best way to handle `cargo kani --tests`?
-  We still want to restrict the reachability and codegen to the last compilation step.
-  Possible solutions that we considered so far:
-  1. Add a new value to `--reachability`, maybe "on-tests" or something like that.
-     This would behave as either "harness" or "none" depending whether RUSTFLAGS has `--tests`.
-  2. Change how we handle not having `--reachability` argument to also take into account the existence of `--tests`.
+- ~~What's the best way to handle `cargo kani --tests`?~~
+  For now, we are going to use the test profile and iterate over all the targets available in the crate:
+  - `cargo rustc --profile test -- --reachability=harnesses`
 
 
 ## Future possibilities

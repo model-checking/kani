@@ -28,7 +28,7 @@ jobs:
           os: ${{ matrix.os }}
 
       - name: Build Kani
-        run: cargo build
+        run: cargo build-dev
 
       - name: Execute Kani regression
         run: ./scripts/kani-regression.sh
@@ -47,7 +47,7 @@ jobs:
           os: ubuntu-20.04
 
       - name: Build Kani
-        run: cargo build
+        run: cargo build-dev
 
       - name: Execute Kani regression
         run: ./scripts/kani-regression.sh
@@ -63,8 +63,8 @@ jobs:
         with:
           os: ubuntu-20.04
 
-      - name: Build Kani
-        run: cargo build
+      - name: Build Kani using release mode
+        run: cargo build-dev -- --release
 
       - name: Execute Kani performance tests
         run: ./scripts/kani-perf.sh
@@ -83,7 +83,7 @@ jobs:
           os: ubuntu-20.04
 
       - name: Build Kani
-        run: cargo build
+        run: cargo build-dev
 
       - name: Install book runner dependencies
         run: ./scripts/setup/install_bookrunner_deps.sh
@@ -133,7 +133,7 @@ jobs:
 
       - name: Build release bundle
         run: |
-          cargo run -p make-kani-release -- latest
+          cargo bundle -- latest
           cargo package -p kani-verifier
 
       - name: Build container test
@@ -154,6 +154,8 @@ jobs:
             docker run -w /tmp/kani/tests/cargo-kani/build-rs-works  $tag  cargo kani
             docker run $tag  cargo-kani setup --use-local-bundle ./${{ matrix.artifact }}
           done
+          # While the above test OS issues, now try testing with nightly as default:
+          docker run -w /tmp/kani/tests/cargo-kani/simple-lib  kani-20-04  bash -c "rustup default nightly && cargo kani"
 
       # We can't run macos in a container, so we can only test locally.
       # Hopefully any dependency issues won't be unique to macos.

@@ -129,7 +129,7 @@ impl<'tcx> GotocCtx<'tcx> {
             ),
             _ => self.codegen_fatal_error(
                 PropertyClass::UnsupportedConstruct,
-                &format!("Unsupported intrinsic {}", intrinsic),
+                &format!("Unsupported intrinsic {intrinsic}"),
                 span,
             ),
         }
@@ -313,13 +313,6 @@ impl<'tcx> GotocCtx<'tcx> {
             ($f:ident) => {{ codegen_intrinsic_binop!($f) }};
         }
 
-        // Intrinsics which encode a pointer comparison (e.g., `ptr_guaranteed_eq`).
-        // These behave as regular pointer comparison at runtime:
-        // https://doc.rust-lang.org/beta/std/primitive.pointer.html#method.guaranteed_eq
-        macro_rules! codegen_ptr_guaranteed_cmp {
-            ($f:ident) => {{ self.binop(p, fargs, |a, b| a.$f(b).cast_to(Type::c_bool())) }};
-        }
-
         // Intrinsics which encode a simple binary operation
         macro_rules! codegen_intrinsic_binop {
             ($f:ident) => {{ self.binop(p, fargs, |a, b| a.$f(b)) }};
@@ -411,8 +404,11 @@ impl<'tcx> GotocCtx<'tcx> {
             }};
         }
 
-        if let Some(stripped) = intrinsic.strip_prefix("simd_shuffle") {
-            let _n: u64 = stripped.parse().unwrap();
+        if let Some(_stripped) = intrinsic.strip_prefix("simd_shuffle") {
+            // TODO: can be empty now (i.e. `simd_shuffle` instead of `simd_shuffle8`)
+            // `parse` fails on empty, so comment that bit of code out.
+            // To re-enable this we'll need to investigate how size is computed now.
+            // let n: u64 = stripped.parse().unwrap();
             return unstable_codegen!(self.codegen_intrinsic_simd_shuffle(
                 fargs,
                 p,
@@ -596,8 +592,7 @@ impl<'tcx> GotocCtx<'tcx> {
             "powif32" => unstable_codegen!(codegen_simple_intrinsic!(Powif)),
             "powif64" => unstable_codegen!(codegen_simple_intrinsic!(Powi)),
             "pref_align_of" => codegen_intrinsic_const!(),
-            "ptr_guaranteed_eq" => codegen_ptr_guaranteed_cmp!(eq),
-            "ptr_guaranteed_ne" => codegen_ptr_guaranteed_cmp!(neq),
+            "ptr_guaranteed_cmp" => self.codegen_ptr_guaranteed_cmp(fargs, p),
             "ptr_offset_from" => self.codegen_ptr_offset_from(fargs, p, loc),
             "ptr_offset_from_unsigned" => self.codegen_ptr_offset_from_unsigned(fargs, p, loc),
             "raw_eq" => self.codegen_intrinsic_raw_eq(instance, fargs, p, loc),
@@ -723,8 +718,8 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> Stmt {
         let arg1 = fargs.remove(0);
         let arg2 = fargs.remove(0);
-        let msg1 = format!("first argument for {} is finite", intrinsic);
-        let msg2 = format!("second argument for {} is finite", intrinsic);
+        let msg1 = format!("first argument for {intrinsic} is finite");
+        let msg2 = format!("second argument for {intrinsic} is finite");
         let loc = self.codegen_span_option(span);
         let finite_check1 = self.codegen_assert_assume(
             arg1.is_finite(),
@@ -814,7 +809,7 @@ impl<'tcx> GotocCtx<'tcx> {
         if layout.abi.is_uninhabited() {
             return self.codegen_fatal_error(
                 PropertyClass::SafetyCheck,
-                &format!("attempted to instantiate uninhabited type `{}`", ty),
+                &format!("attempted to instantiate uninhabited type `{ty}`"),
                 span,
             );
         }
@@ -824,7 +819,7 @@ impl<'tcx> GotocCtx<'tcx> {
         if intrinsic == "assert_zero_valid" && !self.tcx.permits_zero_init(layout) {
             return self.codegen_fatal_error(
                 PropertyClass::SafetyCheck,
-                &format!("attempted to zero-initialize type `{}`, which is invalid", ty),
+                &format!("attempted to zero-initialize type `{ty}`, which is invalid"),
                 span,
             );
         }
@@ -832,7 +827,7 @@ impl<'tcx> GotocCtx<'tcx> {
         if intrinsic == "assert_uninit_valid" && !self.tcx.permits_uninit_init(layout) {
             return self.codegen_fatal_error(
                 PropertyClass::SafetyCheck,
-                &format!("attempted to leave type `{}` uninitialized, which is invalid", ty),
+                &format!("attempted to leave type `{ty}` uninitialized, which is invalid"),
                 span,
             );
         }
@@ -1012,6 +1007,26 @@ impl<'tcx> GotocCtx<'tcx> {
         Stmt::block(vec![src_align_check, dst_align_check, overflow_check, copy_expr], loc)
     }
 
+    // In some contexts (e.g., compilation-time evaluation),
+    // `ptr_guaranteed_cmp` compares two pointers and returns:
+    //  * 2 if the result is unknown.
+    //  * 1 if they are guaranteed to be equal.
+    //  * 0 if they are guaranteed to be not equal.
+    // But at runtime, this intrinsic behaves as a regular pointer comparison.
+    // Therefore, we return 1 if the pointers are equal and 0 otherwise.
+    //
+    // This intrinsic replaces `ptr_guaranteed_eq` and `ptr_guaranteed_ne`:
+    // https://doc.rust-lang.org/beta/std/primitive.pointer.html#method.guaranteed_eq
+    fn codegen_ptr_guaranteed_cmp(&mut self, mut fargs: Vec<Expr>, p: &Place<'tcx>) -> Stmt {
+        let a = fargs.remove(0);
+        let b = fargs.remove(0);
+        let place_type = self.place_ty(p);
+        let res_type = self.codegen_ty(place_type);
+        let eq_expr = a.eq(b);
+        let cmp_expr = eq_expr.ternary(res_type.one(), res_type.zero());
+        self.codegen_expr_to_place(p, cmp_expr)
+    }
+
     /// Computes the offset from a pointer.
     ///
     /// Note that this function handles code generation for:
@@ -1165,7 +1180,7 @@ impl<'tcx> GotocCtx<'tcx> {
         ret_ty: Ty<'tcx>,
         p: &Place<'tcx>,
     ) -> Stmt {
-        assert!(fargs.len() == 1, "transmute had unexpected arguments {:?}", fargs);
+        assert!(fargs.len() == 1, "transmute had unexpected arguments {fargs:?}");
         let arg = fargs.remove(0);
         let cbmc_ret_ty = self.codegen_ty(ret_ty);
         let expr = arg.transmute_to(cbmc_ret_ty, &self.symbol_table);
@@ -1329,7 +1344,7 @@ impl<'tcx> GotocCtx<'tcx> {
         cbmc_ret_ty: Type,
         loc: Location,
     ) -> Stmt {
-        assert!(fargs.len() == 3, "simd_insert had unexpected arguments {:?}", fargs);
+        assert!(fargs.len() == 3, "simd_insert had unexpected arguments {fargs:?}");
         let vec = fargs.remove(0);
         let index = fargs.remove(0);
         let newval = fargs.remove(0);
@@ -1362,7 +1377,7 @@ impl<'tcx> GotocCtx<'tcx> {
         cbmc_ret_ty: Type,
         n: u64,
     ) -> Stmt {
-        assert!(fargs.len() == 3, "simd_shuffle had unexpected arguments {:?}", fargs);
+        assert!(fargs.len() == 3, "simd_shuffle had unexpected arguments {fargs:?}");
         // vector, size n: translated as vector types which cbmc treats as arrays
         let vec1 = fargs.remove(0);
         let vec2 = fargs.remove(0);
@@ -1505,7 +1520,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let size_of_elem = Expr::int_constant(layout.size.bytes(), res_ty);
         let size_of_count_elems = count.mul_overflow(size_of_elem);
         let message =
-            format!("{}: attempt to compute number in bytes which would overflow", intrinsic);
+            format!("{intrinsic}: attempt to compute number in bytes which would overflow");
         let assert_stmt = self.codegen_assert_assume(
             size_of_count_elems.overflowed.not(),
             PropertyClass::ArithmeticOverflow,

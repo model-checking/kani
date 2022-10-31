@@ -12,7 +12,6 @@
 #![feature(box_patterns)]
 #![feature(control_flow_enum)]
 #![feature(box_syntax)]
-#![feature(let_else)]
 #![feature(test)]
 #![feature(never_type)]
 #![feature(once_cell)]
@@ -62,7 +61,6 @@ extern crate rustc_session;
 extern crate rustc_span;
 extern crate rustc_target;
 extern crate rustc_trait_selection;
-extern crate rustc_typeck;
 extern crate test;
 
 pub mod doctest;

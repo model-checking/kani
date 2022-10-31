@@ -122,7 +122,7 @@ impl<'a> ArchiveBuilder<'a> for ArArchiveBuilder<'a> {
             ))
         } else {
             BuilderKind::Bsd(ar::Builder::new(File::create(&output).unwrap_or_else(|err| {
-                sess.fatal(&format!("error opening destination during archive building: {}", err));
+                sess.fatal(&format!("error opening destination during archive building: {err}"));
             })))
         };
 

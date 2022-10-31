@@ -34,8 +34,8 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_var_name(&self, l: &Local) -> String {
         let fname = self.current_fn().name();
         match self.find_debug_info(l) {
-            Some(info) => format!("{}::1::var{:?}::{}", fname, l, info.name),
-            None => format!("{}::1::var{:?}", fname, l),
+            Some(info) => format!("{fname}::1::var{l:?}::{}", info.name),
+            None => format!("{fname}::1::var{l:?}"),
         }
     }
 
@@ -44,13 +44,13 @@ impl<'tcx> GotocCtx<'tcx> {
     // compiler/rustc_codegen_llvm/src/gotoc/mod.rs:codegen_function_prelude
     pub fn codegen_spread_arg_name(&self, l: &Local) -> (String, String) {
         let fname = self.current_fn().name();
-        let base_name = format!("spread{:?}", l);
-        let name = format!("{}::1::{}", fname, base_name);
+        let base_name = format!("spread{l:?}");
+        let name = format!("{fname}::1::{base_name}");
         (name, base_name)
     }
 
     pub fn initializer_fn_name(var_name: &str) -> String {
-        format!("{}_init", var_name)
+        format!("{var_name}_init")
     }
 
     /// A human readable name in Rust for reference, should not be used as a key.
@@ -96,7 +96,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// The name for a tuple field
     pub fn tuple_fld_name(n: usize) -> String {
-        format!("{}", n)
+        format!("{n}")
     }
 
     /// The name for the struct field on a vtable for a given function. Because generic
@@ -112,19 +112,19 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Add a prefix of the form:
-    /// \[<prefix>\]
+    /// \[`<prefix>`\]
     /// to the provided message
     pub fn add_prefix_to_msg(msg: &str, prefix: &str) -> String {
-        format!("[{}] {}", prefix, msg)
+        format!("[{prefix}] {msg}")
     }
 
     /// Generate a message for the reachability check of an assert with ID
     /// `check_id`. The message is of the form:
-    /// \[KANI_REACHABILITY_CHECK\] <ID of assert>
+    /// \[KANI_REACHABILITY_CHECK\] `<ID of assert>`
     /// The check_id is generated using the GotocCtx::next_check_id method and
     /// is a unique string identifier for that check.
     pub fn reachability_check_message(check_id: &str) -> String {
-        format!("[KANI_REACHABILITY_CHECK] {}", check_id)
+        format!("[KANI_REACHABILITY_CHECK] {check_id}")
     }
 }
 

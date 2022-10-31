@@ -1,13 +1,13 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+use crate::args::KaniArgs;
+use crate::session::KaniSession;
 use anyhow::{Context, Result};
-use cargo_metadata::MetadataCommand;
+use cargo_metadata::{Metadata, MetadataCommand, Package};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-
-use crate::session::KaniSession;
 
 /// The outputs of kani-compiler being invoked via cargo on a project.
 pub struct CargoOutputs {
@@ -22,66 +22,77 @@ pub struct CargoOutputs {
     pub metadata: Vec<PathBuf>,
 }
 
-/// Finds the "target" directory while considering workspaces,
-fn find_target_dir() -> PathBuf {
-    fn maybe_get_target() -> Option<PathBuf> {
-        Some(MetadataCommand::new().exec().ok()?.target_directory.into())
-    }
-
-    maybe_get_target().unwrap_or(PathBuf::from("target"))
-}
-
 impl KaniSession {
     /// Calls `cargo_build` to generate `*.symtab.json` files in `target_dir`
     pub fn cargo_build(&self) -> Result<CargoOutputs> {
         let build_target = env!("TARGET"); // see build.rs
-        let target_dir = self.args.target_dir.as_ref().unwrap_or(&find_target_dir()).clone();
+        let metadata = MetadataCommand::new().exec().context("Failed to get cargo metadata.")?;
+        let target_dir = self
+            .args
+            .target_dir
+            .as_ref()
+            .unwrap_or(&metadata.target_directory.clone().into())
+            .clone();
         let outdir = target_dir.join(build_target).join("debug/deps");
 
-        let flag_env = {
-            let rustc_args = self.kani_rustc_flags();
-            crate::util::join_osstring(&rustc_args, " ")
-        };
+        let mut kani_args = self.kani_specific_flags();
+        let rustc_args = self.kani_rustc_flags();
 
-        let mut args: Vec<OsString> = Vec::new();
+        let mut cargo_args: Vec<OsString> = vec!["rustc".into()];
+        if self.args.all_features {
+            cargo_args.push("--all-features".into());
+        }
+
+        cargo_args.push("--target".into());
+        cargo_args.push(build_target.into());
+
+        cargo_args.push("--target-dir".into());
+        cargo_args.push(target_dir.into());
 
         if self.args.tests {
-            args.push("test".into());
-            args.push("--no-run".into());
-        } else {
-            args.push("build".into());
+            // Use test profile in order to pull dev-dependencies and compile using `--test`.
+            // Initially the plan was to use `--tests` but that brings in multiple targets.
+            cargo_args.push("--profile".into());
+            cargo_args.push("test".into());
         }
-
-        for package in self.args.package.iter() {
-            args.push("--package".into());
-            args.push(package.into());
-        }
-
-        if self.args.all_features {
-            args.push("--all-features".into());
-        }
-
-        if self.args.workspace {
-            args.push("--workspace".into());
-        }
-
-        args.push("--target".into());
-        args.push(build_target.into());
-
-        args.push("--target-dir".into());
-        args.push(target_dir.into());
 
         if self.args.verbose {
-            args.push("-v".into());
+            cargo_args.push("-v".into());
         }
 
-        let mut cmd = Command::new("cargo");
-        cmd.args(args)
-            .env("RUSTC", &self.kani_compiler)
-            .env("RUSTFLAGS", "--kani-flags")
-            .env("KANIFLAGS", flag_env);
+        // Arguments that will only be passed to the target package.
+        let mut pkg_args: Vec<OsString> = vec![];
+        if !self.args.legacy_linker {
+            // Only provide reachability flag to the target package.
+            pkg_args.push("--".into());
+            if self.args.function.is_some() {
+                pkg_args.push("--reachability=pub_fns".into());
+            } else {
+                pkg_args.push("--reachability=harnesses".into());
+            }
+        } else {
+            // Pass legacy reachability to the target package and its dependencies.
+            kani_args.push("--reachability=legacy".into());
+        }
 
-        self.run_terminal(cmd)?;
+        // Only joing them at the end. All kani flags must come first.
+        kani_args.extend_from_slice(&rustc_args);
+
+        let packages = packages_to_verify(&self.args, &metadata);
+        for package in packages {
+            for target in package_targets(&self.args, package) {
+                let mut cmd = Command::new("cargo");
+                cmd.args(&cargo_args)
+                    .args(vec!["-p", &package.name])
+                    .args(&target.to_args())
+                    .args(&pkg_args)
+                    .env("RUSTC", &self.kani_compiler)
+                    .env("RUSTFLAGS", "--kani-flags")
+                    .env("KANIFLAGS", &crate::util::join_osstring(&kani_args, " "));
+
+                self.run_terminal(cmd)?;
+            }
+        }
 
         if self.args.dry_run {
             // mock an answer: mostly the same except we don't/can't expand the globs
@@ -109,4 +120,69 @@ fn glob(path: &Path) -> Result<Vec<PathBuf>> {
     // with anyhow, so a type annotation is required
     let v: core::result::Result<Vec<PathBuf>, glob::GlobError> = results.collect();
     Ok(v?)
+}
+
+/// Extract the packages that should be verified.
+/// If --package <pkg> is given, return the list of packages selected.
+/// If --workspace is given, return the list of workspace members.
+/// If no argument provided, return the root package if there's one or all members.
+///   - I.e.: Do whatever cargo does when there's no default_members.
+///   - This is because `default_members` is not available in cargo metadata.
+///     See <https://github.com/rust-lang/cargo/issues/8033>.
+fn packages_to_verify<'a, 'b>(args: &'a KaniArgs, metadata: &'b Metadata) -> Vec<&'b Package> {
+    if !args.package.is_empty() {
+        args.package
+            .iter()
+            .map(|pkg_name| {
+                metadata
+                    .packages
+                    .iter()
+                    .find(|pkg| pkg.name == *pkg_name)
+                    .expect(&format!("Cannot find package '{pkg_name}'"))
+            })
+            .collect()
+    } else {
+        match (args.workspace, metadata.root_package()) {
+            (true, _) | (_, None) => metadata.workspace_packages(),
+            (_, Some(root_pkg)) => vec![root_pkg],
+        }
+    }
+}
+
+/// Possible verification targets.
+enum VerificationTarget {
+    Bin(String),
+    Lib,
+    Test(String),
+}
+
+impl VerificationTarget {
+    /// Convert to cargo argument that select the specific target.
+    fn to_args(&self) -> Vec<String> {
+        match self {
+            VerificationTarget::Test(name) => vec![String::from("--test"), name.clone()],
+            VerificationTarget::Bin(name) => vec![String::from("--bin"), name.clone()],
+            VerificationTarget::Lib => vec![String::from("--lib")],
+        }
+    }
+}
+
+/// Extract the targets inside a package.
+/// If `--tests` is given, the list of targets will include any integration tests.
+fn package_targets(args: &KaniArgs, package: &Package) -> Vec<VerificationTarget> {
+    package
+        .targets
+        .iter()
+        .filter_map(|target| {
+            if target.kind.contains(&String::from("bin")) {
+                Some(VerificationTarget::Bin(target.name.clone()))
+            } else if target.kind.contains(&String::from("lib")) {
+                Some(VerificationTarget::Lib)
+            } else if target.kind.contains(&String::from("test")) && args.tests {
+                Some(VerificationTarget::Test(target.name.clone()))
+            } else {
+                None
+            }
+        })
+        .collect()
 }

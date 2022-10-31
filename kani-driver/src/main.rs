@@ -1,27 +1,27 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+#![feature(let_chains)]
 
 use anyhow::Result;
+use args::CargoKaniSubcommand;
 use args_toml::join_args;
-use call_cbmc::VerificationStatus;
-use kani_metadata::HarnessMetadata;
-use session::KaniSession;
 use std::ffi::OsString;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use structopt::StructOpt;
-use util::append_path;
 
 mod args;
 mod args_toml;
+mod assess;
 mod call_cargo;
 mod call_cbmc;
 mod call_cbmc_viewer;
 mod call_goto_cc;
 mod call_goto_instrument;
 mod call_single_file;
-mod call_symtab;
 mod cbmc_output_parser;
+mod cbmc_property_renderer;
 mod concrete_playback;
+mod harness_runner;
 mod metadata;
 mod session;
 mod util;
@@ -42,11 +42,25 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     args.validate();
     let ctx = session::KaniSession::new(args.common_opts)?;
 
+    if matches!(args.command, Some(CargoKaniSubcommand::Assess)) || ctx.args.assess {
+        // --assess requires --enable-unstable, but the subcommand needs manual checking
+        if !ctx.args.enable_unstable {
+            clap::Error::with_description(
+                "Assess is unstable and requires 'cargo kani --enable-unstable assess'",
+                clap::ErrorKind::MissingRequiredArgument,
+            )
+            .exit()
+        }
+        // Run the alternative command instead
+        return assess::cargokani_assess_main(ctx);
+    }
+
     let outputs = ctx.cargo_build()?;
 
     let mut goto_objs: Vec<PathBuf> = Vec::new();
     for symtab in &outputs.symtabs {
-        goto_objs.push(ctx.symbol_table_to_gotoc(symtab)?);
+        let goto_obj_filename = symtab.with_extension("out");
+        goto_objs.push(goto_obj_filename);
     }
 
     if ctx.args.only_codegen {
@@ -61,30 +75,19 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
 
     let metadata = ctx.collect_kani_metadata(&outputs.metadata)?;
     let harnesses = ctx.determine_targets(&metadata)?;
-    let sorted_harnesses = metadata::sort_harnesses_by_loc(&harnesses);
     let report_base = ctx.args.target_dir.clone().unwrap_or(PathBuf::from("target"));
 
-    let mut failed_harnesses: Vec<&HarnessMetadata> = Vec::new();
+    let runner = harness_runner::HarnessRunner {
+        sess: &ctx,
+        linked_obj: &linked_obj,
+        report_base: &report_base,
+        symtabs: &outputs.symtabs,
+        retain_specialized_harnesses: true,
+    };
 
-    for harness in &sorted_harnesses {
-        let harness_filename = harness.pretty_name.replace("::", "-");
-        let report_dir = report_base.join(format!("report-{}", harness_filename));
-        let specialized_obj = outputs.outdir.join(format!("cbmc-for-{}.out", harness_filename));
-        ctx.run_goto_instrument(
-            &linked_obj,
-            &specialized_obj,
-            &outputs.symtabs,
-            &harness.mangled_name,
-        )?;
+    let results = runner.check_all_harnesses(&harnesses)?;
 
-        let result = ctx.check_harness(&specialized_obj, &report_dir, harness)?;
-        if result == VerificationStatus::Failure {
-            failed_harnesses.push(harness);
-        }
-    }
-
-    ctx.inform_if_no_failed(&failed_harnesses);
-    ctx.print_final_summary(&sorted_harnesses, &failed_harnesses)
+    ctx.print_final_summary(&results)
 }
 
 fn standalone_main() -> Result<()> {
@@ -94,17 +97,14 @@ fn standalone_main() -> Result<()> {
 
     let outputs = ctx.compile_single_rust_file(&args.input)?;
 
-    let goto_obj = ctx.symbol_table_to_gotoc(&outputs.symtab)?;
+    let goto_obj = outputs.goto_obj;
 
     if ctx.args.only_codegen {
         return Ok(());
     }
 
     let linked_obj = util::alter_extension(&args.input, "out");
-    {
-        let mut temps = ctx.temporaries.borrow_mut();
-        temps.push(linked_obj.to_owned());
-    }
+    ctx.record_temporary_files(&[&linked_obj]);
     ctx.link_goto_binary(&[goto_obj], &linked_obj)?;
     if let Some(restriction) = outputs.restrictions {
         ctx.apply_vtable_restrictions(&linked_obj, &restriction)?;
@@ -112,88 +112,19 @@ fn standalone_main() -> Result<()> {
 
     let metadata = ctx.collect_kani_metadata(&[outputs.metadata])?;
     let harnesses = ctx.determine_targets(&metadata)?;
-    let sorted_harnesses = metadata::sort_harnesses_by_loc(&harnesses);
     let report_base = ctx.args.target_dir.clone().unwrap_or(PathBuf::from("."));
 
-    let mut failed_harnesses: Vec<&HarnessMetadata> = Vec::new();
+    let runner = harness_runner::HarnessRunner {
+        sess: &ctx,
+        linked_obj: &linked_obj,
+        report_base: &report_base,
+        symtabs: &[outputs.symtab],
+        retain_specialized_harnesses: false,
+    };
 
-    for harness in &sorted_harnesses {
-        let harness_filename = harness.pretty_name.replace("::", "-");
-        let report_dir = report_base.join(format!("report-{}", harness_filename));
-        let specialized_obj = append_path(&linked_obj, &format!("for-{}", harness_filename));
-        {
-            let mut temps = ctx.temporaries.borrow_mut();
-            temps.push(specialized_obj.to_owned());
-        }
-        ctx.run_goto_instrument(
-            &linked_obj,
-            &specialized_obj,
-            &[&outputs.symtab],
-            &harness.mangled_name,
-        )?;
+    let results = runner.check_all_harnesses(&harnesses)?;
 
-        let result = ctx.check_harness(&specialized_obj, &report_dir, harness)?;
-        if result == VerificationStatus::Failure {
-            failed_harnesses.push(harness);
-        }
-    }
-
-    ctx.inform_if_no_failed(&failed_harnesses);
-    ctx.print_final_summary(&sorted_harnesses, &failed_harnesses)
-}
-
-impl KaniSession {
-    fn check_harness(
-        &self,
-        binary: &Path,
-        report_dir: &Path,
-        harness: &HarnessMetadata,
-    ) -> Result<VerificationStatus> {
-        if !self.args.quiet {
-            println!("Checking harness {}...", harness.pretty_name);
-        }
-
-        if self.args.visualize {
-            self.run_visualize(binary, report_dir, harness)?;
-            // Strictly speaking, we're faking success here. This is more "no error"
-            Ok(VerificationStatus::Success)
-        } else {
-            self.run_cbmc(binary, harness)
-        }
-    }
-
-    fn print_final_summary(
-        self,
-        harnesses: &[HarnessMetadata],
-        failed_harnesses: &[&HarnessMetadata],
-    ) -> Result<()> {
-        if !self.args.quiet && !self.args.visualize && harnesses.len() > 1 {
-            if !failed_harnesses.is_empty() {
-                println!("Summary:");
-            }
-            for harness in failed_harnesses.iter() {
-                println!("Verification failed for - {}", harness.pretty_name);
-            }
-
-            println!(
-                "Complete - {} successfully verified harnesses, {} failures, {} total.",
-                harnesses.len() - failed_harnesses.len(),
-                failed_harnesses.len(),
-                harnesses.len()
-            );
-        }
-
-        #[cfg(feature = "unsound_experiments")]
-        self.args.unsound_experiments.print_warnings();
-
-        if !failed_harnesses.is_empty() {
-            // Failure exit code without additional error message
-            drop(self);
-            std::process::exit(1);
-        }
-
-        Ok(())
-    }
+    ctx.print_final_summary(&results)
 }
 
 #[derive(Debug, PartialEq, Eq)]

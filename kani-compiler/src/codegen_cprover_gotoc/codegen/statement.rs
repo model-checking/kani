@@ -11,8 +11,8 @@ use kani_queries::UserInput;
 use rustc_hir::def_id::DefId;
 use rustc_middle::mir;
 use rustc_middle::mir::{
-    AssertKind, BasicBlock, Operand, Place, Statement, StatementKind, SwitchTargets, Terminator,
-    TerminatorKind,
+    AssertKind, BasicBlock, NonDivergingIntrinsic, Operand, Place, Statement, StatementKind,
+    SwitchTargets, Terminator, TerminatorKind,
 };
 use rustc_middle::ty;
 use rustc_middle::ty::layout::LayoutOf;
@@ -89,8 +89,8 @@ impl<'tcx> GotocCtx<'tcx> {
                             self.codegen_discriminant_field(place_goto_expr, pt)
                                 .assign(discr, location)
                         }
-                        TagEncoding::Niche { dataful_variant, niche_variants, niche_start } => {
-                            if dataful_variant != variant_index {
+                        TagEncoding::Niche { untagged_variant, niche_variants, niche_start } => {
+                            if untagged_variant != variant_index {
                                 let offset = match &layout.fields {
                                     FieldsShape::Arbitrary { offsets, .. } => offsets[0],
                                     _ => unreachable!("niche encoding must have arbitrary fields"),
@@ -122,11 +122,9 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             StatementKind::StorageLive(_) => Stmt::skip(location), // TODO: fix me
             StatementKind::StorageDead(_) => Stmt::skip(location), // TODO: fix me
-            StatementKind::CopyNonOverlapping(box mir::CopyNonOverlapping {
-                ref src,
-                ref dst,
-                ref count,
-            }) => {
+            StatementKind::Intrinsic(box NonDivergingIntrinsic::CopyNonOverlapping(
+                mir::CopyNonOverlapping { ref src, ref dst, ref count },
+            )) => {
                 // Pack the operands and their types, then call `codegen_copy`
                 let fargs = vec![
                     self.codegen_operand(src),
@@ -136,6 +134,15 @@ impl<'tcx> GotocCtx<'tcx> {
                 let farg_types =
                     &[self.operand_ty(src), self.operand_ty(dst), self.operand_ty(count)];
                 self.codegen_copy("copy_nonoverlapping", true, fargs, farg_types, None, location)
+            }
+            StatementKind::Intrinsic(box NonDivergingIntrinsic::Assume(ref op)) => {
+                let cond = self.codegen_operand(op).cast_to(Type::bool());
+                self.codegen_assert_assume(
+                    cond,
+                    PropertyClass::Assume,
+                    "assumption failed",
+                    location,
+                )
             }
             StatementKind::FakeRead(_)
             | StatementKind::Retag(_, _)
@@ -334,7 +341,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             if !(typ.is_trait() || typ.is_box()) {
                                 warn!(self_type=?typ, "Unsupported drop of unsized");
                                 return self.codegen_unimplemented_stmt(
-                                    format!("Unsupported drop unsized struct: {:?}", typ).as_str(),
+                                    format!("drop unsized struct for {typ:?}").as_str(),
                                     loc,
                                     "https://github.com/model-checking/kani/issues/1072",
                                 );
@@ -383,7 +390,11 @@ impl<'tcx> GotocCtx<'tcx> {
                             func.call(args).as_stmt(loc)
                         } else {
                             self.codegen_unimplemented_stmt(
-                                format!("drop_in_place call for {:?}", func).as_str(),
+                                format!(
+                                    "drop_in_place call for {}",
+                                    self.readable_instance_name(drop_instance)
+                                )
+                                .as_str(),
                                 loc,
                                 "https://github.com/model-checking/kani/issues/426",
                             )
@@ -692,7 +703,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // Otherwise, CBMC might treat this as an assume(0) and later user-added assertions
         // could become unreachable.
         let call_is_nonnull = fn_ptr.clone().is_nonnull();
-        let assert_msg = format!("Non-null virtual function call for {:?}", vtable_field_name);
+        let assert_msg = format!("Non-null virtual function call for {vtable_field_name:?}");
         let assert_nonnull = self.codegen_sanity(call_is_nonnull, &assert_msg, loc);
 
         // Virtual function call and corresponding nonnull assertion.

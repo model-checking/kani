@@ -1,0 +1,11 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+[package]
+name = "all_harness"
+version = "0.1.0"
+edition = "2021"
+description = "Package with harnesses that co-located with integration tests and src"
+
+[dependencies]
+integ_harness = { path= "../integ_harness" }
+in_src_harness = { path= "../in_src_harness" }

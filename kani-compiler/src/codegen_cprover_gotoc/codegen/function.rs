@@ -9,6 +9,8 @@ use cbmc::InternString;
 use kani_metadata::HarnessMetadata;
 use rustc_ast::ast;
 use rustc_ast::{Attribute, LitKind};
+use rustc_hir::def::DefKind;
+use rustc_hir::def_id::DefId;
 use rustc_middle::mir::{HasLocalDecls, Local};
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{self, Instance};
@@ -121,6 +123,7 @@ impl<'tcx> GotocCtx<'tcx> {
             self.symbol_table.update_fn_declaration_with_definition(&name, body);
 
             self.handle_kanitool_attributes();
+            self.record_test_harness_metadata();
         }
         self.reset_current_fn();
     }
@@ -262,14 +265,47 @@ impl<'tcx> GotocCtx<'tcx> {
         self.reset_current_fn();
     }
 
-    /// This updates the goto context with any information that should be accumulated from a function's
-    /// attributes.
-    ///
-    /// Handle all attributes i.e. `#[kani::x]` (which kani_macros translates to `#[kanitool::x]` for us to handle here)
-    fn handle_kanitool_attributes(&mut self) {
-        let all_attributes = self.tcx.get_attrs_unchecked(self.current_fn().instance().def_id());
+    pub fn is_proof_harness(&self, def_id: DefId) -> bool {
+        let all_attributes = self.tcx.get_attrs_unchecked(def_id);
+        let (proof_attributes, _) = partition_kanitool_attributes(all_attributes);
+        if !proof_attributes.is_empty() {
+            let span = proof_attributes.first().unwrap().span;
+            if self.tcx.def_kind(def_id) != DefKind::Fn {
+                self.tcx
+                    .sess
+                    .span_err(span, "The kani::proof attribute can only be applied to functions.");
+            } else if self.tcx.generics_of(def_id).requires_monomorphization(self.tcx) {
+                self.tcx
+                    .sess
+                    .span_err(span, "The proof attribute cannot be applied to generic functions.");
+            }
+            self.tcx.sess.abort_if_errors();
+            true
+        } else {
+            false
+        }
+    }
+
+    // Check that all attributes assigned to an item is valid.
+    pub fn check_attributes(&self, def_id: DefId) {
+        let all_attributes = self.tcx.get_attrs_unchecked(def_id);
         let (proof_attributes, other_attributes) = partition_kanitool_attributes(all_attributes);
-        if proof_attributes.is_empty() && !other_attributes.is_empty() {
+        if !proof_attributes.is_empty() {
+            let span = proof_attributes.first().unwrap().span;
+            if self.tcx.def_kind(def_id) != DefKind::Fn {
+                self.tcx
+                    .sess
+                    .span_err(span, "The kani::proof attribute can only be applied to functions.");
+            } else if self.tcx.generics_of(def_id).requires_monomorphization(self.tcx) {
+                self.tcx
+                    .sess
+                    .span_err(span, "The proof attribute cannot be applied to generic functions.");
+            } else if proof_attributes.len() > 1 {
+                self.tcx
+                    .sess
+                    .span_warn(proof_attributes[0].span, "Only one '#[kani::proof]' allowed");
+            }
+        } else if !other_attributes.is_empty() {
             self.tcx.sess.span_err(
                 other_attributes[0].1.span,
                 format!(
@@ -278,12 +314,57 @@ impl<'tcx> GotocCtx<'tcx> {
                 )
                 .as_str(),
             );
-            return;
         }
-        if proof_attributes.len() > 1 {
-            // No return because this only requires a warning
-            self.tcx.sess.span_warn(proof_attributes[0].span, "Only one '#[kani::proof]' allowed");
+    }
+
+    /// We record test harness information in kani-metadata, just like we record
+    /// proof harness information. This is used to support e.g. cargo-kani assess.
+    ///
+    /// Note that we do not actually spot the function that was annotated by `#[test]`
+    /// but instead the closure that gets put into the "test description" that macro
+    /// expands into. (See comment below) This ends up being preferrable, actually,
+    /// as it add asserts for tests that return `Result` types.
+    fn record_test_harness_metadata(&mut self) {
+        let def_id = self.current_fn().instance().def_id();
+        if def_id.is_local() {
+            let local_def_id = def_id.expect_local();
+            let hir_id = self.tcx.hir().local_def_id_to_hir_id(local_def_id);
+
+            // We want to detect the case where we're codegen'ing the closure inside what test "descriptions"
+            // are macro-expanded to:
+            //
+            // #[rustc_test_marker]
+            // pub const check_2: test::TestDescAndFn = test::TestDescAndFn {
+            //     desc: ...,
+            //     testfn: test::StaticTestFn(|| test::assert_test_result(check_2())),
+            // };
+
+            // The parent item of the closure appears to reliably be the `const` declaration item.
+            let parent_id = self.tcx.hir().get_parent_item(hir_id);
+            let attrs = self.tcx.get_attrs_unchecked(parent_id.to_def_id());
+
+            if self.tcx.sess.contains_name(attrs, rustc_span::symbol::sym::rustc_test_marker) {
+                let loc = self.codegen_span(&self.current_fn().mir().span);
+                self.test_harnesses.push(HarnessMetadata {
+                    pretty_name: self.current_fn().readable_name().to_owned(),
+                    mangled_name: self.current_fn().name(),
+                    original_file: loc.filename().unwrap(),
+                    original_start_line: loc.start_line().unwrap() as usize,
+                    original_end_line: loc.end_line().unwrap() as usize,
+                    unwind_value: None,
+                })
+            }
         }
+    }
+
+    /// This updates the goto context with any information that should be accumulated from a function's
+    /// attributes.
+    ///
+    /// Handle all attributes i.e. `#[kani::x]` (which kani_macros translates to `#[kanitool::x]` for us to handle here)
+    fn handle_kanitool_attributes(&mut self) {
+        let def_id = self.current_fn().instance().def_id();
+        let all_attributes = self.tcx.get_attrs_unchecked(def_id);
+        let (proof_attributes, other_attributes) = partition_kanitool_attributes(all_attributes);
         if !proof_attributes.is_empty() {
             self.create_proof_harness(other_attributes);
         }

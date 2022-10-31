@@ -80,7 +80,7 @@ jobs:
 
       - name: Build release bundle
         run: |
-          cargo run -p make-kani-release -- ${{ needs.Release.outputs.version }}
+          cargo bundle
 
       - name: Upload artifact
         uses: actions/upload-release-asset@v1
@@ -113,7 +113,7 @@ jobs:
 
       - name: 'Build release bundle'
         run: |
-          cargo run -p make-kani-release -- ${{ needs.Release.outputs.version }}
+          cargo bundle
           cargo package -p kani-verifier
 
       - name: 'Login to GitHub Container Registry'
@@ -144,8 +144,9 @@ jobs:
             org.opencontainers.image.version=${{ needs.Release.outputs.version }}
             org.opencontainers.image.licenses=Apache-2.0 OR MIT
 
-      - name: Check action and image is updated.
-        uses: ${{ env.OWNER_LC }}/kani@${{ needs.Release.outputs.version }}
-        with:
-          command: |
-            [[ "$(cargo kani --version)" == 'cargo-kani ${{ needs.Release.outputs.version }}' ]]
+      # This check will not work until #1655 is completed.
+      # - name: Check action and image is updated.
+      #   uses: ./.
+      #   with:
+      #     command: |
+      #       [[ "$(cargo kani --version)" == 'cargo-kani ${{ needs.Release.outputs.version }}' ]]

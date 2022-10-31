@@ -35,14 +35,29 @@ pub struct StandaloneArgs {
     setting = structopt::clap::AppSettings::AllArgsOverrideSelf
 )]
 pub struct CargoKaniArgs {
+    #[structopt(subcommand)]
+    pub command: Option<CargoKaniSubcommand>,
+
     #[structopt(flatten)]
     pub common_opts: KaniArgs,
+}
+
+// cargo-kani takes optional subcommands to request specialized behavior
+#[derive(Debug, StructOpt)]
+pub enum CargoKaniSubcommand {
+    #[structopt(setting(structopt::clap::AppSettings::Hidden))]
+    Assess,
 }
 
 // Common arguments for invoking Kani. This gets put into KaniContext, whereas
 // anything above is "local" to "main"'s control flow.
 #[derive(Debug, StructOpt)]
 pub struct KaniArgs {
+    /// Temporary option to trigger assess mode for out test suite
+    /// where we are able to add options but not subcommands
+    #[structopt(long, hidden = true, requires("enable-unstable"))]
+    pub assess: bool,
+
     /// Generate visualizer report to <target-dir>/report/html/index.html
     #[structopt(long)]
     pub visualize: bool,
@@ -69,7 +84,7 @@ pub struct KaniArgs {
     #[structopt(long, short)]
     pub quiet: bool,
     /// Output processing stages and commands, along with minor debug information
-    #[structopt(long, short)]
+    #[structopt(long, short, default_value_if("debug", None, "true"), min_values(0))]
     pub verbose: bool,
     /// Enable usage of unstable options
     #[structopt(long, hidden_short_help(true))]
@@ -121,6 +136,20 @@ pub struct KaniArgs {
     /// Kani will only compile the crate. No verification will be performed
     #[structopt(long, hidden_short_help(true))]
     pub only_codegen: bool,
+
+    /// Disable the new MIR Linker. Using this option may result in missing symbols from the
+    /// `std` library. See <https://github.com/model-checking/kani/issues/1213> for more details.
+    #[structopt(long, hidden = true)]
+    pub legacy_linker: bool,
+
+    /// Enable the new MIR Linker. This is already the default option and it will be removed once
+    /// the linker is stable.
+    /// The MIR Linker affects how Kani prunes the code to be analyzed. It also fixes previous
+    /// issues with missing `std` function definitions.
+    /// See <https://model-checking.github.io/kani/rfc/rfcs/0001-mir-linker.html> for more details.
+    #[structopt(long, conflicts_with("legacy_linker"), hidden = true)]
+    pub mir_linker: bool,
+
     /// Compiles Kani harnesses in all features of all packages selected on the command-line.
     #[structopt(long)]
     pub all_features: bool,
@@ -128,7 +157,7 @@ pub struct KaniArgs {
     #[structopt(long)]
     pub workspace: bool,
     /// Run Kani on the specified packages.
-    #[structopt(long, short)]
+    #[structopt(long, short, conflicts_with("workspace"))]
     pub package: Vec<String>,
 
     /// Specify the value used for loop unwinding in CBMC
@@ -142,6 +171,10 @@ pub struct KaniArgs {
     #[structopt(long, allow_hyphen_values = true, min_values(0), requires("enable-unstable"))]
     // consumes everything
     pub cbmc_args: Vec<OsString>,
+
+    /// Number of parallel jobs, defaults to 1
+    #[structopt(short, long, hidden = true, requires("enable-unstable"))]
+    pub jobs: Option<Option<usize>>,
 
     // Hide option till https://github.com/model-checking/kani/issues/697 is
     // fixed.
@@ -186,6 +219,13 @@ pub struct KaniArgs {
     /// Disable CBMC's slice formula which prevents values from being assigned to redundant variables in traces.
     #[structopt(long, hidden_short_help(true), requires("enable-unstable"))]
     pub no_slice_formula: bool,
+
+    /// Randomize the layout of structures. This option can help catching code that relies on
+    /// a specific layout chosen by the compiler that is not guaranteed to be stable in the future.
+    /// If a value is given, it will be used as the seed for randomization
+    /// See the `-Z randomize-layout` and `-Z layout-seed` arguments of the rust compiler.
+    #[structopt(long)]
+    pub randomize_layout: Option<Option<u64>>,
     /*
     The below is a "TODO list" of things not yet implemented from the kani_flags.py script.
 
@@ -214,10 +254,19 @@ impl KaniArgs {
             Some(DEFAULT_OBJECT_BITS)
         }
     }
+
+    /// Computes how many threads should be used to verify harnesses.
+    pub fn jobs(&self) -> Option<usize> {
+        match self.jobs {
+            None => Some(1),          // no argument, default 1
+            Some(None) => None,       // -j
+            Some(Some(x)) => Some(x), // -j=x
+        }
+    }
 }
 
 arg_enum! {
-    #[derive(Debug, PartialEq, Eq)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq)]
     pub enum ConcretePlaybackMode {
         Print,
         InPlace,
@@ -338,27 +387,73 @@ impl CargoKaniArgs {
 }
 impl KaniArgs {
     pub fn validate(&self) {
+        self.validate_inner().or_else(|e| -> Result<(), ()> { e.exit() }).unwrap()
+    }
+
+    fn validate_inner(&self) -> Result<(), Error> {
         let extra_unwind =
             self.cbmc_args.iter().any(|s| s.to_str().unwrap().starts_with("--unwind"));
         let natives_unwind = self.default_unwind.is_some() || self.unwind.is_some();
 
+        if self.randomize_layout.is_some() && self.concrete_playback.is_some() {
+            let random_seed = if let Some(seed) = self.randomize_layout.unwrap() {
+                format!(" -Z layout-seed={seed}")
+            } else {
+                String::new()
+            };
+
+            println!(
+                "Using concrete playback with --randomize-layout.\n\
+                The produced tests will have to be played with the same rustc arguments:\n\
+                -Z randomize-layout{}",
+                random_seed
+            );
+        }
+
         // TODO: these conflicting flags reflect what's necessary to pass current tests unmodified.
         // We should consider improving the error messages slightly in a later pull request.
         if natives_unwind && extra_unwind {
-            Error::with_description(
+            return Err(Error::with_description(
                 "Conflicting flags: unwind flags provided to kani and in --cbmc-args.",
                 ErrorKind::ArgumentConflict,
-            )
-            .exit();
+            ));
         }
-
         if self.cbmc_args.contains(&OsString::from("--function")) {
-            Error::with_description(
+            return Err(Error::with_description(
                 "Invalid flag: --function should be provided to Kani directly, not via --cbmc-args.",
                 ErrorKind::ArgumentConflict,
-            )
-            .exit();
+            ));
         }
+        if self.quiet && self.concrete_playback == Some(ConcretePlaybackMode::Print) {
+            return Err(Error::with_description(
+                "Conflicting options: --concrete-playback=print and --quiet.",
+                ErrorKind::ArgumentConflict,
+            ));
+        }
+        if self.concrete_playback.is_some() && self.output_format == OutputFormat::Old {
+            return Err(Error::with_description(
+                "Conflicting options: --concrete-playback isn't compatible with \
+                --output-format=old.",
+                ErrorKind::ArgumentConflict,
+            ));
+        }
+        if self.concrete_playback.is_some() && self.jobs() != Some(1) {
+            // Concrete playback currently embeds a lot of assumptions about the order in which harnesses get called.
+            return Err(Error::with_description(
+                "Conflicting options: --concrete-playback isn't compatible with --jobs.",
+                ErrorKind::ArgumentConflict,
+            ));
+        }
+        if self.jobs.is_some() && self.output_format != OutputFormat::Terse {
+            // More verbose output formats make it hard to interpret output right now when run in parallel.
+            // This can be removed when we change up how results are printed.
+            return Err(Error::with_description(
+                "Conflicting options: --jobs requires `--output-format=terse`",
+                ErrorKind::ArgumentConflict,
+            ));
+        }
+
+        Ok(())
     }
 }
 
@@ -413,13 +508,13 @@ mod tests {
     }
 
     fn parse_unstable_disabled(args: &str) -> Result<ArgMatches<'_>, Error> {
-        let args = format!("kani file.rs {}", args);
+        let args = format!("kani file.rs {args}");
         let app = StandaloneArgs::clap();
         app.get_matches_from_safe(args.split(' '))
     }
 
     fn parse_unstable_enabled(args: &str) -> Result<ArgMatches<'_>, Error> {
-        let args = format!("kani --enable-unstable file.rs {}", args);
+        let args = format!("kani --enable-unstable file.rs {args}");
         let app = StandaloneArgs::clap();
         app.get_matches_from_safe(args.split(' '))
     }
@@ -456,5 +551,29 @@ mod tests {
     #[test]
     fn check_disable_slicing_unstable() {
         check_unstable_flag("--no-slice-formula")
+    }
+
+    #[test]
+    fn check_concrete_playback_unstable() {
+        check_unstable_flag("--concrete-playback inplace");
+        check_unstable_flag("--concrete-playback print");
+    }
+
+    /// Check if parsing the given argument string results in the given error.
+    fn expect_validation_error(arg: &str, err: ErrorKind) {
+        let args = StandaloneArgs::from_iter(arg.split_whitespace());
+        assert_eq!(args.common_opts.validate_inner().unwrap_err().kind, err);
+    }
+
+    #[test]
+    fn check_concrete_playback_conflicts() {
+        expect_validation_error(
+            "kani --concrete-playback=print --quiet --enable-unstable test.rs",
+            ErrorKind::ArgumentConflict,
+        );
+        expect_validation_error(
+            "kani --concrete-playback=inplace --output-format=old --enable-unstable test.rs",
+            ErrorKind::ArgumentConflict,
+        );
     }
 }

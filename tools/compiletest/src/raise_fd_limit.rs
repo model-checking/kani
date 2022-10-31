@@ -32,14 +32,14 @@ pub unsafe fn raise_fd_limit() {
         != 0
     {
         let err = io::Error::last_os_error();
-        panic!("raise_fd_limit: error calling sysctl: {}", err);
+        panic!("raise_fd_limit: error calling sysctl: {err}");
     }
 
     // Fetch the current resource limits
     let mut rlim = libc::rlimit { rlim_cur: 0, rlim_max: 0 };
     if libc::getrlimit(libc::RLIMIT_NOFILE, &mut rlim) != 0 {
         let err = io::Error::last_os_error();
-        panic!("raise_fd_limit: error calling getrlimit: {}", err);
+        panic!("raise_fd_limit: error calling getrlimit: {err}");
     }
 
     // Make sure we're only ever going to increase the rlimit.
@@ -50,7 +50,7 @@ pub unsafe fn raise_fd_limit() {
         // Set our newly-increased resource limit.
         if libc::setrlimit(libc::RLIMIT_NOFILE, &rlim) != 0 {
             let err = io::Error::last_os_error();
-            panic!("raise_fd_limit: error calling setrlimit: {}", err);
+            panic!("raise_fd_limit: error calling setrlimit: {err}");
         }
     }
 }
