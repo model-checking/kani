@@ -148,6 +148,7 @@ impl Scheduler {
     pub(crate) fn spawn<F: Future<Output = ()> + Sync + 'static>(&mut self, fut: F) -> JoinHandle {
         let index = self.num_tasks;
         self.tasks[index] = Some(Box::pin(fut));
+        assert!(self.num_tasks < MAX_TASKS, "tried to spawn more than {MAX_TASKS} tasks");
         self.num_tasks += 1;
         self.num_running += 1;
         JoinHandle { index }
