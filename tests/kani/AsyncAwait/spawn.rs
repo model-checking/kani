@@ -15,16 +15,16 @@ use std::sync::{
 fn deterministic_schedule() {
     let x = Arc::new(AtomicI64::new(0)); // Surprisingly, Arc verified faster than Rc
     let x2 = x.clone();
-    spawnable_block_on(
+    kani::spawnable_block_on(
         async move {
             let x3 = x2.clone();
-            spawn(async move {
+            kani::spawn(async move {
                 x3.fetch_add(1, Ordering::Relaxed);
             });
-            yield_now().await;
+            kani::yield_now().await;
             x2.fetch_add(1, Ordering::Relaxed);
         },
-        RoundRobin::default(),
+        kani::RoundRobin::default(),
     );
     assert_eq!(x.load(Ordering::Relaxed), 2);
 }
@@ -34,16 +34,16 @@ fn deterministic_schedule() {
 fn nondeterministic_schedule() {
     let x = Arc::new(AtomicI64::new(0)); // Surprisingly, Arc verified faster than Rc
     let x2 = x.clone();
-    spawnable_block_on(
+    kani::spawnable_block_on(
         async move {
             let x3 = x2.clone();
-            spawn(async move {
+            kani::spawn(async move {
                 x3.fetch_add(1, Ordering::Relaxed);
             });
-            yield_now().await;
+            kani::yield_now().await;
             x2.fetch_add(1, Ordering::Relaxed);
         },
-        NondetFairScheduling::new(2),
+        kani::NondetFairScheduling::new(2),
     );
     assert_eq!(x.load(Ordering::Relaxed), 2);
 }

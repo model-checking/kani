@@ -116,22 +116,16 @@ impl NondetFairScheduling {
     }
 }
 
-impl SchedulingPlan for NondetFairScheduling {
-    #[cfg(kani)]
+impl SchedulingStrategy for NondetFairScheduling {
     fn pick_task(&mut self, num_tasks: usize) -> (usize, bool) {
         if self.counters[0..num_tasks] == [0; MAX_TASKS][0..num_tasks] {
             self.counters = [self.limit; MAX_TASKS];
         }
-        let index = kani::any();
-        kani::assume(index < num_tasks);
-        kani::assume(self.counters[index] > 0);
+        let index = crate::any();
+        crate::assume(index < num_tasks);
+        crate::assume(self.counters[index] > 0);
         self.counters[index] -= 1;
         (index, true)
-    }
-
-    #[cfg(not(kani))]
-    fn pick_task(&mut self, _num_tasks: usize) -> (usize, bool) {
-        panic!("Nondeterministic scheduling is only available when running Kani.")
     }
 }
 
@@ -151,7 +145,6 @@ impl Scheduler {
     }
 
     /// Adds a future to the scheduler's task list, returning a JoinHandle
-    #[inline] // to work around linking issue
     pub(crate) fn spawn<F: Future<Output = ()> + Sync + 'static>(&mut self, fut: F) -> JoinHandle {
         let index = self.num_tasks;
         self.tasks[index] = Some(Box::pin(fut));
@@ -161,7 +154,6 @@ impl Scheduler {
     }
 
     /// Runs the scheduler with the given scheduling plan until all tasks have completed
-    #[inline] // to work around linking issue
     fn run(&mut self, mut scheduling_plan: impl SchedulingStrategy) {
         let waker = unsafe { Waker::from_raw(NOOP_RAW_WAKER) };
         let cx = &mut Context::from_waker(&waker);
@@ -183,7 +175,6 @@ impl Scheduler {
     }
 
     /// Polls the given future and the tasks it may spawn until all of them complete
-    #[inline] // to work around linking issue
     fn block_on<F: Future<Output = ()> + Sync + 'static>(
         &mut self,
         fut: F,
@@ -214,7 +205,6 @@ impl Future for JoinHandle {
     }
 }
 
-#[inline] // to work around linking issue
 pub fn spawn<F: Future<Output = ()> + Sync + 'static>(fut: F) -> JoinHandle {
     unsafe { EXECUTOR.spawn(fut) }
 }
@@ -222,7 +212,6 @@ pub fn spawn<F: Future<Output = ()> + Sync + 'static>(fut: F) -> JoinHandle {
 /// Polls the given future and the tasks it may spawn until all of them complete
 ///
 /// Contrary to [`block_on`], this allows `spawn`ing other futures
-#[inline] // to work around linking issue
 pub fn spawnable_block_on<F: Future<Output = ()> + Sync + 'static>(
     fut: F,
     scheduling_plan: impl SchedulingStrategy,
@@ -235,7 +224,6 @@ pub fn spawnable_block_on<F: Future<Output = ()> + Sync + 'static>(
 /// Suspends execution of the current future, to allow the scheduler to poll another future
 ///
 /// Specifically, it returns a future that
-#[inline] // to work around linking issue
 pub fn yield_now() -> impl Future<Output = ()> {
     struct YieldNow {
         yielded: bool,

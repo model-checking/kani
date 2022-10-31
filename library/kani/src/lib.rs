@@ -15,7 +15,8 @@ pub use arbitrary::Arbitrary;
 #[cfg(feature = "concrete_playback")]
 pub use concrete_playback::concrete_playback_run;
 pub use futures::{
-    block_on, spawn, spawnable_block_on, yield_now, NondeterministicScheduling, RoundRobin,
+    block_on, spawn, spawnable_block_on, yield_now, NondetFairScheduling,
+    NondeterministicScheduling, RoundRobin,
 };
 
 /// Creates an assumption that will be valid after this statement run. Note that the assumption
