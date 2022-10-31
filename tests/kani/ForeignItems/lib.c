@@ -55,6 +55,10 @@ struct Foo2 {
 
 uint32_t S = 12;
 
+// Note: We changed the return type from `void` to `struct Unit` when upgrading
+// to a newer CBMC version with stricter type-checking. This is a temporary
+// change until C-FFI support is added.
+// <https://github.com/model-checking/kani/issues/1817>
 struct Unit update_static()
 {
     S++;
@@ -74,6 +78,10 @@ uint32_t takes_ptr_option(uint32_t *p)
     }
 }
 
+// Note: We changed the return type from `void` to `struct Unit` when upgrading
+// to a newer CBMC version with stricter type-checking. This is a temporary
+// change until C-FFI support is added.
+// <https://github.com/model-checking/kani/issues/1817>
 struct Unit mutates_ptr(uint32_t *p)
 {
     *p -= 1;
