@@ -49,10 +49,10 @@ impl KaniSession {
 
         let mut kani_args = self.kani_specific_flags();
         kani_args.push(
-            match self.args.reachability_mode() {
-                crate::args::ReachabilityMode::Legacy => "--reachability=legacy",
-                crate::args::ReachabilityMode::ProofHarnesses => "--reachability=harnesses",
-                crate::args::ReachabilityMode::AllPubFns => "--reachability=pub_fns",
+            match self.reachability_mode() {
+                crate::session::ReachabilityMode::Legacy => "--reachability=legacy",
+                crate::session::ReachabilityMode::ProofHarnesses => "--reachability=harnesses",
+                crate::session::ReachabilityMode::AllPubFns => "--reachability=pub_fns",
             }
             .into(),
         );

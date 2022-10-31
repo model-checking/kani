@@ -216,7 +216,7 @@ pub(crate) fn cargokani_assess_main(mut ctx: KaniSession) -> Result<()> {
     ctx.args.unwind = Some(1);
     ctx.args.tests = true;
     ctx.args.output_format = crate::args::OutputFormat::Terse;
-    ctx.args.codegen_pub_fns = true;
+    ctx.codegen_pub_fns = true;
     if ctx.args.jobs.is_none() {
         // assess will default to fully parallel instead of single-threaded.
         // can be overridden with e.g. `cargo kani --enable-unstable -j 8 assess`

@@ -137,12 +137,6 @@ pub struct KaniArgs {
     #[structopt(long, hidden_short_help(true))]
     pub only_codegen: bool,
 
-    /// Include all publicly-visible symbols in the generated goto binary, not just those reachable from
-    /// a proof harness. Useful when attempting to verify things that were not annotated with kani
-    /// proof attributes.
-    #[structopt(long, hidden = true, requires("enable-unstable"))]
-    pub codegen_pub_fns: bool,
-
     /// Disable the new MIR Linker. Using this option may result in missing symbols from the
     /// `std` library. See <https://github.com/model-checking/kani/issues/1213> for more details.
     #[structopt(long, hidden = true)]
@@ -262,18 +256,6 @@ impl KaniArgs {
         }
     }
 
-    /// Determine which symbols Kani should codegen (i.e. by slicing away symbols
-    /// that are considered unreachable.)
-    pub fn reachability_mode(&self) -> ReachabilityMode {
-        if self.legacy_linker {
-            ReachabilityMode::Legacy
-        } else if self.function.is_some() || self.codegen_pub_fns {
-            ReachabilityMode::AllPubFns
-        } else {
-            ReachabilityMode::ProofHarnesses
-        }
-    }
-
     /// Computes how many threads should be used to verify harnesses.
     pub fn jobs(&self) -> Option<usize> {
         match self.jobs {
@@ -282,12 +264,6 @@ impl KaniArgs {
             Some(Some(x)) => Some(x), // -j=x
         }
     }
-}
-
-pub enum ReachabilityMode {
-    Legacy,
-    ProofHarnesses,
-    AllPubFns,
 }
 
 arg_enum! {

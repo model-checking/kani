@@ -62,15 +62,15 @@ impl KaniSession {
 
         // Arguments that will only be passed to the target package.
         let mut pkg_args: Vec<OsString> = vec![];
-        match self.args.reachability_mode() {
-            crate::args::ReachabilityMode::Legacy => {
+        match self.reachability_mode() {
+            crate::session::ReachabilityMode::Legacy => {
                 // For this mode, we change `kani_args` not `pkg_args`
                 kani_args.push("--reachability=legacy".into());
             }
-            crate::args::ReachabilityMode::ProofHarnesses => {
+            crate::session::ReachabilityMode::ProofHarnesses => {
                 pkg_args.extend(["--".into(), "--reachability=harnesses".into()]);
             }
-            crate::args::ReachabilityMode::AllPubFns => {
+            crate::session::ReachabilityMode::AllPubFns => {
                 pkg_args.extend(["--".into(), "--reachability=pub_fns".into()]);
             }
         }
