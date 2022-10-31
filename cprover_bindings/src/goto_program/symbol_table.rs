@@ -62,7 +62,7 @@ impl SymbolTable {
         new_value: Symbol,
     ) {
         let old_value = self.lookup(new_value.name);
-        assert!(checker_fn(old_value), "{:?}||{:?}", old_value, new_value);
+        assert!(checker_fn(old_value), "{old_value:?}||{new_value:?}");
         self.symbol_table.insert(new_value.name, new_value);
     }
 

@@ -87,7 +87,7 @@ pub fn parse_config(args: Vec<String>) -> Config {
 
     let (argv0, args_) = args.split_first().unwrap();
     if args.len() == 1 || args[1] == "-h" || args[1] == "--help" {
-        let message = format!("Usage: {} [OPTIONS] [TESTNAME...]", argv0);
+        let message = format!("Usage: {argv0} [OPTIONS] [TESTNAME...]");
         println!("{}", opts.usage(&message));
         println!();
         panic!()
@@ -95,11 +95,11 @@ pub fn parse_config(args: Vec<String>) -> Config {
 
     let matches = &match opts.parse(args_) {
         Ok(m) => m,
-        Err(f) => panic!("{:?}", f),
+        Err(f) => panic!("{f:?}"),
     };
 
     if matches.opt_present("h") || matches.opt_present("help") {
-        let message = format!("Usage: {} [OPTIONS]  [TESTNAME...]", argv0);
+        let message = format!("Usage: {argv0} [OPTIONS]  [TESTNAME...]");
         println!("{}", opts.usage(&message));
         println!();
         panic!()
@@ -110,7 +110,7 @@ pub fn parse_config(args: Vec<String>) -> Config {
             Some(s) => PathBuf::from(&s),
             None => {
                 let mut root_folder = top_level().expect(
-                    format!("Cannot find root directory. Please provide --{} option.", nm).as_str(),
+                    format!("Cannot find root directory. Please provide --{nm} option.").as_str(),
                 );
                 default.iter().for_each(|f| root_folder.push(f));
                 root_folder
@@ -123,7 +123,7 @@ pub fn parse_config(args: Vec<String>) -> Config {
         Some("auto") | None => ColorConfig::AutoColor,
         Some("always") => ColorConfig::AlwaysColor,
         Some("never") => ColorConfig::NeverColor,
-        Some(x) => panic!("argument for --color must be auto, always, or never, but found `{}`", x),
+        Some(x) => panic!("argument for --color must be auto, always, or never, but found `{x}`"),
     };
 
     let suite = matches.opt_str("suite").unwrap();
@@ -230,7 +230,7 @@ pub fn run_tests(config: Config) {
             //
             // This should realistically "never" happen, so don't try to make
             // this a pretty error message.
-            panic!("I/O failure during tests: {:?}", e);
+            panic!("I/O failure during tests: {e:?}");
         }
     }
 }
@@ -499,7 +499,7 @@ fn make_test_name(
         "[{}] {}{}",
         config.mode,
         path.display(),
-        revision.map_or("".to_string(), |rev| format!("#{}", rev))
+        revision.map_or("".to_string(), |rev| format!("#{rev}"))
     ))
 }
 

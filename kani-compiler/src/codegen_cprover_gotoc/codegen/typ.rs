@@ -205,7 +205,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             }
                         }
                     }
-                    write!(out, "{:indent$}}}", "", indent = indent)?;
+                    write!(out, "{:indent$}}}", "")?;
                 }
                 Type::StructTag(tag) => {
                     let ty = &ctx.symbol_table.lookup(*tag).unwrap().typ;
@@ -214,7 +214,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 Type::TypeDef { name, typ } => {
                     write!(out, "typedef {{ {name}: ")?;
                     debug_write_type(ctx, typ, out, indent + 2)?;
-                    write!(out, "{:indent$}}}", "", indent = indent)?;
+                    write!(out, "{:indent$}}}", "")?;
                 }
                 Type::Union { tag, components } => {
                     let pretty_name = if let Some(symbol) = ctx.symbol_table.lookup(aggr_tag(*tag))
@@ -241,7 +241,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             }
                         }
                     }
-                    write!(out, "{:indent$}}}", "", indent = indent)?;
+                    write!(out, "{:indent$}}}", "")?;
                 }
                 Type::UnionTag(tag) => {
                     let ty = &ctx.symbol_table.lookup(*tag).unwrap().typ;
@@ -592,7 +592,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Gives the name for a trait, i.e., `dyn T`. This does not work for `&dyn T`.
     pub fn normalized_trait_name(&self, t: Ty<'tcx>) -> String {
-        assert!(t.is_trait(), "Type {} must be a trait type (a dynamic type)", t);
+        assert!(t.is_trait(), "Type {t} must be a trait type (a dynamic type)");
         self.ty_mangled_name(t).to_string()
     }
 
@@ -640,7 +640,7 @@ impl<'tcx> GotocCtx<'tcx> {
             _ => {
                 // This hash is documented to be the same no matter the crate context
                 let id_u64 = self.tcx.type_id_hash(t);
-                format!("_{}", id_u64).intern()
+                format!("_{id_u64}").intern()
             }
         }
     }
@@ -752,9 +752,8 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Foreign(defid) => self.codegen_foreign(ty, *defid),
             ty::Array(et, len) => {
                 let evaluated_len = len.try_eval_usize(self.tcx, self.param_env()).unwrap();
-                let array_name = format!("[{}; {}]", self.ty_mangled_name(*et), evaluated_len);
-                let array_pretty_name =
-                    format!("[{}; {}]", self.ty_pretty_name(*et), evaluated_len);
+                let array_name = format!("[{}; {evaluated_len}]", self.ty_mangled_name(*et));
+                let array_pretty_name = format!("[{}; {evaluated_len}]", self.ty_pretty_name(*et));
                 // wrap arrays into struct so that one can take advantage of struct copy in C
                 //
                 // struct [T; n] {
@@ -862,7 +861,7 @@ impl<'tcx> GotocCtx<'tcx> {
         if current_offset < next_offset {
             // We need to pad to the next offset
             let padding_size = next_offset - current_offset;
-            let name = format!("$pad{}", idx);
+            let name = format!("$pad{idx}");
             Some(DatatypeComponent::padding(&name, padding_size.bits()))
         } else {
             None
@@ -1469,8 +1468,8 @@ impl<'tcx> GotocCtx<'tcx> {
                             {
                                 fields.push(padding);
                             }
-                            let union_name = format!("{}-union", name);
-                            let union_pretty_name = format!("{}-union", pretty_name);
+                            let union_name = format!("{name}-union");
+                            let union_pretty_name = format!("{pretty_name}-union");
                             fields.push(DatatypeComponent::field(
                                 "cases",
                                 gcx.ensure_union(&union_name, &union_pretty_name, |ctx, name| {
@@ -1661,8 +1660,8 @@ impl<'tcx> GotocCtx<'tcx> {
         variant: &Layout,
         initial_offset: Size,
     ) -> Type {
-        let case_name = format!("{}::{}", name, case.name);
-        let pretty_name = format!("{}::{}", pretty_name, case.name);
+        let case_name = format!("{name}::{}", case.name);
+        let pretty_name = format!("{pretty_name}::{}", case.name);
         debug!("handling variant {}: {:?}", case_name, case);
         self.ensure_struct(&case_name, &pretty_name, |tcx, _| {
             tcx.codegen_variant_struct_fields(case, subst, variant, initial_offset)

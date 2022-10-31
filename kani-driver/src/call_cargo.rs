@@ -138,7 +138,7 @@ fn packages_to_verify<'a, 'b>(args: &'a KaniArgs, metadata: &'b Metadata) -> Vec
                     .packages
                     .iter()
                     .find(|pkg| pkg.name == *pkg_name)
-                    .expect(&format!("Cannot find package '{}'", pkg_name))
+                    .expect(&format!("Cannot find package '{pkg_name}'"))
             })
             .collect()
     } else {

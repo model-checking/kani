@@ -385,7 +385,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // Full (mangled) crate name added so that allocations from different
                 // crates do not conflict. The name alone is insufficient because Rust
                 // allows different versions of the same crate to be used.
-                let name = format!("{}::{:?}", self.full_crate_name(), alloc_id);
+                let name = format!("{}::{alloc_id:?}", self.full_crate_name());
                 self.codegen_allocation(alloc.inner(), |_| name.clone(), Some(name.clone()))
             }
             GlobalAlloc::VTable(ty, trait_ref) => {
@@ -393,7 +393,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // requires a bit more logic to get information about the allocation.
                 let alloc_id = self.tcx.vtable_allocation((ty, trait_ref));
                 let alloc = self.tcx.global_alloc(alloc_id).unwrap_memory();
-                let name = format!("{}::{:?}", self.full_crate_name(), alloc_id);
+                let name = format!("{}::{alloc_id:?}", self.full_crate_name());
                 self.codegen_allocation(alloc.inner(), |_| name.clone(), Some(name.clone()))
             }
         };
@@ -529,7 +529,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Codegen alloc as a static global variable with initial value
     fn codegen_alloc_in_memory(&mut self, alloc: &'tcx Allocation, name: String) {
         debug!("codegen_alloc_in_memory name: {}", name);
-        let struct_name = &format!("{}::struct", name);
+        let struct_name = &format!("{name}::struct");
 
         // The declaration of a static variable may have one type and the constant initializer for
         // a static variable may have a different type. This is because Rust uses bit patterns for

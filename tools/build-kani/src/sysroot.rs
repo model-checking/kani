@@ -118,7 +118,7 @@ pub fn build_lib() {
     // Create sysroot folder.
     let sysroot_lib = kani_sysroot_lib();
     sysroot_lib.exists().then(|| fs::remove_dir_all(&sysroot_lib));
-    fs::create_dir_all(&sysroot_lib).expect(&format!("Failed to create {:?}", sysroot_lib));
+    fs::create_dir_all(&sysroot_lib).expect(&format!("Failed to create {sysroot_lib:?}"));
 
     //  Copy Kani libraries to inside sysroot folder.
     let target_folder = Path::new(target_dir);
@@ -146,7 +146,7 @@ fn filter_kani_std(cargo_cmd: &mut Child) {
         match message.unwrap() {
             Message::CompilerMessage(msg) => {
                 // Print message as cargo would.
-                println!("{:?}", msg)
+                println!("{msg:?}")
             }
             Message::CompilerArtifact(artifact) => {
                 // Remove the `rlib` and `rmeta` files for our `std` library from the deps folder.
@@ -187,7 +187,7 @@ pub fn build_lib_legacy() {
     // Create sysroot folder.
     let legacy_lib = kani_sysroot_legacy_lib();
     legacy_lib.exists().then(|| fs::remove_dir_all(&legacy_lib));
-    fs::create_dir_all(&legacy_lib).expect(&format!("Failed to create {:?}", legacy_lib));
+    fs::create_dir_all(&legacy_lib).expect(&format!("Failed to create {legacy_lib:?}"));
 
     //  Copy Kani libraries to inside the lib folder.
     let target_folder = Path::new(target_dir);

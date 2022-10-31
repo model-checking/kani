@@ -39,12 +39,12 @@ static DEFAULT_HOOK: LazyLock<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send + 
             CURRENT_CODEGEN_ITEM.with(|cell| {
                 let t = cell.borrow().clone();
                 if let Some(current_item) = t.0 {
-                    eprintln!("[Kani] current codegen item: {}", current_item);
+                    eprintln!("[Kani] current codegen item: {current_item}");
                 } else {
                     eprintln!("[Kani] no current codegen item.");
                 }
                 if let Some(current_loc) = t.1 {
-                    eprintln!("[Kani] current codegen location: {:?}", current_loc);
+                    eprintln!("[Kani] current codegen location: {current_loc:?}");
                 } else {
                     eprintln!("[Kani] no current codegen location.");
                 }

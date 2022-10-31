@@ -1,12 +1,15 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-
-#include <assert.h>
-#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
+
+// Declare functions instead of importing more headers in order to avoid conflicting definitions.
+// See https://github.com/model-checking/kani/issues/1774 for more details.
+void  free(void *ptr);
+void *memcpy(void *dst, const void *src, size_t n);
+void *calloc(size_t nmemb, size_t size);
+
+typedef __CPROVER_bool bool;
 
 /// Mapping unit to `void` works for functions with no return type but not for
 /// variables with type unit. We treat both uniformly by declaring an empty

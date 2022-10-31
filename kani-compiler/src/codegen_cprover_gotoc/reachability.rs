@@ -167,8 +167,8 @@ impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {
     /// concrete type.
     fn collect_vtable_methods(&mut self, concrete_ty: Ty<'tcx>, trait_ty: Ty<'tcx>) {
         trace!(?concrete_ty, ?trait_ty, "collect_vtable_methods");
-        assert!(!concrete_ty.is_trait(), "Expected a concrete type, but found: {:?}", concrete_ty);
-        assert!(trait_ty.is_trait(), "Expected a trait: {:?}", trait_ty);
+        assert!(!concrete_ty.is_trait(), "Expected a concrete type, but found: {concrete_ty:?}");
+        assert!(trait_ty.is_trait(), "Expected a trait: {trait_ty:?}");
         if let TyKind::Dynamic(trait_list, ..) = trait_ty.kind() {
             // A trait object type can have multiple trait bounds but up to one non-auto-trait
             // bound. This non-auto-trait, named principal, is the only one that can have methods.
@@ -207,7 +207,7 @@ impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {
         let should_collect = match instance.def {
             InstanceDef::Virtual(..) | InstanceDef::Intrinsic(_) => {
                 // Instance definition has no body.
-                assert!(is_direct_call, "Expected direct call {:?}", instance);
+                assert!(is_direct_call, "Expected direct call {instance:?}");
                 false
             }
             InstanceDef::DropGlue(_, None) => {

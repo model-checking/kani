@@ -152,7 +152,7 @@ impl KaniSession {
             flags.push("randomize-layout".into());
             if let Some(seed) = seed_opt {
                 flags.push("-Z".into());
-                flags.push(format!("layout-seed={}", seed).into());
+                flags.push(format!("layout-seed={seed}").into());
             }
         }
 

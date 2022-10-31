@@ -23,10 +23,10 @@ pub fn main() {
     let rustup_home = env::var("RUSTUP_HOME").unwrap();
     let rustup_tc = env::var("RUSTUP_TOOLCHAIN").unwrap();
     let rustup_lib = path_str!([&rustup_home, "toolchains", &rustup_tc, "lib"]);
-    println!("cargo:rustc-link-arg-bin=kani-compiler=-Wl,-rpath,{}", rustup_lib);
+    println!("cargo:rustc-link-arg-bin=kani-compiler=-Wl,-rpath,{rustup_lib}");
 
     // While we hard-code the above for development purposes, for a release/install we look
     // in a relative location for a symlink to the local rust toolchain
     let origin = if cfg!(target_os = "macos") { "@loader_path" } else { "$ORIGIN" };
-    println!("cargo:rustc-link-arg-bin=kani-compiler=-Wl,-rpath,{}/../toolchain/lib", origin);
+    println!("cargo:rustc-link-arg-bin=kani-compiler=-Wl,-rpath,{origin}/../toolchain/lib");
 }

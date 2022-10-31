@@ -341,7 +341,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             if !(typ.is_trait() || typ.is_box()) {
                                 warn!(self_type=?typ, "Unsupported drop of unsized");
                                 return self.codegen_unimplemented_stmt(
-                                    format!("drop unsized struct for {:?}", typ).as_str(),
+                                    format!("drop unsized struct for {typ:?}").as_str(),
                                     loc,
                                     "https://github.com/model-checking/kani/issues/1072",
                                 );
@@ -703,7 +703,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // Otherwise, CBMC might treat this as an assume(0) and later user-added assertions
         // could become unreachable.
         let call_is_nonnull = fn_ptr.clone().is_nonnull();
-        let assert_msg = format!("Non-null virtual function call for {:?}", vtable_field_name);
+        let assert_msg = format!("Non-null virtual function call for {vtable_field_name:?}");
         let assert_nonnull = self.codegen_sanity(call_is_nonnull, &assert_msg, loc);
 
         // Virtual function call and corresponding nonnull assertion.

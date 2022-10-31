@@ -68,7 +68,7 @@ impl TestProps {
                 }
 
                 if let Some(edition) = config.parse_edition(ln) {
-                    self.compile_flags.push(format!("--edition={}", edition));
+                    self.compile_flags.push(format!("--edition={edition}"));
                     has_edition = true;
                 }
 
@@ -77,7 +77,7 @@ impl TestProps {
         }
 
         if let (Some(edition), false) = (&config.edition, has_edition) {
-            self.compile_flags.push(format!("--edition={}", edition));
+            self.compile_flags.push(format!("--edition={edition}"));
         }
     }
 
@@ -131,7 +131,7 @@ impl Config {
     fn parse_kani_step_fail_directive(&self, line: &str) -> Option<KaniFailStep> {
         let check_kani = |mode: &str| {
             if self.mode != Mode::Kani {
-                panic!("`kani-{}-fail` header is only supported in Kani tests", mode);
+                panic!("`kani-{mode}-fail` header is only supported in Kani tests");
             }
         };
         if self.parse_name_directive(line, "kani-check-fail") {

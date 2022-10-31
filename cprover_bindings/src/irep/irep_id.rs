@@ -871,7 +871,7 @@ impl ToString for IrepId {
             IrepId::FreeformString(s) => return s.to_string(),
             IrepId::FreeformInteger(i) => return i.to_string(),
             IrepId::FreeformBitPattern(i) => {
-                return format!("{:X}", i);
+                return format!("{i:X}");
             }
             _ => (),
         }

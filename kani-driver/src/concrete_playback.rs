@@ -121,7 +121,7 @@ impl KaniSession {
         // Renames are usually automic, so we won't corrupt the user's source file during a crash.
         let tmp_src_path = src_path.to_string() + ".concrete_playback_overwrite";
         let mut tmp_src_file = File::create(&tmp_src_path)
-            .with_context(|| format!("Couldn't create tmp source code file `{}`", tmp_src_path))?;
+            .with_context(|| format!("Couldn't create tmp source code file `{tmp_src_path}`"))?;
         write!(
             tmp_src_file,
             "{}\n{}{}",

@@ -10,7 +10,7 @@ use num_traits::Zero;
 /// The aggregate name used in CBMC for aggregates of type `n`.
 pub fn aggr_tag<T: Into<InternedString>>(n: T) -> InternedString {
     let n = n.into();
-    format!("tag-{}", n).into()
+    format!("tag-{n}").into()
 }
 
 pub trait NumUtils {

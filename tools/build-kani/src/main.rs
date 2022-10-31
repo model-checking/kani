@@ -28,8 +28,8 @@ fn main() -> Result<()> {
         }
         parser::Commands::Bundle(bundle_parser) => {
             let version_string = bundle_parser.version;
-            let kani_string = format!("kani-{}", version_string);
-            let bundle_name = format!("{}-{}.tar.gz", kani_string, env!("TARGET"));
+            let kani_string = format!("kani-{version_string}");
+            let bundle_name = format!("{kani_string}-{}.tar.gz", env!("TARGET"));
             let dir = Path::new(&kani_string);
 
             // Check everything is ready before we start copying files
@@ -46,7 +46,7 @@ fn main() -> Result<()> {
 
             std::fs::remove_dir_all(dir)?;
 
-            println!("\nSuccessfully built release bundle: {}", bundle_name);
+            println!("\nSuccessfully built release bundle: {bundle_name}");
         }
     }
 

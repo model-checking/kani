@@ -128,7 +128,7 @@ impl Book {
                         let prev_text =
                             hierarchy_path.file_name().unwrap().to_str().unwrap().to_string();
                         hierarchy_path.pop();
-                        hierarchy_path.push(format!("{}{}", prev_text, text));
+                        hierarchy_path.push(format!("{prev_text}{text}"));
                     } else {
                         // If not, add the current title to the hierarchy.
                         hierarchy_path.push(&text);
@@ -397,7 +397,7 @@ fn prepend_props(path: &Path, example: &mut Example, config_paths: &mut HashSet<
             props.fail_step = Some(FailStep::Verification);
         }
     }
-    example.code = format!("{}{}", props, example.code);
+    example.code = format!("{props}{}", example.code);
 }
 
 /// Extracts examples from the markdown file specified by `par_from`,

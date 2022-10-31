@@ -912,7 +912,7 @@ impl Type {
         T: TryInto<u64>,
         T::Error: Debug,
     {
-        assert!(self.typecheck_array_elem(), "Can't make array of type {:?}", self);
+        assert!(self.typecheck_array_elem(), "Can't make array of type {self:?}");
         let size: u64 = size.try_into().unwrap();
         Array { typ: Box::new(self), size }
     }
@@ -1028,7 +1028,7 @@ impl Type {
     }
 
     pub fn infinite_array_of(self) -> Self {
-        assert!(self.typecheck_array_elem(), "Can't make infinite array of type {:?}", self);
+        assert!(self.typecheck_array_elem(), "Can't make infinite array of type {self:?}");
         InfiniteArray { typ: Box::new(self) }
     }
 
@@ -1311,7 +1311,7 @@ impl Type {
             | FlexibleArray { .. }
             | IncompleteStruct { .. }
             | IncompleteUnion { .. }
-            | VariadicCode { .. } => panic!("Can't zero init {:?}", self),
+            | VariadicCode { .. } => panic!("Can't zero init {self:?}"),
         }
     }
 }
@@ -1348,13 +1348,13 @@ impl Type {
         // Use String instead of InternedString, since we don't want to intern temporaries.
         match self {
             Type::Array { typ, size } => {
-                format!("array_of_{}_{}", size, typ.to_identifier())
+                format!("array_of_{size}_{}", typ.to_identifier())
             }
             Type::Bool => "bool".to_string(),
             Type::CBitField { width, typ } => {
-                format!("cbitfield_of_{}_{}", width, typ.to_identifier())
+                format!("cbitfield_of_{width}_{}", typ.to_identifier())
             }
-            Type::CInteger(int_kind) => format!("c_int_{:?}", int_kind),
+            Type::CInteger(int_kind) => format!("c_int_{int_kind:?}"),
             // e.g. `int my_func(double x, float_y) {`
             // => "code_from_double_float_to_int"
             Type::Code { parameters, return_type } => {
@@ -1364,7 +1364,7 @@ impl Type {
                     .collect::<Vec<_>>()
                     .join("_");
                 let return_string = return_type.to_identifier();
-                format!("code_from_{}_to_{}", parameter_string, return_string)
+                format!("code_from_{parameter_string}_to_{return_string}")
             }
             Type::Constructor => "constructor".to_string(),
             Type::Double => "double".to_string(),
@@ -1378,13 +1378,13 @@ impl Type {
             }
             Type::Integer => "integer".to_string(),
             Type::Pointer { typ } => format!("pointer_to_{}", typ.to_identifier()),
-            Type::Signedbv { width } => format!("signed_bv_{}", width),
-            Type::Struct { tag, .. } => format!("struct_{}", tag),
-            Type::StructTag(tag) => format!("struct_tag_{}", tag),
-            Type::TypeDef { name: tag, .. } => format!("type_def_{}", tag),
-            Type::Union { tag, .. } => format!("union_{}", tag),
-            Type::UnionTag(tag) => format!("union_tag_{}", tag),
-            Type::Unsignedbv { width } => format!("unsigned_bv_{}", width),
+            Type::Signedbv { width } => format!("signed_bv_{width}"),
+            Type::Struct { tag, .. } => format!("struct_{tag}"),
+            Type::StructTag(tag) => format!("struct_tag_{tag}"),
+            Type::TypeDef { name: tag, .. } => format!("type_def_{tag}"),
+            Type::Union { tag, .. } => format!("union_{tag}"),
+            Type::UnionTag(tag) => format!("union_tag_{tag}"),
+            Type::Unsignedbv { width } => format!("unsigned_bv_{width}"),
             // e.g. `int my_func(double x, float_y, ..) {`
             // => "variadic_code_from_double_float_to_int"
             Type::VariadicCode { parameters, return_type } => {
@@ -1394,10 +1394,10 @@ impl Type {
                     .collect::<Vec<_>>()
                     .join("_");
                 let return_string = return_type.to_identifier();
-                format!("variadic_code_from_{}_to_{}", parameter_string, return_string)
+                format!("variadic_code_from_{parameter_string}_to_{return_string}")
             }
             Type::Vector { size, typ } => {
-                format!("vec_of_{}_{}", size, typ.to_identifier())
+                format!("vec_of_{size}_{}", typ.to_identifier())
             }
         }
     }
@@ -1417,7 +1417,7 @@ mod type_tests {
     fn check_typedef_tag() {
         let type_def = Bool.to_typedef(NAME);
         assert_eq!(type_def.tag().unwrap().to_string().as_str(), NAME);
-        assert_eq!(type_def.type_name().unwrap().to_string(), format!("tag-{}", NAME));
+        assert_eq!(type_def.type_name().unwrap().to_string(), format!("tag-{NAME}"));
     }
 
     #[test]
@@ -1509,7 +1509,7 @@ mod type_tests {
         // Insert a field to the sym table to represent the struct field.
         let mut sym_table = SymbolTable::new(machine_model_test_stub());
         sym_table.ensure(struct_type.type_name().unwrap(), |_, name| {
-            return Symbol::variable(name, name, struct_type.clone(), Location::none());
+            Symbol::variable(name, name, struct_type.clone(), Location::none())
         });
 
         check_properties(struct_type.clone());

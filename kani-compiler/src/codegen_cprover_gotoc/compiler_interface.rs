@@ -93,7 +93,7 @@ impl CodegenBackend for GotocCodegenBackend {
                 MonoItem::Static(def_id) => {
                     gcx.call_with_panic_debug_info(
                         |ctx| ctx.declare_static(def_id, *item),
-                        format!("declare_static: {:?}", def_id),
+                        format!("declare_static: {def_id:?}"),
                         def_id,
                     );
                 }
@@ -118,7 +118,7 @@ impl CodegenBackend for GotocCodegenBackend {
                 MonoItem::Static(def_id) => {
                     gcx.call_with_panic_debug_info(
                         |ctx| ctx.codegen_static(def_id, item),
-                        format!("codegen_static: {:?}", def_id),
+                        format!("codegen_static: {def_id:?}"),
                         def_id,
                     );
                 }
@@ -331,7 +331,7 @@ fn print_report<'tcx>(ctx: &GotocCtx, tcx: TyCtxt<'tcx>) {
             .collect();
         let mut msg = String::from("Found the following unsupported constructs:\n");
         unsupported.iter().for_each(|(construct, locations)| {
-            writeln!(&mut msg, "    - {} ({})", construct, locations.len()).unwrap();
+            writeln!(&mut msg, "    - {construct} ({})", locations.len()).unwrap();
         });
         msg += "\nVerification will fail if one or more of these constructs is reachable.";
         msg += "\nSee https://model-checking.github.io/kani/rust-feature-support.html for more \
@@ -457,7 +457,7 @@ fn dump_mir_items(tcx: TyCtxt, items: &[MonoItem]) {
 
         // For each def_id, dump their MIR
         for (item, def_id) in items.iter().filter_map(visible_item) {
-            writeln!(writer, "// Item: {:?}", item).unwrap();
+            writeln!(writer, "// Item: {item:?}").unwrap();
             write_mir_pretty(tcx, Some(def_id), &mut writer).unwrap();
         }
     }
