@@ -168,7 +168,7 @@ impl Scheduler {
                 match fut.as_mut().poll(cx) {
                     std::task::Poll::Ready(()) => {
                         self.num_running -= 1;
-                        let _prev = std::mem::replace(task, None);
+                        let _prev = task.take();
                     }
                     std::task::Poll::Pending => (),
                 }
