@@ -22,7 +22,7 @@ KANI_DIR=$SCRIPT_DIR/..
 export KANI_FAIL_ON_UNEXPECTED_DESCRIPTION="true"
 
 # Required dependencies
-check-cbmc-version.py --major 5 --minor 67
+check-cbmc-version.py --major 5 --minor 69
 check-cbmc-viewer-version.py --major 3 --minor 5
 
 # Formatting check
@@ -60,7 +60,7 @@ TESTS=(
 
 if [[ "" != "${KANI_ENABLE_UNSOUND_EXPERIMENTS-}" ]]; then
   TESTS+=("unsound_experiments kani")
-else 
+else
   TESTS+=("no_unsound_experiments expected")
 fi
 
