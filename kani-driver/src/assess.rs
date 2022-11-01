@@ -281,6 +281,7 @@ pub(crate) fn cargokani_assess_main(mut ctx: KaniSession) -> Result<()> {
 
     // TODO: Should add another interesting table: Count the actually hit constructs (e.g. 'try', 'InlineAsm', etc)
     // The above table will just say "unsupported_construct   6" without telling us which constructs.
+    // Tracking issue: https://github.com/model-checking/kani/issues/1819
 
     // 2. "Test cases that might be good proof harness starting points"
     //    e.g.  All Successes and maybe Assertions?

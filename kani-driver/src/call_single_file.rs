@@ -6,7 +6,7 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::session::KaniSession;
+use crate::session::{KaniSession, ReachabilityMode};
 use crate::util::{alter_extension, guess_rlib_name};
 
 /// The outputs of kani-compiler operating on a single Rust source file.
@@ -50,9 +50,9 @@ impl KaniSession {
         let mut kani_args = self.kani_specific_flags();
         kani_args.push(
             match self.reachability_mode() {
-                crate::session::ReachabilityMode::Legacy => "--reachability=legacy",
-                crate::session::ReachabilityMode::ProofHarnesses => "--reachability=harnesses",
-                crate::session::ReachabilityMode::AllPubFns => "--reachability=pub_fns",
+                ReachabilityMode::Legacy => "--reachability=legacy",
+                ReachabilityMode::ProofHarnesses => "--reachability=harnesses",
+                ReachabilityMode::AllPubFns => "--reachability=pub_fns",
             }
             .into(),
         );

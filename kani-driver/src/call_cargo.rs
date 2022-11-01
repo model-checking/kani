@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use crate::args::KaniArgs;
-use crate::session::KaniSession;
+use crate::session::{KaniSession, ReachabilityMode};
 use anyhow::{Context, Result};
 use cargo_metadata::{Metadata, MetadataCommand, Package};
 use std::ffi::OsString;
@@ -63,14 +63,14 @@ impl KaniSession {
         // Arguments that will only be passed to the target package.
         let mut pkg_args: Vec<OsString> = vec![];
         match self.reachability_mode() {
-            crate::session::ReachabilityMode::Legacy => {
+            ReachabilityMode::Legacy => {
                 // For this mode, we change `kani_args` not `pkg_args`
                 kani_args.push("--reachability=legacy".into());
             }
-            crate::session::ReachabilityMode::ProofHarnesses => {
+            ReachabilityMode::ProofHarnesses => {
                 pkg_args.extend(["--".into(), "--reachability=harnesses".into()]);
             }
-            crate::session::ReachabilityMode::AllPubFns => {
+            ReachabilityMode::AllPubFns => {
                 pkg_args.extend(["--".into(), "--reachability=pub_fns".into()]);
             }
         }
