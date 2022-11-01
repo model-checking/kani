@@ -55,6 +55,7 @@ pub trait Transformer: Sized {
             Type::IncompleteStruct { tag } => self.transform_type_incomplete_struct(*tag),
             Type::IncompleteUnion { tag } => self.transform_type_incomplete_union(*tag),
             Type::InfiniteArray { typ } => self.transform_type_infinite_array(typ),
+            Type::Integer => self.transform_type_integer(),
             Type::Pointer { typ } => self.transform_type_pointer(typ),
             Type::Signedbv { width } => self.transform_type_signedbv(width),
             Type::Struct { tag, components } => self.transform_type_struct(*tag, components),
@@ -152,6 +153,11 @@ pub trait Transformer: Sized {
     fn transform_type_infinite_array(&mut self, typ: &Type) -> Type {
         let transformed_typ = self.transform_type(typ);
         transformed_typ.infinite_array_of()
+    }
+
+    /// Transforms a CPROVER integer type
+    fn transform_type_integer(&mut self) -> Type {
+        Type::integer()
     }
 
     /// Transforms a pointer type (`typ*`)
