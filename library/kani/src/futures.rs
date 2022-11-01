@@ -50,7 +50,23 @@ const MAX_TASKS: usize = 16;
 
 type BoxFuture = Pin<Box<dyn Future<Output = ()> + Sync + 'static>>;
 
-/// Allows to parameterize how the scheduler picks the next task to poll in `spawnable_block_on`
+/// Trait that determines the possible sequence of tasks scheduling for a harness.
+///
+/// If your harness spawns several tasks, Kani's scheduler has to decide in what order to poll them.
+/// This order may depend on the needs of your verification goal.
+/// For example, you sometimes may wish to verify all possible schedulings, i.e. a nondeterministic scheduling strategy,
+/// provided by [`NondeterministicScheduling`].
+///
+/// However, this one may poll the same task over and over, which is often undesirable.
+/// To ensure some "fairness" in how the tasks are picked, there is [`NondetFairScheduling`].
+/// This is probably what you want when verifying a harness under nondeterministic schedulings.
+///
+/// Nondeterministic scheduling strategies can be very slow to verify because they require Kani to check a large number of permutations of tasks.
+/// So if you want to verify a harness that uses `spawn`, but don't care about concurrency issues, you can simply use a deterministic scheduling strategy,
+/// such as [`RoundRobin`], which polls each task in turn.
+///
+/// Finally, you have the option of providing your own scheduling strategy by implementing this trait.
+/// This can be useful, for example, if you want to verify that things work correctly for a very specific task ordering.
 pub trait SchedulingStrategy {
     /// Picks the next task to be scheduled whenever the scheduler needs to pick a task to run next, and whether it can be assumed that the picked task is still running
     ///
@@ -58,13 +74,6 @@ pub trait SchedulingStrategy {
     /// For example, if pick_task(4) returns (2, true) than it picked the task with index 2 and allows Kani to `assume` that this task is still running.
     /// This is useful if the task is chosen nondeterministicall (`kani::any()`) and allows the verifier to discard useless execution branches (such as polling a completed task again).
     fn pick_task(&mut self, num_tasks: usize) -> (usize, bool);
-}
-
-impl<F: FnMut(usize) -> usize> SchedulingStrategy for F {
-    #[inline]
-    fn pick_task(&mut self, num_tasks: usize) -> (usize, bool) {
-        (self(num_tasks), false)
-    }
 }
 
 /// Keeps cycling through the tasks in a deterministic order
@@ -86,16 +95,10 @@ impl SchedulingStrategy for RoundRobin {
 pub struct NondeterministicScheduling;
 
 impl SchedulingStrategy for NondeterministicScheduling {
-    #[cfg(kani)]
     fn pick_task(&mut self, num_tasks: usize) -> (usize, bool) {
         let index = crate::any();
         crate::assume(index < num_tasks);
         (index, true)
-    }
-
-    #[cfg(not(kani))]
-    fn pick_task(&mut self, _num_tasks: usize) -> (usize, bool) {
-        panic!("Nondeterministic scheduling is only available when running Kani.")
     }
 }
 
