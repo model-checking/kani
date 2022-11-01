@@ -111,7 +111,7 @@ fn main() -> Result<(), &'static str> {
             matches.is_present(parser::HARNESS),
             "Flag --enable-stubbing requires --harness flag"
         );
-        tracing::warn!("Kani currently does not perform any stubbing.");
+        eprintln!("warning: Kani currently does not perform any stubbing.");
     }
 
     // Configure and run compiler.
