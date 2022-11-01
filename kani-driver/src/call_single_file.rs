@@ -6,7 +6,7 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::session::KaniSession;
+use crate::session::{KaniSession, ReachabilityMode};
 use crate::util::{alter_extension, guess_rlib_name};
 
 /// The outputs of kani-compiler operating on a single Rust source file.
@@ -48,13 +48,14 @@ impl KaniSession {
         }
 
         let mut kani_args = self.kani_specific_flags();
-        if self.args.legacy_linker {
-            kani_args.push("--reachability=legacy".into());
-        } else if self.args.function.is_some() {
-            kani_args.push("--reachability=pub_fns".into());
-        } else {
-            kani_args.push("--reachability=harnesses".into());
-        }
+        kani_args.push(
+            match self.reachability_mode() {
+                ReachabilityMode::Legacy => "--reachability=legacy",
+                ReachabilityMode::ProofHarnesses => "--reachability=harnesses",
+                ReachabilityMode::AllPubFns => "--reachability=pub_fns",
+            }
+            .into(),
+        );
 
         let mut rustc_args = self.kani_rustc_flags();
         // kani-compiler workaround part 1/2: *.symtab.json gets generated in the local

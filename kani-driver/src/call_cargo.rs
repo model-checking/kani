@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use crate::args::KaniArgs;
-use crate::session::KaniSession;
+use crate::session::{KaniSession, ReachabilityMode};
 use anyhow::{Context, Result};
 use cargo_metadata::{Metadata, MetadataCommand, Package};
 use std::ffi::OsString;
@@ -62,17 +62,17 @@ impl KaniSession {
 
         // Arguments that will only be passed to the target package.
         let mut pkg_args: Vec<OsString> = vec![];
-        if !self.args.legacy_linker {
-            // Only provide reachability flag to the target package.
-            pkg_args.push("--".into());
-            if self.args.function.is_some() {
-                pkg_args.push("--reachability=pub_fns".into());
-            } else {
-                pkg_args.push("--reachability=harnesses".into());
+        match self.reachability_mode() {
+            ReachabilityMode::Legacy => {
+                // For this mode, we change `kani_args` not `pkg_args`
+                kani_args.push("--reachability=legacy".into());
             }
-        } else {
-            // Pass legacy reachability to the target package and its dependencies.
-            kani_args.push("--reachability=legacy".into());
+            ReachabilityMode::ProofHarnesses => {
+                pkg_args.extend(["--".into(), "--reachability=harnesses".into()]);
+            }
+            ReachabilityMode::AllPubFns => {
+                pkg_args.extend(["--".into(), "--reachability=pub_fns".into()]);
+            }
         }
 
         // Only joing them at the end. All kani flags must come first.

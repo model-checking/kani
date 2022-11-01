@@ -242,11 +242,12 @@ impl KaniArgs {
         // if we flip the default, this will become: !self.no_restrict_vtable
     }
 
+    /// Assertion reachability checks should be disabled when running with --visualize
     pub fn assertion_reach_checks(&self) -> bool {
-        // Turn them off when visualizing an error trace.
         !self.no_assertion_reach_checks && !self.visualize
     }
 
+    /// Suppress our default value, if the user has supplied it explicitly in --cbmc-args
     pub fn cbmc_object_bits(&self) -> Option<u32> {
         if self.cbmc_args.contains(&OsString::from("--object-bits")) {
             None
