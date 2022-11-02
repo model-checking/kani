@@ -45,6 +45,32 @@ pub fn extract_integer_argument(attr: &Attribute) -> Option<u128> {
     }
 }
 
+/// Extracts a vector of path arguments from an attribute.
+/// Returns `None` if any argument is not syntactically a path.
+/// Paths are returned as strings.
+///
+/// For example, on `stub(foo::bar, baz)`, this returns `Some(vec!["foo::bar", "baz"])`.
+pub fn extract_path_arguments(attr: &Attribute) -> Option<Vec<String>> {
+    let attr_args = attr.meta_item_list()?;
+    let mut paths = Vec::new();
+    for arg in attr_args {
+        let meta_item = arg.meta_item()?;
+        if meta_item.is_word() {
+            let path = meta_item
+                .path
+                .segments
+                .iter()
+                .map(|seg| seg.ident.as_str())
+                .collect::<Vec<&str>>()
+                .join("::");
+            paths.push(path);
+        } else {
+            return None;
+        }
+    }
+    Some(paths)
+}
+
 /// If the attribute is named `kanitool::name`, this extracts `name`
 fn kanitool_attr_name(attr: &Attribute) -> Option<String> {
     match &attr.kind {

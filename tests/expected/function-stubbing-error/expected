@@ -1,0 +1,4 @@
+Attribute `kani::stub` takes two path arguments; found 3
+Attribute `kani::stub` takes two path arguments; found 1
+Attribute `kani::stub` takes two path arguments; found argument that is not a path
+error: aborting due to 4 previous errors

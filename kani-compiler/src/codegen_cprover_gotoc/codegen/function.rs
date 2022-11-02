@@ -8,6 +8,7 @@ use crate::kani_middle::attributes::{extract_integer_argument, partition_kanitoo
 use cbmc::goto_program::{Expr, Stmt, Symbol};
 use cbmc::InternString;
 use kani_metadata::HarnessMetadata;
+use kani_queries::UserInput;
 use rustc_ast::Attribute;
 use rustc_hir::def::DefKind;
 use rustc_hir::def_id::DefId;
@@ -341,10 +342,14 @@ impl<'tcx> GotocCtx<'tcx> {
         let mut harness = self.default_kanitool_proof();
         for attr in other_attributes.iter() {
             match attr.0.as_str() {
-                "stub" => self
-                    .tcx
-                    .sess
-                    .span_warn(attr.1.span, "Attribute `kani::stub` is currently ignored by Kani"),
+                "stub" => {
+                    if !self.queries.get_stubbing_enabled() {
+                        self.tcx.sess.span_warn(
+                            attr.1.span,
+                            "Stubbing is not enabled; attribute `kani::stub` will be ignored",
+                        )
+                    }
+                }
                 "unwind" => self.handle_kanitool_unwind(attr.1, &mut harness),
                 _ => {
                     self.tcx.sess.span_err(
