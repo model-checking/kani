@@ -104,14 +104,14 @@ impl<'tcx> CoerceUnsizedIterator<'tcx> {
 /// be coerced, as well as the current source and the destination.
 /// E.g.: The first iteration of casting `Rc<String>` -> `Rc<&dyn Debug>` will return
 /// ```rust,ignore
-/// CoerceUnsizedInfo { field: `ptr`, src_ty: /* Rc<String> */, dst_ty: /* Rc<&dyn Debug> */}
+/// CoerceUnsizedInfo { field: "ptr", src_ty /* Rc<String> */, dst_ty /* Rc<&dyn Debug> */}
 /// ```
 /// while the last iteration will return:
 /// ```rust,ignore
 /// CoerceUnsizedInfo {
 ///   field: None,
-///   src_ty: /* *const RcBox<String> */,
-///   dst_ty: /* *const RcBox<&dyn Debug> */
+///   src_ty: Ty, /* *const RcBox<String> */,
+///   dst_ty: Ty, /* *const RcBox<&dyn Debug> */
 /// }
 /// ```
 impl<'tcx> Iterator for CoerceUnsizedIterator<'tcx> {
