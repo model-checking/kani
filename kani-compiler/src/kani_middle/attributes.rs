@@ -4,21 +4,6 @@
 
 use rustc_ast::{AttrKind, Attribute, LitKind};
 
-/// If the attribute is named `kanitool::name`, this extracts `name`
-fn kanitool_attr_name(attr: &Attribute) -> Option<String> {
-    match &attr.kind {
-        AttrKind::Normal(normal) => {
-            let segments = &normal.item.path.segments;
-            if (!segments.is_empty()) && segments[0].ident.as_str() == "kanitool" {
-                Some(segments[1].ident.as_str().to_string())
-            } else {
-                None
-            }
-        }
-        _ => None,
-    }
-}
-
 /// Partition all the attributes into two buckets, proof_attributes and other_attributes
 pub fn partition_kanitool_attributes(
     all_attributes: &[Attribute],
@@ -57,5 +42,20 @@ pub fn extract_integer_argument(attr: &Attribute) -> Option<u128> {
     // Return none if there are no attributes or if there's too many attributes
     else {
         None
+    }
+}
+
+/// If the attribute is named `kanitool::name`, this extracts `name`
+fn kanitool_attr_name(attr: &Attribute) -> Option<String> {
+    match &attr.kind {
+        AttrKind::Normal(normal) => {
+            let segments = &normal.item.path.segments;
+            if (!segments.is_empty()) && segments[0].ident.as_str() == "kanitool" {
+                Some(segments[1].ident.as_str().to_string())
+            } else {
+                None
+            }
+        }
+        _ => None,
     }
 }
