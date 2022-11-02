@@ -91,7 +91,7 @@ dependencies = [
 
 [[package]]
 name = "build-kani"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "anyhow",
  "cargo_metadata",
@@ -234,7 +234,7 @@ dependencies = [
 
 [[package]]
 name = "cprover_bindings"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "lazy_static",
  "linear-map",
@@ -430,14 +430,14 @@ checksum = "4217ad341ebadf8d8e724e264f13e593e0648f5b3e94b3896a5df283be015ecc"
 
 [[package]]
 name = "kani"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "kani_macros",
 ]
 
 [[package]]
 name = "kani-compiler"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "ar",
  "atty",
@@ -463,7 +463,7 @@ dependencies = [
 
 [[package]]
 name = "kani-driver"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "anyhow",
  "cargo_metadata",
@@ -485,7 +485,7 @@ dependencies = [
 
 [[package]]
 name = "kani-verifier"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "anyhow",
  "home",
@@ -494,7 +494,7 @@ dependencies = [
 
 [[package]]
 name = "kani_macros"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "quote",
  "syn",
@@ -502,7 +502,7 @@ dependencies = [
 
 [[package]]
 name = "kani_metadata"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "cprover_bindings",
  "serde",
@@ -510,7 +510,7 @@ dependencies = [
 
 [[package]]
 name = "kani_queries"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "strum",
  "strum_macros",
@@ -1019,7 +1019,7 @@ checksum = "a507befe795404456341dfab10cef66ead4c041f62b8b11bbb92bffe5d0953e0"
 
 [[package]]
 name = "std"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "kani",
 ]
