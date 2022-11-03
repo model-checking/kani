@@ -1,11 +1,17 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+//! Checks that intrinsics for SIMD vectors of signed integers are supported
 #![feature(repr_simd, platform_intrinsics)]
 
 #[repr(simd)]
 #[allow(non_camel_case_types)]
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq)]
+pub struct f64x2(f64, f64);
+
+#[repr(simd)]
+#[allow(non_camel_case_types)]
+#[derive(Clone, Copy, PartialEq)]
 pub struct i64x2(i64, i64);
 
 // The predicate type U in the functions below must
@@ -26,17 +32,23 @@ macro_rules! assert_cmp {
     };
 }
 
-// https://gcc.gnu.org/onlinedocs/gcc/Vector-Extensions.html
-// Vectors are compared element-wise producing:
-//  * 0 when comparison is false
-//  * -1 (all bits set) otherwise
+// This proof currently fails due to the following invariant violation in CBMC:
+// ```
+// --- begin invariant violation report ---
+// Invariant check failed
+// File: ../src/goto-symex/goto_symex.cpp:48 function: symex_assign
+// Condition: lhs.type() == rhs.type()
+// Reason: assignments must be type consistent
+// ```
+//
+// However, Rust allows this, and Kani's type-checker has been extended
+// to allow it for vector datatypes as well.
+// Tracking issue (CBMC): <https://github.com/diffblue/cbmc/issues/7302>
 #[kani::proof]
 fn main() {
-    let x = i64x2(0, 0);
-    let y = i64x2(0, 1);
+    let x = f64x2(0.0, 0.0);
+    let y = f64x2(0.0, 1.0);
 
-    // CBMC does not support comparison operators
-    // so the below assertions are expected to fail
     unsafe {
         assert_cmp!(res_eq, simd_eq, x, x, -1, -1);
         assert_cmp!(res_eq, simd_eq, x, y, -1, 0);
