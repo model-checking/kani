@@ -74,6 +74,7 @@ impl KaniSession {
     }
 }
 
+#[derive(Debug, Eq, PartialEq)]
 pub enum ReachabilityMode {
     Legacy,
     ProofHarnesses,

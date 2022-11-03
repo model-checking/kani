@@ -32,7 +32,8 @@ impl KaniSession {
             .target_dir
             .as_ref()
             .unwrap_or(&metadata.target_directory.clone().into())
-            .clone();
+            .clone()
+            .join(self.kani_dir());
         let outdir = target_dir.join(build_target).join("debug/deps");
 
         let mut kani_args = self.kani_specific_flags();
@@ -110,6 +111,10 @@ impl KaniSession {
             metadata: glob(&outdir.join("*.kani-metadata.json"))?,
             restrictions: self.args.restrict_vtable().then_some(outdir),
         })
+    }
+
+    fn kani_dir(&self) -> impl AsRef<Path> {
+        if self.reachability_mode() == ReachabilityMode::Legacy { "kani-legacy" } else { "kani" }
     }
 }
 
