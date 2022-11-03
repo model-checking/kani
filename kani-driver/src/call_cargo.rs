@@ -33,8 +33,12 @@ impl KaniSession {
             .as_ref()
             .unwrap_or(&metadata.target_directory.clone().into())
             .clone()
-            .join(self.kani_dir());
+            .join("kani");
         let outdir = target_dir.join(build_target).join("debug/deps");
+
+        // Clean directory before building since we are unable to handle cache today.
+        // TODO: https://github.com/model-checking/kani/issues/1736
+        self.cargo_clean(&target_dir)?;
 
         let mut kani_args = self.kani_specific_flags();
         let rustc_args = self.kani_rustc_flags();
@@ -113,8 +117,13 @@ impl KaniSession {
         })
     }
 
-    fn kani_dir(&self) -> impl AsRef<Path> {
-        if self.reachability_mode() == ReachabilityMode::Legacy { "kani-legacy" } else { "kani" }
+    /// Calls `cargo_clean`.
+    /// Currently we cannot properly handle objects being cached during previous compilations.
+    fn cargo_clean<T: AsRef<Path>>(&self, target_dir: T) -> Result<()> {
+        let mut cmd = Command::new("cargo");
+        cmd.arg("clean").arg("--target-dir").arg(&target_dir.as_ref());
+        self.run_terminal(cmd)?;
+        Ok(())
     }
 }
 
