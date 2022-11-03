@@ -166,6 +166,7 @@ pub fn parser<'a, 'b>() -> App<'a, 'b> {
         )
         .arg(
             // TODO: Remove this argument once stubbing works for multiple harnesses at a time.
+            // https://github.com/model-checking/kani/issues/1841
             Arg::with_name(HARNESS)
                 .long("--harness")
                 .help("Selects the harness to target.")

@@ -109,7 +109,7 @@ fn main() -> Result<(), &'static str> {
     if matches.is_present(parser::ENABLE_STUBBING) {
         assert!(
             matches.is_present(parser::HARNESS),
-            "Flag --enable-stubbing requires --harness flag"
+            "Argument `--enable-stubbing` requires `--harness` argument"
         );
         eprintln!("warning: Kani currently does not perform any stubbing.");
     }

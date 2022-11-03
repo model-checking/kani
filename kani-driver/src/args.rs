@@ -228,7 +228,15 @@ pub struct KaniArgs {
     pub randomize_layout: Option<Option<u64>>,
 
     /// Enable the stubbing of functions and methods.
-    #[structopt(long, hidden_short_help(true), requires("enable-unstable"), requires("harness"))]
+    // TODO Stubbing should in principle work with concrete playback.
+    // https://github.com/model-checking/kani/issues/1842
+    #[structopt(
+        long,
+        hidden_short_help(true),
+        requires("enable-unstable"),
+        requires("harness"),
+        conflicts_with("concrete-playback")
+    )]
     pub enable_stubbing: bool,
     /*
     The below is a "TODO list" of things not yet implemented from the kani_flags.py script.
@@ -586,8 +594,14 @@ mod tests {
     fn check_enable_stubbing() {
         check_unstable_flag("--enable-stubbing --harness foo");
 
-        // --enable-stubbing cannot be called without --harness
+        // `--enable-stubbing` cannot be called without `--harness`
         let err = parse_unstable_enabled("--enable-stubbing").unwrap_err();
         assert_eq!(err.kind, ErrorKind::MissingRequiredArgument);
+
+        // `--enable-stubbing` cannot be called with `--concrete-playback`
+        let err =
+            parse_unstable_enabled("--enable-stubbing --harness foo --concrete-playback=print")
+                .unwrap_err();
+        assert_eq!(err.kind, ErrorKind::ArgumentConflict);
     }
 }
