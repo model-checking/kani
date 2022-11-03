@@ -107,10 +107,6 @@ fn main() -> Result<(), &'static str> {
     let rustc_args = generate_rustc_args(&matches);
 
     if matches.is_present(parser::ENABLE_STUBBING) {
-        assert!(
-            matches.is_present(parser::HARNESS),
-            "Argument `--enable-stubbing` requires `--harness` argument"
-        );
         eprintln!("warning: Kani currently does not perform any stubbing.");
     }
 

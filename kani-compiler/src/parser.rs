@@ -176,7 +176,8 @@ pub fn parser<'a, 'b>() -> App<'a, 'b> {
         .arg(
             Arg::with_name(ENABLE_STUBBING)
                 .long("--enable-stubbing")
-                .help("Instruct the compiler to perform stubbing."),
+                .help("Instruct the compiler to perform stubbing.")
+                .requires(HARNESS),
         );
     #[cfg(feature = "unsound_experiments")]
     let app = crate::unsound_experiments::arg_parser::add_unsound_experiments_to_parser(app);
@@ -234,6 +235,8 @@ pub fn command_arguments(args: &Vec<String>) -> Vec<String> {
 
 #[cfg(test)]
 mod parser_test {
+    use clap::ErrorKind;
+
     use super::*;
 
     #[test]
@@ -257,6 +260,11 @@ mod parser_test {
         let matches = parser().get_matches_from(args);
         assert!(matches.is_present("enable-stubbing"));
         assert_eq!(matches.value_of("harness"), Some("foo"));
+
+        // `--enable-stubbing` cannot be called without `--harness`
+        let args = vec!["kani-compiler", "--enable-stubbing"];
+        let err = parser().get_matches_from_safe(args).unwrap_err();
+        assert_eq!(err.kind, ErrorKind::MissingRequiredArgument);
     }
 
     #[test]
