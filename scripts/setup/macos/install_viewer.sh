@@ -16,4 +16,5 @@ fi
 
 set -x
 
-brew install aws/tap/cbmc-viewer@${CBMC_VIEWER_VERSION}
+# brew doesn't recognize specific versions of viewer
+brew install aws/tap/cbmc-viewer
