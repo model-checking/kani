@@ -6,7 +6,7 @@ CI.
 
 ## Using Kani in your GitHub workflow
 Our GitHub Action is available in the GitHub Marketspace with the name
-`model-checking/kani`
+`model-checking/kani-github-action`
 
 The following workflow snippet will checkout your repository and run
 `cargo kani` on it whenever a push or pull request occurs. Replace
@@ -22,26 +22,30 @@ jobs:
     runs-on: ubuntu-20.04
     steps:
       - name: 'Checkout your code.'
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: 'Run Kani on your code.'
-        uses: model-checking/kani@vVER.SION
+        uses: model-checking/kani-github-action@vVER.SION
 ```
 
-This will run `cargo kani --workspace` on the code you checked
-out. You can also provide a custom command for running Kani. For
-example, the below code runs 2 commands in sequence where the first
-command compiles the crate without running Kani, and the second runs
-Kani on specified packages.
+This will run `cargo kani` on the code you checked out.
 
-```
-      - name: 'Run Kani on your code.'
-        uses: model-checking/kani@vVER.SION
-        with:
-          command: |
-            cargo kani --only-codegen
-            cargo kani -p mypackage-a -p mypackage-b
-```
+### Options
+
+The action takes the following optional parameters:
+
+- `command`: The command to run. 
+  Defaults to `cargo kani`.
+  Most often, you will not need to change this.
+- `working-directory`: The directory to execute the command in.
+  Defaults to `.`.
+  Useful if your repository has multiple crates, and you only want to run on one of them.
+- `args`: The arguments to pass to `cargo kani.
+  See `cargo kani --help` for a full list of options.
+  Useful options include:
+  - `--output-format=terse` to generate terse output.
+  - `--tests` to run on proofs inside the `test` module (needed for running Bolero).
+  - `--workspace` to run on all creates within your repository.
 
 ## FAQ
 - **Kani takes too long for my CI**: Try running Kani on a
