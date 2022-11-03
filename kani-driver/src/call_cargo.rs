@@ -6,6 +6,7 @@ use crate::session::{KaniSession, ReachabilityMode};
 use anyhow::{Context, Result};
 use cargo_metadata::{Metadata, MetadataCommand, Package};
 use std::ffi::OsString;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -38,7 +39,9 @@ impl KaniSession {
 
         // Clean directory before building since we are unable to handle cache today.
         // TODO: https://github.com/model-checking/kani/issues/1736
-        self.cargo_clean(&target_dir)?;
+        if target_dir.exists() {
+            fs::remove_dir_all(&target_dir)?;
+        }
 
         let mut kani_args = self.kani_specific_flags();
         let rustc_args = self.kani_rustc_flags();
@@ -115,15 +118,6 @@ impl KaniSession {
             metadata: glob(&outdir.join("*.kani-metadata.json"))?,
             restrictions: self.args.restrict_vtable().then_some(outdir),
         })
-    }
-
-    /// Calls `cargo_clean`.
-    /// Currently we cannot properly handle objects being cached during previous compilations.
-    fn cargo_clean<T: AsRef<Path>>(&self, target_dir: T) -> Result<()> {
-        let mut cmd = Command::new("cargo");
-        cmd.arg("clean").arg("--target-dir").arg(&target_dir.as_ref());
-        self.run_terminal(cmd)?;
-        Ok(())
     }
 }
 
