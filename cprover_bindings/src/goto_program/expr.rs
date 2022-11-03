@@ -194,6 +194,12 @@ pub enum BinaryOperator {
     Rol,
     Ror,
     Shl,
+    VectorEqual,
+    VectorNotequal,
+    VectorGe,
+    VectorGt,
+    VectorLe,
+    VectorLt,
     Xor,
 }
 
@@ -438,10 +444,10 @@ impl Expr {
     }
 
     pub fn vector_expr(typ: Type, elems: Vec<Expr>) -> Self {
-        if let Type::Vector { size, typ: value_typ } = typ.clone() {
-            assert_eq!(size as usize, elems.len());
+        if let Type::Vector { data } = typ.clone() {
+            assert_eq!(data.size as usize, elems.len());
             assert!(
-                elems.iter().all(|x| x.typ == *value_typ),
+                elems.iter().all(|x| x.typ == *data.typ),
                 "Vector type and value types don't match: \n{:?}\n{:?}",
                 typ,
                 elems
@@ -930,16 +936,12 @@ impl Expr {
             Bitnand => lhs.typ == rhs.typ && lhs.typ.is_integer(),
             // Comparisons
             Ge | Gt | Le | Lt => {
-                lhs.typ == rhs.typ
-                    && (lhs.typ.is_numeric() || lhs.typ.is_pointer() || lhs.typ.is_vector())
+                lhs.typ == rhs.typ && (lhs.typ.is_numeric() || lhs.typ.is_pointer())
             }
             // Equalities
             Equal | Notequal => {
                 lhs.typ == rhs.typ
-                    && (lhs.typ.is_c_bool()
-                        || lhs.typ.is_integer()
-                        || lhs.typ.is_pointer()
-                        || lhs.typ.is_vector())
+                    && (lhs.typ.is_c_bool() || lhs.typ.is_integer() || lhs.typ.is_pointer())
             }
             // Floating Point Equalities
             IeeeFloatEqual | IeeeFloatNotequal => lhs.typ == rhs.typ && lhs.typ.is_floating_point(),
@@ -953,6 +955,9 @@ impl Expr {
                     || (lhs.typ.is_pointer() && rhs.typ.is_integer())
             }
             ROk => lhs.typ.is_pointer() && rhs.typ.is_c_size_t(),
+            VectorEqual | VectorNotequal | VectorGe | VectorLe | VectorGt | VectorLt => {
+                lhs.typ == rhs.typ && lhs.typ.is_vector()
+            }
         }
     }
 
@@ -975,21 +980,9 @@ impl Expr {
             // Bitwise ops
             Bitand | Bitnand | Bitor | Bitxor => lhs.typ.clone(),
             // Comparisons
-            Ge | Gt | Le | Lt => {
-                if lhs.typ.is_vector() {
-                    lhs.typ.clone()
-                } else {
-                    Type::bool()
-                }
-            }
+            Ge | Gt | Le | Lt => Type::bool(),
             // Equalities
-            Equal | Notequal => {
-                if lhs.typ.is_vector() {
-                    lhs.typ.clone()
-                } else {
-                    Type::bool()
-                }
-            }
+            Equal | Notequal => Type::bool(),
             // Floating Point Equalities
             IeeeFloatEqual | IeeeFloatNotequal => Type::bool(),
             // Overflow flags
@@ -999,8 +992,13 @@ impl Expr {
                 Type::struct_tag(struct_type.tag().unwrap())
             }
             ROk => Type::bool(),
+            // Vector comparisons
+            VectorEqual | VectorNotequal | VectorGe | VectorLe | VectorGt | VectorLt => {
+                lhs.typ.clone()
+            }
         }
     }
+
     /// self op right;
     pub fn binop(self, op: BinaryOperator, rhs: Expr) -> Expr {
         assert!(
@@ -1161,6 +1159,39 @@ impl Expr {
     /// `__CPROVER_r_ok(self, e)`
     pub fn r_ok(self, e: Expr) -> Expr {
         self.binop(ROk, e)
+    }
+
+    // Regular comparison operators (e.g., `==` or `<`) don't work over SIMD vectors.
+    // Instead, we must use the dedicated `vector-<op>` Irep operators.
+
+    /// `self == e` for SIMD vectors
+    pub fn vector_eq(self, e: Expr) -> Expr {
+        self.binop(VectorEqual, e)
+    }
+
+    /// `self != e` for SIMD vectors
+    pub fn vector_neq(self, e: Expr) -> Expr {
+        self.binop(VectorNotequal, e)
+    }
+
+    /// `self >= e` for SIMD vectors
+    pub fn vector_ge(self, e: Expr) -> Expr {
+        self.binop(VectorGe, e)
+    }
+
+    /// `self <= e` for SIMD vectors
+    pub fn vector_le(self, e: Expr) -> Expr {
+        self.binop(VectorLe, e)
+    }
+
+    /// `self > e` for SIMD vectors
+    pub fn vector_gt(self, e: Expr) -> Expr {
+        self.binop(VectorGt, e)
+    }
+
+    /// `self < e` for SIMD vectors
+    pub fn vector_lt(self, e: Expr) -> Expr {
+        self.binop(VectorLt, e)
     }
 
     // Expressions defined on top of other expressions

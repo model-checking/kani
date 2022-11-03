@@ -84,6 +84,12 @@ impl ToIrepId for BinaryOperator {
             BinaryOperator::Ror => IrepId::Ror,
             BinaryOperator::Shl => IrepId::Shl,
             BinaryOperator::Xor => IrepId::Xor,
+            BinaryOperator::VectorEqual => IrepId::VectorEqual,
+            BinaryOperator::VectorNotequal => IrepId::VectorNotequal,
+            BinaryOperator::VectorGe => IrepId::VectorGe,
+            BinaryOperator::VectorLe => IrepId::VectorLe,
+            BinaryOperator::VectorGt => IrepId::VectorGt,
+            BinaryOperator::VectorLt => IrepId::VectorLt,
         }
     }
 }
@@ -724,11 +730,11 @@ impl ToIrep for Type {
                     (IrepId::ReturnType, return_type.to_irep(mm)),
                 ],
             },
-            Type::Vector { typ, size } => {
-                let size = Expr::int_constant(*size, Type::ssize_t());
+            Type::Vector { data } => {
+                let size = Expr::int_constant(data.size, Type::ssize_t());
                 Irep {
                     id: IrepId::Vector,
-                    sub: vec![typ.to_irep(mm)],
+                    sub: vec![data.typ.to_irep(mm)],
                     named_sub: linear_map![(IrepId::Size, size.to_irep(mm))],
                 }
             }

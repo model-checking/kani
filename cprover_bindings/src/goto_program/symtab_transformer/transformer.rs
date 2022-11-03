@@ -67,7 +67,7 @@ pub trait Transformer: Sized {
             Type::VariadicCode { parameters, return_type } => {
                 self.transform_type_variadic_code(parameters, return_type)
             }
-            Type::Vector { typ, size } => self.transform_type_vector(typ, size),
+            Type::Vector { data } => self.transform_type_vector(&data.typ, &data.size),
         }
     }
 

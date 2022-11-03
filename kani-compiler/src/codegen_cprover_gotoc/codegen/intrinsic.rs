@@ -611,21 +611,21 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             "simd_and" => unstable_codegen!(codegen_intrinsic_binop!(bitand)),
             "simd_div" => unstable_codegen!(codegen_intrinsic_binop!(div)),
-            "simd_eq" => unstable_codegen!(codegen_intrinsic_binop!(eq)),
+            "simd_eq" => codegen_intrinsic_binop!(vector_eq),
             "simd_extract" => {
                 let _vec = fargs.remove(0);
                 let _index = fargs.remove(0);
                 unstable_codegen!(self.codegen_expr_to_place(p, vec.index_array(index)))
             }
-            "simd_ge" => unstable_codegen!(codegen_intrinsic_binop!(ge)),
-            "simd_gt" => unstable_codegen!(codegen_intrinsic_binop!(gt)),
+            "simd_ge" => codegen_intrinsic_binop!(vector_ge),
+            "simd_gt" => codegen_intrinsic_binop!(vector_gt),
             "simd_insert" => {
                 unstable_codegen!(self.codegen_intrinsic_simd_insert(fargs, p, cbmc_ret_ty, loc))
             }
-            "simd_le" => unstable_codegen!(codegen_intrinsic_binop!(le)),
-            "simd_lt" => unstable_codegen!(codegen_intrinsic_binop!(lt)),
+            "simd_le" => codegen_intrinsic_binop!(vector_le),
+            "simd_lt" => codegen_intrinsic_binop!(vector_lt),
             "simd_mul" => unstable_codegen!(codegen_simd_with_overflow_check!(mul, mul_overflow_p)),
-            "simd_ne" => unstable_codegen!(codegen_intrinsic_binop!(neq)),
+            "simd_ne" => codegen_intrinsic_binop!(vector_neq),
             "simd_or" => unstable_codegen!(codegen_intrinsic_binop!(bitor)),
             "simd_rem" => unstable_codegen!(codegen_intrinsic_binop!(rem)),
             "simd_shl" => unstable_codegen!(codegen_intrinsic_binop!(shl)),

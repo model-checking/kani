@@ -71,7 +71,24 @@ pub enum Type {
     /// Packed SIMD vectors
     /// In CBMC/gcc, variables of this type are declared as:
     /// `typ __attribute__((vector_size (size * sizeof(typ)))) var;`
-    Vector { typ: Box<Type>, size: u64 },
+    Vector { data: VectorData },
+}
+
+/// Contains information about SIMD vector types
+#[derive(Debug, Clone)]
+pub struct VectorData {
+    pub typ: Box<Type>,
+    pub size: u64,
+}
+
+impl PartialEq for VectorData {
+    /// Rust allows conversions between SIMD vector types with the same size. By
+    /// redefining equality over vector types we don't get type-checking errors
+    /// in those cases (although CBMC may, see
+    /// <https://github.com/diffblue/cbmc/issues/7302> for more details).
+    fn eq(&self, other: &VectorData) -> bool {
+        self.size == other.size
+    }
 }
 
 /// Machine dependent integers: `bool`, `char`, `int`, `size_t`, etc.
@@ -258,11 +275,10 @@ impl Type {
     pub fn base_type(&self) -> Option<&Type> {
         let concrete = self.unwrap_typedef();
         match concrete {
-            Array { typ, .. }
-            | CBitField { typ, .. }
-            | FlexibleArray { typ }
-            | Pointer { typ }
-            | Vector { typ, .. } => Some(typ),
+            Array { typ, .. } | CBitField { typ, .. } | FlexibleArray { typ } | Pointer { typ } => {
+                Some(typ)
+            }
+            Vector { data } => Some(&*data.typ),
             _ => None,
         }
     }
@@ -304,6 +320,14 @@ impl Type {
     pub fn return_type(&self) -> Option<&Type> {
         match self {
             Code { return_type, .. } | VariadicCode { return_type, .. } => Some(return_type),
+            _ => None,
+        }
+    }
+
+    pub fn size(&self) -> Option<u64> {
+        match self {
+            Array { size, .. } => Some(*size),
+            Vector { data } => Some(data.size),
             _ => None,
         }
     }
@@ -362,7 +386,7 @@ impl Type {
             // It's possible this should also have size 0, like Code, but we have not been
             // able to generate a unit test, so leaving it unreachable for now.
             VariadicCode { .. } => unreachable!("VariadicCode doesn't have a sizeof"),
-            Vector { typ, size } => typ.sizeof_in_bits(st) * size,
+            Vector { data } => data.typ.sizeof_in_bits(st) * data.size,
         }
     }
 
@@ -1041,6 +1065,19 @@ impl Type {
         Pointer { typ: Box::new(self) }
     }
 
+    /// Convert type to its signed counterpart if possible.
+    /// For types that are already signed, this will return self.
+    /// Note: This will expand any typedef.
+    pub fn to_signed(&self) -> Option<Self> {
+        let concrete = self.unwrap_typedef();
+        match concrete {
+            CInteger(CIntType::SizeT) => Some(CInteger(CIntType::SSizeT)),
+            Unsignedbv { ref width } => Some(Signedbv { width: *width }),
+            Signedbv { .. } => Some(self.clone()),
+            _ => None,
+        }
+    }
+
     /// Convert type to its unsigned counterpart if possible.
     /// For types that are already unsigned, this will return self.
     /// Note: This will expand any typedef.
@@ -1189,7 +1226,8 @@ impl Type {
     // `size` is the number of elements (e.g., a SIMD vector of 4 integers)
     pub fn vector(typ: Type, size: u64) -> Self {
         assert!(typ.is_numeric());
-        Type::Vector { typ: Box::new(typ), size }
+        let data = VectorData { typ: Box::new(typ), size };
+        Type::Vector { data }
     }
 
     /// `void *`
@@ -1296,9 +1334,9 @@ impl Type {
                 }
             }
             UnionTag(tag) => st.lookup(*tag).unwrap().typ.zero_initializer(st),
-            Vector { typ, size } => {
-                let zero = typ.zero_initializer(st);
-                let size = (*size).try_into().unwrap();
+            Vector { data } => {
+                let zero = data.typ.zero_initializer(st);
+                let size = (data.size).try_into().unwrap();
                 let elems = vec![zero; size];
                 Expr::vector_expr(self.clone(), elems)
             }
@@ -1396,8 +1434,10 @@ impl Type {
                 let return_string = return_type.to_identifier();
                 format!("variadic_code_from_{parameter_string}_to_{return_string}")
             }
-            Type::Vector { size, typ } => {
-                format!("vec_of_{size}_{}", typ.to_identifier())
+            Type::Vector { data } => {
+                let size = data.size;
+                let typ = data.typ.to_identifier();
+                format!("vec_of_{size}_{typ}")
             }
         }
     }
