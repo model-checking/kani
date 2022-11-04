@@ -129,7 +129,7 @@ pub struct Config {
     /// Timeout duration for each test.
     pub timeout: Option<Duration>,
 
-    /// Flag that indicates whether we will run the tests or not.
+    /// Whether we will run the tests or not.
     pub dry_run: bool,
 
     /// Allow us to run the regression with the mir linker enabled by default. For that, set
