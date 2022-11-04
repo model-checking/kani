@@ -95,8 +95,12 @@ impl<T: Strategy> Union<T> {
                 <= u64::from(u32::MAX),
             "Union weights overflow u32"
         );
-        let options =
-            options.into_iter().map(|(w, v)| (w, Arc::new(v))).collect();
+        let options: Vec<WA<T>> = options
+            .into_iter()
+            .filter(|(w, _)| w > &0)
+            .map(|(w, v)| (w, Arc::new(v)))
+            .collect();
+        assert!(!options.is_empty());
         Self { options }
     }
 
@@ -107,6 +111,7 @@ impl<T: Strategy> Union<T> {
     }
 }
 
+#[allow(dead_code)] // Merge in progress. See #1608 for details.
 fn pick_weighted<I: Iterator<Item = u32>>(
     runner: &mut TestRunner,
     weights1: I,
@@ -128,15 +133,7 @@ impl<T: Strategy> Strategy for Union<T> {
     type Value = T::Value;
 
     fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
-        fn extract_weight<V>(&(w, _): &WA<V>) -> u32 {
-            w
-        }
-
-        let pick = pick_weighted(
-            runner,
-            self.options.iter().map(extract_weight::<T>),
-            self.options.iter().map(extract_weight::<T>),
-        );
+        let pick = kani::any::<usize>() % self.options.len();
 
         let mut options = Vec::with_capacity(pick);
 
@@ -371,8 +368,8 @@ macro_rules! tuple_union {
 
             fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
                 let weights = [((self.0).0).0, $(((self.0).$ix).0),*];
-                let pick = pick_weighted(runner, weights.iter().cloned(),
-                                         weights.iter().cloned());
+                let pick = kani::any::<usize>() % weights.len();
+                kani::assume(weights[pick] != 0);
 
                 Ok(TupleUnionValueTree {
                     options: (
