@@ -19,7 +19,8 @@ use std::ffi::OsString;
 use std::fs;
 use std::io::{self};
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
+use std::str::FromStr;
+use std::time::{Duration, SystemTime};
 use test::ColorConfig;
 use tracing::*;
 use walkdir::WalkDir;
@@ -83,7 +84,9 @@ pub fn parse_config(args: Vec<String>) -> Config {
         .optopt("", "host", "the host to build for", "HOST")
         .optflag("", "force-rerun", "rerun tests even if the inputs are unchanged")
         .optflag("h", "help", "show this message")
-        .optopt("", "edition", "default Rust edition", "EDITION");
+        .optopt("", "edition", "default Rust edition", "EDITION")
+        .optopt("", "timeout", "the timeout for each test in seconds", "TIMEOUT")
+    ;
 
     let (argv0, args_) = args.split_first().unwrap();
     if args.len() == 1 || args[1] == "-h" || args[1] == "--help" {
@@ -130,6 +133,12 @@ pub fn parse_config(args: Vec<String>) -> Config {
     let src_base = opt_path(matches, "src-base", &["tests", suite.as_str()]);
     let run_ignored = matches.opt_present("ignored");
     let mode = matches.opt_str("mode").unwrap().parse().expect("invalid mode");
+    let timeout = matches.opt_str("timeout").map(|val| {
+        Duration::from_secs(
+            u64::from_str(&val)
+                .expect("Unexpected timeout format. Expected a positive number but found {val}"),
+        )
+    });
 
     Config {
         src_base,
@@ -148,6 +157,7 @@ pub fn parse_config(args: Vec<String>) -> Config {
         edition: matches.opt_str("edition"),
         force_rerun: matches.opt_present("force-rerun"),
         mir_linker: cfg!(mir_linker),
+        timeout,
     }
 }
 
