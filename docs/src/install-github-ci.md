@@ -4,7 +4,7 @@ Kani offers a GitHub Action for running Kani in CI.
 As of now, only Ubuntu 20.04 with `x86_64-unknown-linux-gnu` is supported for Kani in CI.
 
 ## Using Kani in your GitHub workflow
-Our GitHub Action is available in the [GitHub Marketplace](https://github.com/marketplace/actions/kani-rust-verifier) with the name `model-checking/kani-github-action`.
+Our GitHub Action is available in the [GitHub Marketplace](https://github.com/marketplace/actions/kani-rust-verifier).
 
 The following workflow snippet will checkout your repository and run `cargo kani` on it whenever a push or pull request occurs.
 Replace `<MAJOR>.<MINOR>` with the version of Kani you want to run with.
