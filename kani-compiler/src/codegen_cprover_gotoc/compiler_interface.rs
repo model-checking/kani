@@ -3,8 +3,8 @@
 
 //! This file contains the code necessary to interface with the compiler backend
 
-use crate::codegen_cprover_gotoc::reachability::{collect_reachable_items, filter_crate_items};
 use crate::codegen_cprover_gotoc::GotocCtx;
+use crate::kani_middle::reachability::{collect_reachable_items, filter_crate_items};
 use bitflags::_core::any::Any;
 use cbmc::goto_program::{symtab_transformer, Location};
 use cbmc::{InternedString, MachineModel};

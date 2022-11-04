@@ -22,7 +22,7 @@ KANI_DIR=$SCRIPT_DIR/..
 export KANI_FAIL_ON_UNEXPECTED_DESCRIPTION="true"
 
 # Required dependencies
-check-cbmc-version.py --major 5 --minor 67
+check-cbmc-version.py --major 5 --minor 69
 check-cbmc-viewer-version.py --major 3 --minor 5
 
 # Formatting check
@@ -60,7 +60,7 @@ TESTS=(
 
 if [[ "" != "${KANI_ENABLE_UNSOUND_EXPERIMENTS-}" ]]; then
   TESTS+=("unsound_experiments kani")
-else 
+else
   TESTS+=("no_unsound_experiments expected")
 fi
 
@@ -86,16 +86,6 @@ fi
 
 # Check codegen of firecracker
 time "$SCRIPT_DIR"/codegen-firecracker.sh
-
-# Check that we can use Kani on crates with a diamond dependency graph,
-# with two different versions of the same crate.
-#
-#         dependency1
-#        /           \ v0.1.0
-#   main             dependency3
-#        \           / v0.1.1
-#         dependency2
-time "$KANI_DIR"/tests/kani-dependency-test/diamond-dependency/run-dependency-test.sh
 
 # Check that documentation compiles.
 cargo doc --workspace --no-deps --exclude std

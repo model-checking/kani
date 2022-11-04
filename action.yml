@@ -17,7 +17,7 @@ inputs:
 
 runs:
   using: 'docker'
-  image: docker://ghcr.io/model-checking/kani-ubuntu-20.04:0.13.0
+  image: docker://ghcr.io/model-checking/kani-ubuntu-20.04:0.14.0
   args:
     - bash
     - '-c'

@@ -11,6 +11,13 @@ void *calloc(size_t nmemb, size_t size);
 
 typedef __CPROVER_bool bool;
 
+/// Mapping unit to `void` works for functions with no return type but not for
+/// variables with type unit. We treat both uniformly by declaring an empty
+/// struct type: `struct Unit {}` and a global variable `struct Unit VoidUnit`
+/// returned by all void functions (both declared by the Kani compiler).
+struct Unit;
+extern struct Unit VoidUnit;
+
 // `assert` then `assume`
 #define __KANI_assert(cond, msg)            \
     do {                                    \
@@ -70,7 +77,7 @@ uint8_t *__rust_alloc_zeroed(size_t size, size_t align)
 // definition.
 // For safety, refer to the documentation of GlobalAlloc::dealloc:
 // https://doc.rust-lang.org/std/alloc/trait.GlobalAlloc.html#tymethod.dealloc
-void __rust_dealloc(uint8_t *ptr, size_t size, size_t align)
+struct Unit __rust_dealloc(uint8_t *ptr, size_t size, size_t align)
 {
     // TODO: Ensure we are doing the right thing with align
     // https://github.com/model-checking/kani/issues/1168
@@ -79,6 +86,7 @@ void __rust_dealloc(uint8_t *ptr, size_t size, size_t align)
     __KANI_assert(__CPROVER_OBJECT_SIZE(ptr) == size,
                   "rust_dealloc must be called on an object whose allocated size matches its layout");
     free(ptr);
+    return VoidUnit;
 }
 
 // This is a C implementation of the __rust_realloc function that has the following signature:

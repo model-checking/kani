@@ -17,7 +17,7 @@ runs:
         shell: bash
 
       - name: Install cbmc-viewer
-        run: ./scripts/setup/install_viewer.sh
+        run: ./scripts/setup/${{ inputs.os }}/install_viewer.sh
         shell: bash
 
       - name: Install Rust toolchain

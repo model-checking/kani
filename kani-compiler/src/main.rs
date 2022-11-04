@@ -28,6 +28,7 @@ extern crate rustc_target;
 
 #[cfg(feature = "cprover")]
 mod codegen_cprover_gotoc;
+mod kani_middle;
 mod parser;
 mod session;
 mod unsound_experiments;
