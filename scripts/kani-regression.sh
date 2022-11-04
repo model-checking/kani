@@ -43,6 +43,7 @@ cargo test -p kani-driver
 # Check output files (--gen-c option)
 echo "Check GotoC output file generation"
 time "$KANI_DIR"/tests/output-files/check-output.sh
+echo ""
 
 # Declare testing suite information (suite and mode)
 TESTS=(
@@ -63,6 +64,11 @@ if [[ "" != "${KANI_ENABLE_UNSOUND_EXPERIMENTS-}" ]]; then
 else
   TESTS+=("no_unsound_experiments expected")
 fi
+
+# Build compiletest and print configuration. We pick suite / mode combo so there's no test.
+echo "--- Compiletest configuration"
+cargo run -p compiletest --quiet -- --suite kani --mode cargo-kani --dry-run --verbose
+echo "-----------------------------"
 
 # Extract testing suite information and run compiletest
 for testp in "${TESTS[@]}"; do
