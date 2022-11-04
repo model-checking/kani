@@ -129,6 +129,9 @@ pub struct Config {
     /// Timeout duration for each test.
     pub timeout: Option<Duration>,
 
+    /// Flag that indicates whether we will run the tests or not.
+    pub dry_run: bool,
+
     /// Allow us to run the regression with the mir linker enabled by default. For that, set
     /// `RUSTFLAGS=--cfg=mir_linker` while compiling `compiletest`.
     /// Remove this as part of <https://github.com/model-checking/kani/issues/1677>

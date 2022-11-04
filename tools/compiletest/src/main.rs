@@ -86,6 +86,7 @@ pub fn parse_config(args: Vec<String>) -> Config {
         .optflag("h", "help", "show this message")
         .optopt("", "edition", "default Rust edition", "EDITION")
         .optopt("", "timeout", "the timeout for each test in seconds", "TIMEOUT")
+        .optflag("", "dry-run", "don't actually run the tests")
     ;
 
     let (argv0, args_) = args.split_first().unwrap();
@@ -157,6 +158,7 @@ pub fn parse_config(args: Vec<String>) -> Config {
         edition: matches.opt_str("edition"),
         force_rerun: matches.opt_present("force-rerun"),
         mir_linker: cfg!(mir_linker),
+        dry_run: matches.opt_present("dry-run"),
         timeout,
     }
 }
@@ -175,6 +177,15 @@ pub fn log_config(config: &Config) {
     logv(c, format!("verbose: {}", config.verbose));
     logv(c, format!("quiet: {}", config.quiet));
     logv(c, format!("mir_linker: {}", config.mir_linker));
+    logv(c, format!("timeout: {:?}", config.timeout));
+    logv(
+        c,
+        format!(
+            "parallelism: RUST_TEST_THREADS={:?}, available_parallelism={}",
+            env::var("RUST_TEST_THREADS").ok(),
+            std::thread::available_parallelism().unwrap()
+        ),
+    );
     logv(c, "\n".to_string());
 }
 
@@ -213,6 +224,15 @@ pub fn run_tests(config: Config) {
     let mut tests = Vec::new();
     for c in &configs {
         make_tests(c, &mut tests);
+    }
+
+    if config.dry_run {
+        println!("Number of Tests: {}", tests.len());
+        for test in tests {
+            let ignore = if test.desc.ignore ^ config.run_ignored { "IGNORE" } else { "" };
+            println!(" - {} {}", test.desc.name.as_slice(), ignore);
+        }
+        return;
     }
 
     let res = test::run_tests_console(&opts, tests);
