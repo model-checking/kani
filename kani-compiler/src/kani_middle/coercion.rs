@@ -34,14 +34,24 @@ use tracing::trace;
 /// There are a few interesting cases (references / pointers are handled the same way):
 /// 1. Coercion between `&T` to `&U`.
 ///    - This is the base case.
-///    - In this case, we extract the type that is pointed to.
-/// 2. Coercion between smart pointers like `Rc<T>` to `Rc<U>`.
+///    - In this case, we extract the types that are pointed to.
+/// 2. Coercion between smart pointers like `NonNull<T>` to `NonNull<U>`.
 ///    - Smart pointers implement the `CoerceUnsize` trait.
 ///    - Use CustomCoerceUnsized information to traverse the smart pointer structure and find the
 ///      underlying pointer.
 ///    - Use base case to extract `T` and `U`.
-/// 3. Coercion between `&Wrapper<T>` to `&Wrapper<U>`.
-///    - Apply base case to extract the pair `(Wrapper<T>, Wrapper<U>)`.
+/// 3. Coercion between a pointer to a structure whose tail is being coerced.
+///
+/// E.g.: A user may want to define a type like:
+/// ```
+/// struct Message<T> {
+///     header: &str,
+///     content: T,
+/// }
+/// ```
+///    They may want to abstract only the content of a message. So one could coerce a
+///   `&Message<String>` into a `&Message<dyn Display>`. In this case, this would:
+///    - Apply base case to extract the pair `(Message<T>, Message<U>)`.
 ///    - Extract the tail element of the struct which are of type `T` and `U`, respectively.
 /// 4. Coercion between smart pointers of wrapper structs.
 ///    - Apply the logic from item 2 then item 3.
@@ -49,14 +59,43 @@ pub fn extract_unsize_casting<'tcx>(
     tcx: TyCtxt<'tcx>,
     src_ty: Ty<'tcx>,
     dst_ty: Ty<'tcx>,
-) -> (Ty<'tcx>, Ty<'tcx>) {
-    trace!(?dst_ty, ?src_ty, "find_trait_conversion");
-    let info = CoerceUnsizedIterator::new(tcx, src_ty, dst_ty).last().unwrap();
-    let src_base_ty = extract_pointee(info.src_ty)
-        .expect(&format!("Expected source to be a pointer. Found {:?} instead", info.src_ty));
-    let dst_base_ty = extract_pointee(info.dst_ty)
-        .expect(&format!("Expected destination to be a pointer. Found {:?} instead", info.dst_ty));
-    tcx.struct_lockstep_tails_erasing_lifetimes(src_base_ty, dst_base_ty, ParamEnv::reveal_all())
+) -> CoercionBase {
+    trace!(?src_ty, ?dst_ty, "extract_unsize_casting");
+    // Iterate over the pointer structure to find the builtin pointer that will store the metadata.
+    let coerce_info = CoerceUnsizedIterator::new(tcx, src_ty, dst_ty).last().unwrap();
+    // Extract the pointee type that is being coerced.
+    let src_pointee_ty = extract_pointee(coerce_info.src_ty).expect(&format!(
+        "Expected source to be a pointer. Found {:?} instead",
+        coerce_info.src_ty
+    ));
+    let dst_pointee_ty = extract_pointee(coerce_info.dst_ty).expect(&format!(
+        "Expected destination to be a pointer. Found {:?} instead",
+        coerce_info.dst_ty
+    ));
+    // Find the tail of the coercion that determines the type of metadata to be stored.
+    let (src_base_ty, dst_base_ty) = tcx.struct_lockstep_tails_erasing_lifetimes(
+        src_pointee_ty,
+        dst_pointee_ty,
+        ParamEnv::reveal_all(),
+    );
+    trace!(?src_base_ty, ?dst_base_ty, "extract_unsize_casting result");
+    assert!(
+        dst_base_ty.is_trait() || dst_base_ty.is_slice(),
+        "Expected trait or slice as destination of unsized cast, but found {dst_base_ty:?}"
+    );
+    CoercionBase { src_ty: src_base_ty, dst_ty: dst_base_ty }
+}
+
+/// This structure represents the base of a coercion.
+///
+/// This base is used to determine the information that will be stored in the metadata.
+/// E.g.: In order to convert an `Rc<String>` into an `Rc<dyn Debug>`, we need to generate a
+/// vtable that represents the `impl Debug for String`. So this type will carry the `String` type
+/// as the `src_ty` and the `Debug` trait as `dst_ty`.
+#[derive(Debug)]
+pub struct CoercionBase<'tcx> {
+    pub src_ty: Ty<'tcx>,
+    pub dst_ty: Ty<'tcx>,
 }
 
 /// Iterates over the coercion path of a structure that implements `CoerceUnsized<T>` trait.
@@ -68,7 +107,8 @@ pub fn extract_unsize_casting<'tcx>(
 /// `T` is sized and `U` is unsized, this iterator will walk over the fields that lead to a
 /// pointer to `T`, which shall be converted from a thin pointer to a fat pointer.
 ///
-/// This iterator will also include the name of the field that differs in the current iteration.
+/// This iterator will also include the name of the field that differs in the current iteration
+/// if that applies.
 ///
 /// The first element of the iteration will always be the starting types.
 /// The last element of the iteration will always be pointers to `T` and `U`.
@@ -102,16 +142,20 @@ impl<'tcx> CoerceUnsizedIterator<'tcx> {
 
 /// Iterate over the coercion path. At each iteration, it returns the name of the field that must
 /// be coerced, as well as the current source and the destination.
-/// E.g.: The first iteration of casting `Rc<String>` -> `Rc<&dyn Debug>` will return
+/// E.g.: The first iteration of casting `NonNull<String>` -> `NonNull<&dyn Debug>` will return
 /// ```rust,ignore
-/// CoerceUnsizedInfo { field: "ptr", src_ty /* Rc<String> */, dst_ty /* Rc<&dyn Debug> */}
+/// CoerceUnsizedInfo {
+///    field: Some("ptr"),
+///    src_ty, // NonNull<String>
+///    dst_ty  // NonNull<&dyn Debug>
+/// }
 /// ```
 /// while the last iteration will return:
 /// ```rust,ignore
 /// CoerceUnsizedInfo {
 ///   field: None,
-///   src_ty: Ty, /* *const RcBox<String> */,
-///   dst_ty: Ty, /* *const RcBox<&dyn Debug> */
+///   src_ty: Ty, // *const String
+///   dst_ty: Ty, // *const &dyn Debug
 /// }
 /// ```
 impl<'tcx> Iterator for CoerceUnsizedIterator<'tcx> {

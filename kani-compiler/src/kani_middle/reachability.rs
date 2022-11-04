@@ -274,11 +274,11 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
                 // If so, collect items from the impl `Trait for Concrete {}`.
                 let target_ty = self.monomorphize(target);
                 let source_ty = self.monomorphize(operand.ty(self.body, self.tcx));
-                let (src_inner, dst_inner) =
+                let base_coercion =
                     coercion::extract_unsize_casting(self.tcx, source_ty, target_ty);
-                if !src_inner.is_trait() && dst_inner.is_trait() {
-                    debug!(concrete_ty=?src_inner, trait_ty=?dst_inner, "collect_vtable_methods");
-                    self.collect_vtable_methods(src_inner, dst_inner);
+                if !base_coercion.src_ty.is_trait() && base_coercion.dst_ty.is_trait() {
+                    debug!(?base_coercion, "collect_vtable_methods");
+                    self.collect_vtable_methods(base_coercion.src_ty, base_coercion.dst_ty);
                 }
             }
             Rvalue::Cast(CastKind::Pointer(PointerCast::ReifyFnPointer), ref operand, _) => {
