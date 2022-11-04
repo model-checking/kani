@@ -45,10 +45,19 @@ const NOOP_RAW_WAKER: RawWaker = {
     RawWaker::new(std::ptr::null(), &RawWakerVTable::new(clone_waker, noop, noop, noop))
 };
 
-static mut EXECUTOR: Scheduler = Scheduler::new();
+static mut GLOBAL_EXECUTOR: Scheduler = Scheduler::new();
 const MAX_TASKS: usize = 16;
 
 type BoxFuture = Pin<Box<dyn Future<Output = ()> + Sync + 'static>>;
+
+/// Indicates to the scheduler whether it can `kani::assume` that the returned task is running.
+///
+/// This is useful if the task was picked nondeterministically using `kani::any()`.
+/// For more information, see [`SchedulingStrategy`].
+pub enum SchedulingAssumption {
+    CanAssumeRunning,
+    CannotAssumeRunning,
+}
 
 /// Trait that determines the possible sequence of tasks scheduling for a harness.
 ///
@@ -71,9 +80,19 @@ pub trait SchedulingStrategy {
     /// Picks the next task to be scheduled whenever the scheduler needs to pick a task to run next, and whether it can be assumed that the picked task is still running
     ///
     /// Tasks are numbered `0..num_tasks`.
-    /// For example, if pick_task(4) returns (2, true) than it picked the task with index 2 and allows Kani to `assume` that this task is still running.
+    /// For example, if pick_task(4) returns (2, CanAssumeRunning) than it picked the task with index 2 and allows Kani to `assume` that this task is still running.
     /// This is useful if the task is chosen nondeterministicall (`kani::any()`) and allows the verifier to discard useless execution branches (such as polling a completed task again).
-    fn pick_task(&mut self, num_tasks: usize) -> (usize, bool);
+    ///
+    /// As a rule of thumb:
+    /// if the scheduling strategy picks the next task nondeterministically (using `kani::any()`), return CanAssumeRunning, otherwise CannotAssumeRunning.
+    /// When returning `CanAssumeRunning`, the scheduler will then assume that the picked task is still running, which cuts off "useless" paths where a completed task is polled again.
+    /// It is even necessary to make things terminate if nondeterminism is involved:
+    /// if we pick the task nondeterministically, and don't have the restriction to still running tasks, we could poll the same task over and over again.
+    ///
+    /// However, for most deterministic scheduling strategies, e.g. the round robin scheduling strategy, assuming that the picked task is still running is generally not possible
+    /// because if that task has ended, we are saying assume(false) and the verification effectively stops (which is undesirable, of course).
+    /// In such cases, return `CannotAssumeRunning` instead.
+    fn pick_task(&mut self, num_tasks: usize) -> (usize, SchedulingAssumption);
 }
 
 /// Keeps cycling through the tasks in a deterministic order
@@ -84,9 +103,9 @@ pub struct RoundRobin {
 
 impl SchedulingStrategy for RoundRobin {
     #[inline]
-    fn pick_task(&mut self, num_tasks: usize) -> (usize, bool) {
+    fn pick_task(&mut self, num_tasks: usize) -> (usize, SchedulingAssumption) {
         self.index = (self.index + 1) % num_tasks;
-        (self.index, false)
+        (self.index, SchedulingAssumption::CannotAssumeRunning)
     }
 }
 
@@ -95,10 +114,10 @@ impl SchedulingStrategy for RoundRobin {
 pub struct NondeterministicScheduling;
 
 impl SchedulingStrategy for NondeterministicScheduling {
-    fn pick_task(&mut self, num_tasks: usize) -> (usize, bool) {
+    fn pick_task(&mut self, num_tasks: usize) -> (usize, SchedulingAssumption) {
         let index = crate::any();
         crate::assume(index < num_tasks);
-        (index, true)
+        (index, SchedulingAssumption::CanAssumeRunning)
     }
 }
 
@@ -120,7 +139,7 @@ impl NondetFairScheduling {
 }
 
 impl SchedulingStrategy for NondetFairScheduling {
-    fn pick_task(&mut self, num_tasks: usize) -> (usize, bool) {
+    fn pick_task(&mut self, num_tasks: usize) -> (usize, SchedulingAssumption) {
         if self.counters[0..num_tasks] == [0; MAX_TASKS][0..num_tasks] {
             self.counters = [self.limit; MAX_TASKS];
         }
@@ -128,7 +147,7 @@ impl SchedulingStrategy for NondetFairScheduling {
         crate::assume(index < num_tasks);
         crate::assume(self.counters[index] > 0);
         self.counters[index] -= 1;
-        (index, true)
+        (index, SchedulingAssumption::CanAssumeRunning)
     }
 }
 
@@ -162,7 +181,7 @@ impl Scheduler {
         let waker = unsafe { Waker::from_raw(NOOP_RAW_WAKER) };
         let cx = &mut Context::from_waker(&waker);
         while self.num_running > 0 {
-            let (index, can_assume_running) = scheduling_plan.pick_task(self.num_tasks);
+            let (index, assumption) = scheduling_plan.pick_task(self.num_tasks);
             let task = &mut self.tasks[index];
             if let Some(fut) = task.as_mut() {
                 match fut.as_mut().poll(cx) {
@@ -172,7 +191,7 @@ impl Scheduler {
                     }
                     std::task::Poll::Pending => (),
                 }
-            } else if can_assume_running {
+            } else if let SchedulingAssumption::CanAssumeRunning = assumption {
                 crate::assume(false); // useful so that we can assume that a nondeterministically picked task is still running
             }
         }
@@ -200,7 +219,7 @@ impl Future for JoinHandle {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> std::task::Poll<Self::Output> {
-        if unsafe { EXECUTOR.tasks[self.index].is_some() } {
+        if unsafe { GLOBAL_EXECUTOR.tasks[self.index].is_some() } {
             std::task::Poll::Pending
         } else {
             cx.waker().wake_by_ref(); // For completeness. But Kani currently ignores wakers.
@@ -210,7 +229,7 @@ impl Future for JoinHandle {
 }
 
 pub fn spawn<F: Future<Output = ()> + Sync + 'static>(fut: F) -> JoinHandle {
-    unsafe { EXECUTOR.spawn(fut) }
+    unsafe { GLOBAL_EXECUTOR.spawn(fut) }
 }
 
 /// Polls the given future and the tasks it may spawn until all of them complete
@@ -221,7 +240,7 @@ pub fn spawnable_block_on<F: Future<Output = ()> + Sync + 'static>(
     scheduling_plan: impl SchedulingStrategy,
 ) {
     unsafe {
-        EXECUTOR.block_on(fut, scheduling_plan);
+        GLOBAL_EXECUTOR.block_on(fut, scheduling_plan);
     }
 }
 
