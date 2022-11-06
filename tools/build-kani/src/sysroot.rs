@@ -12,8 +12,8 @@
 //!
 //! Note: We don't cross-compile. Target is the same as the host.
 
-use crate::{cp, cp_files, AutoRun};
-use cargo_metadata::Message;
+use crate::{cp, AutoRun};
+use cargo_metadata::{Artifact, Message};
 use std::ffi::OsStr;
 use std::fs;
 use std::io::BufReader;
@@ -31,12 +31,12 @@ macro_rules! path_buf {
 
 #[cfg(target_os = "linux")]
 fn lib_extension() -> &'static str {
-    ".so"
+    "so"
 }
 
 #[cfg(target_os = "macos")]
 fn lib_extension() -> &'static str {
-    ".dylib"
+    "dylib"
 }
 
 /// Returns the path to Kani sysroot. I.e.: folder where we store pre-compiled binaries and
@@ -111,64 +111,90 @@ pub fn build_lib() {
         .spawn()
         .expect("Failed to run `cargo build`.");
 
-    // Remove kani "std" library leftover.
-    filter_kani_std(&mut cmd);
+    // Collect the build artifacts.
+    let artifacts = build_artifacts(&mut cmd);
     let _ = cmd.wait().expect("Couldn't get cargo's exit status");
 
-    // Create sysroot folder.
+    // Create sysroot folder hierarchy.
     let sysroot_lib = kani_sysroot_lib();
     sysroot_lib.exists().then(|| fs::remove_dir_all(&sysroot_lib));
-    fs::create_dir_all(&sysroot_lib).expect(&format!("Failed to create {sysroot_lib:?}"));
+    let std_path = path_buf!(&sysroot_lib, "rustlib", target, "lib");
+    fs::create_dir_all(&std_path).expect(&format!("Failed to create {std_path:?}"));
 
-    //  Copy Kani libraries to inside sysroot folder.
-    let target_folder = Path::new(target_dir);
-    let macro_lib = format!("libkani_macros{}", lib_extension());
-    let kani_macros = path_buf!(target_folder, "debug", macro_lib);
-    cp(&kani_macros, &sysroot_lib).unwrap();
-
-    let kani_rlib_folder = path_buf!(target_folder, target, "debug");
-    cp_files(&kani_rlib_folder, &sysroot_lib, &is_rlib).unwrap();
-
-    // Copy `std` libraries and dependencies to sysroot folder following expected path format.
-    let src_path = path_buf!(target_folder, target, "debug", "deps");
-
-    let dst_path = path_buf!(sysroot_lib, "rustlib", target, "lib");
-    fs::create_dir_all(&dst_path).unwrap();
-    cp_files(&src_path, &dst_path, &is_rlib).unwrap();
+    //  Copy Kani libraries into sysroot top folder.
+    copy_libs(&artifacts, &sysroot_lib, &is_kani_lib);
+    //  Copy standard libraries into rustlib/<target>/lib/ folder.
+    copy_libs(&artifacts, &std_path, &is_std_lib);
 }
 
-/// Kani's "std" library may cause a name conflict with the rust standard library. We remove it
-/// from the `deps/` folder, since we already store it outside of the `deps/` folder.
-/// For that, we retrieve its location from `cargo build` output.
-fn filter_kani_std(cargo_cmd: &mut Child) {
-    let reader = BufReader::new(cargo_cmd.stdout.take().unwrap());
-    for message in Message::parse_stream(reader) {
-        match message.unwrap() {
-            Message::CompilerMessage(msg) => {
-                // Print message as cargo would.
-                println!("{msg:?}")
-            }
-            Message::CompilerArtifact(artifact) => {
-                // Remove the `rlib` and `rmeta` files for our `std` library from the deps folder.
-                if artifact.target.name == "std"
-                    && artifact.target.src_path.starts_with(env!("KANI_REPO_ROOT"))
-                {
-                    let rmeta = artifact.filenames.iter().find(|p| p.extension() == Some("rmeta"));
-                    let mut glob = PathBuf::from(rmeta.unwrap());
-                    glob.set_extension("*");
-                    Command::new("rm").arg("-f").arg(glob.as_os_str()).run().unwrap();
-                }
-            }
-            Message::BuildScriptExecuted(_script) => {
-                // do nothing
-            }
-            Message::BuildFinished(_finished) => {
-                // do nothing
-            }
-            // Non-exhaustive enum.
-            _ => (),
-        }
+/// Check if an artifact is a rust library that can be used by rustc on further crates compilations.
+/// This inspects the kind of targets that this artifact originates from.
+fn is_rust_lib(artifact: &Artifact) -> bool {
+    artifact.target.kind.iter().any(|kind| match kind.as_str() {
+        "lib" | "rlib" | "proc-macro" => true,
+        "bin" | "dylib" | "cdylib" | "staticlib" | "custom-build" => false,
+        _ => unreachable!("Unknown crate type {kind}"),
+    })
+}
+
+/// Return whether this a kani library.
+/// For a given artifact, check if this is a library or proc_macro, and whether this is a local
+/// crate, i.e., that it is part of the Kani repository.
+fn is_kani_lib(artifact: &Artifact) -> bool {
+    is_rust_lib(artifact) && artifact.target.src_path.starts_with(env!("KANI_REPO_ROOT"))
+}
+
+/// Is this a std library or one of its dependencies.
+/// For a given artifact, check if this is a library or proc_macro, and whether its source does
+/// not belong to a Kani library.
+fn is_std_lib(artifact: &Artifact) -> bool {
+    is_rust_lib(artifact) && !is_kani_lib(artifact)
+}
+
+/// Copy the library files from the artifacts that match the given `predicate`.
+/// This function will iterate over the list of artifacts generated by the compiler, it will
+/// filter the artifacts according to the given predicate. For the artifacts that satisfy the
+/// predicate, it will copy the following files to the `target` folder.
+///  - `rlib`: Store metadata for future codegen and executable code for concrete executions.
+///  - shared library which are used for proc_macros.
+fn copy_libs<P>(artifacts: &[Artifact], target: &Path, predicate: P)
+where
+    P: FnMut(&Artifact) -> bool,
+{
+    assert!(target.is_dir(), "Expected a folder, but found {}", target.display());
+    for artifact in artifacts.iter().cloned().filter(predicate) {
+        artifact
+            .filenames
+            .iter()
+            .filter(|path| {
+                path.extension() == Some("rlib") || path.extension() == Some(lib_extension())
+            })
+            .for_each(|lib| cp(lib.clone().as_std_path(), target).unwrap());
     }
+}
+
+/// Collect all the artifacts generated by Cargo build.
+/// This will also include libraries that didn't need to be rebuild.
+fn build_artifacts(cargo_cmd: &mut Child) -> Vec<Artifact> {
+    let reader = BufReader::new(cargo_cmd.stdout.take().unwrap());
+    Message::parse_stream(reader)
+        .filter_map(|message| {
+            match message.unwrap() {
+                Message::CompilerMessage(msg) => {
+                    // Print message as cargo would.
+                    println!("{msg:?}");
+                    None
+                }
+                Message::CompilerArtifact(artifact) => Some(artifact),
+                Message::BuildScriptExecuted(_) | Message::BuildFinished(_) => {
+                    // do nothing
+                    None
+                }
+                // Non-exhaustive enum.
+                _ => None,
+            }
+        })
+        .collect()
 }
 
 /// Build Kani libraries using the regular rust toolchain standard libraries.
@@ -176,31 +202,37 @@ fn filter_kani_std(cargo_cmd: &mut Child) {
 pub fn build_lib_legacy() {
     // Run cargo build with -Z build-std
     let target_dir = env!("KANI_LEGACY_LIBS");
-    let args =
-        ["build", "-p", "std", "-p", "kani", "-p", "kani_macros", "--target-dir", target_dir];
-    Command::new("cargo")
+    let args = [
+        "build",
+        "-p",
+        "std",
+        "-p",
+        "kani",
+        "-p",
+        "kani_macros",
+        "--target-dir",
+        target_dir,
+        "--message-format",
+        "json-diagnostic-rendered-ansi",
+    ];
+    let mut child = Command::new("cargo")
         .env("CARGO_ENCODED_RUSTFLAGS", ["--cfg=kani"].join("\x1f"))
         .args(args)
-        .run()
+        .stdout(Stdio::piped())
+        .spawn()
         .expect("Failed to build Kani libraries.");
+
+    // Collect the build artifacts.
+    let artifacts = build_artifacts(&mut child);
+    let _ = child.wait().expect("Couldn't get cargo's exit status");
 
     // Create sysroot folder.
     let legacy_lib = kani_sysroot_legacy_lib();
     legacy_lib.exists().then(|| fs::remove_dir_all(&legacy_lib));
-    fs::create_dir_all(&legacy_lib).expect(&format!("Failed to create {legacy_lib:?}"));
+    fs::create_dir_all(&legacy_lib).expect(&format!("Failed to create {:?}", legacy_lib));
 
-    //  Copy Kani libraries to inside the lib folder.
-    let target_folder = Path::new(target_dir);
-    let macro_lib = format!("libkani_macros{}", lib_extension());
-    let kani_macros = path_buf!(target_folder, "debug", macro_lib);
-    cp(&kani_macros, &legacy_lib).unwrap();
-
-    let kani_rlib_folder = path_buf!(target_folder, "debug");
-    cp_files(&kani_rlib_folder, &legacy_lib, &is_rlib).unwrap();
-}
-
-fn is_rlib(path: &Path) -> bool {
-    path.is_file() && String::from(path.file_name().unwrap().to_string_lossy()).ends_with(".rlib")
+    //  Copy Kani libraries to inside the legacy-lib folder.
+    copy_libs(&artifacts, &legacy_lib, &is_kani_lib);
 }
 
 /// Extra arguments to be given to `cargo build` while building Kani's binaries.
