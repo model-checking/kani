@@ -97,7 +97,7 @@ impl<T: Strategy> Union<T> {
         );
         let options: Vec<WA<T>> = options
             .into_iter()
-            .filter(|(w, _)| w > &0)
+            .filter(|(w, _)| *w > 0)
             .map(|(w, v)| (w, Arc::new(v)))
             .collect();
         assert!(!options.is_empty());
