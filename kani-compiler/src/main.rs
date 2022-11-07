@@ -106,6 +106,10 @@ fn main() -> Result<(), &'static str> {
     // Generate rustc args.
     let rustc_args = generate_rustc_args(&matches);
 
+    if matches.is_present(parser::ENABLE_STUBBING) {
+        eprintln!("warning: Kani currently does not perform any stubbing.");
+    }
+
     // Configure and run compiler.
     let mut callbacks = KaniCallbacks {};
     let mut compiler = RunCompiler::new(&rustc_args, &mut callbacks);

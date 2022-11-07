@@ -129,6 +129,13 @@ impl KaniSession {
             flags.push("--ignore-global-asm".into());
         }
 
+        if self.args.enable_stubbing {
+            flags.push("--enable-stubbing".into());
+        }
+        if let Some(harness) = &self.args.harness {
+            flags.push(format!("--harness={harness}").into());
+        }
+
         #[cfg(feature = "unsound_experiments")]
         flags.extend(self.args.unsound_experiments.process_args());
 

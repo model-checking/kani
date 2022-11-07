@@ -68,7 +68,7 @@ echo
 echo "Running multi-file check..."
 rm -rf build
 RUST_BACKTRACE=1 cargo kani --target-dir build --gen-c --enable-unstable --quiet
-cd build/${TARGET}/debug/deps/
+cd build/kani/${TARGET}/debug/deps/
 
 if ! [ -e cbmc-linked.for-main.c ]
 then
