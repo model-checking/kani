@@ -12,7 +12,7 @@ extern crate test;
 
 use crate::common::{output_base_dir, output_relative_path};
 use crate::common::{Config, Mode, TestPaths};
-use crate::util::{logv, top_level};
+use crate::util::{logv, print_msg, top_level};
 use getopts::Options;
 use std::env;
 use std::ffi::OsString;
@@ -227,10 +227,10 @@ pub fn run_tests(config: Config) {
     }
 
     if config.dry_run {
-        println!("Number of Tests: {}", tests.len());
+        print_msg(&config, format!("Number of Tests: {}", tests.len()));
         for test in tests {
-            let ignore = if test.desc.ignore ^ config.run_ignored { "IGNORE" } else { "" };
-            println!(" - {} {}", test.desc.name.as_slice(), ignore);
+            let ignore = if test.desc.ignore ^ config.run_ignored { "ignore" } else { "" };
+            print_msg(&config, format!(" - {} ... {}", test.desc.name.as_slice(), ignore));
         }
         return;
     }
