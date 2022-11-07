@@ -6,6 +6,7 @@ use crate::session::{KaniSession, ReachabilityMode};
 use anyhow::{Context, Result};
 use cargo_metadata::{Metadata, MetadataCommand, Package};
 use std::ffi::OsString;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -32,8 +33,15 @@ impl KaniSession {
             .target_dir
             .as_ref()
             .unwrap_or(&metadata.target_directory.clone().into())
-            .clone();
+            .clone()
+            .join("kani");
         let outdir = target_dir.join(build_target).join("debug/deps");
+
+        // Clean directory before building since we are unable to handle cache today.
+        // TODO: https://github.com/model-checking/kani/issues/1736
+        if target_dir.exists() {
+            fs::remove_dir_all(&target_dir)?;
+        }
 
         let mut kani_args = self.kani_specific_flags();
         let rustc_args = self.kani_rustc_flags();
