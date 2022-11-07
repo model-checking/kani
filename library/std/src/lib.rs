@@ -54,7 +54,7 @@ macro_rules! assert {
         // strategy, which is tracked in
         // https://github.com/model-checking/kani/issues/692
         if false {
-            let _ = format_args!($($arg)+);
+            ::std::panic!($($arg)+);
         }
     }};
 }
