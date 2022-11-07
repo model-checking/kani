@@ -1,0 +1,10 @@
+Status: SUCCESS\
+Description: "assertion failed: window.insert(packet_number).is_ok()"
+
+Status: SUCCESS\
+Description: "assertion failed: Err(Duplicate) == window.check(packet_number)"
+
+Status: SUCCESS\
+Description: "assertion failed: Err(Duplicate) != window.check(other_packet_number)"
+
+VERIFICATION:- SUCCESSFUL

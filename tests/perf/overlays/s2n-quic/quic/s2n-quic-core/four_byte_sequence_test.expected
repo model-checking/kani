@@ -1,0 +1,25 @@
+Status: SUCCESS\
+Description: "assertion failed: x <= MAX_VARINT_VALUE"
+
+Status: SUCCESS\
+Description: "assertion failed: expected_val <= 1073741823"
+
+Status: SUCCESS\
+Description: "assertion failed: &byte_sequence[..] == &actual_bytes[..]"
+
+Status: UNREACHABLE\
+Description: "assertion failed: buffer.len() == 1"
+
+Status: UNREACHABLE\
+Description: "assertion failed: buffer.len() == 2"
+
+Status: SUCCESS\
+Description: "assertion failed: buffer.len() == 4"
+
+Status: UNREACHABLE\
+Description: "assertion failed: buffer.len() == 8"
+
+Status: SUCCESS\
+Description: "assertion failed: len as usize == encoding_size(x)"
+
+VERIFICATION:- SUCCESSFUL

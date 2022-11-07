@@ -7,7 +7,7 @@
 
 use crate::common::KaniFailStep;
 use crate::common::{output_base_dir, output_base_name};
-use crate::common::{CargoKani, Expected, Kani, KaniFixme, Stub};
+use crate::common::{CargoKani, CargoKaniTest, Expected, Kani, KaniFixme, Stub};
 use crate::common::{Config, TestPaths};
 use crate::header::TestProps;
 use crate::json;
@@ -62,7 +62,8 @@ impl<'test> TestCx<'test> {
         match self.config.mode {
             Kani => self.run_kani_test(),
             KaniFixme => self.run_kani_test(),
-            CargoKani => self.run_cargo_kani_test(),
+            CargoKani => self.run_cargo_kani_test(false),
+            CargoKaniTest => self.run_cargo_kani_test(true),
             Expected => self.run_expected_test(),
             Stub => self.run_stub_test(),
         }
@@ -279,9 +280,10 @@ impl<'test> TestCx<'test> {
     }
 
     /// Runs cargo-kani on the function specified by the stem of `self.testpaths.file`.
+    /// The `test` parameter controls whether to specify `--tests` to `cargo kani`.
     /// An error message is printed to stdout if verification output does not
     /// contain the expected output in `self.testpaths.file`.
-    fn run_cargo_kani_test(&self) {
+    fn run_cargo_kani_test(&self, test: bool) {
         // We create our own command for the same reasons listed in `run_kani_test` method.
         let mut cargo = Command::new("cargo");
         // We run `cargo` on the directory where we found the `*.expected` file
@@ -293,13 +295,11 @@ impl<'test> TestCx<'test> {
             .arg("--target-dir")
             .arg(self.output_base_dir().join("target"))
             .current_dir(&parent_dir);
+        if test {
+            cargo.arg("--tests");
+        }
         if "expected" != self.testpaths.file.file_name().unwrap() {
             cargo.args(["--harness", function_name]);
-        }
-
-        if self.config.mir_linker {
-            // Allow us to run the regression with the mir linker enabled by default.
-            cargo.arg("--enable-unstable").arg("--mir-linker");
         }
 
         let proc_res = self.compose_and_run(cargo);
@@ -320,11 +320,6 @@ impl<'test> TestCx<'test> {
         // internal call to rustc.
         if !self.props.compile_flags.is_empty() {
             kani.env("RUSTFLAGS", self.props.compile_flags.join(" "));
-        }
-
-        if self.config.mir_linker {
-            // Allow us to run the regression with the mir linker enabled by default.
-            kani.arg("--enable-unstable").arg("--mir-linker");
         }
 
         // Pass the test path along with Kani and CBMC flags parsed from comments at the top of the test file.
