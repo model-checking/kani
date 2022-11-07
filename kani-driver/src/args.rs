@@ -228,8 +228,8 @@ pub struct KaniArgs {
     pub randomize_layout: Option<Option<u64>>,
 
     /// Enable the stubbing of functions and methods.
-    // TODO Stubbing should in principle work with concrete playback.
-    // https://github.com/model-checking/kani/issues/1842
+    /// TODO: Stubbing should in principle work with concrete playback.
+    /// <https://github.com/model-checking/kani/issues/1842>
     #[structopt(
         long,
         hidden_short_help(true),
