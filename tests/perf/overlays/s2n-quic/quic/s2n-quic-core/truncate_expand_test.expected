@@ -1,4 +1,0 @@
-Status: SUCCESS\
-Description: "assertion failed: expected_pn == truncated_pn.expand(largest_pn)"
-
-VERIFICATION:- SUCCESSFUL

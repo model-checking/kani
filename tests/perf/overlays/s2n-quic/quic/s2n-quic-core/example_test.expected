@@ -1,4 +1,0 @@
-Status: SUCCESS\
-Description: "assertion failed: truncated.expand(largest) == expected"
-
-VERIFICATION:- SUCCESSFUL
