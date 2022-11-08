@@ -22,6 +22,7 @@ use std::process::{Command, ExitStatus, Output, Stdio};
 use std::str;
 
 use tracing::*;
+use wait_timeout::ChildExt;
 
 #[cfg(not(windows))]
 fn disable_error_reporting<F: FnOnce() -> R, R>(f: F) -> R {
@@ -84,8 +85,19 @@ impl<'test> TestCx<'test> {
         let newpath = env::join_paths(&path).unwrap();
         command.env(dylib_env_var(), newpath);
 
-        let child = disable_error_reporting(|| command.spawn())
+        let mut child = disable_error_reporting(|| command.spawn())
             .unwrap_or_else(|_| panic!("failed to exec `{:?}`", &command));
+
+        if let Some(timeout) = self.config.timeout {
+            match child.wait_timeout(timeout).unwrap() {
+                Some(_status) => {} // No timeout.
+                None => {
+                    // Timeout. Kill process and print error.
+                    println!("Process timed out after {timeout:?}s: {cmdline}");
+                    child.kill().unwrap();
+                }
+            };
+        }
 
         let Output { status, stdout, stderr } = read2(child).expect("failed to read output");
 

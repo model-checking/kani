@@ -17,6 +17,11 @@ pub fn logv(config: &Config, s: String) {
     }
 }
 
+/// Print a message as long as we are not running under --quiet. In quiet mode, we log the message.
+pub fn print_msg(config: &Config, msg: String) {
+    if config.quiet { debug!("{msg}") } else { println!("{msg}") }
+}
+
 pub trait PathBufExt {
     /// Append an extension to the path, even if it already has one.
     fn with_extra_extension<S: AsRef<OsStr>>(&self, extension: S) -> PathBuf;
