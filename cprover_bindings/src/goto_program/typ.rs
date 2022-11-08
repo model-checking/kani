@@ -271,7 +271,7 @@ impl Type {
 
     /// The base type of this type, if one exists.
     /// `typ*` | `typ x[width]` | `typ x : width`  -> `typ`,
-    pub fn  base_type(&self) -> Option<&Type> {
+    pub fn base_type(&self) -> Option<&Type> {
         let concrete = self.unwrap_typedef();
         match concrete {
             Array { typ, .. } | CBitField { typ, .. } | FlexibleArray { typ } | Pointer { typ } => {
