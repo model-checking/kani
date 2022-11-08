@@ -27,9 +27,7 @@ done
 suite="perf"
 mode="cargo-kani-test"
 echo "Check compiletest suite=$suite mode=$mode"
-# The perf suite typically finishes in under 10 minutes, but give it 20 minutes
-# to account for GH runner variance
-cargo run -p compiletest -- --suite $suite --mode $mode --timeout 1200
+cargo run -p compiletest -- --suite $suite --mode $mode
 exit_code=$?
 
 echo "Cleaning up..."
