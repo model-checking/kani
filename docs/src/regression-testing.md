@@ -112,7 +112,7 @@ For example, to use an unwinding value of 4 in a test, we can write:
 ```
 
 For `cargo-kani` tests, the preferred way to pass command-line options is adding
-them to `Cargo.toml`. See [`Usage - On a package`](./cargo-kani.md) for more details.
+them to `Cargo.toml`. See [`Usage on a package`](./usage.md#usage-on-a-package) for more details.
 
 ### "Fixme" tests
 
