@@ -611,21 +611,21 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             "simd_and" => unstable_codegen!(codegen_intrinsic_binop!(bitand)),
             "simd_div" => unstable_codegen!(codegen_intrinsic_binop!(div)),
-            "simd_eq" => codegen_intrinsic_binop!(vector_eq),
+            "simd_eq" => self.codegen_intrinsic_simd_cmp(Expr::vector_eq, fargs, p, cbmc_ret_ty),
             "simd_extract" => {
                 let _vec = fargs.remove(0);
                 let _index = fargs.remove(0);
                 unstable_codegen!(self.codegen_expr_to_place(p, vec.index_array(index)))
             }
-            "simd_ge" => codegen_intrinsic_binop!(vector_ge),
-            "simd_gt" => codegen_intrinsic_binop!(vector_gt),
+            "simd_ge" => self.codegen_intrinsic_simd_cmp(Expr::vector_ge, fargs, p, cbmc_ret_ty),
+            "simd_gt" => self.codegen_intrinsic_simd_cmp(Expr::vector_gt, fargs, p, cbmc_ret_ty),
             "simd_insert" => {
                 unstable_codegen!(self.codegen_intrinsic_simd_insert(fargs, p, cbmc_ret_ty, loc))
             }
-            "simd_le" => codegen_intrinsic_binop!(vector_le),
-            "simd_lt" => codegen_intrinsic_binop!(vector_lt),
+            "simd_le" => self.codegen_intrinsic_simd_cmp(Expr::vector_le, fargs, p, cbmc_ret_ty),
+            "simd_lt" => self.codegen_intrinsic_simd_cmp(Expr::vector_lt, fargs, p, cbmc_ret_ty),
             "simd_mul" => unstable_codegen!(codegen_simd_with_overflow_check!(mul, mul_overflow_p)),
-            "simd_ne" => codegen_intrinsic_binop!(vector_neq),
+            "simd_ne" => self.codegen_intrinsic_simd_cmp(Expr::vector_neq, fargs, p, cbmc_ret_ty),
             "simd_or" => unstable_codegen!(codegen_intrinsic_binop!(bitor)),
             "simd_rem" => unstable_codegen!(codegen_intrinsic_binop!(rem)),
             "simd_shl" => unstable_codegen!(codegen_intrinsic_binop!(shl)),
@@ -1359,6 +1359,19 @@ impl<'tcx> GotocCtx<'tcx> {
             ],
             loc,
         )
+    }
+
+    fn codegen_intrinsic_simd_cmp<F: FnOnce(Expr, Expr, Type) -> Expr>(
+        &mut self,
+        f: F,
+        mut fargs: Vec<Expr>,
+        p: &Place<'tcx>,
+        ret_ty: Type,
+    ) -> Stmt {
+        let arg1 = fargs.remove(0);
+        let arg2 = fargs.remove(0);
+        let e = f(arg1, arg2, ret_ty);
+        self.codegen_expr_to_place(p, e)
     }
 
     /// simd_shuffle constructs a new vector from the elements of two input vectors,

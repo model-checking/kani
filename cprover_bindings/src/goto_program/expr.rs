@@ -994,7 +994,9 @@ impl Expr {
             ROk => Type::bool(),
             // Vector comparisons
             VectorEqual | VectorNotequal | VectorGe | VectorLe | VectorGt | VectorLt => {
-                lhs.typ.clone()
+                unreachable!(
+                    "Return type for vector comparison operators depends on the place type"
+                )
             }
         }
     }
@@ -1009,6 +1011,40 @@ impl Expr {
             rhs
         );
         expr!(BinOp { op, lhs: self, rhs }, Expr::binop_return_type(op, &self, &rhs))
+    }
+
+    /// Like `binop`, but receives an additional parameter `ret_typ` with the expected
+    /// return type for the place, which is used as the return type.
+    ///
+    /// Comparison operators for SIMD vectors don't work as regular comparison operators.
+    /// The return type must have:
+    ///  1. The same length (number of elements) as the operand types.
+    ///  2. An integer base type (or just "boolean"-y, as mentioned in
+    ///     <https://github.com/rust-lang/rfcs/blob/master/text/1199-simd-infrastructure.md#comparisons>).
+    ///     The signedness doesn't matter, as the result for each element is
+    ///     either "all ones" (false) or "all zeros" (true).
+    /// For example, one can use `simd_eq` on two `f64x4` vectors and assign the
+    /// result to a `u64x4` vector. But it's not possible to assign it to: (1) a
+    /// `u64x2` because they don't have the same length; or (2) another `f64x4`
+    /// vector.
+    pub fn vector_cmp(self, op: BinaryOperator, rhs: Expr, ret_typ: Type) -> Expr {
+        assert!(
+            Expr::typecheck_binop_args(op, &self, &rhs),
+            "vector comparison expression does not typecheck {:?} {:?} {:?}",
+            op,
+            self,
+            rhs
+        );
+        // Note: Two vector types are considered to be equal if they have the
+        // same length (see `VectorData` definition).
+        assert!(
+            self.typ() == &ret_typ && rhs.typ() == &ret_typ,
+            "expected return type with same length, but got `lhs = {:?}`, `rhs = {:?}`, `ret_typ = {:?}`",
+            self.typ(),
+            rhs.typ(),
+            ret_typ
+        );
+        expr!(BinOp { op, lhs: self, rhs }, ret_typ)
     }
 
     /// `__builtin_add_overflow_p(self,e)
@@ -1165,33 +1201,33 @@ impl Expr {
     // Instead, we must use the dedicated `vector-<op>` Irep operators.
 
     /// `self == e` for SIMD vectors
-    pub fn vector_eq(self, e: Expr) -> Expr {
-        self.binop(VectorEqual, e)
+    pub fn vector_eq(self, e: Expr, ret_typ: Type) -> Expr {
+        self.vector_cmp(VectorEqual, e, ret_typ)
     }
 
     /// `self != e` for SIMD vectors
-    pub fn vector_neq(self, e: Expr) -> Expr {
-        self.binop(VectorNotequal, e)
+    pub fn vector_neq(self, e: Expr, ret_typ: Type) -> Expr {
+        self.vector_cmp(VectorNotequal, e, ret_typ)
     }
 
     /// `self >= e` for SIMD vectors
-    pub fn vector_ge(self, e: Expr) -> Expr {
-        self.binop(VectorGe, e)
+    pub fn vector_ge(self, e: Expr, ret_typ: Type) -> Expr {
+        self.vector_cmp(VectorGe, e, ret_typ)
     }
 
     /// `self <= e` for SIMD vectors
-    pub fn vector_le(self, e: Expr) -> Expr {
-        self.binop(VectorLe, e)
+    pub fn vector_le(self, e: Expr, ret_typ: Type) -> Expr {
+        self.vector_cmp(VectorLe, e, ret_typ)
     }
 
     /// `self > e` for SIMD vectors
-    pub fn vector_gt(self, e: Expr) -> Expr {
-        self.binop(VectorGt, e)
+    pub fn vector_gt(self, e: Expr, ret_typ: Type) -> Expr {
+        self.vector_cmp(VectorGt, e, ret_typ)
     }
 
     /// `self < e` for SIMD vectors
-    pub fn vector_lt(self, e: Expr) -> Expr {
-        self.binop(VectorLt, e)
+    pub fn vector_lt(self, e: Expr, ret_typ: Type) -> Expr {
+        self.vector_cmp(VectorLt, e, ret_typ)
     }
 
     // Expressions defined on top of other expressions
