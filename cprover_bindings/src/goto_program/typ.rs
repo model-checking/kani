@@ -84,8 +84,7 @@ pub struct VectorData {
 impl PartialEq for VectorData {
     /// Rust allows conversions between SIMD vector types with the same size. By
     /// redefining equality over vector types we don't get type-checking errors
-    /// in those cases (although CBMC may, see
-    /// <https://github.com/diffblue/cbmc/issues/7302> for more details).
+    /// in those cases.
     fn eq(&self, other: &VectorData) -> bool {
         self.size == other.size
     }
@@ -272,7 +271,7 @@ impl Type {
 
     /// The base type of this type, if one exists.
     /// `typ*` | `typ x[width]` | `typ x : width`  -> `typ`,
-    pub fn base_type(&self) -> Option<&Type> {
+    pub fn  base_type(&self) -> Option<&Type> {
         let concrete = self.unwrap_typedef();
         match concrete {
             Array { typ, .. } | CBitField { typ, .. } | FlexibleArray { typ } | Pointer { typ } => {
