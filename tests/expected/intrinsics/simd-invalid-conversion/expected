@@ -1,0 +1,2 @@
+Kani unexpectedly panicked during compilation
+panicked at 'expected return type with same length, but got `lhs = Vector { data: VectorData { typ: Unsignedbv { width: 64 }, size: 2 } }`, `rhs = Vector { data: VectorData { typ: Unsignedbv { width: 64 }, size: 2 } }`, `ret_typ = Vector { data: VectorData { typ: Unsignedbv { width: 32 }, size: 4 } }`

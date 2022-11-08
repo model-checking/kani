@@ -14,6 +14,11 @@ pub struct f64x2(f64, f64);
 #[derive(Clone, Copy, PartialEq)]
 pub struct i64x2(i64, i64);
 
+#[repr(simd)]
+#[allow(non_camel_case_types)]
+#[derive(Clone, Copy, PartialEq)]
+pub struct i32x2(i32, i32);
+
 // The predicate type U in the functions below must
 // be a SIMD type, otherwise we get a compilation error
 extern "platform-intrinsic" {
@@ -27,23 +32,11 @@ extern "platform-intrinsic" {
 
 macro_rules! assert_cmp {
     ($res_cmp: ident, $simd_cmp: ident, $x: expr, $y: expr, $($res: expr),+) => {
-        let $res_cmp: i64x2 = $simd_cmp($x, $y);
-        assert!($res_cmp == i64x2($($res),+))
+        let $res_cmp: i32x2 = $simd_cmp($x, $y);
+        assert!($res_cmp == i32x2($($res),+))
     };
 }
 
-// This proof currently fails due to the following invariant violation in CBMC:
-// ```
-// --- begin invariant violation report ---
-// Invariant check failed
-// File: ../src/goto-symex/goto_symex.cpp:48 function: symex_assign
-// Condition: lhs.type() == rhs.type()
-// Reason: assignments must be type consistent
-// ```
-//
-// However, Rust allows this, and Kani's type-checker has been extended
-// to allow it for vector datatypes as well.
-// Tracking issue (CBMC): <https://github.com/diffblue/cbmc/issues/7302>
 #[kani::proof]
 fn main() {
     let x = f64x2(0.0, 0.0);
