@@ -534,6 +534,7 @@ where
     ))
 }
 
+#[allow(dead_code)] // todo: cleanup redundant code.
 #[derive(Clone, Copy, Debug)]
 enum Shrink {
     DeleteElement(usize),

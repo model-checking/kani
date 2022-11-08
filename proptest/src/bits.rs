@@ -451,6 +451,7 @@ pub(crate) mod varsize {
     pub(crate) struct VarBitSet(Inner);
 
     impl VarBitSet {
+        #[allow(dead_code)] // todo: cleanup redundant code.
         pub(crate) fn saturated(len: usize) -> Self {
             (0..len).collect::<VarBitSet>()
         }
