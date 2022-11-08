@@ -29,7 +29,7 @@ pub struct ArgumentV1 {
 #[kani::unwind(2)]
 fn dyn_trait_with_encode_utf8() {
     let f = Foo {};
-    let a = [ArgumentV1 { formatter: nn, }];
+    let a = [ArgumentV1 { formatter: nn }];
 
     let _output = &f as &dyn Trait;
     let formatter = Formatter {};
