@@ -558,6 +558,9 @@ impl<T: Strategy> Strategy for VecStrategy<T> {
     type Tree = VecValueTree<T::Tree>;
     type Value = Vec<T::Value>;
 
+    /// Builds a new ValueTree<Vec<_>> by repeatedly generating values
+    /// from strategy stored in self.element. Kani Optimization: loop
+    /// only once by storing the resulting vector in RefCell
     fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let length: usize = kani::any();
         kani::assume(self.size.0.contains(&length));
@@ -577,6 +580,9 @@ impl<T: Strategy> Strategy for Vec<T> {
     type Tree = VecValueTree<T::Tree>;
     type Value = Vec<T::Value>;
 
+    /// Builds a new ValueTree<Vec<_>> by getting one value from each
+    /// strategy in a vector of strategies. Kani Optimization: loop
+    /// only once by storing the resulting vector in RefCell.
     fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let current_vec = self
             .iter()
