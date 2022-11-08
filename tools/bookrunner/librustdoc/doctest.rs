@@ -89,6 +89,7 @@ pub fn make_test(
                 false,
                 Some(80),
                 false,
+                false,
             )
             .supports_color();
 
@@ -101,6 +102,7 @@ pub fn make_test(
                 false,
                 false,
                 None,
+                false,
                 false,
             );
 

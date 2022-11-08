@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use crate::util::PathBufExt;
+use std::time::Duration;
 use test::ColorConfig;
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
@@ -127,6 +128,12 @@ pub struct Config {
 
     /// Whether to rerun tests even if the inputs are unchanged.
     pub force_rerun: bool,
+
+    /// Timeout duration for each test.
+    pub timeout: Option<Duration>,
+
+    /// Whether we will run the tests or not.
+    pub dry_run: bool,
 }
 
 #[derive(Debug, Clone)]
