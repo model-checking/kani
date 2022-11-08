@@ -20,7 +20,7 @@ use core::ops::{Add, Range, RangeInclusive, RangeTo, RangeToInclusive};
 use core::usize;
 
 use crate::std_facade::{
-    fmt, BTreeMap, BTreeSet, BinaryHeap, LinkedList, Vec, VecDeque,
+    fmt, BTreeMap, BTreeSet, BinaryHeap, LinkedList, Rc, RefCell, Vec, VecDeque,
 };
 
 #[cfg(feature = "std")]
@@ -541,13 +541,17 @@ enum Shrink {
 }
 
 /// `ValueTree` corresponding to `VecStrategy`.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct VecValueTree<T: ValueTree> {
-    elements: Vec<T>,
-    included_elements: VarBitSet,
-    min_size: usize,
-    shrink: Shrink,
-    prev_shrink: Option<Shrink>,
+    current: Rc<RefCell<Vec<T::Value>>>,
+}
+
+impl<T: ValueTree> Clone for VecValueTree<T> {
+    fn clone(&self) -> Self {
+        Self {
+            current: self.current.clone(),
+        }
+    }
 }
 
 impl<T: Strategy> Strategy for VecStrategy<T> {
@@ -555,19 +559,16 @@ impl<T: Strategy> Strategy for VecStrategy<T> {
     type Value = Vec<T::Value>;
 
     fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
-        let (start, end) = self.size.start_end_incl();
-        let max_size = sample_uniform_incl(runner, start, end);
-        let mut elements = Vec::with_capacity(max_size);
-        while elements.len() < max_size {
-            elements.push(self.element.new_tree(runner)?);
-        }
+        let length: usize = kani::any();
+        kani::assume(self.size.0.contains(&length));
+
+        let mut current_vec: Self::Value = (0..self.size.0.end)
+            .map(|_| self.element.new_tree(runner).unwrap().current())
+            .collect();
+        unsafe { current_vec.set_len(length) };
 
         Ok(VecValueTree {
-            elements,
-            included_elements: VarBitSet::saturated(max_size),
-            min_size: start,
-            shrink: Shrink::DeleteElement(0),
-            prev_shrink: None,
+            current: Rc::new(RefCell::new(current_vec)),
         })
     }
 }
@@ -577,18 +578,13 @@ impl<T: Strategy> Strategy for Vec<T> {
     type Value = Vec<T::Value>;
 
     fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
-        let len = self.len();
-        let elements = self
+        let current_vec = self
             .iter()
-            .map(|t| t.new_tree(runner))
-            .collect::<Result<Vec<_>, Reason>>()?;
+            .map(|t| t.new_tree(runner).unwrap().current())
+            .collect::<Vec<_>>();
 
         Ok(VecValueTree {
-            elements,
-            included_elements: VarBitSet::saturated(len),
-            min_size: len,
-            shrink: Shrink::ShrinkElement(0),
-            prev_shrink: None,
+            current: Rc::new(RefCell::new(current_vec)),
         })
     }
 }
@@ -597,82 +593,15 @@ impl<T: ValueTree> ValueTree for VecValueTree<T> {
     type Value = Vec<T::Value>;
 
     fn current(&self) -> Vec<T::Value> {
-        self.elements
-            .iter()
-            .enumerate()
-            .filter(|&(ix, _)| self.included_elements.test(ix))
-            .map(|(_, element)| element.current())
-            .collect()
+        self.current.as_ref().replace(vec![])
     }
 
     fn simplify(&mut self) -> bool {
-        // The overall strategy here is to iteratively delete elements from the
-        // list until we can do so no further, then to shrink each remaining
-        // element in sequence.
-        //
-        // For `complicate()`, we simply undo the last shrink operation, if
-        // there was any.
-        if let Shrink::DeleteElement(ix) = self.shrink {
-            // Can't delete an element if beyond the end of the vec or if it
-            // would put us under the minimum length.
-            if ix >= self.elements.len()
-                || self.included_elements.count() == self.min_size
-            {
-                self.shrink = Shrink::ShrinkElement(0);
-            } else {
-                self.included_elements.clear(ix);
-                self.prev_shrink = Some(self.shrink);
-                self.shrink = Shrink::DeleteElement(ix + 1);
-                return true;
-            }
-        }
-
-        while let Shrink::ShrinkElement(ix) = self.shrink {
-            if ix >= self.elements.len() {
-                // Nothing more we can do
-                return false;
-            }
-
-            if !self.included_elements.test(ix) {
-                // No use shrinking something we're not including.
-                self.shrink = Shrink::ShrinkElement(ix + 1);
-                continue;
-            }
-
-            if !self.elements[ix].simplify() {
-                // Move on to the next element
-                self.shrink = Shrink::ShrinkElement(ix + 1);
-            } else {
-                self.prev_shrink = Some(self.shrink);
-                return true;
-            }
-        }
-
-        panic!("Unexpected shrink state");
+        false
     }
 
     fn complicate(&mut self) -> bool {
-        match self.prev_shrink {
-            None => false,
-            Some(Shrink::DeleteElement(ix)) => {
-                // Undo the last item we deleted. Can't complicate any further,
-                // so unset prev_shrink.
-                self.included_elements.set(ix);
-                self.prev_shrink = None;
-                true
-            }
-            Some(Shrink::ShrinkElement(ix)) => {
-                if self.elements[ix].complicate() {
-                    // Don't unset prev_shrink; we may be able to complicate
-                    // again.
-                    true
-                } else {
-                    // Can't complicate the last element any further.
-                    self.prev_shrink = None;
-                    false
-                }
-            }
-        }
+        false
     }
 }
 
@@ -680,7 +609,24 @@ impl<T: ValueTree> ValueTree for VecValueTree<T> {
 // Tests
 //==============================================================================
 
-#[cfg(all(test, not(kani)))]
+#[cfg(kani)]
+mod kani_tests {
+    use super::*;
+
+    crate::proptest! {
+    #[kani::unwind(5)]
+    #[kani::proof]
+    fn vector_even_sums(
+        vec_even in vec((0..10).prop_map(|x: i32| x << 1), 0..2),
+    ) {
+            let sum: i32 = vec_even.into_iter().sum();
+            assert!(sum  < 40, "each element is < 20, at most 2 elements");
+            assert_eq!(sum % 2, 0, "Sum is even due to << 1.");
+    }
+    }
+}
+
+#[cfg(test)]
 mod test {
     use super::*;
 
