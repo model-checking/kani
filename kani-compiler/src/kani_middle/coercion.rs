@@ -9,8 +9,8 @@
 //! allow rust to create references to dynamically sized types (such as Traits and Slices) by
 //! casting concrete sized types. Unsized coercions can also be used to cast unsized to unsized
 //! types. These casts work not only on the top of references, but it also handle
-//! references inside structures, allowing the unsized coercions of smart pointers. This last
-//! piece was defined by
+//! references inside structures, allowing the unsized coercions of smart pointers. The
+//! definition of custom coercions for smart pointers can be found in the
 //! [RFC 982 DST Coercion](https://rust-lang.github.io/rfcs/0982-dst-coercion.html).
 
 use rustc_hir::lang_items::LangItem;
@@ -21,8 +21,10 @@ use rustc_middle::ty::{self, ParamEnv, TraitRef, Ty, TyCtxt};
 use rustc_span::symbol::Symbol;
 use tracing::trace;
 
-/// Extract the pair (`T`, `U`) for a unsized coercion where type `T` implements `Unsize<U>`.
-/// I.e., `U` is either a trait or a slice.
+/// Given an unsized coercion (e.g. from `&u8` to `&dyn Debug`), extract the pair of
+/// corresponding base types `T`, `U` (e.g. `u8`, `dyn Debug`), where the source base type `T` must
+/// implement `Unsize<U>` and `U` is either a trait or slice.
+///
 /// For more details, please refer to:
 /// <https://doc.rust-lang.org/reference/type-coercions.html#unsized-coercions>
 ///
@@ -59,7 +61,7 @@ pub fn extract_unsize_casting<'tcx>(
     tcx: TyCtxt<'tcx>,
     src_ty: Ty<'tcx>,
     dst_ty: Ty<'tcx>,
-) -> CoercionBase {
+) -> CoercionBase<'tcx> {
     trace!(?src_ty, ?dst_ty, "extract_unsize_casting");
     // Iterate over the pointer structure to find the builtin pointer that will store the metadata.
     let coerce_info = CoerceUnsizedIterator::new(tcx, src_ty, dst_ty).last().unwrap();
@@ -91,7 +93,7 @@ pub fn extract_unsize_casting<'tcx>(
 /// This base is used to determine the information that will be stored in the metadata.
 /// E.g.: In order to convert an `Rc<String>` into an `Rc<dyn Debug>`, we need to generate a
 /// vtable that represents the `impl Debug for String`. So this type will carry the `String` type
-/// as the `src_ty` and the `Debug` trait as `dst_ty`.
+/// as the `src_ty` and the `dyn Debug` trait as `dst_ty`.
 #[derive(Debug)]
 pub struct CoercionBase<'tcx> {
     pub src_ty: Ty<'tcx>,
