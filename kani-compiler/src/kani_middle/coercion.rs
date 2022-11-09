@@ -109,8 +109,8 @@ pub struct CoercionBase<'tcx> {
 /// `T` is sized and `U` is unsized, this iterator will walk over the fields that lead to a
 /// pointer to `T`, which shall be converted from a thin pointer to a fat pointer.
 ///
-/// This iterator will also include the name of the field that differs in the current iteration
-/// if that applies.
+/// Each iteration will also include an optional name of the field that differs from the current
+/// pair of types.
 ///
 /// The first element of the iteration will always be the starting types.
 /// The last element of the iteration will always be pointers to `T` and `U`.
