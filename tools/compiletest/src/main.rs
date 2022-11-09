@@ -157,7 +157,6 @@ pub fn parse_config(args: Vec<String>) -> Config {
         color,
         edition: matches.opt_str("edition"),
         force_rerun: matches.opt_present("force-rerun"),
-        mir_linker: cfg!(mir_linker),
         dry_run: matches.opt_present("dry-run"),
         timeout,
     }
@@ -176,7 +175,6 @@ pub fn log_config(config: &Config) {
     logv(c, format!("host: {}", config.host));
     logv(c, format!("verbose: {}", config.verbose));
     logv(c, format!("quiet: {}", config.quiet));
-    logv(c, format!("mir_linker: {}", config.mir_linker));
     logv(c, format!("timeout: {:?}", config.timeout));
     logv(
         c,
@@ -329,7 +327,7 @@ fn collect_tests_from_dir(
     tests: &mut Vec<test::TestDescAndFn>,
 ) -> io::Result<()> {
     match config.mode {
-        Mode::CargoKani => {
+        Mode::CargoKani | Mode::CargoKaniTest => {
             collect_expected_tests_from_dir(config, dir, relative_dir_path, inputs, tests)
         }
         _ => collect_rs_tests_from_dir(config, dir, relative_dir_path, inputs, tests),
@@ -357,7 +355,7 @@ fn collect_expected_tests_from_dir(
     // output directory corresponding to each to avoid race conditions during
     // the testing phase. We immediately return after adding the tests to avoid
     // treating `*.rs` files as tests.
-    assert_eq!(config.mode, Mode::CargoKani);
+    assert!(config.mode == Mode::CargoKani || config.mode == Mode::CargoKaniTest);
 
     let has_cargo_toml = dir.join("Cargo.toml").exists();
     for file in fs::read_dir(dir)? {
