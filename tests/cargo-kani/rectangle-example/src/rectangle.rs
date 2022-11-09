@@ -83,20 +83,6 @@ mod verification {
     #[kani::proof]
     pub fn stretched_rectangle_can_hold_original_fixed() {
         let original = Rectangle { width: kani::any(), height: kani::any() };
-        let factor: u8 = kani::any(); //< would like to make u64
-        kani::assume(0 != original.width);
-        kani::assume(0 != original.height);
-        kani::assume(1 < factor);
-        if let Some(larger) = original.stretch(factor as u64) {
-            assert!(larger.can_hold(&original));
-        }
-    }
-    // ANCHOR_END: stretch_kani_fixed
-
-    // Currently causes Kani timeout
-    #[kani::proof]
-    pub fn stretched_rectangle_can_hold_original_fixed_u64() {
-        let original = Rectangle { width: kani::any(), height: kani::any() };
         let factor = kani::any();
         kani::assume(0 != original.width);
         kani::assume(0 != original.height);
@@ -105,4 +91,5 @@ mod verification {
             assert!(larger.can_hold(&original));
         }
     }
+    // ANCHOR_END: stretch_kani_fixed
 }
