@@ -62,7 +62,7 @@ The code tries to execute more than 1 loop iteration.
 Since the proof harness is trying to limit the array to size 10, an initial unwind value of 10 seems like the obvious place to start.
 But that's not large enough for Kani, and we still see the "unwinding assertion" failure.
 
-At size 11, the "unwinding assertion" goes away, and now we can see the actual failures we're trying to find, too.
+At size 11, the "unwinding assertion" goes away, and now we can see the actual failure we're trying to find too.
 We'll explain why we see this behavior in a moment.
 
 </details>
