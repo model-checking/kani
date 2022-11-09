@@ -127,7 +127,7 @@ impl UserInput for QueryDb {
     }
 
     fn get_stubbing_enabled(&self) -> bool {
-        return self.stubbing_enabled;
+        self.stubbing_enabled
     }
 
     #[cfg(feature = "unsound_experiments")]
