@@ -20,7 +20,7 @@ pub fn collect_stub_mappings(
 ) -> Result<FxHashMap<String, FxHashMap<String, String>>, ErrorGuaranteed> {
     let mut callbacks = CollectorCallbacks::default();
     let compiler = RunCompiler::new(rustc_args, &mut callbacks);
-    compiler.run().and_then(|_| Ok(callbacks.stub_mapping))
+    compiler.run().map(|_| callbacks.stub_mapping)
 }
 
 /// A rustc callback that is used to collect the stub mappings specified for

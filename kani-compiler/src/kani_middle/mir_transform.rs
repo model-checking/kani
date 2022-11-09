@@ -15,9 +15,9 @@ use rustc_middle::{
 fn run_passes<'tcx, const EXTERN: bool>(tcx: TyCtxt<'tcx>, def_id: DefId) -> &Body<'tcx> {
     tracing::debug!(?def_id, "Run rustc transformation passes");
     let optimized_mir = if EXTERN {
-        (*rustc_interface::DEFAULT_EXTERN_QUERY_PROVIDERS).optimized_mir
+        rustc_interface::DEFAULT_EXTERN_QUERY_PROVIDERS.optimized_mir
     } else {
-        (*rustc_interface::DEFAULT_QUERY_PROVIDERS).optimized_mir
+        rustc_interface::DEFAULT_QUERY_PROVIDERS.optimized_mir
     };
     let body = optimized_mir(tcx, def_id);
     run_kani_passes(tcx, def_id, body)

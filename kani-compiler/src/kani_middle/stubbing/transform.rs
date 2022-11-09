@@ -9,7 +9,7 @@ use rustc_middle::{mir::Body, ty::TyCtxt};
 
 /// Returns the new body of a function/method if it has been stubbed out;
 /// otherwise, returns `None`.
-pub fn transform<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId) -> Option<&'tcx Body<'tcx>> {
+pub fn transform(tcx: TyCtxt, def_id: DefId) -> Option<&Body> {
     if let Some(mapping) = get_stub_mapping(tcx) {
         let name = tcx.def_path_str(def_id);
         if let Some(replacement) = mapping.get(&name) {
@@ -41,7 +41,7 @@ fn deserialize_mapping(val: &str) -> FxHashMap<String, String> {
 }
 
 /// Retrieves the stub mapping from the compiler configuration.
-fn get_stub_mapping<'tcx>(tcx: TyCtxt<'tcx>) -> Option<FxHashMap<String, String>> {
+fn get_stub_mapping(tcx: TyCtxt) -> Option<FxHashMap<String, String>> {
     lazy_static! {
         static ref RE: Regex = Regex::new(&format!("'{RUSTC_ARG_PREFIX}(.*)'")).unwrap();
     }
@@ -54,6 +54,6 @@ fn get_stub_mapping<'tcx>(tcx: TyCtxt<'tcx>) -> Option<FxHashMap<String, String>
 }
 
 /// Tries to find the `DefId` of a function/method that matches the path `path`.
-fn get_def_id<'tcx>(tcx: TyCtxt<'tcx>, path: &str) -> Option<DefId> {
+fn get_def_id(tcx: TyCtxt, path: &str) -> Option<DefId> {
     tcx.iter_local_def_id().map(LocalDefId::to_def_id).find(|&id| tcx.def_path_str(id) == path)
 }
