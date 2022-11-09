@@ -25,7 +25,7 @@ for overlay_dir in ${PERF_DIR}/overlays/*/; do
 done
 
 suite="perf"
-mode="cargo-kani"
+mode="cargo-kani-test"
 echo "Check compiletest suite=$suite mode=$mode"
 cargo run -p compiletest -- --suite $suite --mode $mode
 exit_code=$?
