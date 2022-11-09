@@ -18,7 +18,7 @@ pub enum Mode {
     Kani,
     KaniFixme,
     CargoKani,
-    CargoKaniTest, // cargo kani --tests
+    CargoKaniTest, // `cargo kani --tests`. This is temporary and should be removed when s2n-quic moves --tests to `Cargo.toml`.
     Expected,
     Stub,
 }
