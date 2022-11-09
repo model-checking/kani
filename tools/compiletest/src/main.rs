@@ -12,14 +12,15 @@ extern crate test;
 
 use crate::common::{output_base_dir, output_relative_path};
 use crate::common::{Config, Mode, TestPaths};
-use crate::util::{logv, top_level};
+use crate::util::{logv, print_msg, top_level};
 use getopts::Options;
 use std::env;
 use std::ffi::OsString;
 use std::fs;
 use std::io::{self};
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
+use std::str::FromStr;
+use std::time::{Duration, SystemTime};
 use test::ColorConfig;
 use tracing::*;
 use walkdir::WalkDir;
@@ -83,7 +84,10 @@ pub fn parse_config(args: Vec<String>) -> Config {
         .optopt("", "host", "the host to build for", "HOST")
         .optflag("", "force-rerun", "rerun tests even if the inputs are unchanged")
         .optflag("h", "help", "show this message")
-        .optopt("", "edition", "default Rust edition", "EDITION");
+        .optopt("", "edition", "default Rust edition", "EDITION")
+        .optopt("", "timeout", "the timeout for each test in seconds", "TIMEOUT")
+        .optflag("", "dry-run", "don't actually run the tests")
+    ;
 
     let (argv0, args_) = args.split_first().unwrap();
     if args.len() == 1 || args[1] == "-h" || args[1] == "--help" {
@@ -130,6 +134,12 @@ pub fn parse_config(args: Vec<String>) -> Config {
     let src_base = opt_path(matches, "src-base", &["tests", suite.as_str()]);
     let run_ignored = matches.opt_present("ignored");
     let mode = matches.opt_str("mode").unwrap().parse().expect("invalid mode");
+    let timeout = matches.opt_str("timeout").map(|val| {
+        Duration::from_secs(
+            u64::from_str(&val)
+                .expect("Unexpected timeout format. Expected a positive number but found {val}"),
+        )
+    });
 
     Config {
         src_base,
@@ -147,7 +157,8 @@ pub fn parse_config(args: Vec<String>) -> Config {
         color,
         edition: matches.opt_str("edition"),
         force_rerun: matches.opt_present("force-rerun"),
-        mir_linker: cfg!(mir_linker),
+        dry_run: matches.opt_present("dry-run"),
+        timeout,
     }
 }
 
@@ -164,7 +175,15 @@ pub fn log_config(config: &Config) {
     logv(c, format!("host: {}", config.host));
     logv(c, format!("verbose: {}", config.verbose));
     logv(c, format!("quiet: {}", config.quiet));
-    logv(c, format!("mir_linker: {}", config.mir_linker));
+    logv(c, format!("timeout: {:?}", config.timeout));
+    logv(
+        c,
+        format!(
+            "parallelism: RUST_TEST_THREADS={:?}, available_parallelism={}",
+            env::var("RUST_TEST_THREADS").ok(),
+            std::thread::available_parallelism().unwrap()
+        ),
+    );
     logv(c, "\n".to_string());
 }
 
@@ -203,6 +222,15 @@ pub fn run_tests(config: Config) {
     let mut tests = Vec::new();
     for c in &configs {
         make_tests(c, &mut tests);
+    }
+
+    if config.dry_run {
+        print_msg(&config, format!("Number of Tests: {}", tests.len()));
+        for test in tests {
+            let ignore = if test.desc.ignore ^ config.run_ignored { "ignore" } else { "" };
+            print_msg(&config, format!(" - {} ... {}", test.desc.name.as_slice(), ignore));
+        }
+        return;
     }
 
     let res = test::run_tests_console(&opts, tests);
@@ -299,7 +327,7 @@ fn collect_tests_from_dir(
     tests: &mut Vec<test::TestDescAndFn>,
 ) -> io::Result<()> {
     match config.mode {
-        Mode::CargoKani => {
+        Mode::CargoKani | Mode::CargoKaniTest => {
             collect_expected_tests_from_dir(config, dir, relative_dir_path, inputs, tests)
         }
         _ => collect_rs_tests_from_dir(config, dir, relative_dir_path, inputs, tests),
@@ -327,7 +355,7 @@ fn collect_expected_tests_from_dir(
     // output directory corresponding to each to avoid race conditions during
     // the testing phase. We immediately return after adding the tests to avoid
     // treating `*.rs` files as tests.
-    assert_eq!(config.mode, Mode::CargoKani);
+    assert!(config.mode == Mode::CargoKani || config.mode == Mode::CargoKaniTest);
 
     let has_cargo_toml = dir.join("Cargo.toml").exists();
     for file in fs::read_dir(dir)? {

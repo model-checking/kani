@@ -64,7 +64,7 @@ where
     tcx.hir_crate_items(())
         .items()
         .filter_map(|hir_id| {
-            let def_id = hir_id.def_id.to_def_id();
+            let def_id = hir_id.owner_id.def_id.to_def_id();
             filter(tcx, def_id).then(|| MonoItem::Fn(Instance::mono(tcx, def_id)))
         })
         .collect()

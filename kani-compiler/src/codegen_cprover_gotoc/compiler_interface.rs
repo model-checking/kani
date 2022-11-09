@@ -282,7 +282,7 @@ fn check_options(session: &Session, need_metadata_module: bool) {
 fn check_crate_items(gcx: &GotocCtx) {
     let tcx = gcx.tcx;
     for item in tcx.hir_crate_items(()).items() {
-        let def_id = item.def_id.to_def_id();
+        let def_id = item.owner_id.def_id.to_def_id();
         gcx.check_attributes(def_id);
         if tcx.def_kind(def_id) == DefKind::GlobalAsm {
             if !gcx.queries.get_ignore_global_asm() {

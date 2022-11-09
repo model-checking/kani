@@ -432,7 +432,7 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn is_unsized(&self, t: Ty<'tcx>) -> bool {
         !self
             .monomorphize(t)
-            .is_sized(self.tcx.at(rustc_span::DUMMY_SP), ty::ParamEnv::reveal_all())
+            .is_sized(*self.tcx.at(rustc_span::DUMMY_SP), ty::ParamEnv::reveal_all())
     }
 
     /// Generates the type for a single field for a dynamic vtable.
