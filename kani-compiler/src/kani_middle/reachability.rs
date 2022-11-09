@@ -13,10 +13,11 @@
 //!   - For every static, collect initializer and drop functions.
 //!
 //! We have kept this module agnostic of any Kani code in case we can contribute this back to rustc.
+use tracing::{debug, debug_span, trace, warn};
+
 use rustc_data_structures::fingerprint::Fingerprint;
 use rustc_data_structures::fx::FxHashSet;
 use rustc_data_structures::stable_hasher::{HashStable, StableHasher};
-use rustc_hir::lang_items::LangItem;
 use rustc_middle::mir::interpret::{AllocId, ConstValue, ErrorHandled, GlobalAlloc, Scalar};
 use rustc_middle::mir::mono::MonoItem;
 use rustc_middle::mir::visit::Visitor as MirVisitor;
@@ -24,16 +25,14 @@ use rustc_middle::mir::{
     Body, CastKind, Constant, ConstantKind, Location, Rvalue, Terminator, TerminatorKind,
 };
 use rustc_middle::span_bug;
-use rustc_middle::traits::{ImplSource, ImplSourceUserDefinedData};
-use rustc_middle::ty::adjustment::CustomCoerceUnsized;
 use rustc_middle::ty::adjustment::PointerCast;
-use rustc_middle::ty::TypeAndMut;
 use rustc_middle::ty::{
-    self, Closure, ClosureKind, ConstKind, Instance, InstanceDef, ParamEnv, TraitRef, Ty, TyCtxt,
-    TyKind, TypeFoldable, VtblEntry,
+    Closure, ClosureKind, ConstKind, Instance, InstanceDef, ParamEnv, Ty, TyCtxt, TyKind,
+    TypeFoldable, VtblEntry,
 };
 use rustc_span::def_id::DefId;
-use tracing::{debug, debug_span, trace, warn};
+
+use crate::kani_middle::coercion;
 
 /// Collect all reachable items starting from the given starting points.
 pub fn collect_reachable_items<'tcx>(
@@ -275,10 +274,11 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
                 // If so, collect items from the impl `Trait for Concrete {}`.
                 let target_ty = self.monomorphize(target);
                 let source_ty = self.monomorphize(operand.ty(self.body, self.tcx));
-                let (src_inner, dst_inner) = extract_trait_casting(self.tcx, source_ty, target_ty);
-                if !src_inner.is_trait() && dst_inner.is_trait() {
-                    debug!(concrete_ty=?src_inner, trait_ty=?dst_inner, "collect_vtable_methods");
-                    self.collect_vtable_methods(src_inner, dst_inner);
+                let base_coercion =
+                    coercion::extract_unsize_casting(self.tcx, source_ty, target_ty);
+                if !base_coercion.src_ty.is_trait() && base_coercion.dst_ty.is_trait() {
+                    debug!(?base_coercion, "collect_vtable_methods");
+                    self.collect_vtable_methods(base_coercion.src_ty, base_coercion.dst_ty);
                 }
             }
             Rvalue::Cast(CastKind::Pointer(PointerCast::ReifyFnPointer), ref operand, _) => {
@@ -446,107 +446,6 @@ fn should_codegen_locally<'tcx>(tcx: TyCtxt<'tcx>, instance: &Instance<'tcx>) ->
         // This will include things like VTableShim and other stuff. See the method
         // def_id_if_not_guaranteed_local_codegen for the full list.
         true
-    }
-}
-
-/// Extract the pair (`T`, `U`) for a unsized coercion where type `T` implements `Unsize<U>`.
-/// I.e., `U` is either a trait or a slice.
-/// For more details, please refer to:
-/// <https://doc.rust-lang.org/reference/type-coercions.html#unsized-coercions>
-///
-/// This is used to determine the vtable implementation that must be tracked by the fat pointer.
-///
-/// For example, if `&u8` is being converted to `&dyn Debug`, this method would return:
-/// `(u8, dyn Debug)`.
-///
-/// There are a few interesting cases (references / pointers are handled the same way):
-/// 1. Coercion between `&T` to `&U`.
-///    - This is the base case.
-///    - In this case, we extract the type that is pointed to.
-/// 2. Coercion between smart pointers like `Rc<T>` to `Rc<U>`.
-///    - Smart pointers implement the `CoerceUnsize` trait.
-///    - Use CustomCoerceUnsized information to traverse the smart pointer structure and find the
-///      underlying pointer.
-///    - Use base case to extract `T` and `U`.
-/// 3. Coercion between `&Wrapper<T>` to `&Wrapper<U>`.
-///    - Apply base case to extract the pair `(Wrapper<T>, Wrapper<U>)`.
-///    - Extract the tail element of the struct which are of type `T` and `U`, respectively.
-/// 4. Coercion between smart pointers of wrapper structs.
-///    - Apply the logic from item 2 then item 3.
-fn extract_trait_casting<'tcx>(
-    tcx: TyCtxt<'tcx>,
-    src_ty: Ty<'tcx>,
-    dst_ty: Ty<'tcx>,
-) -> (Ty<'tcx>, Ty<'tcx>) {
-    trace!(?dst_ty, ?src_ty, "find_trait_conversion");
-    let mut src_inner_ty = src_ty;
-    let mut dst_inner_ty = dst_ty;
-    (src_inner_ty, dst_inner_ty) = loop {
-        // Extract the pointee types from pointers (including smart pointers) that form the base of
-        // the conversion.
-        match (&src_inner_ty.kind(), &dst_inner_ty.kind()) {
-            (&ty::Adt(src_def, src_substs), &ty::Adt(dst_def, dst_substs))
-                if !src_def.is_box() || !dst_def.is_box() =>
-            {
-                // Handle smart pointers by using CustomCoerceUnsized to find the field being
-                // coerced.
-                assert_eq!(src_def, dst_def);
-                let src_fields = &src_def.non_enum_variant().fields;
-                let dst_fields = &dst_def.non_enum_variant().fields;
-                assert_eq!(src_fields.len(), dst_fields.len());
-
-                let CustomCoerceUnsized::Struct(coerce_index) =
-                    custom_coerce_unsize_info(tcx, src_inner_ty, dst_inner_ty);
-                assert!(coerce_index < src_fields.len());
-
-                src_inner_ty = src_fields[coerce_index].ty(tcx, src_substs);
-                dst_inner_ty = dst_fields[coerce_index].ty(tcx, dst_substs);
-            }
-            _ => {
-                // Base case is always a pointer (Box, raw_pointer or reference).
-                let src_pointee = extract_pointee(src_inner_ty).expect(&format!(
-                    "Expected source to be a pointer. Found {:?} instead",
-                    src_inner_ty
-                ));
-                let dst_pointee = extract_pointee(dst_inner_ty).expect(&format!(
-                    "Expected destination to be a pointer. Found {:?} instead",
-                    dst_inner_ty
-                ));
-                break (src_pointee, dst_pointee);
-            }
-        }
-    };
-
-    tcx.struct_lockstep_tails_erasing_lifetimes(src_inner_ty, dst_inner_ty, ParamEnv::reveal_all())
-}
-
-/// Extract pointee type from builtin pointer types.
-fn extract_pointee(typ: Ty) -> Option<Ty> {
-    typ.builtin_deref(true).map(|TypeAndMut { ty, .. }| ty)
-}
-
-/// Get information about an unsized coercion.
-/// This code was extracted from `rustc_monomorphize` crate.
-/// <https://github.com/rust-lang/rust/blob/4891d57f7aab37b5d6a84f2901c0bb8903111d53/compiler/rustc_monomorphize/src/lib.rs#L25-L46>
-fn custom_coerce_unsize_info<'tcx>(
-    tcx: TyCtxt<'tcx>,
-    source_ty: Ty<'tcx>,
-    target_ty: Ty<'tcx>,
-) -> CustomCoerceUnsized {
-    let def_id = tcx.require_lang_item(LangItem::CoerceUnsized, None);
-
-    let trait_ref = ty::Binder::dummy(TraitRef {
-        def_id,
-        substs: tcx.mk_substs_trait(source_ty, &[target_ty.into()]),
-    });
-
-    match tcx.codegen_select_candidate((ParamEnv::reveal_all(), trait_ref)) {
-        Ok(ImplSource::UserDefined(ImplSourceUserDefinedData { impl_def_id, .. })) => {
-            tcx.coerce_unsized_info(impl_def_id).custom_kind.unwrap()
-        }
-        impl_source => {
-            unreachable!("invalid `CoerceUnsized` impl_source: {:?}", impl_source);
-        }
     }
 }
 
