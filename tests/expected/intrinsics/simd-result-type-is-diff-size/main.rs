@@ -1,8 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! Checks that conversions between SIMD vectors of different sizes are not
-//! allowed.
+//! Checks that storing the result of a vector operation in a vector of
+//! size different to the operands' sizes causes an error.
 #![feature(repr_simd, platform_intrinsics)]
 
 #[repr(simd)]
@@ -19,6 +19,11 @@ pub struct u64x2(u64, u64);
 #[allow(non_camel_case_types)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct u32x4(u32, u32, u32, u32);
+
+#[repr(simd)]
+#[allow(non_camel_case_types)]
+#[derive(Clone, Copy)]
+pub struct f32x2(f32, f32);
 
 // From <https://github.com/rust-lang/rfcs/blob/master/text/1199-simd-infrastructure.md#comparisons>:
 // > The type checker ensures that `T` and `U` have the same length, and that

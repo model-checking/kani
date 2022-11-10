@@ -82,9 +82,16 @@ pub struct VectorData {
 }
 
 impl PartialEq for VectorData {
-    /// Rust allows conversions between SIMD vector types with the same size. By
-    /// redefining equality over vector types we don't get type-checking errors
-    /// in those cases.
+    /// We redefine equality for vector types to account for all cases:
+    ///  * Regular operators (e.g., '+'): They return the same type and don't
+    ///    need this definition.
+    ///  * Comparison operators (e.g., '=='): The return type must have the same
+    ///    length as the operand types and an integer base type.
+    /// Therefore, we relax the definition of type equality for vector types to
+    /// avoid type-checking errors in those cases.
+    /// <https://github.com/rust-lang/rfcs/blob/master/text/1199-simd-infrastructure.md>
+    ///
+    /// Note: Vector comparison operations are created and type-checked by [`Expr::vector_cmp`].
     fn eq(&self, other: &VectorData) -> bool {
         self.size == other.size
     }
