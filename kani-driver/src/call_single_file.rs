@@ -53,6 +53,7 @@ impl KaniSession {
                 ReachabilityMode::Legacy => "--reachability=legacy",
                 ReachabilityMode::ProofHarnesses => "--reachability=harnesses",
                 ReachabilityMode::AllPubFns => "--reachability=pub_fns",
+                ReachabilityMode::Tests => "--reachability=tests",
             }
             .into(),
         );

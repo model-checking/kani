@@ -26,6 +26,8 @@ pub enum ReachabilityType {
     None,
     /// Start the cross-crate reachability analysis from all public functions in the local crate.
     PubFns,
+    /// Start the cross-crate reachability analysis from all *test* (i.e. `#[test]`) harnesses in the local crate.
+    Tests,
 }
 
 impl Default for ReachabilityType {
