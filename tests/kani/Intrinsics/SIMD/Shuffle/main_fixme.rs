@@ -1,5 +1,9 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! This test doesn't work because support for SIMD intrinsics isn't available
+//! at the moment in Kani. Support to be added in
+//! <https://github.com/model-checking/kani/issues/1148>
 #![feature(repr_simd, platform_intrinsics)]
 
 #[repr(simd)]

@@ -1035,11 +1035,19 @@ impl Expr {
             self,
             rhs
         );
+
         // Note: Two vector types are considered to be equal if they have the
         // same length (see `VectorData` definition).
         assert!(
             self.typ() == &ret_typ && rhs.typ() == &ret_typ,
             "expected return type with same length, but got `lhs = {:?}`, `rhs = {:?}`, `ret_typ = {:?}`",
+            self.typ(),
+            rhs.typ(),
+            ret_typ
+        );
+        assert!(
+            ret_typ.base_type().unwrap().is_integer(),
+            "expected return type with base type integer, but got `lhs = {:?}`, `rhs = {:?}`, `ret_typ = {:?}`",
             self.typ(),
             rhs.typ(),
             ret_typ
