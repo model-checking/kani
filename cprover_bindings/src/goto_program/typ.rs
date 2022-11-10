@@ -330,6 +330,7 @@ impl Type {
         }
     }
 
+    /// Returns the length (number of elements) in an array or vector type
     pub fn len(&self) -> Option<u64> {
         match self {
             Array { size, .. } => Some(*size),

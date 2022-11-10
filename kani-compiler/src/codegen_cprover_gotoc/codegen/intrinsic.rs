@@ -1361,6 +1361,9 @@ impl<'tcx> GotocCtx<'tcx> {
         )
     }
 
+    /// Generates code for a SIMD vector comparison intrinsic. This is similar
+    /// to `binop`, but we pass along `ret_ty` because return type for vector
+    /// comparison depends on the place type.
     fn codegen_intrinsic_simd_cmp<F: FnOnce(Expr, Expr, Type) -> Expr>(
         &mut self,
         f: F,
