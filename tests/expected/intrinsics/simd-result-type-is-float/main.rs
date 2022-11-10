@@ -39,7 +39,7 @@ fn main() {
     let y = u64x2(0, 1);
 
     unsafe {
-        let invalid_simd: f32x2= simd_eq(x, y);
+        let invalid_simd: f32x2 = simd_eq(x, y);
         assert!(invalid_simd == f32x2(0.0, -1.0));
         // ^^^^ The code above fails to type-check in Rust with the error:
         // ```
