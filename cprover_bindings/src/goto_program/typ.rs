@@ -1079,7 +1079,7 @@ impl Type {
         match concrete {
             CInteger(CIntType::SizeT) => Some(CInteger(CIntType::SSizeT)),
             Unsignedbv { ref width } => Some(Signedbv { width: *width }),
-            Signedbv { .. } => Some(self.clone()),
+            CInteger(CIntType::SSizeT) | Signedbv { .. } => Some(self.clone()),
             _ => None,
         }
     }
@@ -1092,7 +1092,7 @@ impl Type {
         match concrete {
             CInteger(CIntType::SSizeT) => Some(CInteger(CIntType::SizeT)),
             Signedbv { ref width } => Some(Unsignedbv { width: *width }),
-            Unsignedbv { .. } => Some(self.clone()),
+            CInteger(CIntType::SizeT) | Unsignedbv { .. } => Some(self.clone()),
             _ => None,
         }
     }
