@@ -330,7 +330,7 @@ impl Type {
         }
     }
 
-    pub fn size(&self) -> Option<u64> {
+    pub fn len(&self) -> Option<u64> {
         match self {
             Array { size, .. } => Some(*size),
             Vector { data } => Some(data.size),
