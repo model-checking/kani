@@ -1,2 +1,2 @@
-Kani unexpectedly panicked during compilation
-panicked at 'expected return type with same length, but got `lhs = Vector { data: VectorData { typ: Unsignedbv { width: 64 }, size: 2 } }`, `rhs = Vector { data: VectorData { typ: Unsignedbv { width: 64 }, size: 2 } }`, `ret_typ = Vector { data: VectorData { typ: Unsignedbv { width: 32 }, size: 4 } }`
+error: expected return type with length 2 (same as input type `Vector { data: VectorData { typ: Unsignedbv { width: 64 }, size: 2 } }`), found `Vector { data: VectorData { typ: Unsignedbv { width: 32 }, size: 4 } }` with length 4
+error: aborting due to previous error

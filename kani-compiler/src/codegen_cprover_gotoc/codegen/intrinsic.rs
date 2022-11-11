@@ -611,21 +611,33 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             "simd_and" => unstable_codegen!(codegen_intrinsic_binop!(bitand)),
             "simd_div" => unstable_codegen!(codegen_intrinsic_binop!(div)),
-            "simd_eq" => self.codegen_intrinsic_simd_cmp(Expr::vector_eq, fargs, p, cbmc_ret_ty),
+            "simd_eq" => {
+                self.codegen_intrinsic_simd_cmp(Expr::vector_eq, fargs, p, span, cbmc_ret_ty)
+            }
             "simd_extract" => {
                 let _vec = fargs.remove(0);
                 let _index = fargs.remove(0);
                 unstable_codegen!(self.codegen_expr_to_place(p, vec.index_array(index)))
             }
-            "simd_ge" => self.codegen_intrinsic_simd_cmp(Expr::vector_ge, fargs, p, cbmc_ret_ty),
-            "simd_gt" => self.codegen_intrinsic_simd_cmp(Expr::vector_gt, fargs, p, cbmc_ret_ty),
+            "simd_ge" => {
+                self.codegen_intrinsic_simd_cmp(Expr::vector_ge, fargs, p, span, cbmc_ret_ty)
+            }
+            "simd_gt" => {
+                self.codegen_intrinsic_simd_cmp(Expr::vector_gt, fargs, p, span, cbmc_ret_ty)
+            }
             "simd_insert" => {
                 unstable_codegen!(self.codegen_intrinsic_simd_insert(fargs, p, cbmc_ret_ty, loc))
             }
-            "simd_le" => self.codegen_intrinsic_simd_cmp(Expr::vector_le, fargs, p, cbmc_ret_ty),
-            "simd_lt" => self.codegen_intrinsic_simd_cmp(Expr::vector_lt, fargs, p, cbmc_ret_ty),
+            "simd_le" => {
+                self.codegen_intrinsic_simd_cmp(Expr::vector_le, fargs, p, span, cbmc_ret_ty)
+            }
+            "simd_lt" => {
+                self.codegen_intrinsic_simd_cmp(Expr::vector_lt, fargs, p, span, cbmc_ret_ty)
+            }
             "simd_mul" => unstable_codegen!(codegen_simd_with_overflow_check!(mul, mul_overflow_p)),
-            "simd_ne" => self.codegen_intrinsic_simd_cmp(Expr::vector_neq, fargs, p, cbmc_ret_ty),
+            "simd_ne" => {
+                self.codegen_intrinsic_simd_cmp(Expr::vector_neq, fargs, p, span, cbmc_ret_ty)
+            }
             "simd_or" => unstable_codegen!(codegen_intrinsic_binop!(bitor)),
             "simd_rem" => unstable_codegen!(codegen_intrinsic_binop!(rem)),
             "simd_shl" => unstable_codegen!(codegen_intrinsic_binop!(shl)),
@@ -1361,19 +1373,66 @@ impl<'tcx> GotocCtx<'tcx> {
         )
     }
 
-    /// Generates code for a SIMD vector comparison intrinsic. This is similar
-    /// to `binop`, but we pass along `ret_ty` because return type for vector
-    /// comparison depends on the place type.
+    /// Generates code for a SIMD vector comparison intrinsic.
+    ///
+    /// We perform some typechecks here for two reasons:
+    ///  * In the case of SIMD intrinsics, these checks depend on the backend.
+    ///  * We can emit a friendly error here, but not in `cprover_bindings`.
     fn codegen_intrinsic_simd_cmp<F: FnOnce(Expr, Expr, Type) -> Expr>(
         &mut self,
         f: F,
         mut fargs: Vec<Expr>,
         p: &Place<'tcx>,
-        ret_ty: Type,
+        span: Option<Span>,
+        ret_typ: Type,
     ) -> Stmt {
         let arg1 = fargs.remove(0);
         let arg2 = fargs.remove(0);
-        let e = f(arg1, arg2, ret_ty);
+
+        // The return type must be the same length as the input types. The
+        // argument types have already been checked to ensure they have the same
+        // length (an error would've been emitted otherwise), so we can compare
+        // the return type against any of the argument types.
+        //
+        // An example that triggers this error:
+        // ```rust
+        // let x = u64x2(0, 0);
+        // let y = u64x2(0, 1);
+        // unsafe { let invalid_simd: u32x4 = simd_eq(x, y); }
+        // ```
+        // We compare two `u64x2` vectors but try to store the result in a `u32x4`.
+        if arg1.typ().len().unwrap() != ret_typ.len().unwrap() {
+            let err_msg = format!(
+                "expected return type with length {} (same as input type `{:?}`), \
+                found `{:?}` with length {}",
+                arg1.typ().len().unwrap(),
+                arg1.typ(),
+                ret_typ,
+                ret_typ.len().unwrap()
+            );
+            self.tcx.sess.span_err(span.unwrap(), err_msg);
+        }
+        // The return type must have an integer base type.
+        //
+        // An example that triggers this error:
+        // ```rust
+        // let x = u64x2(0, 0);
+        // let y = u64x2(0, 1);
+        // unsafe { let invalid_simd: f32x2 = simd_eq(x, y); }
+        // ```
+        // We compare two `u64x2` vectors but try to store the result in a `f32x4`,
+        // which is composed of `f32` values.
+        if !ret_typ.base_type().unwrap().is_integer() {
+            let err_msg = format!(
+                "expected return type with integer elements, found `{:?}` with non-integer `{:?}`",
+                ret_typ,
+                ret_typ.base_type().unwrap()
+            );
+            self.tcx.sess.span_err(span.unwrap(), err_msg);
+        }
+        self.tcx.sess.abort_if_errors();
+        // Create the vector comparison expression
+        let e = f(arg1, arg2, ret_typ);
         self.codegen_expr_to_place(p, e)
     }
 

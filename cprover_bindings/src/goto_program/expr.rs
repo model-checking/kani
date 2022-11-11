@@ -956,7 +956,9 @@ impl Expr {
             }
             ROk => lhs.typ.is_pointer() && rhs.typ.is_c_size_t(),
             VectorEqual | VectorNotequal | VectorGe | VectorLe | VectorGt | VectorLt => {
-                lhs.typ == rhs.typ && lhs.typ.is_vector()
+                unreachable!(
+                    "vector comparison operators must be typechecked by `typecheck_vector_cmp_expr`"
+                )
             }
         }
     }
@@ -995,10 +997,17 @@ impl Expr {
             // Vector comparisons
             VectorEqual | VectorNotequal | VectorGe | VectorLe | VectorGt | VectorLt => {
                 unreachable!(
-                    "Return type for vector comparison operators depends on the place type"
+                    "return type for vector comparison operators depends on the place type"
                 )
             }
         }
+    }
+
+    fn typecheck_vector_cmp_expr(lhs: &Expr, rhs: &Expr, ret_typ: &Type) -> bool {
+        lhs.typ.is_vector()
+            && lhs.typ == rhs.typ
+            && lhs.typ.len() == ret_typ.len()
+            && ret_typ.base_type().unwrap().is_integer()
     }
 
     /// self op right;
@@ -1029,28 +1038,8 @@ impl Expr {
     /// vector.
     pub fn vector_cmp(self, op: BinaryOperator, rhs: Expr, ret_typ: Type) -> Expr {
         assert!(
-            Expr::typecheck_binop_args(op, &self, &rhs),
-            "vector comparison expression does not typecheck {:?} {:?} {:?}",
-            op,
-            self,
-            rhs
-        );
-
-        // Note: Two vector types are considered to be equal if they have the
-        // same length (see `VectorData` definition).
-        assert!(
-            self.typ() == &ret_typ && rhs.typ() == &ret_typ,
-            "expected return type with same length, but got `lhs = {:?}`, `rhs = {:?}`, `ret_typ = {:?}`",
-            self.typ(),
-            rhs.typ(),
-            ret_typ
-        );
-        assert!(
-            ret_typ.base_type().unwrap().is_integer(),
-            "expected return type with base type integer, but got `lhs = {:?}`, `rhs = {:?}`, `ret_typ = {:?}`",
-            self.typ(),
-            rhs.typ(),
-            ret_typ
+            Expr::typecheck_vector_cmp_expr(&self, &rhs, &ret_typ),
+            "vector comparison expression does not typecheck",
         );
         expr!(BinOp { op, lhs: self, rhs }, ret_typ)
     }
