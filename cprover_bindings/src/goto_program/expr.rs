@@ -1003,6 +1003,20 @@ impl Expr {
         }
     }
 
+    /// Comparison operators for SIMD vectors aren't typechecked as regular
+    /// comparison operators. First, the return type depends on the place's type
+    /// (i.e., the variable or expression type for the result).
+    ///
+    /// In addition, the return type must have:
+    ///  1. The same length (number of elements) as the operand types.
+    ///  2. An integer base type (or just "boolean"-y, as mentioned in
+    ///     <https://github.com/rust-lang/rfcs/blob/master/text/1199-simd-infrastructure.md#comparisons>).
+    ///     The signedness doesn't matter, as the result for each element is
+    ///     either "all ones" (false) or "all zeros" (true).
+    /// For example, one can use `simd_eq` on two `f64x4` vectors and assign the
+    /// result to a `u64x4` vector. But it's not possible to assign it to: (1) a
+    /// `u64x2` because they don't have the same length; or (2) another `f64x4`
+    /// vector.
     fn typecheck_vector_cmp_expr(lhs: &Expr, rhs: &Expr, ret_typ: &Type) -> bool {
         lhs.typ.is_vector()
             && lhs.typ == rhs.typ
@@ -1024,18 +1038,6 @@ impl Expr {
 
     /// Like `binop`, but receives an additional parameter `ret_typ` with the expected
     /// return type for the place, which is used as the return type.
-    ///
-    /// Comparison operators for SIMD vectors don't work as regular comparison operators.
-    /// The return type must have:
-    ///  1. The same length (number of elements) as the operand types.
-    ///  2. An integer base type (or just "boolean"-y, as mentioned in
-    ///     <https://github.com/rust-lang/rfcs/blob/master/text/1199-simd-infrastructure.md#comparisons>).
-    ///     The signedness doesn't matter, as the result for each element is
-    ///     either "all ones" (false) or "all zeros" (true).
-    /// For example, one can use `simd_eq` on two `f64x4` vectors and assign the
-    /// result to a `u64x4` vector. But it's not possible to assign it to: (1) a
-    /// `u64x2` because they don't have the same length; or (2) another `f64x4`
-    /// vector.
     pub fn vector_cmp(self, op: BinaryOperator, rhs: Expr, ret_typ: Type) -> Expr {
         assert!(
             Expr::typecheck_vector_cmp_expr(&self, &rhs, &ret_typ),
