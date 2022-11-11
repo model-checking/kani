@@ -1,2 +1,2 @@
-error: expected return type with integer elements, found `Vector { data: VectorData { typ: Float, size: 2 } }` with non-integer `Float`
+error: expected return type with integer elements, found `Vector { typ: Float, size: 2 }` with non-integer `Float`
 error: aborting due to previous error
