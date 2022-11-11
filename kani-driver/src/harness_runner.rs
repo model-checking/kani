@@ -144,10 +144,16 @@ impl KaniSession {
                 println!("Verification failed for - {}", failure.harness.pretty_name);
             }
 
-            println!(
-                "Complete - {} successfully verified harnesses, {} failures, {} total.",
-                succeeding, failing, total
-            );
+            if total > 0 {
+                println!(
+                    "Complete - {} successfully verified harnesses, {} failures, {} total.",
+                    succeeding, failing, total
+                );
+            } else {
+                // TODO: This could use a better error message, possibly with links to Kani documentation.
+                // New users may encounter this and could use a pointer to how to write proof harnesses.
+                println!("No proof harnesses (functions with #[kani::proof]) were found to verify.");
+            }
         }
 
         #[cfg(feature = "unsound_experiments")]
