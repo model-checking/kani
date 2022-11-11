@@ -152,7 +152,9 @@ impl KaniSession {
             } else {
                 // TODO: This could use a better error message, possibly with links to Kani documentation.
                 // New users may encounter this and could use a pointer to how to write proof harnesses.
-                println!("No proof harnesses (functions with #[kani::proof]) were found to verify.");
+                println!(
+                    "No proof harnesses (functions with #[kani::proof]) were found to verify."
+                );
             }
         }
 
