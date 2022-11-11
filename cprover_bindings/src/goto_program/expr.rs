@@ -444,10 +444,10 @@ impl Expr {
     }
 
     pub fn vector_expr(typ: Type, elems: Vec<Expr>) -> Self {
-        if let Type::Vector { data } = typ.clone() {
-            assert_eq!(data.size as usize, elems.len());
+        if let Type::Vector { size, typ: value_typ } = typ.clone() {
+            assert_eq!(size as usize, elems.len());
             assert!(
-                elems.iter().all(|x| x.typ == *data.typ),
+                elems.iter().all(|x| x.typ == *value_typ),
                 "Vector type and value types don't match: \n{:?}\n{:?}",
                 typ,
                 elems

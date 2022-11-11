@@ -730,11 +730,11 @@ impl ToIrep for Type {
                     (IrepId::ReturnType, return_type.to_irep(mm)),
                 ],
             },
-            Type::Vector { data } => {
-                let size = Expr::int_constant(data.size, Type::ssize_t());
+            Type::Vector { typ, size } => {
+                let size = Expr::int_constant(*size, Type::ssize_t());
                 Irep {
                     id: IrepId::Vector,
-                    sub: vec![data.typ.to_irep(mm)],
+                    sub: vec![typ.to_irep(mm)],
                     named_sub: linear_map![(IrepId::Size, size.to_irep(mm))],
                 }
             }

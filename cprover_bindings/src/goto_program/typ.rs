@@ -71,30 +71,7 @@ pub enum Type {
     /// Packed SIMD vectors
     /// In CBMC/gcc, variables of this type are declared as:
     /// `typ __attribute__((vector_size (size * sizeof(typ)))) var;`
-    Vector { data: VectorData },
-}
-
-/// Contains information about SIMD vector types
-#[derive(Debug, Clone)]
-pub struct VectorData {
-    pub typ: Box<Type>,
-    pub size: u64,
-}
-
-impl PartialEq for VectorData {
-    /// We redefine equality for vector types to account for all cases:
-    ///  * Regular operators (e.g., '+'): They return the same type and don't
-    ///    need this definition.
-    ///  * Comparison operators (e.g., '=='): The return type must have the same
-    ///    length as the operand types and an integer base type.
-    /// Therefore, we relax the definition of type equality for vector types to
-    /// avoid type-checking errors in those cases.
-    /// <https://github.com/rust-lang/rfcs/blob/master/text/1199-simd-infrastructure.md>
-    ///
-    /// Note: Vector comparison operations are created and type-checked by [`Expr::vector_cmp`].
-    fn eq(&self, other: &VectorData) -> bool {
-        self.size == other.size
-    }
+    Vector { typ: Box<Type>, size: u64 },
 }
 
 /// Machine dependent integers: `bool`, `char`, `int`, `size_t`, etc.
@@ -281,10 +258,9 @@ impl Type {
     pub fn base_type(&self) -> Option<&Type> {
         let concrete = self.unwrap_typedef();
         match concrete {
-            Array { typ, .. } | CBitField { typ, .. } | FlexibleArray { typ } | Pointer { typ } => {
+            Array { typ, .. } | CBitField { typ, .. } | FlexibleArray { typ } | Pointer { typ } | Vector { typ, .. }=> {
                 Some(typ)
             }
-            Vector { data } => Some(&*data.typ),
             _ => None,
         }
     }
@@ -334,7 +310,7 @@ impl Type {
     pub fn len(&self) -> Option<u64> {
         match self {
             Array { size, .. } => Some(*size),
-            Vector { data } => Some(data.size),
+            Vector { size, .. } => Some(*size),
             _ => None,
         }
     }
@@ -393,7 +369,7 @@ impl Type {
             // It's possible this should also have size 0, like Code, but we have not been
             // able to generate a unit test, so leaving it unreachable for now.
             VariadicCode { .. } => unreachable!("VariadicCode doesn't have a sizeof"),
-            Vector { data } => data.typ.sizeof_in_bits(st) * data.size,
+            Vector { typ, size } => typ.sizeof_in_bits(st) * size,
         }
     }
 
@@ -1233,8 +1209,7 @@ impl Type {
     // `size` is the number of elements (e.g., a SIMD vector of 4 integers)
     pub fn vector(typ: Type, size: u64) -> Self {
         assert!(typ.is_numeric());
-        let data = VectorData { typ: Box::new(typ), size };
-        Type::Vector { data }
+        Type::Vector { typ: Box::new(typ), size }
     }
 
     /// `void *`
@@ -1341,9 +1316,9 @@ impl Type {
                 }
             }
             UnionTag(tag) => st.lookup(*tag).unwrap().typ.zero_initializer(st),
-            Vector { data } => {
-                let zero = data.typ.zero_initializer(st);
-                let size = (data.size).try_into().unwrap();
+            Vector { typ, size } => {
+                let zero = typ.zero_initializer(st);
+                let size = (*size).try_into().unwrap();
                 let elems = vec![zero; size];
                 Expr::vector_expr(self.clone(), elems)
             }
@@ -1441,9 +1416,8 @@ impl Type {
                 let return_string = return_type.to_identifier();
                 format!("variadic_code_from_{parameter_string}_to_{return_string}")
             }
-            Type::Vector { data } => {
-                let size = data.size;
-                let typ = data.typ.to_identifier();
+            Type::Vector { typ, size } => {
+                let typ = typ.to_identifier();
                 format!("vec_of_{size}_{typ}")
             }
         }
