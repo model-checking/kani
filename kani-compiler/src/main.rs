@@ -118,7 +118,7 @@ fn main() -> Result<(), &'static str> {
             stubbing::collect_stub_mappings(&rustc_args).or(Err("Failed to compile crate"))?;
         let harness = matches.get_one::<String>(parser::HARNESS).unwrap();
         let mapping = find_harness_stub_mapping(harness, all_stub_mappings)
-            .ok_or("Could not find specified harness in stub mappings")?;
+            .unwrap_or_else(|| FxHashMap::default());
         rustc_args.push(stubbing::mk_rustc_arg(mapping));
     }
 
