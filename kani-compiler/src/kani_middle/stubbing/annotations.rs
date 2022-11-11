@@ -66,29 +66,26 @@ impl CollectorCallbacks {
     /// original function/method, and its stub). Returns `None` and errors if
     /// the attribute's arguments are not two paths.
     fn extract_stubbing_pair(tcx: TyCtxt, attr: &Attribute) -> Option<(String, String)> {
-        if let Some(args) = extract_path_arguments(attr) {
-            if args.len() == 2 {
-                // TODO: We need to do actual path resolution, instead of just
-                // taking these names verbatim.
-                // <https://github.com/model-checking/kani/issues/1866>
-                return Some((args[0].clone(), args[1].clone()));
-            } else {
-                tcx.sess.span_err(
-                    attr.span,
-                    format!(
-                        "Attribute `kani::stub` takes two path arguments; found {}",
-                        args.len()
-                    ),
-                );
-            }
-        } else {
+        let args = extract_path_arguments(attr);
+        if args.len() != 2 {
+            tcx.sess.span_err(
+                attr.span,
+                format!("Attribute `kani::stub` takes two path arguments; found {}", args.len()),
+            );
+            return None;
+        }
+        if args.iter().find(|arg| arg.is_none()).is_some() {
             tcx.sess.span_err(
                 attr.span,
                 "Attribute `kani::stub` takes two path arguments; \
                 found argument that is not a path",
             );
+            return None;
         }
-        None
+        // TODO: We need to do actual path resolution, instead of just
+        // taking these names verbatim.
+        // <https://github.com/model-checking/kani/issues/1866>
+        Some((args[0].as_ref().unwrap().clone(), args[1].as_ref().unwrap().clone()))
     }
 
     /// Updates the running map `stub_pairs` that maps a function/method to its
