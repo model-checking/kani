@@ -258,9 +258,11 @@ impl Type {
     pub fn base_type(&self) -> Option<&Type> {
         let concrete = self.unwrap_typedef();
         match concrete {
-            Array { typ, .. } | CBitField { typ, .. } | FlexibleArray { typ } | Pointer { typ } | Vector { typ, .. }=> {
-                Some(typ)
-            }
+            Array { typ, .. }
+            | CBitField { typ, .. }
+            | FlexibleArray { typ }
+            | Pointer { typ }
+            | Vector { typ, .. } => Some(typ),
             _ => None,
         }
     }
