@@ -1,5 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+//! This module contains code related to the MIR-to-MIR pass that performs the
+//! stubbing of functions and methods.
 
 use lazy_static::lazy_static;
 use regex::Regex;
