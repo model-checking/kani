@@ -48,7 +48,7 @@ impl Callbacks for CollectorCallbacks {
                 let mut stub_pairs = FxHashMap::default();
                 for (name, attr) in other {
                     if name == "stub" {
-                        Self::update_stub_mapping(tcx, attr, &mut stub_pairs);
+                        update_stub_mapping(tcx, attr, &mut stub_pairs);
                     }
                 }
                 let harness_name = tcx.def_path_str(def_id);
@@ -61,51 +61,45 @@ impl Callbacks for CollectorCallbacks {
     }
 }
 
-impl CollectorCallbacks {
-    /// Given a `kani::stub` attribute, tries to extract a pair of paths (the
-    /// original function/method, and its stub). Returns `None` and errors if
-    /// the attribute's arguments are not two paths.
-    fn extract_stubbing_pair(tcx: TyCtxt, attr: &Attribute) -> Option<(String, String)> {
-        let args = extract_path_arguments(attr);
-        if args.len() != 2 {
-            tcx.sess.span_err(
-                attr.span,
-                format!("Attribute `kani::stub` takes two path arguments; found {}", args.len()),
-            );
-            return None;
-        }
-        if args.iter().find(|arg| arg.is_none()).is_some() {
-            tcx.sess.span_err(
-                attr.span,
-                "Attribute `kani::stub` takes two path arguments; \
-                found argument that is not a path",
-            );
-            return None;
-        }
-        // TODO: We need to do actual path resolution, instead of just
-        // taking these names verbatim.
-        // <https://github.com/model-checking/kani/issues/1866>
-        Some((args[0].as_ref().unwrap().clone(), args[1].as_ref().unwrap().clone()))
+/// Given a `kani::stub` attribute, tries to extract a pair of paths (the
+/// original function/method, and its stub). Returns `None` and errors if the
+/// attribute's arguments are not two paths.
+fn extract_stubbing_pair(tcx: TyCtxt, attr: &Attribute) -> Option<(String, String)> {
+    let args = extract_path_arguments(attr);
+    if args.len() != 2 {
+        tcx.sess.span_err(
+            attr.span,
+            format!("Attribute `kani::stub` takes two path arguments; found {}", args.len()),
+        );
+        return None;
     }
+    if args.iter().find(|arg| arg.is_none()).is_some() {
+        tcx.sess.span_err(
+            attr.span,
+            "Attribute `kani::stub` takes two path arguments; \
+                found argument that is not a path",
+        );
+        return None;
+    }
+    // TODO: We need to do actual path resolution, instead of just
+    // taking these names verbatim.
+    // <https://github.com/model-checking/kani/issues/1866>
+    Some((args[0].as_ref().unwrap().clone(), args[1].as_ref().unwrap().clone()))
+}
 
-    /// Updates the running map `stub_pairs` that maps a function/method to its
-    /// stub. Errors if a function/method is mapped more than once.
-    fn update_stub_mapping(
-        tcx: TyCtxt,
-        attr: &Attribute,
-        stub_pairs: &mut FxHashMap<String, String>,
-    ) {
-        if let Some((original, replacement)) = Self::extract_stubbing_pair(tcx, attr) {
-            let other = stub_pairs.insert(original.clone(), replacement.clone());
-            if let Some(other) = other {
-                tcx.sess.span_err(
-                    attr.span,
-                    format!(
-                        "duplicate stub mapping: {} mapped to {} and {}",
-                        original, replacement, other
-                    ),
-                );
-            }
+/// Updates the running map `stub_pairs` that maps a function/method to its
+/// stub. Errors if a function/method is mapped more than once.
+fn update_stub_mapping(tcx: TyCtxt, attr: &Attribute, stub_pairs: &mut FxHashMap<String, String>) {
+    if let Some((original, replacement)) = extract_stubbing_pair(tcx, attr) {
+        let other = stub_pairs.insert(original.clone(), replacement.clone());
+        if let Some(other) = other {
+            tcx.sess.span_err(
+                attr.span,
+                format!(
+                    "duplicate stub mapping: {} mapped to {} and {}",
+                    original, replacement, other
+                ),
+            );
         }
     }
 }
