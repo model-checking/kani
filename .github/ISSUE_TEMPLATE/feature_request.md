@@ -1,8 +1,12 @@
 ---
 name: Feature Request
-about: Create a feature request for Kani
-labels: 
+about: Request a new feature or improvement for Kani
+title: ''
+labels: "[C] Feature / Enhancement"
+assignees: ''
+
 ---
+
 <!--
 If this is a security issue, please report it following the
 [security reporting procedure](https://github.com/model-checking/kani/security/policy).
