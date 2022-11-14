@@ -609,7 +609,7 @@ impl<'tcx> GotocCtx<'tcx> {
             "simd_add" => {
                 unstable_codegen!(codegen_simd_with_overflow_check!(plus, add_overflow_p))
             }
-            "simd_and" => unstable_codegen!(codegen_intrinsic_binop!(bitand)),
+            "simd_and" => codegen_intrinsic_binop!(bitand),
             "simd_div" => unstable_codegen!(codegen_intrinsic_binop!(div)),
             "simd_eq" => self.codegen_simd_cmp(Expr::vector_eq, fargs, p, span, farg_types, ret_ty),
             "simd_extract" => {
@@ -628,7 +628,7 @@ impl<'tcx> GotocCtx<'tcx> {
             "simd_ne" => {
                 self.codegen_simd_cmp(Expr::vector_neq, fargs, p, span, farg_types, ret_ty)
             }
-            "simd_or" => unstable_codegen!(codegen_intrinsic_binop!(bitor)),
+            "simd_or" => codegen_intrinsic_binop!(bitor),
             "simd_rem" => unstable_codegen!(codegen_intrinsic_binop!(rem)),
             "simd_shl" => unstable_codegen!(codegen_intrinsic_binop!(shl)),
             "simd_shr" => {
@@ -643,7 +643,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             // "simd_shuffle#" => handled in an `if` preceding this match
             "simd_sub" => unstable_codegen!(codegen_simd_with_overflow_check!(sub, sub_overflow_p)),
-            "simd_xor" => unstable_codegen!(codegen_intrinsic_binop!(bitxor)),
+            "simd_xor" => codegen_intrinsic_binop!(bitxor),
             "size_of" => codegen_intrinsic_const!(),
             "size_of_val" => codegen_size_align!(size),
             "sqrtf32" => unstable_codegen!(codegen_simple_intrinsic!(Sqrtf)),
