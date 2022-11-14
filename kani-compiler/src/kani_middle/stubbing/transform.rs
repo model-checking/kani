@@ -60,5 +60,8 @@ fn get_stub_mapping(tcx: TyCtxt) -> Option<FxHashMap<String, String>> {
 
 /// Tries to find the `DefId` of a function/method that matches the path `path`.
 fn get_def_id(tcx: TyCtxt, path: &str) -> Option<DefId> {
+    // TODO: This linear scan is potentially inefficient; we should find another
+    // way of resolving the path to a `DefId`.
+    // <https://github.com/model-checking/kani/issues/1894>
     tcx.iter_local_def_id().map(LocalDefId::to_def_id).find(|&id| tcx.def_path_str(id) == path)
 }
