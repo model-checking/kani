@@ -108,7 +108,7 @@ impl<'tcx> GotocCtx<'tcx> {
             })
             .collect::<Vec<_>>();
 
-        type_members.iter().rev().fold(boxed_value, |value, (name, typ)| {
+        type_members.iter().rfold(boxed_value, |value, (name, typ)| {
             Expr::struct_expr_with_nondet_fields(
                 typ.clone(),
                 btree_string_map![(*name, value),],
