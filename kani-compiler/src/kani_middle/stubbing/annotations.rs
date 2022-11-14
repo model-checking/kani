@@ -13,8 +13,8 @@ use rustc_middle::ty::TyCtxt;
 
 use crate::kani_middle::attributes::{extract_path_arguments, partition_kanitool_attributes};
 
-/// Collects the stubs from the harnesses in a crate, running rustc with the
-/// supplied arguments `rustc_args`.
+/// Collects the stubs from the harnesses in a crate, running rustc (to
+/// expansion) with the supplied arguments `rustc_args`.
 pub fn collect_stub_mappings(
     rustc_args: &[String],
 ) -> Result<FxHashMap<String, FxHashMap<String, String>>, ErrorGuaranteed> {

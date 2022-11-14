@@ -16,6 +16,9 @@ pub fn transform(tcx: TyCtxt, def_id: DefId) -> Option<&Body> {
         let name = tcx.def_path_str(def_id);
         if let Some(replacement) = mapping.get(&name) {
             if let Some(replacement_id) = get_def_id(tcx, replacement) {
+                // TODO: We need to perform validation here (e.g., check that
+                // the replacement is compatible with the original function).
+                // <https://github.com/model-checking/kani/issues/1892>
                 let new_body = tcx.optimized_mir(replacement_id).clone();
                 return Some(tcx.arena.alloc(new_body));
             } else {
