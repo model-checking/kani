@@ -1,8 +1,12 @@
 ---
 name: Bug Report
 about: Create a bug report for Kani
-labels: bug
+title: ''
+labels: "[C] Bug"
+assignees: ''
+
 ---
+
 <!--
 If this is a security issue, please report it following the
 [security reporting procedure](https://github.com/model-checking/kani/security/policy).
