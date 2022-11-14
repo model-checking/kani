@@ -753,11 +753,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let src_goto_expr = self.codegen_operand(o);
                 let src_mir_type = self.operand_ty(o);
                 let dst_mir_type = t;
-                if src_mir_type == dst_mir_type {
-                    src_goto_expr
-                } else {
-                    self.codegen_unsized_cast(src_goto_expr, src_mir_type, dst_mir_type)
-                }
+                self.codegen_unsized_cast(src_goto_expr, src_mir_type, dst_mir_type)
             }
         }
     }
@@ -766,7 +762,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// -> (Built-in / Smart) Pointer from array to slice.
     /// -> (Built-in / Smart) Pointer from sized type to dyn trait.
     /// -> (Built-in / Smart) Pointer from dyn trait to dyn trait.
-    ///     - E.g.: `(dyn Any + Send)` to `&dyn Any`.
+    ///     - E.g.: `&(dyn Any + Send)` to `&dyn Any`.
     /// -> All the cases above where the pointer refers to a parametrized struct where the type
     /// parameter is the target of the unsize casting.
     ///     - E.g.: `RcBox<String>` to `RcBox<dyn Any>`
@@ -776,6 +772,12 @@ impl<'tcx> GotocCtx<'tcx> {
         src_mir_type: Ty<'tcx>,
         dst_mir_type: Ty<'tcx>,
     ) -> Expr {
+        // The MIR may include casting that isn't necessary. Detect this early on and return the
+        // expression for the RHS.
+        if src_mir_type == dst_mir_type {
+            return src_goto_expr;
+        }
+
         // Collect some information about the unsized coercion.
         let mut path = self.collect_unsized_cast_path(src_goto_expr, src_mir_type, dst_mir_type);
         debug!(cast=?path, "codegen_unsized_cast");
@@ -786,7 +788,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         // Iterate from the back of the path initializing each struct that requires the coercion.
         // This code is required for handling smart pointers.
-        path.into_iter().rev().fold(initial_expr, |coercion_expr, (info, src_expr)| {
+        path.into_iter().rfold(initial_expr, |coercion_expr, (info, src_expr)| {
             self.codegen_struct_unsized_coercion(src_expr, info, coercion_expr)
         })
     }
@@ -803,10 +805,13 @@ impl<'tcx> GotocCtx<'tcx> {
         CoerceUnsizedIterator::new(self.tcx, src_mir_type, dst_mir_type)
             .map(|info| {
                 let expr = if let Some(field_symbol) = info.field {
+                    // Generate the expression for the current structure and save the type for
+                    // the divergent field.
                     let field_name = field_symbol.as_str().intern();
                     let member_type = field_type.clone().member(field_name, &self.symbol_table);
                     std::mem::replace(&mut field_type, member_type)
                 } else {
+                    // The end of our traverse. Generate the expression for the current type.
                     field_type.clone()
                 };
                 (info, expr)
