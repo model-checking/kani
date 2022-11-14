@@ -73,7 +73,7 @@ fn extract_stubbing_pair(tcx: TyCtxt, attr: &Attribute) -> Option<(String, Strin
         );
         return None;
     }
-    if args.iter().find(|arg| arg.is_none()).is_some() {
+    if args.iter().any(|arg| arg.is_none()) {
         tcx.sess.span_err(
             attr.span,
             "Attribute `kani::stub` takes two path arguments; \

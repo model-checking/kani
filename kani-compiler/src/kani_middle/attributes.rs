@@ -59,7 +59,7 @@ pub fn extract_path_arguments(attr: &Attribute) -> Vec<Option<String>> {
     }
     let mut paths = Vec::new();
     for arg in attr_args.unwrap() {
-        let entry = arg.meta_item().map(extract_path).flatten();
+        let entry = arg.meta_item().and_then(extract_path);
         paths.push(entry)
     }
     paths

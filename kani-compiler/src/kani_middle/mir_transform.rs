@@ -20,6 +20,7 @@ fn run_passes<'tcx, const EXTERN: bool>(tcx: TyCtxt<'tcx>, def_id: DefId) -> &Bo
         rustc_interface::DEFAULT_QUERY_PROVIDERS.optimized_mir
     };
     let body = optimized_mir(tcx, def_id);
+
     run_kani_passes(tcx, def_id, body)
 }
 
