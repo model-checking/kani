@@ -732,7 +732,7 @@ impl Expr {
         for field in non_padding_fields {
             let field_typ = field.field_typ().unwrap();
             let value = components.get(&field.name()).unwrap();
-            assert_eq!(value.typ(), field_typ);
+            assert_eq!(value.typ(), field_typ, "Unexpected type for {:?}", field.name());
         }
 
         let values = fields

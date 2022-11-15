@@ -24,9 +24,7 @@ use rustc_target::abi::{
     VariantIdx, Variants,
 };
 use rustc_target::spec::abi::Abi;
-use std::collections::BTreeMap;
 use std::iter;
-use std::iter::FromIterator;
 use tracing::{debug, trace, warn};
 use ty::layout::HasParamEnv;
 
@@ -1166,7 +1164,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// 3. references to structs whose last field is a unsized object (slice / trait)
     ///    - `matches!(pointee_type.kind(), ty::Adt(..) if self.is_unsized(t))
     ///
-    pub fn codegen_fat_ptr(&mut self, pointee_type: Ty<'tcx>) -> Type {
+    fn codegen_fat_ptr(&mut self, pointee_type: Ty<'tcx>) -> Type {
         assert!(
             !self.use_thin_pointer(pointee_type),
             "Generating a fat pointer for a type requiring a thin pointer: {:?}",
@@ -1781,24 +1779,6 @@ impl<'tcx> GotocCtx<'tcx> {
 
 /// Use maps instead of lists to manage mir struct components.
 impl<'tcx> GotocCtx<'tcx> {
-    /// A mapping from mir field names to mir field types for a mir struct (for a single-variant adt)
-    pub fn mir_struct_field_types(
-        &self,
-        struct_type: Ty<'tcx>,
-    ) -> BTreeMap<InternedString, Ty<'tcx>> {
-        match struct_type.kind() {
-            ty::Adt(adt_def, adt_substs) if adt_def.variants().len() == 1 => {
-                let fields = &adt_def.variants().get(VariantIdx::from_u32(0)).unwrap().fields;
-                BTreeMap::from_iter(
-                    fields.iter().map(|field| {
-                        (field.name.to_string().into(), field.ty(self.tcx, adt_substs))
-                    }),
-                )
-            }
-            _ => unreachable!("Expected a single-variant ADT. Found {:?}", struct_type),
-        }
-    }
-
     /// Extract a trait type from a `Struct<dyn T>`.
     /// Note that `T` must be the last element of the struct.
     /// This also handles nested cases: `Struct<Struct<dyn T>>` returns `dyn T`
