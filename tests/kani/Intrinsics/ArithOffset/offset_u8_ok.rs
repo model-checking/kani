@@ -17,8 +17,8 @@ fn test_arith_offset() {
         assert_eq!(*arith_offset(ptr, 2).sub(1) as char, '2');
 
         // This is okay because it's one byte past the object,
-        // but there is nothing we can assert about it
-        let x = arith_offset(ptr, 3);
+        // but dereferencing it is UB
+        let _x = arith_offset(ptr, 3);
 
         // Check that the results are the same with a pointer
         // that goes 1 element behind the original one
