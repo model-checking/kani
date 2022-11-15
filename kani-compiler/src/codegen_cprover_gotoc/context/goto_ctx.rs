@@ -59,6 +59,7 @@ pub struct GotocCtx<'tcx> {
     pub current_fn: Option<CurrentFnCtx<'tcx>>,
     pub type_map: FxHashMap<InternedString, Ty<'tcx>>,
     /// map from symbol identifier to string literal
+    /// TODO: consider making the map from Expr to String instead
     pub str_literals: FxHashMap<InternedString, String>,
     pub proof_harnesses: Vec<HarnessMetadata>,
     pub test_harnesses: Vec<HarnessMetadata>,
