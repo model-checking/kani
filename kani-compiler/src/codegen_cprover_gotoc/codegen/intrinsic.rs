@@ -1414,6 +1414,30 @@ impl<'tcx> GotocCtx<'tcx> {
     /// We perform some typechecks here for two reasons:
     ///  * In the case of SIMD intrinsics, these checks depend on the backend.
     ///  * We can emit a friendly error here, but not in `cprover_bindings`.
+    ///
+    /// We check the following:
+    ///  1. The return type must be the same length as the input types. The
+    ///     argument types have already been checked to ensure they have the same
+    ///     length (an error would've been emitted otherwise), so we can compare
+    ///     the return type against any of the argument types.
+    ///
+    ///     An example that triggers this error:
+    ///     ```rust
+    ///     let x = u64x2(0, 0);
+    ///     let y = u64x2(0, 1);
+    ///     unsafe { let invalid_simd: u32x4 = simd_eq(x, y); }
+    ///     ```
+    ///     We compare two `u64x2` vectors but try to store the result in a `u32x4`.
+    ///  2. The return type must have an integer base type.
+    ///
+    ///     An example that triggers this error:
+    ///     ```rust
+    ///     let x = u64x2(0, 0);
+    ///     let y = u64x2(0, 1);
+    ///     unsafe { let invalid_simd: f32x2 = simd_eq(x, y); }
+    ///     ```
+    ///     We compare two `u64x2` vectors but try to store the result in a `f32x4`,
+    ///     which is composed of `f32` values.
     fn codegen_intrinsic_simd_cmp<F: FnOnce(Expr, Expr, Type) -> Expr>(
         &mut self,
         f: F,
@@ -1427,18 +1451,6 @@ impl<'tcx> GotocCtx<'tcx> {
         let arg1 = fargs.remove(0);
         let arg2 = fargs.remove(0);
 
-        // The return type must be the same length as the input types. The
-        // argument types have already been checked to ensure they have the same
-        // length (an error would've been emitted otherwise), so we can compare
-        // the return type against any of the argument types.
-        //
-        // An example that triggers this error:
-        // ```rust
-        // let x = u64x2(0, 0);
-        // let y = u64x2(0, 1);
-        // unsafe { let invalid_simd: u32x4 = simd_eq(x, y); }
-        // ```
-        // We compare two `u64x2` vectors but try to store the result in a `u32x4`.
         if arg1.typ().len().unwrap() != ret_typ.len().unwrap() {
             let err_msg = format!(
                 "expected return type with length {} (same as input type `{}`), \
@@ -1450,16 +1462,7 @@ impl<'tcx> GotocCtx<'tcx> {
             );
             self.tcx.sess.span_err(span.unwrap(), err_msg);
         }
-        // The return type must have an integer base type.
-        //
-        // An example that triggers this error:
-        // ```rust
-        // let x = u64x2(0, 0);
-        // let y = u64x2(0, 1);
-        // unsafe { let invalid_simd: f32x2 = simd_eq(x, y); }
-        // ```
-        // We compare two `u64x2` vectors but try to store the result in a `f32x4`,
-        // which is composed of `f32` values.
+
         if !ret_typ.base_type().unwrap().is_integer() {
             let (_, rust_base_type) = rust_ret_type.simd_size_and_type(self.tcx);
             let err_msg = format!(
@@ -1469,6 +1472,7 @@ impl<'tcx> GotocCtx<'tcx> {
             self.tcx.sess.span_err(span.unwrap(), err_msg);
         }
         self.tcx.sess.abort_if_errors();
+
         // Create the vector comparison expression
         let e = f(arg1, arg2, ret_typ);
         self.codegen_expr_to_place(p, e)
