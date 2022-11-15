@@ -348,6 +348,21 @@ mod test {
         }
     }
 
+    proptest! {
+    #[test]
+    #[cfg_attr(kani, kani::proof)]
+    fn possible_values_are_even(
+            x in
+        crate::prop_oneof![
+                    1 => Just(0 as u32),
+                    2 => Just(2 as u32),
+                    0 => Just(3 as u32), // cannot be picked
+        ]
+    ) {
+            assert_eq!(x % 2, 0, "Just(3) cannot be picked b/c weight is 0");
+    }
+    }
+
     #[test]
     #[cfg_attr(kani, kani::proof)]
     fn test_pass() {
