@@ -583,12 +583,21 @@ dependencies = [
 
 [[package]]
 name = "kani_macros"
+<<<<<<< HEAD
 version = "0.28.0"
 dependencies = [
  "proc-macro-error",
  "proc-macro2",
  "quote",
  "syn 1.0.109",
+=======
+version = "0.5.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+ "uuid",
+>>>>>>> Add procedural macros for function contracts. (#1552)
 ]
 
 [[package]]
@@ -1426,8 +1435,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1865806a559042e51ab5414598446a5871b561d21b6764f2eabb0dd481d880a6"
 
 [[package]]
+<<<<<<< HEAD
 name = "utf8parse"
 version = "0.2.1"
+=======
+name = "uuid"
+version = "1.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd6469f4314d5f1ffec476e05f17cc9a78bc7a27a6a857842170bdf8d6f98d2f"
+dependencies = [
+ "getrandom",
+]
+
+[[package]]
+name = "valuable"
+version = "0.1.0"
+>>>>>>> Add procedural macros for function contracts. (#1552)
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "711b9620af191e0cdc7468a8d14e709c3dcdb115b36f838e601583af800a370a"
 
