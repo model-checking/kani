@@ -611,33 +611,69 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             "simd_and" => unstable_codegen!(codegen_intrinsic_binop!(bitand)),
             "simd_div" => unstable_codegen!(codegen_intrinsic_binop!(div)),
-            "simd_eq" => {
-                self.codegen_intrinsic_simd_cmp(Expr::vector_eq, fargs, p, span, cbmc_ret_ty, farg_types, ret_ty)
-            }
+            "simd_eq" => self.codegen_intrinsic_simd_cmp(
+                Expr::vector_eq,
+                fargs,
+                p,
+                span,
+                cbmc_ret_ty,
+                farg_types,
+                ret_ty,
+            ),
             "simd_extract" => {
                 let _vec = fargs.remove(0);
                 let _index = fargs.remove(0);
                 unstable_codegen!(self.codegen_expr_to_place(p, vec.index_array(index)))
             }
-            "simd_ge" => {
-                self.codegen_intrinsic_simd_cmp(Expr::vector_ge, fargs, p, span, cbmc_ret_ty, farg_types, ret_ty)
-            }
-            "simd_gt" => {
-                self.codegen_intrinsic_simd_cmp(Expr::vector_gt, fargs, p, span, cbmc_ret_ty, farg_types, ret_ty)
-            }
+            "simd_ge" => self.codegen_intrinsic_simd_cmp(
+                Expr::vector_ge,
+                fargs,
+                p,
+                span,
+                cbmc_ret_ty,
+                farg_types,
+                ret_ty,
+            ),
+            "simd_gt" => self.codegen_intrinsic_simd_cmp(
+                Expr::vector_gt,
+                fargs,
+                p,
+                span,
+                cbmc_ret_ty,
+                farg_types,
+                ret_ty,
+            ),
             "simd_insert" => {
                 unstable_codegen!(self.codegen_intrinsic_simd_insert(fargs, p, cbmc_ret_ty, loc))
             }
-            "simd_le" => {
-                self.codegen_intrinsic_simd_cmp(Expr::vector_le, fargs, p, span, cbmc_ret_ty, farg_types, ret_ty)
-            }
-            "simd_lt" => {
-                self.codegen_intrinsic_simd_cmp(Expr::vector_lt, fargs, p, span, cbmc_ret_ty, farg_types, ret_ty)
-            }
+            "simd_le" => self.codegen_intrinsic_simd_cmp(
+                Expr::vector_le,
+                fargs,
+                p,
+                span,
+                cbmc_ret_ty,
+                farg_types,
+                ret_ty,
+            ),
+            "simd_lt" => self.codegen_intrinsic_simd_cmp(
+                Expr::vector_lt,
+                fargs,
+                p,
+                span,
+                cbmc_ret_ty,
+                farg_types,
+                ret_ty,
+            ),
             "simd_mul" => unstable_codegen!(codegen_simd_with_overflow_check!(mul, mul_overflow_p)),
-            "simd_ne" => {
-                self.codegen_intrinsic_simd_cmp(Expr::vector_neq, fargs, p, span, cbmc_ret_ty, farg_types, ret_ty)
-            }
+            "simd_ne" => self.codegen_intrinsic_simd_cmp(
+                Expr::vector_neq,
+                fargs,
+                p,
+                span,
+                cbmc_ret_ty,
+                farg_types,
+                ret_ty,
+            ),
             "simd_or" => unstable_codegen!(codegen_intrinsic_binop!(bitor)),
             "simd_rem" => unstable_codegen!(codegen_intrinsic_binop!(rem)),
             "simd_shl" => unstable_codegen!(codegen_intrinsic_binop!(shl)),
@@ -1428,8 +1464,7 @@ impl<'tcx> GotocCtx<'tcx> {
             let (_, rust_base_type) = rust_ret_type.simd_size_and_type(self.tcx);
             let err_msg = format!(
                 "expected return type with integer elements, found `{}` with non-integer `{}`",
-                rust_ret_type,
-                rust_base_type,
+                rust_ret_type, rust_base_type,
             );
             self.tcx.sess.span_err(span.unwrap(), err_msg);
         }
