@@ -779,7 +779,7 @@ impl<'tcx> GotocCtx<'tcx> {
             // [T] -> memory location (flexible array)
             // Note: This is not valid C but CBMC seems to be ok with it.
             ty::Slice(e) => self.codegen_ty(*e).flexible_array_of(),
-            ty::Str => Type::c_char().flexible_array_of(),
+            ty::Str => Type::unsigned_int(8).flexible_array_of(),
             ty::Ref(_, t, _) | ty::RawPtr(ty::TypeAndMut { ty: t, .. }) => self.codegen_ty_ref(*t),
             ty::FnDef(def_id, substs) => {
                 let instance =
@@ -1180,7 +1180,7 @@ impl<'tcx> GotocCtx<'tcx> {
             let pretty_name = format!("&{}", self.ty_pretty_name(pointee_type));
             let element_type = match pointee_type.kind() {
                 ty::Slice(elt_type) => self.codegen_ty(*elt_type),
-                ty::Str => Type::c_char(),
+                ty::Str => Type::unsigned_int(8),
                 // For adt, see https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp
                 ty::Adt(..) => self.codegen_ty(pointee_type),
                 kind => unreachable!("Generating a slice fat pointer to {:?}", kind),
