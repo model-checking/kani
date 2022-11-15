@@ -1444,12 +1444,12 @@ impl<'tcx> GotocCtx<'tcx> {
         mut fargs: Vec<Expr>,
         p: &Place<'tcx>,
         span: Option<Span>,
-        ret_typ: Type,
         rust_arg_types: &[Ty<'tcx>],
         rust_ret_type: Ty<'tcx>,
     ) -> Stmt {
         let arg1 = fargs.remove(0);
         let arg2 = fargs.remove(0);
+        let ret_typ = self.codegen_ty(rust_ret_type);
 
         if arg1.typ().len().unwrap() != ret_typ.len().unwrap() {
             let err_msg = format!(
