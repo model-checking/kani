@@ -8,6 +8,15 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::Mutex;
+use tracing::level_filters::LevelFilter;
+use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Registry};
+use tracing_tree::HierarchicalLayer;
+
+/// Environment variable used to control this session log tracing.
+/// This is the same variable used to control `kani-compiler` logs. Note that you can still control
+/// the driver logs separately, by using the logger directives to  select the kani-driver crate.
+/// `export KANI_LOG=kani_driver=debug`.
+const LOG_ENV_VAR: &str = "KANI_LOG";
 
 /// Contains information about the execution environment and arguments that affect operations
 pub struct KaniSession {
@@ -42,6 +51,7 @@ enum InstallType {
 
 impl KaniSession {
     pub fn new(args: KaniArgs) -> Result<Self> {
+        init_logger(&args);
         let install = InstallType::new()?;
 
         Ok(KaniSession {
@@ -259,4 +269,24 @@ fn expect_path(path: PathBuf) -> Result<PathBuf> {
             path.display()
         );
     }
+}
+
+/// Initialize the logger using the KANI_LOG environment variable and `--debug` argument.
+fn init_logger(args: &KaniArgs) {
+    let filter = EnvFilter::from_env(LOG_ENV_VAR);
+    let filter = if args.debug { filter.add_directive(LevelFilter::DEBUG.into()) } else { filter };
+
+    // Use a hierarchical view for now.
+    let use_colors = atty::is(atty::Stream::Stdout);
+    let subscriber = Registry::default().with(filter);
+    let subscriber = subscriber.with(
+        HierarchicalLayer::default()
+            .with_writer(std::io::stderr)
+            .with_indent_lines(true)
+            .with_ansi(use_colors)
+            .with_targets(true)
+            .with_verbose_exit(true)
+            .with_indent_amount(4),
+    );
+    tracing::subscriber::set_global_default(subscriber).unwrap();
 }
