@@ -18,7 +18,7 @@ fn test_arith_offset() {
 
         // This is okay because it's one byte past the object,
         // but there is nothing we can assert about it
-        let x = *arith_offset(ptr, 3);
+        let x = arith_offset(ptr, 3);
 
         // Check that the results are the same with a pointer
         // that goes 1 element behind the original one
