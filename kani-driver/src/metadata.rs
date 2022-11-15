@@ -153,13 +153,7 @@ impl KaniSession {
             let harness = find_proof_harness(name, &metadata.proof_harnesses)?;
             return Ok(vec![harness.clone()]);
         }
-        if metadata.proof_harnesses.is_empty() {
-            // TODO: This could use a better error message, possibly with links to Kani documentation.
-            // New users may encounter this and could use a pointer to how to write proof harnesses.
-            bail!("No proof harnesses (functions with #[kani::proof]) were found to verify.");
-        } else {
-            Ok(metadata.proof_harnesses.clone())
-        }
+        Ok(metadata.proof_harnesses.clone())
     }
 }
 

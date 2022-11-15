@@ -9,6 +9,7 @@ use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use tracing::{debug, trace};
 
 /// The outputs of kani-compiler being invoked via cargo on a project.
 pub struct CargoOutputs {
@@ -87,6 +88,7 @@ impl KaniSession {
         kani_args.extend_from_slice(&rustc_args);
 
         let packages = packages_to_verify(&self.args, &metadata);
+        if packages.is_empty() {}
         for package in packages {
             for target in package_targets(&self.args, package) {
                 let mut cmd = Command::new("cargo");
@@ -138,7 +140,8 @@ fn glob(path: &Path) -> Result<Vec<PathBuf>> {
 ///   - This is because `default_members` is not available in cargo metadata.
 ///     See <https://github.com/rust-lang/cargo/issues/8033>.
 fn packages_to_verify<'a, 'b>(args: &'a KaniArgs, metadata: &'b Metadata) -> Vec<&'b Package> {
-    if !args.package.is_empty() {
+    debug!(package_selection=?args.package, workspace=args.workspace, "packages_to_verify args");
+    let packages = if !args.package.is_empty() {
         args.package
             .iter()
             .map(|pkg_name| {
@@ -154,7 +157,9 @@ fn packages_to_verify<'a, 'b>(args: &'a KaniArgs, metadata: &'b Metadata) -> Vec
             (true, _) | (_, None) => metadata.workspace_packages(),
             (_, Some(root_pkg)) => vec![root_pkg],
         }
-    }
+    };
+    trace!(?packages, "packages_to_verify result");
+    packages
 }
 
 /// Possible verification targets.
@@ -182,6 +187,7 @@ fn package_targets(args: &KaniArgs, package: &Package) -> Vec<VerificationTarget
         .targets
         .iter()
         .filter_map(|target| {
+            debug!(name=?package.name, target=?target.name, kind=?target.kind, "package_targets");
             if target.kind.contains(&String::from("bin")) {
                 Some(VerificationTarget::Bin(target.name.clone()))
             } else if target.kind.contains(&String::from("lib")) {

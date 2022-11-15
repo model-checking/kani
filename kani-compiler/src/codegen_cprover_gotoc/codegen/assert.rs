@@ -239,8 +239,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// TODO: Ideally we'd eliminate this. Currently used in two places:
     ///
-    /// 1. Functions where we skip codegen. Will eventually go away (we hope?)
-    /// 2. TerminatorKind::Resume and TK::Abort. Related to unwind support.
+    /// - `TerminatorKind::Resume` and `TerminatorKind::Abort`. Related to unwind support.
     pub fn codegen_mimic_unimplemented(
         &mut self,
         operation_name: &str,
