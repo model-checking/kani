@@ -317,6 +317,9 @@ impl<'test> TestCx<'test> {
         let proc_res = self.compose_and_run(cargo);
         let expected = fs::read_to_string(self.testpaths.file.clone()).unwrap();
         self.verify_output(&proc_res, &expected);
+
+        // TODO: We should probably be checking the exit status somehow
+        // See https://github.com/model-checking/kani/issues/1895
     }
 
     /// Common method used to run Kani on a single file test.

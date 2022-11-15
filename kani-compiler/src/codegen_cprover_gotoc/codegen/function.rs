@@ -12,31 +12,11 @@ use rustc_ast::Attribute;
 use rustc_hir::def::DefKind;
 use rustc_hir::def_id::DefId;
 use rustc_middle::mir::{HasLocalDecls, Local};
-use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{self, Instance};
 use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::iter::FromIterator;
 use tracing::{debug, info_span};
-
-/// Utility to skip functions that can't currently be successfully codgenned.
-impl<'tcx> GotocCtx<'tcx> {
-    fn should_skip_current_fn(&self) -> bool {
-        let current_fn_name =
-            with_no_trimmed_paths!(self.tcx.def_path_str(self.current_fn().instance().def_id()));
-        // We cannot use self.current_fn().readable_name() because it gives the monomorphized type, which is more difficult to match on.
-        // Ideally we should not rely on the pretty-printed name here. Tracked here: https://github.com/model-checking/kani/issues/1374
-        match current_fn_name.as_str() {
-            // https://github.com/model-checking/kani/issues/202
-            "fmt::ArgumentV1::<'a>::as_usize" => true,
-            // https://github.com/model-checking/kani/issues/282
-            "bridge::closure::Closure::<'a, A, R>::call" => true,
-            name if name.contains("reusable_box::ReusableBoxFuture") => true,
-            "tokio::sync::Semaphore::acquire_owned::{closure#0}" => true,
-            _ => false,
-        }
-    }
-}
 
 /// Codegen MIR functions into gotoc
 impl<'tcx> GotocCtx<'tcx> {
@@ -94,20 +74,6 @@ impl<'tcx> GotocCtx<'tcx> {
             info_span!("CodegenFunction", name = self.current_fn().readable_name()).entered();
         if old_sym.is_function_definition() {
             tracing::info!("Double codegen of {:?}", old_sym);
-        } else if self.should_skip_current_fn() {
-            debug!("Skipping function {}", self.current_fn().readable_name());
-            self.codegen_function_prelude();
-            self.codegen_declare_variables();
-            let loc = self.codegen_span(&self.current_fn().mir().span);
-            let readable_name = format!("The function {}", self.current_fn().readable_name());
-            // We'll ideally just get rid of this eventually, but use "mimic" to avoid extra compilation warnings
-            let body = self.codegen_mimic_unimplemented(
-                &readable_name,
-                loc,
-                // There actually are links to specific issues in `should_skip_current_fn`...
-                "https://github.com/model-checking/kani/issues/new/choose",
-            );
-            self.symbol_table.update_fn_declaration_with_definition(&name, body);
         } else {
             assert!(old_sym.is_function());
             let mir = self.current_fn().mir();
