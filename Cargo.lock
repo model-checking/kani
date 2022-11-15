@@ -467,6 +467,7 @@ name = "kani-driver"
 version = "0.14.1"
 dependencies = [
  "anyhow",
+ "atty",
  "cargo_metadata",
  "clap 2.34.0",
  "comfy-table",
@@ -482,6 +483,9 @@ dependencies = [
  "serde_json",
  "structopt",
  "toml",
+ "tracing",
+ "tracing-subscriber",
+ "tracing-tree",
 ]
 
 [[package]]
