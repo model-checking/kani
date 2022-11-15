@@ -1,2 +1,2 @@
-error: expected return type with integer elements, found `Vector { typ: Float, size: 2 }` with non-integer `Float`
+expected return type with integer elements, found `f32x2` with non-integer `f32`
 error: aborting due to previous error

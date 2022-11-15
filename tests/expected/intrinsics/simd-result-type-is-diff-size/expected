@@ -1,2 +1,2 @@
-error: expected return type with length 2 (same as input type `Vector { typ: Unsignedbv { width: 64 }, size: 2 }`), found `Vector { typ: Unsignedbv { width: 32 }, size: 4 }` with length 4
+expected return type with length 2 (same as input type `u64x2`), found `u32x4` with length 4
 error: aborting due to previous error
