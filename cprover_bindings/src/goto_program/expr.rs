@@ -1041,7 +1041,10 @@ impl Expr {
     pub fn vector_cmp(self, op: BinaryOperator, rhs: Expr, ret_typ: Type) -> Expr {
         assert!(
             Expr::typecheck_vector_cmp_expr(&self, &rhs, &ret_typ),
-            "vector comparison expression does not typecheck",
+            "vector comparison expression does not typecheck {:?} {:?} {:?}",
+            self,
+            rhs,
+            ret_typ,
         );
         expr!(BinOp { op, lhs: self, rhs }, ret_typ)
     }
