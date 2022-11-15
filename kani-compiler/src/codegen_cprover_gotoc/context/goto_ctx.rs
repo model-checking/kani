@@ -58,6 +58,9 @@ pub struct GotocCtx<'tcx> {
     pub vtable_ctx: VtableCtx,
     pub current_fn: Option<CurrentFnCtx<'tcx>>,
     pub type_map: FxHashMap<InternedString, Ty<'tcx>>,
+    /// map from symbol identifier to string literal
+    /// TODO: consider making the map from Expr to String instead
+    pub str_literals: FxHashMap<InternedString, String>,
     pub proof_harnesses: Vec<HarnessMetadata>,
     pub test_harnesses: Vec<HarnessMetadata>,
     /// a global counter for generating unique IDs for checks
@@ -84,6 +87,7 @@ impl<'tcx> GotocCtx<'tcx> {
             vtable_ctx: VtableCtx::new(emit_vtable_restrictions),
             current_fn: None,
             type_map: FxHashMap::default(),
+            str_literals: FxHashMap::default(),
             proof_harnesses: vec![],
             test_harnesses: vec![],
             global_checks_count: 0,
