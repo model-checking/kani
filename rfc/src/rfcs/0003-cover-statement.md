@@ -45,8 +45,18 @@ match x {
 The `cover` function instructs Kani to find _at least one_ possible execution that satisfies the specified condition at that line of code. If there is no such execution, verification *fails*.
 
 Each cover statements will be reported as a check whose description is "condition is satisfiable" and whose status is:
-- `SUCCESS` (green): if Kani found an execution that would cover the condition
+- `SUCCESS` (green): if Kani found an execution that satisfies the condition
 - `FAILURE` (red): if Kani proved that the condition cannot be satisfied
+
+For example:
+```
+Check 2: main.cover.2
+         - Status: SUCCESS
+         - Description: "condition is satisfiable"
+         - Location: foo.rs:9:5 in function main
+```
+
+If one or more unwinding assertions fail or an unsupported construct is found to be reachable, and Kani proved that the condition cannot be satisfied, the result will be reported as `UNDETERMINED` instead of `FAILURE`.
 
 ## Detailed Design
 
