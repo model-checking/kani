@@ -89,13 +89,13 @@ fn main() -> Result<(), &'static str> {
 
     // Configure queries.
     let mut queries = QueryDb::default();
-    if let Some(symbol_table_passes) = matches.values_of_os(parser::SYM_TABLE_PASSES) {
+    if let Some(symbol_table_passes) = matches.get_raw(parser::SYM_TABLE_PASSES) {
         queries.set_symbol_table_passes(symbol_table_passes.map(convert_arg).collect::<Vec<_>>());
     }
-    queries.set_emit_vtable_restrictions(matches.is_present(parser::RESTRICT_FN_PTRS));
-    queries.set_check_assertion_reachability(matches.is_present(parser::ASSERTION_REACH_CHECKS));
-    queries.set_output_pretty_json(matches.is_present(parser::PRETTY_OUTPUT_FILES));
-    queries.set_ignore_global_asm(matches.is_present(parser::IGNORE_GLOBAL_ASM));
+    queries.set_emit_vtable_restrictions(matches.get_flag(parser::RESTRICT_FN_PTRS));
+    queries.set_check_assertion_reachability(matches.get_flag(parser::ASSERTION_REACH_CHECKS));
+    queries.set_output_pretty_json(matches.get_flag(parser::PRETTY_OUTPUT_FILES));
+    queries.set_ignore_global_asm(matches.get_flag(parser::IGNORE_GLOBAL_ASM));
     queries.set_reachability_analysis(matches.reachability_type());
     #[cfg(feature = "unsound_experiments")]
     crate::unsound_experiments::arg_parser::add_unsound_experiment_args_to_queries(
@@ -106,14 +106,14 @@ fn main() -> Result<(), &'static str> {
     // Generate rustc args.
     let rustc_args = generate_rustc_args(&matches);
 
-    if matches.is_present(parser::ENABLE_STUBBING) {
+    if matches.get_flag(parser::ENABLE_STUBBING) {
         eprintln!("warning: Kani currently does not perform any stubbing.");
     }
 
     // Configure and run compiler.
     let mut callbacks = KaniCallbacks {};
     let mut compiler = RunCompiler::new(&rustc_args, &mut callbacks);
-    if matches.is_present("goto-c") {
+    if matches.get_flag("goto-c") {
         if cfg!(feature = "cprover") {
             compiler.set_make_codegen_backend(Some(Box::new(move |_cfg| {
                 Box::new(codegen_cprover_gotoc::GotocCodegenBackend::new(&Rc::new(queries)))
@@ -151,7 +151,7 @@ fn kani_root() -> PathBuf {
 /// Generate the arguments to pass to rustc_driver.
 fn generate_rustc_args(args: &ArgMatches) -> Vec<String> {
     let mut rustc_args = vec![String::from("rustc")];
-    if args.is_present(parser::GOTO_C) {
+    if args.get_flag(parser::GOTO_C) {
         let mut default_path = kani_root();
         if args.reachability_type() == ReachabilityType::Legacy {
             default_path.push("legacy-lib")
@@ -159,20 +159,21 @@ fn generate_rustc_args(args: &ArgMatches) -> Vec<String> {
             default_path.push("lib");
         }
         let gotoc_args = rustc_gotoc_flags(
-            args.value_of(parser::KANI_LIB).unwrap_or(default_path.to_str().unwrap()),
+            args.get_one::<String>(parser::KANI_LIB)
+                .unwrap_or(&default_path.to_str().unwrap().to_string()),
         );
         rustc_args.extend_from_slice(&gotoc_args);
     }
 
-    if args.is_present(parser::RUSTC_VERSION) {
+    if args.get_flag(parser::RUSTC_VERSION) {
         rustc_args.push(String::from("--version"))
     }
 
-    if args.is_present(parser::JSON_OUTPUT) {
+    if args.get_flag(parser::JSON_OUTPUT) {
         rustc_args.push(String::from("--error-format=json"));
     }
 
-    if let Some(extra_flags) = args.values_of_os(parser::RUSTC_OPTIONS) {
+    if let Some(extra_flags) = args.get_raw(parser::RUSTC_OPTIONS) {
         extra_flags.for_each(|arg| rustc_args.push(convert_arg(arg)));
     }
     let sysroot = sysroot_path(args);
@@ -229,11 +230,10 @@ fn toolchain_sysroot_path() -> PathBuf {
 /// We do provide a `--sysroot` option that users may want to use instead.
 #[allow(deprecated)]
 fn sysroot_path(args: &ArgMatches) -> PathBuf {
-    let sysroot_arg = args.value_of(parser::SYSROOT);
+    let sysroot_arg = args.get_one::<String>(parser::SYSROOT);
     let path = if let Some(s) = sysroot_arg {
         PathBuf::from(s)
-    } else if args.reachability_type() == ReachabilityType::Legacy
-        || !args.is_present(parser::GOTO_C)
+    } else if args.reachability_type() == ReachabilityType::Legacy || !args.get_flag(parser::GOTO_C)
     {
         toolchain_sysroot_path()
     } else {
@@ -264,6 +264,7 @@ mod args_test {
         assert_eq!(os_str.to_str(), None);
 
         let matches = parser::parser().get_matches_from(vec![
+            OsString::from("kani-compiler").as_os_str(),
             OsString::from("--sysroot").as_os_str(),
             OsString::from("any").as_os_str(),
             os_str,
