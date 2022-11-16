@@ -611,21 +611,23 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             "simd_and" => unstable_codegen!(codegen_intrinsic_binop!(bitand)),
             "simd_div" => unstable_codegen!(codegen_intrinsic_binop!(div)),
-            "simd_eq" => unstable_codegen!(codegen_intrinsic_binop!(eq)),
+            "simd_eq" => self.codegen_simd_cmp(Expr::vector_eq, fargs, p, span, farg_types, ret_ty),
             "simd_extract" => {
                 let _vec = fargs.remove(0);
                 let _index = fargs.remove(0);
                 unstable_codegen!(self.codegen_expr_to_place(p, vec.index_array(index)))
             }
-            "simd_ge" => unstable_codegen!(codegen_intrinsic_binop!(ge)),
-            "simd_gt" => unstable_codegen!(codegen_intrinsic_binop!(gt)),
+            "simd_ge" => self.codegen_simd_cmp(Expr::vector_ge, fargs, p, span, farg_types, ret_ty),
+            "simd_gt" => self.codegen_simd_cmp(Expr::vector_gt, fargs, p, span, farg_types, ret_ty),
             "simd_insert" => {
                 unstable_codegen!(self.codegen_intrinsic_simd_insert(fargs, p, cbmc_ret_ty, loc))
             }
-            "simd_le" => unstable_codegen!(codegen_intrinsic_binop!(le)),
-            "simd_lt" => unstable_codegen!(codegen_intrinsic_binop!(lt)),
+            "simd_le" => self.codegen_simd_cmp(Expr::vector_le, fargs, p, span, farg_types, ret_ty),
+            "simd_lt" => self.codegen_simd_cmp(Expr::vector_lt, fargs, p, span, farg_types, ret_ty),
             "simd_mul" => unstable_codegen!(codegen_simd_with_overflow_check!(mul, mul_overflow_p)),
-            "simd_ne" => unstable_codegen!(codegen_intrinsic_binop!(neq)),
+            "simd_ne" => {
+                self.codegen_simd_cmp(Expr::vector_neq, fargs, p, span, farg_types, ret_ty)
+            }
             "simd_or" => unstable_codegen!(codegen_intrinsic_binop!(bitor)),
             "simd_rem" => unstable_codegen!(codegen_intrinsic_binop!(rem)),
             "simd_shl" => unstable_codegen!(codegen_intrinsic_binop!(shl)),
@@ -1359,6 +1361,75 @@ impl<'tcx> GotocCtx<'tcx> {
             ],
             loc,
         )
+    }
+
+    /// Generates code for a SIMD vector comparison intrinsic.
+    ///
+    /// We perform some typechecks here for two reasons:
+    ///  * In the case of SIMD intrinsics, these checks depend on the backend.
+    ///  * We can emit a friendly error here, but not in `cprover_bindings`.
+    ///
+    /// We check the following:
+    ///  1. The return type must be the same length as the input types. The
+    ///     argument types have already been checked to ensure they have the same
+    ///     length (an error would've been emitted otherwise), so we can compare
+    ///     the return type against any of the argument types.
+    ///
+    ///     An example that triggers this error:
+    ///     ```rust
+    ///     let x = u64x2(0, 0);
+    ///     let y = u64x2(0, 1);
+    ///     unsafe { let invalid_simd: u32x4 = simd_eq(x, y); }
+    ///     ```
+    ///     We compare two `u64x2` vectors but try to store the result in a `u32x4`.
+    ///  2. The return type must have an integer base type.
+    ///
+    ///     An example that triggers this error:
+    ///     ```rust
+    ///     let x = u64x2(0, 0);
+    ///     let y = u64x2(0, 1);
+    ///     unsafe { let invalid_simd: f32x2 = simd_eq(x, y); }
+    ///     ```
+    ///     We compare two `u64x2` vectors but try to store the result in a `f32x4`,
+    ///     which is composed of `f32` values.
+    fn codegen_simd_cmp<F: FnOnce(Expr, Expr, Type) -> Expr>(
+        &mut self,
+        f: F,
+        mut fargs: Vec<Expr>,
+        p: &Place<'tcx>,
+        span: Option<Span>,
+        rust_arg_types: &[Ty<'tcx>],
+        rust_ret_type: Ty<'tcx>,
+    ) -> Stmt {
+        let arg1 = fargs.remove(0);
+        let arg2 = fargs.remove(0);
+        let ret_typ = self.codegen_ty(rust_ret_type);
+
+        if arg1.typ().len().unwrap() != ret_typ.len().unwrap() {
+            let err_msg = format!(
+                "expected return type with length {} (same as input type `{}`), \
+                found `{}` with length {}",
+                arg1.typ().len().unwrap(),
+                rust_arg_types[0],
+                rust_ret_type,
+                ret_typ.len().unwrap()
+            );
+            self.tcx.sess.span_err(span.unwrap(), err_msg);
+        }
+
+        if !ret_typ.base_type().unwrap().is_integer() {
+            let (_, rust_base_type) = rust_ret_type.simd_size_and_type(self.tcx);
+            let err_msg = format!(
+                "expected return type with integer elements, found `{}` with non-integer `{}`",
+                rust_ret_type, rust_base_type,
+            );
+            self.tcx.sess.span_err(span.unwrap(), err_msg);
+        }
+        self.tcx.sess.abort_if_errors();
+
+        // Create the vector comparison expression
+        let e = f(arg1, arg2, ret_typ);
+        self.codegen_expr_to_place(p, e)
     }
 
     /// simd_shuffle constructs a new vector from the elements of two input vectors,

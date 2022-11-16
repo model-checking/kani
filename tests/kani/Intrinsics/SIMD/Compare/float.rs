@@ -1,12 +1,23 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+//! Checks that intrinsics for SIMD vectors of signed integers are supported
 #![feature(repr_simd, platform_intrinsics)]
 
 #[repr(simd)]
 #[allow(non_camel_case_types)]
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq)]
+pub struct f64x2(f64, f64);
+
+#[repr(simd)]
+#[allow(non_camel_case_types)]
+#[derive(Clone, Copy, PartialEq)]
 pub struct i64x2(i64, i64);
+
+#[repr(simd)]
+#[allow(non_camel_case_types)]
+#[derive(Clone, Copy, PartialEq)]
+pub struct i32x2(i32, i32);
 
 // The predicate type U in the functions below must
 // be a SIMD type, otherwise we get a compilation error
@@ -21,22 +32,16 @@ extern "platform-intrinsic" {
 
 macro_rules! assert_cmp {
     ($res_cmp: ident, $simd_cmp: ident, $x: expr, $y: expr, $($res: expr),+) => {
-        let $res_cmp: i64x2 = $simd_cmp($x, $y);
-        assert!($res_cmp == i64x2($($res),+))
+        let $res_cmp: i32x2 = $simd_cmp($x, $y);
+        assert!($res_cmp == i32x2($($res),+))
     };
 }
 
-// https://gcc.gnu.org/onlinedocs/gcc/Vector-Extensions.html
-// Vectors are compared element-wise producing:
-//  * 0 when comparison is false
-//  * -1 (all bits set) otherwise
 #[kani::proof]
 fn main() {
-    let x = i64x2(0, 0);
-    let y = i64x2(0, 1);
+    let x = f64x2(0.0, 0.0);
+    let y = f64x2(0.0, 1.0);
 
-    // CBMC does not support comparison operators
-    // so the below assertions are expected to fail
     unsafe {
         assert_cmp!(res_eq, simd_eq, x, x, -1, -1);
         assert_cmp!(res_eq, simd_eq, x, y, -1, 0);

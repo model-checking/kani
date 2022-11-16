@@ -84,6 +84,12 @@ impl ToIrepId for BinaryOperator {
             BinaryOperator::Ror => IrepId::Ror,
             BinaryOperator::Shl => IrepId::Shl,
             BinaryOperator::Xor => IrepId::Xor,
+            BinaryOperator::VectorEqual => IrepId::VectorEqual,
+            BinaryOperator::VectorNotequal => IrepId::VectorNotequal,
+            BinaryOperator::VectorGe => IrepId::VectorGe,
+            BinaryOperator::VectorLe => IrepId::VectorLe,
+            BinaryOperator::VectorGt => IrepId::VectorGt,
+            BinaryOperator::VectorLt => IrepId::VectorLt,
         }
     }
 }
