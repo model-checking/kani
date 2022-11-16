@@ -19,12 +19,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Check action code
-        uses: actions/checkout@v2
-        with:
-            repository: model-checking/kani-github-action
-            path: kani-action
-
       - name: Get version
         run: |
           # pkgid is something like file:///home/ubuntu/kani#kani-verifier:0.1.0
@@ -41,12 +35,6 @@ jobs:
           if [[ ${{ env.CRATE_VERSION }} != ${{ env.TAG_VERSION }} ]]; then
             echo "Git tag ${{env.TAG_VERSION}} did not match crate version ${{env.CRATE_VERSION}}"
             exit 1
-          fi
-          # Check the action script's tag.
-          if ! grep -F "KANI_VERSION=\"${{ env.TAG_VERSION }}" kani-action/action.yml; then
-            echo "Git tag ${{env.TAG_VERSION}} did not match version in action.yml. Found:"
-            grep -F "KANI_VERSION=" kani-action/action.yml
-            exit 1;
           fi
 
       - name: Create release
