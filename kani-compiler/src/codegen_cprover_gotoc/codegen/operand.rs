@@ -4,7 +4,7 @@ use crate::codegen_cprover_gotoc::utils::slice_fat_ptr;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::unwrap_or_return_codegen_unimplemented;
 use cbmc::btree_string_map;
-use cbmc::goto_program::{DatatypeComponent, Expr, Location, Stmt, Symbol, Type};
+use cbmc::goto_program::{DatatypeComponent, Expr, ExprValue, Location, Stmt, Symbol, Type};
 use rustc_ast::ast::Mutability;
 use rustc_middle::mir::interpret::{
     read_target_uint, AllocId, Allocation, ConstValue, GlobalAlloc, Scalar,
@@ -98,18 +98,45 @@ impl<'tcx> GotocCtx<'tcx> {
         v: ConstValue<'tcx>,
         lit_ty: Ty<'tcx>,
         span: Option<&Span>,
-        data: &Allocation,
+        data: &'tcx Allocation,
         start: usize,
         end: usize,
     ) -> Expr {
         if let ty::Ref(_, ref_ty, _) = lit_ty.kind() {
             match ref_ty.kind() {
                 ty::Str => {
+                    // a string literal
+                    // These seem to always start at 0
+                    assert_eq!(start, 0);
+                    // Create a static variable that holds its value
+                    let mem_var =
+                        self.codegen_allocation_auto_imm_name(data, |tcx| tcx.next_global_name());
+
+                    // Extract identifier for static variable.
+                    // codegen_allocation_auto_imm_name returns the *address* of
+                    // the variable, so need to pattern match to extract it.
+                    let ident = match mem_var.value() {
+                        ExprValue::AddressOf(address) => match address.value() {
+                            ExprValue::Symbol { identifier } => identifier,
+                            _ => unreachable!("Expecting a symbol for a string literal allocation"),
+                        },
+                        _ => unreachable!("Expecting an address for string literal allocation"),
+                    };
+
+                    // Extract the actual string literal
                     let slice = data.inspect_with_uninit_and_ptr_outside_interpreter(start..end);
                     let s = ::std::str::from_utf8(slice).expect("non utf8 str from miri");
-                    return Expr::struct_expr_from_values(
+
+                    // Store the identifier to the string literal in the goto context
+                    self.str_literals.insert(*ident, s.into());
+
+                    // Codegen as a fat pointer
+                    let data_expr = mem_var.cast_to(Type::unsigned_int(8).to_pointer());
+                    let len_expr = Expr::int_constant(end - start, Type::size_t());
+                    return slice_fat_ptr(
                         self.codegen_ty(lit_ty),
-                        vec![Expr::string_constant(s), Expr::int_constant(s.len(), Type::size_t())],
+                        data_expr,
+                        len_expr,
                         &self.symbol_table,
                     );
                 }

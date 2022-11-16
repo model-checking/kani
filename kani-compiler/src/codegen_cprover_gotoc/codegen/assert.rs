@@ -18,7 +18,6 @@
 //! 7. `codegen_sanity` : `assert` but not normally displayed as failure would be a Kani bug
 //!
 
-use crate::codegen_cprover_gotoc::utils;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{Expr, Location, Stmt, Type};
 use cbmc::InternedString;
@@ -171,7 +170,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // CBMC requires that the argument to the assertion must be a string constant.
         // If there is one in the MIR, use it; otherwise, explain that we can't.
         assert!(!fargs.is_empty(), "Panic requires a string message");
-        let msg = utils::extract_const_message(&fargs[0]).unwrap_or(String::from(
+        let msg = self.extract_const_message(&fargs[0]).unwrap_or(String::from(
             "This is a placeholder message; Kani doesn't support message formatted at runtime",
         ));
 
@@ -239,8 +238,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// TODO: Ideally we'd eliminate this. Currently used in two places:
     ///
-    /// 1. Functions where we skip codegen. Will eventually go away (we hope?)
-    /// 2. TerminatorKind::Resume and TK::Abort. Related to unwind support.
+    /// - `TerminatorKind::Resume` and `TerminatorKind::Abort`. Related to unwind support.
     pub fn codegen_mimic_unimplemented(
         &mut self,
         operation_name: &str,

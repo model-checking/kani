@@ -8,9 +8,8 @@ pub struct GuestRegionMmap {
     guest_base: GuestAddress,
 }
 
-// TODO: running this with --unwrap 2 causes CBMC to hang in propositional reduction.
 #[kani::proof]
-#[kani::unwind(0)]
+#[kani::unwind(3)]
 fn main() {
     let r = GuestRegionMmap { guest_base: GuestAddress(0) };
     let mut regions: Vec<GuestRegionMmap> = vec![];

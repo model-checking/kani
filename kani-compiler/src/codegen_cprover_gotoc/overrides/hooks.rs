@@ -9,7 +9,6 @@
 //! this module addresses this issue.
 
 use crate::codegen_cprover_gotoc::codegen::PropertyClass;
-use crate::codegen_cprover_gotoc::utils;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Type};
@@ -68,7 +67,7 @@ impl<'tcx> GotocHook<'tcx> for ExpectFail {
 
         // Add "EXPECTED FAIL" to the message because compiletest relies on it
         let msg =
-            format!("EXPECTED FAIL: {}", utils::extract_const_message(&fargs.remove(0)).unwrap());
+            format!("EXPECTED FAIL: {}", tcx.extract_const_message(&fargs.remove(0)).unwrap());
 
         let loc = tcx.codegen_span_option(span);
         Stmt::block(
@@ -129,7 +128,7 @@ impl<'tcx> GotocHook<'tcx> for Assert {
         assert_eq!(fargs.len(), 2);
         let cond = fargs.remove(0).cast_to(Type::bool());
         let msg = fargs.remove(0);
-        let msg = utils::extract_const_message(&msg).unwrap();
+        let msg = tcx.extract_const_message(&msg).unwrap();
         let target = target.unwrap();
         let caller_loc = tcx.codegen_caller_span(&span);
 

@@ -18,25 +18,6 @@ pub fn dynamic_fat_ptr(typ: Type, data: Expr, vtable: Expr, symbol_table: &Symbo
     Expr::struct_expr(typ, btree_string_map![("data", data), ("vtable", vtable)], symbol_table)
 }
 
-/// Tries to extract a string message from an `Expr`.
-/// If the expression represents a pointer to a string constant, this will return the string
-/// constant. Otherwise, return `None`.
-pub fn extract_const_message(arg: &Expr) -> Option<String> {
-    match arg.value() {
-        ExprValue::Struct { values } => match &values[0].value() {
-            ExprValue::AddressOf(address) => match address.value() {
-                ExprValue::Index { array, .. } => match array.value() {
-                    ExprValue::StringConstant { s } => Some(s.to_string()),
-                    _ => None,
-                },
-                _ => None,
-            },
-            _ => None,
-        },
-        _ => None,
-    }
-}
-
 impl<'tcx> GotocCtx<'tcx> {
     /// Generates an expression `(ptr as usize) % align_of(T) == 0`
     /// to determine if a pointer `ptr` with pointee type `T` is aligned.
@@ -60,6 +41,30 @@ impl<'tcx> GotocCtx<'tcx> {
             s.push_str(url);
         }
         s
+    }
+
+    /// Tries to extract a string message from an `Expr`.  If the expression is
+    /// a pointer to a variable that represents a string literal (as created in
+    /// codegen_slice_value), this will return the string constant. Otherwise,
+    /// return `None`.
+    pub fn extract_const_message(&self, arg: &Expr) -> Option<String> {
+        match arg.value() {
+            ExprValue::Struct { values } => match &values[0].value() {
+                ExprValue::Typecast(expr) => match expr.value() {
+                    ExprValue::AddressOf(address) => match address.value() {
+                        ExprValue::Symbol { identifier } => {
+                            // lookup the string literal in the goto context
+                            let name = self.str_literals.get(identifier).unwrap();
+                            Some(name.clone())
+                        }
+                        _ => None,
+                    },
+                    _ => None,
+                },
+                _ => None,
+            },
+            _ => None,
+        }
     }
 }
 
@@ -108,7 +113,7 @@ impl<'tcx> GotocCtx<'tcx> {
             })
             .collect::<Vec<_>>();
 
-        type_members.iter().rev().fold(boxed_value, |value, (name, typ)| {
+        type_members.iter().rfold(boxed_value, |value, (name, typ)| {
             Expr::struct_expr_with_nondet_fields(
                 typ.clone(),
                 btree_string_map![(*name, value),],
