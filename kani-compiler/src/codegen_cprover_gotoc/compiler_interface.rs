@@ -4,7 +4,7 @@
 //! This file contains the code necessary to interface with the compiler backend
 
 use crate::codegen_cprover_gotoc::GotocCtx;
-use crate::kani_middle::mir_transform;
+use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{
     collect_reachable_items, filter_closures_in_const_crate_items, filter_crate_items,
 };
@@ -58,11 +58,11 @@ impl CodegenBackend for GotocCodegenBackend {
     }
 
     fn provide(&self, providers: &mut Providers) {
-        mir_transform::provide(providers);
+        provide::provide(providers, &self.queries);
     }
 
     fn provide_extern(&self, providers: &mut ty::query::ExternProviders) {
-        mir_transform::provide_extern(providers);
+        provide::provide_extern(providers);
     }
 
     fn codegen_crate(

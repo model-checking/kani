@@ -13,24 +13,75 @@ use rustc_hir::def_id::{DefId, LocalDefId};
 use rustc_middle::{mir::Body, ty::TyCtxt};
 
 /// Returns the new body of a function/method if it has been stubbed out;
-/// otherwise, returns `None`.
-pub fn transform(tcx: TyCtxt, def_id: DefId) -> Option<&Body> {
+/// otherwise, returns the old body.
+pub fn transform<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    def_id: DefId,
+    old_body: &'tcx Body<'tcx>,
+) -> &'tcx Body<'tcx> {
     if let Some(mapping) = get_stub_mapping(tcx) {
         let name = tcx.def_path_str(def_id);
         if let Some(replacement) = mapping.get(&name) {
             if let Some(replacement_id) = get_def_id(tcx, replacement) {
-                // TODO: We need to perform validation here (e.g., check that
-                // the replacement is compatible with the original function).
-                // <https://github.com/model-checking/kani/issues/1892>
                 let new_body = tcx.optimized_mir(replacement_id).clone();
-                return Some(tcx.arena.alloc(new_body));
+                if check_compatibility(tcx, def_id, old_body, replacement_id, &new_body) {
+                    return tcx.arena.alloc(new_body);
+                }
             } else {
                 tcx.sess
                     .span_err(tcx.def_span(def_id), format!("Unable to find stub: {replacement}"));
             };
         }
     }
-    None
+    old_body
+}
+
+/// Checks whether the stub is compatible with the original function/method: do
+/// the arities and types (of the parameters and return values) match up? This
+/// does **NOT** check whether the type variables are constrained to implement
+/// the same traits; trait mismatches are checked during monomorphization.
+fn check_compatibility<'a, 'tcx>(
+    tcx: TyCtxt,
+    old_def_id: DefId,
+    old_body: &'a Body<'tcx>,
+    stub_def_id: DefId,
+    stub_body: &'a Body<'tcx>,
+) -> bool {
+    // Check whether the arities match.
+    if old_body.arg_count != stub_body.arg_count {
+        tcx.sess.span_err(
+            tcx.def_span(stub_def_id),
+            format!(
+                "Arity mismatch: original function/method `{}` takes {} argument(s), stub `{}` takes {}",
+                tcx.def_path_str(old_def_id),
+                old_body.arg_count,
+                tcx.def_path_str(stub_def_id),
+                stub_body.arg_count
+            ),
+        );
+        return false;
+    }
+    // Check whether the types match. Index 0 refers to the returned value,
+    // indices [1, `arg_count`] refer to the parameters.
+    let mut matches = true;
+    for i in 0..=old_body.arg_count {
+        let old_arg = old_body.local_decls.get(i.into()).unwrap();
+        let new_arg = stub_body.local_decls.get(i.into()).unwrap();
+        if old_arg.ty != new_arg.ty {
+            tcx.sess.span_err(
+                new_arg.source_info.span,
+                format!(
+                    "Type mismatch: stub `{}` has type `{}` where original function/method `{}` has type `{}`",
+                    tcx.def_path_str(stub_def_id),
+                    new_arg.ty,
+                    tcx.def_path_str(old_def_id),
+                    old_arg.ty
+                ),
+            );
+            matches = false;
+        }
+    }
+    matches
 }
 
 /// The prefix we will use when serializing the stub mapping as a rustc argument.

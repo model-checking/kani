@@ -45,6 +45,7 @@ pub fn collect_reachable_items<'tcx>(
     for item in starting_points {
         collector.collect(*item);
     }
+    tcx.sess.abort_if_errors();
 
     // Sort the result so code generation follows deterministic order.
     // This helps us to debug the code, but it also provides the user a good experience since the
@@ -400,11 +401,29 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
                 let callee_ty = func.ty(self.body, tcx);
                 let fn_ty = self.monomorphize(callee_ty);
                 if let TyKind::FnDef(def_id, substs) = *fn_ty.kind() {
-                    let instance =
+                    let instance_opt =
                         Instance::resolve(self.tcx, ParamEnv::reveal_all(), def_id, substs)
-                            .unwrap()
                             .unwrap();
-                    self.collect_instance(instance, true);
+                    match instance_opt {
+                        None => {
+                            // During the MIR stubbing transformation, we do not
+                            // force type variables in the stub's signature to
+                            // implement the same traits as those in the
+                            // original function/method. A trait mismatch shows
+                            // up here, when we try to resolve a trait method
+                            // that the type does not implement.
+                            tcx.sess.span_err(
+                                terminator.source_info.span,
+                                format!(
+                                    "Unable to resolve call to `{}`; \
+                        this is either an internal Kani bug, or there is a trait mismatch \
+                        between a stub you are using and the original function/method.",
+                                    tcx.def_path_str(def_id)
+                                ),
+                            );
+                        }
+                        Some(instance) => self.collect_instance(instance, true),
+                    };
                 } else {
                     assert!(
                         matches!(fn_ty.kind(), TyKind::FnPtr(..)),
