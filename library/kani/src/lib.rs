@@ -64,6 +64,37 @@ pub const fn assert(_cond: bool, _msg: &'static str) {
     }
 }
 
+/// Check if a condition is satisfiable at a specific location in the code.
+///
+/// # Example 1:
+///
+/// ```rust
+/// let mut set: BTreeSet<i32> = BTreeSet::new();
+/// for i in 0..5 {
+///     set.insert(kani::any());
+/// }
+/// // check if the set can end up with a single element (if all the elements
+/// // inserted were the same)
+/// kani::cover(set.len() == 1);
+/// ```
+///
+/// # Example 2:
+///
+/// ```rust
+/// let (x, y) = ...
+/// if x > y {
+///     ...
+/// } else if x < y {
+///     ...
+/// } else {
+///     // check if it's possible for `x` and `y` to be equal
+///     kani::cover(true);
+/// }
+/// Verification fails if there is no execution that would satisfy the condition
+#[inline(never)]
+#[rustc_diagnostic_item = "KaniCover"]
+pub fn cover(_cond: bool) {}
+
 /// This creates an symbolic *valid* value of type `T`. You can assign the return value of this
 /// function to a variable that you want to make symbolic.
 ///

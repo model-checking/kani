@@ -1,0 +1,9 @@
+Status: SUCCESS\
+Description: "condition is satisfiable"\
+main.rs:12:5 in function main
+
+Status: SUCCESS\
+Description: "condition is satisfiable"\
+main.rs:13:5 in function main
+
+VERIFICATION:- SUCCESSFUL

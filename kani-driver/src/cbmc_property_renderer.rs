@@ -429,7 +429,9 @@ pub fn postprocess_result(properties: Vec<Property>, extra_ptr_checks: bool) -> 
         || has_failed_unwinding_asserts
         || has_reachable_undefined_functions;
 
-    update_properties_with_reach_status(properties_filtered, has_fundamental_failures)
+    let updated_properties =
+        update_properties_with_reach_status(properties_filtered, has_fundamental_failures);
+    update_results_of_cover_checks(updated_properties)
 }
 
 /// Determines if there is property with status `FAILURE` and the given description
@@ -495,7 +497,7 @@ fn get_readable_description(property: &Property) -> String {
     original
 }
 
-/// Performs a last pass to update all properties as follows:
+/// Performs a pass to update all properties as follows:
 ///  1. Descriptions are replaced with more readable ones.
 ///  2. If there were failures that made the verification result unreliable
 ///     (e.g., a reachable unsupported construct), changes all `SUCCESS` results
@@ -525,6 +527,21 @@ fn update_properties_with_reach_status(
     properties
 }
 
+/// Flip the results of cover properties (SUCCESS -> FAILURE and FAILURE ->
+/// SUCCESS) since we encode cover(cond) as assert(!cond), so if the assertion
+/// fails, then the cover property is satisfied and vice versa
+fn update_results_of_cover_checks(mut properties: Vec<Property>) -> Vec<Property> {
+    for prop in properties.iter_mut() {
+        if prop.property_class() == "cover" {
+            if prop.status == CheckStatus::Success {
+                prop.status = CheckStatus::Failure;
+            } else if prop.status == CheckStatus::Failure {
+                prop.status = CheckStatus::Success;
+            }
+        }
+    }
+    properties
+}
 /// Some Kani-generated asserts have a unique ID in their description of the form:
 /// ```text
 /// [KANI_CHECK_ID_<crate-fn-name>_<index>]

@@ -1,0 +1,9 @@
+Status: UNDETERMINED\
+Description: "condition is satisfiable"\
+main.rs:15:5 in function cover_undetermined
+
+Failed Checks: unwinding assertion loop 0
+
+VERIFICATION:- FAILED
+[Kani] info: Verification output shows one or more unwinding failures.
+[Kani] tip: Consider increasing the unwinding value or disabling `--unwinding-assertions`.
