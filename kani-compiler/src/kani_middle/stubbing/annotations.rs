@@ -91,8 +91,8 @@ fn extract_stubbing_pair(tcx: TyCtxt, attr: &Attribute) -> Option<(String, Strin
 /// stub. Errors if a function/method is mapped more than once.
 fn update_stub_mapping(tcx: TyCtxt, attr: &Attribute, stub_pairs: &mut FxHashMap<String, String>) {
     if let Some((original, replacement)) = extract_stubbing_pair(tcx, attr) {
-        let other = stub_pairs.insert(original.clone(), replacement.clone());
-        if let Some(other) = other {
+        let other_opt = stub_pairs.insert(original.clone(), replacement.clone());
+        if let Some(other) = other_opt {
             tcx.sess.span_err(
                 attr.span,
                 format!(
