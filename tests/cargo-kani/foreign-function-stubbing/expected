@@ -1,6 +1,0 @@
-error: Unable to find stub: other_crate::PubType::the_answer
-error: Unable to find stub: other_crate::pub_mod::priv_mod::the_answer
-error: Unable to find stub: other_crate::PubType::the_answer
-error: Unable to find stub: other_crate::the_answer
-error: Unable to find stub: other_crate::PrivType::the_answer
-error: could not compile `foreign-function-stubbing` due to 5 previous errors
