@@ -50,6 +50,7 @@ fn deserialize_mapping(val: &str) -> FxHashMap<String, String> {
 
 /// Retrieves the stub mapping from the compiler configuration.
 fn get_stub_mapping(tcx: TyCtxt) -> Option<FxHashMap<String, String>> {
+    // Use a static so that we compile the regex only once.
     lazy_static! {
         static ref RE: Regex = Regex::new(&format!("'{RUSTC_ARG_PREFIX}(.*)'")).unwrap();
     }
