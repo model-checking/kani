@@ -17,11 +17,6 @@ extern "platform-intrinsic" {
     fn simd_mul<T>(x: T, y: T) -> T;
     fn simd_div<T>(x: T, y: T) -> T;
     fn simd_rem<T>(x: T, y: T) -> T;
-    fn simd_shl<T>(x: T, y: T) -> T;
-    fn simd_shr<T>(x: T, y: T) -> T;
-    fn simd_and<T>(x: T, y: T) -> T;
-    fn simd_or<T>(x: T, y: T) -> T;
-    fn simd_xor<T>(x: T, y: T) -> T;
 }
 
 macro_rules! assert_op {
@@ -46,10 +41,5 @@ fn main() {
         assert_op!(res_mul, simd_mul, y, z, 0, 2);
         assert_op!(res_div, simd_div, v, z, 1, 1);
         assert_op!(res_rem, simd_rem, v, z, 0, 1);
-        assert_op!(res_shl, simd_shl, z, z, 2, 8);
-        assert_op!(res_shr, simd_shr, z, y, 1, 1);
-        assert_op!(res_and, simd_and, y, v, 0, 1);
-        assert_op!(res_or, simd_or, x, y, 0, 1);
-        assert_op!(res_xor, simd_xor, x, y, 0, 1);
     }
 }
