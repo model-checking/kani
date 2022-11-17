@@ -53,6 +53,9 @@ pub trait UserInput {
     fn set_reachability_analysis(&mut self, reachability: ReachabilityType);
     fn get_reachability_analysis(&self) -> ReachabilityType;
 
+    fn set_stubbing_enabled(&mut self, stubbing_enabled: bool);
+    fn get_stubbing_enabled(&self) -> bool;
+
     #[cfg(feature = "unsound_experiments")]
     fn get_unsound_experiments(&self) -> Arc<Mutex<UnsoundExperiments>>;
 }
@@ -65,6 +68,7 @@ pub struct QueryDb {
     json_pretty_print: AtomicBool,
     ignore_global_asm: AtomicBool,
     reachability_analysis: Mutex<ReachabilityType>,
+    stubbing_enabled: bool,
     #[cfg(feature = "unsound_experiments")]
     unsound_experiments: Arc<Mutex<UnsoundExperiments>>,
 }
@@ -116,6 +120,14 @@ impl UserInput for QueryDb {
 
     fn get_reachability_analysis(&self) -> ReachabilityType {
         *self.reachability_analysis.lock().unwrap()
+    }
+
+    fn set_stubbing_enabled(&mut self, stubbing_enabled: bool) {
+        self.stubbing_enabled = stubbing_enabled;
+    }
+
+    fn get_stubbing_enabled(&self) -> bool {
+        self.stubbing_enabled
     }
 
     #[cfg(feature = "unsound_experiments")]
