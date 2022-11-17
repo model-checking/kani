@@ -3,7 +3,7 @@
 
 use crate::args::KaniArgs;
 use crate::session::{KaniSession, ReachabilityMode};
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use cargo_metadata::{Metadata, MetadataCommand, Package};
 use std::ffi::OsString;
 use std::fs;
@@ -87,6 +87,7 @@ impl KaniSession {
         // Only joing them at the end. All kani flags must come first.
         kani_args.extend_from_slice(&rustc_args);
 
+        let mut any_target = false;
         let packages = packages_to_verify(&self.args, &metadata);
         for package in packages {
             for target in package_targets(&self.args, package) {
@@ -100,9 +101,13 @@ impl KaniSession {
                     .env("KANIFLAGS", &crate::util::join_osstring(&kani_args, " "));
 
                 self.run_terminal(cmd)?;
+                any_target = true;
             }
         }
 
+        if !any_target {
+            bail!("No supported targets were found.");
+        }
         if self.args.dry_run {
             // mock an answer: mostly the same except we don't/can't expand the globs
             return Ok(CargoOutputs {
