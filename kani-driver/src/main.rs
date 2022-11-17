@@ -56,6 +56,12 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     }
 
     let outputs = ctx.cargo_build()?;
+    if outputs.symtabs.is_empty() && !ctx.args.dry_run {
+        if !ctx.args.quiet {
+            println!("No verification targets were found.");
+        }
+        return Ok(());
+    }
 
     let mut goto_objs: Vec<PathBuf> = Vec::new();
     for symtab in &outputs.symtabs {

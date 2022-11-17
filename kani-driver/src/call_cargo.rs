@@ -88,7 +88,6 @@ impl KaniSession {
         kani_args.extend_from_slice(&rustc_args);
 
         let packages = packages_to_verify(&self.args, &metadata);
-        if packages.is_empty() {}
         for package in packages {
             for target in package_targets(&self.args, package) {
                 let mut cmd = Command::new("cargo");
@@ -181,22 +180,81 @@ impl VerificationTarget {
 }
 
 /// Extract the targets inside a package.
+///
 /// If `--tests` is given, the list of targets will include any integration tests.
+///
+/// We use the `target.kind` as documented here. Note that `kind` for library will
+/// match the `crate-type`, despite them not being explicitly listed in the documentation:
+/// <https://docs.rs/cargo_metadata/0.15.0/cargo_metadata/struct.Target.html#structfield.kind>
+///
+/// The documentation for `crate-type` explicitly states that the only time `kind` and
+/// `crate-type` differs is for examples.
+/// <https://docs.rs/cargo_metadata/0.15.0/cargo_metadata/struct.Target.html#structfield.crate_types>
 fn package_targets(args: &KaniArgs, package: &Package) -> Vec<VerificationTarget> {
-    package
+    let mut ignored_libs = vec![];
+    let mut ignored_tests = vec![];
+    let mut ignored_unsupported = vec![];
+    let verification_targets = package
         .targets
         .iter()
         .filter_map(|target| {
-            debug!(name=?package.name, target=?target.name, kind=?target.kind, "package_targets");
+            debug!(name=?package.name, target=?target.name, kind=?target.kind, crate_type=?target
+                .crate_types,
+                "package_targets");
             if target.kind.contains(&String::from("bin")) {
+                // Binary targets.
                 Some(VerificationTarget::Bin(target.name.clone()))
-            } else if target.kind.contains(&String::from("lib")) {
-                Some(VerificationTarget::Lib)
-            } else if target.kind.contains(&String::from("test")) && args.tests {
-                Some(VerificationTarget::Test(target.name.clone()))
+            } else if target.kind.contains(&String::from("lib"))
+                || target.kind.contains(&String::from("rlib"))
+            {
+                // Lib targets.
+                if target.kind.iter().any(|kind| {
+                    matches!(kind.as_str(), "cdylib" | "dylib" | "staticlib" | "proc-macro")
+                }) {
+                    ignored_libs.push(target.name.as_str());
+                    None
+                } else {
+                    Some(VerificationTarget::Lib)
+                }
+            } else if target.kind.contains(&String::from("test")) {
+                // Test target.
+                if args.tests {
+                    Some(VerificationTarget::Test(target.name.clone()))
+                } else {
+                    ignored_tests.push(target.name.as_str());
+                    None
+                }
             } else {
+                ignored_unsupported.push(target.name.as_str());
                 None
             }
         })
-        .collect()
+        .collect();
+
+    if !ignored_libs.is_empty() {
+        // Print a warning for a lib that had at least one supported crate-types and one
+        // unsupported one.
+        println!(
+            "warning: Skipped verification of the following targets: '{}'",
+            ignored_libs.join("', '")
+        );
+        println!(
+            "    -> The targets above contained at least of one unsupported library type. \
+        Supported types are 'lib' and 'rlib'."
+        );
+    }
+    if args.verbose {
+        // Print targets that were skipped only on verbose mode.
+        if !ignored_tests.is_empty() {
+            println!("Skipped the following test targets: '{}'.", ignored_tests.join("', '"));
+            println!("    -> Use '--tests' to verify harnesses inside a 'test' crate.");
+        }
+        if !ignored_unsupported.is_empty() {
+            println!(
+                "Skipped the following unsupported targets: '{}'.",
+                ignored_unsupported.join("', '")
+            );
+        }
+    }
+    verification_targets
 }
