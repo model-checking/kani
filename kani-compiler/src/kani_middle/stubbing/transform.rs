@@ -1,7 +1,10 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! This module contains code related to the MIR-to-MIR pass that performs the
-//! stubbing of functions and methods.
+//! stubbing of functions and methods. The primary function of the module is
+//! `transform`, which takes the `DefId` of a function/method and returns the
+//! body of its stub, if appropriate. The stub mapping it uses is set via rustc
+//! arguments.
 
 use lazy_static::lazy_static;
 use regex::Regex;
