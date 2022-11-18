@@ -290,7 +290,17 @@ impl<'tcx> GotocCtx<'tcx> {
 
         return self.tcx.sess.contains_name(attrs, rustc_span::symbol::sym::rustc_test_marker);
     }
-    /// Is this the closure inside of a test description (i.e. generated from a `#[test]`)?
+    /// Is this the closure inside of a test description const (i.e. macro expanded from a `#[test]`)?
+    ///
+    /// We're trying to detect the closure (`||`) inside code like:
+    ///
+    /// ```ignore
+    /// #[rustc_test_marker]
+    /// pub const check_2: test::TestDescAndFn = test::TestDescAndFn {
+    ///     desc: ...,
+    ///     testfn: test::StaticTestFn(|| test::assert_test_result(check_2())),
+    /// };
+    /// ```
     pub fn is_test_harness_closure(&self, def_id: DefId) -> bool {
         if !def_id.is_local() {
             return false;
@@ -298,15 +308,6 @@ impl<'tcx> GotocCtx<'tcx> {
 
         let local_def_id = def_id.expect_local();
         let hir_id = self.tcx.hir().local_def_id_to_hir_id(local_def_id);
-
-        // We want to detect the case where we're codegen'ing the closure inside what test "descriptions"
-        // are macro-expanded to:
-        //
-        // #[rustc_test_marker]
-        // pub const check_2: test::TestDescAndFn = test::TestDescAndFn {
-        //     desc: ...,
-        //     testfn: test::StaticTestFn(|| test::assert_test_result(check_2())),
-        // };
 
         // The parent item of the closure appears to reliably be the `const` declaration item.
         let parent_id = self.tcx.hir().get_parent_item(hir_id);
