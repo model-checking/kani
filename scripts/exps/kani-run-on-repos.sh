@@ -54,7 +54,7 @@ function clone_and_run_kani {
 
     # run cargo kani compile on repo. save results to file.
     PATH=$PATH:$(readlink -f $SELF_DIR/..)
-    (cd $REPO_DIRECTORY; nice -n15 cargo kani --only-codegen) \
+    (cd $REPO_DIRECTORY; nice -n15 cargo kani --only-codegen --legacy-linker) \
          1> $REPO_DIRECTORY/$STDOUT_SUFFIX \
          2> $REPO_DIRECTORY/$STDERR_SUFFIX
     echo $? > $REPO_DIRECTORY/$EXIT_CODE_SUFFIX
