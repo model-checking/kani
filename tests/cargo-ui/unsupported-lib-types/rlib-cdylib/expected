@@ -1,2 +1,2 @@
-warning: Skipped verification of the following targets: 'lib'
+warning: Skipped verification of `lib` due to unsupported crate-type: `cdylib`.
 Error: No supported targets were found.

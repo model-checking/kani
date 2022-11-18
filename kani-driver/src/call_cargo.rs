@@ -11,6 +11,16 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use tracing::{debug, trace};
 
+//---- Crate types identifier used by cargo.
+const CRATE_TYPE_BIN: &str = "bin";
+const CRATE_TYPE_CDYLIB: &str = "cdylib";
+const CRATE_TYPE_DYLIB: &str = "dylib";
+const CRATE_TYPE_LIB: &str = "lib";
+const CRATE_TYPE_PROC_MACRO: &str = "proc-macro";
+const CRATE_TYPE_RLIB: &str = "rlib";
+const CRATE_TYPE_STATICLIB: &str = "staticlib";
+const CRATE_TYPE_TEST: &str = "test";
+
 /// The outputs of kani-compiler being invoked via cargo on a project.
 pub struct CargoOutputs {
     /// The directory where compiler outputs should be directed.
@@ -196,7 +206,6 @@ impl VerificationTarget {
 /// `crate-type` differs is for examples.
 /// <https://docs.rs/cargo_metadata/0.15.0/cargo_metadata/struct.Target.html#structfield.crate_types>
 fn package_targets(args: &KaniArgs, package: &Package) -> Vec<VerificationTarget> {
-    let mut ignored_libs = vec![];
     let mut ignored_tests = vec![];
     let mut ignored_unsupported = vec![];
     let verification_targets = package
@@ -206,22 +215,35 @@ fn package_targets(args: &KaniArgs, package: &Package) -> Vec<VerificationTarget
             debug!(name=?package.name, target=?target.name, kind=?target.kind, crate_type=?target
                 .crate_types,
                 "package_targets");
-            if target.kind.contains(&String::from("bin")) {
+            if target.kind.contains(&String::from(CRATE_TYPE_BIN)) {
                 // Binary targets.
                 Some(VerificationTarget::Bin(target.name.clone()))
-            } else if target.kind.contains(&String::from("lib"))
-                || target.kind.contains(&String::from("rlib"))
+            } else if target.kind.contains(&String::from(CRATE_TYPE_LIB))
+                || target.kind.contains(&String::from(CRATE_TYPE_RLIB))
             {
                 // Lib targets.
-                if target.kind.iter().any(|kind| {
-                    matches!(kind.as_str(), "cdylib" | "dylib" | "staticlib" | "proc-macro")
-                }) {
-                    ignored_libs.push(target.name.as_str());
-                    None
-                } else {
+                let unsupported_types = target
+                    .kind
+                    .iter()
+                    .filter_map(|kind| {
+                        let kind_str = kind.as_str();
+                        matches!(kind_str,
+                            CRATE_TYPE_CDYLIB | CRATE_TYPE_DYLIB | CRATE_TYPE_STATICLIB |
+                            CRATE_TYPE_PROC_MACRO
+                        ).then_some(kind_str)
+                    })
+                    .collect::<Vec<_>>();
+                if unsupported_types.is_empty() {
                     Some(VerificationTarget::Lib)
+                } else {
+                    println!(
+                        "warning: Skipped verification of `{}` due to unsupported crate-type: `{}`.",
+                        target.name,
+                        unsupported_types.join("`, `")
+                    );
+                    None
                 }
-            } else if target.kind.contains(&String::from("test")) {
+            } else if target.kind.contains(&String::from(CRATE_TYPE_TEST)) {
                 // Test target.
                 if args.tests {
                     Some(VerificationTarget::Test(target.name.clone()))
@@ -236,18 +258,6 @@ fn package_targets(args: &KaniArgs, package: &Package) -> Vec<VerificationTarget
         })
         .collect();
 
-    if !ignored_libs.is_empty() {
-        // Print a warning for a lib that had at least one supported crate-types and one
-        // unsupported one.
-        println!(
-            "warning: Skipped verification of the following targets: '{}'",
-            ignored_libs.join("', '")
-        );
-        println!(
-            "    -> The targets above contained at least of one unsupported library type. \
-        Supported types are 'lib' and 'rlib'."
-        );
-    }
     if args.verbose {
         // Print targets that were skipped only on verbose mode.
         if !ignored_tests.is_empty() {
