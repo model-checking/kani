@@ -23,6 +23,8 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 export PATH=$SCRIPT_DIR:$PATH
 KANI_DIR=$SCRIPT_DIR/..
 
+type clang-format
+clang-format --version
 find $KANI_DIR/library/kani -name "*.c" | xargs clang-format $FLAGS
 find $KANI_DIR/tests/kani -name "*.c" | xargs clang-format $FLAGS
 find $KANI_DIR/tests/cargo-kani -name "*.c" | xargs clang-format $FLAGS
