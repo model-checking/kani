@@ -288,7 +288,7 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn is_test_harness_description(&self, def_id: DefId) -> bool {
         let attrs = self.tcx.get_attrs_unchecked(def_id);
 
-        return self.tcx.sess.contains_name(attrs, rustc_span::symbol::sym::rustc_test_marker);
+        self.tcx.sess.contains_name(attrs, rustc_span::symbol::sym::rustc_test_marker)
     }
     /// Is this the closure inside of a test description const (i.e. macro expanded from a `#[test]`)?
     ///
@@ -313,7 +313,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let parent_id = self.tcx.hir().get_parent_item(hir_id);
         let parent_def_id = parent_id.to_def_id();
 
-        return self.is_test_harness_description(parent_def_id);
+        self.is_test_harness_description(parent_def_id)
     }
 
     /// We record test harness information in kani-metadata, just like we record

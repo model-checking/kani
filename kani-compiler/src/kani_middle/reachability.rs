@@ -516,6 +516,7 @@ struct ConstMonoItemExtractor<'a, 'tcx> {
 }
 
 impl<'a, 'tcx> MirVisitor<'tcx> for ConstMonoItemExtractor<'a, 'tcx> {
+    #[allow(clippy::single_match)]
     fn visit_rvalue(&mut self, rvalue: &Rvalue<'tcx>, location: Location) {
         trace!(rvalue=?*rvalue, "visit_rvalue");
 
