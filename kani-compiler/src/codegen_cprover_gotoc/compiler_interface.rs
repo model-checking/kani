@@ -5,7 +5,9 @@
 
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::mir_transform;
-use crate::kani_middle::reachability::{collect_reachable_items, filter_crate_items};
+use crate::kani_middle::reachability::{
+    collect_reachable_items, filter_closures_in_const_crate_items, filter_crate_items,
+};
 use bitflags::_core::any::Any;
 use cbmc::goto_program::{symtab_transformer, Location};
 use cbmc::{InternedString, MachineModel};
@@ -390,6 +392,14 @@ fn collect_codegen_items<'tcx>(gcx: &GotocCtx<'tcx>) -> Vec<MonoItem<'tcx>> {
         ReachabilityType::Harnesses => {
             // Cross-crate collecting of all items that are reachable from the crate harnesses.
             let harnesses = filter_crate_items(tcx, |_, def_id| gcx.is_proof_harness(def_id));
+            collect_reachable_items(tcx, &harnesses).into_iter().collect()
+        }
+        ReachabilityType::Tests => {
+            // We're iterating over crate items here, so what we have to codegen is the "test description" containing the
+            // test closure that we want to execute
+            let harnesses = filter_closures_in_const_crate_items(tcx, |_, def_id| {
+                gcx.is_test_harness_description(def_id)
+            });
             collect_reachable_items(tcx, &harnesses).into_iter().collect()
         }
         ReachabilityType::None => Vec::new(),
