@@ -87,7 +87,7 @@ impl KaniSession {
         // Only joing them at the end. All kani flags must come first.
         kani_args.extend_from_slice(&rustc_args);
 
-        let mut any_target = false;
+        let mut found_target = false;
         let packages = packages_to_verify(&self.args, &metadata);
         for package in packages {
             for target in package_targets(&self.args, package) {
@@ -101,11 +101,11 @@ impl KaniSession {
                     .env("KANIFLAGS", &crate::util::join_osstring(&kani_args, " "));
 
                 self.run_terminal(cmd)?;
-                any_target = true;
+                found_target = true;
             }
         }
 
-        if !any_target {
+        if !found_target {
             bail!("No supported targets were found.");
         }
         if self.args.dry_run {
