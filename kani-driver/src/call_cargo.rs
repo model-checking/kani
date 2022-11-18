@@ -82,6 +82,9 @@ impl KaniSession {
             ReachabilityMode::AllPubFns => {
                 pkg_args.extend(["--".into(), "--reachability=pub_fns".into()]);
             }
+            ReachabilityMode::Tests => {
+                pkg_args.extend(["--".into(), "--reachability=tests".into()]);
+            }
         }
 
         // Only joing them at the end. All kani flags must come first.
