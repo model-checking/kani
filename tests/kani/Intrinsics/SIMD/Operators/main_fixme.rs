@@ -15,8 +15,8 @@ extern "platform-intrinsic" {
     fn simd_add<T>(x: T, y: T) -> T;
     fn simd_sub<T>(x: T, y: T) -> T;
     fn simd_mul<T>(x: T, y: T) -> T;
-    fn simd_div<T>(x: T, y: T) -> T;
-    fn simd_rem<T>(x: T, y: T) -> T;
+    // fn simd_div<T>(x: T, y: T) -> T;
+    // fn simd_rem<T>(x: T, y: T) -> T;
 }
 
 macro_rules! assert_op {
@@ -39,7 +39,7 @@ fn main() {
         assert_op!(res_add, simd_add, x, y, 0, 1);
         assert_op!(res_sub, simd_sub, x, y, 0, -1);
         assert_op!(res_mul, simd_mul, y, z, 0, 2);
-        assert_op!(res_div, simd_div, v, z, 1, 1);
-        assert_op!(res_rem, simd_rem, v, z, 0, 1);
+        // assert_op!(res_div, simd_div, v, z, 1, 1);
+        // assert_op!(res_rem, simd_rem, v, z, 0, 1);
     }
 }
