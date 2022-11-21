@@ -526,11 +526,11 @@ fn update_properties_with_reach_status(
 }
 
 /// Some Kani-generated asserts have a unique ID in their description of the form:
-/// ```
+/// ```text
 /// [KANI_CHECK_ID_<crate-fn-name>_<index>]
 /// ```
 /// e.g.:
-/// ```
+/// ```text
 /// [KANI_CHECK_ID_foo.6875c808::foo_0] assertion failed: x % 2 == 0
 /// ```
 /// This function removes those IDs from the property's description so that
@@ -591,21 +591,21 @@ fn filter_ptr_checks(properties: Vec<Property>) -> Vec<Property> {
 
 /// When assertion reachability checks are turned on, Kani prefixes each
 /// assert's description with an ID of the following form:
-/// ```
+/// ```text
 /// [KANI_CHECK_ID_<crate-name>_<index-of-check>]
 /// ```
 /// e.g.:
-/// ```
+/// ```text
 /// [KANI_CHECK_ID_foo.6875c808::foo_0] assertion failed: x % 2 == 0
 /// ```
 /// In addition, the description of each reachability check that it generates
 /// includes the ID of the assert for which we want to check its reachability.
 /// The description of a reachability check uses the following template:
-/// ```
+/// ```text
 /// [KANI_REACHABILITY_CHECK] <ID of original assert>
 /// ```
 /// e.g.:
-/// ```
+/// ```text
 /// [KANI_REACHABILITY_CHECK] KANI_CHECK_ID_foo.6875c808::foo_0
 /// ```
 /// This function first collects all data from reachability checks. Then,

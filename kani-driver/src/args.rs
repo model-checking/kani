@@ -58,7 +58,7 @@ pub struct KaniArgs {
     #[structopt(long, hidden = true, requires("enable-unstable"))]
     pub assess: bool,
 
-    /// Generate visualizer report to <target-dir>/report/html/index.html
+    /// Generate visualizer report to `<target-dir>/report/html/index.html`
     #[structopt(long)]
     pub visualize: bool,
     /// Generate concrete playback unit test.
