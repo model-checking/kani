@@ -277,7 +277,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // Intrinsics which encode a SIMD arithmetic operation with overflow check.
         // We expand the overflow check because CBMC overflow operations don't accept array as
         // argument.
-        macro_rules! _codegen_simd_with_overflow_check {
+        macro_rules! codegen_simd_with_overflow_check {
             ($op:ident, $overflow:ident) => {{
                 let a = fargs.remove(0);
                 let b = fargs.remove(0);
@@ -607,7 +607,7 @@ impl<'tcx> GotocCtx<'tcx> {
             "sinf32" => codegen_simple_intrinsic!(Sinf),
             "sinf64" => codegen_simple_intrinsic!(Sin),
             "simd_add" => {
-                unstable_codegen!(codegen_simd_with_overflow_check!(plus, add_overflow_p))
+                codegen_simd_with_overflow_check!(plus, add_overflow_p)
             }
             "simd_and" => codegen_intrinsic_binop!(bitand),
             "simd_div" => unstable_codegen!(codegen_intrinsic_binop!(div)),
@@ -624,7 +624,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             "simd_le" => self.codegen_simd_cmp(Expr::vector_le, fargs, p, span, farg_types, ret_ty),
             "simd_lt" => self.codegen_simd_cmp(Expr::vector_lt, fargs, p, span, farg_types, ret_ty),
-            "simd_mul" => unstable_codegen!(codegen_simd_with_overflow_check!(mul, mul_overflow_p)),
+            "simd_mul" => codegen_simd_with_overflow_check!(mul, mul_overflow_p),
             "simd_ne" => {
                 self.codegen_simd_cmp(Expr::vector_neq, fargs, p, span, farg_types, ret_ty)
             }
@@ -642,7 +642,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
             }
             // "simd_shuffle#" => handled in an `if` preceding this match
-            "simd_sub" => unstable_codegen!(codegen_simd_with_overflow_check!(sub, sub_overflow_p)),
+            "simd_sub" => codegen_simd_with_overflow_check!(sub, sub_overflow_p),
             "simd_xor" => codegen_intrinsic_binop!(bitxor),
             "size_of" => codegen_intrinsic_const!(),
             "size_of_val" => codegen_size_align!(size),
