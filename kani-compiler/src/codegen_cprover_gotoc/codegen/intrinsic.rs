@@ -574,7 +574,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 loc,
             ),
             "simd_and" => codegen_intrinsic_binop!(bitand),
-            "simd_div" => unstable_codegen!(codegen_intrinsic_binop!(div)),
+            "simd_div" => codegen_intrinsic_binop!(div),
             "simd_eq" => self.codegen_simd_cmp(Expr::vector_eq, fargs, p, span, farg_types, ret_ty),
             "simd_extract" => {
                 self.codegen_intrinsic_simd_extract(fargs, p, farg_types, ret_ty, span)
@@ -598,7 +598,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 self.codegen_simd_cmp(Expr::vector_neq, fargs, p, span, farg_types, ret_ty)
             }
             "simd_or" => codegen_intrinsic_binop!(bitor),
-            "simd_rem" => unstable_codegen!(codegen_intrinsic_binop!(rem)),
+            "simd_rem" => codegen_intrinsic_binop!(rem),
             // TODO: `simd_shl` and `simd_shr` don't check overflow cases.
             // <https://github.com/model-checking/kani/issues/1963>
             "simd_shl" => codegen_intrinsic_binop!(shl),
