@@ -176,7 +176,9 @@ impl<'tcx> ProjectedPlace<'tcx> {
                 goto_expr, expr_ty, ty_from_mir
             );
             warn!("{}", msg);
-            debug_assert!(false, "{}", msg);
+            // TODO: this assertion fails on firecracker with the rust 2022-11-20 toolchain
+            // https://github.com/model-checking/kani/issues/1926
+            //debug_assert!(false, "{}", msg);
             return Err(UnimplementedData::new(
                 "Projection mismatch",
                 "https://github.com/model-checking/kani/issues/277",

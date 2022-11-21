@@ -488,7 +488,7 @@ impl<'tcx> GotocCtx<'tcx> {
         mut_name: F,
         imm_name: Option<String>,
     ) -> Expr {
-        debug!("codegen_allocation imm_name {:?} alloc {:?}", imm_name, alloc);
+        debug!("codegen_allocation imm_name {:?}", imm_name);
         let mem_var = match alloc.mutability {
             Mutability::Mut => {
                 let name = mut_name(self);
@@ -502,12 +502,12 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     fn codegen_allocation_data(&mut self, alloc: &'tcx Allocation) -> Vec<AllocData<'tcx>> {
-        let mut alloc_vals = Vec::with_capacity(alloc.provenance().len() + 1);
+        let mut alloc_vals = Vec::with_capacity(alloc.provenance().ptrs().len() + 1);
         let pointer_size =
             Size::from_bytes(self.symbol_table.machine_model().pointer_width_in_bytes());
 
         let mut next_offset = Size::ZERO;
-        for &(offset, alloc_id) in alloc.provenance().iter() {
+        for &(offset, alloc_id) in alloc.provenance().ptrs().iter() {
             if offset > next_offset {
                 let bytes = alloc.inspect_with_uninit_and_ptr_outside_interpreter(
                     next_offset.bytes_usize()..offset.bytes_usize(),

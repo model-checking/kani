@@ -53,6 +53,7 @@ impl<'tcx> GotocCtx<'tcx> {
         self.current_fn().mir().var_debug_info.iter().find(|info| match info.value {
             VarDebugInfoContents::Place(p) => p.local == *l && p.projection.len() == 0,
             VarDebugInfoContents::Const(_) => false,
+            VarDebugInfoContents::Composite { .. } => todo!(),
         })
     }
 }
