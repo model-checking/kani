@@ -3,6 +3,8 @@
 
 //! This test makes sure Kani does not emit "unused variable" warnings for
 //! variables that are only used in arguments of assert macros
+//! This doesn't work currently:
+//! https://github.com/model-checking/kani/issues/1556
 
 // Promote "unused variable" warnings to an error so that this test fails if
 // Kani's overridden version of the assert macros drops variables used as
