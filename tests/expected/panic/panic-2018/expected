@@ -1,10 +1,10 @@
-Failed Checks: concat!("Panic: {} code: ", 10), msg
+Failed Checks: concat! ("Panic: {} code: ", 10), msg
 Failed Checks: msg
 Failed Checks: explicit panic
 Failed Checks: Panic message
 Failed Checks: "Panic message with arg {}", "str"
 Failed Checks: "{}", msg
 
-Failed Checks: concat!("ArrayVec::", "try_insert",\
-": index {} is out of bounds in vector of length {}"),\
-5, 3
+Failed Checks: concat!\
+("ArrayVec::", "try_insert",\
+": index {} is out of bounds in vector of length {}"), 5, 3

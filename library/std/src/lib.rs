@@ -54,7 +54,7 @@ macro_rules! assert {
         // strategy, which is tracked in
         // https://github.com/model-checking/kani/issues/692
         if false {
-            ::std::panic!($($arg)+);
+            core::assert!(true, $($arg)+);
         }
     }};
 }
@@ -158,7 +158,7 @@ macro_rules! unreachable {
     // handle.
     ($fmt:expr, $($arg:tt)*) => {{
         if false {
-            let _ = format_args!($fmt, $($arg)+);
+            core::assert!(true, $fmt, $($arg)+);
         }
         kani::panic(concat!("internal error: entered unreachable code: ",
         stringify!($fmt, $($arg)*)))}};
@@ -186,22 +186,12 @@ macro_rules! panic {
     ($msg:expr $(,)?) => ({
         kani::panic(stringify!($msg));
     });
-    // The first argument is the message and the rest contains tokens to be included in the msg.
+    // All other cases, e.g.:
     // `panic!("Error: {}", code);`
-    //
-    // Note: This macro may match things that wouldn't be accepted by the panic!() macro. we have
-    // decided to over-approximate the matching so we can deal with things like macro inside a macro
-    // E.g.:
-    // ```
-    // panic!(concat!("Message {}", " split in two"), argument);
-    // ```
-    // The std implementation of `panic!()` macro is implemented in the compiler and it seems to
-    // be able to do things that we cannot do here.
-    // https://github.com/rust-lang/rust/blob/dc2d232c7485c60dd856f8b9aee83426492d4661/compiler/rustc_expand/src/base.rs#L1197
-    ($msg:expr, $($arg:tt)+) => {{
+    ($($arg:tt)+) => {{
         if false {
-            let _ = format_args!($msg, $($arg)+);
+            core::assert!(true, $($arg)+);
         }
-        kani::panic(stringify!($msg, $($arg)+));
+        kani::panic(stringify!($($arg)+));
     }};
 }
