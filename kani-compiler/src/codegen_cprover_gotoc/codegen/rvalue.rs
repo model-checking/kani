@@ -17,7 +17,7 @@ use rustc_middle::mir::{AggregateKind, BinOp, CastKind, NullOp, Operand, Place, 
 use rustc_middle::ty::adjustment::PointerCast;
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{self, Instance, IntTy, Ty, TyCtxt, UintTy, VtblEntry};
-use rustc_target::abi::{FieldsShape, TagEncoding, Variants};
+use rustc_target::abi::{FieldsShape, Size, TagEncoding, Variants};
 use std::collections::BTreeMap;
 use tracing::{debug, warn};
 
@@ -576,6 +576,21 @@ impl<'tcx> GotocCtx<'tcx> {
                     )
                 }
             },
+        }
+    }
+
+    /// Extract the niche value from `v`. This value should be of type `niche_ty` and located
+    /// at byte offset `offset`
+    pub fn codegen_get_niche(&self, v: Expr, offset: Size, niche_ty: Type) -> Expr {
+        if offset == Size::ZERO {
+            v.reinterpret_cast(niche_ty)
+        } else {
+            v // t: T
+                .address_of() // &t: T*
+                .cast_to(Type::unsigned_int(8).to_pointer()) // (u8 *)&t: u8 *
+                .plus(Expr::int_constant(offset.bytes(), Type::size_t())) // ((u8 *)&t) + offset: u8 *
+                .cast_to(niche_ty.to_pointer()) // (N *)(((u8 *)&t) + offset): N *
+                .dereference() // *(N *)(((u8 *)&t) + offset): N
         }
     }
 
