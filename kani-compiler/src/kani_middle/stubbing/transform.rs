@@ -68,10 +68,15 @@ fn check_compatibility<'a, 'tcx>(
         let old_arg = old_body.local_decls.get(i.into()).unwrap();
         let new_arg = stub_body.local_decls.get(i.into()).unwrap();
         if old_arg.ty != new_arg.ty {
+            let prefix = if i == 0 {
+                "Return type differs".to_string()
+            } else {
+                format!("Type of parameter {} differs", i - 1)
+            };
             tcx.sess.span_err(
                 new_arg.source_info.span,
                 format!(
-                    "Type mismatch: stub `{}` has type `{}` where original function/method `{}` has type `{}`",
+                    "{prefix}: stub `{}` has type `{}` where original function/method `{}` has type `{}`",
                     tcx.def_path_str(stub_def_id),
                     new_arg.ty,
                     tcx.def_path_str(old_def_id),
