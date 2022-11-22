@@ -1,5 +1,8 @@
 error: Arity mismatch: original function/method `f1` takes 1 argument(s), stub `f2` takes 0
-error: Type mismatch: stub `g2` has type `u32` where original function/method `g1` has type `i32`
-error: Type mismatch: stub `g2` has type `&mut bool` where original function/method `g1` has type `&bool`
-error: Type mismatch: stub `h2` has type `T` where original function/method `h1` has type `S`
-error: aborting due to 4 previous errors
+error: Return type differs: stub `g2` has type `i32` where original function/method `g1` has type `bool`
+error: Type of parameter 1 differs: stub `g2` has type `u32` where original function/method `g1` has type `i32`
+error: Type of parameter 2 differs: stub `g2` has type `&mut bool` where original function/method `g1` has type `&bool`
+error: Type of parameter 0 differs: stub `h2` has type `T` where original function/method `h1` has type `S`
+error: Return type differs: stub `i2` has type `Y` where original function/method `i1` has type `X`
+error: Type of parameter 1 differs: stub `j2` has type `&X` where original function/method `j1` has type `&Y`
+error: aborting due to 7 previous errors
