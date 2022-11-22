@@ -15,8 +15,11 @@ overrides and a description of their behavior compared to the `std` versions:
 
 Name | Description |
 ---  | --- |
-`assert`, `assert_eq`, and `assert_ne` macros | Skips string formatting code, generates a more informative message and performs some instrumentation |
+`assert`, `assert_eq`, and `assert_ne` macros | Skips string formatting code[^skip-errors], generates a more informative message and performs some instrumentation.
 `debug_assert`, `debug_assert_eq`, and `debug_assert_ne` macros | Rewrites as equivalent `assert*` macro |
-`print`, `eprint`, `println`, and `eprintln` macros | Skips string formatting and I/O operations |
-`unreachable` macro | Skips string formatting and invokes `panic!()` |
+`panic` | Skips string formatting code[^skip-errors] |
+`print`, `eprint`, `println`, and `eprintln` macros | Skips I/O operations |
+`unreachable` macro | Skips string formatting[^skip-errors] and invokes `panic!()` |
 `std::process::{abort, exit}` functions | Invokes `panic!()` to abort the execution |
+
+[^skip-errors]: The effect of skipping string formatting code is that Kani fails to detect and report any compiler warnings/errors associated with them (see https://github.com/model-checking/kani/issues/803)
