@@ -1411,9 +1411,11 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> Stmt {
         let a = fargs.remove(0);
         let b = fargs.remove(0);
+
         let a_size = a.typ().len().unwrap();
         let b_size = b.typ().len().unwrap();
         assert_eq!(a_size, b_size, "expected same length vectors");
+
         let mut check = Expr::bool_false();
         for i in 0..a_size {
             // create expression
