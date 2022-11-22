@@ -17,12 +17,14 @@ extern "platform-intrinsic" {
 
 #[kani::proof]
 fn main() {
-    let val_any = kani::any();
-    let simd_any = i8x2(val_any, val_any);
+    let a = kani::any();
+    let b = kani::any();
+    let simd_a = i8x2(a, a);
+    let simd_b = i8x2(b, b);
 
     unsafe {
-        let _ = simd_add(simd_any, simd_any);
-        let _ = simd_sub(simd_any, simd_any);
-        let _ = simd_mul(simd_any, simd_any);
+        let _ = simd_add(simd_a, simd_b);
+        let _ = simd_sub(simd_a, simd_b);
+        let _ = simd_mul(simd_a, simd_b);
     }
 }
