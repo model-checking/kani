@@ -8,7 +8,7 @@
 //! - `legacy-lib/`: Kani libraries built based on the the toolchain standard libraries.
 //!
 //! Rustc expects the sysroot to have a specific folder layout:
-//! {SYSROOT}/rustlib/<target-triplet>/lib/<libraries>
+//! `{SYSROOT}/rustlib/<target-triplet>/lib/<libraries>`
 //!
 //! Note: We don't cross-compile. Target is the same as the host.
 
