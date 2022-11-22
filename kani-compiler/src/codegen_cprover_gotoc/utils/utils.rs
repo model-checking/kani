@@ -45,7 +45,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Tries to extract a string message from an `Expr`.  If the expression is
     /// a pointer to a variable that represents a string literal (as created in
-    /// codegen_slice_value), this will return the string constant. Otherwise,
+    /// `codegen_slice_value`), this will return the string constant. Otherwise,
     /// return `None`.
     pub fn extract_const_message(&self, arg: &Expr) -> Option<String> {
         match arg.value() {
@@ -122,25 +122,25 @@ impl<'tcx> GotocCtx<'tcx> {
         })
     }
 
-    /// Best effort check if the struct represents a rust "std::alloc::Global".
+    /// Best effort check if the struct represents a rust `std::alloc::Global`
     fn assert_is_rust_global_alloc_like(&self, t: &Type) {
-        // TODO: A std::alloc::Global appears to be an empty struct, in the cases we've seen.
+        // TODO: A `std::alloc::Global` appears to be an empty struct, in the cases we've seen.
         // Is there something smarter we can do here?
         assert!(t.is_struct_like());
         let components = t.lookup_components(&self.symbol_table).unwrap();
         assert_eq!(components.len(), 0);
     }
 
-    /// Best effort check if the struct represents a rust "std::marker::PhantomData".
+    /// Best effort check if the struct represents a rust `std::marker::PhantomData`
     fn assert_is_rust_phantom_data_like(&self, t: &Type) {
-        // TODO: A std::marker::PhantomData appears to be an empty struct, in the cases we've seen.
+        // TODO: A `std::marker::PhantomData` appears to be an empty struct, in the cases we've seen.
         // Is there something smarter we can do here?
         assert!(t.is_struct_like());
         let components = t.lookup_components(&self.symbol_table).unwrap();
         assert_eq!(components.len(), 0);
     }
 
-    /// Best effort check if the struct represents a Rust "Box". May return false positives.
+    /// Best effort check if the struct represents a Rust `Box`. May return false positives.
     fn assert_is_rust_box_like(&self, t: &Type) {
         // struct std::boxed::Box<[u8; 8]>::15334369982748499855
         // {
@@ -161,7 +161,7 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    /// Checks if the struct represents a Rust "std::ptr::Unique"
+    /// Checks if the struct represents a Rust `std::ptr::Unique`
     fn assert_is_rust_unique_pointer_like(&self, t: &Type) {
         // struct std::ptr::Unique<[u8; 8]>::14713681870393313245
         // {

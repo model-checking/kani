@@ -31,7 +31,7 @@ pub fn join_args(input_args: Vec<OsString>) -> Result<Vec<OsString>> {
 /// flag must only be included once.
 ///
 /// This function will return the arguments in the following order:
-/// ```
+/// ```text
 /// <bin_name> [<cfg_kani_args>]* [<cmd_kani_args>]* [--cbmc-args [<cfg_cbmc_args>]* [<cmd_cbmc_args>]*]
 /// ```
 fn merge_args(
