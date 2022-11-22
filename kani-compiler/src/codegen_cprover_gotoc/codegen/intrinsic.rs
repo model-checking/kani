@@ -572,7 +572,14 @@ impl<'tcx> GotocCtx<'tcx> {
             "saturating_sub" => codegen_intrinsic_binop_with_mm!(saturating_sub),
             "sinf32" => codegen_simple_intrinsic!(Sinf),
             "sinf64" => codegen_simple_intrinsic!(Sin),
-            "simd_add" => self.codegen_simd_op_with_overflow(Expr::plus, Expr::add_overflow_p, fargs, intrinsic, p, loc),
+            "simd_add" => self.codegen_simd_op_with_overflow(
+                Expr::plus,
+                Expr::add_overflow_p,
+                fargs,
+                intrinsic,
+                p,
+                loc,
+            ),
             "simd_and" => codegen_intrinsic_binop!(bitand),
             "simd_div" => unstable_codegen!(codegen_intrinsic_binop!(div)),
             "simd_eq" => self.codegen_simd_cmp(Expr::vector_eq, fargs, p, span, farg_types, ret_ty),
@@ -588,7 +595,14 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             "simd_le" => self.codegen_simd_cmp(Expr::vector_le, fargs, p, span, farg_types, ret_ty),
             "simd_lt" => self.codegen_simd_cmp(Expr::vector_lt, fargs, p, span, farg_types, ret_ty),
-            "simd_mul" => self.codegen_simd_op_with_overflow(Expr::mul, Expr::mul_overflow_p, fargs, intrinsic, p, loc),
+            "simd_mul" => self.codegen_simd_op_with_overflow(
+                Expr::mul,
+                Expr::mul_overflow_p,
+                fargs,
+                intrinsic,
+                p,
+                loc,
+            ),
             "simd_ne" => {
                 self.codegen_simd_cmp(Expr::vector_neq, fargs, p, span, farg_types, ret_ty)
             }
@@ -606,7 +620,14 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
             }
             // "simd_shuffle#" => handled in an `if` preceding this match
-            "simd_sub" => self.codegen_simd_op_with_overflow(Expr::sub, Expr::sub_overflow_p, fargs, intrinsic, p, loc),
+            "simd_sub" => self.codegen_simd_op_with_overflow(
+                Expr::sub,
+                Expr::sub_overflow_p,
+                fargs,
+                intrinsic,
+                p,
+                loc,
+            ),
             "simd_xor" => codegen_intrinsic_binop!(bitxor),
             "size_of" => codegen_intrinsic_const!(),
             "size_of_val" => codegen_size_align!(size),
@@ -1396,11 +1417,10 @@ impl<'tcx> GotocCtx<'tcx> {
         self.codegen_expr_to_place(p, e)
     }
 
-
     // Intrinsics which encode a SIMD arithmetic operation with overflow check.
     // We expand the overflow check because CBMC overflow operations don't accept array as
     // argument.
-    fn codegen_simd_op_with_overflow<F : FnOnce(Expr, Expr) -> Expr, G: Fn(Expr, Expr) -> Expr>(
+    fn codegen_simd_op_with_overflow<F: FnOnce(Expr, Expr) -> Expr, G: Fn(Expr, Expr) -> Expr>(
         &mut self,
         op_fun: F,
         overflow_fun: G,
