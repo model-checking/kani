@@ -135,8 +135,8 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    /// c.f. rustc_codegen_llvm::intrinsic impl IntrinsicCallMethods<'tcx> for Builder<'a, 'll, 'tcx>
-    /// fn codegen_intrinsic_call
+    /// c.f. `rustc_codegen_llvm::intrinsic` `impl IntrinsicCallMethods<'tcx> for Builder<'a, 'll, 'tcx>`
+    /// `fn codegen_intrinsic_call`
     /// c.f. <https://doc.rust-lang.org/std/intrinsics/index.html>
     fn codegen_intrinsic(
         &mut self,
@@ -1240,7 +1240,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// This function computes the size and alignment of a dynamically-sized type.
     /// The implementations follows closely the SSA implementation found in
-    /// rustc_codegen_ssa::glue::size_and_align_of_dst.
+    /// `rustc_codegen_ssa::glue::size_and_align_of_dst`.
     fn size_and_align_of_dst(&self, t: Ty<'tcx>, arg: Expr) -> SizeAlign {
         let layout = self.layout_of(t);
         let usizet = Type::size_t();
