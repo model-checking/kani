@@ -161,16 +161,17 @@ Given a set of `original`-`replacement` pairs, Kani will exit with an error if
 ### Stub compatibility and validation
 
 When considering whether a function/method can be replaced with some given stub, we want to allow some measure of flexibility, while also ensuring that we can provide the user with useful feedback if stubbing results in misformed code.
-We consider a stub to be compatible with some function/method if all the following conditions are met:
+We consider a stub and a function/method to be compatible if all the following conditions are met:
 
-- They have the same return type. The names of type variables need to match.
 - They have the same number of parameters.
+- They have the same return type.
 - Each parameter in the stub has the same type as the corresponding parameter in the original function/method.
-The names of type variables need to match.
-- During monomorphization, every statically dispatched call to a trait method can be resolved.
+- We do **NOT** allow for the renaming of type parameters when checking whether types are equivalent; for example, the function `foo<S>(x: S) -> S` is considered to have a different type than the function `bar<T>(x: T) -> T`.
+- The bounds for each type parameter don't need to match; however, all calls to the original function must also satisfy the bounds of the stub.
+
 
 The final point is the most subtle.
-We do not require that a type variable in the signature of the stub implements the same traits as the corresponding type variable in the signature of the original function/method.
+We do not require that a type parameter in the signature of the stub implements the same traits as the corresponding type parameter in the signature of the original function/method.
 However, Kani will reject a stub if a trait mismatch leads to a situation where a statically dispatched call to a trait method cannot be resolved during monomorphization.
 For example, this restriction rules out the following harness:
 ```rust
@@ -192,9 +193,9 @@ fn harness() {
     assert!(foo("hello"));
 }
 ```
-The call to the trait method `DoIt::do_it` is unresolvable in the stub `bar` when the type variable `T` is instantiated with the type `&str`.
+The call to the trait method `DoIt::do_it` is unresolvable in the stub `bar` when the type parameter `T` is instantiated with the type `&str`.
 On the other hand, our approach provides some flexibility, such as allowing our earlier example of mocking randomization: both `rand::random` and `my_random` have the type `() -> T`, but in the first case `T` is restricted such that the type `Standard` implements `Distribution<T>`, whereas in the latter case `T` has to implement `kani::Arbitrary`.
-This trait mismatch is harmless because it does not result in any unresolvable behavior when `T` is instantiated with `u32`.
+This trait mismatch is allowed because at this call site `T` is instantiated with `u32`, which implements `kani::Arbitrary`.
 
 ### Pedagogy
 
