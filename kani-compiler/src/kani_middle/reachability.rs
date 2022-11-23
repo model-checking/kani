@@ -29,7 +29,7 @@ use rustc_middle::span_bug;
 use rustc_middle::ty::adjustment::PointerCast;
 use rustc_middle::ty::{
     Closure, ClosureKind, ConstKind, Instance, InstanceDef, ParamEnv, Ty, TyCtxt, TyKind,
-    TypeFoldable, VtblEntry, WithOptConstParam,
+    TypeAndMut, TypeFoldable, VtblEntry, WithOptConstParam,
 };
 
 use crate::kani_middle::coercion;
@@ -398,7 +398,7 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
 
         let tcx = self.tcx;
         match terminator.kind {
-            TerminatorKind::Call { ref func, .. } => {
+            TerminatorKind::Call { ref func, ref args, .. } => {
                 let callee_ty = func.ty(self.body, tcx);
                 let fn_ty = self.monomorphize(callee_ty);
                 if let TyKind::FnDef(def_id, substs) = *fn_ty.kind() {
@@ -417,13 +417,27 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
                                 // original function/method. A trait mismatch shows
                                 // up here, when we try to resolve a trait method
                                 // that the type does not implement.
+                                fn deref(orig_ty: Ty) -> Ty {
+                                    match orig_ty.builtin_deref(false) {
+                                        None => orig_ty,
+                                        Some(TypeAndMut { ty, .. }) => deref(ty),
+                                    }
+                                }
+                                let generic_ty = deref(args[0].ty(self.body, tcx));
+                                let receiver_ty = tcx.subst_and_normalize_erasing_regions(
+                                    substs,
+                                    ParamEnv::reveal_all(),
+                                    generic_ty,
+                                );
+                                let sep = callee.rfind("::").unwrap();
+                                let trait_ = &callee[..sep];
                                 tcx.sess.span_err(
                                     terminator.source_info.span,
                                     format!(
-                                        "unable to resolve call to `{callee}`; \
-                                        there is likely a trait mismatch between \
-                                        the signatures for the stub `{stub}` \
-                                        and the original function/method `{caller}`"
+                                        "`{receiver_ty}` doesn't implement \
+                                        `{trait_}`. The function `{caller}` \
+                                        cannot be stubbed by `{stub}` due to \
+                                        generic bounds not being met."
                                     ),
                                 );
                             } else {
