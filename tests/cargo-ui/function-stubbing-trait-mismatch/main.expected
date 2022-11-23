@@ -1,3 +1,3 @@
 error: unable to resolve call to `DoIt::do_it`; there is likely a trait mismatch between the signatures for the stub `bar` and the original function/method `foo`
 error: unable to resolve call to `std::cmp::PartialEq::eq`; there is likely a trait mismatch between the signatures for the stub `bar` and the original function/method `foo`
-error: aborting due to 2 previous errors
+error: could not compile `function-stubbing-trait-mismatch` due to 2 previous errors

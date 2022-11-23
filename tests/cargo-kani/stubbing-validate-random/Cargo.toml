@@ -9,4 +9,4 @@ edition = "2021"
 rand = "0.8.5"
 
 [package.metadata.kani]
-flags = { enable-unstable=true, enable-stubbing=true, harness="main" }
+flags = { enable-unstable=true, enable-stubbing=true }

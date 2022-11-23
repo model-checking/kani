@@ -1,3 +1,0 @@
-error: Unable to resolve call to `DoIt::do_it`; this is either an internal Kani bug, or there is a trait mismatch between a stub you are using and the original function/method.
-error: Unable to resolve call to `std::cmp::PartialEq::eq`; this is either an internal Kani bug, or there is a trait mismatch between a stub you are using and the original function/method.
-error: aborting due to 2 previous errors

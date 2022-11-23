@@ -12,6 +12,14 @@ use rustc_data_structures::fx::FxHashMap;
 use rustc_hir::def_id::{DefId, LocalDefId};
 use rustc_middle::{mir::Body, ty::TyCtxt};
 
+/// Returns the name of the stub for the function/method identified by `def_id`,
+/// and `None` if the function/method is not stubbed.
+pub fn get_stub_name(tcx: TyCtxt, def_id: DefId) -> Option<String> {
+    let mapping = get_stub_mapping(tcx)?;
+    let name = tcx.def_path_str(def_id);
+    mapping.get(&name).map(String::clone)
+}
+
 /// Returns the new body of a function/method if it has been stubbed out;
 /// otherwise, returns the old body.
 pub fn transform<'tcx>(
@@ -19,19 +27,16 @@ pub fn transform<'tcx>(
     def_id: DefId,
     old_body: &'tcx Body<'tcx>,
 ) -> &'tcx Body<'tcx> {
-    if let Some(mapping) = get_stub_mapping(tcx) {
-        let name = tcx.def_path_str(def_id);
-        if let Some(replacement) = mapping.get(&name) {
-            if let Some(replacement_id) = get_def_id(tcx, replacement) {
-                let new_body = tcx.optimized_mir(replacement_id).clone();
-                if check_compatibility(tcx, def_id, old_body, replacement_id, &new_body) {
-                    return tcx.arena.alloc(new_body);
-                }
-            } else {
-                tcx.sess
-                    .span_err(tcx.def_span(def_id), format!("Unable to find stub: {replacement}"));
-            };
-        }
+    if let Some(replacement) = get_stub_name(tcx, def_id) {
+        if let Some(replacement_id) = get_def_id(tcx, &replacement) {
+            let new_body = tcx.optimized_mir(replacement_id).clone();
+            if check_compatibility(tcx, def_id, old_body, replacement_id, &new_body) {
+                return tcx.arena.alloc(new_body);
+            }
+        } else {
+            tcx.sess
+                .span_err(tcx.def_span(def_id), format!("unable to find stub: `{}`", replacement));
+        };
     }
     old_body
 }
@@ -52,7 +57,7 @@ fn check_compatibility<'a, 'tcx>(
         tcx.sess.span_err(
             tcx.def_span(stub_def_id),
             format!(
-                "Arity mismatch: original function/method `{}` takes {} argument(s), stub `{}` takes {}",
+                "arity mismatch: original function/method `{}` takes {} argument(s), stub `{}` takes {}",
                 tcx.def_path_str(old_def_id),
                 old_body.arg_count,
                 tcx.def_path_str(stub_def_id),
@@ -69,9 +74,9 @@ fn check_compatibility<'a, 'tcx>(
         let new_arg = stub_body.local_decls.get(i.into()).unwrap();
         if old_arg.ty != new_arg.ty {
             let prefix = if i == 0 {
-                "Return type differs".to_string()
+                "return type differs".to_string()
             } else {
-                format!("Type of parameter {} differs", i - 1)
+                format!("type of parameter {} differs", i - 1)
             };
             tcx.sess.span_err(
                 new_arg.source_info.span,

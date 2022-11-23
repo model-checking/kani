@@ -8,4 +8,4 @@ edition = "2021"
 [dependencies]
 
 [package.metadata.kani]
-flags = { enable-unstable=true, enable-stubbing=true, harness="main" }
+flags = { enable-unstable=true, enable-stubbing=true }

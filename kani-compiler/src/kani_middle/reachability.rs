@@ -33,6 +33,7 @@ use rustc_middle::ty::{
 };
 
 use crate::kani_middle::coercion;
+use crate::kani_middle::stubbing::get_stub_name;
 
 /// Collect all reachable items starting from the given starting points.
 pub fn collect_reachable_items<'tcx>(
@@ -406,21 +407,28 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
                             .unwrap();
                     match instance_opt {
                         None => {
-                            // During the MIR stubbing transformation, we do not
-                            // force type variables in the stub's signature to
-                            // implement the same traits as those in the
-                            // original function/method. A trait mismatch shows
-                            // up here, when we try to resolve a trait method
-                            // that the type does not implement.
-                            tcx.sess.span_err(
-                                terminator.source_info.span,
-                                format!(
-                                    "Unable to resolve call to `{}`; \
-                        this is either an internal Kani bug, or there is a trait mismatch \
-                        between a stub you are using and the original function/method.",
-                                    tcx.def_path_str(def_id)
-                                ),
-                            );
+                            let caller = tcx.def_path_str(self.instance.def_id());
+                            let callee = tcx.def_path_str(def_id);
+                            // Check if the current function has been stubbed.
+                            if let Some(stub) = get_stub_name(tcx, self.instance.def_id()) {
+                                // During the MIR stubbing transformation, we do not
+                                // force type variables in the stub's signature to
+                                // implement the same traits as those in the
+                                // original function/method. A trait mismatch shows
+                                // up here, when we try to resolve a trait method
+                                // that the type does not implement.
+                                tcx.sess.span_err(
+                                    terminator.source_info.span,
+                                    format!(
+                                        "unable to resolve call to `{callee}`; \
+                                        there is likely a trait mismatch between \
+                                        the signatures for the stub `{stub}` \
+                                        and the original function/method `{caller}`"
+                                    ),
+                                );
+                            } else {
+                                panic!("unable to resolve call to `{callee}` in `{caller}`")
+                            }
                         }
                         Some(instance) => self.collect_instance(instance, true),
                     };
