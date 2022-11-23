@@ -371,10 +371,30 @@ impl<'tcx> GotocCtx<'tcx> {
         }
 
         if let Some(stripped) = intrinsic.strip_prefix("simd_shuffle") {
-            // TODO: can be empty now (i.e. `simd_shuffle` instead of `simd_shuffle8`)
-            // `parse` fails on empty, so comment that bit of code out.
-            // To re-enable this we'll need to investigate how size is computed now.
-            let n: u64 = stripped.parse().unwrap();
+
+            let n: u64 = if stripped.is_empty() {
+            // Make sure this is actually an array, since typeck only checks the length-suffixed
+            // version of this intrinsic.
+                match farg_types[2].kind() {
+                ty::Array(ty, len) if matches!(ty.kind(), ty::Uint(ty::UintTy::U32)) => {
+                    len.try_eval_usize(self.tcx, ty::ParamEnv::reveal_all()).unwrap_or_else(|| {
+                        self.tcx.sess.span_err(span.unwrap(), "could not evaluate shuffle index array length");
+                        panic!();
+                    })
+                }
+                _ => {
+                let err_msg = format!("simd_shuffle index must be an array of `u32`, got `{}`",
+                farg_types[2]);
+                self.tcx.sess.span_err(span.unwrap(), err_msg);
+                panic!()
+                }
+            }
+        } else {
+            stripped.parse().unwrap_or_else(|_| {
+                self.tcx.sess.span_err(span.unwrap(), "bad `simd_shuffle` instruction only caught in codegen?");
+                panic!()
+            })
+        };
             return self.codegen_intrinsic_simd_shuffle(
                 fargs,
                 p,
