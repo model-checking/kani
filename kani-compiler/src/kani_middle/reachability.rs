@@ -29,7 +29,7 @@ use rustc_middle::span_bug;
 use rustc_middle::ty::adjustment::PointerCast;
 use rustc_middle::ty::{
     Closure, ClosureKind, ConstKind, Instance, InstanceDef, ParamEnv, Ty, TyCtxt, TyKind,
-    TypeAndMut, TypeFoldable, VtblEntry, WithOptConstParam,
+    TypeFoldable, VtblEntry, WithOptConstParam,
 };
 
 use crate::kani_middle::coercion;
@@ -416,14 +416,7 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
                                 // implement the same traits as those in the
                                 // original function/method. A trait mismatch shows
                                 // up here, when we try to resolve a trait method
-                                // that the type does not implement.
-                                fn deref(orig_ty: Ty) -> Ty {
-                                    match orig_ty.builtin_deref(false) {
-                                        None => orig_ty,
-                                        Some(TypeAndMut { ty, .. }) => deref(ty),
-                                    }
-                                }
-                                let generic_ty = deref(args[0].ty(self.body, tcx));
+                                let generic_ty = args[0].ty(self.body, tcx).peel_refs();
                                 let receiver_ty = tcx.subst_and_normalize_erasing_regions(
                                     substs,
                                     ParamEnv::reveal_all(),
