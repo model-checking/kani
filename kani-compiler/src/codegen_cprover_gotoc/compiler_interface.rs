@@ -3,21 +3,30 @@
 
 //! This file contains the code necessary to interface with the compiler backend
 
-use crate::codegen_cprover_gotoc::GotocCtx;
-use crate::kani_middle::mir_transform;
-use crate::kani_middle::reachability::{
-    collect_reachable_items, filter_closures_in_const_crate_items, filter_crate_items,
-};
+use std::collections::BTreeMap;
+use std::ffi::OsString;
+use std::fmt::Write;
+use std::fs::File;
+use std::io::BufWriter;
+use std::io::Write as IoWrite;
+use std::iter::FromIterator;
+use std::path::Path;
+use std::process::Command;
+use std::rc::Rc;
+
 use bitflags::_core::any::Any;
-use cbmc::goto_program::{symtab_transformer, Location};
+use tracing::{debug, error, warn};
+
+use cbmc::goto_program::Location;
 use cbmc::{InternedString, MachineModel};
-use kani_metadata::KaniMetadata;
+use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata};
 use kani_queries::{QueryDb, ReachabilityType, UserInput};
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_codegen_ssa::{CodegenResults, CrateInfo};
 use rustc_data_structures::fx::FxHashMap;
 use rustc_errors::ErrorGuaranteed;
 use rustc_hir::def::DefKind;
+use rustc_hir::def_id::LOCAL_CRATE;
 use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
 use rustc_middle::mir::mono::{CodegenUnit, MonoItem};
@@ -30,16 +39,12 @@ use rustc_session::Session;
 use rustc_span::def_id::DefId;
 use rustc_target::abi::Endian;
 use rustc_target::spec::PanicStrategy;
-use std::collections::BTreeMap;
-use std::fmt::Write;
-use std::fs::File;
-use std::io::BufWriter;
-use std::io::Write as IoWrite;
-use std::iter::FromIterator;
-use std::path::Path;
-use std::process::Command;
-use std::rc::Rc;
-use tracing::{debug, error, warn};
+
+use crate::codegen_cprover_gotoc::GotocCtx;
+use crate::kani_middle::mir_transform;
+use crate::kani_middle::reachability::{
+    collect_reachable_items, filter_closures_in_const_crate_items, filter_crate_items,
+};
 
 #[derive(Clone)]
 pub struct GotocCodegenBackend {
@@ -136,15 +141,13 @@ impl CodegenBackend for GotocCodegenBackend {
         // Print compilation report.
         print_report(&gcx, tcx);
 
-        let unsupported_features = gcx.unsupported_metadata();
-
         // perform post-processing symbol table passes
-        let passes = self.queries.get_symbol_table_passes();
-        let symtab = symtab_transformer::do_passes(gcx.symbol_table, &passes);
+        //let passes = self.queries.get_symbol_table_passes();
+        //let symtab = symtab_transformer::do_passes(gcx.symbol_table, &passes);
 
         // Map MIR types to GotoC types
         let type_map: BTreeMap<InternedString, InternedString> =
-            BTreeMap::from_iter(gcx.type_map.into_iter().map(|(k, v)| (k, v.to_string().into())));
+            BTreeMap::from_iter(gcx.type_map.iter().map(|(k, v)| (*k, v.to_string().into())));
 
         // Get the vtable function pointer restrictions if requested
         let vtable_restrictions = if gcx.vtable_ctx.emit_vtable_restrictions {
@@ -153,27 +156,23 @@ impl CodegenBackend for GotocCodegenBackend {
             None
         };
 
-        let metadata = KaniMetadata {
-            proof_harnesses: gcx.proof_harnesses,
-            unsupported_features,
-            test_harnesses: gcx.test_harnesses,
-        };
+        let metadata = generate_metadata(&gcx, tcx);
 
         // No output should be generated if user selected no_codegen.
         if !tcx.sess.opts.unstable_opts.no_codegen && tcx.sess.opts.output_types.should_codegen() {
             let outputs = tcx.output_filenames(());
             let base_filename = outputs.output_path(OutputType::Object);
             let pretty = self.queries.get_output_pretty_json();
-            write_file(&base_filename, "symtab.json", &symtab, pretty);
-            write_file(&base_filename, "type_map.json", &type_map, pretty);
-            write_file(&base_filename, "kani-metadata.json", &metadata, pretty);
+            write_file(&base_filename, ArtifactType::SymTab, &gcx.symbol_table, pretty);
+            write_file(&base_filename, ArtifactType::TypeMap, &type_map, pretty);
+            write_file(&base_filename, ArtifactType::Metadata, &metadata, pretty);
             // If they exist, write out vtable virtual call function pointer restrictions
             if let Some(restrictions) = vtable_restrictions {
-                write_file(&base_filename, "restrictions.json", &restrictions, pretty);
+                write_file(&base_filename, ArtifactType::VTableRestriction, &restrictions, pretty);
             }
             symbol_table_to_gotoc(&tcx, &base_filename);
         }
-        codegen_results(tcx, rustc_metadata, symtab.machine_model())
+        codegen_results(tcx, rustc_metadata, gcx.symbol_table.machine_model())
     }
 
     fn join_codegen(
@@ -311,21 +310,6 @@ fn check_crate_items(gcx: &GotocCtx) {
     tcx.sess.abort_if_errors();
 }
 
-fn write_file<T>(base_filename: &Path, extension: &str, source: &T, pretty: bool)
-where
-    T: serde::Serialize,
-{
-    let filename = base_filename.with_extension(extension);
-    debug!("output to {:?}", filename);
-    let out_file = File::create(&filename).unwrap();
-    let writer = BufWriter::new(out_file);
-    if pretty {
-        serde_json::to_writer_pretty(writer, &source).unwrap();
-    } else {
-        serde_json::to_writer(writer, &source).unwrap();
-    }
-}
-
 /// Prints a report at the end of the compilation.
 fn print_report<'tcx>(ctx: &GotocCtx, tcx: TyCtxt<'tcx>) {
     // Print all unsupported constructs.
@@ -372,9 +356,8 @@ fn codegen_results(
 /// - None: Skip collection and codegen all together. This is used to compile dependencies.
 /// - Legacy: Use regular compiler collection that will collect local items, and a few cross
 /// crate items (such as generic functions and functions candidate to be inlined).
-///
-/// To be implemented:
 /// - PubFns: Cross-crate reachability analysis that use the local public fns as starting point.
+/// - Tests: Cross-crate collection of all reachable items starting from test harnesses.
 fn collect_codegen_items<'tcx>(gcx: &GotocCtx<'tcx>) -> Vec<MonoItem<'tcx>> {
     let tcx = gcx.tcx;
     let reach = gcx.queries.get_reachability_analysis();
@@ -413,14 +396,14 @@ fn collect_codegen_items<'tcx>(gcx: &GotocCtx<'tcx>) -> Vec<MonoItem<'tcx>> {
     }
 }
 
-fn symbol_table_to_gotoc(tcx: &TyCtxt, file: &Path) {
-    let output_filename = file.with_extension("symtab.out");
-    let input_filename = file.with_extension("symtab.json");
+fn symbol_table_to_gotoc(tcx: &TyCtxt, file: &Path) -> impl AsRef<Path> {
+    let output_filename = file.with_extension(ArtifactType::SymTabGoto);
+    let input_filename = file.with_extension(ArtifactType::SymTab);
 
     let args = vec![
         input_filename.clone().into_os_string(),
         "--out".into(),
-        output_filename.into_os_string(),
+        OsString::from(output_filename.as_os_str()),
     ];
     // TODO get symtab2gb path from self
     let mut cmd = Command::new("symtab2gb");
@@ -439,7 +422,8 @@ fn symbol_table_to_gotoc(tcx: &TyCtxt, file: &Path) {
         );
         tcx.sess.err(&err_msg);
         tcx.sess.abort_if_errors();
-    }
+    };
+    output_filename
 }
 
 /// Print MIR for the reachable items if the `--emit mir` option was provided to rustc.
@@ -475,5 +459,41 @@ fn dump_mir_items(tcx: TyCtxt, items: &[MonoItem]) {
             writeln!(writer, "// Item: {item:?}").unwrap();
             write_mir_pretty(tcx, Some(def_id), &mut writer).unwrap();
         }
+    }
+}
+
+/// Method that generates `KaniMetadata` from the given compilation context.
+/// This is a temporary method used until we generate a model per-harness.
+/// See <https://github.com/model-checking/kani/issues/1855> for more details.
+fn generate_metadata(gcx: &GotocCtx, tcx: TyCtxt) -> KaniMetadata {
+    let outputs = tcx.output_filenames(());
+    let model_file =
+        outputs.output_path(OutputType::Object).with_extension(ArtifactType::SymTabGoto);
+    let extend_harnesses = |mut harnesses: Vec<HarnessMetadata>| {
+        for harness in harnesses.iter_mut() {
+            harness.model_file = Some(model_file.clone());
+        }
+        harnesses
+    };
+    KaniMetadata {
+        crate_name: tcx.crate_name(LOCAL_CRATE).to_string(),
+        proof_harnesses: extend_harnesses(gcx.proof_harnesses.clone()),
+        unsupported_features: gcx.unsupported_metadata(),
+        test_harnesses: extend_harnesses(gcx.test_harnesses.clone()),
+    }
+}
+
+pub fn write_file<T>(base_path: &Path, file_type: ArtifactType, source: &T, pretty: bool)
+where
+    T: serde::Serialize,
+{
+    let filename = base_path.with_extension(file_type);
+    debug!(?filename, "write_json");
+    let out_file = File::create(&filename).unwrap();
+    let writer = BufWriter::new(out_file);
+    if pretty {
+        serde_json::to_writer_pretty(writer, &source).unwrap();
+    } else {
+        serde_json::to_writer(writer, &source).unwrap();
     }
 }

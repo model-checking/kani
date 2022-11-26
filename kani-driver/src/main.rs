@@ -6,6 +6,7 @@ use anyhow::Result;
 use args::CargoKaniSubcommand;
 use args_toml::join_args;
 use clap::Parser;
+use kani_metadata::artifact::{convert_type, ArtifactType::*};
 use std::ffi::OsString;
 use std::path::PathBuf;
 
@@ -59,7 +60,7 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
 
     let mut goto_objs: Vec<PathBuf> = Vec::new();
     for symtab in &outputs.symtabs {
-        let goto_obj_filename = symtab.with_extension("out");
+        let goto_obj_filename = convert_type(symtab, SymTab, SymTabGoto);
         goto_objs.push(goto_obj_filename);
     }
 
@@ -103,7 +104,7 @@ fn standalone_main() -> Result<()> {
         return Ok(());
     }
 
-    let linked_obj = util::alter_extension(&args.input, "out");
+    let linked_obj = args.input.with_extension(Goto);
     ctx.record_temporary_files(&[&linked_obj]);
     ctx.link_goto_binary(&[goto_obj], &linked_obj)?;
     if let Some(restriction) = outputs.restrictions {

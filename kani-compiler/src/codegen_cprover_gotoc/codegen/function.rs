@@ -330,10 +330,12 @@ impl<'tcx> GotocCtx<'tcx> {
             self.test_harnesses.push(HarnessMetadata {
                 pretty_name: self.current_fn().readable_name().to_owned(),
                 mangled_name: self.current_fn().name(),
+                crate_name: self.current_fn().krate(),
                 original_file: loc.filename().unwrap(),
                 original_start_line: loc.start_line().unwrap() as usize,
                 original_end_line: loc.end_line().unwrap() as usize,
                 unwind_value: None,
+                model_file: None,
             })
         }
     }
@@ -386,10 +388,12 @@ impl<'tcx> GotocCtx<'tcx> {
         HarnessMetadata {
             pretty_name,
             mangled_name,
+            crate_name: current_fn.krate(),
             original_file: loc.filename().unwrap(),
             original_start_line: loc.start_line().unwrap() as usize,
             original_end_line: loc.end_line().unwrap() as usize,
             unwind_value: None,
+            model_file: None,
         }
     }
 

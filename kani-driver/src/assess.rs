@@ -5,7 +5,7 @@ use std::{collections::HashMap, path::PathBuf};
 
 use anyhow::Result;
 use comfy_table::Table;
-use kani_metadata::KaniMetadata;
+use kani_metadata::{ArtifactType, KaniMetadata};
 
 use crate::harness_runner::HarnessResult;
 use crate::session::KaniSession;
@@ -244,7 +244,7 @@ pub(crate) fn cargokani_assess_main(mut ctx: KaniSession) -> Result<()> {
     // We could start thinking about abtracting this stuff out into a shared function...
     let mut goto_objs: Vec<PathBuf> = Vec::new();
     for symtab in &outputs.symtabs {
-        let goto_obj_filename = symtab.with_extension("out");
+        let goto_obj_filename = symtab.with_extension(ArtifactType::Goto);
         goto_objs.push(goto_obj_filename);
     }
 
