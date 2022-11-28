@@ -176,9 +176,13 @@ impl<'tcx> ProjectedPlace<'tcx> {
                 goto_expr, expr_ty, ty_from_mir
             );
             warn!("{}", msg);
-            // TODO: this assertion fails on firecracker with the rust 2022-11-20 toolchain
+            // TODO: there's an expr type mismatch with the rust 2022-11-20 toolchain
+            // for simd:
             // https://github.com/model-checking/kani/issues/1926
-            //debug_assert!(false, "{}", msg);
+            // Disabling it for this specific case.
+            if !(expr_ty.is_integer() && ty_from_mir.is_struct_tag()) {
+                debug_assert!(false, "{}", msg);
+            }
             return Err(UnimplementedData::new(
                 "Projection mismatch",
                 "https://github.com/model-checking/kani/issues/277",
