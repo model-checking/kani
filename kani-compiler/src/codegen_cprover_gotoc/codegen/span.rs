@@ -60,7 +60,11 @@ impl<'tcx> GotocCtx<'tcx> {
             // TODO: create a test and figure out if we should return debug info
             // for this case:
             // https://github.com/model-checking/kani/issues/1933
-            VarDebugInfoContents::Composite { .. } => false,
+            VarDebugInfoContents::Composite { .. } => {
+                // Fail in debug mode to determine if we ever hit this case
+                debug_assert!(false, "Unhandled VarDebugInfoContents::Composite");
+                false
+            }
         })
     }
 }
