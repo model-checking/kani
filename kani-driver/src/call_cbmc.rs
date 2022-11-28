@@ -124,17 +124,12 @@ impl KaniSession {
             args.push("--validate-ssa-equation".into());
         }
 
-        // Push `--slice-formula` argument.
-        // Previously, this would happen if the condition below was satisfied:
-        // ```rust
-        // if !self.args.visualize
-        //   && self.args.concrete_playback.is_none()
-        //   && !self.args.no_slice_formula
-        // ```
-        // But for some reason, not pushing it causes a CBMC invariant violation
-        // since version 5.68.0.
-        // <https://github.com/model-checking/kani/issues/1810>
-        args.push("--slice-formula".into());
+        if !self.args.visualize
+            && self.args.concrete_playback.is_none()
+            && !self.args.no_slice_formula
+        {
+            args.push("--slice-formula".into());
+        }
 
         if self.args.concrete_playback.is_some() {
             args.push("--trace".into());
