@@ -127,7 +127,7 @@ impl KaniSession {
             cmd.stderr(std::process::Stdio::null());
         }
         if self.args.verbose {
-            println!("Running: `{}`", render_command(&cmd).to_string_lossy());
+            println!("[Kani] Running: `{}`", render_command(&cmd).to_string_lossy());
         }
         let result = cmd
             .status()
@@ -163,7 +163,7 @@ impl KaniSession {
     pub fn run_redirect(&self, mut cmd: Command, stdout: &Path) -> Result<ExitStatus> {
         if self.args.verbose {
             println!(
-                "Running: `{} > {}`",
+                "[Kani] Running: `{} > {}`",
                 render_command(&cmd).to_string_lossy(),
                 stdout.display()
             );
@@ -181,7 +181,7 @@ impl KaniSession {
     /// the process exit code, you need to remember to check this yourself.
     pub fn run_piped(&self, mut cmd: Command) -> Result<Option<Child>> {
         if self.args.verbose {
-            println!("Running: `{}`", render_command(&cmd).to_string_lossy());
+            println!("[Kani] Running: `{}`", render_command(&cmd).to_string_lossy());
         }
         // Run the process as a child process
         let process = cmd

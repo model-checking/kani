@@ -449,7 +449,7 @@ impl KaniArgs {
         if self.dry_run {
             return Err(Error::raw(
                 ErrorKind::ValueValidation,
-                "We no longer support `--dry-run`. Use --verbose instead.",
+                "The `--dry-run` option is obsolete. Use --verbose instead.",
             ));
         }
 
