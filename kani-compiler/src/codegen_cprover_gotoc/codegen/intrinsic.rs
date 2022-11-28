@@ -612,7 +612,9 @@ impl<'tcx> GotocCtx<'tcx> {
             "simd_and" => codegen_intrinsic_binop!(bitand),
             "simd_div" => unstable_codegen!(codegen_intrinsic_binop!(div)),
             "simd_eq" => self.codegen_simd_cmp(Expr::vector_eq, fargs, p, span, farg_types, ret_ty),
-            "simd_extract" => self.codegen_intrinsic_simd_extract(fargs, p, farg_types, ret_ty, span),
+            "simd_extract" => {
+                self.codegen_intrinsic_simd_extract(fargs, p, farg_types, ret_ty, span)
+            }
             "simd_ge" => self.codegen_simd_cmp(Expr::vector_ge, fargs, p, span, farg_types, ret_ty),
             "simd_gt" => self.codegen_simd_cmp(Expr::vector_gt, fargs, p, span, farg_types, ret_ty),
             "simd_insert" => {
@@ -1347,12 +1349,10 @@ impl<'tcx> GotocCtx<'tcx> {
         let index = fargs.remove(0);
 
         let (_, vector_base_type) = rust_arg_types[0].simd_size_and_type(self.tcx);
-        if rust_ret_type != vector_base_type  {
+        if rust_ret_type != vector_base_type {
             let err_msg = format!(
                 "expected return type `{}` (element of input `{}`), found `{}`",
-                vector_base_type,
-                rust_arg_types[0],
-                rust_ret_type
+                vector_base_type, rust_arg_types[0], rust_ret_type
             );
             self.tcx.sess.span_err(span.unwrap(), err_msg);
         }
@@ -1390,9 +1390,7 @@ impl<'tcx> GotocCtx<'tcx> {
         if vector_base_type != rust_arg_types[2] {
             let err_msg = format!(
                 "expected inserted type `{}` (element of input `{}`), found `{}`",
-                vector_base_type,
-                rust_arg_types[0],
-                rust_arg_types[2]
+                vector_base_type, rust_arg_types[0], rust_arg_types[2]
             );
             self.tcx.sess.span_err(span.unwrap(), err_msg);
         }
