@@ -24,13 +24,10 @@ fn copy_from_slice(src: &[u8], dst: &mut [u8]) {
 
 #[kani::proof]
 fn proof_harness() {
-    let mut data = Data {
-        t: Type::Apple,
-        array: [0; 8],
-    };
+    let mut data = Data { t: Type::Apple, array: [0; 8] };
     let coin = kani::any();
     let param = [0, 0, 0, 0];
     let start = if coin { 4 } else { 0 };
-    copy_from_slice(&param, &mut data.array[start..start+4]);
+    copy_from_slice(&param, &mut data.array[start..start + 4]);
     assert!(data.t == Type::Apple || data.t == Type::Banana);
 }

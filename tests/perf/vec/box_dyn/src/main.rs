@@ -4,7 +4,7 @@
 //! This test checks the performance of pushing onto a vector of Box<dyn _>
 
 const N: usize = 4;
-const M: usize = N+1;
+const M: usize = N + 1;
 
 trait T {
     fn foo(&self) -> i32;

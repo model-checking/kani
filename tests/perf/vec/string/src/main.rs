@@ -6,7 +6,7 @@
 const N: usize = 9;
 
 #[kani::proof]
-#[kani::unwind(10))]
+#[kani::unwind(10)]
 fn main() {
     let mut v: Vec<String> = Vec::new();
     for _i in 0..N {
