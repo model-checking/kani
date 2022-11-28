@@ -241,14 +241,6 @@ pub struct KaniArgs {
         conflicts_with("concrete_playback")
     )]
     pub enable_stubbing: bool,
-    /*
-    The below is a "TODO list" of things not yet implemented from the kani_flags.py script.
-
-        add_flag(group, "--gen-c-runnable", default=False, action=BooleanOptionalAction,
-                 help="Generate C file equivalent to inputted program; "
-                      "performs additional processing to produce valid C code "
-                      "at the cost of some readability")
-        */
 }
 
 impl KaniArgs {

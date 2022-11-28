@@ -18,9 +18,6 @@ pub const GOTO_C: &str = "goto-c";
 /// Option name used to override Kani library path.
 pub const KANI_LIB: &str = "kani-lib";
 
-/// Option name used to select symbol table passes.
-pub const SYM_TABLE_PASSES: &str = "symbol-table-passes";
-
 /// Option name used to set the log output to a json file.
 pub const JSON_OUTPUT: &str = "json-output";
 
@@ -85,15 +82,6 @@ pub fn parser() -> Command {
                 .long(GOTO_C)
                 .help("Enables compilation to goto-c intermediate representation.")
                 .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(SYM_TABLE_PASSES)
-                .long(SYM_TABLE_PASSES)
-                .value_name("PASS")
-                .help("Transformations to perform to the symbol table after it has been generated.")
-                .value_delimiter(',')
-                .value_parser(value_parser!(OsString)) // Allow invalid UTF-8
-                .action(ArgAction::Append),
         )
         .arg(
             Arg::new(LOG_LEVEL)

@@ -92,9 +92,6 @@ fn main() -> Result<(), &'static str> {
 
     // Configure queries.
     let mut queries = QueryDb::default();
-    if let Some(symbol_table_passes) = matches.get_raw(parser::SYM_TABLE_PASSES) {
-        queries.set_symbol_table_passes(symbol_table_passes.map(convert_arg).collect::<Vec<_>>());
-    }
     queries.set_emit_vtable_restrictions(matches.get_flag(parser::RESTRICT_FN_PTRS));
     queries.set_check_assertion_reachability(matches.get_flag(parser::ASSERTION_REACH_CHECKS));
     queries.set_output_pretty_json(matches.get_flag(parser::PRETTY_OUTPUT_FILES));
