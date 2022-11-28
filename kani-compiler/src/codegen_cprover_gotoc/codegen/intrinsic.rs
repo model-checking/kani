@@ -402,7 +402,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     panic!()
                 })
             };
-            return self.codegen_intrinsic_simd_shuffle(fargs, p, cbmc_ret_ty, n);
+            return self.codegen_intrinsic_simd_shuffle(fargs, p, cbmc_ret_ty, farg_types, ret_ty, n, span);
         }
 
         match intrinsic {
@@ -1537,7 +1537,10 @@ impl<'tcx> GotocCtx<'tcx> {
         mut fargs: Vec<Expr>,
         p: &Place<'tcx>,
         cbmc_ret_ty: Type,
+        rust_arg_types: &[Ty<'tcx>],
+        rust_ret_type: Ty<'tcx>,
         n: u64,
+        span: Option<Span>,
     ) -> Stmt {
         assert!(fargs.len() == 3, "simd_shuffle had unexpected arguments {fargs:?}");
         // vector, size n: translated as vector types which cbmc treats as arrays
@@ -1546,6 +1549,27 @@ impl<'tcx> GotocCtx<'tcx> {
         // [u32; n]: translated wrapped in a struct
         let indexes = fargs.remove(0);
 
+        let (_, in_elem) = rust_arg_types[0].simd_size_and_type(self.tcx);
+        let (out_len, out_ty) = rust_ret_type.simd_size_and_type(self.tcx);
+        if out_len != n {
+            let err_msg = format!(
+                "expected return type of length {}, found `{}` with length {}",
+                n, rust_ret_type, out_len
+            );
+            self.tcx.sess.span_err(span.unwrap(), err_msg);
+        }
+        if in_elem != out_ty {
+            let err_msg = format!(
+                "expected return element type `{}` (element of input `{}`), \
+                 found `{}` with element type `{}`",
+                 in_elem,
+                 rust_arg_types[0],
+                 rust_ret_type,
+                 out_ty
+            );
+            self.tcx.sess.span_err(span.unwrap(), err_msg);
+        }
+        
         // An unsigned type here causes an invariant violation in CBMC.
         // Issue: https://github.com/diffblue/cbmc/issues/6298
         let st_rep = Type::ssize_t();
@@ -1563,6 +1587,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 cond.ternary(t, e)
             })
             .collect();
+        self.tcx.sess.abort_if_errors();
         self.codegen_expr_to_place(p, Expr::vector_expr(cbmc_ret_ty, elems))
     }
 
