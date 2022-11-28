@@ -37,9 +37,6 @@ impl Default for ReachabilityType {
 }
 
 pub trait UserInput {
-    fn set_symbol_table_passes(&mut self, passes: Vec<String>);
-    fn get_symbol_table_passes(&self) -> Vec<String>;
-
     fn set_emit_vtable_restrictions(&mut self, restrictions: bool);
     fn get_emit_vtable_restrictions(&self) -> bool;
 
@@ -66,7 +63,6 @@ pub trait UserInput {
 pub struct QueryDb {
     check_assertion_reachability: AtomicBool,
     emit_vtable_restrictions: AtomicBool,
-    symbol_table_passes: Vec<String>,
     json_pretty_print: AtomicBool,
     ignore_global_asm: AtomicBool,
     reachability_analysis: Mutex<ReachabilityType>,
@@ -76,14 +72,6 @@ pub struct QueryDb {
 }
 
 impl UserInput for QueryDb {
-    fn set_symbol_table_passes(&mut self, passes: Vec<String>) {
-        self.symbol_table_passes = passes;
-    }
-
-    fn get_symbol_table_passes(&self) -> Vec<String> {
-        self.symbol_table_passes.clone()
-    }
-
     fn set_emit_vtable_restrictions(&mut self, restrictions: bool) {
         self.emit_vtable_restrictions.store(restrictions, Ordering::Relaxed);
     }
