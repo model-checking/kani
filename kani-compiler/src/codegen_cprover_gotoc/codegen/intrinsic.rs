@@ -1417,9 +1417,9 @@ impl<'tcx> GotocCtx<'tcx> {
         self.codegen_expr_to_place(p, e)
     }
 
-    // Intrinsics which encode a SIMD arithmetic operation with overflow check.
-    // We expand the overflow check because CBMC overflow operations don't accept array as
-    // argument.
+    /// Intrinsics which encode a SIMD arithmetic operation with overflow check.
+    /// We expand the overflow check because CBMC overflow operations don't accept array as
+    /// argument.
     fn codegen_simd_op_with_overflow<F: FnOnce(Expr, Expr) -> Expr, G: Fn(Expr, Expr) -> Expr>(
         &mut self,
         op_fun: F,
