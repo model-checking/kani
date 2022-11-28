@@ -18,8 +18,12 @@ fn generate_mock_harness() -> HarnessMetadata {
     HarnessMetadata {
         pretty_name: String::from("harness"),
         mangled_name: String::from("harness"),
+        crate_name: "".to_string(),
         original_file: String::from("target_file.rs"),
-        ..Default::default()
+        original_start_line: 0,
+        original_end_line: 0,
+        unwind_value: None,
+        goto_file: None,
     }
 }
 
@@ -99,7 +103,12 @@ pub fn from_json<T: for<'a> Deserialize<'a>>(path: &Path) -> Result<T> {
 
 /// Consumes a vector of parsed metadata, and produces a combined structure
 pub fn merge_kani_metadata(files: Vec<KaniMetadata>) -> KaniMetadata {
-    let mut result = KaniMetadata { crate_name: "cbmc-linked".to_string(), ..Default::default() };
+    let mut result = KaniMetadata {
+        crate_name: "cbmc-linked".to_string(),
+        proof_harnesses: vec![],
+        unsupported_features: vec![],
+        test_harnesses: vec![],
+    };
     for md in files {
         // Note that we're taking ownership of the original vec, and so we can move the data into the new data structure.
         result.proof_harnesses.extend(md.proof_harnesses);
@@ -117,8 +126,10 @@ impl KaniSession {
         if self.args.dry_run {
             // Mock an answer
             Ok(KaniMetadata {
+                crate_name: "".to_string(),
                 proof_harnesses: vec![generate_mock_harness()],
-                ..Default::default()
+                unsupported_features: vec![],
+                test_harnesses: vec![],
             })
         } else {
             // TODO: one possible future improvement here would be to return some kind of Lazy

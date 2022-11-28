@@ -12,7 +12,7 @@ mod harness;
 mod vtable;
 
 /// The structure of `.kani-metadata.json` files, which are emitted for each crate
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KaniMetadata {
     /// The crate name from which this metadata was extracted.
     pub crate_name: String,
