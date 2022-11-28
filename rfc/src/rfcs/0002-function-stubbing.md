@@ -166,7 +166,9 @@ We consider a stub and a function/method to be compatible if all the following c
 - They have the same number of parameters.
 - They have the same return type.
 - Each parameter in the stub has the same type as the corresponding parameter in the original function/method.
-- We do **NOT** allow for the renaming of type parameters when checking whether types are equivalent; for example, the function `foo<S>(x: S) -> S` is considered to have a different type than the function `bar<T>(x: T) -> T`.
+- The stub must have the same number of generic parameters as the original function/method.
+However, a generic parameter in the stub is allowed to have a different name than the corresponding parameter in the original function/method.
+For example, the stub `bar<A, B>(x: A, y: B) -> B` is considered to have a type compatible with the function `foo<S, T>(x: S, y: T) -> T`.
 - The bounds for each type parameter don't need to match; however, all calls to the original function must also satisfy the bounds of the stub.
 
 
