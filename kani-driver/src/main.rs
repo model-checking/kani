@@ -5,6 +5,7 @@
 use anyhow::Result;
 use args::CargoKaniSubcommand;
 use args_toml::join_args;
+use clap::CommandFactory;
 use clap::Parser;
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -45,11 +46,12 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     if matches!(args.command, Some(CargoKaniSubcommand::Assess)) || ctx.args.assess {
         // --assess requires --enable-unstable, but the subcommand needs manual checking
         if !ctx.args.enable_unstable {
-            clap::Error::raw(
-                clap::error::ErrorKind::MissingRequiredArgument,
-                "Assess is unstable and requires 'cargo kani --enable-unstable assess'".to_string(),
-            )
-            .exit()
+            args::CargoKaniArgs::command()
+                .error(
+                    clap::error::ErrorKind::MissingRequiredArgument,
+                    "Assess is unstable and requires 'cargo kani --enable-unstable assess'",
+                )
+                .exit()
         }
         // Run the alternative command instead
         return assess::cargokani_assess_main(ctx);
