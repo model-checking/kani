@@ -1,0 +1,6 @@
+FAILURE\
+attempt to compute simd_add which would overflow
+FAILURE\
+attempt to compute simd_sub which would overflow
+FAILURE\
+attempt to compute simd_mul which would overflow
