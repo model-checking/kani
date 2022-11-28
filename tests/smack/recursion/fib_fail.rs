@@ -12,6 +12,7 @@ fn fib(x: u64) -> u64 {
     }
 }
 
+#[kani::proof]
 pub fn main() {
     let x = fib(6);
     assert!(x != 8);

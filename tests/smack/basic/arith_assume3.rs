@@ -3,6 +3,7 @@
 // @expect error
 // kani-verify-fail
 
+#[kani::proof]
 pub fn main() {
     let a = kani::any();
     let b = kani::any();

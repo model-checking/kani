@@ -11,6 +11,7 @@ where
     some_closure(1);
 }
 
+#[kani::proof]
 pub fn main() {
     let mut num: i32 = kani::any();
     if num <= std::i32::MAX - 10 {
