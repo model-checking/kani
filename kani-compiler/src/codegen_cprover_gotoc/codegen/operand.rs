@@ -773,7 +773,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let mangled_name = func_symbol.name;
         let fn_item_struct_ty = self.codegen_fndef_type(instance);
         // This zero-sized object that a function name refers to in Rust is globally unique, so we create such a global object.
-        let fn_singleton_name = format!("{func}::FnDefSingleton");
+        let fn_singleton_name = format!("{mangled_name}::FnDefSingleton");
         let fn_singleton = self.ensure_global_var(
             &fn_singleton_name,
             false,
