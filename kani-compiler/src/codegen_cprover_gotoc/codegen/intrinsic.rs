@@ -1444,7 +1444,7 @@ impl<'tcx> GotocCtx<'tcx> {
             let v_b = b.clone().index_array(index);
             check = check.or(overflow_fun(v_a, v_b));
         }
-        let check_stmt = self.codegen_assert(
+        let check_stmt = self.codegen_assert_assume(
             check.not(),
             PropertyClass::ArithmeticOverflow,
             format!("attempt to compute {} which would overflow", intrinsic).as_str(),
