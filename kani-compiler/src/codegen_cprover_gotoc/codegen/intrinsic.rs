@@ -612,11 +612,7 @@ impl<'tcx> GotocCtx<'tcx> {
             "simd_and" => codegen_intrinsic_binop!(bitand),
             "simd_div" => unstable_codegen!(codegen_intrinsic_binop!(div)),
             "simd_eq" => self.codegen_simd_cmp(Expr::vector_eq, fargs, p, span, farg_types, ret_ty),
-            "simd_extract" => {
-                let _vec = fargs.remove(0);
-                let _index = fargs.remove(0);
-                unstable_codegen!(self.codegen_expr_to_place(p, vec.index_array(index)))
-            }
+            "simd_extract" => self.codegen_intrinsic_simd_extract(fargs, p, farg_types, ret_ty, span),
             "simd_ge" => self.codegen_simd_cmp(Expr::vector_ge, fargs, p, span, farg_types, ret_ty),
             "simd_gt" => self.codegen_simd_cmp(Expr::vector_gt, fargs, p, span, farg_types, ret_ty),
             "simd_insert" => {
@@ -1333,6 +1329,38 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
+    /// `simd_extract(vector, n)` returns the `n`-th element of `vector`
+    ///
+    /// We check that both the vector's base type and the return type are the
+    /// same. In the case of some SIMD intrinsics, the backend is responsible
+    /// for performing this and similar checks, and erroring out if it proceeds.
+    fn codegen_intrinsic_simd_extract(
+        &mut self,
+        mut fargs: Vec<Expr>,
+        p: &Place<'tcx>,
+        rust_arg_types: &[Ty<'tcx>],
+        rust_ret_type: Ty<'tcx>,
+        span: Option<Span>,
+    ) -> Stmt {
+        assert!(fargs.len() == 2, "`simd_extract` had unexpected arguments {fargs:?}");
+        let vec = fargs.remove(0);
+        let index = fargs.remove(0);
+
+        let (_, vector_base_type) = rust_arg_types[0].simd_size_and_type(self.tcx);
+        if rust_ret_type != vector_base_type  {
+            let err_msg = format!(
+                "expected return type `{}` (element of input `{}`), found `{}`",
+                vector_base_type,
+                rust_arg_types[0],
+                rust_ret_type
+            );
+            self.tcx.sess.span_err(span.unwrap(), err_msg);
+        }
+        self.tcx.sess.abort_if_errors();
+
+        self.codegen_expr_to_place(p, vec.index_array(index))
+    }
+
     /// Insert is a generic update of a single value in a SIMD vector.
     /// `P = simd_insert(vector, index, newval)` is here translated to
     /// `{ T v = vector; v[index] = (cast)newval; P = v; }`
@@ -1353,7 +1381,7 @@ impl<'tcx> GotocCtx<'tcx> {
         span: Option<Span>,
         loc: Location,
     ) -> Stmt {
-        assert!(fargs.len() == 3, "simd_insert had unexpected arguments {fargs:?}");
+        assert!(fargs.len() == 3, "`simd_insert` had unexpected arguments {fargs:?}");
         let vec = fargs.remove(0);
         let index = fargs.remove(0);
         let newval = fargs.remove(0);
