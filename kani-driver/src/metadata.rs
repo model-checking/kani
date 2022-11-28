@@ -172,7 +172,7 @@ pub fn mock_proof_harness(
         original_start_line: 0,
         original_end_line: 0,
         unwind_value,
-        model_file: None,
+        goto_file: None,
     }
 }
 

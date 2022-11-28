@@ -464,7 +464,7 @@ fn generate_metadata(gcx: &GotocCtx, tcx: TyCtxt) -> KaniMetadata {
         outputs.output_path(OutputType::Object).with_extension(ArtifactType::SymTabGoto);
     let extend_harnesses = |mut harnesses: Vec<HarnessMetadata>| {
         for harness in harnesses.iter_mut() {
-            harness.model_file = Some(model_file.clone());
+            harness.goto_file = Some(model_file.clone());
         }
         harnesses
     };
