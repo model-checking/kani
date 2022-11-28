@@ -150,10 +150,10 @@ fn glob(path: &Path) -> Result<Vec<PathBuf>> {
 }
 
 /// Extract the packages that should be verified.
-/// If --package <pkg> is given, return the list of packages selected.
-/// If --workspace is given, return the list of workspace members.
+/// If `--package <pkg>` is given, return the list of packages selected.
+/// If `--workspace` is given, return the list of workspace members.
 /// If no argument provided, return the root package if there's one or all members.
-///   - I.e.: Do whatever cargo does when there's no default_members.
+///   - I.e.: Do whatever cargo does when there's no `default_members`.
 ///   - This is because `default_members` is not available in cargo metadata.
 ///     See <https://github.com/rust-lang/cargo/issues/8033>.
 fn packages_to_verify<'a, 'b>(args: &'a KaniArgs, metadata: &'b Metadata) -> Vec<&'b Package> {

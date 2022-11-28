@@ -287,7 +287,7 @@ pub fn resolve_unwind_value(args: &KaniArgs, harness_metadata: &HarnessMetadata)
 mod tests {
     use crate::args;
     use crate::metadata::mock_proof_harness;
-    use structopt::StructOpt;
+    use clap::Parser;
 
     use super::*;
 
@@ -305,37 +305,37 @@ mod tests {
 
         // test against no unwind annotation
         assert_eq!(
-            resolve_unwind_value(&args::KaniArgs::from_iter(args_empty), &harness_none),
+            resolve_unwind_value(&args::KaniArgs::parse_from(args_empty), &harness_none),
             None
         );
         assert_eq!(
-            resolve_unwind_value(&args::KaniArgs::from_iter(args_only_default), &harness_none),
+            resolve_unwind_value(&args::KaniArgs::parse_from(args_only_default), &harness_none),
             Some(2)
         );
         assert_eq!(
-            resolve_unwind_value(&args::KaniArgs::from_iter(args_only_harness), &harness_none),
+            resolve_unwind_value(&args::KaniArgs::parse_from(args_only_harness), &harness_none),
             Some(1)
         );
         assert_eq!(
-            resolve_unwind_value(&args::KaniArgs::from_iter(args_both), &harness_none),
+            resolve_unwind_value(&args::KaniArgs::parse_from(args_both), &harness_none),
             Some(1)
         );
 
         // test against unwind annotation
         assert_eq!(
-            resolve_unwind_value(&args::KaniArgs::from_iter(args_empty), &harness_some),
+            resolve_unwind_value(&args::KaniArgs::parse_from(args_empty), &harness_some),
             Some(3)
         );
         assert_eq!(
-            resolve_unwind_value(&args::KaniArgs::from_iter(args_only_default), &harness_some),
+            resolve_unwind_value(&args::KaniArgs::parse_from(args_only_default), &harness_some),
             Some(3)
         );
         assert_eq!(
-            resolve_unwind_value(&args::KaniArgs::from_iter(args_only_harness), &harness_some),
+            resolve_unwind_value(&args::KaniArgs::parse_from(args_only_harness), &harness_some),
             Some(1)
         );
         assert_eq!(
-            resolve_unwind_value(&args::KaniArgs::from_iter(args_both), &harness_some),
+            resolve_unwind_value(&args::KaniArgs::parse_from(args_both), &harness_some),
             Some(1)
         );
     }
