@@ -5,7 +5,12 @@
 # 2. Checks Rust-Sec registry for security advisories.
 
 name: Cargo Audit
-on: [pull_request]
+on:
+  pull_request:
+  push:
+    # Run on changes to branches but not tags.
+    branches:
+      - '**'
 
 jobs:
   audit:
