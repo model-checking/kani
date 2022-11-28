@@ -1,7 +1,10 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! This test checks the performance of pushing onto a vector of Box<dyn _>
+//! This test checks the performance of pushing onto a vector of Box<dyn _>.
+//! The test is from https://github.com/model-checking/kani/issues/1657.
+//! Pre CBMC 5.71.0, it took 3 minutes and consumed more than 14 GB of memory.
+//! With CBMC 5.71.0, it takes ~3 seconds and consumes ~150 MB of memory.
 
 const N: usize = 4;
 const M: usize = N + 1;
