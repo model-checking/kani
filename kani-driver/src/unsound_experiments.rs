@@ -2,16 +2,16 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 #![cfg(feature = "unsound_experiments")]
+use clap::Parser;
 use std::ffi::OsString;
-use structopt::StructOpt;
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Parser)]
 pub struct UnsoundExperimentArgs {
     /// Zero initilize variables.
     /// This is useful for experiments to see whether assigning constant values produces better
     /// performance by allowing CBMC to do more constant propegation.
     /// Unfortunatly, it is unsafe to use for production code, since it may unsoundly hide bugs.
     /// Marked as `unsound` to prevent use outside of experimental contexts.
-    #[structopt(long, hidden_short_help(true), requires("enable-unstable"))]
+    #[arg(long, hide_short_help = true, requires("enable_unstable"))]
     pub unsound_experiment_zero_init_vars: bool,
 }
 
