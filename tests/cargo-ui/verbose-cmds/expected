@@ -1,0 +1,7 @@
+KANIFLAGS=
+RUSTC=
+cargo rustc
+Running: `goto-cc
+Running: `goto-instrument
+Checking harness dummy_harness...
+Running: `cbmc
