@@ -37,6 +37,7 @@ impl AddAssign for Point {
     }
 }
 
+#[kani::proof]
 pub fn main() {
     let w = kani::any();
     let x = kani::any();
