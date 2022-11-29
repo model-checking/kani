@@ -154,7 +154,7 @@ impl<'tcx> MonoItemsCollector<'tcx> {
 
         // Collect initialization.
         let alloc = self.tcx.eval_static_initializer(def_id).unwrap();
-        for &id in alloc.inner().provenance().values() {
+        for id in alloc.inner().provenance().provenances() {
             self.queue.extend(collect_alloc_items(self.tcx, id).iter());
         }
     }
@@ -260,7 +260,7 @@ impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {
             }
             ConstValue::Slice { data: alloc, start: _, end: _ }
             | ConstValue::ByRef { alloc, .. } => {
-                for &id in alloc.inner().provenance().values() {
+                for id in alloc.inner().provenance().provenances() {
                     self.collected.extend(collect_alloc_items(self.tcx, id).iter())
                 }
             }
@@ -491,7 +491,11 @@ fn collect_alloc_items<'tcx>(tcx: TyCtxt<'tcx>, alloc_id: AllocId) -> Vec<MonoIt
         }
         GlobalAlloc::Memory(alloc) => {
             items.extend(
-                alloc.inner().provenance().values().flat_map(|id| collect_alloc_items(tcx, *id)),
+                alloc
+                    .inner()
+                    .provenance()
+                    .provenances()
+                    .flat_map(|id| collect_alloc_items(tcx, id)),
             );
         }
         GlobalAlloc::VTable(ty, trait_ref) => {
