@@ -670,12 +670,12 @@ impl<'tcx> GotocCtx<'tcx> {
     /// representation of what those fields should be initialized with.
     /// (A field is either bytes, or initialized with an expression.)
     fn codegen_allocation_data(&mut self, alloc: &'tcx Allocation) -> Vec<AllocData<'tcx>> {
-        let mut alloc_vals = Vec::with_capacity(alloc.provenance().len() + 1);
+        let mut alloc_vals = Vec::with_capacity(alloc.provenance().ptrs().len() + 1);
         let pointer_size =
             Size::from_bytes(self.symbol_table.machine_model().pointer_width_in_bytes());
 
         let mut next_offset = Size::ZERO;
-        for &(offset, alloc_id) in alloc.provenance().iter() {
+        for &(offset, alloc_id) in alloc.provenance().ptrs().iter() {
             if offset > next_offset {
                 let bytes = alloc.inspect_with_uninit_and_ptr_outside_interpreter(
                     next_offset.bytes_usize()..offset.bytes_usize(),
