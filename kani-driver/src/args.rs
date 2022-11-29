@@ -4,7 +4,7 @@
 #[cfg(feature = "unsound_experiments")]
 use crate::unsound_experiments::UnsoundExperimentArgs;
 
-use clap::{error::ErrorKind, Error, Parser, ValueEnum};
+use clap::{error::Error, error::ErrorKind, Parser, ValueEnum};
 use std::ffi::OsString;
 use std::path::PathBuf;
 
@@ -370,17 +370,19 @@ impl CheckArgs {
 
 impl StandaloneArgs {
     pub fn validate(&self) {
-        self.common_opts.validate();
+        self.common_opts.validate::<Self>();
     }
 }
 impl CargoKaniArgs {
     pub fn validate(&self) {
-        self.common_opts.validate();
+        self.common_opts.validate::<Self>();
     }
 }
 impl KaniArgs {
-    pub fn validate(&self) {
-        self.validate_inner().or_else(|e| -> Result<(), ()> { e.exit() }).unwrap()
+    pub fn validate<T: Parser>(&self) {
+        self.validate_inner()
+            .or_else(|e| -> Result<(), ()> { e.format(&mut T::command()).exit() })
+            .unwrap()
     }
 
     fn validate_inner(&self) -> Result<(), Error> {
