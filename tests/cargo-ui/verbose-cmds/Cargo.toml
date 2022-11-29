@@ -4,8 +4,9 @@
 name = "dry-run"
 version = "0.1.0"
 edition = "2021"
+description = "Check that --verbose include the commands ran by Kani"
 
 [dependencies]
 
 [package.metadata.kani]
-flags = { dry-run=true, enable-unstable=true }
+flags = { verbose=true }
