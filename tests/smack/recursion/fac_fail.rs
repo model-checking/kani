@@ -11,6 +11,7 @@ fn fac(n: u64, acc: u64) -> u64 {
     }
 }
 
+#[kani::proof]
 pub fn main() {
     let x = fac(5, 1);
     assert!(x != 120);

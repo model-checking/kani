@@ -121,15 +121,6 @@ impl KaniSession {
         if !found_target {
             bail!("No supported targets were found.");
         }
-        if self.args.dry_run {
-            // mock an answer: mostly the same except we don't/can't expand the globs
-            return Ok(CargoOutputs {
-                outdir: outdir.clone(),
-                symtabs: vec![outdir.join("*.symtab.json")],
-                metadata: vec![outdir.join("*.kani-metadata.json")],
-                restrictions: self.args.restrict_vtable().then_some(outdir),
-            });
-        }
 
         Ok(CargoOutputs {
             outdir: outdir.clone(),
