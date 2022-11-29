@@ -1,8 +1,7 @@
 # Intrinsics
 
-The table below tries to summarize the current support in Kani for Rust
-compiler intrinsics. We define the level of support similar to how we
-indicate [Rust feature support](../rust-feature-support.md):
+The tables below try to summarize the current support in Kani for Rust intrinsics.
+We define the level of support similar to how we indicate [Rust feature support](../rust-feature-support.md):
  * **Yes**: The intrinsic is fully supported. We are not aware of any issue with it.
  * **Partial**: The intrinsic is at least partially supported. We are aware of some issue with
  with it.
@@ -11,6 +10,12 @@ indicate [Rust feature support](../rust-feature-support.md):
 In general, code generation for unsupported intrinsics follows the rule
 described in [Rust feature support - Code generation for unsupported
 features](../rust-feature-support.md#code-generation-for-unsupported-features).
+
+Any intrinsic not appearing in the tables below is considered not supported.
+Please [open a feature request](https://github.com/model-checking/kani/issues/new?assignees=&labels=%5BC%5D+Feature+%2F+Enhancement&template=feature_request.md&title=)
+if your code depends on an unsupported intrinsic.
+
+### Compiler intrinsics
 
 Name | Support | Notes |
 --- | --- | --- |
@@ -244,3 +249,27 @@ performed. But as noted in [Notes - Concurrency](#concurrency), Kani support for
 concurrent verification is limited and not used by default. Verification on code
 containing atomic intrinsics should not be trusted given that Kani assumes the
 code to be sequential.
+
+### Platform intrinsics
+
+Name | Support | Notes |
+--- | --- | --- |
+`simd_add` | Yes | |
+`simd_and`  | Yes | |
+`simd_div`  | No | |
+`simd_eq`  | Yes | |
+`simd_extract`  | No | |
+`simd_ge`  | Yes | |
+`simd_gt`  | Yes | |
+`simd_insert`  | No | |
+`simd_le`  | Yes | |
+`simd_lt`  | Yes | |
+`simd_mul`  | Yes | |
+`simd_ne`  | Yes | |
+`simd_or`  | Yes | |
+`simd_rem`  | No | |
+`simd_shl`  | No | |
+`simd_shr`  | No | |
+`simd_shuffle*`  | No | |
+`simd_sub`  | Yes | |
+`simd_xor`  | Yes | |

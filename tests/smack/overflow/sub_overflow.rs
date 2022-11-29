@@ -8,6 +8,7 @@ fn get128() -> u8 {
     128
 }
 
+#[kani::proof]
 pub fn main() {
     let a: u8 = get128();
     let b: u8 = 129;
