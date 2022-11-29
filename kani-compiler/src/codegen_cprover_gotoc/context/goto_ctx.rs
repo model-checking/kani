@@ -304,7 +304,7 @@ impl<'tcx> GotocCtx<'tcx> {
         Type::union_tag(union_name)
     }
 
-    /// Makes a __attribute__((constructor)) fnname() {body} initalizer function
+    /// Makes a `__attribute__((constructor)) fnname() {body}` initalizer function
     pub fn register_initializer(&mut self, var_name: &str, body: Stmt) -> &Symbol {
         let fn_name = Self::initializer_fn_name(var_name);
         let pretty_name = format!("{var_name}::init");

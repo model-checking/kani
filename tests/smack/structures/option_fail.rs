@@ -7,6 +7,7 @@ fn safe_div(x: u32, y: u32) -> Option<u32> {
     if y != 0 { Some(x / y) } else { None }
 }
 
+#[kani::proof]
 pub fn main() {
     let x = kani::any();
     if x > 0 && x <= 100 {

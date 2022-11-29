@@ -74,9 +74,6 @@ pub fn machine_model_symbols(mm: &MachineModel) -> Vec<Symbol> {
 pub fn additional_env_symbols() -> Vec<Symbol> {
     vec![
         Symbol::builtin_function("__CPROVER_initialize", vec![], Type::empty()),
-        // https://github.com/diffblue/cbmc/blob/b26d3479679574c6c179f911b488a314bc2f1085/src/util/config.h#L214
-        int_constant("__CPROVER_malloc_failure_mode_assert_then_assume", 2),
-        int_constant("__CPROVER_malloc_failure_mode_return_null", 1),
         Symbol::typedef("__CPROVER_size_t", "__CPROVER_size_t", Type::size_t(), Location::none()),
         Symbol::static_variable(
             "__CPROVER_memory",

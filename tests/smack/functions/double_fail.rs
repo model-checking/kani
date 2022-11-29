@@ -7,6 +7,7 @@ fn double(a: u32) -> u32 {
     a * 2
 }
 
+#[kani::proof]
 pub fn main() {
     let a = kani::any();
     if a <= std::u32::MAX / 2 {
