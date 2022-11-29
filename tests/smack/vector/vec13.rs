@@ -4,6 +4,7 @@
 // @expect error
 // kani-verify-fail
 
+#[kani::proof]
 pub fn main() {
     let mut v: Vec<u64> = Vec::new();
     v.push(0);
