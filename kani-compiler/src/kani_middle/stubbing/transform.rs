@@ -66,8 +66,29 @@ fn check_compatibility<'a, 'tcx>(
         );
         return false;
     }
+    // Check whether the numbers of generic parameters match.
+    let old_num_generics = tcx.generics_of(old_def_id).count();
+    let stub_num_generics = tcx.generics_of(stub_def_id).count();
+    if old_num_generics != stub_num_generics {
+        tcx.sess.span_err(
+            tcx.def_span(stub_def_id),
+            format!(
+                "mismatch in the number of generic parameters: original function/method `{}` takes {} generic parameters(s), stub `{}` takes {}",
+                tcx.def_path_str(old_def_id),
+                old_num_generics,
+                tcx.def_path_str(stub_def_id),
+                stub_num_generics
+            ),
+        );
+        return false;
+    }
     // Check whether the types match. Index 0 refers to the returned value,
     // indices [1, `arg_count`] refer to the parameters.
+    // TODO: We currently force generic parameters in the stub to have exactly
+    // the same names as their counterparts in the original function/method;
+    // instead, we should be checking for the equivalence of types up to the
+    // renaming of generic parameters.
+    // <https://github.com/model-checking/kani/issues/1953>
     let mut matches = true;
     for i in 0..=old_body.arg_count {
         let old_arg = old_body.local_decls.get(i.into()).unwrap();

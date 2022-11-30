@@ -26,7 +26,7 @@ fn h1<S>(_x: S) -> bool {
     true
 }
 
-fn h2<T>(_x: T) -> bool {
+fn h2<S, T>(_x: S) -> bool {
     true
 }
 

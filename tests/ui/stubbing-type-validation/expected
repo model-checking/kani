@@ -2,7 +2,7 @@ error: arity mismatch: original function/method `f1` takes 1 argument(s), stub `
 error: return type differs: stub `g2` has type `i32` where original function/method `g1` has type `bool`
 error: type of parameter 1 differs: stub `g2` has type `u32` where original function/method `g1` has type `i32`
 error: type of parameter 2 differs: stub `g2` has type `&mut bool` where original function/method `g1` has type `&bool`
-error: type of parameter 0 differs: stub `h2` has type `T` where original function/method `h1` has type `S`
+error: mismatch in the number of generic parameters: original function/method `h1` takes 1 generic parameters(s), stub `h2` takes 2
 error: return type differs: stub `i2` has type `Y` where original function/method `i1` has type `X`
 error: type of parameter 1 differs: stub `j2` has type `&X` where original function/method `j1` has type `&Y`
 error: aborting due to 7 previous errors
