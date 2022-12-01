@@ -33,6 +33,7 @@ use rustc_middle::ty::{
 };
 
 use crate::kani_middle::coercion;
+use crate::kani_middle::stubbing::get_stub_name;
 
 /// Collect all reachable items starting from the given starting points.
 pub fn collect_reachable_items<'tcx>(
@@ -45,6 +46,7 @@ pub fn collect_reachable_items<'tcx>(
     for item in starting_points {
         collector.collect(*item);
     }
+    tcx.sess.abort_if_errors();
 
     // Sort the result so code generation follows deterministic order.
     // This helps us to debug the code, but it also provides the user a good experience since the
@@ -396,15 +398,47 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
 
         let tcx = self.tcx;
         match terminator.kind {
-            TerminatorKind::Call { ref func, .. } => {
+            TerminatorKind::Call { ref func, ref args, .. } => {
                 let callee_ty = func.ty(self.body, tcx);
                 let fn_ty = self.monomorphize(callee_ty);
                 if let TyKind::FnDef(def_id, substs) = *fn_ty.kind() {
-                    let instance =
+                    let instance_opt =
                         Instance::resolve(self.tcx, ParamEnv::reveal_all(), def_id, substs)
-                            .unwrap()
                             .unwrap();
-                    self.collect_instance(instance, true);
+                    match instance_opt {
+                        None => {
+                            let caller = tcx.def_path_str(self.instance.def_id());
+                            let callee = tcx.def_path_str(def_id);
+                            // Check if the current function has been stubbed.
+                            if let Some(stub) = get_stub_name(tcx, self.instance.def_id()) {
+                                // During the MIR stubbing transformation, we do not
+                                // force type variables in the stub's signature to
+                                // implement the same traits as those in the
+                                // original function/method. A trait mismatch shows
+                                // up here, when we try to resolve a trait method
+                                let generic_ty = args[0].ty(self.body, tcx).peel_refs();
+                                let receiver_ty = tcx.subst_and_normalize_erasing_regions(
+                                    substs,
+                                    ParamEnv::reveal_all(),
+                                    generic_ty,
+                                );
+                                let sep = callee.rfind("::").unwrap();
+                                let trait_ = &callee[..sep];
+                                tcx.sess.span_err(
+                                    terminator.source_info.span,
+                                    format!(
+                                        "`{receiver_ty}` doesn't implement \
+                                        `{trait_}`. The function `{caller}` \
+                                        cannot be stubbed by `{stub}` due to \
+                                        generic bounds not being met."
+                                    ),
+                                );
+                            } else {
+                                panic!("unable to resolve call to `{callee}` in `{caller}`")
+                            }
+                        }
+                        Some(instance) => self.collect_instance(instance, true),
+                    };
                 } else {
                     assert!(
                         matches!(fn_ty.kind(), TyKind::FnPtr(..)),
