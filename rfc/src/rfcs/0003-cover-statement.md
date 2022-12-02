@@ -44,26 +44,62 @@ kani::cover!(x > y, "x can be greater than y");
 
 ## User Experience
 
-The `cover` macro instructs Kani to find _at least one_ possible execution that satisfies the specified condition at that line of code. If no such execution is possible, verification *fails*.
+The `cover` macro instructs Kani to find _at least one_ possible execution that satisfies the specified condition at that line of code.  If no such execution is possible, the check is reported as *unsatisfiable*.
 
-Each cover statements will be reported as a check whose description is `condition "cond" is satisfiable` and whose status is:
-- `SUCCESS` (green): if Kani found an execution that satisfies the condition
-- `FAILURE` (red): if Kani proved that the condition cannot be satisfied
-- `FAILURE (UNREACHABLE)` (red): if Kani proved that the cover statement itself cannot be reached
+Each cover statements will be reported as a check whose description is `cover condition "cond"` and whose status is:
+- `SATISFIED` (green): if Kani found an execution that satisfies the condition
+- `UNSATISFIABLE` (yellow): if Kani proved that the condition cannot be satisfied
+- `UNREACHABLE` (yellow): if Kani proved that the cover statement itself cannot be reached
 
 For example, for the following `cover` statement:
 ```rust
 kani::cover!(a == 0);
 ```
-The result can be:
+An example result is:
 ```
 Check 2: main.cover.2
-         - Status: SUCCESS
-         - Description: "condition "a == 0" is satisfiable"
+         - Status: SATISFIED
+         - Description: "cover condition "a == 0""
          - Location: foo.rs:9:5 in function main
 ```
 
-If one or more unwinding assertions fail or an unsupported construct is found to be reachable, and Kani proved that the condition cannot be satisfied, the result will be reported as `UNDETERMINED` instead of `FAILURE`.
+### Impact on Overall Verification Status
+
+By default, unsatisfiable and unreachable `cover` checks will not impact verification success or failure.
+This is to avoid getting verification failure for harnesses for which a `cover` check is not relevant.
+For example, on the following program, verification should not fail for `another_harness_that_doesnt_call_foo` because the `cover` statement in `foo` is unreachable from it.
+```rust
+[kani::proof]
+fn a_harness_that_calls_foo() {
+    foo();
+}
+
+#[kani::proof]
+fn another_harness_that_doesnt_call_foo() {
+    // ...
+}
+
+fn foo() {
+    kani::cover!( /* some condition */);
+}
+```
+
+We can consider adding an option that would cause verification to fail if a cover property was unsatisfiable or unreachable, e.g. `--fail-uncoverable`.
+
+### Inclusion in the Verification Summary
+
+Cover checks will be reported separately in the verification summary, e.g.
+```
+SUMMARY:
+ ** 1 of 206 failed (2 unreachable)
+ Failed Checks: assertion failed: x[0] == x[1]
+
+ ** 30 of 35 cover statements satisfied (1 unreachable) <--- NEW
+ ```
+In this example, 5 of the 35 cover statements were found to be unsatisfiable, and one of those 5 is additionally unreachable.
+### Interaction with Other Checks
+
+If one or more unwinding assertions fail or an unsupported construct is found to be reachable (which indicate an incomplete path exploration), and Kani found the condition to be unsatisfiable or unreachable, the result will be reported as `UNDETERMINED`.
 
 ## Detailed Design
 
