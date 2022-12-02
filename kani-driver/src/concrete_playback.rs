@@ -42,11 +42,8 @@ impl KaniSession {
                     harness.pretty_name
                 ),
                 Some(concrete_vals) => {
-                    let concrete_playback = format_unit_test(
-                        &harness.mangled_name,
-                        &concrete_vals,
-                        self.args.randomize_layout,
-                    );
+                    let concrete_playback =
+                        format_unit_test(&harness, &concrete_vals, self.args.randomize_layout);
                     match playback_mode {
                         ConcretePlaybackMode::Print => {
                             println!(
@@ -219,7 +216,7 @@ impl KaniSession {
 /// `Some(None)` when layout is randomized without seed, and
 /// `Some(Some(seed))` when layout is randomized with the seed `seed`.
 fn format_unit_test(
-    harness_name: &str,
+    harness_metadata: &HarnessMetadata,
     concrete_vals: &[ConcreteVal],
     randomize_layout_seed: Option<Option<u64>>,
 ) -> UnitTest {
@@ -241,6 +238,8 @@ fn format_unit_test(
         })
         .collect::<Vec<String>>()
         .join(",\n");
+    let harness_name = &harness_metadata.mangled_name;
+    let pretty_name = &harness_metadata.pretty_name;
 
     // Hash the generated det val string along with the proof harness name.
     let mut hasher = DefaultHasher::new();
@@ -248,7 +247,7 @@ fn format_unit_test(
     vecs_as_str.hash(&mut hasher);
     let hash = hasher.finish();
 
-    let concrete_playback_func_name = format!("kani_concrete_playback_{harness_name}_{hash}");
+    let concrete_playback_func_name = format!("kani_concrete_playback_{pretty_name}_{hash}");
 
     let randomize_layout_message = match randomize_layout_seed {
         None => String::new(),
@@ -269,7 +268,7 @@ fn {concrete_playback_func_name}() {{
     let concrete_vals: Vec<Vec<u8>> = vec![
 {vecs_as_str}
     ];
-    kani::concrete_playback_run(concrete_vals, {harness_name});
+    kani::concrete_playback_run(concrete_vals, {pretty_name});
 }}"
     );
 
