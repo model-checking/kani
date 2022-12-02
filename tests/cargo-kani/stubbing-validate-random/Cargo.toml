@@ -1,0 +1,12 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+[package]
+name = "stubbing-validate-random"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rand = "0.8.5"
+
+[package.metadata.kani]
+flags = { enable-unstable=true, enable-stubbing=true }

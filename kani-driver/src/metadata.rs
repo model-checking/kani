@@ -13,17 +13,6 @@ use std::io::{BufReader, BufWriter};
 
 use crate::session::KaniSession;
 
-fn generate_mock_harness() -> HarnessMetadata {
-    HarnessMetadata {
-        pretty_name: String::from("harness"),
-        mangled_name: String::from("harness"),
-        original_file: String::from("target_file.rs"),
-        original_start_line: 0,
-        original_end_line: 0,
-        unwind_value: None,
-    }
-}
-
 /// From either a file or a path with multiple files, output the CBMC restrictions file we should use.
 pub fn collect_and_link_function_pointer_restrictions(
     path: &Path,
@@ -127,19 +116,10 @@ fn merge_kani_metadata(files: Vec<KaniMetadata>) -> KaniMetadata {
 impl KaniSession {
     /// Reads a collection of kani-metadata.json files and merges the results.
     pub fn collect_kani_metadata(&self, files: &[PathBuf]) -> Result<KaniMetadata> {
-        if self.args.dry_run {
-            // Mock an answer
-            Ok(KaniMetadata {
-                proof_harnesses: vec![generate_mock_harness()],
-                unsupported_features: vec![],
-                test_harnesses: vec![],
-            })
-        } else {
-            // TODO: one possible future improvement here would be to return some kind of Lazy
-            // value, that only computes this metadata if it turns out we need it.
-            let results: Result<Vec<_>, _> = files.iter().map(|x| read_kani_metadata(x)).collect();
-            Ok(merge_kani_metadata(results?))
-        }
+        // TODO: one possible future improvement here would be to return some kind of Lazy
+        // value, that only computes this metadata if it turns out we need it.
+        let results: Result<Vec<_>, _> = files.iter().map(|x| read_kani_metadata(x)).collect();
+        Ok(merge_kani_metadata(results?))
     }
 
     /// Determine which function to use as entry point, based on command-line arguments and kani-metadata.

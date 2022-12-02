@@ -274,40 +274,6 @@ impl<'tcx> GotocCtx<'tcx> {
             }};
         }
 
-        // Intrinsics which encode a SIMD arithmetic operation with overflow check.
-        // We expand the overflow check because CBMC overflow operations don't accept array as
-        // argument.
-        macro_rules! _codegen_simd_with_overflow_check {
-            ($op:ident, $overflow:ident) => {{
-                let a = fargs.remove(0);
-                let b = fargs.remove(0);
-                let mut check = Expr::bool_false();
-                if let Type::Vector { size, .. } = a.typ() {
-                    let a_size = size;
-                    if let Type::Vector { size, .. } = b.typ() {
-                        let b_size = size;
-                        assert_eq!(a_size, b_size, "Expected same length vectors",);
-                        for i in 0..*a_size {
-                            // create expression
-                            let index = Expr::int_constant(i, Type::ssize_t());
-                            let v_a = a.clone().index_array(index.clone());
-                            let v_b = b.clone().index_array(index);
-                            check = check.or(v_a.$overflow(v_b));
-                        }
-                    }
-                }
-                let check_stmt = self.codegen_assert(
-                    check.not(),
-                    PropertyClass::ArithmeticOverflow,
-                    format!("attempt to compute {} which would overflow", intrinsic).as_str(),
-                    loc,
-                );
-                let res = a.$op(b);
-                let expr_place = self.codegen_expr_to_place(p, res);
-                Stmt::block(vec![expr_place, check_stmt], loc)
-            }};
-        }
-
         // Intrinsics which encode a simple wrapping arithmetic operation
         macro_rules! codegen_wrapping_op {
             ($f:ident) => {{ codegen_intrinsic_binop!($f) }};
@@ -606,25 +572,35 @@ impl<'tcx> GotocCtx<'tcx> {
             "saturating_sub" => codegen_intrinsic_binop_with_mm!(saturating_sub),
             "sinf32" => codegen_simple_intrinsic!(Sinf),
             "sinf64" => codegen_simple_intrinsic!(Sin),
-            "simd_add" => {
-                unstable_codegen!(codegen_simd_with_overflow_check!(plus, add_overflow_p))
-            }
+            "simd_add" => self.codegen_simd_op_with_overflow(
+                Expr::plus,
+                Expr::add_overflow_p,
+                fargs,
+                intrinsic,
+                p,
+                loc,
+            ),
             "simd_and" => codegen_intrinsic_binop!(bitand),
             "simd_div" => unstable_codegen!(codegen_intrinsic_binop!(div)),
             "simd_eq" => self.codegen_simd_cmp(Expr::vector_eq, fargs, p, span, farg_types, ret_ty),
             "simd_extract" => {
-                let _vec = fargs.remove(0);
-                let _index = fargs.remove(0);
-                unstable_codegen!(self.codegen_expr_to_place(p, vec.index_array(index)))
+                self.codegen_intrinsic_simd_extract(fargs, p, farg_types, ret_ty, span)
             }
             "simd_ge" => self.codegen_simd_cmp(Expr::vector_ge, fargs, p, span, farg_types, ret_ty),
             "simd_gt" => self.codegen_simd_cmp(Expr::vector_gt, fargs, p, span, farg_types, ret_ty),
             "simd_insert" => {
-                unstable_codegen!(self.codegen_intrinsic_simd_insert(fargs, p, cbmc_ret_ty, loc))
+                self.codegen_intrinsic_simd_insert(fargs, p, cbmc_ret_ty, farg_types, span, loc)
             }
             "simd_le" => self.codegen_simd_cmp(Expr::vector_le, fargs, p, span, farg_types, ret_ty),
             "simd_lt" => self.codegen_simd_cmp(Expr::vector_lt, fargs, p, span, farg_types, ret_ty),
-            "simd_mul" => unstable_codegen!(codegen_simd_with_overflow_check!(mul, mul_overflow_p)),
+            "simd_mul" => self.codegen_simd_op_with_overflow(
+                Expr::mul,
+                Expr::mul_overflow_p,
+                fargs,
+                intrinsic,
+                p,
+                loc,
+            ),
             "simd_ne" => {
                 self.codegen_simd_cmp(Expr::vector_neq, fargs, p, span, farg_types, ret_ty)
             }
@@ -642,7 +618,14 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
             }
             // "simd_shuffle#" => handled in an `if` preceding this match
-            "simd_sub" => unstable_codegen!(codegen_simd_with_overflow_check!(sub, sub_overflow_p)),
+            "simd_sub" => self.codegen_simd_op_with_overflow(
+                Expr::sub,
+                Expr::sub_overflow_p,
+                fargs,
+                intrinsic,
+                p,
+                loc,
+            ),
             "simd_xor" => codegen_intrinsic_binop!(bitxor),
             "size_of" => codegen_intrinsic_const!(),
             "size_of_val" => codegen_size_align!(size),
@@ -1333,23 +1316,71 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
+    /// `simd_extract(vector, n)` returns the `n`-th element of `vector`
+    ///
+    /// We check that both the vector's base type and the return type are the
+    /// same. In the case of some SIMD intrinsics, the backend is responsible
+    /// for performing this and similar checks, and erroring out if it proceeds.
+    fn codegen_intrinsic_simd_extract(
+        &mut self,
+        mut fargs: Vec<Expr>,
+        p: &Place<'tcx>,
+        rust_arg_types: &[Ty<'tcx>],
+        rust_ret_type: Ty<'tcx>,
+        span: Option<Span>,
+    ) -> Stmt {
+        assert!(fargs.len() == 2, "`simd_extract` had unexpected arguments {fargs:?}");
+        let vec = fargs.remove(0);
+        let index = fargs.remove(0);
+
+        let (_, vector_base_type) = rust_arg_types[0].simd_size_and_type(self.tcx);
+        if rust_ret_type != vector_base_type {
+            let err_msg = format!(
+                "expected return type `{}` (element of input `{}`), found `{}`",
+                vector_base_type, rust_arg_types[0], rust_ret_type
+            );
+            self.tcx.sess.span_err(span.unwrap(), err_msg);
+        }
+        self.tcx.sess.abort_if_errors();
+
+        self.codegen_expr_to_place(p, vec.index_array(index))
+    }
+
     /// Insert is a generic update of a single value in a SIMD vector.
     /// `P = simd_insert(vector, index, newval)` is here translated to
     /// `{ T v = vector; v[index] = (cast)newval; P = v; }`
     ///
     /// CBMC does not currently seem to implement intrinsics like insert e.g.:
     /// `**** WARNING: no body for function __builtin_ia32_vec_set_v4si`
-    fn _codegen_intrinsic_simd_insert(
+    ///
+    /// We check that both the vector's base type and the new value's type are
+    /// the same. In the case of some SIMD intrinsics, the backend is
+    /// responsible for performing this and similar checks, and erroring out if
+    /// it proceeds.
+    fn codegen_intrinsic_simd_insert(
         &mut self,
         mut fargs: Vec<Expr>,
         p: &Place<'tcx>,
         cbmc_ret_ty: Type,
+        rust_arg_types: &[Ty<'tcx>],
+        span: Option<Span>,
         loc: Location,
     ) -> Stmt {
-        assert!(fargs.len() == 3, "simd_insert had unexpected arguments {fargs:?}");
+        assert!(fargs.len() == 3, "`simd_insert` had unexpected arguments {fargs:?}");
         let vec = fargs.remove(0);
         let index = fargs.remove(0);
         let newval = fargs.remove(0);
+
+        let (_, vector_base_type) = rust_arg_types[0].simd_size_and_type(self.tcx);
+        if vector_base_type != rust_arg_types[2] {
+            let err_msg = format!(
+                "expected inserted type `{}` (element of input `{}`), found `{}`",
+                vector_base_type, rust_arg_types[0], rust_arg_types[2]
+            );
+            self.tcx.sess.span_err(span.unwrap(), err_msg);
+        }
+        self.tcx.sess.abort_if_errors();
+
         // Type checker should have ensured it's a vector type
         let elem_ty = cbmc_ret_ty.base_type().unwrap().clone();
         let (tmp, decl) = self.decl_temp_variable(cbmc_ret_ty, Some(vec), loc);
@@ -1430,6 +1461,44 @@ impl<'tcx> GotocCtx<'tcx> {
         // Create the vector comparison expression
         let e = f(arg1, arg2, ret_typ);
         self.codegen_expr_to_place(p, e)
+    }
+
+    /// Intrinsics which encode a SIMD arithmetic operation with overflow check.
+    /// We expand the overflow check because CBMC overflow operations don't accept array as
+    /// argument.
+    fn codegen_simd_op_with_overflow<F: FnOnce(Expr, Expr) -> Expr, G: Fn(Expr, Expr) -> Expr>(
+        &mut self,
+        op_fun: F,
+        overflow_fun: G,
+        mut fargs: Vec<Expr>,
+        intrinsic: &str,
+        p: &Place<'tcx>,
+        loc: Location,
+    ) -> Stmt {
+        let a = fargs.remove(0);
+        let b = fargs.remove(0);
+
+        let a_size = a.typ().len().unwrap();
+        let b_size = b.typ().len().unwrap();
+        assert_eq!(a_size, b_size, "expected same length vectors");
+
+        let mut check = Expr::bool_false();
+        for i in 0..a_size {
+            // create expression
+            let index = Expr::int_constant(i, Type::ssize_t());
+            let v_a = a.clone().index_array(index.clone());
+            let v_b = b.clone().index_array(index);
+            check = check.or(overflow_fun(v_a, v_b));
+        }
+        let check_stmt = self.codegen_assert_assume(
+            check.not(),
+            PropertyClass::ArithmeticOverflow,
+            format!("attempt to compute {} which would overflow", intrinsic).as_str(),
+            loc,
+        );
+        let res = op_fun(a, b);
+        let expr_place = self.codegen_expr_to_place(p, res);
+        Stmt::block(vec![expr_place, check_stmt], loc)
     }
 
     /// simd_shuffle constructs a new vector from the elements of two input vectors,

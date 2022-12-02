@@ -4,12 +4,12 @@
 //! This file contains the code necessary to interface with the compiler backend
 
 use crate::codegen_cprover_gotoc::GotocCtx;
-use crate::kani_middle::mir_transform;
+use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{
     collect_reachable_items, filter_closures_in_const_crate_items, filter_crate_items,
 };
 use bitflags::_core::any::Any;
-use cbmc::goto_program::{symtab_transformer, Location};
+use cbmc::goto_program::Location;
 use cbmc::{InternedString, MachineModel};
 use kani_metadata::KaniMetadata;
 use kani_queries::{QueryDb, ReachabilityType, UserInput};
@@ -58,11 +58,11 @@ impl CodegenBackend for GotocCodegenBackend {
     }
 
     fn provide(&self, providers: &mut Providers) {
-        mir_transform::provide(providers);
+        provide::provide(providers, &self.queries);
     }
 
     fn provide_extern(&self, providers: &mut ty::query::ExternProviders) {
-        mir_transform::provide_extern(providers);
+        provide::provide_extern(providers);
     }
 
     fn codegen_crate(
@@ -138,10 +138,6 @@ impl CodegenBackend for GotocCodegenBackend {
 
         let unsupported_features = gcx.unsupported_metadata();
 
-        // perform post-processing symbol table passes
-        let passes = self.queries.get_symbol_table_passes();
-        let symtab = symtab_transformer::do_passes(gcx.symbol_table, &passes);
-
         // Map MIR types to GotoC types
         let type_map: BTreeMap<InternedString, InternedString> =
             BTreeMap::from_iter(gcx.type_map.into_iter().map(|(k, v)| (k, v.to_string().into())));
@@ -164,7 +160,7 @@ impl CodegenBackend for GotocCodegenBackend {
             let outputs = tcx.output_filenames(());
             let base_filename = outputs.output_path(OutputType::Object);
             let pretty = self.queries.get_output_pretty_json();
-            write_file(&base_filename, "symtab.json", &symtab, pretty);
+            write_file(&base_filename, "symtab.json", &gcx.symbol_table, pretty);
             write_file(&base_filename, "type_map.json", &type_map, pretty);
             write_file(&base_filename, "kani-metadata.json", &metadata, pretty);
             // If they exist, write out vtable virtual call function pointer restrictions
@@ -173,7 +169,7 @@ impl CodegenBackend for GotocCodegenBackend {
             }
             symbol_table_to_gotoc(&tcx, &base_filename);
         }
-        codegen_results(tcx, rustc_metadata, symtab.machine_model())
+        codegen_results(tcx, rustc_metadata, gcx.symbol_table.machine_model())
     }
 
     fn join_codegen(

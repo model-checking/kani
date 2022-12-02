@@ -23,6 +23,11 @@ enum AllocData<'a> {
 }
 
 impl<'tcx> GotocCtx<'tcx> {
+    /// Generate a goto expression from a MIR operand.
+    ///
+    /// A MIR operand is either a constant (literal or `const` declaration) or a place
+    /// (being moved or copied for this operation).
+    /// An "operand" in MIR is the argument to an "Rvalue" (and is also used by some statements.)
     pub fn codegen_operand(&mut self, o: &Operand<'tcx>) -> Expr {
         trace!(operand=?o, "codegen_operand");
         match o {
@@ -45,6 +50,12 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
+    /// Generate a goto expression from a MIR constant operand.
+    ///
+    /// There are three possibile constants:
+    /// 1. `Ty` means e.g. that it's a const generic parameter. (See `codegen_const`)
+    /// 2. `Val` means it's a constant value of various kinds. (See `codegen_const_value`)
+    /// 3. `Unevaluated` means we need to run the interpreter, to get a `ConstValue`. (See `codegen_const_unevaluated`)
     fn codegen_constant(&mut self, c: &Constant<'tcx>) -> Expr {
         trace!(constant=?c, "codegen_constant");
         let span = Some(&c.span);
@@ -57,6 +68,7 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
+    /// Runs the interpreter to get a `ConstValue`, then call `codegen_const_value`
     fn codegen_const_unevaluated(
         &mut self,
         unevaluated: UnevaluatedConst<'tcx>,
@@ -69,6 +81,12 @@ impl<'tcx> GotocCtx<'tcx> {
         self.codegen_const_value(const_val, ty, span)
     }
 
+    /// Generate a goto expression from a MIR `Const`.
+    ///
+    /// `Const` are special constant values that (only?) come from the type system,
+    /// and consequently only need monomorphization to produce a value.
+    ///
+    /// Not to be confused with the more general MIR `Constant` which may need interpretation.
     pub fn codegen_const(&mut self, lit: Const<'tcx>, span: Option<&Span>) -> Expr {
         debug!("found literal: {:?}", lit);
         let lit = self.monomorphize(lit);
@@ -93,6 +111,44 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
+    /// Generate a goto expression from a MIR `ConstValue`.
+    ///
+    /// A `ConstValue` is the result of evaluation of a constant (of various original forms).
+    /// All forms of constant code generation ultimately land here, where we have an actual value
+    /// that we now just need to translate based on its kind.
+    pub fn codegen_const_value(
+        &mut self,
+        v: ConstValue<'tcx>,
+        lit_ty: Ty<'tcx>,
+        span: Option<&Span>,
+    ) -> Expr {
+        trace!(val=?v, ?lit_ty, "codegen_const_value");
+        match v {
+            ConstValue::Scalar(s) => self.codegen_scalar(s, lit_ty, span),
+            ConstValue::Slice { data, start, end } => {
+                self.codegen_slice_value(v, lit_ty, span, data.inner(), start, end)
+            }
+            ConstValue::ByRef { alloc, offset } => {
+                debug!("ConstValue by ref {:?} {:?}", alloc, offset);
+                let mem_var = self
+                    .codegen_allocation_auto_imm_name(alloc.inner(), |tcx| tcx.next_global_name());
+                mem_var
+                    .cast_to(Type::unsigned_int(8).to_pointer())
+                    .plus(Expr::int_constant(offset.bytes(), Type::unsigned_int(64)))
+                    .cast_to(self.codegen_ty(lit_ty).to_pointer())
+                    .dereference()
+            }
+            ConstValue::ZeroSized => match lit_ty.kind() {
+                // Rust "function items" (not closures, not function pointers, see `codegen_fndef`)
+                ty::FnDef(d, substs) => self.codegen_fndef(*d, substs, span),
+                _ => unimplemented!(),
+            },
+        }
+    }
+
+    /// Generate a goto expression from a MIR `ConstValue::Slice`.
+    ///
+    /// A constant slice is an internal reference to another constant allocation.
     fn codegen_slice_value(
         &mut self,
         v: ConstValue<'tcx>,
@@ -164,8 +220,9 @@ impl<'tcx> GotocCtx<'tcx> {
                         // TODO: Handle cases with other types such as tuples and larger integers.
                         let loc = self.codegen_span_option(span.cloned());
                         let typ = self.codegen_ty(lit_ty);
+                        let operation_name = format!("Constant slice for type {}", slice_ty);
                         return self.codegen_unimplemented_expr(
-                            "Constant slice value with 2+ bytes",
+                            &operation_name,
                             typ,
                             loc,
                             "https://github.com/model-checking/kani/issues/1339",
@@ -178,35 +235,14 @@ impl<'tcx> GotocCtx<'tcx> {
         unimplemented!("\nv {:?}\nlit_ty {:?}\nspan {:?}", v, lit_ty.kind(), span);
     }
 
-    pub fn codegen_const_value(
-        &mut self,
-        v: ConstValue<'tcx>,
-        lit_ty: Ty<'tcx>,
-        span: Option<&Span>,
-    ) -> Expr {
-        trace!(val=?v, ?lit_ty, "codegen_const_value");
-        match v {
-            ConstValue::Scalar(s) => self.codegen_scalar(s, lit_ty, span),
-            ConstValue::Slice { data, start, end } => {
-                self.codegen_slice_value(v, lit_ty, span, data.inner(), start, end)
-            }
-            ConstValue::ByRef { alloc, offset } => {
-                debug!("ConstValue by ref {:?} {:?}", alloc, offset);
-                let mem_var = self
-                    .codegen_allocation_auto_imm_name(alloc.inner(), |tcx| tcx.next_global_name());
-                mem_var
-                    .cast_to(Type::unsigned_int(8).to_pointer())
-                    .plus(Expr::int_constant(offset.bytes(), Type::unsigned_int(64)))
-                    .cast_to(self.codegen_ty(lit_ty).to_pointer())
-                    .dereference()
-            }
-            ConstValue::ZeroSized => match lit_ty.kind() {
-                ty::FnDef(d, substs) => self.codegen_fndef(*d, substs, span),
-                _ => unimplemented!(),
-            },
-        }
-    }
-
+    /// Generate a goto expression from a MIR `ConstValue::Scalar`.
+    ///
+    /// A `Scalar` is a constant too small/simple to require an `Allocation` such as:
+    /// 1. integers
+    /// 2. ZST, or transparent structs of one (scalar) value
+    /// 3. enums that don't carry data
+    /// 4. unit, 1-ary tuples, or size-0 arrays
+    /// 5. pointers to an allocation
     fn codegen_scalar(&mut self, s: Scalar, ty: Ty<'tcx>, span: Option<&Span>) -> Expr {
         debug!(scalar=?s, ?ty, kind=?ty.kind(), ?span, "codegen_scalar");
         match (s, &ty.kind()) {
@@ -384,17 +420,29 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    pub fn codegen_fndef(
+    /// A private helper for `codegen_scalar`. Many "scalars" are more complex types, but get treated as scalars
+    /// because they only have one (small) field. We still translated them as struct types, however.
+    fn codegen_single_variant_single_field(
         &mut self,
-        d: DefId,
-        substs: ty::subst::SubstsRef<'tcx>,
+        s: Scalar,
         span: Option<&Span>,
+        overall_t: Type,
+        fty: Ty<'tcx>,
     ) -> Expr {
-        let instance =
-            Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), d, substs).unwrap().unwrap();
-        self.codegen_fn_item(instance, span)
+        if fty.is_unit() {
+            // TODO: It's not clear if this case is reachable. It's not covered by our test suite at least.
+            Expr::struct_expr_from_values(overall_t, vec![], &self.symbol_table)
+        } else {
+            Expr::struct_expr_from_values(
+                overall_t,
+                vec![self.codegen_scalar(s, fty, span)],
+                &self.symbol_table,
+            )
+        }
     }
 
+    /// A private helper function that ensures `alloc_id` is "allocated" (exists in the global symbol table and is
+    /// initialized), and just returns a pointer to somewhere (using `offset`) inside it.
     fn codegen_alloc_pointer(
         &mut self,
         res_t: Type,
@@ -404,7 +452,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> Expr {
         let base_addr = match self.tcx.global_alloc(alloc_id) {
             GlobalAlloc::Function(instance) => {
-                // here we have a function pointer
+                // We want to return the function pointer (not to be confused with function item)
                 self.codegen_func_expr(instance, span).address_of()
             }
             GlobalAlloc::Static(def_id) => self.codegen_static_pointer(def_id, false),
@@ -442,9 +490,10 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    /// Generates a pointer to a static or thread-local variable.
+    /// Generate a goto expression for a pointer to a static or thread-local variable.
+    ///
+    /// These are not initialized here, see `codegen_static`.
     pub fn codegen_static_pointer(&mut self, def_id: DefId, is_thread_local: bool) -> Expr {
-        // here we have a potentially unevaluated static
         let instance = Instance::mono(self.tcx, def_id);
 
         let sym = self.ensure(&self.symbol_name(instance), |ctx, name| {
@@ -474,7 +523,11 @@ impl<'tcx> GotocCtx<'tcx> {
         sym.clone().to_expr().address_of()
     }
 
-    pub fn codegen_allocation_auto_imm_name<F: FnOnce(&mut GotocCtx<'tcx>) -> String>(
+    /// `codegen_allocation` but without an `imm_name`
+    ///
+    /// TODO: This could use some refactoring. This function is only ever invoked as:
+    /// `self.codegen_allocation_auto_imm_name(alloc, |tcx| tcx.next_global_name())`
+    fn codegen_allocation_auto_imm_name<F: FnOnce(&mut GotocCtx<'tcx>) -> String>(
         &mut self,
         alloc: &'tcx Allocation,
         mut_name: F,
@@ -482,13 +535,28 @@ impl<'tcx> GotocCtx<'tcx> {
         self.codegen_allocation(alloc, mut_name, None)
     }
 
+    /// Add a new static allocation to the symbol table (if not already present) and
+    /// generate a goto expression that points to it.
+    ///
+    /// This is *the* mechanism for generating (and ensuring the intialization of) a global
+    /// (often but not necessarily immutable) variable in the symbol table.
+    ///
+    /// We need to codegen allocations from two sources:
+    /// 1. `codegen_static` which supplies the initialization code for top-level statics.
+    /// 2. Constants, scattered throughout the source, which need to be initialized statically,
+    /// so those functions can reference them. (These should always be immutable.)
+    /// (These also require de-duplication.)
+    ///
+    /// TODO: This function could use some refactoring. Outside of `codegen_allocation_auto_imm_name`
+    /// above, this function is only ever invoked as:
+    /// `self.codegen_allocation(alloc, |_| name.clone(), Some(name.clone()))`
     pub fn codegen_allocation<F: FnOnce(&mut GotocCtx<'tcx>) -> String>(
         &mut self,
         alloc: &'tcx Allocation,
         mut_name: F,
         imm_name: Option<String>,
     ) -> Expr {
-        debug!("codegen_allocation imm_name {:?} alloc {:?}", imm_name, alloc);
+        debug!("codegen_allocation imm_name {:?}", imm_name);
         let mem_var = match alloc.mutability {
             Mutability::Mut => {
                 let name = mut_name(self);
@@ -501,45 +569,11 @@ impl<'tcx> GotocCtx<'tcx> {
         mem_var.address_of()
     }
 
-    fn codegen_allocation_data(&mut self, alloc: &'tcx Allocation) -> Vec<AllocData<'tcx>> {
-        let mut alloc_vals = Vec::with_capacity(alloc.provenance().len() + 1);
-        let pointer_size =
-            Size::from_bytes(self.symbol_table.machine_model().pointer_width_in_bytes());
-
-        let mut next_offset = Size::ZERO;
-        for &(offset, alloc_id) in alloc.provenance().iter() {
-            if offset > next_offset {
-                let bytes = alloc.inspect_with_uninit_and_ptr_outside_interpreter(
-                    next_offset.bytes_usize()..offset.bytes_usize(),
-                );
-                alloc_vals.push(AllocData::Bytes(bytes));
-            }
-            let ptr_offset = {
-                let bytes = alloc.inspect_with_uninit_and_ptr_outside_interpreter(
-                    offset.bytes_usize()..(offset + pointer_size).bytes_usize(),
-                );
-                read_target_uint(self.tcx.sess.target.options.endian, bytes)
-            }
-            .unwrap();
-            alloc_vals.push(AllocData::Expr(self.codegen_alloc_pointer(
-                Type::signed_int(8).to_pointer(),
-                alloc_id,
-                Size::from_bytes(ptr_offset),
-                None,
-            )));
-
-            next_offset = offset + pointer_size;
-        }
-        if alloc.len() >= next_offset.bytes_usize() {
-            let range = next_offset.bytes_usize()..alloc.len();
-            let bytes = alloc.inspect_with_uninit_and_ptr_outside_interpreter(range);
-            alloc_vals.push(AllocData::Bytes(bytes));
-        }
-
-        alloc_vals
-    }
-
-    /// since it's immutable, we only allocate one location for it
+    /// Generate a goto expression for an immutable (constant) allocation.
+    ///
+    /// This function's primary purpose is to de-duplicate immutable global constants.
+    /// If it already has been codegen'd, use that.
+    /// If not, we otherwise proceed identically to the mutable case and call `codegen_alloc_in_memory`
     fn codegen_immutable_allocation(
         &mut self,
         alloc: &'tcx Allocation,
@@ -553,7 +587,12 @@ impl<'tcx> GotocCtx<'tcx> {
         self.symbol_table.lookup(&self.alloc_map.get(&alloc).unwrap()).unwrap().to_expr()
     }
 
-    /// Codegen alloc as a static global variable with initial value
+    /// Insert an allocation into the goto symbol table, and generate a goto function that will
+    /// initialize it.
+    ///
+    /// This function is ultimately responsible for creating new statically initialized global variables
+    /// in our goto binaries. These may be actual (potentially mutable) globals or (more often) constants
+    /// that were encountered during code generation (that are of course immutable).
     fn codegen_alloc_in_memory(&mut self, alloc: &'tcx Allocation, name: String) {
         debug!("codegen_alloc_in_memory name: {}", name);
         let struct_name = &format!("{name}::struct");
@@ -624,36 +663,70 @@ impl<'tcx> GotocCtx<'tcx> {
         self.alloc_map.insert(alloc, name);
     }
 
-    fn codegen_single_variant_single_field(
-        &mut self,
-        s: Scalar,
-        span: Option<&Span>,
-        overall_t: Type,
-        fty: Ty<'tcx>,
-    ) -> Expr {
-        if fty.is_unit() {
-            Expr::struct_expr_from_values(overall_t, vec![], &self.symbol_table)
-        } else {
-            Expr::struct_expr_from_values(
-                overall_t,
-                vec![self.codegen_scalar(s, fty, span)],
-                &self.symbol_table,
-            )
+    /// This is an internal helper function for `codegen_alloc_in_memory` and you should understand
+    /// it by starting there.
+    ///
+    /// We codegen global statics as their own unique struct types, and this creates a field-by-field
+    /// representation of what those fields should be initialized with.
+    /// (A field is either bytes, or initialized with an expression.)
+    fn codegen_allocation_data(&mut self, alloc: &'tcx Allocation) -> Vec<AllocData<'tcx>> {
+        let mut alloc_vals = Vec::with_capacity(alloc.provenance().ptrs().len() + 1);
+        let pointer_size =
+            Size::from_bytes(self.symbol_table.machine_model().pointer_width_in_bytes());
+
+        let mut next_offset = Size::ZERO;
+        for &(offset, alloc_id) in alloc.provenance().ptrs().iter() {
+            if offset > next_offset {
+                let bytes = alloc.inspect_with_uninit_and_ptr_outside_interpreter(
+                    next_offset.bytes_usize()..offset.bytes_usize(),
+                );
+                alloc_vals.push(AllocData::Bytes(bytes));
+            }
+            let ptr_offset = {
+                let bytes = alloc.inspect_with_uninit_and_ptr_outside_interpreter(
+                    offset.bytes_usize()..(offset + pointer_size).bytes_usize(),
+                );
+                read_target_uint(self.tcx.sess.target.options.endian, bytes)
+            }
+            .unwrap();
+            alloc_vals.push(AllocData::Expr(self.codegen_alloc_pointer(
+                Type::signed_int(8).to_pointer(),
+                alloc_id,
+                Size::from_bytes(ptr_offset),
+                None,
+            )));
+
+            next_offset = offset + pointer_size;
         }
+        if alloc.len() >= next_offset.bytes_usize() {
+            let range = next_offset.bytes_usize()..alloc.len();
+            let bytes = alloc.inspect_with_uninit_and_ptr_outside_interpreter(range);
+            alloc_vals.push(AllocData::Bytes(bytes));
+        }
+
+        alloc_vals
     }
 
-    /// fetch the niche value (as both left and right value)
-    pub fn codegen_get_niche(&self, v: Expr, offset: Size, niche_ty: Type) -> Expr {
-        if offset == Size::ZERO {
-            v.reinterpret_cast(niche_ty)
-        } else {
-            v // t: T
-                .address_of() // &t: T*
-                .cast_to(Type::unsigned_int(8).to_pointer()) // (u8 *)&t: u8 *
-                .plus(Expr::int_constant(offset.bytes(), Type::size_t())) // ((u8 *)&t) + offset: u8 *
-                .cast_to(niche_ty.to_pointer()) // (N *)(((u8 *)&t) + offset): N *
-                .dereference() // *(N *)(((u8 *)&t) + offset): N
-        }
+    /// Generate a goto expression for a MIR "function item" reference.
+    ///
+    /// A "function item" is a ZST that corresponds to a specific single function.
+    /// This is not the closure, nor a function pointer.
+    ///
+    /// Unlike closures or pointers, which can point to anything of the correct type,
+    /// a function item is a type associated with a unique function.
+    /// This type has impls for e.g. Fn, FnOnce, etc, which is how it safely converts to other
+    /// function types.
+    ///
+    /// See <https://doc.rust-lang.org/reference/types/function-item.html>
+    pub fn codegen_fndef(
+        &mut self,
+        d: DefId,
+        substs: ty::subst::SubstsRef<'tcx>,
+        span: Option<&Span>,
+    ) -> Expr {
+        let instance =
+            Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), d, substs).unwrap().unwrap();
+        self.codegen_fn_item(instance, span)
     }
 
     /// Ensure that the given instance is in the symbol table, returning the symbol.
@@ -662,10 +735,10 @@ impl<'tcx> GotocCtx<'tcx> {
     /// because the symbol should have the type. The problem is that the type in the symbol table
     /// sometimes subtly differs from the type that codegen_function_sig returns.
     /// This is tracked in <https://github.com/model-checking/kani/issues/1350>.
-    pub fn codegen_func_symbol(&mut self, instance: Instance<'tcx>) -> (&Symbol, Type) {
+    fn codegen_func_symbol(&mut self, instance: Instance<'tcx>) -> (&Symbol, Type) {
         let func = self.symbol_name(instance);
         let funct = self.codegen_function_sig(self.fn_sig_of_instance(instance));
-        // make sure the functions imported from other modules are in the symbol table
+        // make sure the functions imported from other modules (or externs) are in the symbol table
         let sym = self.ensure(&func, |ctx, _| {
             Symbol::function(
                 &func,
@@ -679,34 +752,32 @@ impl<'tcx> GotocCtx<'tcx> {
         (sym, funct)
     }
 
-    /// For a given function instance, generates an expression for the function symbol of type `Code`.
+    /// Generate a goto expression that references the function identified by `instance`.
     ///
-    /// Note: use `codegen_func_expr_zst` in the general case because GotoC does not allow functions to be used in all contexts
-    /// (e.g. struct fields).
+    /// Note: In general with this `Expr` you should immediately either `.address_of()` or `.call(...)`.
     ///
-    /// For details, see <https://github.com/model-checking/kani/pull/1338>
+    /// This should not be used where Rust expects a "function item" (See `codegen_fn_item`)
     pub fn codegen_func_expr(&mut self, instance: Instance<'tcx>, span: Option<&Span>) -> Expr {
         let (func_symbol, func_typ) = self.codegen_func_symbol(instance);
         Expr::symbol_expression(func_symbol.name, func_typ)
             .with_location(self.codegen_span_option(span.cloned()))
     }
 
-    /// For a given function instance, generates a zero-sized dummy symbol of type `Struct`.
+    /// Generate a goto expression referencing the singleton value for a MIR "function item".
     ///
-    /// This is often necessary because GotoC does not allow functions to be used in all contexts (e.g. struct fields).
-    /// For details, see <https://github.com/model-checking/kani/pull/1338>
-    ///
-    /// Note: use `codegen_func_expr` instead if you want to call the function immediately.
+    /// For a given function instance, generate a ZST struct and return a singleton reference to that.
+    /// This is the Rust "function item". See <https://doc.rust-lang.org/reference/types/function-item.html>
+    /// This is not the function pointer, for that use `codegen_func_expr`.
     fn codegen_fn_item(&mut self, instance: Instance<'tcx>, span: Option<&Span>) -> Expr {
         let (func_symbol, _) = self.codegen_func_symbol(instance);
-        let func = func_symbol.name;
-        let fn_struct_ty = self.codegen_fndef_type(instance);
+        let mangled_name = func_symbol.name;
+        let fn_item_struct_ty = self.codegen_fndef_type(instance);
         // This zero-sized object that a function name refers to in Rust is globally unique, so we create such a global object.
-        let fn_singleton_name = format!("{func}::FnDefSingleton");
+        let fn_singleton_name = format!("{mangled_name}::FnDefSingleton");
         let fn_singleton = self.ensure_global_var(
             &fn_singleton_name,
             false,
-            fn_struct_ty,
+            fn_item_struct_ty,
             Location::none(),
             |_, _| None, // zero-sized, so no initialization necessary
         );

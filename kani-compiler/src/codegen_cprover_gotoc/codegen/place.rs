@@ -176,7 +176,13 @@ impl<'tcx> ProjectedPlace<'tcx> {
                 goto_expr, expr_ty, ty_from_mir
             );
             warn!("{}", msg);
-            debug_assert!(false, "{}", msg);
+            // TODO: there's an expr type mismatch with the rust 2022-11-20 toolchain
+            // for simd:
+            // https://github.com/model-checking/kani/issues/1926
+            // Disabling it for this specific case.
+            if !(expr_ty.is_integer() && ty_from_mir.is_struct_tag()) {
+                debug_assert!(false, "{}", msg);
+            }
             return Err(UnimplementedData::new(
                 "Projection mismatch",
                 "https://github.com/model-checking/kani/issues/277",
@@ -310,7 +316,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// a named variable.
     ///
     /// Recursively finds the actual FnDef from a pointer or box.
-    pub fn codegen_local_fndef(&mut self, ty: ty::Ty<'tcx>) -> Option<Expr> {
+    fn codegen_local_fndef(&mut self, ty: ty::Ty<'tcx>) -> Option<Expr> {
         match ty.kind() {
             // A local that is itself a FnDef, like Fn::call_once
             ty::FnDef(defid, substs) => Some(self.codegen_fndef(*defid, substs, None)),
@@ -329,7 +335,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Codegen for a local
-    pub fn codegen_local(&mut self, l: Local) -> Expr {
+    fn codegen_local(&mut self, l: Local) -> Expr {
         // Check if the local is a function definition (see comment above)
         if let Some(fn_def) = self.codegen_local_fndef(self.local_ty(l)) {
             return fn_def;
