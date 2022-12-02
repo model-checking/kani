@@ -5,9 +5,10 @@
 use anyhow::Result;
 use args::CargoKaniSubcommand;
 use args_toml::join_args;
+use clap::CommandFactory;
+use clap::Parser;
 use std::ffi::OsString;
 use std::path::PathBuf;
-use structopt::StructOpt;
 
 mod args;
 mod args_toml;
@@ -38,18 +39,19 @@ fn main() -> Result<()> {
 
 fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     let input_args = join_args(input_args)?;
-    let args = args::CargoKaniArgs::from_iter(input_args);
+    let args = args::CargoKaniArgs::parse_from(input_args);
     args.validate();
     let ctx = session::KaniSession::new(args.common_opts)?;
 
     if matches!(args.command, Some(CargoKaniSubcommand::Assess)) || ctx.args.assess {
         // --assess requires --enable-unstable, but the subcommand needs manual checking
         if !ctx.args.enable_unstable {
-            clap::Error::with_description(
-                "Assess is unstable and requires 'cargo kani --enable-unstable assess'",
-                clap::ErrorKind::MissingRequiredArgument,
-            )
-            .exit()
+            args::CargoKaniArgs::command()
+                .error(
+                    clap::error::ErrorKind::MissingRequiredArgument,
+                    "Assess is unstable and requires 'cargo kani --enable-unstable assess'",
+                )
+                .exit()
         }
         // Run the alternative command instead
         return assess::cargokani_assess_main(ctx);
@@ -91,7 +93,7 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
 }
 
 fn standalone_main() -> Result<()> {
-    let args = args::StandaloneArgs::from_args();
+    let args = args::StandaloneArgs::parse();
     args.validate();
     let ctx = session::KaniSession::new(args.common_opts)?;
 

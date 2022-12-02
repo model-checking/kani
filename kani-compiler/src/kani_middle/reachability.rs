@@ -18,6 +18,7 @@ use tracing::{debug, debug_span, trace, warn};
 use rustc_data_structures::fingerprint::Fingerprint;
 use rustc_data_structures::fx::FxHashSet;
 use rustc_data_structures::stable_hasher::{HashStable, StableHasher};
+use rustc_hir::def_id::DefId;
 use rustc_middle::mir::interpret::{AllocId, ConstValue, ErrorHandled, GlobalAlloc, Scalar};
 use rustc_middle::mir::mono::MonoItem;
 use rustc_middle::mir::visit::Visitor as MirVisitor;
@@ -28,11 +29,11 @@ use rustc_middle::span_bug;
 use rustc_middle::ty::adjustment::PointerCast;
 use rustc_middle::ty::{
     Closure, ClosureKind, ConstKind, Instance, InstanceDef, ParamEnv, Ty, TyCtxt, TyKind,
-    TypeFoldable, VtblEntry,
+    TypeFoldable, VtblEntry, WithOptConstParam,
 };
-use rustc_span::def_id::DefId;
 
 use crate::kani_middle::coercion;
+use crate::kani_middle::stubbing::get_stub_name;
 
 /// Collect all reachable items starting from the given starting points.
 pub fn collect_reachable_items<'tcx>(
@@ -45,6 +46,7 @@ pub fn collect_reachable_items<'tcx>(
     for item in starting_points {
         collector.collect(*item);
     }
+    tcx.sess.abort_if_errors();
 
     // Sort the result so code generation follows deterministic order.
     // This helps us to debug the code, but it also provides the user a good experience since the
@@ -54,12 +56,11 @@ pub fn collect_reachable_items<'tcx>(
     sorted_items
 }
 
-/// Collect all items in the crate that matches the given predicate.
+/// Collect all (top-level) items in the crate that matches the given predicate.
 pub fn filter_crate_items<F>(tcx: TyCtxt, predicate: F) -> Vec<MonoItem>
 where
     F: FnMut(TyCtxt, DefId) -> bool,
 {
-    // Filter proof harnesses.
     let mut filter = predicate;
     tcx.hir_crate_items(())
         .items()
@@ -68,6 +69,31 @@ where
             filter(tcx, def_id).then(|| MonoItem::Fn(Instance::mono(tcx, def_id)))
         })
         .collect()
+}
+
+/// Use a predicate to find `const` declarations, then extract all closures from those declarations
+///
+/// Probably only specifically useful with a predicate to find `TestDescAndFn` const declarations from
+/// tests and extract the closures from them.
+pub fn filter_closures_in_const_crate_items<F>(tcx: TyCtxt, mut predicate: F) -> Vec<MonoItem>
+where
+    F: FnMut(TyCtxt, DefId) -> bool,
+{
+    let mut roots = Vec::new();
+    for hir_id in tcx.hir_crate_items(()).items() {
+        let def_id = hir_id.owner_id.def_id.to_def_id();
+        if predicate(tcx, def_id) {
+            // The predicate should only ever apply to monomorphic items
+            let instance = Instance::mono(tcx, def_id);
+            let body = tcx.instance_mir(InstanceDef::Item(WithOptConstParam::unknown(def_id)));
+            let mut extrator =
+                ConstMonoItemExtractor { tcx, body, instance, collected: FxHashSet::default() };
+            extrator.visit_body(body);
+
+            roots.extend(extrator.collected);
+        }
+    }
+    roots
 }
 
 struct MonoItemsCollector<'tcx> {
@@ -130,7 +156,7 @@ impl<'tcx> MonoItemsCollector<'tcx> {
 
         // Collect initialization.
         let alloc = self.tcx.eval_static_initializer(def_id).unwrap();
-        for &id in alloc.inner().provenance().values() {
+        for id in alloc.inner().provenance().provenances() {
             self.queue.extend(collect_alloc_items(self.tcx, id).iter());
         }
     }
@@ -236,7 +262,7 @@ impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {
             }
             ConstValue::Slice { data: alloc, start: _, end: _ }
             | ConstValue::ByRef { alloc, .. } => {
-                for &id in alloc.inner().provenance().values() {
+                for id in alloc.inner().provenance().provenances() {
                     self.collected.extend(collect_alloc_items(self.tcx, id).iter())
                 }
             }
@@ -372,15 +398,47 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
 
         let tcx = self.tcx;
         match terminator.kind {
-            TerminatorKind::Call { ref func, .. } => {
+            TerminatorKind::Call { ref func, ref args, .. } => {
                 let callee_ty = func.ty(self.body, tcx);
                 let fn_ty = self.monomorphize(callee_ty);
                 if let TyKind::FnDef(def_id, substs) = *fn_ty.kind() {
-                    let instance =
+                    let instance_opt =
                         Instance::resolve(self.tcx, ParamEnv::reveal_all(), def_id, substs)
-                            .unwrap()
                             .unwrap();
-                    self.collect_instance(instance, true);
+                    match instance_opt {
+                        None => {
+                            let caller = tcx.def_path_str(self.instance.def_id());
+                            let callee = tcx.def_path_str(def_id);
+                            // Check if the current function has been stubbed.
+                            if let Some(stub) = get_stub_name(tcx, self.instance.def_id()) {
+                                // During the MIR stubbing transformation, we do not
+                                // force type variables in the stub's signature to
+                                // implement the same traits as those in the
+                                // original function/method. A trait mismatch shows
+                                // up here, when we try to resolve a trait method
+                                let generic_ty = args[0].ty(self.body, tcx).peel_refs();
+                                let receiver_ty = tcx.subst_and_normalize_erasing_regions(
+                                    substs,
+                                    ParamEnv::reveal_all(),
+                                    generic_ty,
+                                );
+                                let sep = callee.rfind("::").unwrap();
+                                let trait_ = &callee[..sep];
+                                tcx.sess.span_err(
+                                    terminator.source_info.span,
+                                    format!(
+                                        "`{receiver_ty}` doesn't implement \
+                                        `{trait_}`. The function `{caller}` \
+                                        cannot be stubbed by `{stub}` due to \
+                                        generic bounds not being met."
+                                    ),
+                                );
+                            } else {
+                                panic!("unable to resolve call to `{callee}` in `{caller}`")
+                            }
+                        }
+                        Some(instance) => self.collect_instance(instance, true),
+                    };
                 } else {
                     assert!(
                         matches!(fn_ty.kind(), TyKind::FnPtr(..)),
@@ -467,7 +525,11 @@ fn collect_alloc_items<'tcx>(tcx: TyCtxt<'tcx>, alloc_id: AllocId) -> Vec<MonoIt
         }
         GlobalAlloc::Memory(alloc) => {
             items.extend(
-                alloc.inner().provenance().values().flat_map(|id| collect_alloc_items(tcx, *id)),
+                alloc
+                    .inner()
+                    .provenance()
+                    .provenances()
+                    .flat_map(|id| collect_alloc_items(tcx, id)),
             );
         }
         GlobalAlloc::VTable(ty, trait_ref) => {
@@ -476,4 +538,51 @@ fn collect_alloc_items<'tcx>(tcx: TyCtxt<'tcx>, alloc_id: AllocId) -> Vec<MonoIt
         }
     };
     items
+}
+
+/// This MIR Visitor is intended for one specific purpose:
+/// Find the closure that exist inside a top-level const declaration generated by
+/// test declarations. This allows us to treat this closure instance as a root for
+/// the reachability analysis.
+///
+/// Entry into this visitor will be via `visit_body`
+struct ConstMonoItemExtractor<'a, 'tcx> {
+    tcx: TyCtxt<'tcx>,
+    collected: FxHashSet<MonoItem<'tcx>>,
+    instance: Instance<'tcx>,
+    body: &'a Body<'tcx>,
+}
+
+impl<'a, 'tcx> MirVisitor<'tcx> for ConstMonoItemExtractor<'a, 'tcx> {
+    #[allow(clippy::single_match)]
+    fn visit_rvalue(&mut self, rvalue: &Rvalue<'tcx>, location: Location) {
+        trace!(rvalue=?*rvalue, "visit_rvalue");
+
+        match *rvalue {
+            Rvalue::Cast(CastKind::Pointer(PointerCast::ClosureFnPointer(_)), ref operand, _) => {
+                let source_ty = operand.ty(self.body, self.tcx);
+                let source_ty = self.instance.subst_mir_and_normalize_erasing_regions(
+                    self.tcx,
+                    ParamEnv::reveal_all(),
+                    source_ty,
+                );
+                match *source_ty.kind() {
+                    Closure(def_id, substs) => {
+                        let instance = Instance::resolve_closure(
+                            self.tcx,
+                            def_id,
+                            substs,
+                            ClosureKind::FnOnce,
+                        )
+                        .expect("failed to normalize and resolve closure during codegen");
+                        self.collected.insert(MonoItem::Fn(instance.polymorphize(self.tcx)));
+                    }
+                    _ => unreachable!("Unexpected type: {:?}", source_ty),
+                }
+            }
+            _ => { /* not interesting */ }
+        }
+
+        self.super_rvalue(rvalue, location);
+    }
 }

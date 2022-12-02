@@ -8,6 +8,7 @@ use crate::kani_middle::attributes::{extract_integer_argument, partition_kanitoo
 use cbmc::goto_program::{Expr, Stmt, Symbol};
 use cbmc::InternString;
 use kani_metadata::HarnessMetadata;
+use kani_queries::UserInput;
 use rustc_ast::Attribute;
 use rustc_hir::def::DefKind;
 use rustc_hir::def_id::DefId;
@@ -283,6 +284,38 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
+    /// Does this `def_id` have `#[rustc_test_marker]`?
+    pub fn is_test_harness_description(&self, def_id: DefId) -> bool {
+        let attrs = self.tcx.get_attrs_unchecked(def_id);
+
+        self.tcx.sess.contains_name(attrs, rustc_span::symbol::sym::rustc_test_marker)
+    }
+    /// Is this the closure inside of a test description const (i.e. macro expanded from a `#[test]`)?
+    ///
+    /// We're trying to detect the closure (`||`) inside code like:
+    ///
+    /// ```ignore
+    /// #[rustc_test_marker]
+    /// pub const check_2: test::TestDescAndFn = test::TestDescAndFn {
+    ///     desc: ...,
+    ///     testfn: test::StaticTestFn(|| test::assert_test_result(check_2())),
+    /// };
+    /// ```
+    pub fn is_test_harness_closure(&self, def_id: DefId) -> bool {
+        if !def_id.is_local() {
+            return false;
+        }
+
+        let local_def_id = def_id.expect_local();
+        let hir_id = self.tcx.hir().local_def_id_to_hir_id(local_def_id);
+
+        // The parent item of the closure appears to reliably be the `const` declaration item.
+        let parent_id = self.tcx.hir().get_parent_item(hir_id);
+        let parent_def_id = parent_id.to_def_id();
+
+        self.is_test_harness_description(parent_def_id)
+    }
+
     /// We record test harness information in kani-metadata, just like we record
     /// proof harness information. This is used to support e.g. cargo-kani assess.
     ///
@@ -292,34 +325,16 @@ impl<'tcx> GotocCtx<'tcx> {
     /// as it add asserts for tests that return `Result` types.
     fn record_test_harness_metadata(&mut self) {
         let def_id = self.current_fn().instance().def_id();
-        if def_id.is_local() {
-            let local_def_id = def_id.expect_local();
-            let hir_id = self.tcx.hir().local_def_id_to_hir_id(local_def_id);
-
-            // We want to detect the case where we're codegen'ing the closure inside what test "descriptions"
-            // are macro-expanded to:
-            //
-            // #[rustc_test_marker]
-            // pub const check_2: test::TestDescAndFn = test::TestDescAndFn {
-            //     desc: ...,
-            //     testfn: test::StaticTestFn(|| test::assert_test_result(check_2())),
-            // };
-
-            // The parent item of the closure appears to reliably be the `const` declaration item.
-            let parent_id = self.tcx.hir().get_parent_item(hir_id);
-            let attrs = self.tcx.get_attrs_unchecked(parent_id.to_def_id());
-
-            if self.tcx.sess.contains_name(attrs, rustc_span::symbol::sym::rustc_test_marker) {
-                let loc = self.codegen_span(&self.current_fn().mir().span);
-                self.test_harnesses.push(HarnessMetadata {
-                    pretty_name: self.current_fn().readable_name().to_owned(),
-                    mangled_name: self.current_fn().name(),
-                    original_file: loc.filename().unwrap(),
-                    original_start_line: loc.start_line().unwrap() as usize,
-                    original_end_line: loc.end_line().unwrap() as usize,
-                    unwind_value: None,
-                })
-            }
+        if self.is_test_harness_closure(def_id) {
+            let loc = self.codegen_span(&self.current_fn().mir().span);
+            self.test_harnesses.push(HarnessMetadata {
+                pretty_name: self.current_fn().readable_name().to_owned(),
+                mangled_name: self.current_fn().name(),
+                original_file: loc.filename().unwrap(),
+                original_start_line: loc.start_line().unwrap() as usize,
+                original_end_line: loc.end_line().unwrap() as usize,
+                unwind_value: None,
+            })
         }
     }
 
@@ -341,10 +356,14 @@ impl<'tcx> GotocCtx<'tcx> {
         let mut harness = self.default_kanitool_proof();
         for attr in other_attributes.iter() {
             match attr.0.as_str() {
-                "stub" => self
-                    .tcx
-                    .sess
-                    .span_warn(attr.1.span, "Attribute `kani::stub` is currently ignored by Kani"),
+                "stub" => {
+                    if !self.queries.get_stubbing_enabled() {
+                        self.tcx.sess.span_warn(
+                            attr.1.span,
+                            "Stubbing is not enabled; attribute `kani::stub` will be ignored",
+                        )
+                    }
+                }
                 "unwind" => self.handle_kanitool_unwind(attr.1, &mut harness),
                 _ => {
                     self.tcx.sess.span_err(

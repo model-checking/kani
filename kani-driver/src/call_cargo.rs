@@ -3,13 +3,23 @@
 
 use crate::args::KaniArgs;
 use crate::session::{KaniSession, ReachabilityMode};
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use cargo_metadata::{Metadata, MetadataCommand, Package};
 use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tracing::{debug, trace};
+
+//---- Crate types identifier used by cargo.
+const CRATE_TYPE_BIN: &str = "bin";
+const CRATE_TYPE_CDYLIB: &str = "cdylib";
+const CRATE_TYPE_DYLIB: &str = "dylib";
+const CRATE_TYPE_LIB: &str = "lib";
+const CRATE_TYPE_PROC_MACRO: &str = "proc-macro";
+const CRATE_TYPE_RLIB: &str = "rlib";
+const CRATE_TYPE_STATICLIB: &str = "staticlib";
+const CRATE_TYPE_TEST: &str = "test";
 
 /// The outputs of kani-compiler being invoked via cargo on a project.
 pub struct CargoOutputs {
@@ -82,13 +92,16 @@ impl KaniSession {
             ReachabilityMode::AllPubFns => {
                 pkg_args.extend(["--".into(), "--reachability=pub_fns".into()]);
             }
+            ReachabilityMode::Tests => {
+                pkg_args.extend(["--".into(), "--reachability=tests".into()]);
+            }
         }
 
         // Only joing them at the end. All kani flags must come first.
         kani_args.extend_from_slice(&rustc_args);
 
+        let mut found_target = false;
         let packages = packages_to_verify(&self.args, &metadata);
-        if packages.is_empty() {}
         for package in packages {
             for target in package_targets(&self.args, package) {
                 let mut cmd = Command::new("cargo");
@@ -101,17 +114,12 @@ impl KaniSession {
                     .env("KANIFLAGS", &crate::util::join_osstring(&kani_args, " "));
 
                 self.run_terminal(cmd)?;
+                found_target = true;
             }
         }
 
-        if self.args.dry_run {
-            // mock an answer: mostly the same except we don't/can't expand the globs
-            return Ok(CargoOutputs {
-                outdir: outdir.clone(),
-                symtabs: vec![outdir.join("*.symtab.json")],
-                metadata: vec![outdir.join("*.kani-metadata.json")],
-                restrictions: self.args.restrict_vtable().then_some(outdir),
-            });
+        if !found_target {
+            bail!("No supported targets were found.");
         }
 
         Ok(CargoOutputs {
@@ -133,10 +141,10 @@ fn glob(path: &Path) -> Result<Vec<PathBuf>> {
 }
 
 /// Extract the packages that should be verified.
-/// If --package <pkg> is given, return the list of packages selected.
-/// If --workspace is given, return the list of workspace members.
+/// If `--package <pkg>` is given, return the list of packages selected.
+/// If `--workspace` is given, return the list of workspace members.
 /// If no argument provided, return the root package if there's one or all members.
-///   - I.e.: Do whatever cargo does when there's no default_members.
+///   - I.e.: Do whatever cargo does when there's no `default_members`.
 ///   - This is because `default_members` is not available in cargo metadata.
 ///     See <https://github.com/rust-lang/cargo/issues/8033>.
 fn packages_to_verify<'a, 'b>(args: &'a KaniArgs, metadata: &'b Metadata) -> Vec<&'b Package> {
@@ -181,22 +189,81 @@ impl VerificationTarget {
 }
 
 /// Extract the targets inside a package.
+///
 /// If `--tests` is given, the list of targets will include any integration tests.
+///
+/// We use the `target.kind` as documented here. Note that `kind` for library will
+/// match the `crate-type`, despite them not being explicitly listed in the documentation:
+/// <https://docs.rs/cargo_metadata/0.15.0/cargo_metadata/struct.Target.html#structfield.kind>
+///
+/// The documentation for `crate-type` explicitly states that the only time `kind` and
+/// `crate-type` differs is for examples.
+/// <https://docs.rs/cargo_metadata/0.15.0/cargo_metadata/struct.Target.html#structfield.crate_types>
 fn package_targets(args: &KaniArgs, package: &Package) -> Vec<VerificationTarget> {
-    package
+    let mut ignored_tests = vec![];
+    let mut ignored_unsupported = vec![];
+    let verification_targets = package
         .targets
         .iter()
         .filter_map(|target| {
-            debug!(name=?package.name, target=?target.name, kind=?target.kind, "package_targets");
-            if target.kind.contains(&String::from("bin")) {
+            debug!(name=?package.name, target=?target.name, kind=?target.kind, crate_type=?target
+                .crate_types,
+                "package_targets");
+            if target.kind.contains(&String::from(CRATE_TYPE_BIN)) {
+                // Binary targets.
                 Some(VerificationTarget::Bin(target.name.clone()))
-            } else if target.kind.contains(&String::from("lib")) {
-                Some(VerificationTarget::Lib)
-            } else if target.kind.contains(&String::from("test")) && args.tests {
-                Some(VerificationTarget::Test(target.name.clone()))
+            } else if target.kind.contains(&String::from(CRATE_TYPE_LIB))
+                || target.kind.contains(&String::from(CRATE_TYPE_RLIB))
+            {
+                // Lib targets.
+                let unsupported_types = target
+                    .kind
+                    .iter()
+                    .filter_map(|kind| {
+                        let kind_str = kind.as_str();
+                        matches!(kind_str,
+                            CRATE_TYPE_CDYLIB | CRATE_TYPE_DYLIB | CRATE_TYPE_STATICLIB |
+                            CRATE_TYPE_PROC_MACRO
+                        ).then_some(kind_str)
+                    })
+                    .collect::<Vec<_>>();
+                if unsupported_types.is_empty() {
+                    Some(VerificationTarget::Lib)
+                } else {
+                    println!(
+                        "warning: Skipped verification of `{}` due to unsupported crate-type: `{}`.",
+                        target.name,
+                        unsupported_types.join("`, `")
+                    );
+                    None
+                }
+            } else if target.kind.contains(&String::from(CRATE_TYPE_TEST)) {
+                // Test target.
+                if args.tests {
+                    Some(VerificationTarget::Test(target.name.clone()))
+                } else {
+                    ignored_tests.push(target.name.as_str());
+                    None
+                }
             } else {
+                ignored_unsupported.push(target.name.as_str());
                 None
             }
         })
-        .collect()
+        .collect();
+
+    if args.verbose {
+        // Print targets that were skipped only on verbose mode.
+        if !ignored_tests.is_empty() {
+            println!("Skipped the following test targets: '{}'.", ignored_tests.join("', '"));
+            println!("    -> Use '--tests' to verify harnesses inside a 'test' crate.");
+        }
+        if !ignored_unsupported.is_empty() {
+            println!(
+                "Skipped the following unsupported targets: '{}'.",
+                ignored_unsupported.join("', '")
+            );
+        }
+    }
+    verification_targets
 }

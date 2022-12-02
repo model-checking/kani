@@ -1,0 +1,2 @@
+SUCCESS\
+assertion failed: foo() == 42

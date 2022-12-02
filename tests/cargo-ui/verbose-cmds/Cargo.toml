@@ -1,0 +1,12 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+[package]
+name = "dry-run"
+version = "0.1.0"
+edition = "2021"
+description = "Check that --verbose include the commands ran by Kani"
+
+[dependencies]
+
+[package.metadata.kani]
+flags = { verbose=true }

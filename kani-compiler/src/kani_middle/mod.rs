@@ -4,4 +4,6 @@
 //! and transformations.
 pub mod attributes;
 pub mod coercion;
+pub mod provide;
 pub mod reachability;
+pub mod stubbing;

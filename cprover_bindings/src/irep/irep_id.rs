@@ -824,6 +824,12 @@ pub enum IrepId {
     StatementListNot,
     StatementListInstruction,
     StatementListInstructions,
+    VectorEqual,
+    VectorNotequal,
+    VectorGe,
+    VectorLe,
+    VectorGt,
+    VectorLt,
 }
 
 impl IrepId {
@@ -1693,6 +1699,12 @@ impl ToString for IrepId {
             IrepId::StatementListNot => "statement_list_not",
             IrepId::StatementListInstruction => "statement_list_instruction",
             IrepId::StatementListInstructions => "statement_list_instructions",
+            IrepId::VectorEqual => "vector-=",
+            IrepId::VectorNotequal => "vector-!=",
+            IrepId::VectorGe => "vector->=",
+            IrepId::VectorLe => "vector-<=",
+            IrepId::VectorGt => "vector->",
+            IrepId::VectorLt => "vector-<",
         };
         s.to_string()
     }

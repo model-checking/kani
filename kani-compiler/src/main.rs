@@ -20,6 +20,7 @@ extern crate rustc_driver;
 extern crate rustc_errors;
 extern crate rustc_hir;
 extern crate rustc_index;
+extern crate rustc_interface;
 extern crate rustc_metadata;
 extern crate rustc_middle;
 extern crate rustc_session;
@@ -33,10 +34,12 @@ mod parser;
 mod session;
 mod unsound_experiments;
 
+use crate::kani_middle::stubbing;
 use crate::parser::KaniCompilerParser;
 use crate::session::init_session;
 use clap::ArgMatches;
 use kani_queries::{QueryDb, ReachabilityType, UserInput};
+use rustc_data_structures::fx::FxHashMap;
 use rustc_driver::{Callbacks, RunCompiler};
 use std::ffi::OsStr;
 use std::path::PathBuf;
@@ -89,9 +92,6 @@ fn main() -> Result<(), &'static str> {
 
     // Configure queries.
     let mut queries = QueryDb::default();
-    if let Some(symbol_table_passes) = matches.get_raw(parser::SYM_TABLE_PASSES) {
-        queries.set_symbol_table_passes(symbol_table_passes.map(convert_arg).collect::<Vec<_>>());
-    }
     queries.set_emit_vtable_restrictions(matches.get_flag(parser::RESTRICT_FN_PTRS));
     queries.set_check_assertion_reachability(matches.get_flag(parser::ASSERTION_REACH_CHECKS));
     queries.set_output_pretty_json(matches.get_flag(parser::PRETTY_OUTPUT_FILES));
@@ -104,10 +104,18 @@ fn main() -> Result<(), &'static str> {
     );
 
     // Generate rustc args.
-    let rustc_args = generate_rustc_args(&matches);
+    let mut rustc_args = generate_rustc_args(&matches);
 
-    if matches.get_flag(parser::ENABLE_STUBBING) {
-        eprintln!("warning: Kani currently does not perform any stubbing.");
+    // If appropriate, collect and set the stub mapping.
+    if matches.get_flag(parser::ENABLE_STUBBING)
+        && queries.get_reachability_analysis() == ReachabilityType::Harnesses
+    {
+        queries.set_stubbing_enabled(true);
+        let all_stub_mappings =
+            stubbing::collect_stub_mappings(&rustc_args).or(Err("Failed to compile crate"))?;
+        let harness = matches.get_one::<String>(parser::HARNESS).unwrap();
+        let mapping = find_harness_stub_mapping(harness, all_stub_mappings).unwrap_or_default();
+        rustc_args.push(stubbing::mk_rustc_arg(mapping));
     }
 
     // Configure and run compiler.
@@ -245,6 +253,24 @@ fn sysroot_path(args: &ArgMatches) -> PathBuf {
     }
     tracing::debug!(?path, ?sysroot_arg, "Sysroot path.");
     path
+}
+
+/// Find the stub mapping for the given harness.
+///
+/// This function is necessary because Kani currently allows a harness to be
+/// specified by a partially qualified name, whereas stub mappings use fully
+/// qualified names.
+fn find_harness_stub_mapping(
+    harness: &str,
+    stub_mappings: FxHashMap<String, FxHashMap<String, String>>,
+) -> Option<FxHashMap<String, String>> {
+    let suffix = String::from("::") + harness;
+    for (name, mapping) in stub_mappings {
+        if name == harness || name.ends_with(&suffix) {
+            return Some(mapping);
+        }
+    }
+    None
 }
 
 #[cfg(test)]
