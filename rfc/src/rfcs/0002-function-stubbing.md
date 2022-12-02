@@ -372,8 +372,8 @@ The source code annotations could likely stay the same, although the underlying 
 - It would probably make sense to provide a library of common stubs for users, since many applications might want to stub the same functions and mock the same behaviors (e.g., `rand::random` can be replaced with a function returning `kani::any`).
 - We could provide special classes of stubs that are likely to come up in practice:
     - `unreachable`: assert the function is unreachable.
-    - `havoc_locals`: return non-det values and assign non-det to all mutable argument.
-    - `havoc`: similar to `havoc_locals` but also assign non-det to all mutable global.
+    - `havoc_locals`: return nondeterministic values and assign nondeterministic values to all mutable arguments.
+    - `havoc`: similar to `havoc_locals` but also assign nondeterministic values to all mutable global variables.
     - `uninterpret`: treat function as an uninterpreted function.
 - How can we provide a good user experience for accessing private fields of `self` in methods?
 It is possible to do so using `std::mem::transmute` (see below); this is clunky and error-prone, and it would be good to provide better support for users.
