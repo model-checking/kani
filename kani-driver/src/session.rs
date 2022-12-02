@@ -95,7 +95,7 @@ pub enum ReachabilityMode {
 
 impl Drop for KaniSession {
     fn drop(&mut self) {
-        if !self.args.keep_temps && !self.args.dry_run {
+        if !self.args.keep_temps {
             let temporaries = self.temporaries.lock().unwrap();
 
             for file in temporaries.iter() {
@@ -108,7 +108,7 @@ impl Drop for KaniSession {
 
 impl KaniSession {
     // The below suite of helper functions for executing Commands are meant to be a common handler
-    // for various cmdline flags like 'dry-run' and 'quiet'. These functions are temporary: in the
+    // for various cmdline flags like 'verbose' and 'quiet'. These functions are temporary: in the
     // longer run we'll switch to a graph-interpreter style of constructing and executing jobs.
     // (In other words: higher-level data structures, rather than passing around Commands.)
     // (e.g. to support emitting Litani build graphs, or to better parallelize our work)
@@ -126,12 +126,8 @@ impl KaniSession {
             cmd.stdout(std::process::Stdio::null());
             cmd.stderr(std::process::Stdio::null());
         }
-        if self.args.verbose || self.args.dry_run {
-            println!("{}", render_command(&cmd).to_string_lossy());
-            if self.args.dry_run {
-                // Short circuit
-                return Ok(());
-            }
+        if self.args.verbose {
+            println!("[Kani] Running: `{}`", render_command(&cmd).to_string_lossy());
         }
         let result = cmd
             .status()
@@ -144,7 +140,7 @@ impl KaniSession {
 
     /// Run a job, but only output (unless --quiet) if it fails, and fail if there's a problem.
     pub fn run_suppress(&self, mut cmd: Command) -> Result<()> {
-        if self.args.quiet || self.args.debug || self.args.verbose || self.args.dry_run {
+        if self.args.quiet || self.args.debug || self.args.verbose {
             return self.run_terminal(cmd);
         }
         let result = cmd
@@ -165,12 +161,12 @@ impl KaniSession {
 
     /// Run a job, redirect its output to a file, and allow the caller to decide what to do with failure.
     pub fn run_redirect(&self, mut cmd: Command, stdout: &Path) -> Result<ExitStatus> {
-        if self.args.verbose || self.args.dry_run {
-            println!("{} > {}", render_command(&cmd).to_string_lossy(), stdout.display());
-            if self.args.dry_run {
-                // Short circuit. Difficult to mock an ExitStatus :(
-                return Ok(<ExitStatus as std::os::unix::prelude::ExitStatusExt>::from_raw(0));
-            }
+        if self.args.verbose {
+            println!(
+                "[Kani] Running: `{} > {}`",
+                render_command(&cmd).to_string_lossy(),
+                stdout.display()
+            );
         }
         let output_file = std::fs::File::create(&stdout)?;
         cmd.stdout(output_file);
@@ -184,11 +180,8 @@ impl KaniSession {
     /// NOTE: Unlike other `run_` functions, this function does not attempt to indicate
     /// the process exit code, you need to remember to check this yourself.
     pub fn run_piped(&self, mut cmd: Command) -> Result<Option<Child>> {
-        if self.args.verbose || self.args.dry_run {
-            println!("{}", render_command(&cmd).to_string_lossy());
-            if self.args.dry_run {
-                return Ok(None);
-            }
+        if self.args.verbose {
+            println!("[Kani] Running: `{}`", render_command(&cmd).to_string_lossy());
         }
         // Run the process as a child process
         let process = cmd

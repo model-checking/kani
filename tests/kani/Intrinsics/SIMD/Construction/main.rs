@@ -1,9 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! This test doesn't work because support for SIMD intrinsics isn't available
-//! at the moment in Kani. Support to be added in
-//! <https://github.com/model-checking/kani/issues/1148>
+//! Checks that the `simd_extract` and `simd_insert` intrinsics are supported
+//! and return the expected results.
 #![feature(repr_simd, platform_intrinsics)]
 
 #[repr(simd)]
@@ -34,8 +33,8 @@ fn main() {
     }
     {
         // Intrinsic updating
-        let m = unsafe { simd_insert(y, 0, 1) };
-        let n = unsafe { simd_insert(y, 1, 5) };
+        let m = unsafe { simd_insert(y, 0, 1_i64) };
+        let n = unsafe { simd_insert(y, 1, 5_i64) };
         assert!(m.0 == 1 && m.1 == 1);
         assert!(n.0 == 0 && n.1 == 5);
         // Original unchanged

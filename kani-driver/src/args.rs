@@ -4,7 +4,7 @@
 #[cfg(feature = "unsound_experiments")]
 use crate::unsound_experiments::UnsoundExperimentArgs;
 
-use clap::{error::ErrorKind, Error, Parser, ValueEnum};
+use clap::{error::Error, error::ErrorKind, Parser, ValueEnum};
 use std::ffi::OsString;
 use std::path::PathBuf;
 
@@ -67,7 +67,7 @@ pub struct KaniArgs {
     #[arg(
         long,
         requires("enable_unstable"),
-        conflicts_with_all(&["visualize", "dry_run"]),
+        conflicts_with_all(&["visualize"]),
         ignore_case = true,
         value_enum
     )]
@@ -89,10 +89,9 @@ pub struct KaniArgs {
     #[arg(long, hide_short_help = true)]
     pub enable_unstable: bool,
 
-    // Hide this since it depends on function that is a hidden option.
-    /// Print commands instead of running them. This command uses "harness" as a place holder for
-    /// name of the target harness.
-    #[arg(long, hide = true, requires("enable_unstable"))]
+    /// We no longer support dry-run. Use `--verbose` to see the commands being printed during
+    /// Kani execution.
+    #[arg(long, hide = true)]
     pub dry_run: bool,
 
     /// Generate C file equivalent to inputted program.
@@ -118,11 +117,10 @@ pub struct KaniArgs {
 
     /// Entry point for verification (symbol name).
     /// This is an unstable feature. Consider using --harness instead
-    #[arg(long, hide = true, requires("enable_unstable"), conflicts_with("dry_run"))]
+    #[arg(long, hide = true, requires("enable_unstable"))]
     pub function: Option<String>,
     /// Entry point for verification (proof harness)
-    // In a dry-run, we don't have kani-metadata.json to read, so we can't use this flag
-    #[arg(long, conflicts_with = "function", conflicts_with = "dry_run")]
+    #[arg(long, conflicts_with = "function")]
     pub harness: Option<String>,
 
     /// Link external C files referenced by Rust code.
@@ -372,17 +370,19 @@ impl CheckArgs {
 
 impl StandaloneArgs {
     pub fn validate(&self) {
-        self.common_opts.validate();
+        self.common_opts.validate::<Self>();
     }
 }
 impl CargoKaniArgs {
     pub fn validate(&self) {
-        self.common_opts.validate();
+        self.common_opts.validate::<Self>();
     }
 }
 impl KaniArgs {
-    pub fn validate(&self) {
-        self.validate_inner().or_else(|e| -> Result<(), ()> { e.exit() }).unwrap()
+    pub fn validate<T: Parser>(&self) {
+        self.validate_inner()
+            .or_else(|e| -> Result<(), ()> { e.format(&mut T::command()).exit() })
+            .unwrap()
     }
 
     fn validate_inner(&self) -> Result<(), Error> {
@@ -448,6 +448,13 @@ impl KaniArgs {
             ));
         }
 
+        if self.dry_run {
+            return Err(Error::raw(
+                ErrorKind::ValueValidation,
+                "The `--dry-run` option is obsolete. Use --verbose instead.",
+            ));
+        }
+
         Ok(())
     }
 }
@@ -510,11 +517,11 @@ mod tests {
     }
 
     #[test]
-    fn check_dry_run_harness_conflicts() {
-        // harness needs metadata which we don't have with dry-run
-        let args = vec!["kani", "file.rs", "--dry-run", "--harness", "foo"];
-        let err = StandaloneArgs::try_parse_from(args).unwrap_err();
-        assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
+    fn check_dry_run_fails() {
+        // We don't support --dry-run anymore but we print a friendly reminder for now.
+        let args = vec!["kani", "file.rs", "--dry-run"];
+        let err = StandaloneArgs::parse_from(&args).common_opts.validate_inner().unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::ValueValidation);
     }
 
     #[test]

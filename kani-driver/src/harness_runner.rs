@@ -103,12 +103,8 @@ impl KaniSession {
             let result = self.run_cbmc(binary, harness)?;
 
             // When quiet, we don't want to print anything at all.
-            // When dry-run, we don't have real results to print.
             // When output is old, we also don't have real results to print.
-            if !self.args.quiet
-                && !self.args.dry_run
-                && self.args.output_format != OutputFormat::Old
-            {
+            if !self.args.quiet && self.args.output_format != OutputFormat::Old {
                 println!("{}", result.render(&self.args.output_format));
             }
 
