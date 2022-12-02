@@ -38,7 +38,7 @@ use std::fs::File;
 use std::io::BufWriter;
 use std::io::Write as IoWrite;
 use std::iter::FromIterator;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::rc::Rc;
 use tracing::{debug, error, warn};
@@ -389,7 +389,7 @@ fn collect_codegen_items<'tcx>(gcx: &GotocCtx<'tcx>) -> Vec<MonoItem<'tcx>> {
     }
 }
 
-fn symbol_table_to_gotoc(tcx: &TyCtxt, file: &Path) -> impl AsRef<Path> {
+fn symbol_table_to_gotoc(tcx: &TyCtxt, file: &Path) -> PathBuf {
     let output_filename = file.with_extension(ArtifactType::SymTabGoto);
     let input_filename = file.with_extension(ArtifactType::SymTab);
 
