@@ -4,7 +4,7 @@
 #[cfg(feature = "unsound_experiments")]
 use crate::unsound_experiments::UnsoundExperimentArgs;
 
-use clap::{error::Error, error::ErrorKind, Parser, ValueEnum};
+use clap::{error::Error, error::ErrorKind, CommandFactory, Parser, ValueEnum};
 use std::ffi::OsString;
 use std::path::PathBuf;
 
@@ -72,7 +72,7 @@ pub struct KaniArgs {
         value_enum
     )]
     pub concrete_playback: Option<ConcretePlaybackMode>,
-    /// Keep temporary files generated throughout Kani process
+    /// Keep temporary files generated throughout Kani process. This is a no-op for `cargo-kani`.
     #[arg(long, hide_short_help = true)]
     pub keep_temps: bool,
 
@@ -96,11 +96,12 @@ pub struct KaniArgs {
 
     /// Generate C file equivalent to inputted program.
     /// This feature is unstable and it requires `--enable-unstable` to be used
-    #[arg(long, hide_short_help = true, requires("enable_unstable"))]
+    #[arg(long, hide_short_help = true, requires("enable_unstable"),
+        conflicts_with_all(&["function", "legacy_linker"])
+)]
     pub gen_c: bool,
 
-    // TODO: currently only cargo-kani pays attention to this.
-    /// Directory for all generated artifacts. Only effective when running Kani with cargo
+    /// Directory for all generated artifacts.
     #[arg(long)]
     pub target_dir: Option<PathBuf>,
 
@@ -371,11 +372,34 @@ impl CheckArgs {
 impl StandaloneArgs {
     pub fn validate(&self) {
         self.common_opts.validate::<Self>();
+        self.valid_input().unwrap();
+    }
+
+    fn valid_input(&self) -> Result<(), Error> {
+        if !self.input.is_file() {
+            Err(Error::raw(
+                ErrorKind::InvalidValue,
+                "Invalid argument: Input invalid. `{}` is not a regular file.",
+            ))
+        } else {
+            Ok(())
+        }
     }
 }
 impl CargoKaniArgs {
     pub fn validate(&self) {
         self.common_opts.validate::<Self>();
+        // --assess requires --enable-unstable, but the subcommand needs manual checking
+        if (matches!(self.command, Some(CargoKaniSubcommand::Assess)) || self.common_opts.assess)
+            && !self.common_opts.enable_unstable
+        {
+            Self::command()
+                .error(
+                    ErrorKind::MissingRequiredArgument,
+                    "Assess is unstable and requires 'cargo kani --enable-unstable assess'",
+                )
+                .exit()
+        }
     }
 }
 impl KaniArgs {
@@ -453,6 +477,14 @@ impl KaniArgs {
                 ErrorKind::ValueValidation,
                 "The `--dry-run` option is obsolete. Use --verbose instead.",
             ));
+        }
+        if let Some(out_dir) = &self.target_dir {
+            if out_dir.exists() && !out_dir.is_dir() {
+                return Err(Error::raw(
+                    ErrorKind::InvalidValue,
+                    "Invalid argument: `--target-dir` argument `{}` is not a directory",
+                ));
+            }
         }
 
         Ok(())

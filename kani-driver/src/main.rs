@@ -1,15 +1,19 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 #![feature(let_chains)]
+#![feature(array_methods)]
+
+use std::ffi::OsString;
 
 use anyhow::Result;
+
 use args::CargoKaniSubcommand;
 use args_toml::join_args;
-use clap::CommandFactory;
+
+use crate::project::{Project, StandaloneProjectBuilder};
+use crate::session::KaniSession;
 use clap::Parser;
-use kani_metadata::artifact::{convert_type, ArtifactType::*};
-use std::ffi::OsString;
-use std::path::PathBuf;
+use tracing::debug;
 
 mod args;
 mod args_toml;
@@ -25,12 +29,16 @@ mod cbmc_property_renderer;
 mod concrete_playback;
 mod harness_runner;
 mod metadata;
+mod project;
 mod session;
 mod util;
 
 #[cfg(feature = "unsound_experiments")]
 mod unsound_experiments;
 
+/// The main function for the `kani-driver`.
+/// The driver can be invoked via `cargo kani` and `kani` commands, which determines what kind of
+/// project should be verified.
 fn main() -> Result<()> {
     match determine_invocation_type(Vec::from_iter(std::env::args_os())) {
         InvocationType::CargoKani(args) => cargokani_main(args),
@@ -38,96 +46,43 @@ fn main() -> Result<()> {
     }
 }
 
+/// The main function for the `cargo kani` command.
 fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     let input_args = join_args(input_args)?;
     let args = args::CargoKaniArgs::parse_from(input_args);
     args.validate();
-    let ctx = session::KaniSession::new(args.common_opts)?;
+    let session = session::KaniSession::new(args.common_opts)?;
 
-    if matches!(args.command, Some(CargoKaniSubcommand::Assess)) || ctx.args.assess {
-        // --assess requires --enable-unstable, but the subcommand needs manual checking
-        if !ctx.args.enable_unstable {
-            args::CargoKaniArgs::command()
-                .error(
-                    clap::error::ErrorKind::MissingRequiredArgument,
-                    "Assess is unstable and requires 'cargo kani --enable-unstable assess'",
-                )
-                .exit()
-        }
-        // Run the alternative command instead
-        return assess::cargokani_assess_main(ctx);
+    if matches!(args.command, Some(CargoKaniSubcommand::Assess)) || session.args.assess {
+        // Run cargo assess.
+        return assess::cargokani_assess_main(session);
     }
 
-    let outputs = ctx.cargo_build()?;
-
-    let mut goto_objs: Vec<PathBuf> = Vec::new();
-    for symtab in &outputs.symtabs {
-        let goto_obj_filename = convert_type(symtab, SymTab, SymTabGoto);
-        goto_objs.push(goto_obj_filename);
-    }
-
-    if ctx.args.only_codegen {
-        return Ok(());
-    }
-
-    let linked_obj = outputs.outdir.join("cbmc-linked.out");
-    ctx.link_goto_binary(&goto_objs, &linked_obj)?;
-    if let Some(restrictions) = outputs.restrictions {
-        ctx.apply_vtable_restrictions(&linked_obj, &restrictions)?;
-    }
-
-    let metadata = ctx.collect_kani_metadata(&outputs.metadata)?;
-    let harnesses = ctx.determine_targets(&metadata)?;
-    let report_base = ctx.args.target_dir.clone().unwrap_or(PathBuf::from("target"));
-
-    let runner = harness_runner::HarnessRunner {
-        sess: &ctx,
-        linked_obj: &linked_obj,
-        report_base: &report_base,
-        symtabs: &outputs.symtabs,
-        retain_specialized_harnesses: true,
-    };
-
-    let results = runner.check_all_harnesses(&harnesses)?;
-
-    ctx.print_final_summary(&results)
+    let project = project::cargo_project(&session)?;
+    if session.args.only_codegen { Ok(()) } else { verify_project(project, session) }
 }
 
+/// The main function for the `kani` command.
 fn standalone_main() -> Result<()> {
     let args = args::StandaloneArgs::parse();
     args.validate();
-    let ctx = session::KaniSession::new(args.common_opts)?;
+    let session = session::KaniSession::new(args.common_opts)?;
 
-    let outputs = ctx.compile_single_rust_file(&args.input)?;
+    let project = StandaloneProjectBuilder::try_new(&args.input, &session)?.build()?;
+    if session.args.only_codegen { Ok(()) } else { verify_project(project, session) }
+}
 
-    let goto_obj = outputs.goto_obj;
+/// Run verification on the given project.
+fn verify_project(project: Project, session: KaniSession) -> Result<()> {
+    debug!(?project, "verify_project");
+    let harnesses = session.determine_targets(&project.get_all_harnesses())?;
+    debug!(n = harnesses.len(), ?harnesses, "verify_project");
 
-    if ctx.args.only_codegen {
-        return Ok(());
-    }
-
-    let linked_obj = args.input.with_extension(Goto);
-    ctx.record_temporary_files(&[&linked_obj]);
-    ctx.link_goto_binary(&[goto_obj], &linked_obj)?;
-    if let Some(restriction) = outputs.restrictions {
-        ctx.apply_vtable_restrictions(&linked_obj, &restriction)?;
-    }
-
-    let metadata = ctx.collect_kani_metadata(&[outputs.metadata])?;
-    let harnesses = ctx.determine_targets(&metadata)?;
-    let report_base = ctx.args.target_dir.clone().unwrap_or(PathBuf::from("."));
-
-    let runner = harness_runner::HarnessRunner {
-        sess: &ctx,
-        linked_obj: &linked_obj,
-        report_base: &report_base,
-        symtabs: &[outputs.symtab],
-        retain_specialized_harnesses: false,
-    };
-
+    // Verification
+    let runner = harness_runner::HarnessRunner { sess: &session, project };
     let results = runner.check_all_harnesses(&harnesses)?;
 
-    ctx.print_final_summary(&results)
+    session.print_final_summary(&results)
 }
 
 #[derive(Debug, PartialEq, Eq)]

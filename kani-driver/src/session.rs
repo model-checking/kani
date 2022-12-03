@@ -64,11 +64,11 @@ impl KaniSession {
         })
     }
 
-    pub fn record_temporary_files(&self, temps: &[&Path]) {
+    pub fn record_temporary_files<T: AsRef<Path>>(&self, temps: &[&T]) {
         // unwrap safety: will panic this thread if another thread panicked *while holding the lock.*
         // This is vanishingly unlikely, and even then probably the right thing to do
         let mut t = self.temporaries.lock().unwrap();
-        t.extend(temps.iter().map(|p| (*p).to_owned()));
+        t.extend(temps.iter().map(|p| p.as_ref().to_owned()));
     }
 
     /// Determine which symbols Kani should codegen (i.e. by slicing away symbols
