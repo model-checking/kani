@@ -1,0 +1,11 @@
+Checking harness check_lib...
+SUCCESS\
+"This should succeed"\
+in function check_lib
+
+Checking harness check_lib...
+FAILURE\
+"This should fail"\
+in function check_lib
+
+Complete - 1 successfully verified harnesses, 1 failures, 2 total.
