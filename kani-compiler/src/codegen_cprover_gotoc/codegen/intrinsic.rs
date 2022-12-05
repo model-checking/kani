@@ -407,14 +407,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 })
             };
             self.tcx.sess.abort_if_errors();
-            return self.codegen_intrinsic_simd_shuffle(
-                fargs,
-                p,
-                farg_types,
-                ret_ty,
-                n,
-                span,
-            );
+            return self.codegen_intrinsic_simd_shuffle(fargs, p, farg_types, ret_ty, n, span);
         }
 
         match intrinsic {
