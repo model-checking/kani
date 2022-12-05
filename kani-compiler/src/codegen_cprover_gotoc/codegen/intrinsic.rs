@@ -606,6 +606,8 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             "simd_or" => codegen_intrinsic_binop!(bitor),
             "simd_rem" => unstable_codegen!(codegen_intrinsic_binop!(rem)),
+            // TODO: `simd_shl` and `simd_shr` don't check overflow cases.
+            // <https://github.com/model-checking/kani/issues/1963>
             "simd_shl" => codegen_intrinsic_binop!(shl),
             "simd_shr" => {
                 if fargs[0].typ().base_type().unwrap().is_signed(self.symbol_table.machine_model())
