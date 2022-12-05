@@ -410,7 +410,6 @@ impl<'tcx> GotocCtx<'tcx> {
             return self.codegen_intrinsic_simd_shuffle(
                 fargs,
                 p,
-                cbmc_ret_ty,
                 farg_types,
                 ret_ty,
                 n,
@@ -1563,7 +1562,6 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         mut fargs: Vec<Expr>,
         p: &Place<'tcx>,
-        cbmc_ret_ty: Type,
         rust_arg_types: &[Ty<'tcx>],
         rust_ret_type: Ty<'tcx>,
         n: u64,
@@ -1612,6 +1610,7 @@ impl<'tcx> GotocCtx<'tcx> {
             })
             .collect();
         self.tcx.sess.abort_if_errors();
+        let cbmc_ret_ty = self.codegen_ty(rust_ret_type);
         self.codegen_expr_to_place(p, Expr::vector_expr(cbmc_ret_ty, elems))
     }
 
