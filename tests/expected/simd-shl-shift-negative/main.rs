@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! Checks that `simd_shl` returns a failure if the shift distance is too large.
+//! Checks that `simd_shl` returns a failure if the shift distance is negative.
 #![feature(repr_simd, platform_intrinsics)]
 
 #[repr(simd)]
