@@ -1,9 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! This test doesn't work because support for SIMD intrinsics isn't available
-//! at the moment in Kani. Support to be added in
-//! <https://github.com/model-checking/kani/issues/1148>
+//! Checks that `simd_shuffle` and `simd_shuffleN` (where `N` is a length) are
+//! supported and return the expected results.
 #![feature(repr_simd, platform_intrinsics)]
 
 #[repr(simd)]
@@ -17,9 +16,9 @@ pub struct i64x2(i64, i64);
 pub struct i64x4(i64, i64, i64, i64);
 
 extern "platform-intrinsic" {
-    fn simd_shuffle4<T, U>(x: T, y: T, idx: [u32; 4]) -> U;
-    fn simd_shuffle2<T, U>(x: T, y: T, idx: [u32; 2]) -> U;
     fn simd_shuffle<T, U, V>(x: T, y: T, idx: U) -> V;
+    fn simd_shuffle2<T, U>(x: T, y: T, idx: [u32; 2]) -> U;
+    fn simd_shuffle4<T, U>(x: T, y: T, idx: [u32; 4]) -> U;
 }
 
 #[kani::proof]
