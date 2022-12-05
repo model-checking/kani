@@ -15,6 +15,13 @@ fn int_constant<T>(name: &str, value: T) -> Symbol
 where
     T: Into<BigInt>,
 {
+    Symbol::constant(name, name, name, Expr::int_constant(value, Type::integer()), Location::none())
+}
+
+fn int_constant_c_int<T>(name: &str, value: T) -> Symbol
+where
+    T: Into<BigInt>,
+{
     Symbol::constant(name, name, name, Expr::int_constant(value, Type::c_int()), Location::none())
 }
 
@@ -23,7 +30,7 @@ fn int_constant_from_bool(name: &str, value: bool) -> Symbol {
         name,
         name,
         name,
-        Expr::int_constant(if value { 1 } else { 0 }, Type::c_int()),
+        Expr::int_constant(if value { 1 } else { 0 }, Type::integer()),
         Location::none(),
     )
 }
@@ -58,16 +65,15 @@ pub fn machine_model_symbols(mm: &MachineModel) -> Vec<Symbol> {
         ),
         int_constant("__CPROVER_architecture_wchar_t_width", mm.wchar_t_width),
         int_constant("__CPROVER_architecture_word_size", mm.word_size),
-        int_constant("__CPROVER_rounding_mode", mm.rounding_mode),
+        // `__CPROVER_rounding_mode` doesn't use `integer` type.
+        // More details in <https://github.com/diffblue/cbmc/issues/7282>
+        int_constant_c_int("__CPROVER_rounding_mode", mm.rounding_mode),
     ]
 }
 
 pub fn additional_env_symbols() -> Vec<Symbol> {
     vec![
         Symbol::builtin_function("__CPROVER_initialize", vec![], Type::empty()),
-        // https://github.com/diffblue/cbmc/blob/b26d3479679574c6c179f911b488a314bc2f1085/src/util/config.h#L214
-        int_constant("__CPROVER_malloc_failure_mode_assert_then_assume", 2),
-        int_constant("__CPROVER_malloc_failure_mode_return_null", 1),
         Symbol::typedef("__CPROVER_size_t", "__CPROVER_size_t", Type::size_t(), Location::none()),
         Symbol::static_variable(
             "__CPROVER_memory",

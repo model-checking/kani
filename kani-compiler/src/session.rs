@@ -55,13 +55,13 @@ pub fn init_session(args: &ArgMatches) {
 /// Initialize the logger using the KANI_LOG environment variable and the --log-level argument.
 fn init_logger(args: &ArgMatches) {
     let filter = EnvFilter::from_env(LOG_ENV_VAR);
-    let filter = if let Some(log_level) = args.value_of(parser::LOG_LEVEL) {
+    let filter = if let Some(log_level) = args.get_one::<String>(parser::LOG_LEVEL) {
         filter.add_directive(Directive::from_str(log_level).unwrap())
     } else {
         filter
     };
 
-    if args.is_present(parser::JSON_OUTPUT) {
+    if args.get_flag(parser::JSON_OUTPUT) {
         json_logs(filter);
     } else {
         hier_logs(args, filter);
@@ -77,11 +77,11 @@ fn json_logs(filter: EnvFilter) {
 
 /// Configure global logger to use a hierarchical view.
 fn hier_logs(args: &ArgMatches, filter: EnvFilter) {
-    let use_colors = atty::is(atty::Stream::Stdout) || args.is_present(parser::COLOR_OUTPUT);
+    let use_colors = atty::is(atty::Stream::Stdout) || args.get_flag(parser::COLOR_OUTPUT);
     let subscriber = Registry::default().with(filter);
     let subscriber = subscriber.with(
         HierarchicalLayer::default()
-            .with_writer(std::io::stdout)
+            .with_writer(std::io::stderr)
             .with_indent_lines(true)
             .with_ansi(use_colors)
             .with_targets(true)

@@ -186,7 +186,7 @@ mod test {
             is_auxiliary: false,
             is_weak: false,
         };
-        sym_table.insert(symbol.clone());
+        sym_table.insert(symbol);
         assert_ser_tokens(
             &sym_table,
             &[

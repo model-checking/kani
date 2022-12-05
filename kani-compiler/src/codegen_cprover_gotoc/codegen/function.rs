@@ -4,39 +4,20 @@
 //! This file contains functions related to codegenning MIR functions into gotoc
 
 use crate::codegen_cprover_gotoc::GotocCtx;
+use crate::kani_middle::attributes::{extract_integer_argument, partition_kanitool_attributes};
 use cbmc::goto_program::{Expr, Stmt, Symbol};
 use cbmc::InternString;
 use kani_metadata::HarnessMetadata;
-use rustc_ast::ast;
-use rustc_ast::{Attribute, LitKind};
+use kani_queries::UserInput;
+use rustc_ast::Attribute;
 use rustc_hir::def::DefKind;
 use rustc_hir::def_id::DefId;
 use rustc_middle::mir::{HasLocalDecls, Local};
-use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{self, Instance};
 use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::iter::FromIterator;
 use tracing::{debug, info_span};
-
-/// Utility to skip functions that can't currently be successfully codgenned.
-impl<'tcx> GotocCtx<'tcx> {
-    fn should_skip_current_fn(&self) -> bool {
-        let current_fn_name =
-            with_no_trimmed_paths!(self.tcx.def_path_str(self.current_fn().instance().def_id()));
-        // We cannot use self.current_fn().readable_name() because it gives the monomorphized type, which is more difficult to match on.
-        // Ideally we should not rely on the pretty-printed name here. Tracked here: https://github.com/model-checking/kani/issues/1374
-        match current_fn_name.as_str() {
-            // https://github.com/model-checking/kani/issues/202
-            "fmt::ArgumentV1::<'a>::as_usize" => true,
-            // https://github.com/model-checking/kani/issues/282
-            "bridge::closure::Closure::<'a, A, R>::call" => true,
-            name if name.contains("reusable_box::ReusableBoxFuture") => true,
-            "tokio::sync::Semaphore::acquire_owned::{closure#0}" => true,
-            _ => false,
-        }
-    }
-}
 
 /// Codegen MIR functions into gotoc
 impl<'tcx> GotocCtx<'tcx> {
@@ -94,20 +75,6 @@ impl<'tcx> GotocCtx<'tcx> {
             info_span!("CodegenFunction", name = self.current_fn().readable_name()).entered();
         if old_sym.is_function_definition() {
             tracing::info!("Double codegen of {:?}", old_sym);
-        } else if self.should_skip_current_fn() {
-            debug!("Skipping function {}", self.current_fn().readable_name());
-            self.codegen_function_prelude();
-            self.codegen_declare_variables();
-            let loc = self.codegen_span(&self.current_fn().mir().span);
-            let readable_name = format!("The function {}", self.current_fn().readable_name());
-            // We'll ideally just get rid of this eventually, but use "mimic" to avoid extra compilation warnings
-            let body = self.codegen_mimic_unimplemented(
-                &readable_name,
-                loc,
-                // There actually are links to specific issues in `should_skip_current_fn`...
-                "https://github.com/model-checking/kani/issues/new/choose",
-            );
-            self.symbol_table.update_fn_declaration_with_definition(&name, body);
         } else {
             assert!(old_sym.is_function());
             let mir = self.current_fn().mir();
@@ -123,6 +90,7 @@ impl<'tcx> GotocCtx<'tcx> {
             self.symbol_table.update_fn_declaration_with_definition(&name, body);
 
             self.handle_kanitool_attributes();
+            self.record_test_harness_metadata();
         }
         self.reset_current_fn();
     }
@@ -316,12 +284,70 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
+    /// Does this `def_id` have `#[rustc_test_marker]`?
+    pub fn is_test_harness_description(&self, def_id: DefId) -> bool {
+        let attrs = self.tcx.get_attrs_unchecked(def_id);
+
+        self.tcx.sess.contains_name(attrs, rustc_span::symbol::sym::rustc_test_marker)
+    }
+    /// Is this the closure inside of a test description const (i.e. macro expanded from a `#[test]`)?
+    ///
+    /// We're trying to detect the closure (`||`) inside code like:
+    ///
+    /// ```ignore
+    /// #[rustc_test_marker]
+    /// pub const check_2: test::TestDescAndFn = test::TestDescAndFn {
+    ///     desc: ...,
+    ///     testfn: test::StaticTestFn(|| test::assert_test_result(check_2())),
+    /// };
+    /// ```
+    pub fn is_test_harness_closure(&self, def_id: DefId) -> bool {
+        if !def_id.is_local() {
+            return false;
+        }
+
+        let local_def_id = def_id.expect_local();
+        let hir_id = self.tcx.hir().local_def_id_to_hir_id(local_def_id);
+
+        // The parent item of the closure appears to reliably be the `const` declaration item.
+        let parent_id = self.tcx.hir().get_parent_item(hir_id);
+        let parent_def_id = parent_id.to_def_id();
+
+        self.is_test_harness_description(parent_def_id)
+    }
+
+    /// We record test harness information in kani-metadata, just like we record
+    /// proof harness information. This is used to support e.g. cargo-kani assess.
+    ///
+    /// Note that we do not actually spot the function that was annotated by `#[test]`
+    /// but instead the closure that gets put into the "test description" that macro
+    /// expands into. (See comment below) This ends up being preferrable, actually,
+    /// as it add asserts for tests that return `Result` types.
+    fn record_test_harness_metadata(&mut self) {
+        let def_id = self.current_fn().instance().def_id();
+        if self.is_test_harness_closure(def_id) {
+            let loc = self.codegen_span(&self.current_fn().mir().span);
+            self.test_harnesses.push(HarnessMetadata {
+                pretty_name: self.current_fn().readable_name().to_owned(),
+                mangled_name: self.current_fn().name(),
+                crate_name: self.current_fn().krate(),
+                original_file: loc.filename().unwrap(),
+                original_start_line: loc.start_line().unwrap() as usize,
+                original_end_line: loc.end_line().unwrap() as usize,
+                unwind_value: None,
+                // We record the actual path after codegen before we dump the metadata into a file.
+                goto_file: None,
+            })
+        }
+    }
+
     /// This updates the goto context with any information that should be accumulated from a function's
     /// attributes.
     ///
     /// Handle all attributes i.e. `#[kani::x]` (which kani_macros translates to `#[kanitool::x]` for us to handle here)
     fn handle_kanitool_attributes(&mut self) {
-        let all_attributes = self.tcx.get_attrs_unchecked(self.current_fn().instance().def_id());
+        let def_id = self.current_fn().instance().def_id();
+        let all_attributes = self.tcx.get_attrs_unchecked(def_id);
         let (proof_attributes, other_attributes) = partition_kanitool_attributes(all_attributes);
         if !proof_attributes.is_empty() {
             self.create_proof_harness(other_attributes);
@@ -333,6 +359,14 @@ impl<'tcx> GotocCtx<'tcx> {
         let mut harness = self.default_kanitool_proof();
         for attr in other_attributes.iter() {
             match attr.0.as_str() {
+                "stub" => {
+                    if !self.queries.get_stubbing_enabled() {
+                        self.tcx.sess.span_warn(
+                            attr.1.span,
+                            "Stubbing is not enabled; attribute `kani::stub` will be ignored",
+                        )
+                    }
+                }
                 "unwind" => self.handle_kanitool_unwind(attr.1, &mut harness),
                 _ => {
                     self.tcx.sess.span_err(
@@ -355,10 +389,13 @@ impl<'tcx> GotocCtx<'tcx> {
         HarnessMetadata {
             pretty_name,
             mangled_name,
+            crate_name: current_fn.krate(),
             original_file: loc.filename().unwrap(),
             original_start_line: loc.start_line().unwrap() as usize,
             original_end_line: loc.end_line().unwrap() as usize,
             unwind_value: None,
+            // We record the actual path after codegen before we dump the metadata into a file.
+            goto_file: None,
         }
     }
 
@@ -388,61 +425,5 @@ impl<'tcx> GotocCtx<'tcx> {
                 harness.unwind_value = Some(val.unwrap());
             }
         }
-    }
-}
-
-/// If the attribute is named `kanitool::name`, this extracts `name`
-fn kanitool_attr_name(attr: &ast::Attribute) -> Option<String> {
-    match &attr.kind {
-        ast::AttrKind::Normal(normal) => {
-            let segments = &normal.item.path.segments;
-            if (!segments.is_empty()) && segments[0].ident.as_str() == "kanitool" {
-                Some(segments[1].ident.as_str().to_string())
-            } else {
-                None
-            }
-        }
-        _ => None,
-    }
-}
-
-/// Partition all the attributes into two buckets, proof_attributes and other_attributes
-fn partition_kanitool_attributes(
-    all_attributes: &[Attribute],
-) -> (Vec<&Attribute>, Vec<(String, &Attribute)>) {
-    let mut proof_attributes = vec![];
-    let mut other_attributes = vec![];
-
-    for attr in all_attributes {
-        // Get the string the appears after "kanitool::" in each attribute string.
-        // Ex - "proof" | "unwind" etc.
-        if let Some(attribute_string) = kanitool_attr_name(attr).as_deref() {
-            if attribute_string == "proof" {
-                proof_attributes.push(attr);
-            } else {
-                other_attributes.push((attribute_string.to_string(), attr));
-            }
-        }
-    }
-
-    (proof_attributes, other_attributes)
-}
-
-/// Extracts the integer value argument from the attribute provided
-/// For example, `unwind(8)` return `Some(8)`
-fn extract_integer_argument(attr: &Attribute) -> Option<u128> {
-    // Vector of meta items , that contain the arguments given the attribute
-    let attr_args = attr.meta_item_list()?;
-    // Only extracts one integer value as argument
-    if attr_args.len() == 1 {
-        let x = attr_args[0].literal()?;
-        match x.kind {
-            LitKind::Int(y, ..) => Some(y),
-            _ => None,
-        }
-    }
-    // Return none if there are no attributes or if there's too many attributes
-    else {
-        None
     }
 }

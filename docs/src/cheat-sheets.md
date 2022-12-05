@@ -10,10 +10,10 @@ development purposes.
 
 ```bash
 # Error "'rustc' panicked at 'failed to lookup `SourceFile` in new context'"
-# or similar error?
-# Clean `kani-compiler` and re-build:
-cargo clean -p kani-compiler
-cargo build -p kani-compiler
+# or similar error? Cleaning artifacts might help.
+# Otherwise, comment the line below.
+cargo clean
+cargo build-dev
 ```
 
 ### Test
@@ -59,6 +59,13 @@ These can help understand what Kani is generating or encountering on an example 
 # Enable `debug!` macro logging output when running Kani:
 kani --debug file.rs
 ```
+
+```bash
+# Use KANI_LOG for a finer grain control of the source and verbosity of logs.
+# E.g.: The command below will print all logs from the kani_middle module.
+KANI_LOG="kani_compiler::kani_middle=trace" kani file.rs
+```
+
 ```bash
 # Keep CBMC Symbol Table and Goto-C output (.json and .goto)
 kani --keep-temps file.rs
@@ -66,6 +73,12 @@ kani --keep-temps file.rs
 ```bash
 # Generate "C code" from CBMC IR (.c)
 kani --gen-c file.rs
+```
+
+```bash
+# Generate a ${INPUT}.kani.mir file with a human friendly MIR dump
+# for all items that are compiled to the respective goto-program.
+RUSTFLAGS="--emit mir" kani ${INPUT}.rs
 ```
 
 ## CBMC

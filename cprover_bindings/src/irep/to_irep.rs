@@ -84,6 +84,12 @@ impl ToIrepId for BinaryOperator {
             BinaryOperator::Ror => IrepId::Ror,
             BinaryOperator::Shl => IrepId::Shl,
             BinaryOperator::Xor => IrepId::Xor,
+            BinaryOperator::VectorEqual => IrepId::VectorEqual,
+            BinaryOperator::VectorNotequal => IrepId::VectorNotequal,
+            BinaryOperator::VectorGe => IrepId::VectorGe,
+            BinaryOperator::VectorLe => IrepId::VectorLe,
+            BinaryOperator::VectorGt => IrepId::VectorGt,
+            BinaryOperator::VectorLt => IrepId::VectorLt,
         }
     }
 }
@@ -140,14 +146,16 @@ impl ToIrep for DatatypeComponent {
 impl ToIrep for Expr {
     fn to_irep(&self, mm: &MachineModel) -> Irep {
         if let ExprValue::IntConstant(i) = self.value() {
-            let width = self.typ().native_width(mm).unwrap();
+            let typ_width = self.typ().native_width(mm);
+            let irep_value = if let Some(width) = typ_width {
+                Irep::just_bitpattern_id(i.clone(), width, self.typ().is_signed(mm))
+            } else {
+                Irep::just_int_id(i.clone())
+            };
             Irep {
                 id: IrepId::Constant,
                 sub: vec![],
-                named_sub: linear_map![(
-                    IrepId::Value,
-                    Irep::just_bitpattern_id(i.clone(), width, self.typ().is_signed(mm))
-                )],
+                named_sub: linear_map![(IrepId::Value, irep_value,)],
             }
             .with_location(self.location(), mm)
             .with_type(self.typ(), mm)
@@ -345,10 +353,7 @@ impl ToIrep for Location {
         match self {
             Location::None => Irep::nil(),
             Location::BuiltinFunction { line, function_name } => Irep::just_named_sub(linear_map![
-                (
-                    IrepId::File,
-                    Irep::just_string_id(format!("<builtin-library-{}>", function_name)),
-                ),
+                (IrepId::File, Irep::just_string_id(format!("<builtin-library-{function_name}>")),),
                 (IrepId::Function, Irep::just_string_id(function_name.to_string())),
             ])
             .with_named_sub_option(IrepId::Line, line.map(Irep::just_int_id)),
@@ -655,6 +660,7 @@ impl ToIrep for Type {
                     named_sub: linear_map![(IrepId::Size, infinity)],
                 }
             }
+            Type::Integer => Irep::just_id(IrepId::Integer),
             Type::Pointer { typ } => Irep {
                 id: IrepId::Pointer,
                 sub: vec![typ.to_irep(mm)],

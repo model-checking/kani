@@ -1,66 +1,10 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// running with a unwind of 1 passes; running with unwind of two gets stuck in post-processing
-// from arg_parser.rs in firecracker/src/utils/src
+// This test takes too long with all the std symbols. Use --legacy-linker for now.
+// kani-flags: --legacy-linker
 
-// warning: ignoring typecast
-//   * type: struct_tag
-//       * identifier: tag-std::alloc::Global
-//   0: struct
-//       * type: struct_tag
-//           * identifier: tag-std::mem::ManuallyDrop<std::vec::Vec<&()>>
-//       0: struct
-//           * type: struct_tag
-//               * identifier: tag-std::vec::Vec<&()>
-//           0: struct
-//               * type: struct_tag
-//                   * identifier: tag-alloc::raw_vec::RawVec<&()>
-//               0: struct
-//                   * type: struct_tag
-//                       * identifier: tag-std::alloc::Global
-//               1: struct
-//                   * type: struct_tag
-//                       * identifier: tag-std::ptr::Unique<&()>
-//                   0: struct
-//                       * type: struct_tag
-//                           * identifier: tag-std::marker::PhantomData<&()>
-//                   1: constant
-//                       * type: pointer
-//                           * width: 64
-//                           0: pointer
-//                               * width: 64
-//                               0: struct_tag
-//                                   * identifier: tag-Unit
-//                       * value: 8
-//               2: constant
-//                   * type: unsignedbv
-//                       * #source_location:
-//                         * file: <built-in-additions>
-//                         * line: 1
-//                         * working_directory: /Users/dsn/ws/RustToCBMC/src/RustToCBMC/rust-tests/cbmc-reg/Refs
-//                       * width: 64
-//                       * #typedef: __CPROVER_size_t
-//                       * #c_type: unsigned_long_int
-//                   * #source_location:
-//                     * file: <built-in-additions>
-//                     * line: 16
-//                     * working_directory: /Users/dsn/ws/RustToCBMC/src/RustToCBMC/rust-tests/cbmc-reg/Refs
-//                   * value: 0
-//           1: constant
-//               * type: unsignedbv
-//                   * #source_location:
-//                     * file: <built-in-additions>
-//                     * line: 1
-//                     * working_directory: /Users/dsn/ws/RustToCBMC/src/RustToCBMC/rust-tests/cbmc-reg/Refs
-//                   * width: 64
-//                   * #typedef: __CPROVER_size_t
-//                   * #c_type: unsigned_long_int
-//               * #source_location:
-//                 * file: <built-in-additions>
-//                 * line: 16
-//                 * working_directory: /Users/dsn/ws/RustToCBMC/src/RustToCBMC/rust-tests/cbmc-reg/Refs
-//               * value: 0
-
+//! This harness was based on firecracker argument parsing code from arg_parser.rs in
+//! firecracker/src/utils/src. It used to get stuck in post-processing with unwind of two or more.
 use std::collections::BTreeMap;
 
 pub struct ArgParser<'a> {

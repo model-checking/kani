@@ -1,9 +1,10 @@
 # Installation
 
-Kani offers an easy installation option on two platforms:
+Kani offers an easy installation option on three platforms:
 
 * `x86_64-unknown-linux-gnu` (Most Linux distributions)
 * `x86_64-apple-darwin` (Intel Mac OS)
+* `aarch64-apple-darwin` (Apple M1)
 
 Other platforms are either not yet supported or require instead that
 you [build from source](build-from-source.md). To use Kani in your

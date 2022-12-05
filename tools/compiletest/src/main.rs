@@ -10,16 +10,17 @@
 
 extern crate test;
 
-use crate::common::{output_base_dir, output_relative_path, PanicStrategy};
+use crate::common::{output_base_dir, output_relative_path};
 use crate::common::{Config, Mode, TestPaths};
-use crate::util::{logv, top_level};
+use crate::util::{logv, print_msg, top_level};
 use getopts::Options;
 use std::env;
 use std::ffi::OsString;
 use std::fs;
 use std::io::{self};
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
+use std::str::FromStr;
+use std::time::{Duration, SystemTime};
 use test::ColorConfig;
 use tracing::*;
 use walkdir::WalkDir;
@@ -57,19 +58,7 @@ fn add_kani_to_path() {
 
 pub fn parse_config(args: Vec<String>) -> Config {
     let mut opts = Options::new();
-    opts.optopt("", "compile-lib-path", "path to host shared libraries", "PATH")
-        .optopt("", "run-lib-path", "path to target shared libraries", "PATH")
-        .optopt("", "rustc-path", "path to rustc to use for compiling", "PATH")
-        .optopt("", "kani-dir-path", "path to directory where kani is located", "PATH")
-        .optopt("", "rustdoc-path", "path to rustdoc to use for compiling", "PATH")
-        .optopt("", "rust-demangler-path", "path to rust-demangler to use in tests", "PATH")
-        .optopt("", "lldb-python", "path to python to use for doc tests", "PATH")
-        .optopt("", "docck-python", "path to python to use for doc tests", "PATH")
-        .optopt("", "jsondocck-path", "path to jsondocck to use for doc tests", "PATH")
-        .optopt("", "valgrind-path", "path to Valgrind executable for Valgrind tests", "PROGRAM")
-        .optflag("", "force-valgrind", "fail if Valgrind tests cannot be run under Valgrind")
-        .optopt("", "run-clang-based-tests-with", "path to Clang executable", "PATH")
-        .optopt("", "llvm-filecheck", "path to LLVM's FileCheck binary", "DIR")
+    opts
         .optopt("", "src-base", "directory to scan for test files", "PATH")
         .optopt("", "build-base", "directory to deposit test outputs", "PATH")
         .optopt(
@@ -85,74 +74,24 @@ pub fn parse_config(args: Vec<String>) -> Config {
             "which suite of compile tests to run. used for nicer error reporting.",
             "SUITE",
         )
-        .optopt(
-            "",
-            "pass",
-            "force {check,build,run}-pass tests to this mode.",
-            "check | build | run",
-        )
-        .optopt("", "run", "whether to execute run-* tests", "auto | always | never")
         .optflag("", "ignored", "run tests marked as ignored")
         .optflag("", "exact", "filters match exactly")
-        .optopt(
-            "",
-            "runtool",
-            "supervisor program to run tests under \
-             (eg. emulator, valgrind)",
-            "PROGRAM",
-        )
-        .optmulti("", "host-rustcflags", "flags to pass to rustc for host", "FLAGS")
-        .optmulti("", "target-rustcflags", "flags to pass to rustc for target", "FLAGS")
-        .optopt("", "target-panic", "what panic strategy the target supports", "unwind | abort")
         .optflag("", "verbose", "run tests verbosely, showing all output")
-        .optflag(
-            "",
-            "bless",
-            "overwrite stderr/stdout files instead of complaining about a mismatch",
-        )
         .optflag("", "quiet", "print one character per test instead of one line")
         .optopt("", "color", "coloring: auto, always, never", "WHEN")
         .optopt("", "logfile", "file to log test execution to", "FILE")
         .optopt("", "target", "the target to build for", "TARGET")
         .optopt("", "host", "the host to build for", "HOST")
-        .optopt("", "cdb", "path to CDB to use for CDB debuginfo tests", "PATH")
-        .optopt("", "gdb", "path to GDB to use for GDB debuginfo tests", "PATH")
-        .optopt("", "lldb-version", "the version of LLDB used", "VERSION STRING")
-        .optopt("", "llvm-version", "the version of LLVM used", "VERSION STRING")
-        .optflag("", "system-llvm", "is LLVM the system LLVM")
-        .optopt("", "android-cross-path", "Android NDK standalone path", "PATH")
-        .optopt("", "adb-path", "path to the android debugger", "PATH")
-        .optopt("", "adb-test-dir", "path to tests for the android debugger", "PATH")
-        .optopt("", "lldb-python-dir", "directory containing LLDB's python module", "PATH")
-        .optopt("", "cc", "path to a C compiler", "PATH")
-        .optopt("", "cxx", "path to a C++ compiler", "PATH")
-        .optopt("", "cflags", "flags for the C compiler", "FLAGS")
-        .optopt("", "ar", "path to an archiver", "PATH")
-        .optopt("", "linker", "path to a linker", "PATH")
-        .optopt("", "llvm-components", "list of LLVM components built in", "LIST")
-        .optopt("", "llvm-bin-dir", "Path to LLVM's `bin` directory", "PATH")
-        .optopt("", "nodejs", "the name of nodejs", "PATH")
-        .optopt("", "npm", "the name of npm", "PATH")
-        .optopt("", "remote-test-client", "path to the remote test client", "PATH")
-        .optopt(
-            "",
-            "compare-mode",
-            "mode describing what file the actual ui output will be compared to",
-            "COMPARE MODE",
-        )
-        .optflag(
-            "",
-            "rustfix-coverage",
-            "enable this to generate a Rustfix coverage file, which is saved in \
-                `./<build_base>/rustfix_missing_coverage.txt`",
-        )
         .optflag("", "force-rerun", "rerun tests even if the inputs are unchanged")
         .optflag("h", "help", "show this message")
-        .optopt("", "edition", "default Rust edition", "EDITION");
+        .optopt("", "edition", "default Rust edition", "EDITION")
+        .optopt("", "timeout", "the timeout for each test in seconds", "TIMEOUT")
+        .optflag("", "dry-run", "don't actually run the tests")
+    ;
 
     let (argv0, args_) = args.split_first().unwrap();
     if args.len() == 1 || args[1] == "-h" || args[1] == "--help" {
-        let message = format!("Usage: {} [OPTIONS] [TESTNAME...]", argv0);
+        let message = format!("Usage: {argv0} [OPTIONS] [TESTNAME...]");
         println!("{}", opts.usage(&message));
         println!();
         panic!()
@@ -160,11 +99,11 @@ pub fn parse_config(args: Vec<String>) -> Config {
 
     let matches = &match opts.parse(args_) {
         Ok(m) => m,
-        Err(f) => panic!("{:?}", f),
+        Err(f) => panic!("{f:?}"),
     };
 
     if matches.opt_present("h") || matches.opt_present("help") {
-        let message = format!("Usage: {} [OPTIONS]  [TESTNAME...]", argv0);
+        let message = format!("Usage: {argv0} [OPTIONS]  [TESTNAME...]");
         println!("{}", opts.usage(&message));
         println!();
         panic!()
@@ -175,7 +114,7 @@ pub fn parse_config(args: Vec<String>) -> Config {
             Some(s) => PathBuf::from(&s),
             None => {
                 let mut root_folder = top_level().expect(
-                    format!("Cannot find root directory. Please provide --{} option.", nm).as_str(),
+                    format!("Cannot find root directory. Please provide --{nm} option.").as_str(),
                 );
                 default.iter().for_each(|f| root_folder.push(f));
                 root_folder
@@ -188,16 +127,21 @@ pub fn parse_config(args: Vec<String>) -> Config {
         Some("auto") | None => ColorConfig::AutoColor,
         Some("always") => ColorConfig::AlwaysColor,
         Some("never") => ColorConfig::NeverColor,
-        Some(x) => panic!("argument for --color must be auto, always, or never, but found `{}`", x),
+        Some(x) => panic!("argument for --color must be auto, always, or never, but found `{x}`"),
     };
 
     let suite = matches.opt_str("suite").unwrap();
     let src_base = opt_path(matches, "src-base", &["tests", suite.as_str()]);
     let run_ignored = matches.opt_present("ignored");
     let mode = matches.opt_str("mode").unwrap().parse().expect("invalid mode");
+    let timeout = matches.opt_str("timeout").map(|val| {
+        Duration::from_secs(
+            u64::from_str(&val)
+                .expect("Unexpected timeout format. Expected a positive number but found {val}"),
+        )
+    });
 
     Config {
-        kani_dir_path: opt_path(matches, "kani-dir-path", &["target/debug"]),
         src_base,
         build_base: opt_path(matches, "build-base", &["build", "tests", suite.as_str()]),
         mode,
@@ -206,22 +150,15 @@ pub fn parse_config(args: Vec<String>) -> Config {
         filters: matches.free.clone(),
         filter_exact: matches.opt_present("exact"),
         logfile: matches.opt_str("logfile").map(|s| PathBuf::from(&s)),
-        host_rustcflags: Some(matches.opt_strs("host-rustcflags").join(" ")),
-        target_rustcflags: Some(matches.opt_strs("target-rustcflags").join(" ")),
-        target_panic: match matches.opt_str("target-panic").as_deref() {
-            Some("unwind") | None => PanicStrategy::Unwind,
-            Some("abort") => PanicStrategy::Abort,
-            _ => panic!("unknown `--target-panic` option `{}` given", mode),
-        },
         target,
         host: opt_str2(matches.opt_str("host")),
         verbose: matches.opt_present("verbose"),
         quiet: matches.opt_present("quiet"),
         color,
         edition: matches.opt_str("edition"),
-
         force_rerun: matches.opt_present("force-rerun"),
-        mir_linker: cfg!(mir_linker),
+        dry_run: matches.opt_present("dry-run"),
+        timeout,
     }
 }
 
@@ -234,13 +171,19 @@ pub fn log_config(config: &Config) {
     logv(c, format!("run_ignored: {}", config.run_ignored));
     logv(c, format!("filters: {:?}", config.filters));
     logv(c, format!("filter_exact: {}", config.filter_exact));
-    logv(c, format!("host-rustcflags: {}", opt_str(&config.host_rustcflags)));
-    logv(c, format!("target-rustcflags: {}", opt_str(&config.target_rustcflags)));
     logv(c, format!("target: {}", config.target));
     logv(c, format!("host: {}", config.host));
     logv(c, format!("verbose: {}", config.verbose));
     logv(c, format!("quiet: {}", config.quiet));
-    logv(c, format!("mir_linker: {}", config.mir_linker));
+    logv(c, format!("timeout: {:?}", config.timeout));
+    logv(
+        c,
+        format!(
+            "parallelism: RUST_TEST_THREADS={:?}, available_parallelism={}",
+            env::var("RUST_TEST_THREADS").ok(),
+            std::thread::available_parallelism().unwrap()
+        ),
+    );
     logv(c, "\n".to_string());
 }
 
@@ -281,6 +224,15 @@ pub fn run_tests(config: Config) {
         make_tests(c, &mut tests);
     }
 
+    if config.dry_run {
+        print_msg(&config, format!("Number of Tests: {}", tests.len()));
+        for test in tests {
+            let ignore = if test.desc.ignore ^ config.run_ignored { "ignore" } else { "" };
+            print_msg(&config, format!(" - {} ... {}", test.desc.name.as_slice(), ignore));
+        }
+        return;
+    }
+
     let res = test::run_tests_console(&opts, tests);
     match res {
         Ok(true) => {}
@@ -306,7 +258,7 @@ pub fn run_tests(config: Config) {
             //
             // This should realistically "never" happen, so don't try to make
             // this a pretty error message.
-            panic!("I/O failure during tests: {:?}", e);
+            panic!("I/O failure during tests: {e:?}");
         }
     }
 }
@@ -375,7 +327,7 @@ fn collect_tests_from_dir(
     tests: &mut Vec<test::TestDescAndFn>,
 ) -> io::Result<()> {
     match config.mode {
-        Mode::CargoKani => {
+        Mode::CargoKani | Mode::CargoKaniTest => {
             collect_expected_tests_from_dir(config, dir, relative_dir_path, inputs, tests)
         }
         _ => collect_rs_tests_from_dir(config, dir, relative_dir_path, inputs, tests),
@@ -403,7 +355,7 @@ fn collect_expected_tests_from_dir(
     // output directory corresponding to each to avoid race conditions during
     // the testing phase. We immediately return after adding the tests to avoid
     // treating `*.rs` files as tests.
-    assert_eq!(config.mode, Mode::CargoKani);
+    assert!(config.mode == Mode::CargoKani || config.mode == Mode::CargoKaniTest);
 
     let has_cargo_toml = dir.join("Cargo.toml").exists();
     for file in fs::read_dir(dir)? {
@@ -575,7 +527,7 @@ fn make_test_name(
         "[{}] {}{}",
         config.mode,
         path.display(),
-        revision.map_or("".to_string(), |rev| format!("#{}", rev))
+        revision.map_or("".to_string(), |rev| format!("#{rev}"))
     ))
 }
 
@@ -587,5 +539,8 @@ fn make_test_closure(
     let config = config.clone();
     let testpaths = testpaths.clone();
     let revision = revision.cloned();
-    test::DynTestFn(Box::new(move || runtest::run(config, &testpaths, revision.as_deref())))
+    test::DynTestFn(Box::new(move || {
+        runtest::run(config, &testpaths, revision.as_deref());
+        Ok(())
+    }))
 }

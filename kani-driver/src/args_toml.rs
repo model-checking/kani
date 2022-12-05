@@ -31,7 +31,7 @@ pub fn join_args(input_args: Vec<OsString>) -> Result<Vec<OsString>> {
 /// flag must only be included once.
 ///
 /// This function will return the arguments in the following order:
-/// ```
+/// ```text
 /// <bin_name> [<cfg_kani_args>]* [<cmd_kani_args>]* [--cbmc-args [<cfg_cbmc_args>]* [<cmd_cbmc_args>]*]
 /// ```
 fn merge_args(
@@ -112,16 +112,16 @@ fn insert_arg_from_toml(flag: &str, value: &Value, args: &mut Vec<OsString>) -> 
     match value {
         Value::Boolean(b) => {
             if *b {
-                args.push(format!("--{}", flag).into());
+                args.push(format!("--{flag}").into());
             } else if flag.starts_with("no-") {
                 // Seems iffy. Let's just not support this.
                 bail!("{} disables a disabling flag. Just enable the flag instead.", flag);
             } else {
-                args.push(format!("--no-{}", flag).into());
+                args.push(format!("--no-{flag}").into());
             }
         }
         Value::Array(a) => {
-            args.push(format!("--{}", flag).into());
+            args.push(format!("--{flag}").into());
             for arg in a {
                 if let Some(arg) = arg.as_str() {
                     args.push(arg.into());
@@ -131,7 +131,7 @@ fn insert_arg_from_toml(flag: &str, value: &Value, args: &mut Vec<OsString>) -> 
             }
         }
         Value::String(s) => {
-            args.push(format!("--{}", flag).into());
+            args.push(format!("--{flag}").into());
             args.push(s.into());
         }
         _ => {

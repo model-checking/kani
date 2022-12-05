@@ -1,9 +1,13 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+
 use super::typ::{is_pointer, pointee_type, TypeExt};
 use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::codegen_cprover_gotoc::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
+use crate::kani_middle::coercion::{
+    extract_unsize_casting, CoerceUnsizedInfo, CoerceUnsizedIterator, CoercionBase,
+};
 use crate::{emit_concurrency_warning, unwrap_or_return_codegen_unimplemented};
 use cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
 use cbmc::MachineModel;
@@ -13,7 +17,8 @@ use rustc_middle::mir::{AggregateKind, BinOp, CastKind, NullOp, Operand, Place, 
 use rustc_middle::ty::adjustment::PointerCast;
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{self, Instance, IntTy, Ty, TyCtxt, UintTy, VtblEntry};
-use rustc_target::abi::{FieldsShape, TagEncoding, Variants};
+use rustc_target::abi::{FieldsShape, Size, TagEncoding, Variants};
+use std::collections::BTreeMap;
 use tracing::{debug, warn};
 
 impl<'tcx> GotocCtx<'tcx> {
@@ -50,7 +55,7 @@ impl<'tcx> GotocCtx<'tcx> {
             let body = vec![
                 self.codegen_assert_assume_false(
                     PropertyClass::SafetyCheck,
-                    format!("Reached unstable vtable comparison '{:?}'", op).as_str(),
+                    format!("Reached unstable vtable comparison '{op:?}'").as_str(),
                     loc,
                 ),
                 ret_type.nondet().as_stmt(loc).with_location(loc),
@@ -204,7 +209,7 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_rvalue_repeat(
         &mut self,
         op: &Operand<'tcx>,
-        sz: &ty::Const<'tcx>,
+        sz: ty::Const<'tcx>,
         res_ty: Ty<'tcx>,
         loc: Location,
     ) -> Expr {
@@ -393,13 +398,21 @@ impl<'tcx> GotocCtx<'tcx> {
         debug!(?rv, "codegen_rvalue");
         match rv {
             Rvalue::Use(p) => self.codegen_operand(p),
-            Rvalue::Repeat(op, sz) => self.codegen_rvalue_repeat(op, sz, res_ty, loc),
+            Rvalue::Repeat(op, sz) => {
+                let sz = self.monomorphize(*sz);
+                self.codegen_rvalue_repeat(op, sz, res_ty, loc)
+            }
             Rvalue::Ref(_, _, p) | Rvalue::AddressOf(_, p) => self.codegen_rvalue_ref(p, res_ty),
             Rvalue::Len(p) => self.codegen_rvalue_len(p),
             // Rust has begun distinguishing "ptr -> num" and "num -> ptr" (providence-relevant casts) but we do not yet:
             // Should we? Tracking ticket: https://github.com/model-checking/kani/issues/1274
             Rvalue::Cast(
-                CastKind::Misc
+                CastKind::IntToInt
+                | CastKind::FloatToFloat
+                | CastKind::FloatToInt
+                | CastKind::IntToFloat
+                | CastKind::FnPtrToPtr
+                | CastKind::PtrToPtr
                 | CastKind::PointerExposeAddress
                 | CastKind::PointerFromExposedAddress,
                 e,
@@ -407,6 +420,15 @@ impl<'tcx> GotocCtx<'tcx> {
             ) => {
                 let t = self.monomorphize(*t);
                 self.codegen_misc_cast(e, t)
+            }
+            Rvalue::Cast(CastKind::DynStar, _, _) => {
+                let ty = self.codegen_ty(res_ty);
+                self.codegen_unimplemented_expr(
+                    "CastKind::DynStar",
+                    ty,
+                    loc,
+                    "https://github.com/model-checking/kani/issues/1784",
+                )
             }
             Rvalue::Cast(CastKind::Pointer(k), e, t) => {
                 let t = self.monomorphize(*t);
@@ -504,7 +526,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 TagEncoding::Direct => {
                     self.codegen_discriminant_field(e, ty).cast_to(self.codegen_ty(res_ty))
                 }
-                TagEncoding::Niche { dataful_variant, niche_variants, niche_start } => {
+                TagEncoding::Niche { untagged_variant, niche_variants, niche_start } => {
                     // This code follows the logic in the ssa codegen backend:
                     // https://github.com/rust-lang/rust/blob/fee75fbe11b1fad5d93c723234178b2a329a3c03/compiler/rustc_codegen_ssa/src/mir/place.rs#L247
                     // See also the cranelift backend:
@@ -550,10 +572,25 @@ impl<'tcx> GotocCtx<'tcx> {
                     };
                     is_niche.ternary(
                         niche_discr,
-                        Expr::int_constant(dataful_variant.as_u32(), result_type),
+                        Expr::int_constant(untagged_variant.as_u32(), result_type),
                     )
                 }
             },
+        }
+    }
+
+    /// Extract the niche value from `v`. This value should be of type `niche_ty` and located
+    /// at byte offset `offset`
+    pub fn codegen_get_niche(&self, v: Expr, offset: Size, niche_ty: Type) -> Expr {
+        if offset == Size::ZERO {
+            v.reinterpret_cast(niche_ty)
+        } else {
+            v // t: T
+                .address_of() // &t: T*
+                .cast_to(Type::unsigned_int(8).to_pointer()) // (u8 *)&t: u8 *
+                .plus(Expr::int_constant(offset.bytes(), Type::size_t())) // ((u8 *)&t) + offset: u8 *
+                .cast_to(niche_ty.to_pointer()) // (N *)(((u8 *)&t) + offset): N *
+                .dereference() // *(N *)(((u8 *)&t) + offset): N
         }
     }
 
@@ -633,7 +670,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // this is a noop in the case dst_subt is a Projection or Opaque type
                 dst_subt = self.tcx.normalize_erasing_regions(ty::ParamEnv::reveal_all(), dst_subt);
                 match dst_subt.kind() {
-                    ty::Slice(_) | ty::Str | ty::Dynamic(_, _) => {
+                    ty::Slice(_) | ty::Str | ty::Dynamic(_, _, _) => {
                         //TODO: this does the wrong thing on Strings/fixme_boxed_str.rs
                         // if we cast to slice or string, then we know the source is also a slice or string,
                         // so there shouldn't be anything to do
@@ -679,6 +716,7 @@ impl<'tcx> GotocCtx<'tcx> {
         t: Ty<'tcx>,
         loc: Location,
     ) -> Expr {
+        debug!(cast=?k, op=?o, ?loc, "codegen_pointer_cast");
         match k {
             PointerCast::ReifyFnPointer => match self.operand_ty(o).kind() {
                 ty::FnDef(def_id, substs) => {
@@ -730,31 +768,113 @@ impl<'tcx> GotocCtx<'tcx> {
                 let src_goto_expr = self.codegen_operand(o);
                 let src_mir_type = self.operand_ty(o);
                 let dst_mir_type = t;
-                self.cast_to_unsized_expr(src_goto_expr.clone(), src_mir_type, dst_mir_type)
-                    .unwrap_or(src_goto_expr)
+                self.codegen_unsized_cast(src_goto_expr, src_mir_type, dst_mir_type)
             }
         }
     }
 
-    fn cast_to_unsized_expr(
+    /// Generate code for unsized cast. This includes the following:
+    /// -> (Built-in / Smart) Pointer from array to slice.
+    /// -> (Built-in / Smart) Pointer from sized type to dyn trait.
+    /// -> (Built-in / Smart) Pointer from dyn trait to dyn trait.
+    ///     - E.g.: `&(dyn Any + Send)` to `&dyn Any`.
+    /// -> All the cases above where the pointer refers to a parametrized struct where the type
+    /// parameter is the target of the unsize casting.
+    ///     - E.g.: `RcBox<String>` to `RcBox<dyn Any>`
+    fn codegen_unsized_cast(
         &mut self,
         src_goto_expr: Expr,
         src_mir_type: Ty<'tcx>,
         dst_mir_type: Ty<'tcx>,
-    ) -> Option<Expr> {
-        // Check if the cast is from a vtable fat pointer to another
-        // vtable fat pointer (which can happen with auto trait fat pointers)
-        if self.is_vtable_fat_pointer(src_mir_type) {
-            self.cast_unsized_dyn_trait_to_unsized_dyn_trait(
-                src_goto_expr,
-                src_mir_type,
-                dst_mir_type,
-            )
-        } else {
-            // Recursively cast the source expression into an unsized expression.
-            // This will include thin pointers, slices, and Adt.
-            self.cast_expr_to_unsized_expr(src_goto_expr, src_mir_type, dst_mir_type)
+    ) -> Expr {
+        // The MIR may include casting that isn't necessary. Detect this early on and return the
+        // expression for the RHS.
+        if src_mir_type == dst_mir_type {
+            return src_goto_expr;
         }
+
+        // Collect some information about the unsized coercion.
+        let mut path = self.collect_unsized_cast_path(src_goto_expr, src_mir_type, dst_mir_type);
+        debug!(cast=?path, "codegen_unsized_cast");
+
+        // Handle the leaf which should always be a pointer.
+        let (ptr_cast_info, ptr_src_expr) = path.pop().unwrap();
+        let initial_expr = self.codegen_cast_to_fat_pointer(ptr_src_expr, ptr_cast_info);
+
+        // Iterate from the back of the path initializing each struct that requires the coercion.
+        // This code is required for handling smart pointers.
+        path.into_iter().rfold(initial_expr, |coercion_expr, (info, src_expr)| {
+            self.codegen_struct_unsized_coercion(src_expr, info, coercion_expr)
+        })
+    }
+
+    /// Extract path that must be explicitly casted. Add to the tuple the expression type for
+    /// the current source.
+    fn collect_unsized_cast_path(
+        &self,
+        src_goto_expr: Expr,
+        src_mir_type: Ty<'tcx>,
+        dst_mir_type: Ty<'tcx>,
+    ) -> Vec<(CoerceUnsizedInfo<'tcx>, Expr)> {
+        let mut field_type = src_goto_expr;
+        CoerceUnsizedIterator::new(self.tcx, src_mir_type, dst_mir_type)
+            .map(|info| {
+                let expr = if let Some(field_symbol) = info.field {
+                    // Generate the expression for the current structure and save the type for
+                    // the divergent field.
+                    let field_name = field_symbol.as_str().intern();
+                    let member_type = field_type.clone().member(field_name, &self.symbol_table);
+                    std::mem::replace(&mut field_type, member_type)
+                } else {
+                    // The end of our traverse. Generate the expression for the current type.
+                    field_type.clone()
+                };
+                (info, expr)
+            })
+            .collect::<Vec<_>>()
+    }
+
+    /// Generate a struct resulting from an unsized coercion.
+    /// The resulting expression is basically a field by field assignment to from the
+    /// source expression, except for the field being coerced.
+    /// Coercion ignores phantom data structures, so do we.
+    /// See <https://github.com/rust-lang/rust/issues/26905> for more details.
+    fn codegen_struct_unsized_coercion(
+        &mut self,
+        src_expr: Expr,
+        info: CoerceUnsizedInfo<'tcx>,
+        member_coercion: Expr,
+    ) -> Expr {
+        assert!(info.src_ty.is_adt(), "Expected struct. Found {:?}", info.src_ty);
+        assert!(info.dst_ty.is_adt(), "Expected struct. Found {:?}", info.dst_ty);
+        let dst_goto_type = self.codegen_ty(info.dst_ty);
+        let src_field_exprs = src_expr.struct_field_exprs(&self.symbol_table);
+        let dst_field_exprs = src_field_exprs
+            .into_iter()
+            .map(|(key, val)| {
+                let new_val = if info.field.unwrap().as_str().intern() == key {
+                    // The type being coerced. Use the provided expression.
+                    member_coercion.clone()
+                } else {
+                    let dst_member_type =
+                        dst_goto_type.lookup_field_type(key, &self.symbol_table).unwrap();
+                    if &dst_member_type != val.typ() {
+                        // Phantom data is ignored during a coercion, but it's type may still
+                        // change. So we just recreate the empty struct.
+                        assert_eq!(dst_member_type.sizeof(&self.symbol_table), 0);
+                        Expr::struct_expr(dst_member_type, BTreeMap::new(), &self.symbol_table)
+                    } else {
+                        // No coercion is required. Just assign dst.field = src.field.
+                        val
+                    }
+                };
+                (key, new_val)
+            })
+            .collect();
+
+        let dst_expr = Expr::struct_expr(dst_goto_type, dst_field_exprs, &self.symbol_table);
+        debug!(?dst_expr, "codegen_struct_unsized_coercion");
+        dst_expr
     }
 
     fn codegen_vtable_method_field(
@@ -836,7 +956,7 @@ impl<'tcx> GotocCtx<'tcx> {
             let drop_sym = self.ensure(&drop_sym_name, |ctx, name| {
                 // Function body
                 let unimplemented = ctx.codegen_unimplemented_stmt(
-                    format!("drop_in_place for {}", drop_sym_name).as_str(),
+                    format!("drop_in_place for {drop_instance}").as_str(),
                     Location::none(),
                     "https://github.com/model-checking/kani/issues/281",
                 );
@@ -901,7 +1021,7 @@ impl<'tcx> GotocCtx<'tcx> {
         };
         let check = Expr::eq(cbmc_size, vt_size);
         let assert_msg =
-            format!("Correct CBMC vtable size for {:?} (MIR type {:?})", ty, operand_type.kind());
+            format!("Correct CBMC vtable size for {ty:?} (MIR type {:?})", operand_type.kind());
         let size_assert = self.codegen_sanity(check, &assert_msg, Location::none());
         Stmt::block(vec![decl, size_assert], Location::none())
     }
@@ -918,7 +1038,7 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Dynamic(..) => dst_mir_type,
             _ => unimplemented!("Cannot codegen_vtable for type {:?}", dst_mir_type.kind()),
         };
-        assert!(trait_type.is_trait(), "VTable trait type {} must be a trait type", trait_type);
+        assert!(trait_type.is_trait(), "VTable trait type {trait_type} must be a trait type");
         let binders = match trait_type.kind() {
             ty::Dynamic(binders, ..) => binders,
             _ => unimplemented!("Cannot codegen_vtable for type {:?}", dst_mir_type.kind()),
@@ -927,7 +1047,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let src_name = self.ty_mangled_name(src_mir_type);
         // The name needs to be the same as inserted in typ.rs
         let vtable_name = self.vtable_name(trait_type).intern();
-        let vtable_impl_name = format!("{}_impl_for_{}", vtable_name, src_name);
+        let vtable_impl_name = format!("{vtable_name}_impl_for_{src_name}");
 
         self.ensure_global_var(
             vtable_impl_name,
@@ -979,314 +1099,63 @@ impl<'tcx> GotocCtx<'tcx> {
         )
     }
 
-    /// Fat pointers to dynamic auto trait objects can be the src of casts.
-    /// For example, this cast is legal, because Send is an auto trait with
-    /// no associated function:
-    ///
-    ///     &(dyn Any + Send) as &dyn Any
-    ///
-    /// This cast is legal because without any changes to the set of virtual
-    /// functions, the underlying vtable does not need to change.
-    ///
-    /// Cast a pointer from one usized dynamic trait object to another. The
-    /// result  of the cast will be a fat pointer with the same data and
-    /// vtable, but the new type. Returns None if no cast is needed.
-    fn cast_unsized_dyn_trait_to_unsized_dyn_trait(
+    /// Cast a pointer to a fat pointer.
+    /// The fat pointer will have two elements:
+    ///  1. `data` which will point to the same address as the original fat pointer.
+    ///  2. `vtable` | `len` which corresponds to the coercion metadata.
+    fn codegen_cast_to_fat_pointer(
         &mut self,
         src_goto_expr: Expr,
-        src_mir_type: Ty<'tcx>,
-        dst_mir_type: Ty<'tcx>,
-    ) -> Option<Expr> {
-        if src_mir_type.kind() == dst_mir_type.kind() {
-            return None; // no cast required, nothing to do
-        }
-        debug!(?src_goto_expr, ?src_mir_type, ?dst_mir_type, "cast_unsized_dyn_trait");
+        coerce_info: CoerceUnsizedInfo<'tcx>,
+    ) -> Expr {
+        assert_ne!(coerce_info.src_ty.kind(), coerce_info.dst_ty.kind());
 
-        // The source destination must be a fat pointers to a dyn trait object
-        assert!(self.is_vtable_fat_pointer(src_mir_type));
-        assert!(self.is_vtable_fat_pointer(dst_mir_type));
+        // The fat pointer type.
+        let fat_ptr_type = self.codegen_ty(coerce_info.dst_ty);
 
-        let dst_goto_type = self.codegen_ty(dst_mir_type);
+        // Extract the type conversion that will require metadata to be saved.
+        let CoercionBase { src_ty: metadata_src_type, dst_ty: metadata_dst_type } =
+            extract_unsize_casting(self.tcx, coerce_info.src_ty, coerce_info.dst_ty);
 
-        // Cast the data type.
-        let dst_mir_dyn_ty = pointee_type(dst_mir_type).unwrap();
-        let dst_data_type = self.codegen_trait_data_pointer(dst_mir_dyn_ty);
-        let data =
-            src_goto_expr.to_owned().member("data", &self.symbol_table).cast_to(dst_data_type);
+        // Extract information about the data pointer.
+        let dst_pointee_ty = pointee_type(coerce_info.dst_ty).unwrap();
+        let dst_data_type = self.codegen_ty(dst_pointee_ty).to_pointer();
 
-        // Retrieve the vtable and cast the vtable type.
-        let vtable_name = self.vtable_name(dst_mir_dyn_ty);
-        let vtable_ty = Type::struct_tag(vtable_name).to_pointer();
-        let vtable = src_goto_expr.member("vtable", &self.symbol_table).cast_to(vtable_ty);
-
-        // Construct a fat pointer with the same (casted) fields and new type
-        Some(dynamic_fat_ptr(dst_goto_type, data, vtable, &self.symbol_table))
-    }
-
-    /// Cast an object / thin pointer to a fat pointer or an ADT with a nested fat pointer.
-    /// Return the result of the cast as Some(expr) and return None if no cast was required.
-    fn cast_expr_to_unsized_expr(
-        &mut self,
-        src_goto_expr: Expr,
-        src_mir_type: Ty<'tcx>,
-        dst_mir_type: Ty<'tcx>,
-    ) -> Option<Expr> {
-        if src_mir_type.kind() == dst_mir_type.kind() {
-            return None; // no cast required, nothing to do
-        }
-
-        match (src_mir_type.kind(), dst_mir_type.kind()) {
-            (ty::Ref(..), ty::Ref(..)) => {
-                self.cast_sized_pointer_to_fat_pointer(src_goto_expr, src_mir_type, dst_mir_type)
+        debug!(?coerce_info, ?metadata_src_type, ?metadata_dst_type, "codegen_thin_to_fat");
+        // Generate the metadata and the fat pointer according to the target of this coercion.
+        match (metadata_src_type.kind(), metadata_dst_type.kind()) {
+            (ty::Array(src_elt_type, src_elt_count), ty::Slice(dst_elt_type)) => {
+                // Cast to a slice fat pointer.
+                assert_eq!(src_elt_type, dst_elt_type);
+                let dst_goto_len = self.codegen_const(*src_elt_count, None);
+                let dst_data_expr =
+                    src_goto_expr.cast_to(self.codegen_ty(*src_elt_type).to_pointer());
+                slice_fat_ptr(fat_ptr_type, dst_data_expr, dst_goto_len, &self.symbol_table)
             }
-            (ty::Ref(..), ty::RawPtr(..)) => {
-                self.cast_sized_pointer_to_fat_pointer(src_goto_expr, src_mir_type, dst_mir_type)
+            (ty::Dynamic(..), ty::Dynamic(..)) => {
+                // Cast between fat pointers. Cast the data and the source
+                let src_data = src_goto_expr.to_owned().member("data", &self.symbol_table);
+                let dst_data = src_data.cast_to(dst_data_type);
+
+                // Retrieve the vtable and cast the vtable type.
+                let src_vtable = src_goto_expr.member("vtable", &self.symbol_table);
+                let vtable_name = self.vtable_name(metadata_dst_type);
+                let vtable_ty = Type::struct_tag(vtable_name).to_pointer();
+                let dst_vtable = src_vtable.cast_to(vtable_ty);
+
+                // Construct a fat pointer with the same (casted) fields and new type
+                dynamic_fat_ptr(fat_ptr_type, dst_data, dst_vtable, &self.symbol_table)
             }
-            (ty::RawPtr(..), ty::Ref(..)) => {
-                self.cast_sized_pointer_to_fat_pointer(src_goto_expr, src_mir_type, dst_mir_type)
-            }
-            (ty::RawPtr(..), ty::RawPtr(..)) => {
-                self.cast_sized_pointer_to_fat_pointer(src_goto_expr, src_mir_type, dst_mir_type)
-            }
-            (ty::Adt(..), ty::Adt(..)) => {
-                self.cast_adt_to_unsized_adt(src_goto_expr, src_mir_type, dst_mir_type)
+            (_, ty::Dynamic(..)) => {
+                // Generate the data and vtable pointer that will be stored in the fat pointer.
+                let dst_data_expr = src_goto_expr.cast_to(dst_data_type);
+                let vtable = self.codegen_vtable(metadata_src_type, metadata_dst_type);
+                let vtable_expr = vtable.address_of();
+                dynamic_fat_ptr(fat_ptr_type, dst_data_expr, vtable_expr, &self.symbol_table)
             }
             (src_kind, dst_kind) => {
-                unreachable!(
-                    "In this case, {:?} and {:?} should have the same type (a case already handled)",
-                    src_kind, dst_kind
-                )
+                unreachable!("Unexpected unsized cast from type {:?} to {:?}", src_kind, dst_kind)
             }
-        }
-    }
-
-    /// Cast a pointer to a sized object to a fat pointer to an unsized object.
-    /// Return the result of the cast as Some(expr) and return None if no cast
-    /// was required.
-    /// Note: This seems conceptually wrong. If we are converting sized to unsized, how come
-    /// source and destination can have the same type? Also, how come destination can be a thin
-    /// pointer?
-    /// TODO: Fix the cast code structure:
-    /// <https://github.com/model-checking/kani/issues/1531>
-    fn cast_sized_pointer_to_fat_pointer(
-        &mut self,
-        src_goto_expr: Expr,
-        src_mir_type: Ty<'tcx>,
-        dst_mir_type: Ty<'tcx>,
-    ) -> Option<Expr> {
-        // treat type equality as a no op
-        if src_mir_type.kind() == dst_mir_type.kind() {
-            return None;
-        };
-
-        // The src type cannot be a pointer to a dynamic trait object, otherwise
-        // we should have called cast_unsized_dyn_trait_to_unsized_dyn_trait
-        assert!(!self.is_vtable_fat_pointer(src_mir_type));
-
-        // extract pointee types from pointer types, panic if type is not a
-        // pointer type.
-        let src_pointee_type = pointee_type(src_mir_type).unwrap();
-        let dst_pointee_type = pointee_type(dst_mir_type).unwrap();
-
-        if self.use_thin_pointer(dst_pointee_type) {
-            assert_eq!(src_pointee_type, dst_pointee_type);
-            None
-        } else if self.use_slice_fat_pointer(dst_pointee_type) {
-            self.cast_sized_pointer_to_slice_fat_pointer(
-                src_goto_expr,
-                src_mir_type,
-                dst_mir_type,
-                src_pointee_type,
-                dst_pointee_type,
-            )
-        } else if self.use_vtable_fat_pointer(dst_pointee_type) {
-            self.cast_sized_pointer_to_trait_fat_pointer(
-                src_goto_expr,
-                src_mir_type,
-                dst_mir_type,
-                src_pointee_type,
-                dst_pointee_type,
-            )
-        } else {
-            unreachable!(
-                "A pointer is either a thin pointer, slice fat pointer, or vtable fat pointer."
-            );
-        }
-    }
-
-    /// Cast a pointer to a sized object to a fat pointer to a slice. Return the
-    /// result of the cast as Some(expr) and return None if no cast was
-    /// required.
-    fn cast_sized_pointer_to_slice_fat_pointer(
-        &mut self,
-        src_goto_expr: Expr,
-        _src_mir_type: Ty<'tcx>,
-        dst_mir_type: Ty<'tcx>,
-        src_pointee_type: Ty<'tcx>,
-        dst_pointee_type: Ty<'tcx>,
-    ) -> Option<Expr> {
-        match (src_pointee_type.kind(), dst_pointee_type.kind()) {
-            (ty::Array(src_elt_type, src_elt_count), ty::Slice(dst_elt_type)) => {
-                assert_eq!(src_elt_type, dst_elt_type);
-                let dst_goto_type = self.codegen_ty(dst_mir_type);
-                let dst_goto_expr = // cast from an array type to a pointer type
-                    src_goto_expr.cast_to(self.codegen_ty(*src_elt_type).to_pointer());
-                let dst_goto_len = self.codegen_const(*src_elt_count, None);
-                Some(slice_fat_ptr(dst_goto_type, dst_goto_expr, dst_goto_len, &self.symbol_table))
-            }
-            (src_kind, dst_kind) => panic!(
-                "Only an array can be cast to a slice.  Found types {:?} and {:?}",
-                src_kind, dst_kind
-            ),
-        }
-    }
-
-    /// Cast a pointer to a sized object to a fat pointer to a trait object.
-    /// Return the result of the cast as Some(expr) and return None if no cast
-    /// was required.
-    fn cast_sized_pointer_to_trait_fat_pointer(
-        &mut self,
-        src_goto_expr: Expr,
-        src_mir_type: Ty<'tcx>,
-        dst_mir_type: Ty<'tcx>,
-        src_pointee_type: Ty<'tcx>,
-        dst_pointee_type: Ty<'tcx>,
-    ) -> Option<Expr> {
-        tracing::trace!(?src_pointee_type, ?dst_pointee_type, "cast_thin_2_fat_ptr");
-        tracing::trace!(?src_mir_type, ?dst_mir_type, "cast_thin_2_fat_ptr");
-        if let Some((concrete_type, trait_type)) =
-            self.nested_pair_of_concrete_and_trait_types(src_pointee_type, dst_pointee_type)
-        {
-            tracing::trace!(?concrete_type, ?trait_type, "cast_thin_2_fat_ptr");
-            let dst_goto_expr =
-                src_goto_expr.cast_to(self.codegen_ty(dst_pointee_type).to_pointer());
-            let dst_goto_type = self.codegen_ty(dst_mir_type);
-            let vtable = self.codegen_vtable(concrete_type, trait_type);
-            let vtable_expr = vtable.address_of();
-            Some(dynamic_fat_ptr(dst_goto_type, dst_goto_expr, vtable_expr, &self.symbol_table))
-        } else {
-            None
-        }
-    }
-
-    /// Cast an ADT (sized or unsized) to an unsized ADT (an ADT with a nested fat pointer).
-    /// Return the result of the cast as Some(expr) and return None if no cast
-    /// was required.
-    fn cast_adt_to_unsized_adt(
-        &mut self,
-        src_goto_expr: Expr,
-        src_mir_type: Ty<'tcx>,
-        dst_mir_type: Ty<'tcx>,
-    ) -> Option<Expr> {
-        // Map field names to field values (goto expressions) and field types (mir types)
-        let mut src_goto_field_values = src_goto_expr.struct_field_exprs(&self.symbol_table);
-        let src_mir_field_types = self.mir_struct_field_types(src_mir_type);
-        let dst_mir_field_types = self.mir_struct_field_types(dst_mir_type);
-
-        // Assert that the struct expression and struct types have the same field names
-        assert!(src_goto_field_values.keys().eq(src_mir_field_types.keys()));
-        assert!(src_goto_field_values.keys().eq(dst_mir_field_types.keys()));
-
-        // Cast each field and collect the fields for which a cast was required
-        let mut cast_required: Vec<(InternedString, Expr)> = vec![];
-        for field in src_goto_field_values.keys() {
-            if let Some(expr) = self.cast_to_unsized_expr(
-                src_goto_field_values.get(field).unwrap().clone(),
-                *src_mir_field_types.get(field).unwrap(),
-                *dst_mir_field_types.get(field).unwrap(),
-            ) {
-                cast_required.push((*field, expr));
-            }
-        }
-        // Return None for a struct with fields if none of the fields require a cast.
-        //
-        // Note that a struct with no fields may still require a cast.
-        // PhantomData is a zero-sized type that is a struct with no fields, and
-        // hence with no fields that require a cast.  But PhantomData takes a
-        // type as an generic parameter, and when casting a sized [u8; 4] to an
-        // unsized [u8], we have to change the type of PhantomData from
-        // PhantomData<[u8; 4]> to PhantomData<[u8]>.
-        if !dst_mir_field_types.is_empty() && cast_required.is_empty() {
-            return None;
-        }
-
-        for (field, expr) in cast_required {
-            // Replace the field expression with the cast expression
-            src_goto_field_values.insert(field, expr.clone());
-        }
-        let dst_goto_expr = Expr::struct_expr(
-            self.codegen_ty(dst_mir_type),
-            src_goto_field_values,
-            &self.symbol_table,
-        );
-        Some(dst_goto_expr)
-    }
-
-    /// Find the trait type and corresponding concrete type in a pair of ADTs.
-    ///
-    /// Given two ADTs with types src and dst, the goal is to cast a thin
-    /// pointer to src to a fat pointer to dst.  Dst has nested within it a
-    /// trait type (a Dynamic).  Src has nested within it at the corresponding
-    /// position a concrete type. This function returns the pair (concrete type,
-    /// trait type) that we can use to build the vtable for the concrete type
-    /// implementation of the trait type.
-    fn nested_pair_of_concrete_and_trait_types(
-        &self,
-        src_mir_type: Ty<'tcx>,
-        dst_mir_type: Ty<'tcx>,
-    ) -> Option<(Ty<'tcx>, Ty<'tcx>)> {
-        // We are walking an ADT searching for a trait type in this ADT.  We can
-        // terminate a walk down a path when we hit a primitive type or which we hit
-        // a pointer type (that would take us out of this ADT and into another type).
-        if dst_mir_type.is_primitive() || is_pointer(dst_mir_type) {
-            return None;
-        }
-
-        match (src_mir_type.kind(), dst_mir_type.kind()) {
-            (_, ty::Dynamic(..)) => Some((src_mir_type, dst_mir_type)),
-            (ty::Adt(..), ty::Adt(..)) => {
-                let src_fields = self.mir_struct_field_types(src_mir_type);
-                let dst_fields = self.mir_struct_field_types(dst_mir_type);
-                assert!(src_fields.keys().eq(dst_fields.keys()));
-
-                let mut matching_types: Option<(Ty<'tcx>, Ty<'tcx>)> = None;
-                for field in src_fields.keys() {
-                    let pair = self.nested_pair_of_concrete_and_trait_types(
-                        *src_fields.get(field).unwrap(),
-                        *dst_fields.get(field).unwrap(),
-                    );
-                    if pair.is_some() {
-                        assert!(
-                            matching_types.is_none(),
-                            "Searching for pairs of concrete and trait types, found multiple pairs in {:?} and {:?}",
-                            src_mir_type,
-                            dst_mir_type
-                        );
-                        matching_types = pair;
-                    }
-                }
-                matching_types
-            }
-            // In the context of
-            //    handling Result::<&i32, ()>::unwrap, std::result::Result::<T, E>::unwrap
-            //    let _1: std::result::Result<&i32, ()>
-            //    let _3: ()
-            //    let _6: &dyn std::fmt::Debug
-            //    let _7: &()
-            //    let _8: &()
-            //    _3 = move ((_1 as Err).0: E)
-            //    _8 = &_3
-            //    _7 = _8
-            //    _6 = move _7 as &dyn std::fmt::Debug (Pointer(Unsize))
-            // we find rustc trying to cast () to a trait type.
-            //
-            // (ty::Tuple(ref types), ty::Dynamic(..)) if types.is_empty() => {
-            //     Some((src_mir_type.clone(), dst_mir_type.clone()))
-            // }
-            _ => panic!(
-                "Found unexpected types while searching for pairs of concrete and trait types in {:?} and {:?}",
-                src_mir_type, dst_mir_type
-            ),
         }
     }
 }

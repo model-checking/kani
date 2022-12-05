@@ -199,7 +199,7 @@ Finally, override the current toolchain in your kani workspace and rebuild kani:
 cd ${KANI_WORKSPACE}
 rustup override set custom-toolchain
 cargo clean
-cargo build
+cargo build-dev
 ```
 
 # Enable `rustc` logs

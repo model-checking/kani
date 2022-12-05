@@ -12,6 +12,7 @@
 #![feature(box_patterns)]
 #![feature(once_cell)]
 #![feature(rustc_private)]
+#![feature(more_qualified_paths)]
 extern crate rustc_ast;
 extern crate rustc_codegen_ssa;
 extern crate rustc_data_structures;
@@ -19,6 +20,7 @@ extern crate rustc_driver;
 extern crate rustc_errors;
 extern crate rustc_hir;
 extern crate rustc_index;
+extern crate rustc_interface;
 extern crate rustc_metadata;
 extern crate rustc_middle;
 extern crate rustc_session;
@@ -27,19 +29,22 @@ extern crate rustc_target;
 
 #[cfg(feature = "cprover")]
 mod codegen_cprover_gotoc;
+mod kani_middle;
 mod parser;
 mod session;
 mod unsound_experiments;
 
+use crate::kani_middle::stubbing;
+use crate::parser::KaniCompilerParser;
 use crate::session::init_session;
 use clap::ArgMatches;
 use kani_queries::{QueryDb, ReachabilityType, UserInput};
+use rustc_data_structures::fx::FxHashMap;
 use rustc_driver::{Callbacks, RunCompiler};
-use std::env;
 use std::ffi::OsStr;
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::str::FromStr as _;
+use std::{env, fs};
 
 /// This function generates all rustc configurations required by our goto-c codegen.
 fn rustc_gotoc_flags(lib_path: &str) -> Vec<String> {
@@ -87,16 +92,11 @@ fn main() -> Result<(), &'static str> {
 
     // Configure queries.
     let mut queries = QueryDb::default();
-    if let Some(symbol_table_passes) = matches.values_of_os(parser::SYM_TABLE_PASSES) {
-        queries.set_symbol_table_passes(symbol_table_passes.map(convert_arg).collect::<Vec<_>>());
-    }
-    queries.set_emit_vtable_restrictions(matches.is_present(parser::RESTRICT_FN_PTRS));
-    queries.set_check_assertion_reachability(matches.is_present(parser::ASSERTION_REACH_CHECKS));
-    queries.set_output_pretty_json(matches.is_present(parser::PRETTY_OUTPUT_FILES));
-    queries.set_ignore_global_asm(matches.is_present(parser::IGNORE_GLOBAL_ASM));
-    queries.set_reachability_analysis(
-        ReachabilityType::from_str(matches.value_of(parser::REACHABILITY).unwrap()).unwrap(),
-    );
+    queries.set_emit_vtable_restrictions(matches.get_flag(parser::RESTRICT_FN_PTRS));
+    queries.set_check_assertion_reachability(matches.get_flag(parser::ASSERTION_REACH_CHECKS));
+    queries.set_output_pretty_json(matches.get_flag(parser::PRETTY_OUTPUT_FILES));
+    queries.set_ignore_global_asm(matches.get_flag(parser::IGNORE_GLOBAL_ASM));
+    queries.set_reachability_analysis(matches.reachability_type());
     #[cfg(feature = "unsound_experiments")]
     crate::unsound_experiments::arg_parser::add_unsound_experiment_args_to_queries(
         &mut queries,
@@ -104,12 +104,24 @@ fn main() -> Result<(), &'static str> {
     );
 
     // Generate rustc args.
-    let rustc_args = generate_rustc_args(&matches);
+    let mut rustc_args = generate_rustc_args(&matches);
+
+    // If appropriate, collect and set the stub mapping.
+    if matches.get_flag(parser::ENABLE_STUBBING)
+        && queries.get_reachability_analysis() == ReachabilityType::Harnesses
+    {
+        queries.set_stubbing_enabled(true);
+        let all_stub_mappings =
+            stubbing::collect_stub_mappings(&rustc_args).or(Err("Failed to compile crate"))?;
+        let harness = matches.get_one::<String>(parser::HARNESS).unwrap();
+        let mapping = find_harness_stub_mapping(harness, all_stub_mappings).unwrap_or_default();
+        rustc_args.push(stubbing::mk_rustc_arg(mapping));
+    }
 
     // Configure and run compiler.
     let mut callbacks = KaniCallbacks {};
     let mut compiler = RunCompiler::new(&rustc_args, &mut callbacks);
-    if matches.is_present("goto-c") {
+    if matches.get_flag("goto-c") {
         if cfg!(feature = "cprover") {
             compiler.set_make_codegen_backend(Some(Box::new(move |_cfg| {
                 Box::new(codegen_cprover_gotoc::GotocCodegenBackend::new(&Rc::new(queries)))
@@ -128,27 +140,51 @@ struct KaniCallbacks {}
 /// Use default function implementations.
 impl Callbacks for KaniCallbacks {}
 
+/// The Kani root folder has all binaries inside bin/ and libraries inside lib/.
+/// This folder can also be used as a rustc sysroot.
+fn kani_root() -> PathBuf {
+    match env::current_exe() {
+        Ok(exe_path) => {
+            let mut path = fs::canonicalize(&exe_path).unwrap_or(exe_path);
+            // Current folder (bin/)
+            path.pop();
+            // Top folder
+            path.pop();
+            path
+        }
+        Err(e) => panic!("Failed to get current exe path: {e}"),
+    }
+}
+
 /// Generate the arguments to pass to rustc_driver.
 fn generate_rustc_args(args: &ArgMatches) -> Vec<String> {
-    let gotoc_args =
-        rustc_gotoc_flags(args.value_of(parser::KANI_LIB).unwrap_or(std::env!("KANI_LIB_PATH")));
     let mut rustc_args = vec![String::from("rustc")];
-    if args.is_present(parser::GOTO_C) {
+    if args.get_flag(parser::GOTO_C) {
+        let mut default_path = kani_root();
+        if args.reachability_type() == ReachabilityType::Legacy {
+            default_path.push("legacy-lib")
+        } else {
+            default_path.push("lib");
+        }
+        let gotoc_args = rustc_gotoc_flags(
+            args.get_one::<String>(parser::KANI_LIB)
+                .unwrap_or(&default_path.to_str().unwrap().to_string()),
+        );
         rustc_args.extend_from_slice(&gotoc_args);
     }
 
-    if args.is_present(parser::RUSTC_VERSION) {
+    if args.get_flag(parser::RUSTC_VERSION) {
         rustc_args.push(String::from("--version"))
     }
 
-    if args.is_present(parser::JSON_OUTPUT) {
+    if args.get_flag(parser::JSON_OUTPUT) {
         rustc_args.push(String::from("--error-format=json"));
     }
 
-    if let Some(extra_flags) = args.values_of_os(parser::RUSTC_OPTIONS) {
+    if let Some(extra_flags) = args.get_raw(parser::RUSTC_OPTIONS) {
         extra_flags.for_each(|arg| rustc_args.push(convert_arg(arg)));
     }
-    let sysroot = sysroot_path(args.value_of(parser::SYSROOT));
+    let sysroot = sysroot_path(args);
     rustc_args.push(String::from("--sysroot"));
     rustc_args.push(convert_arg(sysroot.as_os_str()));
     tracing::debug!(?rustc_args, "Compile");
@@ -158,9 +194,7 @@ fn generate_rustc_args(args: &ArgMatches) -> Vec<String> {
 /// Convert an argument from OsStr to String.
 /// If conversion fails, panic with a custom message.
 fn convert_arg(arg: &OsStr) -> String {
-    arg.to_str()
-        .expect(format!("[Error] Cannot parse argument \"{:?}\".", arg).as_str())
-        .to_string()
+    arg.to_str().expect(format!("[Error] Cannot parse argument \"{arg:?}\".").as_str()).to_string()
 }
 
 /// Get the sysroot, for our specific version of Rust nightly.
@@ -170,37 +204,73 @@ fn convert_arg(arg: &OsStr) -> String {
 /// and not located under the rust sysroot.
 ///
 /// We do know the actual name of the toolchain we need, however.
-/// So if we don't have `--sysroot`, then we look for our toolchain
-/// in the usual place for rustup.
+/// We look for our toolchain in the usual place for rustup.
 ///
 /// We previously used to pass `--sysroot` in `KANIFLAGS` from `kani-driver`,
 /// but this failed to have effect when building a `build.rs` file.
 /// This wasn't used anywhere but passing down here, so we've just migrated
 /// the code to find the sysroot path directly into this function.
-fn sysroot_path(sysroot_arg: Option<&str>) -> PathBuf {
+///
+/// This function will soon be removed.
+#[deprecated]
+fn toolchain_sysroot_path() -> PathBuf {
     // rustup sets some environment variables during build, but this is not clearly documented.
     // https://github.com/rust-lang/rustup/blob/master/src/toolchain.rs (search for RUSTUP_HOME)
     // We're using RUSTUP_TOOLCHAIN here, which is going to be set by our `rust-toolchain.toml` file.
     // This is a *compile-time* constant, not a dynamic lookup at runtime, so this is reliable.
     let toolchain = env!("RUSTUP_TOOLCHAIN");
 
-    let path = if let Some(s) = sysroot_arg {
-        PathBuf::from(s)
-    } else {
-        // We use the home crate to do a *runtime* determination of where rustup toolchains live
-        let rustup = home::rustup_home().expect("Couldn't find RUSTUP_HOME");
-        rustup.join("toolchains").join(toolchain)
-    };
-    // If we ever have a problem with the above not being good enough, we can consider a third heuristic
-    // for finding our sysroot: readlink() on `../toolchain` from the location of our executable.
-    // At time of writing this would only work for release, not development, however, so I'm not going
-    // with this option yet. It would eliminate the need for the `home` crate however.
+    // We use the home crate to do a *runtime* determination of where rustup toolchains live
+    let rustup = home::rustup_home().expect("Couldn't find RUSTUP_HOME");
+    let path = rustup.join("toolchains").join(toolchain);
 
     if !path.exists() {
-        panic!("Couldn't find Kani Rust toolchain {}. Tried: {}", toolchain, path.display());
+        panic!("Couldn't find Kani Rust toolchain {toolchain}. Tried: {}", path.display());
+    }
+    path
+}
+
+/// Get the sysroot relative to the binary location.
+///
+/// Kani uses a custom sysroot. The `std` library and dependencies are compiled in debug mode and
+/// include the entire MIR definitions needed by Kani.
+///
+/// We do provide a `--sysroot` option that users may want to use instead.
+#[allow(deprecated)]
+fn sysroot_path(args: &ArgMatches) -> PathBuf {
+    let sysroot_arg = args.get_one::<String>(parser::SYSROOT);
+    let path = if let Some(s) = sysroot_arg {
+        PathBuf::from(s)
+    } else if args.reachability_type() == ReachabilityType::Legacy || !args.get_flag(parser::GOTO_C)
+    {
+        toolchain_sysroot_path()
+    } else {
+        kani_root()
+    };
+
+    if !path.exists() {
+        panic!("Couldn't find Kani Rust toolchain {:?}.", path.display());
     }
     tracing::debug!(?path, ?sysroot_arg, "Sysroot path.");
     path
+}
+
+/// Find the stub mapping for the given harness.
+///
+/// This function is necessary because Kani currently allows a harness to be
+/// specified by a partially qualified name, whereas stub mappings use fully
+/// qualified names.
+fn find_harness_stub_mapping(
+    harness: &str,
+    stub_mappings: FxHashMap<String, FxHashMap<String, String>>,
+) -> Option<FxHashMap<String, String>> {
+    let suffix = String::from("::") + harness;
+    for (name, mapping) in stub_mappings {
+        if name == harness || name.ends_with(&suffix) {
+            return Some(mapping);
+        }
+    }
+    None
 }
 
 #[cfg(test)]
@@ -220,6 +290,7 @@ mod args_test {
         assert_eq!(os_str.to_str(), None);
 
         let matches = parser::parser().get_matches_from(vec![
+            OsString::from("kani-compiler").as_os_str(),
             OsString::from("--sysroot").as_os_str(),
             OsString::from("any").as_os_str(),
             os_str,

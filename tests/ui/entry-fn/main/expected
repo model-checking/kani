@@ -1,0 +1,6 @@
+main.assertion\
+SUCCESS\
+Some(10).and_then(|v| Some(v * 2)) == Some(20)\
+in function main
+
+VERIFICATION:- SUCCESSFUL

@@ -18,25 +18,6 @@ pub fn dynamic_fat_ptr(typ: Type, data: Expr, vtable: Expr, symbol_table: &Symbo
     Expr::struct_expr(typ, btree_string_map![("data", data), ("vtable", vtable)], symbol_table)
 }
 
-/// Tries to extract a string message from an `Expr`.
-/// If the expression represents a pointer to a string constant, this will return the string
-/// constant. Otherwise, return `None`.
-pub fn extract_const_message(arg: &Expr) -> Option<String> {
-    match arg.value() {
-        ExprValue::Struct { values } => match &values[0].value() {
-            ExprValue::AddressOf(address) => match address.value() {
-                ExprValue::Index { array, .. } => match array.value() {
-                    ExprValue::StringConstant { s } => Some(s.to_string()),
-                    _ => None,
-                },
-                _ => None,
-            },
-            _ => None,
-        },
-        _ => None,
-    }
-}
-
 impl<'tcx> GotocCtx<'tcx> {
     /// Generates an expression `(ptr as usize) % align_of(T) == 0`
     /// to determine if a pointer `ptr` with pointee type `T` is aligned.
@@ -54,12 +35,36 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     pub fn unsupported_msg(item: &str, url: Option<&str>) -> String {
-        let mut s = format!("{} is not currently supported by Kani", item);
+        let mut s = format!("{item} is not currently supported by Kani");
         if let Some(url) = url {
             s.push_str(". Please post your example at ");
             s.push_str(url);
         }
         s
+    }
+
+    /// Tries to extract a string message from an `Expr`.  If the expression is
+    /// a pointer to a variable that represents a string literal (as created in
+    /// `codegen_slice_value`), this will return the string constant. Otherwise,
+    /// return `None`.
+    pub fn extract_const_message(&self, arg: &Expr) -> Option<String> {
+        match arg.value() {
+            ExprValue::Struct { values } => match &values[0].value() {
+                ExprValue::Typecast(expr) => match expr.value() {
+                    ExprValue::AddressOf(address) => match address.value() {
+                        ExprValue::Symbol { identifier } => {
+                            // lookup the string literal in the goto context
+                            let name = self.str_literals.get(identifier).unwrap();
+                            Some(name.clone())
+                        }
+                        _ => None,
+                    },
+                    _ => None,
+                },
+                _ => None,
+            },
+            _ => None,
+        }
     }
 }
 
@@ -90,7 +95,7 @@ impl<'tcx> GotocCtx<'tcx> {
         RAW_PTR_FROM_BOX.iter().fold(box_expr, |expr, name| expr.member(name, &self.symbol_table))
     }
 
-    /// Box<T> initializer
+    /// `Box<T>` initializer
     ///
     /// Traverse over the Box representation and only initialize the raw_ptr field. All other
     /// members are left uninitialized.
@@ -108,7 +113,7 @@ impl<'tcx> GotocCtx<'tcx> {
             })
             .collect::<Vec<_>>();
 
-        type_members.iter().rev().fold(boxed_value, |value, (name, typ)| {
+        type_members.iter().rfold(boxed_value, |value, (name, typ)| {
             Expr::struct_expr_with_nondet_fields(
                 typ.clone(),
                 btree_string_map![(*name, value),],
@@ -117,25 +122,25 @@ impl<'tcx> GotocCtx<'tcx> {
         })
     }
 
-    /// Best effort check if the struct represents a rust "std::alloc::Global".
+    /// Best effort check if the struct represents a rust `std::alloc::Global`
     fn assert_is_rust_global_alloc_like(&self, t: &Type) {
-        // TODO: A std::alloc::Global appears to be an empty struct, in the cases we've seen.
+        // TODO: A `std::alloc::Global` appears to be an empty struct, in the cases we've seen.
         // Is there something smarter we can do here?
         assert!(t.is_struct_like());
         let components = t.lookup_components(&self.symbol_table).unwrap();
         assert_eq!(components.len(), 0);
     }
 
-    /// Best effort check if the struct represents a rust "std::marker::PhantomData".
+    /// Best effort check if the struct represents a rust `std::marker::PhantomData`
     fn assert_is_rust_phantom_data_like(&self, t: &Type) {
-        // TODO: A std::marker::PhantomData appears to be an empty struct, in the cases we've seen.
+        // TODO: A `std::marker::PhantomData` appears to be an empty struct, in the cases we've seen.
         // Is there something smarter we can do here?
         assert!(t.is_struct_like());
         let components = t.lookup_components(&self.symbol_table).unwrap();
         assert_eq!(components.len(), 0);
     }
 
-    /// Best effort check if the struct represents a Rust "Box". May return false positives.
+    /// Best effort check if the struct represents a Rust `Box`. May return false positives.
     fn assert_is_rust_box_like(&self, t: &Type) {
         // struct std::boxed::Box<[u8; 8]>::15334369982748499855
         // {
@@ -151,12 +156,12 @@ impl<'tcx> GotocCtx<'tcx> {
             match c.name().to_string().as_str() {
                 "0" => self.assert_is_rust_unique_pointer_like(&c.typ()),
                 "1" => self.assert_is_rust_global_alloc_like(&c.typ()),
-                _ => panic!("Unexpected component {} in {:?}", c.name(), t),
+                _ => panic!("Unexpected component {} in {t:?}", c.name()),
             }
         }
     }
 
-    /// Checks if the struct represents a Rust "std::ptr::Unique"
+    /// Checks if the struct represents a Rust `std::ptr::Unique`
     fn assert_is_rust_unique_pointer_like(&self, t: &Type) {
         // struct std::ptr::Unique<[u8; 8]>::14713681870393313245
         // {
@@ -172,12 +177,12 @@ impl<'tcx> GotocCtx<'tcx> {
             match c.name().to_string().as_str() {
                 "_marker" => self.assert_is_rust_phantom_data_like(&c.typ()),
                 "pointer" => self.assert_is_non_null_like(&c.typ()),
-                _ => panic!("Unexpected component {} in {:?}", c.name(), t),
+                _ => panic!("Unexpected component {} in {t:?}", c.name()),
             }
         }
     }
 
-    /// Best effort check if the struct represents a std::ptr::NonNull<T>.
+    /// Best effort check if the struct represents a `std::ptr::NonNull<T>`.
     ///
     /// This assumes the following structure. Any changes to this will break this code.
     /// ```

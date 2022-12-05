@@ -1,35 +1,13 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// This is a regression test for size_and_align_of_dst computing the
-// size and alignment of a dynamically-sized type like
-// Arc<Mutex<dyn Subscriber>>.
+// The original harness takes too long so we introduced a simplified version to run in CI.
+// kani-flags: --harness simplified
 
-// https://github.com/model-checking/kani/issues/426
-// Current Kani-time compiler panic in implementing drop_in_place:
-
-// thread 'rustc' panicked at 'Function call does not type check:
-// "func":"Expr"{
-//     "value":"Symbol"{
-//        "identifier":"_RINvNtCsgWci0eQkB8o_4core3ptr13drop_in_placeNtNtNtCs1HAdiQHUxxm_3std10sys_common5mutex12MovableMutexECsb7rQPrKk64Y_4main"
-//     },
-//     "typ":"Code"{
-//        "parameters":[
-//           "Parameter"{
-//              "typ":"Pointer"{
-//                 "typ":"StructTag(""tag-std::sys_common::mutex::MovableMutex"")"
-//              },
-//           }
-//        ],
-//        "return_type":"StructTag(""tag-Unit"")"
-//     },
-//  }"args":[
-//     "Expr"{
-//        "value":"Symbol"{
-//           "identifier":"_RINvNtCsgWci0eQkB8o_4core3ptr13drop_in_placeINtNtNtCs1HAdiQHUxxm_3std4sync5mutex5MutexDNtCsb7rQPrKk64Y_4main10SubscriberEL_EEB1p_::1::var_1"
-//        },
-//        "typ":"StructTag(""tag-dyn Subscriber"")",
-//     }
-//  ]"', compiler/rustc_codegen_llvm/src/gotoc/cbmc/goto_program/expr.rs:532:9"
+//! This is a regression test for size_and_align_of_dst computing the
+//! size and alignment of a dynamically-sized type like
+//! Arc<Mutex<dyn Subscriber>>.
+//! We added a simplified version of the original harness from:
+//! <https://github.com/model-checking/kani/issues/426>
 
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -61,7 +39,16 @@ impl Subscriber for DummySubscriber {
 }
 
 #[kani::proof]
-fn main() {
+#[kani::unwind(2)]
+fn simplified() {
+    let s: Arc<Mutex<dyn Subscriber>> = Arc::new(Mutex::new(DummySubscriber::new()));
+    let data = s.lock().unwrap();
+    assert!(data.get() == 0);
+}
+
+#[kani::proof]
+#[kani::unwind(1)]
+fn original() {
     let s: Arc<Mutex<dyn Subscriber>> = Arc::new(Mutex::new(DummySubscriber::new()));
     let mut data = s.lock().unwrap();
     data.increment();

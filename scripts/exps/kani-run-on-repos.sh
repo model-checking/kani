@@ -34,7 +34,7 @@ SPDX-License-Identifier: Apache-2.0 OR MIT'
 export SELF_SCRIPT=$0
 export SELF_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 NPROC=$(nproc 2> /dev/null || sysctl -n hw.ncpu 2> /dev/null || echo 4)  # Linux or Mac or hard-coded default of 4
-export WORK_DIRECTORY_PREFIX="$SELF_DIR/../../target/remote-repos"
+export WORK_DIRECTORY_PREFIX="/tmp/remote-repos"
 export TMP_UNSUPPORTED_FEATURES_DATA="/tmp/unsupported_features_data.txt"
 
 export STDOUT_SUFFIX='stdout.cargo-kani'
@@ -54,7 +54,7 @@ function clone_and_run_kani {
 
     # run cargo kani compile on repo. save results to file.
     PATH=$PATH:$(readlink -f $SELF_DIR/..)
-    (cd $REPO_DIRECTORY; nice -n15 cargo kani --only-codegen) \
+    (cd $REPO_DIRECTORY; nice -n15 cargo kani --only-codegen --legacy-linker) \
          1> $REPO_DIRECTORY/$STDOUT_SUFFIX \
          2> $REPO_DIRECTORY/$STDERR_SUFFIX
     echo $? > $REPO_DIRECTORY/$EXIT_CODE_SUFFIX

@@ -7,7 +7,7 @@
 
 use crate::common::KaniFailStep;
 use crate::common::{output_base_dir, output_base_name};
-use crate::common::{CargoKani, Expected, Kani, KaniFixme, Stub};
+use crate::common::{CargoKani, CargoKaniTest, Expected, Kani, KaniFixme, Stub};
 use crate::common::{Config, TestPaths};
 use crate::header::TestProps;
 use crate::json;
@@ -22,6 +22,7 @@ use std::process::{Command, ExitStatus, Output, Stdio};
 use std::str;
 
 use tracing::*;
+use wait_timeout::ChildExt;
 
 #[cfg(not(windows))]
 fn disable_error_reporting<F: FnOnce() -> R, R>(f: F) -> R {
@@ -62,7 +63,8 @@ impl<'test> TestCx<'test> {
         match self.config.mode {
             Kani => self.run_kani_test(),
             KaniFixme => self.run_kani_test(),
-            CargoKani => self.run_cargo_kani_test(),
+            CargoKani => self.run_cargo_kani_test(false),
+            CargoKaniTest => self.run_cargo_kani_test(true),
             Expected => self.run_expected_test(),
             Stub => self.run_stub_test(),
         }
@@ -70,8 +72,8 @@ impl<'test> TestCx<'test> {
 
     fn compose_and_run(&self, mut command: Command) -> ProcRes {
         let cmdline = {
-            let cmdline = format!("{:?}", command);
-            logv(self.config, format!("executing {}", cmdline));
+            let cmdline = format!("{command:?}");
+            logv(self.config, format!("executing {cmdline}"));
             cmdline
         };
 
@@ -84,8 +86,19 @@ impl<'test> TestCx<'test> {
         let newpath = env::join_paths(&path).unwrap();
         command.env(dylib_env_var(), newpath);
 
-        let child = disable_error_reporting(|| command.spawn())
+        let mut child = disable_error_reporting(|| command.spawn())
             .unwrap_or_else(|_| panic!("failed to exec `{:?}`", &command));
+
+        if let Some(timeout) = self.config.timeout {
+            match child.wait_timeout(timeout).unwrap() {
+                Some(_status) => {} // No timeout.
+                None => {
+                    // Timeout. Kill process and print error.
+                    println!("Process timed out after {timeout:?}s: {cmdline}");
+                    child.kill().unwrap();
+                }
+            };
+        }
 
         let Output { status, stdout, stderr } = read2(child).expect("failed to read output");
 
@@ -102,10 +115,10 @@ impl<'test> TestCx<'test> {
     }
 
     fn dump_output(&self, out: &str, err: &str) {
-        let revision = if let Some(r) = self.revision { format!("{}.", r) } else { String::new() };
+        let revision = if let Some(r) = self.revision { format!("{r}.") } else { String::new() };
 
-        self.dump_output_file(out, &format!("{}out", revision));
-        self.dump_output_file(err, &format!("{}err", revision));
+        self.dump_output_file(out, &format!("{revision}out"));
+        self.dump_output_file(err, &format!("{revision}err"));
         self.maybe_dump_to_stdout(out, err);
     }
 
@@ -143,17 +156,17 @@ impl<'test> TestCx<'test> {
     fn maybe_dump_to_stdout(&self, out: &str, err: &str) {
         if self.config.verbose {
             println!("------stdout------------------------------");
-            println!("{}", out);
+            println!("{out}");
             println!("------stderr------------------------------");
-            println!("{}", err);
+            println!("{err}");
             println!("------------------------------------------");
         }
     }
 
     fn error(&self, err: &str) {
         match self.revision {
-            Some(rev) => println!("\nerror in revision `{}`: {}", rev, err),
-            None => println!("\nerror: {}", err),
+            Some(rev) => println!("\nerror in revision `{rev}`: {err}"),
+            None => println!("\nerror: {err}"),
         }
     }
 
@@ -215,7 +228,7 @@ impl<'test> TestCx<'test> {
             let lines = TestCx::verify_expect_fail(&proc_res.stdout);
             if !lines.is_empty() {
                 self.fatal_proc_rec(
-                    &format!("test failed: expected failure in lines {:?}, got success", lines),
+                    &format!("test failed: expected failure in lines {lines:?}, got success"),
                     &proc_res,
                 )
             }
@@ -279,9 +292,10 @@ impl<'test> TestCx<'test> {
     }
 
     /// Runs cargo-kani on the function specified by the stem of `self.testpaths.file`.
+    /// The `test` parameter controls whether to specify `--tests` to `cargo kani`.
     /// An error message is printed to stdout if verification output does not
     /// contain the expected output in `self.testpaths.file`.
-    fn run_cargo_kani_test(&self) {
+    fn run_cargo_kani_test(&self, test: bool) {
         // We create our own command for the same reasons listed in `run_kani_test` method.
         let mut cargo = Command::new("cargo");
         // We run `cargo` on the directory where we found the `*.expected` file
@@ -293,18 +307,19 @@ impl<'test> TestCx<'test> {
             .arg("--target-dir")
             .arg(self.output_base_dir().join("target"))
             .current_dir(&parent_dir);
+        if test {
+            cargo.arg("--tests");
+        }
         if "expected" != self.testpaths.file.file_name().unwrap() {
             cargo.args(["--harness", function_name]);
-        }
-
-        if self.config.mir_linker {
-            // Allow us to run the regression with the mir linker enabled by default.
-            cargo.arg("--enable-unstable").arg("--mir-linker");
         }
 
         let proc_res = self.compose_and_run(cargo);
         let expected = fs::read_to_string(self.testpaths.file.clone()).unwrap();
         self.verify_output(&proc_res, &expected);
+
+        // TODO: We should probably be checking the exit status somehow
+        // See https://github.com/model-checking/kani/issues/1895
     }
 
     /// Common method used to run Kani on a single file test.
@@ -320,11 +335,6 @@ impl<'test> TestCx<'test> {
         // internal call to rustc.
         if !self.props.compile_flags.is_empty() {
             kani.env("RUSTFLAGS", self.props.compile_flags.join(" "));
-        }
-
-        if self.config.mir_linker {
-            // Allow us to run the regression with the mir linker enabled by default.
-            kani.arg("--enable-unstable").arg("--mir-linker");
         }
 
         // Pass the test path along with Kani and CBMC flags parsed from comments at the top of the test file.
@@ -448,7 +458,7 @@ pub struct ProcRes {
 impl ProcRes {
     pub fn fatal(&self, err: Option<&str>, on_failure: impl FnOnce()) -> ! {
         if let Some(e) = err {
-            println!("\nerror: {}", e);
+            println!("\nerror: {e}");
         }
         print!(
             "\

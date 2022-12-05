@@ -36,11 +36,6 @@ jobs:
             echo "Git tag ${{env.TAG_VERSION}} did not match crate version ${{env.CRATE_VERSION}}"
             exit 1
           fi
-          # Check the action script's tag.
-          if ! grep -F "image: docker://ghcr.io/model-checking/kani-ubuntu-20.04:${{ env.TAG_VERSION }}" action.yml; then
-            echo "Git tag ${{env.TAG_VERSION}} did not match version in action.yml"
-            exit 1;
-          fi
 
       - name: Create release
         id: create_release
@@ -80,7 +75,7 @@ jobs:
 
       - name: Build release bundle
         run: |
-          cargo run -p make-kani-release -- ${{ needs.Release.outputs.version }}
+          cargo bundle
 
       - name: Upload artifact
         uses: actions/upload-release-asset@v1
@@ -113,7 +108,7 @@ jobs:
 
       - name: 'Build release bundle'
         run: |
-          cargo run -p make-kani-release -- ${{ needs.Release.outputs.version }}
+          cargo bundle
           cargo package -p kani-verifier
 
       - name: 'Login to GitHub Container Registry'

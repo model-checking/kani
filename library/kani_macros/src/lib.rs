@@ -118,3 +118,30 @@ pub fn unwind(attr: TokenStream, item: TokenStream) -> TokenStream {
     result.extend(item);
     result
 }
+
+#[cfg(not(kani))]
+#[proc_macro_attribute]
+pub fn stub(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    // When the config is not kani, we should leave the function alone
+    item
+}
+
+/// Specify a function/method stub pair to use for proof harness
+///
+/// The attribute `#[kani::stub(original, replacement)]` can only be used alongside `#[kani::proof]`.
+///
+/// # Arguments
+/// * `original` - The function or method to replace, specified as a path.
+/// * `replacement` - The function or method to use as a replacement, specified as a path.
+#[cfg(kani)]
+#[proc_macro_attribute]
+pub fn stub(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let mut result = TokenStream::new();
+
+    // Translate #[kani::stub(original, replacement)] to #[kanitool::stub(original, replacement)]
+    let insert_string = "#[kanitool::stub(".to_owned() + &attr.to_string() + ")]";
+    result.extend(insert_string.parse::<TokenStream>().unwrap());
+
+    result.extend(item);
+    result
+}

@@ -4,15 +4,29 @@
 use crate::args::KaniArgs;
 use crate::util::render_command;
 use anyhow::{bail, Context, Result};
-use std::cell::RefCell;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
+use std::sync::Mutex;
+use tracing::level_filters::LevelFilter;
+use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Registry};
+use tracing_tree::HierarchicalLayer;
+
+/// Environment variable used to control this session log tracing.
+/// This is the same variable used to control `kani-compiler` logs. Note that you can still control
+/// the driver logs separately, by using the logger directives to  select the kani-driver crate.
+/// `export KANI_LOG=kani_driver=debug`.
+const LOG_ENV_VAR: &str = "KANI_LOG";
 
 /// Contains information about the execution environment and arguments that affect operations
 pub struct KaniSession {
     /// The common command-line arguments
     pub args: KaniArgs,
+
+    /// Include all publicly-visible symbols in the generated goto binary, not just those reachable from
+    /// a proof harness. Useful when attempting to verify things that were not annotated with kani
+    /// proof attributes.
+    pub codegen_tests: bool,
 
     /// The location we found the 'kani_rustc' command
     pub kani_compiler: PathBuf,
@@ -21,11 +35,8 @@ pub struct KaniSession {
     /// The location we found the Kani C stub .c files
     pub kani_c_stubs: PathBuf,
 
-    /// The location we found our pre-built libraries
-    pub kani_rlib: Option<PathBuf>,
-
     /// The temporary files we littered that need to be cleaned up at the end of execution
-    pub temporaries: RefCell<Vec<PathBuf>>,
+    pub temporaries: Mutex<Vec<PathBuf>>,
 }
 
 /// Represents where we detected Kani, with helper methods for using that information to find critical paths
@@ -33,30 +44,59 @@ enum InstallType {
     /// We're operating in a a checked out repo that's been built locally.
     /// The path here is to the root of the repo.
     DevRepo(PathBuf),
-    /// We're operating from a release bundle (made with `make-kani-release`).
+    /// We're operating from a release bundle (made with `build-kani release`).
     /// The path here to where this release bundle has been unpacked.
     Release(PathBuf),
 }
 
 impl KaniSession {
     pub fn new(args: KaniArgs) -> Result<Self> {
+        init_logger(&args);
         let install = InstallType::new()?;
 
         Ok(KaniSession {
             args,
+            codegen_tests: false,
             kani_compiler: install.kani_compiler()?,
             kani_lib_c: install.kani_lib_c()?,
             kani_c_stubs: install.kani_c_stubs()?,
-            kani_rlib: install.kani_rlib()?,
-            temporaries: RefCell::new(vec![]),
+            temporaries: Mutex::new(vec![]),
         })
     }
+
+    pub fn record_temporary_files(&self, temps: &[&Path]) {
+        // unwrap safety: will panic this thread if another thread panicked *while holding the lock.*
+        // This is vanishingly unlikely, and even then probably the right thing to do
+        let mut t = self.temporaries.lock().unwrap();
+        t.extend(temps.iter().map(|p| (*p).to_owned()));
+    }
+
+    /// Determine which symbols Kani should codegen (i.e. by slicing away symbols
+    /// that are considered unreachable.)
+    pub fn reachability_mode(&self) -> ReachabilityMode {
+        if self.args.legacy_linker {
+            ReachabilityMode::Legacy
+        } else if self.codegen_tests {
+            ReachabilityMode::Tests
+        } else if self.args.function.is_some() {
+            ReachabilityMode::AllPubFns
+        } else {
+            ReachabilityMode::ProofHarnesses
+        }
+    }
+}
+
+pub enum ReachabilityMode {
+    Legacy,
+    ProofHarnesses,
+    AllPubFns,
+    Tests,
 }
 
 impl Drop for KaniSession {
     fn drop(&mut self) {
-        if !self.args.keep_temps && !self.args.dry_run {
-            let temporaries = self.temporaries.borrow();
+        if !self.args.keep_temps {
+            let temporaries = self.temporaries.lock().unwrap();
 
             for file in temporaries.iter() {
                 // If it fails, we don't care, skip it
@@ -68,7 +108,7 @@ impl Drop for KaniSession {
 
 impl KaniSession {
     // The below suite of helper functions for executing Commands are meant to be a common handler
-    // for various cmdline flags like 'dry-run' and 'quiet'. These functions are temporary: in the
+    // for various cmdline flags like 'verbose' and 'quiet'. These functions are temporary: in the
     // longer run we'll switch to a graph-interpreter style of constructing and executing jobs.
     // (In other words: higher-level data structures, rather than passing around Commands.)
     // (e.g. to support emitting Litani build graphs, or to better parallelize our work)
@@ -86,12 +126,8 @@ impl KaniSession {
             cmd.stdout(std::process::Stdio::null());
             cmd.stderr(std::process::Stdio::null());
         }
-        if self.args.verbose || self.args.dry_run {
-            println!("{}", render_command(&cmd).to_string_lossy());
-            if self.args.dry_run {
-                // Short circuit
-                return Ok(());
-            }
+        if self.args.verbose {
+            println!("[Kani] Running: `{}`", render_command(&cmd).to_string_lossy());
         }
         let result = cmd
             .status()
@@ -104,7 +140,7 @@ impl KaniSession {
 
     /// Run a job, but only output (unless --quiet) if it fails, and fail if there's a problem.
     pub fn run_suppress(&self, mut cmd: Command) -> Result<()> {
-        if self.args.quiet || self.args.debug || self.args.verbose || self.args.dry_run {
+        if self.args.quiet || self.args.debug || self.args.verbose {
             return self.run_terminal(cmd);
         }
         let result = cmd
@@ -125,12 +161,12 @@ impl KaniSession {
 
     /// Run a job, redirect its output to a file, and allow the caller to decide what to do with failure.
     pub fn run_redirect(&self, mut cmd: Command, stdout: &Path) -> Result<ExitStatus> {
-        if self.args.verbose || self.args.dry_run {
-            println!("{} > {}", render_command(&cmd).to_string_lossy(), stdout.display());
-            if self.args.dry_run {
-                // Short circuit. Difficult to mock an ExitStatus :(
-                return Ok(<ExitStatus as std::os::unix::prelude::ExitStatusExt>::from_raw(0));
-            }
+        if self.args.verbose {
+            println!(
+                "[Kani] Running: `{} > {}`",
+                render_command(&cmd).to_string_lossy(),
+                stdout.display()
+            );
         }
         let output_file = std::fs::File::create(&stdout)?;
         cmd.stdout(output_file);
@@ -139,23 +175,21 @@ impl KaniSession {
     }
 
     /// Run a job and pipe its output to this process.
-    /// Returns an error if the process could not be spawned
+    /// Returns an error if the process could not be spawned.
+    ///
+    /// NOTE: Unlike other `run_` functions, this function does not attempt to indicate
+    /// the process exit code, you need to remember to check this yourself.
     pub fn run_piped(&self, mut cmd: Command) -> Result<Option<Child>> {
-        if self.args.verbose || self.args.dry_run {
-            println!("{}", render_command(&cmd).to_string_lossy());
-            if self.args.dry_run {
-                return Ok(None);
-            }
+        if self.args.verbose {
+            println!("[Kani] Running: `{}`", render_command(&cmd).to_string_lossy());
         }
         // Run the process as a child process
-        let process = cmd.stdout(Stdio::piped()).spawn();
+        let process = cmd
+            .stdout(Stdio::piped())
+            .spawn()
+            .context(format!("Failed to invoke {}", cmd.get_program().to_string_lossy()))?;
 
-        // Render the command if the process could not be spawned
-        if process.is_err() {
-            bail!("Could not spawn process `{}`", render_command(&cmd).to_string_lossy());
-        }
-        // Return the child process handle
-        Ok(Some(process.unwrap()))
+        Ok(Some(process))
     }
 }
 
@@ -168,9 +202,10 @@ fn bin_folder() -> Result<PathBuf> {
 
 impl InstallType {
     pub fn new() -> Result<Self> {
-        // Case 1: We've checked out the development repo and we're built under `target/`
+        // Case 1: We've checked out the development repo and we're built under `target/kani`
         let mut path = bin_folder()?;
-        if path.ends_with("target/debug") || path.ends_with("target/release") {
+        if path.ends_with("target/kani/bin") {
+            path.pop();
             path.pop();
             path.pop();
 
@@ -209,21 +244,6 @@ impl InstallType {
         self.base_path_with("library/kani/stubs/C")
     }
 
-    pub fn kani_rlib(&self) -> Result<Option<PathBuf>> {
-        match self {
-            Self::DevRepo(_repo) => {
-                // Awkwardly, there is not an easy way to determine the location of these outputs
-                // So we let kani-compiler default to hard-coding them for development builds.
-                Ok(None)
-            }
-            Self::Release(release) => {
-                // First-time setup should place these here. Note `lib` not `library` for built artifacts.
-                let path = release.join("lib");
-                Ok(Some(expect_path(path)?))
-            }
-        }
-    }
-
     /// A common case is that our repo and release bundle have the same `subpath`
     fn base_path_with(&self, subpath: &str) -> Result<PathBuf> {
         let path = match self {
@@ -245,4 +265,24 @@ fn expect_path(path: PathBuf) -> Result<PathBuf> {
             path.display()
         );
     }
+}
+
+/// Initialize the logger using the KANI_LOG environment variable and `--debug` argument.
+fn init_logger(args: &KaniArgs) {
+    let filter = EnvFilter::from_env(LOG_ENV_VAR);
+    let filter = if args.debug { filter.add_directive(LevelFilter::DEBUG.into()) } else { filter };
+
+    // Use a hierarchical view for now.
+    let use_colors = atty::is(atty::Stream::Stdout);
+    let subscriber = Registry::default().with(filter);
+    let subscriber = subscriber.with(
+        HierarchicalLayer::default()
+            .with_writer(std::io::stderr)
+            .with_indent_lines(true)
+            .with_ansi(use_colors)
+            .with_targets(true)
+            .with_verbose_exit(true)
+            .with_indent_amount(4),
+    );
+    tracing::subscriber::set_global_default(subscriber).unwrap();
 }

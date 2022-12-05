@@ -122,7 +122,7 @@ impl<'a> ArchiveBuilder<'a> for ArArchiveBuilder<'a> {
             ))
         } else {
             BuilderKind::Bsd(ar::Builder::new(File::create(&output).unwrap_or_else(|err| {
-                sess.fatal(&format!("error opening destination during archive building: {}", err));
+                sess.fatal(&format!("error opening destination during archive building: {err}"));
             })))
         };
 
@@ -160,6 +160,7 @@ impl ArchiveBuilderBuilder for ArArchiveBuilderBuilder {
         _lib_name: &str,
         _dll_imports: &[rustc_session::cstore::DllImport],
         _tmpdir: &Path,
+        _is_direct_dependency: bool,
     ) -> PathBuf {
         unimplemented!("injecting dll imports is not supported");
     }

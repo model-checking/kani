@@ -22,7 +22,7 @@ KANI_DIR=$SCRIPT_DIR/..
 export KANI_FAIL_ON_UNEXPECTED_DESCRIPTION="true"
 
 # Required dependencies
-check-cbmc-version.py --major 5 --minor 66
+check-cbmc-version.py --major 5 --minor 69
 check-cbmc-viewer-version.py --major 3 --minor 5
 
 # Formatting check
@@ -30,9 +30,9 @@ ${SCRIPT_DIR}/kani-fmt.sh --check
 
 # Build all packages in the workspace
 if [[ "" != "${KANI_ENABLE_UNSOUND_EXPERIMENTS-}" ]]; then
-  cargo build --features unsound_experiments
+  cargo build-dev -- --features unsound_experiments
 else
-  cargo build
+  cargo build-dev
 fi
 
 # Unit tests
@@ -43,6 +43,7 @@ cargo test -p kani-driver
 # Check output files (--gen-c option)
 echo "Check GotoC output file generation"
 time "$KANI_DIR"/tests/output-files/check-output.sh
+echo ""
 
 # Declare testing suite information (suite and mode)
 TESTS=(
@@ -60,9 +61,14 @@ TESTS=(
 
 if [[ "" != "${KANI_ENABLE_UNSOUND_EXPERIMENTS-}" ]]; then
   TESTS+=("unsound_experiments kani")
-else 
+else
   TESTS+=("no_unsound_experiments expected")
 fi
+
+# Build compiletest and print configuration. We pick suite / mode combo so there's no test.
+echo "--- Compiletest configuration"
+cargo run -p compiletest --quiet -- --suite kani --mode cargo-kani --dry-run --verbose
+echo "-----------------------------"
 
 # Extract testing suite information and run compiletest
 for testp in "${TESTS[@]}"; do
@@ -70,8 +76,6 @@ for testp in "${TESTS[@]}"; do
   suite=${testl[0]}
   mode=${testl[1]}
   echo "Check compiletest suite=$suite mode=$mode"
-  # Note: `cargo-kani` tests fail if we do not add `$(pwd)` to `--build-base`
-  # Tracking issue: https://github.com/model-checking/kani/issues/755
   cargo run -p compiletest --quiet -- --suite $suite --mode $mode --quiet
 done
 
@@ -88,16 +92,6 @@ fi
 
 # Check codegen of firecracker
 time "$SCRIPT_DIR"/codegen-firecracker.sh
-
-# Check that we can use Kani on crates with a diamond dependency graph,
-# with two different versions of the same crate.
-#
-#         dependency1
-#        /           \ v0.1.0
-#   main             dependency3
-#        \           / v0.1.1
-#         dependency2
-time "$KANI_DIR"/tests/kani-dependency-test/diamond-dependency/run-dependency-test.sh
 
 # Check that documentation compiles.
 cargo doc --workspace --no-deps --exclude std

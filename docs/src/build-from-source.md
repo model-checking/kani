@@ -29,7 +29,7 @@ cd kani
 git submodule update --init
 ./scripts/setup/ubuntu/install_deps.sh
 ./scripts/setup/ubuntu/install_cbmc.sh
-./scripts/setup/install_viewer.sh
+./scripts/setup/ubuntu/install_viewer.sh
 # If you haven't already:
 ./scripts/setup/install_rustup.sh
 source $HOME/.cargo/env
@@ -46,7 +46,7 @@ cd kani
 git submodule update --init
 ./scripts/setup/macos/install_deps.sh
 ./scripts/setup/macos/install_cbmc.sh
-./scripts/setup/install_viewer.sh
+./scripts/setup/macos/install_viewer.sh
 # If you haven't already:
 ./scripts/setup/install_rustup.sh
 source $HOME/.cargo/env
@@ -57,7 +57,7 @@ source $HOME/.cargo/env
 Build the Kani package:
 
 ```
-cargo build
+cargo build-dev
 ```
 
 Then, optionally, run the regression tests:
@@ -66,7 +66,7 @@ Then, optionally, run the regression tests:
 ./scripts/kani-regression.sh
 ```
 
-This script has a lot of noisy output, but on a successful run you'll see:
+This script has a lot of noisy output, but on a successful run you'll see at the end of the execution:
 
 ```
 All Kani regression tests completed successfully.

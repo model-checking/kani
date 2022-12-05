@@ -21,7 +21,7 @@ use cbmc::goto_program::{DatatypeComponent, Expr, Location, Stmt, Symbol, Symbol
 use cbmc::utils::aggr_tag;
 use cbmc::InternedString;
 use cbmc::{MachineModel, RoundingMode};
-use kani_metadata::HarnessMetadata;
+use kani_metadata::{HarnessMetadata, UnsupportedFeature};
 use kani_queries::{QueryDb, UserInput};
 use rustc_data_structures::fx::FxHashMap;
 use rustc_data_structures::owning_ref::OwningRef;
@@ -58,7 +58,11 @@ pub struct GotocCtx<'tcx> {
     pub vtable_ctx: VtableCtx,
     pub current_fn: Option<CurrentFnCtx<'tcx>>,
     pub type_map: FxHashMap<InternedString, Ty<'tcx>>,
+    /// map from symbol identifier to string literal
+    /// TODO: consider making the map from Expr to String instead
+    pub str_literals: FxHashMap<InternedString, String>,
     pub proof_harnesses: Vec<HarnessMetadata>,
+    pub test_harnesses: Vec<HarnessMetadata>,
     /// a global counter for generating unique IDs for checks
     pub global_checks_count: u64,
     /// A map of unsupported constructs that were found while codegen
@@ -83,7 +87,9 @@ impl<'tcx> GotocCtx<'tcx> {
             vtable_ctx: VtableCtx::new(emit_vtable_restrictions),
             current_fn: None,
             type_map: FxHashMap::default(),
+            str_literals: FxHashMap::default(),
             proof_harnesses: vec![],
+            test_harnesses: vec![],
             global_checks_count: 0,
             unsupported_constructs: FxHashMap::default(),
         }
@@ -98,6 +104,32 @@ impl<'tcx> GotocCtx<'tcx> {
 
     pub fn current_fn_mut(&mut self) -> &mut CurrentFnCtx<'tcx> {
         self.current_fn.as_mut().unwrap()
+    }
+
+    /// Maps the goto-context "unsupported features" data into the
+    /// KaniMetadata "unsupported features" format.
+    ///
+    /// These are different because the KaniMetadata is a flat serializable list,
+    /// while we need a more richly structured HashMap in the goto context.
+    pub(crate) fn unsupported_metadata(&self) -> Vec<UnsupportedFeature> {
+        self.unsupported_constructs
+            .iter()
+            .map(|(construct, location)| UnsupportedFeature {
+                feature: construct.to_string(),
+                locations: location
+                    .iter()
+                    .map(|l| {
+                        // We likely (and should) have no instances of
+                        // calling `codegen_unimplemented` without file/line.
+                        // So while we map out of `Option` here, we expect them to always be `Some`
+                        (
+                            l.filename().unwrap_or_default(),
+                            l.start_line().map(|x| x.to_string()).unwrap_or_default(),
+                        )
+                    })
+                    .collect(),
+            })
+            .collect()
     }
 }
 
@@ -143,8 +175,8 @@ impl<'tcx> GotocCtx<'tcx> {
         loc: Location,
         is_param: bool,
     ) -> Symbol {
-        let base_name = format!("{}_{}", prefix, c);
-        let name = format!("{}::1::{}", fname, base_name);
+        let base_name = format!("{prefix}_{c}");
+        let name = format!("{fname}::1::{base_name}");
         let symbol = Symbol::variable(name, base_name, t, loc).with_is_parameter(is_param);
         self.symbol_table.insert(symbol.clone());
         symbol
@@ -272,7 +304,7 @@ impl<'tcx> GotocCtx<'tcx> {
         Type::union_tag(union_name)
     }
 
-    /// Makes a __attribute__((constructor)) fnname() {body} initalizer function
+    /// Makes a `__attribute__((constructor)) fnname() {body}` initalizer function
     pub fn register_initializer(&mut self, var_name: &str, body: Stmt) -> &Symbol {
         let fn_name = Self::initializer_fn_name(var_name);
         let pretty_name = format!("{var_name}::init");
@@ -299,7 +331,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 .instance_mir(instance.def)
                 .basic_blocks
                 .indices()
-                .map(|bb| format!("{:?}", bb))
+                .map(|bb| format!("{bb:?}"))
                 .collect(),
         ));
     }
@@ -311,14 +343,14 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn next_global_name(&mut self) -> String {
         let c = self.global_var_count;
         self.global_var_count += 1;
-        format!("{}::global::{}::", self.full_crate_name(), c)
+        format!("{}::global::{c}::", self.full_crate_name())
     }
 
     pub fn next_check_id(&mut self) -> String {
         // check id is KANI_CHECK_ID_<crate_name>_<counter>
         let c = self.global_checks_count;
         self.global_checks_count += 1;
-        format!("KANI_CHECK_ID_{}_{}", self.full_crate_name, c)
+        format!("KANI_CHECK_ID_{}_{c}", self.full_crate_name)
     }
 }
 
@@ -468,7 +500,7 @@ fn machine_model_from_session(sess: &Session) -> MachineModel {
             }
         }
         _ => {
-            panic!("Unsupported architecture: {}", architecture);
+            panic!("Unsupported architecture: {architecture}");
         }
     }
 }

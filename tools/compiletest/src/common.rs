@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use crate::util::PathBufExt;
+use std::time::Duration;
 use test::ColorConfig;
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
@@ -17,6 +18,7 @@ pub enum Mode {
     Kani,
     KaniFixme,
     CargoKani,
+    CargoKaniTest, // `cargo kani --tests`. This is temporary and should be removed when s2n-quic moves --tests to `Cargo.toml`.
     Expected,
     Stub,
 }
@@ -28,6 +30,7 @@ impl FromStr for Mode {
             "kani" => Ok(Kani),
             "kani-fixme" => Ok(KaniFixme),
             "cargo-kani" => Ok(CargoKani),
+            "cargo-kani-test" => Ok(CargoKaniTest),
             "expected" => Ok(Expected),
             "stub-tests" => Ok(Stub),
             _ => Err(()),
@@ -41,6 +44,7 @@ impl fmt::Display for Mode {
             Kani => "kani",
             KaniFixme => "kani-fixme",
             CargoKani => "cargo-kani",
+            CargoKaniTest => "cargo-kani-test",
             Expected => "expected",
             Stub => "stub-tests",
         };
@@ -79,9 +83,6 @@ pub enum PanicStrategy {
 /// Configuration for compiletest
 #[derive(Debug, Clone)]
 pub struct Config {
-    /// The path to the directory where the Kani executable is located
-    pub kani_dir_path: PathBuf,
-
     /// The directory containing the tests to run
     pub src_base: PathBuf,
 
@@ -107,16 +108,6 @@ pub struct Config {
     /// Write out a parseable log of tests that were run
     pub logfile: Option<PathBuf>,
 
-    /// Flags to pass to the compiler when building for the host
-    pub host_rustcflags: Option<String>,
-
-    /// Flags to pass to the compiler when building for the target
-    pub target_rustcflags: Option<String>,
-
-    /// What panic strategy the target is built with.  Unwind supports Abort, but
-    /// not vice versa.
-    pub target_panic: PanicStrategy,
-
     /// Target system to be tested
     pub target: String,
 
@@ -138,10 +129,11 @@ pub struct Config {
     /// Whether to rerun tests even if the inputs are unchanged.
     pub force_rerun: bool,
 
-    /// Allow us to run the regression with the mir linker enabled by default. For that, set
-    /// `RUSTFLAGS=--cfg=mir_linker` while compiling `compiletest`.
-    /// Remove this as part of <https://github.com/model-checking/kani/issues/1677>
-    pub mir_linker: bool,
+    /// Timeout duration for each test.
+    pub timeout: Option<Duration>,
+
+    /// Whether we will run the tests or not.
+    pub dry_run: bool,
 }
 
 #[derive(Debug, Clone)]

@@ -1,12 +1,12 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use clap::{
-    app_from_crate, crate_authors, crate_description, crate_name, crate_version, App, AppSettings,
-    Arg,
-};
+use clap::value_parser;
+use clap::{builder::PossibleValuesParser, command, Arg, ArgAction, ArgMatches, Command};
 use kani_queries::ReachabilityType;
 use std::env;
+use std::ffi::OsString;
+use std::str::FromStr;
 use strum::VariantNames as _;
 
 /// Option name used to set log level.
@@ -17,9 +17,6 @@ pub const GOTO_C: &str = "goto-c";
 
 /// Option name used to override Kani library path.
 pub const KANI_LIB: &str = "kani-lib";
-
-/// Option name used to select symbol table passes.
-pub const SYM_TABLE_PASSES: &str = "symbol-table-passes";
 
 /// Option name used to set the log output to a json file.
 pub const JSON_OUTPUT: &str = "json-output";
@@ -46,6 +43,12 @@ pub const SYSROOT: &str = "sysroot";
 pub const REACHABILITY: &str = "reachability";
 pub const REACHABILITY_FLAG: &str = "--reachability";
 
+/// Option name used to specify which harness is the target.
+pub const HARNESS: &str = "harness";
+
+/// Option name used to enable stubbing.
+pub const ENABLE_STUBBING: &str = "enable-stubbing";
+
 /// Option name used to pass extra rustc-options.
 pub const RUSTC_OPTIONS: &str = "rustc-options";
 
@@ -58,109 +61,142 @@ const KANIFLAGS_ENV_VAR: &str = "KANIFLAGS";
 const KANI_ARGS_FLAG: &str = "--kani-flags";
 
 /// Configure command options for the Kani compiler.
-pub fn parser<'a, 'b>() -> App<'a, 'b> {
-    let app = app_from_crate!()
-        .setting(AppSettings::TrailingVarArg) // This allow us to fwd commands to rustc.
-        .setting(clap::AppSettings::AllowLeadingHyphen)
-        .version_short("?")
+pub fn parser() -> Command {
+    let app = command!()
+        .disable_version_flag(true)
         .arg(
-            Arg::with_name(KANI_LIB)
-                .long("--kani-lib")
+            Arg::new("kani-compiler-version")
+                .short('?')
+                .action(ArgAction::Version)
+                .help("Gets `kani-compiler` version."),
+        )
+        .arg(
+            Arg::new(KANI_LIB)
+                .long(KANI_LIB)
                 .value_name("FOLDER_PATH")
                 .help("Sets the path to locate the kani library.")
-                .takes_value(true),
+                .action(ArgAction::Set),
         )
         .arg(
-            Arg::with_name(GOTO_C)
-                .long("--goto-c")
-                .help("Enables compilation to goto-c intermediate representation."),
+            Arg::new(GOTO_C)
+                .long(GOTO_C)
+                .help("Enables compilation to goto-c intermediate representation.")
+                .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::with_name(SYM_TABLE_PASSES)
-                .long("--symbol-table-passes")
-                .value_name("PASS")
-                .help("Transformations to perform to the symbol table after it has been generated.")
-                .takes_value(true)
-                .use_delimiter(true)
-                .multiple(true),
-        )
-        .arg(
-            Arg::with_name(LOG_LEVEL)
-                .long("--log-level")
-                .takes_value(true)
-                .possible_values(&["error", "warn", "info", "debug", "trace"])
+            Arg::new(LOG_LEVEL)
+                .long(LOG_LEVEL)
+                .value_parser(["error", "warn", "info", "debug", "trace"])
                 .value_name("LOG_LEVEL")
                 .help(
                     "Sets the maximum log level to the value given. Use KANI_LOG for more granular \
             control.",
-                ),
+                )
+                .action(ArgAction::Set),
         )
         .arg(
-            Arg::with_name(JSON_OUTPUT)
-                .long("--json-output")
-                .help("Print output including logs in json format."),
+            Arg::new(JSON_OUTPUT)
+                .long(JSON_OUTPUT)
+                .help("Print output including logs in json format.")
+                .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::with_name(COLOR_OUTPUT)
-                .long("--color-output")
+            Arg::new(COLOR_OUTPUT)
+                .long(COLOR_OUTPUT)
                 .help("Print output using colors.")
-                .conflicts_with(JSON_OUTPUT),
+                .conflicts_with(JSON_OUTPUT)
+                .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::with_name(RESTRICT_FN_PTRS)
-                .long("--restrict-vtable-fn-ptrs")
-                .help("Restrict the targets of virtual table function pointer calls."),
+            Arg::new(RESTRICT_FN_PTRS)
+                .long(RESTRICT_FN_PTRS)
+                .help("Restrict the targets of virtual table function pointer calls.")
+                .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::with_name(SYSROOT)
-                .long("--sysroot")
-                .takes_value(true)
+            Arg::new(SYSROOT)
+                .long(SYSROOT)
                 .help("Override the system root.")
                 .long_help(
                     "The \"sysroot\" is the location where Kani will look for the Rust \
                 distribution.",
-                ),
+                )
+                .action(ArgAction::Set),
         )
         .arg(
             // TODO: Move this to a cargo wrapper. This should return kani version.
-            Arg::with_name(RUSTC_VERSION)
-                .short("V")
-                .long("--version")
-                .help("Gets underlying rustc version."),
+            Arg::new(RUSTC_VERSION)
+                .short('V')
+                .long("version")
+                .help("Gets underlying rustc version.")
+                .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::with_name(RUSTC_OPTIONS)
+            Arg::new(RUSTC_OPTIONS)
                 .help("Arguments to be passed down to rustc.")
-                .multiple(true)
-                .takes_value(true),
+                .trailing_var_arg(true) // This allow us to fwd commands to rustc.
+                .allow_hyphen_values(true)
+                .value_parser(value_parser!(OsString)) // Allow invalid UTF-8
+                .action(ArgAction::Append),
         )
         .arg(
-            Arg::with_name(ASSERTION_REACH_CHECKS)
-                .long("--assertion-reach-checks")
-                .help("Check the reachability of every assertion."),
+            Arg::new(ASSERTION_REACH_CHECKS)
+                .long(ASSERTION_REACH_CHECKS)
+                .help("Check the reachability of every assertion.")
+                .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::with_name(REACHABILITY)
-                .long(REACHABILITY_FLAG)
-                .possible_values(ReachabilityType::VARIANTS)
+            Arg::new(REACHABILITY)
+                .long(REACHABILITY)
+                .value_parser(PossibleValuesParser::new(ReachabilityType::VARIANTS))
                 .required(false)
                 .default_value(ReachabilityType::None.as_ref())
-                .help("Selects the type of reachability analysis to perform."),
+                .help("Selects the type of reachability analysis to perform.")
+                .action(ArgAction::Set),
         )
         .arg(
-            Arg::with_name(PRETTY_OUTPUT_FILES)
-                .long("--pretty-json-files")
-                .help("Output json files in a more human-readable format (with spaces)."),
+            Arg::new(PRETTY_OUTPUT_FILES)
+                .long(PRETTY_OUTPUT_FILES)
+                .help("Output json files in a more human-readable format (with spaces).")
+                .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::with_name(IGNORE_GLOBAL_ASM)
-                .long("--ignore-global-asm")
-                .help("Suppress error due to the existence of global_asm in a crate"),
+            Arg::new(IGNORE_GLOBAL_ASM)
+                .long(IGNORE_GLOBAL_ASM)
+                .help("Suppress error due to the existence of global_asm in a crate")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            // TODO: Remove this argument once stubbing works for multiple harnesses at a time.
+            // <https://github.com/model-checking/kani/issues/1841>
+            Arg::new(HARNESS)
+                .long(HARNESS)
+                .help("Selects the harness to target.")
+                .value_name("HARNESS")
+                .action(ArgAction::Set),
+        )
+        .arg(
+            Arg::new(ENABLE_STUBBING)
+                .long(ENABLE_STUBBING)
+                .help("Instruct the compiler to perform stubbing.")
+                .requires(HARNESS)
+                .action(ArgAction::SetTrue),
         );
     #[cfg(feature = "unsound_experiments")]
     let app = crate::unsound_experiments::arg_parser::add_unsound_experiments_to_parser(app);
 
     app
+}
+
+pub trait KaniCompilerParser {
+    fn reachability_type(&self) -> ReachabilityType;
+}
+
+impl KaniCompilerParser for ArgMatches {
+    fn reachability_type(&self) -> ReachabilityType {
+        self.get_one::<String>(REACHABILITY)
+            .map_or(ReachabilityType::None, |arg| ReachabilityType::from_str(arg).unwrap())
+    }
 }
 
 /// Retrieves the arguments from the command line and process hack to incorporate CARGO arguments.
@@ -189,7 +225,7 @@ pub fn command_arguments(args: &Vec<String>) -> Vec<String> {
         let env_flags = env::var(KANIFLAGS_ENV_VAR).unwrap_or_default();
         new_args.extend(
             shell_words::split(&env_flags)
-                .expect(&format!("Cannot parse {} value '{}'", KANIFLAGS_ENV_VAR, env_flags)),
+                .expect(&format!("Cannot parse {KANIFLAGS_ENV_VAR} value '{env_flags}'")),
         );
         // Add the leftover arguments for rustc at the end.
         new_args
@@ -202,27 +238,42 @@ pub fn command_arguments(args: &Vec<String>) -> Vec<String> {
 
 #[cfg(test)]
 mod parser_test {
+    use clap::error::ErrorKind;
+
     use super::*;
 
     #[test]
     fn test_rustc_version() {
         let args = vec!["kani-compiler", "-V"];
         let matches = parser().get_matches_from(args);
-        assert!(matches.is_present("rustc-version"));
+        assert!(matches.get_flag("rustc-version"));
     }
 
     #[test]
     fn test_kani_flags() {
         let args = vec!["kani-compiler", "--goto-c", "--kani-lib", "some/path"];
         let matches = parser().get_matches_from(args);
-        assert!(matches.is_present("goto-c"));
-        assert_eq!(matches.value_of("kani-lib"), Some("some/path"));
+        assert!(matches.get_flag("goto-c"));
+        assert_eq!(matches.get_one::<String>("kani-lib"), Some(&"some/path".to_string()));
+    }
+
+    #[test]
+    fn test_stubbing_flags() {
+        let args = vec!["kani-compiler", "--enable-stubbing", "--harness", "foo"];
+        let matches = parser().get_matches_from(args);
+        assert!(matches.get_flag("enable-stubbing"));
+        assert_eq!(matches.get_one::<String>("harness"), Some(&"foo".to_string()));
+
+        // `--enable-stubbing` cannot be called without `--harness`
+        let args = vec!["kani-compiler", "--enable-stubbing"];
+        let err = parser().try_get_matches_from(args).unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::MissingRequiredArgument);
     }
 
     #[test]
     fn test_cargo_kani_hack_noop() {
         let args = ["kani-compiler", "some/path"];
-        let args = args.map(|v| String::from(v));
+        let args = args.map(String::from);
         let new_args = command_arguments(&Vec::from(args.clone()));
         assert_eq!(args.as_slice(), new_args.as_slice());
     }
@@ -231,7 +282,7 @@ mod parser_test {
     fn test_cargo_kani_hack_no_args() {
         env::remove_var(KANIFLAGS_ENV_VAR);
         let args = ["kani-compiler", "some/path", "--kani-flags"];
-        let args = args.map(|v| String::from(v));
+        let args = args.map(String::from);
         let new_args = command_arguments(&Vec::from(args.clone()));
         assert_eq!(new_args.len(), 2, "New args should not include --kani-flags");
         assert_eq!(new_args[0], args[0]);

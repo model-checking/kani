@@ -1,7 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// Checks that `copy_nonoverlapping` fails when `dst` is not aligned.
+//! Checks that `copy_nonoverlapping` fails when `dst` is not aligned.
+
 #[kani::proof]
 fn test_copy_nonoverlapping_unaligned() {
     let arr: [i32; 3] = [0, 1, 0];

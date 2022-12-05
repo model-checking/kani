@@ -23,14 +23,6 @@ pub fn guess_rlib_name(path: &Path) -> PathBuf {
     basedir.join(rlib_name)
 }
 
-/// Add an extension to an existing file path (amazingly Rust doesn't support this well)
-pub fn append_path(path: &Path, ext: &str) -> PathBuf {
-    let mut str = path.to_owned().into_os_string();
-    str.push(".");
-    str.push(ext);
-    str.into()
-}
-
 /// Given a path of some sort (usually from argv0), this attempts to extract the basename / stem
 /// of the executable. e.g. "/path/foo -> foo" "./foo.exe -> foo" "foo -> foo"
 pub fn executable_basename(argv0: &Option<&OsString>) -> Option<OsString> {
@@ -85,6 +77,11 @@ pub fn render_command(cmd: &Command) -> OsString {
     str
 }
 
+/// Generate the filename for a specialized harness from the base linked object
+pub fn specialized_harness_name(linked_obj: &Path, harness_filename: &str) -> PathBuf {
+    alter_extension(linked_obj, &format!("for-{harness_filename}.out"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -108,15 +105,6 @@ mod tests {
         assert_eq!(guess_rlib_name(Path::new("my-crate.rs")), PathBuf::from("libmy_crate.rlib"));
         assert_eq!(guess_rlib_name(Path::new("./foo.rs")), PathBuf::from("./libfoo.rlib"));
         assert_eq!(guess_rlib_name(Path::new("a/b/foo.rs")), PathBuf::from("a/b/libfoo.rlib"));
-    }
-
-    #[test]
-    fn check_append_path() {
-        assert_eq!(append_path(&PathBuf::from("./file"), "tar"), PathBuf::from("./file.tar"));
-        assert_eq!(
-            append_path(&PathBuf::from("./file.symtab.json"), "out"),
-            PathBuf::from("./file.symtab.json.out")
-        );
     }
 
     #[test]
@@ -153,5 +141,22 @@ mod tests {
         assert_eq!(render_command(&c1), OsString::from("a b \"/c d/\""));
         c1.env("PARAM", "VALUE");
         assert_eq!(render_command(&c1), OsString::from("PARAM=\"VALUE\" a b \"/c d/\""));
+    }
+
+    #[test]
+    fn check_specialized_harness_name() {
+        // It's important that the filenames produced end in `.out` as we produce
+        // `--gen-c` filenames with `alter_extension` and we previously had a bug where
+        // `for-harness` was the "extension" being removed, and all filenames collided.
+
+        // cargo kani typically produced a file name like this
+        let h1 = PathBuf::from("./cbmc-linked.out");
+        assert_eq!(specialized_harness_name(&h1, "main"), Path::new("./cbmc-linked.for-main.out"));
+        assert_eq!(specialized_harness_name(&h1, "hs_n"), Path::new("./cbmc-linked.for-hs_n.out"));
+
+        // kani typically produces a file name like this
+        let h2 = PathBuf::from("./rs-file.out");
+        assert_eq!(specialized_harness_name(&h2, "main"), Path::new("./rs-file.for-main.out"));
+        assert_eq!(specialized_harness_name(&h2, "hs_n"), Path::new("./rs-file.for-hs_n.out"));
     }
 }

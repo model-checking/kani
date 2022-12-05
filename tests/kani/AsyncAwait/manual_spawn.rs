@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
 // compile-flags: --edition 2018
+// kani-flags: --enable-unstable --mir-linker
 
 //! This file tests a hand-written spawn infrastructure and executor.
 //! This should be replaced with code from the Kani library as soon as the executor can get merged.

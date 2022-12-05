@@ -5,8 +5,7 @@
 //! generating concrete playback unit tests, and adding them to the user's source code.
 
 use crate::args::ConcretePlaybackMode;
-use crate::call_cbmc::VerificationStatus;
-use crate::cbmc_output_parser::VerificationOutput;
+use crate::call_cbmc::{VerificationResult, VerificationStatus};
 use crate::session::KaniSession;
 use anyhow::{Context, Result};
 use concrete_vals_extractor::{extract_harness_values, ConcreteVal};
@@ -24,26 +23,30 @@ impl KaniSession {
     pub fn gen_and_add_concrete_playback(
         &self,
         harness: &HarnessMetadata,
-        verification_output: &VerificationOutput,
+        verification_result: &VerificationResult,
     ) -> Result<()> {
         let playback_mode = match self.args.concrete_playback {
             Some(playback_mode) => playback_mode,
             None => return Ok(()),
         };
 
-        if verification_output.status == VerificationStatus::Success {
+        if verification_result.status == VerificationStatus::Success {
             return Ok(());
         }
 
-        if let Some(processed_items) = &verification_output.processed_items {
-            match extract_harness_values(processed_items) {
+        if let Some(result_items) = &verification_result.results {
+            match extract_harness_values(result_items) {
                 None => println!(
                     "WARNING: Kani could not produce a concrete playback for `{}` because there \
                     were no failing panic checks.",
                     harness.pretty_name
                 ),
                 Some(concrete_vals) => {
-                    let concrete_playback = format_unit_test(&harness.mangled_name, &concrete_vals);
+                    let concrete_playback = format_unit_test(
+                        &harness.mangled_name,
+                        &concrete_vals,
+                        self.args.randomize_layout,
+                    );
                     match playback_mode {
                         ConcretePlaybackMode::Print => {
                             println!(
@@ -118,7 +121,7 @@ impl KaniSession {
         // Renames are usually automic, so we won't corrupt the user's source file during a crash.
         let tmp_src_path = src_path.to_string() + ".concrete_playback_overwrite";
         let mut tmp_src_file = File::create(&tmp_src_path)
-            .with_context(|| format!("Couldn't create tmp source code file `{}`", tmp_src_path))?;
+            .with_context(|| format!("Couldn't create tmp source code file `{tmp_src_path}`"))?;
         write!(
             tmp_src_file,
             "{}\n{}{}",
@@ -209,20 +212,17 @@ impl KaniSession {
         }
         Ok(())
     }
-
-    /// Helper function to inform the user that they tried to generate concrete playback unit tests when there were no failing harnesses.
-    pub fn inform_if_no_failed(&self, failed_harnesses: &[&HarnessMetadata]) {
-        if self.args.concrete_playback.is_some() && !self.args.quiet && failed_harnesses.is_empty()
-        {
-            println!(
-                "INFO: The concrete playback feature never generated unit tests because there were no failing harnesses."
-            )
-        }
-    }
 }
 
 /// Generate a unit test from a list of concrete values.
-fn format_unit_test(harness_name: &str, concrete_vals: &[ConcreteVal]) -> UnitTest {
+/// `randomize_layout_seed` is `None` when layout is not randomized,
+/// `Some(None)` when layout is randomized without seed, and
+/// `Some(Some(seed))` when layout is randomized with the seed `seed`.
+fn format_unit_test(
+    harness_name: &str,
+    concrete_vals: &[ConcreteVal],
+    randomize_layout_seed: Option<Option<u64>>,
+) -> UnitTest {
     /*
     Given a number of byte vectors, format them as:
     // interp_concrete_val_1
@@ -249,10 +249,23 @@ fn format_unit_test(harness_name: &str, concrete_vals: &[ConcreteVal]) -> UnitTe
     let hash = hasher.finish();
 
     let concrete_playback_func_name = format!("kani_concrete_playback_{harness_name}_{hash}");
+
+    let randomize_layout_message = match randomize_layout_seed {
+        None => String::new(),
+        Some(None) => {
+            "// This test has to be run with rustc option: -Z randomize-layout\n    ".to_string()
+        }
+        Some(Some(seed)) => format!(
+            "// This test has to be run with rust options: -Z randomize-layout -Z layout-seed={}\n    ",
+            seed,
+        ),
+    };
+
     #[rustfmt::skip]
     let concrete_playback = format!(
 "#[test]
 fn {concrete_playback_func_name}() {{
+    {randomize_layout_message}\
     let concrete_vals: Vec<Vec<u8>> = vec![
 {vecs_as_str}
     ];
@@ -288,7 +301,7 @@ struct UnitTest {
 ///     ..., ] }
 /// ```
 mod concrete_vals_extractor {
-    use crate::cbmc_output_parser::{extract_property_class, CheckStatus, ParserItem, TraceItem};
+    use crate::cbmc_output_parser::{CheckStatus, Property, TraceItem};
 
     pub struct ConcreteVal {
         pub byte_arr: Vec<u8>,
@@ -297,26 +310,19 @@ mod concrete_vals_extractor {
 
     /// Extract a set of concrete values that trigger one assertion failure.
     /// This will return None if the failure is not related to a user assertion.
-    pub fn extract_harness_values(processed_items: &[ParserItem]) -> Option<Vec<ConcreteVal>> {
-        let result_item =
-            processed_items
-                .iter()
-                .find_map(|item| {
-                    if let ParserItem::Result { result } = item { Some(result) } else { None }
-                })
-                .expect("Missing CBMC result.");
-
-        let mut failures = result_item.iter().filter(|prop| {
-            extract_property_class(prop).expect("Unexpected property class.") == "assertion"
-                && prop.status == CheckStatus::Failure
+    pub fn extract_harness_values(result_items: &[Property]) -> Option<Vec<ConcreteVal>> {
+        let mut failures = result_items.iter().filter(|prop| {
+            prop.property_class() == "assertion" && prop.status == CheckStatus::Failure
         });
 
         // Process the first assertion failure.
         let first_failure = failures.next();
         if let Some(property) = first_failure {
             // Extract values for the first assertion that has failed.
-            let trace =
-                property.trace.as_ref().expect(&format!("Missing trace for {}", property.property));
+            let trace = property
+                .trace
+                .as_ref()
+                .expect(&format!("Missing trace for {}", property.property_name()));
             let concrete_vals = trace.iter().filter_map(&extract_from_trace_item).collect();
 
             // Print warnings for all the other failures that were not handled in case they expected
@@ -324,7 +330,8 @@ mod concrete_vals_extractor {
             for unhandled in failures {
                 println!(
                     "WARNING: Unable to extract concrete values from multiple failing assertions. Skipping property `{}` with description `{}`.",
-                    unhandled.property, unhandled.description,
+                    unhandled.property_name(),
+                    unhandled.description,
                 );
             }
             Some(concrete_vals)

@@ -2,12 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use anyhow::{Context, Result};
+use kani_metadata::ArtifactType::*;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::session::KaniSession;
-use crate::util::{alter_extension, guess_rlib_name};
+use crate::session::{KaniSession, ReachabilityMode};
+use crate::util::guess_rlib_name;
 
 /// The outputs of kani-compiler operating on a single Rust source file.
 pub struct SingleOutputs {
@@ -16,6 +17,8 @@ pub struct SingleOutputs {
     pub outdir: PathBuf,
     /// The *.symtab.json written.
     pub symtab: PathBuf,
+    /// The *.symtab.out binary written by symtab2gb (run from kani-compiler)
+    pub goto_obj: PathBuf,
     /// The vtable restrictions files, if any.
     pub restrictions: Option<PathBuf>,
     /// The kani-metadata.json file written by kani-compiler.
@@ -27,29 +30,34 @@ impl KaniSession {
     pub fn compile_single_rust_file(&self, file: &Path) -> Result<SingleOutputs> {
         let outdir =
             file.canonicalize()?.parent().context("File doesn't exist in a directory?")?.to_owned();
-        let output_filename = alter_extension(file, "symtab.json");
-        let typemap_filename = alter_extension(file, "type_map.json");
-        let metadata_filename = alter_extension(file, "kani-metadata.json");
-        let restrictions_filename = alter_extension(file, "restrictions.json");
+        let symtab_filename = file.with_extension(SymTab);
+        let goto_obj_filename = file.with_extension(SymTabGoto);
+        let typemap_filename = file.with_extension(TypeMap);
+        let metadata_filename = file.with_extension(Metadata);
+        let restrictions_filename = file.with_extension(VTableRestriction);
         let rlib_filename = guess_rlib_name(file);
 
-        {
-            let mut temps = self.temporaries.borrow_mut();
-            temps.push(rlib_filename);
-            temps.push(output_filename.clone());
-            temps.push(typemap_filename);
-            temps.push(metadata_filename.clone());
-            if self.args.restrict_vtable() {
-                temps.push(restrictions_filename.clone());
-            }
+        self.record_temporary_files(&[
+            &rlib_filename,
+            &symtab_filename,
+            &goto_obj_filename,
+            &typemap_filename,
+            &metadata_filename,
+        ]);
+        if self.args.restrict_vtable() {
+            self.record_temporary_files(&[&restrictions_filename]);
         }
 
         let mut kani_args = self.kani_specific_flags();
-        if self.args.mir_linker {
-            kani_args.push("--reachability=harnesses".into());
-        } else {
-            kani_args.push("--reachability=legacy".into());
-        }
+        kani_args.push(
+            match self.reachability_mode() {
+                ReachabilityMode::Legacy => "--reachability=legacy",
+                ReachabilityMode::ProofHarnesses => "--reachability=harnesses",
+                ReachabilityMode::AllPubFns => "--reachability=pub_fns",
+                ReachabilityMode::Tests => "--reachability=tests",
+            }
+            .into(),
+        );
 
         let mut rustc_args = self.kani_rustc_flags();
         // kani-compiler workaround part 1/2: *.symtab.json gets generated in the local
@@ -91,7 +99,8 @@ impl KaniSession {
 
         Ok(SingleOutputs {
             outdir,
-            symtab: output_filename,
+            symtab: symtab_filename,
+            goto_obj: goto_obj_filename,
             metadata: metadata_filename,
             restrictions: if self.args.restrict_vtable() {
                 Some(restrictions_filename)
@@ -106,15 +115,8 @@ impl KaniSession {
     pub fn kani_specific_flags(&self) -> Vec<OsString> {
         let mut flags = vec![OsString::from("--goto-c")];
 
-        if let Some(rlib) = &self.kani_rlib {
-            flags.push("--kani-lib".into());
-            flags.push(rlib.into());
-        }
-
         if self.args.debug {
             flags.push("--log-level=debug".into());
-        } else if self.args.verbose {
-            flags.push("--log-level=info".into());
         } else {
             flags.push("--log-level=warn".into());
         }
@@ -127,6 +129,13 @@ impl KaniSession {
         }
         if self.args.ignore_global_asm {
             flags.push("--ignore-global-asm".into());
+        }
+
+        if self.args.enable_stubbing {
+            flags.push("--enable-stubbing".into());
+        }
+        if let Some(harness) = &self.args.harness {
+            flags.push(format!("--harness={harness}").into());
         }
 
         #[cfg(feature = "unsound_experiments")]
@@ -146,6 +155,15 @@ impl KaniSession {
             flags.push("--cfg".into());
             let abs_type = format!("abs_type={}", self.args.abs_type.to_string().to_lowercase());
             flags.push(abs_type.into());
+        }
+
+        if let Some(seed_opt) = self.args.randomize_layout {
+            flags.push("-Z".into());
+            flags.push("randomize-layout".into());
+            if let Some(seed) = seed_opt {
+                flags.push("-Z".into());
+                flags.push(format!("layout-seed={seed}").into());
+            }
         }
 
         flags.push("-C".into());

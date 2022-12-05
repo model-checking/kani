@@ -31,15 +31,15 @@ cd $(dirname $0)
 echo "Running single-file check..."
 rm -rf *.c
 RUST_BACKTRACE=1 kani --gen-c --enable-unstable singlefile.rs --quiet
-if ! [ -e singlefile.out.c ]
+if ! [ -e singlefile.for-main.c ]
 then
-    echo "Error: no GotoC file generated. Expected: singlefile.out.c"
+    echo "Error: no GotoC file generated. Expected: singlefile.for-main.c"
     exit 1
 fi
 
-if ! [ -e singlefile.out.demangled.c ]
+if ! [ -e singlefile.for-main.demangled.c ]
 then
-    echo "Error: no demangled GotoC file generated. Expected singlefile.out.demangled.c."
+    echo "Error: no demangled GotoC file generated. Expected singlefile.for-main.demangled.c."
     exit 1
 fi
 
@@ -54,9 +54,9 @@ declare -a PATTERNS=(
 )
 
 for val in "${PATTERNS[@]}"; do
-    if ! grep -Fq "$val" singlefile.out.demangled.c;
+    if ! grep -Fq "$val" singlefile.for-main.demangled.c;
     then
-        echo "Error: demangled file singlefile.out.demangled.c did not contain expected pattern '$val'."
+        echo "Error: demangled file singlefile.for-main.demangled.c did not contain expected pattern '$val'."
         exit 1
     fi
 done
@@ -68,23 +68,23 @@ echo
 echo "Running multi-file check..."
 rm -rf build
 RUST_BACKTRACE=1 cargo kani --target-dir build --gen-c --enable-unstable --quiet
-cd build/${TARGET}/debug/deps/
+cd build/kani/${TARGET}/debug/deps/
 
-if ! [ -e cbmc-for-main.c ]
+if ! [ -e cbmc-linked.for-main.c ]
 then
-    echo "Error: no GotoC file generated. Expected: build/${TARGET}/debug/deps/cbmc-for-main.c"
+    echo "Error: no GotoC file generated. Expected: build/${TARGET}/debug/deps/cbmc-linked.for-main.c"
     exit 1
 fi
 
-if ! [ -e cbmc-for-main.demangled.c ]
+if ! [ -e cbmc-linked.for-main.demangled.c ]
 then
-    echo "Error: no demangled GotoC file generated. Expected build/${TARGET}/debug/deps/cbmc-for-main.demangled.c."
+    echo "Error: no demangled GotoC file generated. Expected build/${TARGET}/debug/deps/cbmc-linked.for-main.demangled.c."
     exit 1
 fi
 
-if ! grep -Fq "struct PrettyStruct pretty_function(struct PrettyStruct" cbmc-for-main.demangled.c;
+if ! grep -Fq "struct PrettyStruct pretty_function(struct PrettyStruct" cbmc-linked.for-main.demangled.c;
 then
-    echo "Error: demangled file build/${TARGET}/debug/deps/cbmc-for-main.demangled.c did not contain expected demangled struct and function name."
+    echo "Error: demangled file build/${TARGET}/debug/deps/cbmc-linked.for-main.demangled.c did not contain expected demangled struct and function name."
     exit 1
 fi
 echo "Finished multi-file check successfully..."

@@ -51,7 +51,7 @@ pub fn make_test(
 
     // Next, any attributes that came from the crate root via #![doc(test(attr(...)))].
     for attr in &opts.attrs {
-        prog.push_str(&format!("#![{}]\n", attr));
+        prog.push_str(&format!("#![{attr}]\n"));
         line_offset += 1;
     }
 
@@ -89,6 +89,7 @@ pub fn make_test(
                 false,
                 Some(80),
                 false,
+                false,
             )
             .supports_color();
 
@@ -101,6 +102,7 @@ pub fn make_test(
                 false,
                 false,
                 None,
+                false,
                 false,
             );
 
@@ -207,7 +209,7 @@ pub fn make_test(
             // parse the source, but only has false positives, not false
             // negatives.
             if s.contains(crate_name) {
-                prog.push_str(&format!("extern crate r#{};\n", crate_name));
+                prog.push_str(&format!("extern crate r#{crate_name};\n"));
                 line_offset += 1;
             }
         }
@@ -221,7 +223,7 @@ pub fn make_test(
         // Give each doctest main function a unique name.
         // This is for example needed for the tooling around `-Z instrument-coverage`.
         let inner_fn_name = if let Some(test_id) = test_id {
-            format!("_doctest_main_{}", test_id)
+            format!("_doctest_main_{test_id}")
         } else {
             "_inner".into()
         };
@@ -232,12 +234,12 @@ pub fn make_test(
                     "fn main() {{ {}fn {}() -> Result<(), impl core::fmt::Debug> {{\n",
                     inner_attr, inner_fn_name
                 ),
-                format!("\n}} {}().unwrap() }}", inner_fn_name),
+                format!("\n}} {inner_fn_name}().unwrap() }}"),
             )
         } else if test_id.is_some() {
             (
-                format!("fn main() {{ {}fn {}() {{\n", inner_attr, inner_fn_name),
-                format!("\n}} {}() }}", inner_fn_name),
+                format!("fn main() {{ {inner_attr}fn {inner_fn_name}() {{\n"),
+                format!("\n}} {inner_fn_name}() }}"),
             )
         } else {
             ("fn main() {\n".into(), "\n}".into())

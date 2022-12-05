@@ -7,6 +7,13 @@
 #include <stdio.h>
 #include <string.h>
 
+/// Mapping unit to `void` works for functions with no return type but not for
+/// variables with type unit. We treat both uniformly by declaring an empty
+/// struct type: `struct Unit {}` and a global variable `struct Unit VoidUnit`
+/// returned by all void functions (both declared by the Kani compiler).
+struct Unit;
+extern struct Unit VoidUnit;
+
 size_t my_add(size_t num, ...)
 {
     va_list argp;
@@ -48,7 +55,15 @@ struct Foo2 {
 
 uint32_t S = 12;
 
-void update_static() { S++; }
+// Note: We changed the return type from `void` to `struct Unit` when upgrading
+// to a newer CBMC version with stricter type-checking. This is a temporary
+// change until C-FFI support is added.
+// <https://github.com/model-checking/kani/issues/1817>
+struct Unit update_static()
+{
+    S++;
+    return VoidUnit;
+}
 
 uint32_t takes_int(uint32_t i) { return i + 2; }
 
@@ -63,7 +78,15 @@ uint32_t takes_ptr_option(uint32_t *p)
     }
 }
 
-void mutates_ptr(uint32_t *p) { *p -= 1; }
+// Note: We changed the return type from `void` to `struct Unit` when upgrading
+// to a newer CBMC version with stricter type-checking. This is a temporary
+// change until C-FFI support is added.
+// <https://github.com/model-checking/kani/issues/1817>
+struct Unit mutates_ptr(uint32_t *p)
+{
+    *p -= 1;
+    return VoidUnit;
+}
 
 uint32_t name_in_c(uint32_t i) { return i + 2; }
 

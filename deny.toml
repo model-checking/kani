@@ -31,7 +31,7 @@ allow = [
 allow-osi-fsf-free = "neither"
 confidence-threshold = 0.8
 
-# All these exceptions should probably appear in: tools/make-kani-release/license-notes.txt
+# All these exceptions should probably appear in: tools/build-kani/license-notes.txt
 exceptions = [
     { name = "Inflector", allow=["BSD-2-Clause"] },
     { name = "unicode-ident", allow=["Unicode-DFS-2016"] },

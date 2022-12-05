@@ -64,10 +64,7 @@ impl KaniSession {
     pub fn apply_vtable_restrictions(&self, file: &Path, source: &Path) -> Result<()> {
         let linked_restrictions = alter_extension(file, "linked-restrictions.json");
 
-        {
-            let mut temps = self.temporaries.borrow_mut();
-            temps.push(linked_restrictions.clone());
-        }
+        self.record_temporary_files(&[&linked_restrictions]);
 
         collect_and_link_function_pointer_restrictions(source, &linked_restrictions)?;
 

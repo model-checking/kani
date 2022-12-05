@@ -13,8 +13,13 @@ use tracing::*;
 pub fn logv(config: &Config, s: String) {
     debug!("{}", s);
     if config.verbose {
-        println!("{}", s);
+        println!("{s}");
     }
+}
+
+/// Print a message as long as we are not running under --quiet. In quiet mode, we log the message.
+pub fn print_msg(config: &Config, msg: String) {
+    if config.quiet { debug!("{msg}") } else { println!("{msg}") }
 }
 
 pub trait PathBufExt {

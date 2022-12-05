@@ -3,7 +3,7 @@
 
 [package]
 name = "kani-verifier"
-version = "0.11.0"
+version = "0.16.0"
 edition = "2021"
 description = "A bit-precise model checker for Rust."
 readme = "README.md"
@@ -40,7 +40,7 @@ members = [
   "library/std",
   "tools/bookrunner",
   "tools/compiletest",
-  "tools/make-kani-release",
+  "tools/build-kani",
   "kani-driver",
   "kani-compiler",
   "kani_metadata",

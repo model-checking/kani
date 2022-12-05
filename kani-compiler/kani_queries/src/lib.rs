@@ -26,6 +26,8 @@ pub enum ReachabilityType {
     None,
     /// Start the cross-crate reachability analysis from all public functions in the local crate.
     PubFns,
+    /// Start the cross-crate reachability analysis from all *test* (i.e. `#[test]`) harnesses in the local crate.
+    Tests,
 }
 
 impl Default for ReachabilityType {
@@ -35,9 +37,6 @@ impl Default for ReachabilityType {
 }
 
 pub trait UserInput {
-    fn set_symbol_table_passes(&mut self, passes: Vec<String>);
-    fn get_symbol_table_passes(&self) -> Vec<String>;
-
     fn set_emit_vtable_restrictions(&mut self, restrictions: bool);
     fn get_emit_vtable_restrictions(&self) -> bool;
 
@@ -53,6 +52,9 @@ pub trait UserInput {
     fn set_reachability_analysis(&mut self, reachability: ReachabilityType);
     fn get_reachability_analysis(&self) -> ReachabilityType;
 
+    fn set_stubbing_enabled(&mut self, stubbing_enabled: bool);
+    fn get_stubbing_enabled(&self) -> bool;
+
     #[cfg(feature = "unsound_experiments")]
     fn get_unsound_experiments(&self) -> Arc<Mutex<UnsoundExperiments>>;
 }
@@ -61,23 +63,15 @@ pub trait UserInput {
 pub struct QueryDb {
     check_assertion_reachability: AtomicBool,
     emit_vtable_restrictions: AtomicBool,
-    symbol_table_passes: Vec<String>,
     json_pretty_print: AtomicBool,
     ignore_global_asm: AtomicBool,
     reachability_analysis: Mutex<ReachabilityType>,
+    stubbing_enabled: bool,
     #[cfg(feature = "unsound_experiments")]
     unsound_experiments: Arc<Mutex<UnsoundExperiments>>,
 }
 
 impl UserInput for QueryDb {
-    fn set_symbol_table_passes(&mut self, passes: Vec<String>) {
-        self.symbol_table_passes = passes;
-    }
-
-    fn get_symbol_table_passes(&self) -> Vec<String> {
-        self.symbol_table_passes.clone()
-    }
-
     fn set_emit_vtable_restrictions(&mut self, restrictions: bool) {
         self.emit_vtable_restrictions.store(restrictions, Ordering::Relaxed);
     }
@@ -116,6 +110,14 @@ impl UserInput for QueryDb {
 
     fn get_reachability_analysis(&self) -> ReachabilityType {
         *self.reachability_analysis.lock().unwrap()
+    }
+
+    fn set_stubbing_enabled(&mut self, stubbing_enabled: bool) {
+        self.stubbing_enabled = stubbing_enabled;
+    }
+
+    fn get_stubbing_enabled(&self) -> bool {
+        self.stubbing_enabled
     }
 
     #[cfg(feature = "unsound_experiments")]
