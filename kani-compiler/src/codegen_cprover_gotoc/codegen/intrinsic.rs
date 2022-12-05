@@ -372,8 +372,9 @@ impl<'tcx> GotocCtx<'tcx> {
 
         if let Some(stripped) = intrinsic.strip_prefix("simd_shuffle") {
             let n: u64 = if stripped.is_empty() {
-                // Make sure this is actually an array, since typeck only checks the length-suffixed
-                // version of this intrinsic.
+                // Make sure that this is an array, since only the
+                // length-suffixed version of `simd_shuffle` (e.g.,
+                // `simd_shuffle4`) is type-checked
                 match farg_types[2].kind() {
                     ty::Array(ty, len) if matches!(ty.kind(), ty::Uint(ty::UintTy::U32)) => len
                         .try_eval_usize(self.tcx, ty::ParamEnv::reveal_all())
@@ -382,7 +383,8 @@ impl<'tcx> GotocCtx<'tcx> {
                                 span.unwrap(),
                                 "could not evaluate shuffle index array length",
                             );
-                            panic!();
+                            // Return a dummy value
+                            u64::MIN
                         }),
                     _ => {
                         let err_msg = format!(
@@ -390,7 +392,8 @@ impl<'tcx> GotocCtx<'tcx> {
                             farg_types[2]
                         );
                         self.tcx.sess.span_err(span.unwrap(), err_msg);
-                        panic!()
+                        // Return a dummy value
+                        u64::MIN
                     }
                 }
             } else {
@@ -399,9 +402,11 @@ impl<'tcx> GotocCtx<'tcx> {
                         span.unwrap(),
                         "bad `simd_shuffle` instruction only caught in codegen?",
                     );
-                    panic!()
+                    // Return a dummy value
+                    u64::MIN
                 })
             };
+            self.tcx.sess.abort_if_errors();
             return self.codegen_intrinsic_simd_shuffle(
                 fargs,
                 p,
@@ -1531,8 +1536,22 @@ impl<'tcx> GotocCtx<'tcx> {
         Stmt::block(vec![expr_place, check_stmt], loc)
     }
 
-    /// simd_shuffle constructs a new vector from the elements of two input vectors,
-    /// choosing values according to an input array of indexes.
+    /// `simd_shuffle` constructs a new vector from the elements of two input
+    /// vectors, choosing values according to an input array of indexes.
+    ///
+    /// We check that:
+    ///  1. The return type length is equal to the expected length (`n`) of the
+    ///     `simd_shuffle` operation.
+    ///  2. The return type's subtype is equal to the vector's subtype (i.e.,
+    ///     the 1st argument). Both input vectors are guaranteed to be of the
+    ///     same type when they get here due to the `simd_shuffle` definition.
+    ///
+    /// In the case of some SIMD intrinsics, the backend is responsible for
+    /// performing this and similar checks, and erroring out if it proceeds.
+    ///
+    /// TODO: Check that `indexes` contains constant values which are within the
+    /// expected bounds. See
+    /// <https://github.com/model-checking/kani/issues/1960> for more details.
     ///
     /// This code mimics CBMC's `shuffle_vector_exprt::lower()` here:
     /// <https://github.com/diffblue/cbmc/blob/develop/src/ansi-c/c_expr.cpp>
@@ -1557,20 +1576,20 @@ impl<'tcx> GotocCtx<'tcx> {
         // [u32; n]: translated wrapped in a struct
         let indexes = fargs.remove(0);
 
-        let (_, in_elem) = rust_arg_types[0].simd_size_and_type(self.tcx);
-        let (out_len, out_ty) = rust_ret_type.simd_size_and_type(self.tcx);
-        if out_len != n {
+        let (_, vec_subtype) = rust_arg_types[0].simd_size_and_type(self.tcx);
+        let (ret_type_len, ret_type_subtype) = rust_ret_type.simd_size_and_type(self.tcx);
+        if ret_type_len != n {
             let err_msg = format!(
                 "expected return type of length {}, found `{}` with length {}",
-                n, rust_ret_type, out_len
+                n, rust_ret_type, ret_type_len
             );
             self.tcx.sess.span_err(span.unwrap(), err_msg);
         }
-        if in_elem != out_ty {
+        if vec_subtype != ret_type_subtype {
             let err_msg = format!(
                 "expected return element type `{}` (element of input `{}`), \
                  found `{}` with element type `{}`",
-                in_elem, rust_arg_types[0], rust_ret_type, out_ty
+                vec_subtype, rust_arg_types[0], rust_ret_type, ret_type_subtype
             );
             self.tcx.sess.span_err(span.unwrap(), err_msg);
         }
