@@ -207,11 +207,11 @@ cargo build-dev
 
 In order to enable logs, you can just define the `RUSTC_LOG` variable, as documented here: <https://rustc-dev-guide.rust-lang.org/tracing.html>.
 
-Note that depending on the level of logs you would like to enable (debug and trace are not enabled by default), you'll need to build your own version of `rustc` as described above. For logs that are related to `kani-compiler` code, use `KANI_LOG` variable.
+Note that, depending on the level of logs you would like to get (debug and trace are not enabled by default), you'll need to build your own version of `rustc` as described above. For logs that are related to `kani-compiler` code, use the `KANI_LOG` variable.
 
 ## Debugging type layout
 
-In order to print the type layout computed by the rust compiler, you can pass the following flag to rustc: `-Zprint-type-sizes`. This flag can be passed to `kani` or `cargo kani` by setting the `RUSTFLAG` environment variable. 
+In order to print the type layout computed by the Rust compiler, you can pass the following flag to `rustc`: `-Zprint-type-sizes`. This flag can be passed to `kani` or `cargo kani` by setting the `RUSTFLAG` environment variable.
 
 ```
 RUSTFLAGS=-Zprint-type-sizes kani test.rs
@@ -228,10 +228,13 @@ print-type-size     variant `None`: 0 bytes
 
 ## Inspecting the MIR
 
-You can easily visualize the MIR that is used as an input to code generation by setting the rust flag `-emit mir`. I.e.:
+You can easily visualize the MIR that is used as an input to code generation by setting the Rust flag `-emit mir`. I.e.:
 
 ```
 RUSTFLAGS=--emit=mir kani test.rs
 ```
 
-The compiler will generate a few files, but I recommend looking at the files that have the following suffix: `kani.mir`. Those files will include the entire MIR collected by our reachability analysis. It will include functions from all dependencies, including `std` library. One limitation is that we dump one copy of each specialization of the MIR function, even though the MIR body itself doesn't change.
+The compiler will generate a few files, but we recommend looking at the files that have the following suffix: `kani.mir`.
+Those files will include the entire MIR collected by our reachability analysis.
+It will include functions from all dependencies, including the `std` library.
+One limitation is that we dump one copy of each specialization of the MIR function, even though the MIR body itself doesn't change.
