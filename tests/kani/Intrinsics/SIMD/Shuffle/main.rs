@@ -17,12 +17,21 @@ pub struct i64x2(i64, i64);
 pub struct i64x4(i64, i64, i64, i64);
 
 extern "platform-intrinsic" {
-    fn simd_shuffle2<T, U>(x: T, y: T, idx: [u32; 2]) -> U;
     fn simd_shuffle4<T, U>(x: T, y: T, idx: [u32; 4]) -> U;
+    fn simd_shuffle2<T, U>(x: T, y: T, idx: [u32; 2]) -> U;
+    fn simd_shuffle<T, U, V>(x: T, y: T, idx: U) -> V;
 }
 
 #[kani::proof]
 fn main() {
+    {
+        let y = i64x2(0, 1);
+        let z = i64x2(1, 2);
+        const I: [u32; 2] = [1, 2];
+        let x: i64x2 = unsafe { simd_shuffle(y, z, I) };
+        assert!(x.0 == 1);
+        assert!(x.1 == 1);
+    }
     {
         let y = i64x2(0, 1);
         let z = i64x2(1, 2);
