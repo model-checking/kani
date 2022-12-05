@@ -402,7 +402,15 @@ impl<'tcx> GotocCtx<'tcx> {
                     panic!()
                 })
             };
-            return self.codegen_intrinsic_simd_shuffle(fargs, p, cbmc_ret_ty, farg_types, ret_ty, n, span);
+            return self.codegen_intrinsic_simd_shuffle(
+                fargs,
+                p,
+                cbmc_ret_ty,
+                farg_types,
+                ret_ty,
+                n,
+                span,
+            );
         }
 
         match intrinsic {
@@ -1562,14 +1570,11 @@ impl<'tcx> GotocCtx<'tcx> {
             let err_msg = format!(
                 "expected return element type `{}` (element of input `{}`), \
                  found `{}` with element type `{}`",
-                 in_elem,
-                 rust_arg_types[0],
-                 rust_ret_type,
-                 out_ty
+                in_elem, rust_arg_types[0], rust_ret_type, out_ty
             );
             self.tcx.sess.span_err(span.unwrap(), err_msg);
         }
-        
+
         // An unsigned type here causes an invariant violation in CBMC.
         // Issue: https://github.com/diffblue/cbmc/issues/6298
         let st_rep = Type::ssize_t();
@@ -1578,9 +1583,9 @@ impl<'tcx> GotocCtx<'tcx> {
         // P = indexes.expanded_map(v -> if v < N then vec1[v] else vec2[v-N])
         let elems = (0..n)
             .map(|i| {
-                let i = Expr::int_constant(i, st_rep.clone());
+                let idx = Expr::int_constant(i, st_rep.clone());
                 // Must not use `indexes.index(i)` directly, because codegen wraps arrays in struct
-                let v = self.codegen_idx_array(indexes.clone(), i).cast_to(st_rep.clone());
+                let v = self.codegen_idx_array(indexes.clone(), idx).cast_to(st_rep.clone());
                 let cond = v.clone().lt(n_rep.clone());
                 let t = vec1.clone().index(v.clone());
                 let e = vec2.clone().index(v.sub(n_rep.clone()));
