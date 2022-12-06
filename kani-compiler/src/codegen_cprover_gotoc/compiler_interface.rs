@@ -41,6 +41,7 @@ use std::iter::FromIterator;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::rc::Rc;
+use std::time::Instant;
 use tracing::{debug, error, info, warn};
 
 #[derive(Clone)]
@@ -82,58 +83,66 @@ impl CodegenBackend for GotocCodegenBackend {
         check_options(tcx.sess, need_metadata_module);
         check_crate_items(&gcx);
 
-        let items = collect_codegen_items(&gcx);
+        let items = with_timer(|| collect_codegen_items(&gcx), "reachability analysis");
         if items.is_empty() {
             // There's nothing to do.
             return codegen_results(tcx, rustc_metadata, gcx.symbol_table.machine_model());
         }
         dump_mir_items(tcx, &items);
 
-        // we first declare all items
-        for item in &items {
-            match *item {
-                MonoItem::Fn(instance) => {
-                    gcx.call_with_panic_debug_info(
-                        |ctx| ctx.declare_function(instance),
-                        format!("declare_function: {}", gcx.readable_instance_name(instance)),
-                        instance.def_id(),
-                    );
+        with_timer(
+            || {
+                // we first declare all items
+                for item in &items {
+                    match *item {
+                        MonoItem::Fn(instance) => {
+                            gcx.call_with_panic_debug_info(
+                                |ctx| ctx.declare_function(instance),
+                                format!(
+                                    "declare_function: {}",
+                                    gcx.readable_instance_name(instance)
+                                ),
+                                instance.def_id(),
+                            );
+                        }
+                        MonoItem::Static(def_id) => {
+                            gcx.call_with_panic_debug_info(
+                                |ctx| ctx.declare_static(def_id, *item),
+                                format!("declare_static: {def_id:?}"),
+                                def_id,
+                            );
+                        }
+                        MonoItem::GlobalAsm(_) => {} // Ignore this. We have already warned about it.
+                    }
                 }
-                MonoItem::Static(def_id) => {
-                    gcx.call_with_panic_debug_info(
-                        |ctx| ctx.declare_static(def_id, *item),
-                        format!("declare_static: {def_id:?}"),
-                        def_id,
-                    );
-                }
-                MonoItem::GlobalAsm(_) => {} // Ignore this. We have already warned about it.
-            }
-        }
 
-        // then we move on to codegen
-        for item in items {
-            match item {
-                MonoItem::Fn(instance) => {
-                    gcx.call_with_panic_debug_info(
-                        |ctx| ctx.codegen_function(instance),
-                        format!(
-                            "codegen_function: {}\n{}",
-                            gcx.readable_instance_name(instance),
-                            gcx.symbol_name(instance)
-                        ),
-                        instance.def_id(),
-                    );
+                // then we move on to codegen
+                for item in items {
+                    match item {
+                        MonoItem::Fn(instance) => {
+                            gcx.call_with_panic_debug_info(
+                                |ctx| ctx.codegen_function(instance),
+                                format!(
+                                    "codegen_function: {}\n{}",
+                                    gcx.readable_instance_name(instance),
+                                    gcx.symbol_name(instance)
+                                ),
+                                instance.def_id(),
+                            );
+                        }
+                        MonoItem::Static(def_id) => {
+                            gcx.call_with_panic_debug_info(
+                                |ctx| ctx.codegen_static(def_id, item),
+                                format!("codegen_static: {def_id:?}"),
+                                def_id,
+                            );
+                        }
+                        MonoItem::GlobalAsm(_) => {} // We have already warned above
+                    }
                 }
-                MonoItem::Static(def_id) => {
-                    gcx.call_with_panic_debug_info(
-                        |ctx| ctx.codegen_static(def_id, item),
-                        format!("codegen_static: {def_id:?}"),
-                        def_id,
-                    );
-                }
-                MonoItem::GlobalAsm(_) => {} // We have already warned above
-            }
-        }
+            },
+            "codegen",
+        );
 
         // Print compilation report.
         print_report(&gcx, tcx);
@@ -403,9 +412,13 @@ fn symbol_table_to_gotoc(tcx: &TyCtxt, file: &Path) -> PathBuf {
     cmd.args(args);
     info!("[Kani] Running: `{:?} {:?}`", cmd.get_program(), cmd.get_args());
 
-    let result = cmd
-        .output()
-        .expect(&format!("Failed to generate goto model for {}", input_filename.display()));
+    let result = with_timer(
+        || {
+            cmd.output()
+                .expect(&format!("Failed to generate goto model for {}", input_filename.display()))
+        },
+        "symtab2gb",
+    );
     if !result.status.success() {
         error!("Symtab error output:\n{}", String::from_utf8_lossy(&result.stderr));
         error!("Symtab output:\n{}", String::from_utf8_lossy(&result.stdout));
@@ -489,4 +502,15 @@ where
     } else {
         serde_json::to_writer(writer, &source).unwrap();
     }
+}
+
+pub fn with_timer<T, F>(func: F, description: &str) -> T
+where
+    F: FnOnce() -> T,
+{
+    let start = Instant::now();
+    let ret = func();
+    let elapsed = start.elapsed();
+    info!("Finished {description} in {}s", elapsed.as_secs_f32());
+    ret
 }
