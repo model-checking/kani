@@ -9,11 +9,6 @@
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct i32x2(i32, i32);
 
-#[repr(simd)]
-#[allow(non_camel_case_types)]
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub struct u32x2(u32, u32);
-
 extern "platform-intrinsic" {
     fn simd_shl<T>(x: T, y: T) -> T;
 }
