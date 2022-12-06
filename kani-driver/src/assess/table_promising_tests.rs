@@ -1,0 +1,84 @@
+// Copyright Kani Contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use std::cmp::Ordering;
+
+use comfy_table::Table;
+
+use crate::harness_runner::HarnessResult;
+
+use super::table_builder::{ColumnType, RenderableTableRow, TableBuilder, TableRow};
+
+/// Reports the "test harnesses" most likely to be easily turned into proof harnesses.
+///
+/// This presently is very naive and just reports successful harnesses, however
+/// there is significant potential here to make use of improved heuristics,
+/// and to find a way to *sort* these harnesses.
+///
+/// Example:
+/// ```text
+/// =============================================================================
+///  Candidate for proof harness                           | Location
+/// -------------------------------------------------------+---------------------
+///  float::tests::f64_edge_cases                          | src/float.rs:226
+///  float::tests::f32_edge_cases                          | src/float.rs:184
+///  integer::tests::test_integers                         | src/integer.rs:171
+///  other::tests::test_misc                               | src/other.rs:284
+/// =============================================================================
+/// ```
+pub(crate) fn build(results: &[HarnessResult]) -> Table {
+    let mut builder = TableBuilder::new();
+
+    for r in results {
+        // For now we're just reporting "successful" harnesses as candidates.
+        // In the future this heuristic should be expanded. More data is required to do this, however.
+        if r.result.failed_properties().is_empty() {
+            // The functions we extract are actually the closures inside the test harness macro expansion
+            // Strip that closure suffix, so we have better names:
+            let name = r.harness.pretty_name.trim_end_matches("::{closure#0}").to_string();
+            // Location in a format "clickable" in e.g. IDE terminals
+            let location = format!("{}:{}", r.harness.original_file, r.harness.original_start_line);
+
+            builder.add(PromisingTestsTableRow { name, location });
+        }
+    }
+
+    builder.render()
+}
+
+pub struct PromisingTestsTableRow {
+    pub name: String,
+    pub location: String,
+}
+
+impl TableRow for PromisingTestsTableRow {
+    type Key = String;
+
+    fn key(&self) -> Self::Key {
+        self.name.clone()
+    }
+
+    fn merge(&mut self, _new: Self) {
+        unreachable!("This table should never have duplicate keys")
+    }
+
+    fn compare(&self, right: &Self) -> Ordering {
+        // In the future this should use heuristics, but for now we have no really desired order
+        self.name.cmp(&right.name)
+    }
+}
+
+impl RenderableTableRow for PromisingTestsTableRow {
+    fn headers() -> Vec<&'static str> {
+        vec!["Candidate for proof harness", "Location"]
+    }
+
+    fn columns() -> Vec<ColumnType> {
+        use ColumnType::*;
+        vec![Text, Text]
+    }
+
+    fn row(&self) -> Vec<String> {
+        vec![self.name.to_owned(), self.location.to_owned()]
+    }
+}
