@@ -606,15 +606,15 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             "simd_or" => codegen_intrinsic_binop!(bitor),
             "simd_rem" => unstable_codegen!(codegen_intrinsic_binop!(rem)),
-            "simd_shl" => unstable_codegen!(codegen_intrinsic_binop!(shl)),
+            // TODO: `simd_shl` and `simd_shr` don't check overflow cases.
+            // <https://github.com/model-checking/kani/issues/1963>
+            "simd_shl" => codegen_intrinsic_binop!(shl),
             "simd_shr" => {
-                // Remove this attribute once unstable_codegen! is removed.
-                #[allow(clippy::if_same_then_else)]
                 if fargs[0].typ().base_type().unwrap().is_signed(self.symbol_table.machine_model())
                 {
-                    unstable_codegen!(codegen_intrinsic_binop!(ashr))
+                    codegen_intrinsic_binop!(ashr)
                 } else {
-                    unstable_codegen!(codegen_intrinsic_binop!(lshr))
+                    codegen_intrinsic_binop!(lshr)
                 }
             }
             // "simd_shuffle#" => handled in an `if` preceding this match
