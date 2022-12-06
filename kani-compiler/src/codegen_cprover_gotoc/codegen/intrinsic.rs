@@ -371,42 +371,7 @@ impl<'tcx> GotocCtx<'tcx> {
         }
 
         if let Some(stripped) = intrinsic.strip_prefix("simd_shuffle") {
-            let n: u64 = if stripped.is_empty() {
-                // Make sure that this is an array, since only the
-                // length-suffixed version of `simd_shuffle` (e.g.,
-                // `simd_shuffle4`) is type-checked
-                match farg_types[2].kind() {
-                    ty::Array(ty, len) if matches!(ty.kind(), ty::Uint(ty::UintTy::U32)) => len
-                        .try_eval_usize(self.tcx, ty::ParamEnv::reveal_all())
-                        .unwrap_or_else(|| {
-                            self.tcx.sess.span_err(
-                                span.unwrap(),
-                                "could not evaluate shuffle index array length",
-                            );
-                            // Return a dummy value
-                            u64::MIN
-                        }),
-                    _ => {
-                        let err_msg = format!(
-                            "simd_shuffle index must be an array of `u32`, got `{}`",
-                            farg_types[2]
-                        );
-                        self.tcx.sess.span_err(span.unwrap(), err_msg);
-                        // Return a dummy value
-                        u64::MIN
-                    }
-                }
-            } else {
-                stripped.parse().unwrap_or_else(|_| {
-                    self.tcx.sess.span_err(
-                        span.unwrap(),
-                        "bad `simd_shuffle` instruction only caught in codegen?",
-                    );
-                    // Return a dummy value
-                    u64::MIN
-                })
-            };
-            self.tcx.sess.abort_if_errors();
+            let n: u64 = self.simd_shuffle_length(stripped, farg_types, span);
             return self.codegen_intrinsic_simd_shuffle(fargs, p, farg_types, ret_ty, n, span);
         }
 
@@ -1246,6 +1211,57 @@ impl<'tcx> GotocCtx<'tcx> {
             VTableInfo::Align => vtable_obj.member(typ::VTABLE_ALIGN_FIELD, &self.symbol_table),
         };
         self.codegen_expr_to_place(place, expr)
+    }
+
+    /// Gets the length for a `simd_shuffle*` instance, which comes in two
+    /// forms:
+    ///  1. `simd_shuffleN`, where `N` is a number which is part of the name
+    ///     (e.g., `simd_shuffle4`).
+    ///  2. `simd_shuffle`, where `N` isn't specified and must be computed from
+    ///     the length of the indexes array (the third argument).
+    fn simd_shuffle_length(
+        &mut self,
+        stripped: &str,
+        farg_types: &[Ty<'tcx>],
+        span: Option<Span>,
+    ) -> u64 {
+        let n = if stripped.is_empty() {
+            // Make sure that this is an array, since only the
+            // length-suffixed version of `simd_shuffle` (e.g.,
+            // `simd_shuffle4`) is type-checked
+            match farg_types[2].kind() {
+                ty::Array(ty, len) if matches!(ty.kind(), ty::Uint(ty::UintTy::U32)) => {
+                    len.try_eval_usize(self.tcx, ty::ParamEnv::reveal_all()).unwrap_or_else(|| {
+                        self.tcx.sess.span_err(
+                            span.unwrap(),
+                            "could not evaluate shuffle index array length",
+                        );
+                        // Return a dummy value
+                        u64::MIN
+                    })
+                }
+                _ => {
+                    let err_msg = format!(
+                        "simd_shuffle index must be an array of `u32`, got `{}`",
+                        farg_types[2]
+                    );
+                    self.tcx.sess.span_err(span.unwrap(), err_msg);
+                    // Return a dummy value
+                    u64::MIN
+                }
+            }
+        } else {
+            stripped.parse().unwrap_or_else(|_| {
+                self.tcx.sess.span_err(
+                    span.unwrap(),
+                    "bad `simd_shuffle` instruction only caught in codegen?",
+                );
+                // Return a dummy value
+                u64::MIN
+            })
+        };
+        self.tcx.sess.abort_if_errors();
+        n
     }
 
     /// This function computes the size and alignment of a dynamically-sized type.
