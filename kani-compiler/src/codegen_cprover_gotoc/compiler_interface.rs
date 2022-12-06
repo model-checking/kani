@@ -41,7 +41,7 @@ use std::iter::FromIterator;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::rc::Rc;
-use tracing::{debug, error, warn};
+use tracing::{debug, error, info, warn};
 
 #[derive(Clone)]
 pub struct GotocCodegenBackend {
@@ -401,7 +401,7 @@ fn symbol_table_to_gotoc(tcx: &TyCtxt, file: &Path) -> PathBuf {
     // TODO get symtab2gb path from self
     let mut cmd = Command::new("symtab2gb");
     cmd.args(args);
-    debug!("calling: `{:?} {:?}`", cmd.get_program(), cmd.get_args());
+    info!("[Kani] Running: `{:?} {:?}`", cmd.get_program(), cmd.get_args());
 
     let result = cmd
         .output()
