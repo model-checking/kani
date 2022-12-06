@@ -28,7 +28,9 @@ fn test_simd_shl() {
     kani::assume(shift >= 0);
     kani::assume(shift < 32);
     let shifts = i32x2(shift, shift);
-    let _result = unsafe { simd_shl(values, shifts) };
+    let normal_result = value << shift;
+    let simd_result = unsafe { simd_shl(values, shifts) };
+    assert_eq!(normal_result, simd_result.0);
 }
 
 #[kani::proof]
@@ -39,17 +41,19 @@ fn test_simd_shr_signed() {
     kani::assume(shift >= 0);
     kani::assume(shift < 32);
     let shifts = i32x2(shift, shift);
-    let _result = unsafe { simd_shr(values, shifts) };
+    let normal_result = value >> shift;
+    let simd_result = unsafe { simd_shr(values, shifts) };
+    assert_eq!(normal_result, simd_result.0);
 }
 
 #[kani::proof]
 fn test_simd_shr_unsigned() {
     let value = kani::any();
-    kani::assume(value >= 0);
     let values = u32x2(value, value);
     let shift = kani::any();
-    kani::assume(shift >= 0);
     kani::assume(shift < 32);
     let shifts = u32x2(shift, shift);
-    let _result = unsafe { simd_shr(values, shifts) };
+    let normal_result = value >> shift;
+    let simd_result = unsafe { simd_shr(values, shifts) };
+    assert_eq!(normal_result, simd_result.0);
 }
