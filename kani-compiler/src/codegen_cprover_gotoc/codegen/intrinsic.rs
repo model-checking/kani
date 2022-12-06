@@ -371,6 +371,7 @@ impl<'tcx> GotocCtx<'tcx> {
         }
 
         if let Some(stripped) = intrinsic.strip_prefix("simd_shuffle") {
+            assert!(fargs.len() == 3, "`simd_shuffle` had unexpected arguments {fargs:?}");
             let n: u64 = self.simd_shuffle_length(stripped, farg_types, span);
             return self.codegen_intrinsic_simd_shuffle(fargs, p, farg_types, ret_ty, n, span);
         }
@@ -1576,7 +1577,6 @@ impl<'tcx> GotocCtx<'tcx> {
         n: u64,
         span: Option<Span>,
     ) -> Stmt {
-        assert!(fargs.len() == 3, "simd_shuffle had unexpected arguments {fargs:?}");
         // vector, size n: translated as vector types which cbmc treats as arrays
         let vec1 = fargs.remove(0);
         let vec2 = fargs.remove(0);
