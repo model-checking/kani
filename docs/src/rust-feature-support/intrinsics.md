@@ -256,7 +256,7 @@ Name | Support | Notes |
 --- | --- | --- |
 `simd_add` | Yes | |
 `simd_and`  | Yes | |
-`simd_div`  | No | |
+`simd_div`  | Yes | Doesn't check for overflow cases [#1970](https://github.com/model-checking/kani/issues/1970) |
 `simd_eq`  | Yes | |
 `simd_extract`  | No | |
 `simd_ge`  | Yes | |
@@ -267,9 +267,9 @@ Name | Support | Notes |
 `simd_mul`  | Yes | |
 `simd_ne`  | Yes | |
 `simd_or`  | Yes | |
-`simd_rem`  | No | |
-`simd_shl`  | Yes | Doesn't check for overflow cases (#1963)[https://github.com/model-checking/kani/issues/1963] |
-`simd_shr`  | Yes | Doesn't check for overflow cases (#1963)[https://github.com/model-checking/kani/issues/1963] |
+`simd_rem`  | Yes | Doesn't check for overflow cases [#1970](https://github.com/model-checking/kani/issues/1970) |
+`simd_shl`  | Yes | Doesn't check for overflow cases [#1963](https://github.com/model-checking/kani/issues/1963) |
+`simd_shr`  | Yes | Doesn't check for overflow cases [#1963](https://github.com/model-checking/kani/issues/1963) |
 `simd_shuffle*`  | Yes | |
 `simd_sub`  | Yes | |
 `simd_xor`  | Yes | |
