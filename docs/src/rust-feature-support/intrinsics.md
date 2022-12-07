@@ -268,8 +268,8 @@ Name | Support | Notes |
 `simd_ne`  | Yes | |
 `simd_or`  | Yes | |
 `simd_rem`  | No | |
-`simd_shl`  | No | |
-`simd_shr`  | No | |
+`simd_shl`  | Yes | Doesn't check for overflow cases (#1963)[https://github.com/model-checking/kani/issues/1963] |
+`simd_shr`  | Yes | Doesn't check for overflow cases (#1963)[https://github.com/model-checking/kani/issues/1963] |
 `simd_shuffle*`  | No | |
 `simd_sub`  | Yes | |
 `simd_xor`  | Yes | |
