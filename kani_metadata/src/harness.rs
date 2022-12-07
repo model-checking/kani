@@ -29,7 +29,7 @@ impl HarnessMetadata {
     /// get the unqualifed (i.e. without ::) harness name. If the
     /// harness name contains ::, then we use rightmost name..
     pub fn get_harness_name_unqualified(&self) -> &str {
-        const PATH_SEPARATOR: &'static str = "::";
+        const PATH_SEPARATOR: &str = "::";
         if let Some(last_separator) = self.pretty_name.rfind(PATH_SEPARATOR) {
             let name_start = last_separator + PATH_SEPARATOR.len();
             &self.pretty_name[name_start..]
