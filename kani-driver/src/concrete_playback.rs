@@ -239,6 +239,7 @@ fn format_unit_test(
         .collect::<Vec<String>>()
         .join(",\n");
     let harness_name = &harness_metadata.mangled_name;
+    let function_sub_name = &harness_metadata.pretty_name.replace("::", "_");
     let pretty_name = &harness_metadata.pretty_name;
 
     // Hash the generated det val string along with the proof harness name.
@@ -247,7 +248,7 @@ fn format_unit_test(
     vecs_as_str.hash(&mut hasher);
     let hash = hasher.finish();
 
-    let concrete_playback_func_name = format!("kani_concrete_playback_{pretty_name}_{hash}");
+    let concrete_playback_func_name = format!("kani_concrete_playback_{function_sub_name}_{hash}");
 
     let randomize_layout_message = match randomize_layout_seed {
         None => String::new(),
