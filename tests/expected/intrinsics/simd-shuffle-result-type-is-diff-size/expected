@@ -1,0 +1,2 @@
+expected return type of length 4, found `i64x2` with length 2
+error: aborting due to previous error
