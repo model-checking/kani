@@ -1,6 +1,11 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+//! This test checks if Kani can handle multiple harnesses in
+//! different directories (first, second, main) that share the same
+//! harness name (check). Previously, this caused Kani to crash. See
+//! issue #661 for details.
+
 mod first {
     #[kani::proof]
     fn check() {
