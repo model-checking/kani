@@ -5,6 +5,7 @@
 use semver::{BuildMetadata, Prerelease, Version};
 
 #[kani::proof]
+#[kani::unwind(2)]
 fn check_version() {
     let next_major: u64 = kani::any();
     let next_minor: u64 = kani::any();
