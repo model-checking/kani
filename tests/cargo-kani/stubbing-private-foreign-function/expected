@@ -1,3 +1,3 @@
-error: Unable to find stub: other_crate::pub_mod::priv_mod::the_answer
-error: Unable to find stub: other_crate::the_answer
+error: unable to find stub: `other_crate::pub_mod::priv_mod::the_answer`
+error: unable to find stub: `other_crate::the_answer`
 error: could not compile `foreign-function-stubbing` due to 2 previous errors

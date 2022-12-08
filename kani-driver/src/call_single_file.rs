@@ -2,12 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use anyhow::{Context, Result};
+use kani_metadata::ArtifactType::*;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::session::{KaniSession, ReachabilityMode};
-use crate::util::{alter_extension, guess_rlib_name};
+use crate::util::guess_rlib_name;
 
 /// The outputs of kani-compiler operating on a single Rust source file.
 pub struct SingleOutputs {
@@ -29,11 +30,11 @@ impl KaniSession {
     pub fn compile_single_rust_file(&self, file: &Path) -> Result<SingleOutputs> {
         let outdir =
             file.canonicalize()?.parent().context("File doesn't exist in a directory?")?.to_owned();
-        let symtab_filename = alter_extension(file, "symtab.json");
-        let goto_obj_filename = symtab_filename.with_extension("out");
-        let typemap_filename = alter_extension(file, "type_map.json");
-        let metadata_filename = alter_extension(file, "kani-metadata.json");
-        let restrictions_filename = alter_extension(file, "restrictions.json");
+        let symtab_filename = file.with_extension(SymTab);
+        let goto_obj_filename = file.with_extension(SymTabGoto);
+        let typemap_filename = file.with_extension(TypeMap);
+        let metadata_filename = file.with_extension(Metadata);
+        let restrictions_filename = file.with_extension(VTableRestriction);
         let rlib_filename = guess_rlib_name(file);
 
         self.record_temporary_files(&[

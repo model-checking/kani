@@ -2,7 +2,7 @@
 - **Feature Request Issue:** <https://github.com/model-checking/kani/issues/1695>
 - **RFC PR:** <https://github.com/model-checking/kani/pull/1723> 
 - **Status:** Under Review
-- **Version:** 0
+- **Version:** 1
 - **Proof-of-concept:** <https://github.com/aaronbembenek-aws/kani/tree/mir_transform>
 
 ## Summary
@@ -88,7 +88,7 @@ A good example of this is compositional reasoning: in some harnesses, we want to
 
 Users will specify stubs by attaching the `#[kani::stub(<original>, <replacement>)]` attribute to each harness function.
 The arguments `original` and `replacement` give the names of functions/methods.
-They will be resolved using Rust's standard name resolution rules; this includes supporting imports like `use foo::bar as baz`.
+They will be resolved using Rust's standard name resolution rules; this includes supporting imports like `use foo::bar as baz`, as well as imports of multiple versions of the same crate (in which case a name would resolve to a function/method in a particular version).
 The attribute may be specified multiple times per harness, so that multiple (non-conflicting) stub pairings are supported.
 
 For example, this code specifies that the function `mock_random` should be used in place of the function `rand::random` and the function `my_mod::bar` should be used in place of the function `my_mod::foo` for the harness `my_mod::my_harness`:
@@ -156,7 +156,48 @@ Given a set of `original`-`replacement` pairs, Kani will exit with an error if
 1. a specified `original` function/method does not exist;
 2. a specified `replacement` stub does not exist;
 3. the user specifies conflicting stubs for the same harness (e.g., if the same `original` function is mapped to multiple `replacement` functions); or
-4. the signature of the `replacement` stub is not compatible with the signature of the `original` function/method.
+4. the signature of the `replacement` stub is not compatible with the signature of the `original` function/method (see next section).
+
+### Stub compatibility and validation
+
+When considering whether a function/method can be replaced with some given stub, we want to allow some measure of flexibility, while also ensuring that we can provide the user with useful feedback if stubbing results in misformed code.
+We consider a stub and a function/method to be compatible if all the following conditions are met:
+
+- They have the same number of parameters.
+- They have the same return type.
+- Each parameter in the stub has the same type as the corresponding parameter in the original function/method.
+- The stub must have the same number of generic parameters as the original function/method.
+However, a generic parameter in the stub is allowed to have a different name than the corresponding parameter in the original function/method.
+For example, the stub `bar<A, B>(x: A, y: B) -> B` is considered to have a type compatible with the function `foo<S, T>(x: S, y: T) -> T`.
+- The bounds for each type parameter don't need to match; however, all calls to the original function must also satisfy the bounds of the stub.
+
+
+The final point is the most subtle.
+We do not require that a type parameter in the signature of the stub implements the same traits as the corresponding type parameter in the signature of the original function/method.
+However, Kani will reject a stub if a trait mismatch leads to a situation where a statically dispatched call to a trait method cannot be resolved during monomorphization.
+For example, this restriction rules out the following harness:
+```rust
+fn foo<T>(_x: T) -> bool {
+    false
+}
+
+trait DoIt {
+    fn do_it(&self) -> bool;
+}
+
+fn bar<T: DoIt>(x: T) -> bool {
+    x.do_it()
+}
+
+#[kani::proof]
+#[kani::stub(foo, bar)]
+fn harness() {
+    assert!(foo("hello"));
+}
+```
+The call to the trait method `DoIt::do_it` is unresolvable in the stub `bar` when the type parameter `T` is instantiated with the type `&str`.
+On the other hand, our approach provides some flexibility, such as allowing our earlier example of mocking randomization: both `rand::random` and `my_random` have the type `() -> T`, but in the first case `T` is restricted such that the type `Standard` implements `Distribution<T>`, whereas in the latter case `T` has to implement `kani::Arbitrary`.
+This trait mismatch is allowed because at this call site `T` is instantiated with `u32`, which implements `kani::Arbitrary`.
 
 ### Pedagogy
 
@@ -315,9 +356,6 @@ Furthermore, provided we supported stubbing across crate boundaries, it seems li
 ## Open questions
 
 - Would there ever be the need to stub a particular monomorphization of a function, as opposed to the polymorphic function?
-- What does it mean for the replacement function/method to be "compatible" with the original one?
-Requiring the replacement's type to be a subtype of the original type is likely stronger than what we want.
-For example, if the original function is polymorphic but monomorphized to only a single type, then it seems okay to replace it with a function that matches the monomorphized type.
 - How can the user verify that the stub is an abstraction of the original function/method?
 Sometimes it might be important that a stub is an overapproximation or underapproximation of the replaced code. 
 One possibility would be writing proofs about stubs (possibly relating their behavior to that of the code they are replacing).
@@ -332,6 +370,11 @@ One possibility would be writing proofs about stubs (possibly relating their beh
 - It would increase the utility of stubbing if we supported stubs for types.
 The source code annotations could likely stay the same, although the underlying technical approach performing these substitutions might be significantly more complex.
 - It would probably make sense to provide a library of common stubs for users, since many applications might want to stub the same functions and mock the same behaviors (e.g., `rand::random` can be replaced with a function returning `kani::any`).
+- We could provide special classes of stubs that are likely to come up in practice:
+    - `unreachable`: assert the function is unreachable.
+    - `havoc_locals`: return nondeterministic values and assign nondeterministic values to all mutable arguments.
+    - `havoc`: similar to `havoc_locals` but also assign nondeterministic values to all mutable global variables.
+    - `uninterpret`: treat function as an uninterpreted function.
 - How can we provide a good user experience for accessing private fields of `self` in methods?
 It is possible to do so using `std::mem::transmute` (see below); this is clunky and error-prone, and it would be good to provide better support for users.
 

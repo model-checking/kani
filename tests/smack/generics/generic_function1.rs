@@ -34,6 +34,7 @@ fn swapem<T, U: S<T>>(s: U) -> U {
     s.swap_items()
 }
 
+#[kani::proof]
 pub fn main() {
     let x2 = kani::any();
     let y2 = kani::any();

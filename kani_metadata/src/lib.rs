@@ -1,17 +1,21 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-mod harness;
-mod vtable;
+use serde::{Deserialize, Serialize};
 
+pub use artifact::ArtifactType;
 pub use harness::*;
 pub use vtable::*;
 
-use serde::{Deserialize, Serialize};
+pub mod artifact;
+mod harness;
+mod vtable;
 
 /// The structure of `.kani-metadata.json` files, which are emitted for each crate
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KaniMetadata {
+    /// The crate name from which this metadata was extracted.
+    pub crate_name: String,
     /// The proof harnesses (`#[kani::proof]`) found in this crate.
     pub proof_harnesses: Vec<HarnessMetadata>,
     /// The features found in this crate that Kani does not support.
