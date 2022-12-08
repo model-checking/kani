@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! Check if we can codegen drop for unsized struct.
+//! Test that cover fix for https://github.com/model-checking/kani/issues/1072.
 use std::rc::Rc;
 
 pub trait DummyTrait {}
