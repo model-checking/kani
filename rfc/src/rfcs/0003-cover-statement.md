@@ -27,13 +27,13 @@ kani::cover!(v.len() == 5);
 ```
 This is typically used to ensure that verified checks are not passing _vacuously_, e.g. due to overconstrained pre-conditions.
 
-The special case of verifying that a certain line of code is reachable can be achieved using `kani::cover!(true)`, e.g.
+The special case of verifying that a certain line of code is reachable can be achieved using `kani::cover!()` (which is equivalent to `cover!(true)`), e.g.
 ```rust
 match x {
     val_1 => ...,
     val_2 => ...,
     ...
-    val_i => kani::cover!(true), // verify that `x` can take the value `val_i`
+    val_i => kani::cover!(), // verify that `x` can take the value `val_i`
 }
 ```
 
