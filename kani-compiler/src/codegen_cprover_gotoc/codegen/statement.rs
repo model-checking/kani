@@ -4,6 +4,7 @@ use super::typ::TypeExt;
 use super::typ::FN_RETURN_VOID_VAR_NAME;
 use super::PropertyClass;
 use crate::codegen_cprover_gotoc::codegen::typ::pointee_type;
+use crate::codegen_cprover_gotoc::utils::dynamic_fat_ptr;
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::{Expr, Location, Stmt, Type};
@@ -310,8 +311,9 @@ impl<'tcx> GotocCtx<'tcx> {
     /// <https://github.com/model-checking/kani/issues/221>
     fn codegen_drop(&mut self, place: &Place<'tcx>, target: &BasicBlock, loc: Location) -> Stmt {
         let place_ty = self.place_ty(place);
-        debug!(?place_ty, "codegen_drop");
         let drop_instance = Instance::resolve_drop_in_place(self.tcx, place_ty);
+        debug!(?place_ty, ?drop_instance, "codegen_drop");
+        // Once upon a time we did a `hook_applies` check here, but we no longer seem to hook drops
         let drop_implementation = match drop_instance.def {
             InstanceDef::DropGlue(_, None) => {
                 // We can skip empty DropGlue functions
@@ -359,7 +361,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         }
                     }
                     _ => {
-                        // Non-virtual, direct drop call
+                        // Non-virtual, direct drop_in_place call
                         assert!(!matches!(drop_instance.def, InstanceDef::Virtual(_, _)));
 
                         let func = self.codegen_func_expr(drop_instance, None);
@@ -368,8 +370,11 @@ impl<'tcx> GotocCtx<'tcx> {
                             self.codegen_place(place)
                         );
                         let arg = if let Some(fat_ptr) = place.fat_ptr_goto_expr {
-                            // Drop takes the fat pointer if it exists
-                            fat_ptr
+                            // Generate a fat pointer to the place dereferenced
+                            let place_type = self.codegen_ty_ref(place_ty);
+                            let data = place.goto_expr.address_of();
+                            let vtable = fat_ptr.member("vtable", &self.symbol_table);
+                            dynamic_fat_ptr(place_type, data, vtable, &self.symbol_table)
                         } else {
                             place.goto_expr.address_of()
                         };
@@ -383,19 +388,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         // for calls that fail the typecheck.
                         // https://github.com/model-checking/kani/issues/426
                         // Unblocks: https://github.com/model-checking/kani/issues/435
-                        if Expr::typecheck_call(&func, &args) {
-                            func.call(args).as_stmt(loc)
-                        } else {
-                            self.codegen_unimplemented_stmt(
-                                format!(
-                                    "drop_in_place call for {}",
-                                    self.readable_instance_name(drop_instance)
-                                )
-                                .as_str(),
-                                loc,
-                                "https://github.com/model-checking/kani/issues/426",
-                            )
-                        }
+                        func.call(args).as_stmt(loc)
                     }
                 }
             }
