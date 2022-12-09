@@ -118,7 +118,7 @@ impl KaniSession {
             let harness = find_proof_harness(&name, all_harnesses)?;
             return Ok(vec![harness.clone()]);
         }
-        Ok(all_harnesses.iter().cloned().cloned().collect())
+        Ok(all_harnesses.iter().map(|md| (*md).clone()).collect())
     }
 }
 

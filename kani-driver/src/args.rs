@@ -72,7 +72,8 @@ pub struct KaniArgs {
         value_enum
     )]
     pub concrete_playback: Option<ConcretePlaybackMode>,
-    /// Keep temporary files generated throughout Kani process. This is a no-op for `cargo-kani`.
+    /// Keep temporary files generated throughout Kani process. This is already the default
+    /// behavior for `cargo-kani`.
     #[arg(long, hide_short_help = true)]
     pub keep_temps: bool,
 
@@ -372,14 +373,19 @@ impl CheckArgs {
 impl StandaloneArgs {
     pub fn validate(&self) {
         self.common_opts.validate::<Self>();
-        self.valid_input().unwrap();
+        self.valid_input()
+            .or_else(|e| -> Result<(), ()> { e.format(&mut Self::command()).exit() })
+            .unwrap()
     }
 
     fn valid_input(&self) -> Result<(), Error> {
         if !self.input.is_file() {
             Err(Error::raw(
                 ErrorKind::InvalidValue,
-                "Invalid argument: Input invalid. `{}` is not a regular file.",
+                &format!(
+                    "Invalid argument: Input invalid. `{}` is not a regular file.",
+                    self.input.display()
+                ),
             ))
         } else {
             Ok(())
@@ -554,6 +560,14 @@ mod tests {
         let args = vec!["kani", "file.rs", "--dry-run"];
         let err = StandaloneArgs::parse_from(&args).common_opts.validate_inner().unwrap_err();
         assert_eq!(err.kind(), ErrorKind::ValueValidation);
+    }
+
+    /// Kani should fail if the argument given is not a file.
+    #[test]
+    fn check_invalid_input_fails() {
+        let args = vec!["kani", "."];
+        let err = StandaloneArgs::parse_from(&args).valid_input().unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::InvalidValue);
     }
 
     #[test]

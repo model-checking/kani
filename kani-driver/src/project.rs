@@ -3,6 +3,21 @@
 //! This module defines the structure for a Kani project.
 //! The goal is to provide one project view independent on the build system (cargo / standalone
 //! rustc) and its configuration (e.g.: linker type).
+//!
+//! For `--legacy-linker` and `--function`, we still have a hack in-place that merges all the
+//! artifacts together. The reason is the following:
+//!  - For `--legacy-linker`, the compiler generate one goto file per crate, including each
+//!    target and all their dependencies. Ideally, the linking be done on a per-target base, but
+//!    this would require extra logic. Since we are planning to remove the `--legacy-linker` in
+//!    the near future, we decided not to invest time there.
+//!  - For `--function`, the compiler doesn't generate any metadata that indicates which
+//!    functions each goto model includes. Thus, we don't have an easy way to tell which goto
+//!    files are relevant for the function verification. This is also another flag that we don't
+//!    expect to stabilize, so we also opted to use the same hack of merging everything together.
+//!
+//! Note that for `--function` we also inject a mock `HarnessMetadata` to the project. This
+//! allows the rest of the driver to handle a function under verification the same way it handle
+//! other harnesses.
 
 use crate::metadata::{from_json, merge_kani_metadata, mock_proof_harness};
 use crate::session::KaniSession;
@@ -37,8 +52,14 @@ pub struct Project {
     pub outdir: PathBuf,
     /// The collection of artifacts kept as part of this project.
     artifacts: Vec<Artifact>,
-    /// A flag that allow us to provide a consistent behavior for `--legacy-linker`.
-    /// If this flag is true, there should only be up to one artifact of a
+    /// A flag that indicated whether all artifacts have been merged or not.
+    ///
+    /// This allow us to provide a consistent behavior for `--legacy-linker` and `--function`.
+    /// For these two options, we still merge all the artifacts together, so the
+    /// `merged_artifacts` flag will be set to `true`.
+    /// When this flag is `true`, there should only be up to one artifact of any given type.
+    /// When this flag is `false`, there may be multiple artifacts for any given type. However,
+    /// only up to one artifact for each
     merged_artifacts: bool,
 }
 
@@ -101,28 +122,31 @@ impl Deref for Artifact {
 }
 
 impl Artifact {
-    /// Create a new existing artifact.
-    /// This will fail if the artifact doesn't exist.
+    /// Create a new artifact if the given path exists.
     fn try_new(path: &Path, typ: ArtifactType) -> Result<Self> {
         Ok(Artifact { path: path.canonicalize()?, typ })
     }
 
+    /// Check if this artifact has the given type.
     fn has_type(&self, typ: ArtifactType) -> bool {
         self.typ == typ
     }
 }
 
+/// Generate the expected path to a cargo artifact and return it if the artifact actually exists.
 fn cargo_artifact(metadata: &Path, typ: ArtifactType) -> Option<Artifact> {
     let path = convert_type(metadata, Metadata, typ);
     if path.exists() { Artifact::try_new(&path, typ).ok() } else { None }
 }
 
+/// Store the KaniMetadata into a file.
 fn dump_metadata(metadata: &KaniMetadata, path: &Path) {
     let out_file = File::create(path).unwrap();
     let writer = BufWriter::new(out_file);
     serde_json::to_writer_pretty(writer, &metadata).unwrap();
 }
 
+/// Generate a project using `cargo`.
 pub fn cargo_project(session: &KaniSession) -> Result<Project> {
     let outputs = session.cargo_build()?;
     let mut artifacts = vec![];
@@ -173,7 +197,13 @@ pub fn cargo_project(session: &KaniSession) -> Result<Project> {
     }
 }
 
-pub struct StandaloneProjectBuilder<'a> {
+/// Generate a project directly using `kani-compiler` on a single crate.
+pub fn standalone_project(input: &Path, session: &KaniSession) -> Result<Project> {
+    StandaloneProjectBuilder::try_new(input, session)?.build()
+}
+
+/// Builder for a standalone project.
+struct StandaloneProjectBuilder<'a> {
     /// The directory where all outputs should be directed to.
     outdir: PathBuf,
     /// The collection of artifacts that may be generated.
@@ -193,7 +223,7 @@ const BUILD_ARTIFACTS: [ArtifactType; 6] =
 impl<'a> StandaloneProjectBuilder<'a> {
     /// Create a `StandaloneProjectBuilder` from the given input and session.
     /// This will perform a few validations before the build.
-    pub fn try_new(input: &Path, session: &'a KaniSession) -> Result<Self> {
+    fn try_new(input: &Path, session: &'a KaniSession) -> Result<Self> {
         // Ensure the directory exist and it's in its canonical form.
         let outdir = if let Some(target_dir) = &session.args.target_dir {
             std::fs::create_dir_all(target_dir)?; // This is a no-op if directory exists.
@@ -214,7 +244,7 @@ impl<'a> StandaloneProjectBuilder<'a> {
     }
 
     /// Build a project by compiling `self.input` file.
-    pub fn build(self) -> Result<Project> {
+    fn build(self) -> Result<Project> {
         // Register artifacts that may be generated by the compiler / linker for future deletion.
         let rlib_path = guess_rlib_name(&self.outdir.join(self.input.file_name().unwrap()));
         self.session.record_temporary_files(&[&rlib_path]);
@@ -262,6 +292,8 @@ impl<'a> StandaloneProjectBuilder<'a> {
     }
 }
 
+/// Generate a `KaniMetadata` by extending the original metadata to contain the function under
+/// verification, when there is one.
 fn metadata_with_function(
     session: &KaniSession,
     crate_name: &str,
@@ -274,7 +306,8 @@ fn metadata_with_function(
     metadata
 }
 
-// Note: `out_dir` is already on canonical form, so need to invoke `try_new()`.
+/// Generate the expected path of a standalone artifact of the given type.
+// Note: `out_dir` is already on canonical form, so no need to invoke `try_new()`.
 fn standalone_artifact(out_dir: &Path, crate_name: &String, typ: ArtifactType) -> Artifact {
     let mut path = out_dir.join(crate_name);
     let _ = path.set_extension(&typ);
