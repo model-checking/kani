@@ -37,7 +37,7 @@ impl T for B {
 #[kani::unwind(6)]
 fn main() {
     let mut a: Vec<Box<dyn T>> = Vec::new();
-    a.push(Box::new(A { x: 5 }));
+    a.push(Box::new(A { x: 9 }));
     for i in 1..N {
         a.push(Box::new(B { x: 9 }));
     }
@@ -48,4 +48,5 @@ fn main() {
         let x = a[index].as_mut().foo();
         val += x;
     }
+    assert_eq!(val as usize, 9 * M);
 }

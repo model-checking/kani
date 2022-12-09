@@ -29,5 +29,5 @@ fn proof_harness() {
     let param = [0, 0, 0, 0];
     let start = if coin { 4 } else { 0 };
     copy_from_slice(&param, &mut data.array[start..start + 4]);
-    assert!(data.t == Type::Apple || data.t == Type::Banana);
+    assert!(data.t == Type::Apple);
 }

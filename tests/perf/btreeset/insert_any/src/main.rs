@@ -12,5 +12,7 @@ use std::collections::BTreeSet;
 #[kani::unwind(3)]
 fn main() {
     let mut set = BTreeSet::<u32>::new();
-    set.insert(kani::any());
+    let x = kani::any();
+    set.insert(x);
+    assert!(set.contains(&x));
 }
