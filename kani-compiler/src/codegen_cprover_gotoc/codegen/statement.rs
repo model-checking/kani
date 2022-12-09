@@ -307,7 +307,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// The generated code should invoke the appropriate `drop` function on `place`, then goto `target`.
     ///
     /// TODO: this function doesn't handle unwinding which begins if the destructor panics
-    /// https://github.com/model-checking/kani/issues/221
+    /// <https://github.com/model-checking/kani/issues/221>
     fn codegen_drop(&mut self, place: &Place<'tcx>, target: &BasicBlock, loc: Location) -> Stmt {
         let place_ty = self.place_ty(place);
         debug!(?place_ty, "codegen_drop");
@@ -327,15 +327,17 @@ impl<'tcx> GotocCtx<'tcx> {
                         );
                         debug!(?projection, "codegen_drop");
                         //  The data comes from the projection.
-                        let self_ref =
-                            if place_ty != pointee_type(self.local_ty(place.local)).unwrap() {
-                                // We are dropping an unsized member of a struct.
-                                assert!(!projection.goto_expr.typ().is_pointer());
-                                projection.goto_expr.address_of()
-                            } else {
-                                // Projection of `dyn T` already returns a pointer.
-                                projection.goto_expr
-                            };
+                        let self_ref = if matches!(
+                            pointee_type(self.local_ty(place.local)).unwrap().kind(),
+                            ty::Dynamic(..)
+                        ) {
+                            // Projection of `dyn T` already returns a pointer.
+                            projection.goto_expr
+                        } else {
+                            // We are dropping an unsized member of a struct.
+                            assert!(!projection.goto_expr.typ().is_pointer());
+                            projection.goto_expr.address_of()
+                        };
 
                         // Pull the drop function off of the fat pointer's vtable pointer
                         let trait_fat_ptr = projection.fat_ptr_goto_expr.unwrap();
