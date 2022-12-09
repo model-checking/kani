@@ -19,7 +19,7 @@ use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{Instance, InstanceDef, Ty};
 use rustc_span::Span;
 use rustc_target::abi::{FieldsShape, Primitive, TagEncoding, Variants};
-use tracing::{debug, info_span, trace, warn};
+use tracing::{debug, info_span, trace};
 
 impl<'tcx> GotocCtx<'tcx> {
     /// Generate Goto-C for MIR [Statement]s.
@@ -305,13 +305,13 @@ impl<'tcx> GotocCtx<'tcx> {
     /// transformation, so these have a simpler semantics.
     ///
     /// The generated code should invoke the appropriate `drop` function on `place`, then goto `target`.
+    ///
+    /// TODO: this function doesn't handle unwinding which begins if the destructor panics
+    /// <https://github.com/model-checking/kani/issues/221>
     fn codegen_drop(&mut self, place: &Place<'tcx>, target: &BasicBlock, loc: Location) -> Stmt {
-        // TODO: this function doesn't handle unwinding which begins if the destructor panics
-        // https://github.com/model-checking/kani/issues/221
         let place_ty = self.place_ty(place);
         debug!(?place_ty, "codegen_drop");
         let drop_instance = Instance::resolve_drop_in_place(self.tcx, place_ty);
-        // Once upon a time we did a `hook_applies` check here, but we no longer seem to hook drops
         let drop_implementation = match drop_instance.def {
             InstanceDef::DropGlue(_, None) => {
                 // We can skip empty DropGlue functions
@@ -320,35 +320,32 @@ impl<'tcx> GotocCtx<'tcx> {
             InstanceDef::DropGlue(_def_id, Some(_)) => {
                 match place_ty.kind() {
                     ty::Dynamic(..) => {
-                        // Virtual drop via a vtable lookup
-                        let trait_fat_ptr = unwrap_or_return_codegen_unimplemented_stmt!(
+                        // Virtual drop via a vtable lookup.
+                        let projection = unwrap_or_return_codegen_unimplemented_stmt!(
                             self,
                             self.codegen_place(place)
-                        )
-                        .fat_ptr_goto_expr
-                        .unwrap();
-                        debug!(?trait_fat_ptr, "codegen_drop: ");
+                        );
+                        debug!(?projection, "codegen_drop");
+                        //  The data comes from the projection.
+                        let self_ref = if matches!(
+                            pointee_type(self.local_ty(place.local)).unwrap().kind(),
+                            ty::Dynamic(..)
+                        ) {
+                            // Projection of `dyn T` already returns a pointer.
+                            projection.goto_expr
+                        } else {
+                            // We are dropping an unsized member of a struct.
+                            assert!(!projection.goto_expr.typ().is_pointer());
+                            projection.goto_expr.address_of()
+                        };
 
-                        // Pull the function off of the fat pointer's vtable pointer
+                        // Pull the drop function off of the fat pointer's vtable pointer
+                        let trait_fat_ptr = projection.fat_ptr_goto_expr.unwrap();
                         let vtable_ref =
                             trait_fat_ptr.to_owned().member("vtable", &self.symbol_table);
-
                         let vtable = vtable_ref.dereference();
                         let fn_ptr = vtable.member("drop", &self.symbol_table);
-
-                        // Pull the self argument off of the fat pointer's data pointer
-                        if let Some(typ) = pointee_type(self.local_ty(place.local)) {
-                            if !(typ.is_trait() || typ.is_box()) {
-                                warn!(self_type=?typ, "Unsupported drop of unsized");
-                                return self.codegen_unimplemented_stmt(
-                                    format!("drop unsized struct for {typ:?}").as_str(),
-                                    loc,
-                                    "https://github.com/model-checking/kani/issues/1072",
-                                );
-                            }
-                        }
-                        let self_data = trait_fat_ptr.to_owned().member("data", &self.symbol_table);
-                        let self_ref = self_data.cast_to(trait_fat_ptr.typ().clone().to_pointer());
+                        trace!(?fn_ptr, ?self_ref, "codegen_drop");
 
                         let call = fn_ptr.dereference().call(vec![self_ref]).as_stmt(loc);
                         if self.vtable_ctx.emit_vtable_restrictions {
