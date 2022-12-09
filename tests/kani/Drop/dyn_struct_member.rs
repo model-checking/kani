@@ -1,5 +1,5 @@
-// Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
-// SPDX-License-Identifier: Apache-2.0
+// Copyright Kani Contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 
 //! Check if we can codegen drop for unsized struct.
 //! Test that cover fix for https://github.com/model-checking/kani/issues/1072.
