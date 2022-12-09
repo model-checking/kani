@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use super::typ::{is_pointer, pointee_type, TypeExt};
+use super::typ::pointee_type;
 use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::codegen_cprover_gotoc::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
@@ -130,78 +130,6 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
             }
             _ => unreachable!(),
-        }
-    }
-
-    /// Given a mir object denoted by a mir place, codegen a pointer to this object.
-    fn codegen_rvalue_ref(&mut self, place: &Place<'tcx>, result_mir_type: Ty<'tcx>) -> Expr {
-        let place_mir_type = self.place_ty(place);
-        let projection = unwrap_or_return_codegen_unimplemented!(self, self.codegen_place(place));
-
-        debug!("codegen_rvalue_ref: place: {:?}", place);
-        debug!("codegen_rvalue_ref: place type: {:?}", place_mir_type);
-        debug!("codegen_rvalue_ref: place kind: {:?}", place_mir_type.kind());
-        debug!("codegen_rvalue_ref: projection: {:?}", projection);
-
-        assert!(
-            is_pointer(result_mir_type),
-            "Constructing a pointer of the type {:?} to the value of the place {:?}",
-            result_mir_type,
-            place
-        );
-        let result_goto_type = self.codegen_ty(result_mir_type);
-
-        // The goto expr for the value of this place
-        let place_goto_expr = projection.goto_expr;
-
-        /*
-         * Construct a thin pointer to the value of this place
-         */
-
-        if self.use_thin_pointer(place_mir_type) {
-            return place_goto_expr.address_of();
-        }
-
-        /*
-         * Construct a fat pointer to the value of this place
-         */
-
-        // skip constructing a fat ptr if this place is already one
-        if place_goto_expr.typ().is_rust_fat_ptr(&self.symbol_table) {
-            return place_goto_expr;
-        }
-
-        // In the sequence of projections leading to this place, we dereferenced
-        // this fat pointer.
-        let intermediate_fat_pointer = projection.fat_ptr_goto_expr.unwrap();
-
-        // The thin pointer in the resulting fat pointer is a pointer to the value
-        let thin_pointer = if place_goto_expr.typ().is_pointer() {
-            // The value is itself a pointer, just use this pointer
-            place_goto_expr
-        } else if place_goto_expr.typ().is_array_like() {
-            // The value is an array (eg, a flexible struct member), point to the first array element
-            place_goto_expr.array_to_ptr()
-        } else {
-            // The value is of any other type (eg, a struct), just point to it
-            place_goto_expr.address_of()
-        };
-
-        // The metadata in the resulting fat pointer comes from the intermediate fat pointer
-        let metadata = if self.use_slice_fat_pointer(place_mir_type) {
-            intermediate_fat_pointer.member("len", &self.symbol_table)
-        } else if self.use_vtable_fat_pointer(place_mir_type) {
-            intermediate_fat_pointer.member("vtable", &self.symbol_table)
-        } else {
-            unreachable!()
-        };
-
-        if self.use_slice_fat_pointer(place_mir_type) {
-            slice_fat_ptr(result_goto_type, thin_pointer, metadata, &self.symbol_table)
-        } else if self.use_vtable_fat_pointer(place_mir_type) {
-            dynamic_fat_ptr(result_goto_type, thin_pointer, metadata, &self.symbol_table)
-        } else {
-            unreachable!();
         }
     }
 
@@ -402,7 +330,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let sz = self.monomorphize(*sz);
                 self.codegen_rvalue_repeat(op, sz, res_ty, loc)
             }
-            Rvalue::Ref(_, _, p) | Rvalue::AddressOf(_, p) => self.codegen_rvalue_ref(p, res_ty),
+            Rvalue::Ref(_, _, p) | Rvalue::AddressOf(_, p) => self.codegen_place_ref(p),
             Rvalue::Len(p) => self.codegen_rvalue_len(p),
             // Rust has begun distinguishing "ptr -> num" and "num -> ptr" (providence-relevant casts) but we do not yet:
             // Should we? Tracking ticket: https://github.com/model-checking/kani/issues/1274
@@ -1101,7 +1029,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Cast a pointer to a fat pointer.
     /// The fat pointer will have two elements:
-    ///  1. `data` which will point to the same address as the original fat pointer.
+    ///  1. `data` which will point to the same address as the source object.
     ///  2. `vtable` | `len` which corresponds to the coercion metadata.
     fn codegen_cast_to_fat_pointer(
         &mut self,
@@ -1128,8 +1056,13 @@ impl<'tcx> GotocCtx<'tcx> {
                 // Cast to a slice fat pointer.
                 assert_eq!(src_elt_type, dst_elt_type);
                 let dst_goto_len = self.codegen_const(*src_elt_count, None);
-                let dst_data_expr =
-                    src_goto_expr.cast_to(self.codegen_ty(*src_elt_type).to_pointer());
+                let src_pointee_ty = pointee_type(coerce_info.src_ty).unwrap();
+                let dst_data_expr = if src_pointee_ty.is_array() {
+                    src_goto_expr.cast_to(self.codegen_ty(*src_elt_type).to_pointer())
+                } else {
+                    // A struct that contains the type being coerced to a slice.
+                    src_goto_expr.cast_to(dst_data_type)
+                };
                 slice_fat_ptr(fat_ptr_type, dst_data_expr, dst_goto_len, &self.symbol_table)
             }
             (ty::Dynamic(..), ty::Dynamic(..)) => {
