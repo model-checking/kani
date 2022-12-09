@@ -8,6 +8,8 @@
 //! Arc<Mutex<dyn Subscriber>>.
 //! We added a simplified version of the original harness from:
 //! <https://github.com/model-checking/kani/issues/426>
+//! This currently fails due to
+//! <https://github.com/model-checking/kani/issues/1781>
 
 use std::sync::Arc;
 use std::sync::Mutex;
