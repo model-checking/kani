@@ -8,10 +8,10 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::Mutex;
+use std::time::Instant;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Registry};
 use tracing_tree::HierarchicalLayer;
-
 /// Environment variable used to control this session log tracing.
 /// This is the same variable used to control `kani-compiler` logs. Note that you can still control
 /// the driver logs separately, by using the logger directives to  select the kani-driver crate.
@@ -129,9 +129,14 @@ impl KaniSession {
         if self.args.verbose {
             println!("[Kani] Running: `{}`", render_command(&cmd).to_string_lossy());
         }
-        let result = cmd
-            .status()
-            .context(format!("Failed to invoke {}", cmd.get_program().to_string_lossy()))?;
+        let program = cmd.get_program().to_string_lossy().to_string();
+        let result = self.with_timer(
+            || {
+                cmd.status()
+                    .context(format!("Failed to invoke {}", cmd.get_program().to_string_lossy()))
+            },
+            &program,
+        )?;
         if !result.success() {
             bail!("{} exited with status {}", cmd.get_program().to_string_lossy(), result);
         }
@@ -171,7 +176,14 @@ impl KaniSession {
         let output_file = std::fs::File::create(&stdout)?;
         cmd.stdout(output_file);
 
-        cmd.status().context(format!("Failed to invoke {}", cmd.get_program().to_string_lossy()))
+        let program = cmd.get_program().to_string_lossy().to_string();
+        self.with_timer(
+            || {
+                cmd.status()
+                    .context(format!("Failed to invoke {}", cmd.get_program().to_string_lossy()))
+            },
+            &program,
+        )
     }
 
     /// Run a job and pipe its output to this process.
@@ -190,6 +202,21 @@ impl KaniSession {
             .context(format!("Failed to invoke {}", cmd.get_program().to_string_lossy()))?;
 
         Ok(Some(process))
+    }
+
+    /// Execute the provided function and measure the clock time it took for its execution.
+    /// Print the time with the given description if we are on verbose or debug mode.
+    pub fn with_timer<T, F>(&self, func: F, description: &str) -> T
+    where
+        F: FnOnce() -> T,
+    {
+        let start = Instant::now();
+        let ret = func();
+        if self.args.verbose || self.args.debug {
+            let elapsed = start.elapsed();
+            println!("Finished {description} in {}s", elapsed.as_secs_f32())
+        }
+        ret
     }
 }
 

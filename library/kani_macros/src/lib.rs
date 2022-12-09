@@ -41,11 +41,14 @@ pub fn proof(attr: TokenStream, item: TokenStream) -> TokenStream {
     let fn_item = parse_macro_input!(item as ItemFn);
     let attrs = fn_item.attrs;
     let vis = fn_item.vis;
+    let fn_name = fn_item.sig.ident.clone();
+    let test_name = quote!(#fn_name);
     let sig = fn_item.sig;
     let body = fn_item.block;
 
     let kani_attributes = quote!(
         #[kanitool::proof]
+        #[export_name = concat!(module_path!(), "::", stringify!(#test_name))]
         // no_mangle is a temporary hack to make the function "public" so it gets codegen'd
         #[no_mangle]
     );
