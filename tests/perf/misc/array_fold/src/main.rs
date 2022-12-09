@@ -7,14 +7,14 @@
 //! Pre CBMC 5.72.0, it took ~36 seconds and consumed ~3.6 GB of memory.
 //! With CBMC 5.72.0, it takes ~11 seconds and consumes ~255 MB of memory.
 
-pub fn array_sum_fold(x : [usize; 100]) -> usize {
+pub fn array_sum_fold(x: [usize; 100]) -> usize {
     x.iter().fold(0, |accumulator, current| accumulator + current)
 }
 
-pub fn array_sum_for(x : [usize; 100]) -> usize {
-    let mut accumulator : usize = 0;
+pub fn array_sum_for(x: [usize; 100]) -> usize {
+    let mut accumulator: usize = 0;
     for i in 0..100 {
-      accumulator = x[i] + accumulator
+        accumulator = x[i] + accumulator
     }
     accumulator
 }
