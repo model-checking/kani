@@ -83,7 +83,7 @@ impl CodegenBackend for GotocCodegenBackend {
         check_options(tcx.sess, need_metadata_module);
         check_crate_items(&gcx);
 
-        let items = with_timer(|| collect_codegen_items(&gcx), "reachability analysis");
+        let items = with_timer(|| collect_codegen_items(&gcx), "codegen reachability analysis");
         if items.is_empty() {
             // There's nothing to do.
             return codegen_results(tcx, rustc_metadata, gcx.symbol_table.machine_model());
@@ -504,6 +504,8 @@ where
     }
 }
 
+/// Execute the provided function and measure the clock time it took for its execution.
+/// Log the time with the given description.
 pub fn with_timer<T, F>(func: F, description: &str) -> T
 where
     F: FnOnce() -> T,

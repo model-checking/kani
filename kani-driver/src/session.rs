@@ -204,13 +204,15 @@ impl KaniSession {
         Ok(Some(process))
     }
 
+    /// Execute the provided function and measure the clock time it took for its execution.
+    /// Print the time with the given description if we are on verbose or debug mode.
     pub fn with_timer<T, F>(&self, func: F, description: &str) -> T
     where
         F: FnOnce() -> T,
     {
         let start = Instant::now();
         let ret = func();
-        if self.args.verbose {
+        if self.args.verbose || self.args.debug {
             let elapsed = start.elapsed();
             println!("Finished {description} in {}s", elapsed.as_secs_f32())
         }
