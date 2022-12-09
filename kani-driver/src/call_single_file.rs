@@ -117,6 +117,9 @@ impl KaniSession {
 
         if self.args.debug {
             flags.push("--log-level=debug".into());
+        } else if self.args.verbose {
+            // Print the symtab command being invoked.
+            flags.push("--log-level=info".into());
         } else {
             flags.push("--log-level=warn".into());
         }
