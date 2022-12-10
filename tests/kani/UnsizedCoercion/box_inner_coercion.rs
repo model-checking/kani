@@ -3,8 +3,6 @@
 // kani-flags: --mir-linker --enable-unstable
 //! Check the basic coercion when using boxes.
 //! Tests are broken down into different crates to ensure that the reachability works for each case.
-//! FIXME: Drop of struct with dyn member unsupported for now.
-//! https://github.com/model-checking/kani/issues/1072
 
 mod defs;
 use defs::*;
