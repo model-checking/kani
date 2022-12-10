@@ -46,10 +46,10 @@ kani::cover!(x > y, "x can be greater than y");
 
 The `cover` macro instructs Kani to find _at least one_ possible execution that satisfies the specified condition at that line of code.  If no such execution is possible, the check is reported as *unsatisfiable*.
 
-Each cover statements will be reported as a check whose description is `cover condition "cond"` and whose status is:
-- `SATISFIED` (green): if Kani found an execution that satisfies the condition
-- `UNSATISFIABLE` (yellow): if Kani proved that the condition cannot be satisfied
-- `UNREACHABLE` (yellow): if Kani proved that the cover statement itself cannot be reached
+Each cover statement will be reported as a check whose description is `cover condition: cond` and whose status is:
+- `SATISFIED` (green): if Kani found an execution that satisfies the condition.
+- `UNSATISFIABLE` (yellow): if Kani proved that the condition cannot be satisfied.
+- `UNREACHABLE` (yellow): if Kani proved that the cover statement itself cannot be reached.
 
 For example, for the following `cover` statement:
 ```rust
@@ -59,7 +59,7 @@ An example result is:
 ```
 Check 2: main.cover.2
          - Status: SATISFIED
-         - Description: "cover condition "a == 0""
+         - Description: "cover condition: a == 0"
          - Location: foo.rs:9:5 in function main
 ```
 
