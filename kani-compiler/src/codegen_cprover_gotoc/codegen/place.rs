@@ -582,15 +582,7 @@ impl<'tcx> GotocCtx<'tcx> {
         } else {
             // Build a new fat pointer to the place dereferenced with the metadata from the
             // original fat pointer.
-            let proj_expr = projection.goto_expr;
-            let data = if proj_expr.typ().is_pointer() {
-                proj_expr
-            } else if proj_expr.typ().is_array_like() {
-                proj_expr.array_to_ptr()
-            } else {
-                proj_expr.address_of()
-            };
-
+            let data = projection_data_ptr(&projection);
             let fat_ptr = projection.fat_ptr_goto_expr.unwrap();
             let place_type = self.codegen_ty_ref(place_ty);
             if self.use_vtable_fat_pointer(place_ty) {
@@ -695,6 +687,24 @@ impl<'tcx> GotocCtx<'tcx> {
 
     pub fn codegen_idx_array(&mut self, arr: Expr, idx: Expr) -> Expr {
         arr.member("0", &self.symbol_table).index_array(idx)
+    }
+}
+
+/// Extract the data pointer from a projection.
+/// The return type of the projection is not consistent today, so we need to specialize the
+/// behavior in order to get a consistent expression that represents a pointer to the projected
+/// data. The cases are:
+///  - For `dyn T`, the projection already generates a pointer.
+///  - For slices, the projection returns a flexible array.
+///  - For structs, like `Wrapper<dyn T>`, the projection returns the object.
+fn projection_data_ptr(projection: &ProjectedPlace) -> Expr {
+    let proj_expr = projection.goto_expr.clone();
+    if proj_expr.typ().is_pointer() {
+        proj_expr
+    } else if proj_expr.typ().is_array_like() {
+        proj_expr.array_to_ptr()
+    } else {
+        proj_expr.address_of()
     }
 }
 

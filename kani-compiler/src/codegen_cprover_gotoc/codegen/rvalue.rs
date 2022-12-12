@@ -1061,6 +1061,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     src_goto_expr.cast_to(self.codegen_ty(*src_elt_type).to_pointer())
                 } else {
                     // A struct that contains the type being coerced to a slice.
+                    // E.g.: Convert Src<[u8; 2]> to Src<[u8]> where struct Src<T> { member: T }
                     src_goto_expr.cast_to(dst_data_type)
                 };
                 slice_fat_ptr(fat_ptr_type, dst_data_expr, dst_goto_len, &self.symbol_table)
