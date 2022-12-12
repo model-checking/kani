@@ -402,7 +402,10 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
                 ConstKind::Value(v) => self.tcx.valtree_to_const_val((ct.ty(), v)),
                 ConstKind::Unevaluated(_) => unreachable!(),
                 // Nothing to do
-                ConstKind::Param(..) | ConstKind::Infer(..) | ConstKind::Error(..) => return,
+                ConstKind::Param(..)
+                | ConstKind::Infer(..)
+                | ConstKind::Error(..)
+                | ConstKind::Expr(..) => return,
 
                 // Shouldn't happen
                 ConstKind::Placeholder(..) | ConstKind::Bound(..) => {
