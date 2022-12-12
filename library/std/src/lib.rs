@@ -54,7 +54,7 @@ macro_rules! assert {
         // strategy, which is tracked in
         // https://github.com/model-checking/kani/issues/692
         if false {
-            core::assert!(true, $($arg)+);
+            ::core::assert!(true, $($arg)+);
         }
     }};
 }
@@ -158,7 +158,7 @@ macro_rules! unreachable {
     // handle.
     ($fmt:expr, $($arg:tt)*) => {{
         if false {
-            core::assert!(true, $fmt, $($arg)+);
+            ::core::assert!(true, $fmt, $($arg)+);
         }
         kani::panic(concat!("internal error: entered unreachable code: ",
         stringify!($fmt, $($arg)*)))}};
@@ -190,7 +190,7 @@ macro_rules! panic {
     // `panic!("Error: {}", code);`
     ($($arg:tt)+) => {{
         if false {
-            core::assert!(true, $($arg)+);
+            ::core::assert!(true, $($arg)+);
         }
         kani::panic(stringify!($($arg)+));
     }};
