@@ -540,6 +540,7 @@ impl TimerFd {
 }
 
 #[derive(PartialOrd, PartialEq, Eq, Debug, Clone)]
+/// In all of these cases, storing nanoseconds in a u64
 struct Instant(u64);
 
 static mut MIN_DELAY : Option<u64> = None;
@@ -568,15 +569,22 @@ impl Instant {
         unsafe {
             static mut last : u64 = 0;
             let next = kani::any();
+            // Constraint 1: instants are monotonically increasing, cause time works that way.
             kani::assume(next > last);
+
+            // User defined constaint, to reflect `sleep`
             if let Some(min_delay) = MIN_DELAY {
                 kani::assume(next-last > min_delay);
+                // Once we've slept, don't sleep more until the user asks us to
+                MIN_DELAY = None;
             }
+
+            // This reflects user expectation that operations complete "quickly",
+            // which is assumed in Firecracker tests
             if let Some(max_delay) = MAX_DELAY {
                 kani::assume(next-last < max_delay);
+                // Don't reset till the user says to
             }
-            // Don't reset max delay
-            MIN_DELAY = None;
             last = next;
             Instant(next)
         }
@@ -696,6 +704,7 @@ pub(crate) mod kani_proofs {
         kani_set_max_delay(100);
         //DSN
         assert!(tb.one_time_burst() < capacity);
+        // Don't give the bucket time to refill, see that we fail to give out tokens
         kani_set_max_delay(100 * NANOSEC_IN_ONE_MILLISEC);
         let result = tb.reduce(capacity);
         assert_eq!(result, BucketReduction::Failure);
@@ -713,6 +722,7 @@ pub(crate) mod kani_proofs {
         assert_eq!(tb.reduce(500), BucketReduction::Success);
         assert_eq!(tb.reduce(500), BucketReduction::Failure);
         kani_reset_max_delay();
+        
         kani_sleep(500*NANOSEC_IN_ONE_MILLISEC);
         // thread::sleep(Duration::from_millis(500));
         assert_eq!(tb.reduce(500), BucketReduction::Success);
