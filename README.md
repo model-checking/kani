@@ -15,7 +15,7 @@ To install the latest version of Kani ([Rust 1.58+; Linux or Mac](https://model-
 
 ```bash
 cargo install --locked kani-verifier
-cargo-kani setup
+cargo kani setup
 ```
 
 See [the installation guide](https://model-checking.github.io/kani/install-guide.html) for more details.
