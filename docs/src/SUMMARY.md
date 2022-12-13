@@ -34,3 +34,5 @@
     - [Intrinsics](./rust-feature-support/intrinsics.md)
     - [Unstable features](./rust-feature-support/unstable.md)
   - [Overrides](./overrides.md)
+
+- [Crates Documentation](./crates/index.md)
