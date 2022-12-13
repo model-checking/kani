@@ -7,8 +7,9 @@
 
 use super::typ::TypeExt;
 use crate::codegen_cprover_gotoc::codegen::typ::{pointee_type, std_pointee_type};
-use crate::codegen_cprover_gotoc::utils::slice_fat_ptr;
+use crate::codegen_cprover_gotoc::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::codegen_cprover_gotoc::GotocCtx;
+use crate::unwrap_or_return_codegen_unimplemented;
 use cbmc::goto_program::{Expr, Location, Type};
 use rustc_hir::Mutability;
 use rustc_middle::ty::layout::LayoutOf;
@@ -563,6 +564,37 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
+    /// Codegen the reference to a given place.
+    /// We currently have a somewhat weird way of handling ZST.
+    /// - For `*(&T)` where `T: Unsized`, the projection's `goto_expr` is a thin pointer, so we
+    ///   build the fat pointer from there.
+    /// - For `*(Wrapper<T>)` where `T: Unsized`, the projection's `goto_expr` returns an object,
+    ///   and we need to take it's address and build the fat pointer.
+    pub fn codegen_place_ref(&mut self, place: &Place<'tcx>) -> Expr {
+        let place_ty = self.place_ty(place);
+        let projection = unwrap_or_return_codegen_unimplemented!(self, self.codegen_place(place));
+        if self.use_thin_pointer(place_ty) {
+            // Just return the address of the place dereferenced.
+            projection.goto_expr.address_of()
+        } else if place_ty == pointee_type(self.local_ty(place.local)).unwrap() {
+            // Just return the fat pointer if this is a simple &(*local).
+            projection.fat_ptr_goto_expr.unwrap()
+        } else {
+            // Build a new fat pointer to the place dereferenced with the metadata from the
+            // original fat pointer.
+            let data = projection_data_ptr(&projection);
+            let fat_ptr = projection.fat_ptr_goto_expr.unwrap();
+            let place_type = self.codegen_ty_ref(place_ty);
+            if self.use_vtable_fat_pointer(place_ty) {
+                let vtable = fat_ptr.member("vtable", &self.symbol_table);
+                dynamic_fat_ptr(place_type, data, vtable, &self.symbol_table)
+            } else {
+                let len = fat_ptr.member("len", &self.symbol_table);
+                slice_fat_ptr(place_type, data, len, &self.symbol_table)
+            }
+        }
+    }
+
     /// Given a MIR place, generate a CBMC expression that represents it as a CBMC lvalue.
     /// A place is the rust term for an lvalue.
     /// Like in "C", a place can be a "projected": e.g. `*x.foo = bar`
@@ -655,6 +687,24 @@ impl<'tcx> GotocCtx<'tcx> {
 
     pub fn codegen_idx_array(&mut self, arr: Expr, idx: Expr) -> Expr {
         arr.member("0", &self.symbol_table).index_array(idx)
+    }
+}
+
+/// Extract the data pointer from a projection.
+/// The return type of the projection is not consistent today, so we need to specialize the
+/// behavior in order to get a consistent expression that represents a pointer to the projected
+/// data. The cases are:
+///  - For `dyn T`, the projection already generates a pointer.
+///  - For slices, the projection returns a flexible array.
+///  - For structs, like `Wrapper<dyn T>`, the projection returns the object.
+fn projection_data_ptr(projection: &ProjectedPlace) -> Expr {
+    let proj_expr = projection.goto_expr.clone();
+    if proj_expr.typ().is_pointer() {
+        proj_expr
+    } else if proj_expr.typ().is_array_like() {
+        proj_expr.array_to_ptr()
+    } else {
+        proj_expr.address_of()
     }
 }
 
