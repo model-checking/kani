@@ -17,7 +17,7 @@ use rustc_middle::ty::{self, Instance};
 use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::iter::FromIterator;
-use tracing::{debug, info_span};
+use tracing::{debug, debug_span};
 
 /// Codegen MIR functions into gotoc
 impl<'tcx> GotocCtx<'tcx> {
@@ -72,9 +72,9 @@ impl<'tcx> GotocCtx<'tcx> {
         let old_sym = self.symbol_table.lookup(&name).unwrap();
 
         let _trace_span =
-            info_span!("CodegenFunction", name = self.current_fn().readable_name()).entered();
+            debug_span!("CodegenFunction", name = self.current_fn().readable_name()).entered();
         if old_sym.is_function_definition() {
-            tracing::info!("Double codegen of {:?}", old_sym);
+            debug!("Double codegen of {:?}", old_sym);
         } else {
             assert!(old_sym.is_function());
             let mir = self.current_fn().mir();
