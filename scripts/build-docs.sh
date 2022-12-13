@@ -65,4 +65,8 @@ $SCRIPT_DIR/mdbook build -d $KANI_DIR/docs/book/rfc
 # doc tests is in README.md. We don't run them here because
 # that would cause CI to run these tests twice.
 
+echo "Building rustdocs..."
+cd $KANI_DIR
+cargo doc -p kani -p kani_macros --no-deps --target-dir docs/book/crates
+
 echo "Finished documentation build successfully."
