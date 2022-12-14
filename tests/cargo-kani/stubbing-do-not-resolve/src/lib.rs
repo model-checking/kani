@@ -6,8 +6,11 @@
 //! matches the name of a local module -- to external functions that match that
 //! path.
 
-use other_crate1;
-use other_crate2;
+// Pull these crates into the compiler.
+mod ignore_me {
+    use other_crate1;
+    use other_crate2;
+}
 
 mod my_mod {
 
