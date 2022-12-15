@@ -44,6 +44,7 @@ multiplex_alloc! {
     alloc::string, ::std::string,
     alloc::sync::Arc, ::std::sync::Arc,
     alloc::rc::Rc, ::std::rc::Rc,
+    alloc::cell::RefCell, ::std::cell::RefCell,
     alloc::vec::Vec, ::std::vec::Vec,
     alloc::vec, ::std::vec,
     alloc::collections::VecDeque, std::collections::VecDeque,
