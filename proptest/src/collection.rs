@@ -560,7 +560,7 @@ impl<T: Strategy> Strategy for VecStrategy<T> {
     type Value = Vec<T::Value>;
 
     /// Builds a new ValueTree<Vec<_>> by repeatedly generating values
-    /// from strategy stored in self.element. Kani Optimization: loop
+    /// from strategy stored in `self.element`. Kani Optimization: loop
     /// only once by storing the resulting vector in RefCell
     fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let length: usize = kani::any();
