@@ -144,20 +144,8 @@ compiles as if it was sequential code.
 
 ### Standard library functions
 
-At present, Kani is able to link in functions from the standard library but the
-generated code will not contain them unless they are generic, intrinsics,
-inlined or macros. Missing functions are treated in a similar way to [unsupported
-features](#code-generation-for-unsupported-features).
-This results in verification failures if a call to one of these missing functions
-is reachable.
-
-We've done some experiments to embed the standard library into the generated
-code, but this causes verification times to increase significantly. As of now,
-we've not been able to find a simple solution for [this
-issue](https://github.com/model-checking/kani/issues/581), but we have some
-ideas for future work in this direction. At present, Kani
-[overrides](./overrides.md) a few common functions (e.g., print macros) as
-a workaround.
+Kani [overrides](./overrides.md) a few common functions
+(e.g., print macros) to provide a more verification friendly implementation.
 
 ### Advanced features
 

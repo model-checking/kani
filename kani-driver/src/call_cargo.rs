@@ -38,7 +38,13 @@ impl KaniSession {
     /// Calls `cargo_build` to generate `*.symtab.json` files in `target_dir`
     pub fn cargo_build(&self) -> Result<CargoOutputs> {
         let build_target = env!("TARGET"); // see build.rs
-        let metadata = MetadataCommand::new().exec().context("Failed to get cargo metadata.")?;
+        let metadata = MetadataCommand::new()
+            // restrict metadata command to host platform. References:
+            // https://github.com/rust-lang/rust-analyzer/issues/6908
+            // https://github.com/rust-lang/rust-analyzer/pull/6912
+            .other_options(vec![String::from("--filter-platform"), build_target.to_owned()])
+            .exec()
+            .context("Failed to get cargo metadata.")?;
         let target_dir = self
             .args
             .target_dir

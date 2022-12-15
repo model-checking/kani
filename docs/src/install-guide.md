@@ -4,7 +4,7 @@ Kani offers an easy installation option on three platforms:
 
 * `x86_64-unknown-linux-gnu` (Most Linux distributions)
 * `x86_64-apple-darwin` (Intel Mac OS)
-* `aarch64-apple-darwin` (Apple M1)
+* `aarch64-apple-darwin` (Apple Silicon Mac OS)
 
 Other platforms are either not yet supported or require instead that
 you [build from source](build-from-source.md). To use Kani in your
@@ -14,8 +14,8 @@ GitHub CI workflows, see [GitHub CI Action](./install-github-ci.md).
 
 The following must already be installed:
 
-* **Python version 3.6 or greater** and the package installer `pip`.
-* Rust installed via `rustup`.
+* **Python version 3.6 or newer** and the package installer `pip`.
+* Rust 1.58 or newer installed via `rustup`.
 * `ctags` is required for Kani's `--visualize` option to work correctly. [Universal ctags](https://ctags.io/) is recommended.
 
 ## Installing the latest version
@@ -24,17 +24,17 @@ To install the latest version of Kani, run:
 
 ```bash
 cargo install --locked kani-verifier
-cargo-kani setup
+cargo kani setup
 ```
 
 This will build and place in `~/.cargo/bin` (in a typical environment) the `kani` and `cargo-kani` binaries.
-The second step (`cargo-kani setup`) will download the Kani compiler and other necessary dependencies (and place them under `~/.kani/`).
+The second step (`cargo kani setup`) will download the Kani compiler and other necessary dependencies (and place them under `~/.kani/`).
 
 ## Installing an older version
 
 ```bash
 cargo install --locked kani-verifier --version <VERSION>
-cargo-kani setup
+cargo kani setup
 ```
 
 ## Checking your installation

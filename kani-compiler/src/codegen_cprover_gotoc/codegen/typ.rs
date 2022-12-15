@@ -536,16 +536,8 @@ impl<'tcx> GotocCtx<'tcx> {
     /// `drop_in_place` is a function with type &self -> (), the vtable for
     /// dynamic trait objects needs a pointer to it
     pub fn trait_vtable_drop_type(&mut self, t: ty::Ty<'tcx>) -> Type {
-        if matches!(t.kind(), ty::Dynamic(..)) {
-            Type::code_with_unnamed_parameters(
-                vec![self.codegen_fat_ptr(t).to_pointer()],
-                Type::unit(),
-            )
+        Type::code_with_unnamed_parameters(vec![self.codegen_ty(t).to_pointer()], Type::unit())
             .to_pointer()
-        } else {
-            Type::code_with_unnamed_parameters(vec![self.codegen_ty(t).to_pointer()], Type::unit())
-                .to_pointer()
-        }
     }
 
     /// Given a trait of type `t`, determine the fields of the struct that will implement its vtable.

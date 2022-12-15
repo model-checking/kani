@@ -214,6 +214,15 @@ fn convert_arg(arg: &OsStr) -> String {
 /// This function will soon be removed.
 #[deprecated]
 fn toolchain_sysroot_path() -> PathBuf {
+    // If we're installed normally, we'll find `$KANI/toolchain` as a symlink to our desired toolchain
+    {
+        let kani_root = kani_root();
+        let toolchain_path = kani_root.join("toolchain");
+        if toolchain_path.exists() {
+            return toolchain_path;
+        }
+    }
+
     // rustup sets some environment variables during build, but this is not clearly documented.
     // https://github.com/rust-lang/rustup/blob/master/src/toolchain.rs (search for RUSTUP_HOME)
     // We're using RUSTUP_TOOLCHAIN here, which is going to be set by our `rust-toolchain.toml` file.
