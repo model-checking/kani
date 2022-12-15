@@ -534,7 +534,7 @@ where
     ))
 }
 
-#[allow(dead_code)] // todo: cleanup redundant code.
+#[allow(dead_code)] // todo: cleanup redundant code. See issue #2004.
 #[derive(Clone, Copy, Debug)]
 enum Shrink {
     DeleteElement(usize),
@@ -560,7 +560,7 @@ impl<T: Strategy> Strategy for VecStrategy<T> {
     type Value = Vec<T::Value>;
 
     /// Builds a new ValueTree<Vec<_>> by repeatedly generating values
-    /// from strategy stored in `self.element`. Kani Optimization: loop
+    /// from strategy stored in self.element. Kani Optimization: loop
     /// only once by storing the resulting vector in RefCell
     fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let length: usize = kani::any();
@@ -599,14 +599,29 @@ impl<T: Strategy> Strategy for Vec<T> {
 impl<T: ValueTree> ValueTree for VecValueTree<T> {
     type Value = Vec<T::Value>;
 
+    /// The current value is extracted out of the RC-RefCell by
+    /// replacing it with an empty vector.
+    ///
+    /// Kani Optimization:This avoids having to copy
+    /// the vector and improves verification performance. Note that
+    /// this will clobber the current value, but that is fine because
+    /// Kani will run this function at most once.
     fn current(&self) -> Vec<T::Value> {
         self.current.as_ref().replace(vec![])
     }
 
+    /// Simplifies the current value.
+    ///
+    /// Kani Optimization: This is not necessary for Kani, and getting
+    /// rid of this loop improves verification performance.
     fn simplify(&mut self) -> bool {
         false
     }
 
+    /// Complicates the current value.
+    ///
+    /// Kani Optimization: This is not necessary for Kani, and getting
+    /// rid of this loop improves verification performance.
     fn complicate(&mut self) -> bool {
         false
     }
