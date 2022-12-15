@@ -16,7 +16,7 @@ pub use std::*;
 // crate uses `extern crate std as core`. See
 // https://github.com/model-checking/kani/issues/1949
 #[allow(unused_imports)]
-use core::assert as __core_assert;
+use core::assert as __kani__workaround_core_assert;
 
 // Override process calls with stubs.
 pub mod process;
@@ -60,7 +60,7 @@ macro_rules! assert {
         // strategy, which is tracked in
         // https://github.com/model-checking/kani/issues/692
         if false {
-            __core_assert!(true, $($arg)+);
+            __kani__workaround_core_assert!(true, $($arg)+);
         }
     }};
 }
@@ -164,7 +164,7 @@ macro_rules! unreachable {
     // handle.
     ($fmt:expr, $($arg:tt)*) => {{
         if false {
-            __core_assert!(true, $fmt, $($arg)+);
+            __kani__workaround_core_assert!(true, $fmt, $($arg)+);
         }
         kani::panic(concat!("internal error: entered unreachable code: ",
         stringify!($fmt, $($arg)*)))}};
@@ -196,7 +196,7 @@ macro_rules! panic {
     // `panic!("Error: {}", code);`
     ($($arg:tt)+) => {{
         if false {
-            __core_assert!(true, $($arg)+);
+            __kani__workaround_core_assert!(true, $($arg)+);
         }
         kani::panic(stringify!($($arg)+));
     }};
