@@ -636,15 +636,15 @@ mod kani_tests {
     use super::*;
 
     crate::proptest! {
-    #[kani::unwind(5)]
-    #[kani::proof]
-    fn vector_even_sums(
-        vec_even in vec((0..10).prop_map(|x: i32| x << 1), 0..2),
-    ) {
+        #[kani::unwind(5)]
+        #[kani::proof]
+        fn vector_even_sums(
+            vec_even in vec((0..10).prop_map(|x: i32| x * 2), 0..2),
+        ) {
             let sum: i32 = vec_even.into_iter().sum();
-            assert!(sum  < 40, "each element is < 20, at most 2 elements");
+            assert!(sum < 40, "each element is < 20, at most 2 elements");
             assert_eq!(sum % 2, 0, "Sum is even due to << 1.");
-    }
+        }
     }
 }
 
