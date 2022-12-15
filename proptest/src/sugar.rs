@@ -161,6 +161,7 @@ macro_rules! proptest {
     )*) => {
         $(
             $(#[$meta])*
+            #[kani::proof]
             fn $test_name() {
                 let mut config = <$crate::test_runner::Config as Default>::default();
                 config.test_name = Some(
@@ -176,6 +177,7 @@ macro_rules! proptest {
     )*) => {
         $(
             $(#[$meta])*
+            #[kani::proof]
             fn $test_name() {
                 let mut config = <$crate::test_runner::Config as Default>::default();
                 config.test_name = Some(
