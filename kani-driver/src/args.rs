@@ -488,7 +488,10 @@ impl KaniArgs {
             if out_dir.exists() && !out_dir.is_dir() {
                 return Err(Error::raw(
                     ErrorKind::InvalidValue,
-                    "Invalid argument: `--target-dir` argument `{}` is not a directory",
+                    &format!(
+                        "Invalid argument: `--target-dir` argument `{}` is not a directory",
+                        out_dir.display()
+                    ),
                 ));
             }
         }

@@ -38,8 +38,7 @@ use tracing::{debug, trace};
 /// artifacts relevant for verification.
 ///
 /// For one specific harness, there should be up to one artifact of each type. I.e., artifacts of
-/// the same type are linked as part of creating the project. Except for `symtab` files used for
-/// demangling `C` when on legacy linker mode.
+/// the same type are linked as part of creating the project.
 ///
 /// However, one artifact can be used for multiple harnesses. This will depend on the type of
 /// artifact, but it should be transparent for the user of this object.

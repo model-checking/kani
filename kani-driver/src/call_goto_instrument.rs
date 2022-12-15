@@ -57,8 +57,8 @@ impl KaniSession {
             }
 
             let c_demangled = alter_extension(output, "demangled.c");
-            let symtabs = project.get_harness_artifact(&harness, ArtifactType::SymTab).unwrap();
-            self.demangle_c(&[symtabs], &c_outfile, &c_demangled)?;
+            let symtab = project.get_harness_artifact(&harness, ArtifactType::SymTab).unwrap();
+            self.demangle_c(symtab, &c_outfile, &c_demangled)?;
             if !self.args.quiet {
                 println!("Demangled GotoC code written to {}", c_demangled.to_string_lossy())
             }
@@ -159,29 +159,27 @@ impl KaniSession {
         self.call_goto_instrument(args)
     }
 
-    /// Generate a .demangled.c file from the .c file using the `prettyName`s from the symbol tables
+    /// Generate a .demangled.c file from the .c file using the `prettyName`s from the symbol table
     ///
     /// Currently, only top-level function names and (most) type names are demangled.
     /// For local variables, it would be more complicated than a simple search and replace to obtain the demangled name.
     pub fn demangle_c(
         &self,
-        symtab_files: &[impl AsRef<Path>],
+        symtab_file: &impl AsRef<Path>,
         c_file: &Path,
         demangled_file: &Path,
     ) -> Result<()> {
         let mut c_code = std::fs::read_to_string(c_file)?;
-        for symtab_file in symtab_files {
-            let reader = BufReader::new(File::open(symtab_file)?);
-            let symtab: serde_json::Value = serde_json::from_reader(reader)?;
-            for (_, symbol) in symtab["symbolTable"].as_object().unwrap() {
-                if let Some(serde_json::Value::String(name)) = symbol.get("name") {
-                    if let Some(serde_json::Value::String(pretty)) = symbol.get("prettyName") {
-                        // Struct names start with "tag-", but this prefix is not used in the GotoC files, so we strip it.
-                        // If there is no such prefix, we leave the name unchanged.
-                        let name = name.strip_prefix("tag-").unwrap_or(name);
-                        if !pretty.is_empty() && pretty != name {
-                            c_code = c_code.replace(name, pretty);
-                        }
+        let reader = BufReader::new(File::open(symtab_file)?);
+        let symtab: serde_json::Value = serde_json::from_reader(reader)?;
+        for (_, symbol) in symtab["symbolTable"].as_object().unwrap() {
+            if let Some(serde_json::Value::String(name)) = symbol.get("name") {
+                if let Some(serde_json::Value::String(pretty)) = symbol.get("prettyName") {
+                    // Struct names start with "tag-", but this prefix is not used in the GotoC files, so we strip it.
+                    // If there is no such prefix, we leave the name unchanged.
+                    let name = name.strip_prefix("tag-").unwrap_or(name);
+                    if !pretty.is_empty() && pretty != name {
+                        c_code = c_code.replace(name, pretty);
                     }
                 }
             }
