@@ -9,6 +9,6 @@ fn cover_sorted() {
     let arr: [i32; 5] = kani::any();
     let mut sorted = arr.clone();
     sorted.sort();
-    kani::cover(sorted == arr);
-    kani::cover(sorted != arr);
+    kani::cover!(sorted == arr);
+    kani::cover!(sorted != arr);
 }

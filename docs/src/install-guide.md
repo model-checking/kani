@@ -24,17 +24,17 @@ To install the latest version of Kani, run:
 
 ```bash
 cargo install --locked kani-verifier
-cargo-kani setup
+cargo kani setup
 ```
 
 This will build and place in `~/.cargo/bin` (in a typical environment) the `kani` and `cargo-kani` binaries.
-The second step (`cargo-kani setup`) will download the Kani compiler and other necessary dependencies (and place them under `~/.kani/`).
+The second step (`cargo kani setup`) will download the Kani compiler and other necessary dependencies (and place them under `~/.kani/`).
 
 ## Installing an older version
 
 ```bash
 cargo install --locked kani-verifier --version <VERSION>
-cargo-kani setup
+cargo kani setup
 ```
 
 ## Checking your installation

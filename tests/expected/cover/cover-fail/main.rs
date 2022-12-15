@@ -26,7 +26,7 @@ fn cover_overconstrained() {
     let sign = get_sign(x);
 
     match sign {
-        Sign::Zero => kani::cover(true),
+        Sign::Zero => kani::cover!(),
         _ => {}
     }
 }

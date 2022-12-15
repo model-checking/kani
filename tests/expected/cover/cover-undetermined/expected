@@ -1,6 +1,8 @@
 Status: UNDETERMINED\
-Description: "condition is satisfiable"\
+Description: "cover condition: sum == 10"\
 main.rs:15:5 in function cover_undetermined
+
+ ** 0 of 1 cover properties unsatisfiable (1 undetermined)
 
 Failed Checks: unwinding assertion loop 0
 

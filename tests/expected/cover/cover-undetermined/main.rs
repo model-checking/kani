@@ -12,5 +12,5 @@ fn cover_undetermined() {
     for i in x {
         sum += i;
     }
-    kani::cover(sum == 10);
+    kani::cover!(sum == 10);
 }

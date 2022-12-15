@@ -3,7 +3,6 @@
 use super::typ::TypeExt;
 use super::typ::FN_RETURN_VOID_VAR_NAME;
 use super::PropertyClass;
-use crate::codegen_cprover_gotoc::codegen::typ::pointee_type;
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::{Expr, Location, Stmt, Type};
@@ -310,47 +309,30 @@ impl<'tcx> GotocCtx<'tcx> {
     /// <https://github.com/model-checking/kani/issues/221>
     fn codegen_drop(&mut self, place: &Place<'tcx>, target: &BasicBlock, loc: Location) -> Stmt {
         let place_ty = self.place_ty(place);
-        debug!(?place_ty, "codegen_drop");
         let drop_instance = Instance::resolve_drop_in_place(self.tcx, place_ty);
+        debug!(?place_ty, ?drop_instance, "codegen_drop");
+        // Once upon a time we did a `hook_applies` check here, but we no longer seem to hook drops
         let drop_implementation = match drop_instance.def {
             InstanceDef::DropGlue(_, None) => {
                 // We can skip empty DropGlue functions
                 Stmt::skip(loc)
             }
             InstanceDef::DropGlue(_def_id, Some(_)) => {
+                let place_ref = self.codegen_place_ref(place);
                 match place_ty.kind() {
                     ty::Dynamic(..) => {
                         // Virtual drop via a vtable lookup.
-                        let projection = unwrap_or_return_codegen_unimplemented_stmt!(
-                            self,
-                            self.codegen_place(place)
-                        );
-                        debug!(?projection, "codegen_drop");
-                        //  The data comes from the projection.
-                        let self_ref = if matches!(
-                            pointee_type(self.local_ty(place.local)).unwrap().kind(),
-                            ty::Dynamic(..)
-                        ) {
-                            // Projection of `dyn T` already returns a pointer.
-                            projection.goto_expr
-                        } else {
-                            // We are dropping an unsized member of a struct.
-                            assert!(!projection.goto_expr.typ().is_pointer());
-                            projection.goto_expr.address_of()
-                        };
-
                         // Pull the drop function off of the fat pointer's vtable pointer
-                        let trait_fat_ptr = projection.fat_ptr_goto_expr.unwrap();
-                        let vtable_ref =
-                            trait_fat_ptr.to_owned().member("vtable", &self.symbol_table);
+                        let vtable_ref = place_ref.to_owned().member("vtable", &self.symbol_table);
+                        let data_ref = place_ref.to_owned().member("data", &self.symbol_table);
                         let vtable = vtable_ref.dereference();
                         let fn_ptr = vtable.member("drop", &self.symbol_table);
-                        trace!(?fn_ptr, ?self_ref, "codegen_drop");
+                        trace!(?fn_ptr, ?data_ref, "codegen_drop");
 
-                        let call = fn_ptr.dereference().call(vec![self_ref]).as_stmt(loc);
+                        let call = fn_ptr.dereference().call(vec![data_ref]).as_stmt(loc);
                         if self.vtable_ctx.emit_vtable_restrictions {
                             self.virtual_call_with_restricted_fn_ptr(
-                                trait_fat_ptr.typ().clone(),
+                                place_ref.typ().clone(),
                                 VtableCtx::drop_index(),
                                 call,
                             )
@@ -359,22 +341,12 @@ impl<'tcx> GotocCtx<'tcx> {
                         }
                     }
                     _ => {
-                        // Non-virtual, direct drop call
+                        // Non-virtual, direct drop_in_place call
                         assert!(!matches!(drop_instance.def, InstanceDef::Virtual(_, _)));
 
                         let func = self.codegen_func_expr(drop_instance, None);
-                        let place = unwrap_or_return_codegen_unimplemented_stmt!(
-                            self,
-                            self.codegen_place(place)
-                        );
-                        let arg = if let Some(fat_ptr) = place.fat_ptr_goto_expr {
-                            // Drop takes the fat pointer if it exists
-                            fat_ptr
-                        } else {
-                            place.goto_expr.address_of()
-                        };
                         // The only argument should be a self reference
-                        let args = vec![arg];
+                        let args = vec![place_ref];
 
                         // We have a known issue where nested Arc and Mutex objects result in
                         // drop_in_place call implementations that fail to typecheck. Skipping
@@ -383,19 +355,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         // for calls that fail the typecheck.
                         // https://github.com/model-checking/kani/issues/426
                         // Unblocks: https://github.com/model-checking/kani/issues/435
-                        if Expr::typecheck_call(&func, &args) {
-                            func.call(args).as_stmt(loc)
-                        } else {
-                            self.codegen_unimplemented_stmt(
-                                format!(
-                                    "drop_in_place call for {}",
-                                    self.readable_instance_name(drop_instance)
-                                )
-                                .as_str(),
-                                loc,
-                                "https://github.com/model-checking/kani/issues/426",
-                            )
-                        }
+                        func.call(args).as_stmt(loc)
                     }
                 }
             }

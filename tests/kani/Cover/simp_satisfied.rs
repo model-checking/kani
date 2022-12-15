@@ -6,5 +6,5 @@
 #[kani::proof]
 fn check_pass() {
     let x: i32 = kani::any();
-    kani::cover(x == 58);
+    kani::cover!(x == 58);
 }

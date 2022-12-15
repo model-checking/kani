@@ -61,17 +61,18 @@ impl<'tcx> GotocHook<'tcx> for Cover {
         target: Option<BasicBlock>,
         span: Option<Span>,
     ) -> Stmt {
-        assert_eq!(fargs.len(), 1);
+        assert_eq!(fargs.len(), 2);
         let cond = fargs.remove(0).cast_to(Type::bool());
+        let msg = fargs.remove(0);
+        let msg = tcx.extract_const_message(&msg).unwrap();
         let target = target.unwrap();
+        let caller_loc = tcx.codegen_caller_span(&span);
         let loc = tcx.codegen_span_option(span);
-
-        let msg = "condition is satisfiable";
 
         Stmt::block(
             vec![
                 tcx.codegen_cover(cond, &msg, span),
-                Stmt::goto(tcx.current_fn().find_label(&target), loc),
+                Stmt::goto(tcx.current_fn().find_label(&target), caller_loc),
             ],
             loc,
         )
