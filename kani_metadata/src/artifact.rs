@@ -41,7 +41,7 @@ impl ArtifactType {
 /// E.g.:
 /// ```
 /// # use std::path::PathBuf;
-/// # use kani_metadata::{ArtifactType, convert_type};
+/// # use kani_metadata::{ArtifactType, artifact::convert_type};
 /// let path = PathBuf::from("my_file.symtab.out");
 /// let goto = convert_type(&path, ArtifactType::SymTabGoto, ArtifactType::Goto);
 /// assert_eq!(goto.as_os_str(), "my_file.out");

@@ -70,21 +70,23 @@ rm -rf build
 RUST_BACKTRACE=1 cargo kani --target-dir build --gen-c --enable-unstable --quiet
 cd build/kani/${TARGET}/debug/deps/
 
-if ! [ -e cbmc-linked.for-main.c ]
+mangled=$(ls multifile*.for-main.c)
+if ! [ -e "${mangled}" ]
 then
-    echo "Error: no GotoC file generated. Expected: build/${TARGET}/debug/deps/cbmc-linked.for-main.c"
+    echo "Error: no GotoC file found. Expected: build/${TARGET}/debug/deps/multifile*.for-main.c"
     exit 1
 fi
 
-if ! [ -e cbmc-linked.for-main.demangled.c ]
+demangled=$(ls multifile*.for-main.demangled.c)
+if ! [ -e "${demangled}" ]
 then
-    echo "Error: no demangled GotoC file generated. Expected build/${TARGET}/debug/deps/cbmc-linked.for-main.demangled.c."
+    echo "Error: no demangled GotoC file found. Expected build/${TARGET}/debug/deps/multifile*.for-main.demangled.c."
     exit 1
 fi
 
-if ! grep -Fq "struct PrettyStruct pretty_function(struct PrettyStruct" cbmc-linked.for-main.demangled.c;
+if ! grep -Fq "struct PrettyStruct pretty_function(struct PrettyStruct" "${demangled}";
 then
-    echo "Error: demangled file build/${TARGET}/debug/deps/cbmc-linked.for-main.demangled.c did not contain expected demangled struct and function name."
+    echo "Error: demangled file ${demangled} did not contain expected demangled struct and function name."
     exit 1
 fi
 echo "Finished multi-file check successfully..."

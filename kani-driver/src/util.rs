@@ -10,6 +10,13 @@ pub fn alter_extension(path: &Path, ext: &str) -> PathBuf {
     path.with_extension(ext)
 }
 
+/// Generate a valid crate name from the input file.
+/// Note that this method will replace invalid characters from the crate name.
+pub fn crate_name(path: &Path) -> String {
+    let stem = path.file_stem().unwrap().to_str().expect("utf-8 filename");
+    stem.replace(['-', '.'], "_")
+}
+
 /// Attempt to guess the rlib name for rust source file.
 /// This is only used by 'kani', never 'cargo-kani', so we hopefully don't have too many corner
 /// cases to deal with.
@@ -17,8 +24,7 @@ pub fn alter_extension(path: &Path, ext: &str) -> PathBuf {
 ///      compiler/rustc_codegen_ssa/src/back/link.rs
 pub fn guess_rlib_name(path: &Path) -> PathBuf {
     let basedir = path.parent().unwrap_or(Path::new("."));
-    let stem = path.file_stem().expect("has filename").to_str().expect("utf-8 filename");
-    let rlib_name = format!("lib{}.rlib", stem.replace('-', "_"));
+    let rlib_name = format!("lib{}.rlib", crate_name(path));
 
     basedir.join(rlib_name)
 }
