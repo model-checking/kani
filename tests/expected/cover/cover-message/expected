@@ -10,6 +10,6 @@ Status: UNSATISFIABLE\
 Description: "y may be greater than 10"\
 main.rs:16:18 in function cover_match
 
- ** 1 of 3 cover properties unsatisfiable
+ ** 2 of 3 cover properties satisfied
 
 VERIFICATION:- SUCCESSFUL

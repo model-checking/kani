@@ -6,6 +6,6 @@ Status: SATISFIED\
 Description: "cover condition: sorted != arr"\
 main.rs:13:5 in function cover_sorted
 
- ** 0 of 2 cover properties unsatisfiable
+ ** 2 of 2 cover properties satisfied
 
 VERIFICATION:- SUCCESSFUL

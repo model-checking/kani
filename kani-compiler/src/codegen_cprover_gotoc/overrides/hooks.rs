@@ -46,6 +46,14 @@ fn matches_function(tcx: TyCtxt, instance: Instance, attr_name: &str) -> bool {
     false
 }
 
+/// A hook for Kani's `cover` function (declared in `library/kani/src/lib.rs`).
+/// The function takes two arguments: a condition expression (bool) and a
+/// message (&'static str).
+/// The hook codegens the function as a cover property that checks whether the
+/// condition is satisfiable. Unlike assertions, cover properties currently do
+/// not have an impact on verification success or failure. See
+/// https://github.com/model-checking/kani/blob/main/rfc/src/rfcs/0003-cover-statement.md
+/// for more details.
 struct Cover;
 impl<'tcx> GotocHook<'tcx> for Cover {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {

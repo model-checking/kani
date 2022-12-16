@@ -71,6 +71,17 @@ pub const fn assert(_cond: bool, _msg: &'static str) {
 /// ```rust
 /// kani::cover(slice.len() == 0, "The slice may have a length of 0");
 /// ```
+///
+/// A cover property checks if there is at least one execution that satisfies
+/// the specified condition at the location in which the function is called.
+///
+/// Cover properties are reported as:
+///  - SATISFIED: if Kani found an execution that satisfies the condition
+///  - UNSATISFIABLE: if Kani proved that the condition cannot be satisfied
+///
+/// This function is called by the [`kani::cover!`] macro. The macro is more
+/// convenient to use.
+///
 #[inline(never)]
 #[rustc_diagnostic_item = "KaniCover"]
 pub fn cover(_cond: bool, _msg: &'static str) {}
