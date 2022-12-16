@@ -1,0 +1,7 @@
+Checking harness check_arbitrary_point...
+Failed Checks: assertion failed: point.x >= 0
+Failed Checks: assertion failed: point.x <= 0
+Failed Checks: assertion failed: point.x != 0
+Failed Checks: assertion failed: point.y >= 0
+Failed Checks: assertion failed: point.y <= 0
+Failed Checks: assertion failed: point.y != 0

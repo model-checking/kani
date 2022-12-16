@@ -1,0 +1,24 @@
+Checking harness check_comparison...
+SUCCESS\
+"assertion failed: disc >= -1 && disc <= 1"
+
+SUCCESS\
+"assertion failed: disc == 1"
+
+SUCCESS\
+"assertion failed: disc == -1"
+
+SUCCESS\
+"assertion failed: disc == 0"
+
+
+Checking harness check_enum_wrapper...
+
+SUCCESS\
+"assertion failed: c <= char::MAX"
+
+SUCCESS\
+""empty""
+
+SUCCESS\
+"assertion failed: b as u8 == 0 || b as u8 == 1"

@@ -1,0 +1,10 @@
+error: Cannot derive `Arbitrary` for `Empty`
+|\
+| #[derive(kani::Arbitrary)]\
+|          ^^^^^^^^^^^^^^^
+note: `Empty` has zero variants and cannot be instantiated
+|\
+| enum Empty {}\
+|      ^^^^^
+
+Error: "Failed to compile crate."
