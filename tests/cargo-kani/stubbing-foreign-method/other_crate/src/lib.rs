@@ -25,15 +25,17 @@ impl PubType {
     }
 
     pub fn fn_delegating_to_priv_type(&self) -> u32 {
-        PrivType::new().priv_fn()
+        PrivType::<i32>::new().priv_fn()
     }
 }
 
-struct PrivType {}
+enum PrivType<T> {
+    Empty(std::marker::PhantomData<T>),
+}
 
-impl PrivType {
+impl<T> PrivType<T> {
     fn new() -> Self {
-        Self {}
+        Self::Empty(std::marker::PhantomData)
     }
 
     fn priv_fn(&self) -> u32 {

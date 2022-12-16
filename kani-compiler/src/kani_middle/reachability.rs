@@ -33,7 +33,7 @@ use rustc_middle::ty::{
 };
 
 use crate::kani_middle::coercion;
-use crate::kani_middle::stubbing::get_stub_name;
+use crate::kani_middle::stubbing::get_stub;
 
 /// Collect all reachable items starting from the given starting points.
 pub fn collect_reachable_items<'tcx>(
@@ -410,7 +410,7 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
                             let caller = tcx.def_path_str(self.instance.def_id());
                             let callee = tcx.def_path_str(def_id);
                             // Check if the current function has been stubbed.
-                            if let Some(stub) = get_stub_name(tcx, self.instance.def_id()) {
+                            if let Some(stub) = get_stub(tcx, self.instance.def_id()) {
                                 // During the MIR stubbing transformation, we do not
                                 // force type variables in the stub's signature to
                                 // implement the same traits as those in the
@@ -429,8 +429,9 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
                                     format!(
                                         "`{receiver_ty}` doesn't implement \
                                         `{trait_}`. The function `{caller}` \
-                                        cannot be stubbed by `{stub}` due to \
-                                        generic bounds not being met."
+                                        cannot be stubbed by `{}` due to \
+                                        generic bounds not being met.",
+                                        tcx.def_path_str(stub)
                                     ),
                                 );
                             } else {
