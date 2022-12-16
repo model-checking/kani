@@ -41,6 +41,7 @@ use clap::ArgMatches;
 use kani_queries::{QueryDb, ReachabilityType, UserInput};
 use rustc_data_structures::fx::FxHashMap;
 use rustc_driver::{Callbacks, RunCompiler};
+use rustc_hir::definitions::DefPathHash;
 use std::ffi::OsStr;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -271,8 +272,8 @@ fn sysroot_path(args: &ArgMatches) -> PathBuf {
 /// qualified names.
 fn find_harness_stub_mapping(
     harness: &str,
-    stub_mappings: FxHashMap<String, FxHashMap<String, String>>,
-) -> Option<FxHashMap<String, String>> {
+    stub_mappings: FxHashMap<String, FxHashMap<DefPathHash, DefPathHash>>,
+) -> Option<FxHashMap<DefPathHash, DefPathHash>> {
     let suffix = String::from("::") + harness;
     for (name, mapping) in stub_mappings {
         if name == harness || name.ends_with(&suffix) {
