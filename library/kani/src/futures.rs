@@ -46,7 +46,6 @@ const NOOP_RAW_WAKER: RawWaker = {
 };
 
 static mut GLOBAL_EXECUTOR: Scheduler = Scheduler::new();
-const MAX_TASKS: usize = 16;
 
 type BoxFuture = Pin<Box<dyn Future<Output = ()> + Sync + 'static>>;
 
@@ -127,21 +126,21 @@ impl SchedulingStrategy for NondeterministicScheduling {
 /// If a task has reached a provided limit, it cannot be scheduled anymore until all other tasks have reached the limit too,
 /// at which point all the counters are reset to zero.
 pub struct NondetFairScheduling {
-    counters: [u8; MAX_TASKS],
+    counters: Vec<u8>,
     limit: u8,
 }
 
 impl NondetFairScheduling {
     #[inline]
     pub fn new(limit: u8) -> Self {
-        Self { counters: [limit; MAX_TASKS], limit }
+        Self { counters: Vec::new(), limit }
     }
 }
 
 impl SchedulingStrategy for NondetFairScheduling {
     fn pick_task(&mut self, num_tasks: usize) -> (usize, SchedulingAssumption) {
-        if self.counters[0..num_tasks] == [0; MAX_TASKS][0..num_tasks] {
-            self.counters = [self.limit; MAX_TASKS];
+        if self.counters.len() != num_tasks || self.counters.iter().all(|x| *x == 0) {
+            self.counters = vec![self.limit; num_tasks];
         }
         let index = crate::any();
         crate::assume(index < num_tasks);
@@ -152,9 +151,7 @@ impl SchedulingStrategy for NondetFairScheduling {
 }
 
 pub(crate) struct Scheduler {
-    /// Using a Vec instead of an array makes the runtime jump from 40s to almost 10min if using Vec::with_capacity and leads to out of memory with Vec::new (even with 64 GB RAM).
-    tasks: [Option<BoxFuture>; MAX_TASKS],
-    num_tasks: usize,
+    tasks: Vec<Option<BoxFuture>>,
     num_running: usize,
 }
 
@@ -163,15 +160,13 @@ impl Scheduler {
     #[inline]
     pub(crate) const fn new() -> Scheduler {
         const INIT: Option<BoxFuture> = None;
-        Scheduler { tasks: [INIT; MAX_TASKS], num_tasks: 0, num_running: 0 }
+        Scheduler { tasks: Vec::new(), num_running: 0 }
     }
 
     /// Adds a future to the scheduler's task list, returning a JoinHandle
     pub(crate) fn spawn<F: Future<Output = ()> + Sync + 'static>(&mut self, fut: F) -> JoinHandle {
-        let index = self.num_tasks;
-        self.tasks[index] = Some(Box::pin(fut));
-        assert!(self.num_tasks < MAX_TASKS, "tried to spawn more than {MAX_TASKS} tasks");
-        self.num_tasks += 1;
+        let index = self.tasks.len();
+        self.tasks.push(Some(Box::pin(fut)));
         self.num_running += 1;
         JoinHandle { index }
     }
@@ -181,7 +176,7 @@ impl Scheduler {
         let waker = unsafe { Waker::from_raw(NOOP_RAW_WAKER) };
         let cx = &mut Context::from_waker(&waker);
         while self.num_running > 0 {
-            let (index, assumption) = scheduling_plan.pick_task(self.num_tasks);
+            let (index, assumption) = scheduling_plan.pick_task(self.tasks.len());
             let task = &mut self.tasks[index];
             if let Some(fut) = task.as_mut() {
                 match fut.as_mut().poll(cx) {
