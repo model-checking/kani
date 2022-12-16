@@ -6,17 +6,16 @@
 //! This tests whether we correctly find harnesses during stubbing that are
 //! specified with a partially qualified name.
 
-fn foo() -> u32 {
-    0
-}
-
-fn bar() -> u32 {
-    42
-}
-
 mod mod1 {
     mod mod2 {
-        use foo;
+        fn foo() -> u32 {
+            0
+        }
+
+        fn bar() -> u32 {
+            42
+        }
+
         #[kani::proof]
         #[kani::stub(foo, bar)]
         fn harness() {
