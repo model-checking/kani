@@ -6,9 +6,9 @@ These APIs are tightly coupled with each Kani version, so they are not
 published yet at <crates.io>.
 
 You can find their latest documentation here:
-  - [kani](https://model-checking.github.io/kani/crates/kani): This crate
+  - [kani](https://model-checking.github.io/kani/crates/doc/kani): This crate
   provide APIs to write Kani harnesses.
-  - [kani_macros](https://model-checking.github.io/kani/crates/kani_macros):
+  - [kani_macros](https://model-checking.github.io/kani/crates/doc/kani_macros):
   This crate provides `proc_macro` definitions that allow users to configure their
   harnesses using function attributes.
 
