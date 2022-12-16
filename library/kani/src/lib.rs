@@ -79,7 +79,7 @@ pub const fn assert(_cond: bool, _msg: &'static str) {
 ///  - SATISFIED: if Kani found an execution that satisfies the condition
 ///  - UNSATISFIABLE: if Kani proved that the condition cannot be satisfied
 ///
-/// This function is called by the [`kani::cover!`] macro. The macro is more
+/// This function is called by the [`cover!`] macro. The macro is more
 /// convenient to use.
 ///
 #[inline(never)]
