@@ -3,7 +3,6 @@
 //
 // compile-flags: --edition 2018
 
-
 //! This file tests a hand-written spawn infrastructure and executor.
 //! This should be replaced with code from the Kani library as soon as the executor can get merged.
 //! Tracking issue: https://github.com/model-checking/kani/issues/1685
@@ -12,7 +11,6 @@ use std::sync::{
     atomic::{AtomicI64, Ordering},
     Arc,
 };
-
 
 use std::{
     future::Future,
