@@ -46,6 +46,47 @@ fn matches_function(tcx: TyCtxt, instance: Instance, attr_name: &str) -> bool {
     false
 }
 
+/// A hook for Kani's `cover` function (declared in `library/kani/src/lib.rs`).
+/// The function takes two arguments: a condition expression (bool) and a
+/// message (&'static str).
+/// The hook codegens the function as a cover property that checks whether the
+/// condition is satisfiable. Unlike assertions, cover properties currently do
+/// not have an impact on verification success or failure. See
+/// <https://github.com/model-checking/kani/blob/main/rfc/src/rfcs/0003-cover-statement.md>
+/// for more details.
+struct Cover;
+impl<'tcx> GotocHook<'tcx> for Cover {
+    fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
+        matches_function(tcx, instance, "KaniCover")
+    }
+
+    fn handle(
+        &self,
+        tcx: &mut GotocCtx<'tcx>,
+        _instance: Instance<'tcx>,
+        mut fargs: Vec<Expr>,
+        _assign_to: Place<'tcx>,
+        target: Option<BasicBlock>,
+        span: Option<Span>,
+    ) -> Stmt {
+        assert_eq!(fargs.len(), 2);
+        let cond = fargs.remove(0).cast_to(Type::bool());
+        let msg = fargs.remove(0);
+        let msg = tcx.extract_const_message(&msg).unwrap();
+        let target = target.unwrap();
+        let caller_loc = tcx.codegen_caller_span(&span);
+        let loc = tcx.codegen_span_option(span);
+
+        Stmt::block(
+            vec![
+                tcx.codegen_cover(cond, &msg, span),
+                Stmt::goto(tcx.current_fn().find_label(&target), caller_loc),
+            ],
+            loc,
+        )
+    }
+}
+
 struct ExpectFail;
 impl<'tcx> GotocHook<'tcx> for ExpectFail {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
@@ -369,6 +410,7 @@ pub fn fn_hooks<'tcx>() -> GotocHooks<'tcx> {
             Rc::new(Panic),
             Rc::new(Assume),
             Rc::new(Assert),
+            Rc::new(Cover),
             Rc::new(ExpectFail),
             Rc::new(Nondet),
             Rc::new(RustAlloc),
