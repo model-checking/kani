@@ -168,7 +168,6 @@ impl Scheduler {
     /// Creates a scheduler with an empty task list
     #[inline]
     pub(crate) const fn new() -> Scheduler {
-        const INIT: Option<BoxFuture> = None;
         Scheduler { tasks: Vec::new(), num_running: 0 }
     }
 
