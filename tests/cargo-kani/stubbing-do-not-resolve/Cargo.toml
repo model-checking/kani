@@ -1,12 +1,15 @@
 # Copyright Kani Contributors
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 [package]
-name = "foreign-function-stubbing"
+name = "stubbing-do-not-resolve"
 version = "0.1.0"
 edition = "2021"
 
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
 [dependencies]
-other_crate = { path = "other_crate" }
+other_crate1 = { path = "other_crate1" }
+other_crate2 = { path = "other_crate2" }
 
 [package.metadata.kani]
 flags = { enable-unstable=true, enable-stubbing=true }
