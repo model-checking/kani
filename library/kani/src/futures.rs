@@ -17,7 +17,6 @@ use std::{
 /// As a consequence, this function completely ignores the waker infrastructure and just polls the given future in a busy loop.
 ///
 /// Note that spawn is not supported with this function. Use [`spawnable_block_on`] if you need it.
-// TODO: Give an error if spawn is used in the future passed to this function.
 pub fn block_on<T>(mut fut: impl Future<Output = T>) -> T {
     let waker = unsafe { Waker::from_raw(NOOP_RAW_WAKER) };
     let cx = &mut Context::from_waker(&waker);
@@ -45,7 +44,7 @@ const NOOP_RAW_WAKER: RawWaker = {
     RawWaker::new(std::ptr::null(), &RawWakerVTable::new(clone_waker, noop, noop, noop))
 };
 
-static mut GLOBAL_EXECUTOR: Scheduler = Scheduler::new();
+static mut GLOBAL_EXECUTOR: Option<Scheduler> = None;
 
 type BoxFuture = Pin<Box<dyn Future<Output = ()> + Sync + 'static>>;
 
@@ -213,7 +212,7 @@ impl Future for JoinHandle {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> std::task::Poll<Self::Output> {
-        if unsafe { GLOBAL_EXECUTOR.tasks[self.index].is_some() } {
+        if unsafe { GLOBAL_EXECUTOR.as_mut().unwrap().tasks[self.index].is_some() } {
             std::task::Poll::Pending
         } else {
             cx.waker().wake_by_ref(); // For completeness. But Kani currently ignores wakers.
@@ -223,7 +222,12 @@ impl Future for JoinHandle {
 }
 
 pub fn spawn<F: Future<Output = ()> + Sync + 'static>(fut: F) -> JoinHandle {
-    unsafe { GLOBAL_EXECUTOR.spawn(fut) }
+    unsafe {
+        GLOBAL_EXECUTOR
+            .as_mut()
+            .expect("`spawn` should only be called within `spawnable_block_on`")
+            .spawn(fut)
+    }
 }
 
 /// Polls the given future and the tasks it may spawn until all of them complete
@@ -234,7 +238,9 @@ pub fn spawnable_block_on<F: Future<Output = ()> + Sync + 'static>(
     scheduling_plan: impl SchedulingStrategy,
 ) {
     unsafe {
-        GLOBAL_EXECUTOR.block_on(fut, scheduling_plan);
+        GLOBAL_EXECUTOR = Some(Scheduler::new());
+        GLOBAL_EXECUTOR.as_mut().unwrap().block_on(fut, scheduling_plan);
+        GLOBAL_EXECUTOR = None;
     }
 }
 
