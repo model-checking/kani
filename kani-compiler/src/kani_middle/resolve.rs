@@ -1,6 +1,11 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-//! This module contains code for resolving strings to `DefId`s.
+//! This module contains code for resolving strings representing simple paths to
+//! `DefId`s. For the definition of a simple path, see
+//! <https://doc.rust-lang.org/reference/paths.html#simple-paths>.
+//!
+//! TODO: Extend this logic to support resolving qualified paths.
+//! <https://github.com/model-checking/kani/issues/1997>
 
 use std::collections::VecDeque;
 
@@ -9,9 +14,13 @@ use rustc_hir::def_id::{DefId, LocalDefId, CRATE_DEF_INDEX};
 use rustc_hir::ItemKind;
 use rustc_middle::ty::TyCtxt;
 
-/// Attempts to resolve a path (in the form of a string) to a `DefId`. The
-/// current module is provided as an argument in order to resolve relative
+/// Attempts to resolve a simple path (in the form of a string) to a `DefId`.
+/// The current module is provided as an argument in order to resolve relative
 /// paths.
+///
+/// TODO: Extend this implementation to handle qualified paths and simple paths
+/// corresponding to trait methods.
+/// <https://github.com/model-checking/kani/issues/1997>
 pub fn resolve_path(tcx: TyCtxt, current_module: LocalDefId, path_str: &str) -> Option<DefId> {
     let path = to_path(tcx, current_module, path_str)?;
     match &path.base {
@@ -48,7 +57,9 @@ enum Base {
     LocalModule { id: LocalDefId, may_be_external_path: bool },
 }
 
-/// A path consisting of a starting point and a bunch of segments.
+/// A path consisting of a starting point and a bunch of segments. If `base`
+/// matches `Base::LocalModule { id: _, may_be_external_path : true }`, then
+/// `segments` cannot be empty.
 #[derive(Debug)]
 struct Path {
     base: Base,
@@ -65,6 +76,7 @@ impl Path {
 /// structure, resolving qualifiers (like `crate`, etc.) along the way.
 fn to_path(tcx: TyCtxt, current_module: LocalDefId, name: &str) -> Option<Path> {
     const CRATE: &str = "crate";
+    // rustc represents initial `::` as `{{root}}`.
     const ROOT: &str = "{{root}}";
     const SELF: &str = "self";
     const SUPER: &str = "super";
@@ -80,26 +92,30 @@ fn to_path(tcx: TyCtxt, current_module: LocalDefId, name: &str) -> Option<Path> 
 
     // Resolve qualifiers `crate`, initial `::`, and `self`. The qualifier
     // `self` may be followed be `super` (handled below).
-    let mut may_be_external_path = true;
     let first = segments[0].as_str();
-    if first == ROOT {
-        segments.pop_front();
-        return Some(Path::new(Base::ExternPrelude, segments));
-    } else if first == CRATE {
-        segments.pop_front();
-        // Find the module at the root of the crate.
-        let current_module_hir_id = tcx.hir().local_def_id_to_hir_id(current_module);
-        let crate_root = match tcx.hir().parent_iter(current_module_hir_id).last() {
-            None => current_module,
-            Some((hir_id, _)) => tcx.hir().local_def_id(hir_id),
-        };
-        return Some(Path::new(
-            Base::LocalModule { id: crate_root, may_be_external_path: false },
-            segments,
-        ));
-    } else if first == SELF {
-        segments.pop_front();
-        may_be_external_path = false;
+    let may_be_external_path = !matches!(first, CRATE | SELF | SUPER);
+    match first {
+        ROOT => {
+            segments.pop_front();
+            return Some(Path::new(Base::ExternPrelude, segments));
+        }
+        CRATE => {
+            segments.pop_front();
+            // Find the module at the root of the crate.
+            let current_module_hir_id = tcx.hir().local_def_id_to_hir_id(current_module);
+            let crate_root = match tcx.hir().parent_iter(current_module_hir_id).last() {
+                None => current_module,
+                Some((hir_id, _)) => tcx.hir().local_def_id(hir_id),
+            };
+            return Some(Path::new(
+                Base::LocalModule { id: crate_root, may_be_external_path },
+                segments,
+            ));
+        }
+        SELF => {
+            segments.pop_front();
+        }
+        _ => (),
     }
 
     // Pop up the module stack until we account for all the `super` prefixes.
@@ -109,7 +125,6 @@ fn to_path(tcx: TyCtxt, current_module: LocalDefId, name: &str) -> Option<Path> 
     while segments.front().map(String::as_str) == Some(SUPER) {
         segments.pop_front();
         base_module = tcx.hir().local_def_id(parents.next()?.0);
-        may_be_external_path = false;
     }
 
     Some(Path::new(Base::LocalModule { id: base_module, may_be_external_path }, segments))
