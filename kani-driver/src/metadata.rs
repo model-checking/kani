@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use anyhow::{bail, Result};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use kani_metadata::{
     HarnessMetadata, InternedString, KaniMetadata, TraitDefinedMethod, VtableCtxResults,
@@ -108,27 +108,17 @@ pub fn merge_kani_metadata(files: Vec<KaniMetadata>) -> KaniMetadata {
 }
 
 impl KaniSession {
-    /// Reads a collection of kani-metadata.json files and merges the results.
-    pub fn collect_kani_metadata(&self, files: &[PathBuf]) -> Result<KaniMetadata> {
-        // TODO: one possible future improvement here would be to return some kind of Lazy
-        // value, that only computes this metadata if it turns out we need it.
-        let results: Result<Vec<_>, _> =
-            files.iter().map(|x| from_json::<KaniMetadata>(x)).collect();
-        Ok(merge_kani_metadata(results?))
-    }
-
     /// Determine which function to use as entry point, based on command-line arguments and kani-metadata.
-    pub fn determine_targets(&self, metadata: &KaniMetadata) -> Result<Vec<HarnessMetadata>> {
-        if let Some(name) = &self.args.function {
-            // --function is untranslated, create a mock harness
-            return Ok(vec![mock_proof_harness(name, None, None)]);
-        }
-        if let Some(name) = &self.args.harness {
+    pub fn determine_targets(
+        &self,
+        all_harnesses: &[&HarnessMetadata],
+    ) -> Result<Vec<HarnessMetadata>> {
+        if let Some(name) = self.args.harness.clone().or(self.args.function.clone()) {
             // Linear search, since this is only ever called once
-            let harness = find_proof_harness(name, &metadata.proof_harnesses)?;
+            let harness = find_proof_harness(&name, all_harnesses)?;
             return Ok(vec![harness.clone()]);
         }
-        Ok(metadata.proof_harnesses.clone())
+        Ok(all_harnesses.iter().map(|md| (*md).clone()).collect())
     }
 }
 
@@ -169,7 +159,7 @@ pub fn mock_proof_harness(
 /// but this function is written to be robust against that changing in the future.
 fn find_proof_harness<'a>(
     name: &str,
-    harnesses: &'a [HarnessMetadata],
+    harnesses: &'a [&HarnessMetadata],
 ) -> Result<&'a HarnessMetadata> {
     let mut result: Option<&'a HarnessMetadata> = None;
     for h in harnesses.iter() {
@@ -214,11 +204,14 @@ mod tests {
             mock_proof_harness("module::check_two", None, None),
             mock_proof_harness("module::not_check_three", None, None),
         ];
-        assert!(find_proof_harness("check_three", &harnesses).is_err());
+        let ref_harnesses = harnesses.iter().collect::<Vec<_>>();
+        assert!(find_proof_harness("check_three", &ref_harnesses).is_err());
         assert!(
-            find_proof_harness("check_two", &harnesses).unwrap().mangled_name
+            find_proof_harness("check_two", &ref_harnesses).unwrap().mangled_name
                 == "module::check_two"
         );
-        assert!(find_proof_harness("check_one", &harnesses).unwrap().mangled_name == "check_one");
+        assert!(
+            find_proof_harness("check_one", &ref_harnesses).unwrap().mangled_name == "check_one"
+        );
     }
 }

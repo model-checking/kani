@@ -1,0 +1,9 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+# Test that Kani can handle harnesses in different crates with the same name
+
+[workspace]
+members = [
+  "lib1",
+  "lib2",
+]
