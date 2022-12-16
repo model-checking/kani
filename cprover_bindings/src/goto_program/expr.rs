@@ -194,6 +194,12 @@ pub enum BinaryOperator {
     Rol,
     Ror,
     Shl,
+    VectorEqual,
+    VectorNotequal,
+    VectorGe,
+    VectorGt,
+    VectorLe,
+    VectorLt,
     Xor,
 }
 
@@ -732,7 +738,7 @@ impl Expr {
         for field in non_padding_fields {
             let field_typ = field.field_typ().unwrap();
             let value = components.get(&field.name()).unwrap();
-            assert_eq!(value.typ(), field_typ);
+            assert_eq!(value.typ(), field_typ, "Unexpected type for {:?}", field.name());
         }
 
         let values = fields
@@ -930,16 +936,12 @@ impl Expr {
             Bitnand => lhs.typ == rhs.typ && lhs.typ.is_integer(),
             // Comparisons
             Ge | Gt | Le | Lt => {
-                lhs.typ == rhs.typ
-                    && (lhs.typ.is_numeric() || lhs.typ.is_pointer() || lhs.typ.is_vector())
+                lhs.typ == rhs.typ && (lhs.typ.is_numeric() || lhs.typ.is_pointer())
             }
             // Equalities
             Equal | Notequal => {
                 lhs.typ == rhs.typ
-                    && (lhs.typ.is_c_bool()
-                        || lhs.typ.is_integer()
-                        || lhs.typ.is_pointer()
-                        || lhs.typ.is_vector())
+                    && (lhs.typ.is_c_bool() || lhs.typ.is_integer() || lhs.typ.is_pointer())
             }
             // Floating Point Equalities
             IeeeFloatEqual | IeeeFloatNotequal => lhs.typ == rhs.typ && lhs.typ.is_floating_point(),
@@ -953,6 +955,11 @@ impl Expr {
                     || (lhs.typ.is_pointer() && rhs.typ.is_integer())
             }
             ROk => lhs.typ.is_pointer() && rhs.typ.is_c_size_t(),
+            VectorEqual | VectorNotequal | VectorGe | VectorLe | VectorGt | VectorLt => {
+                unreachable!(
+                    "vector comparison operators must be typechecked by `typecheck_vector_cmp_expr`"
+                )
+            }
         }
     }
 
@@ -975,21 +982,9 @@ impl Expr {
             // Bitwise ops
             Bitand | Bitnand | Bitor | Bitxor => lhs.typ.clone(),
             // Comparisons
-            Ge | Gt | Le | Lt => {
-                if lhs.typ.is_vector() {
-                    lhs.typ.clone()
-                } else {
-                    Type::bool()
-                }
-            }
+            Ge | Gt | Le | Lt => Type::bool(),
             // Equalities
-            Equal | Notequal => {
-                if lhs.typ.is_vector() {
-                    lhs.typ.clone()
-                } else {
-                    Type::bool()
-                }
-            }
+            Equal | Notequal => Type::bool(),
             // Floating Point Equalities
             IeeeFloatEqual | IeeeFloatNotequal => Type::bool(),
             // Overflow flags
@@ -999,8 +994,36 @@ impl Expr {
                 Type::struct_tag(struct_type.tag().unwrap())
             }
             ROk => Type::bool(),
+            // Vector comparisons
+            VectorEqual | VectorNotequal | VectorGe | VectorLe | VectorGt | VectorLt => {
+                unreachable!(
+                    "return type for vector comparison operators depends on the place type"
+                )
+            }
         }
     }
+
+    /// Comparison operators for SIMD vectors aren't typechecked as regular
+    /// comparison operators. First, the return type depends on the place's type
+    /// (i.e., the variable or expression type for the result).
+    ///
+    /// In addition, the return type must have:
+    ///  1. The same length (number of elements) as the operand types.
+    ///  2. An integer base type (or just "boolean"-y, as mentioned in
+    ///     <https://github.com/rust-lang/rfcs/blob/master/text/1199-simd-infrastructure.md#comparisons>).
+    ///     The signedness doesn't matter, as the result for each element is
+    ///     either "all ones" (true) or "all zeros" (false).
+    /// For example, one can use `simd_eq` on two `f64x4` vectors and assign the
+    /// result to a `u64x4` vector. But it's not possible to assign it to: (1) a
+    /// `u64x2` because they don't have the same length; or (2) another `f64x4`
+    /// vector.
+    fn typecheck_vector_cmp_expr(lhs: &Expr, rhs: &Expr, ret_typ: &Type) -> bool {
+        lhs.typ.is_vector()
+            && lhs.typ == rhs.typ
+            && lhs.typ.len() == ret_typ.len()
+            && ret_typ.base_type().unwrap().is_integer()
+    }
+
     /// self op right;
     pub fn binop(self, op: BinaryOperator, rhs: Expr) -> Expr {
         assert!(
@@ -1011,6 +1034,19 @@ impl Expr {
             rhs
         );
         expr!(BinOp { op, lhs: self, rhs }, Expr::binop_return_type(op, &self, &rhs))
+    }
+
+    /// Like `binop`, but receives an additional parameter `ret_typ` with the expected
+    /// return type for the place, which is used as the return type.
+    pub fn vector_cmp(self, op: BinaryOperator, rhs: Expr, ret_typ: Type) -> Expr {
+        assert!(
+            Expr::typecheck_vector_cmp_expr(&self, &rhs, &ret_typ),
+            "vector comparison expression does not typecheck {:?} {:?} {:?}",
+            self,
+            rhs,
+            ret_typ,
+        );
+        expr!(BinOp { op, lhs: self, rhs }, ret_typ)
     }
 
     /// `__builtin_add_overflow_p(self,e)
@@ -1161,6 +1197,39 @@ impl Expr {
     /// `__CPROVER_r_ok(self, e)`
     pub fn r_ok(self, e: Expr) -> Expr {
         self.binop(ROk, e)
+    }
+
+    // Regular comparison operators (e.g., `==` or `<`) don't work over SIMD vectors.
+    // Instead, we must use the dedicated `vector-<op>` Irep operators.
+
+    /// `self == e` for SIMD vectors
+    pub fn vector_eq(self, e: Expr, ret_typ: Type) -> Expr {
+        self.vector_cmp(VectorEqual, e, ret_typ)
+    }
+
+    /// `self != e` for SIMD vectors
+    pub fn vector_neq(self, e: Expr, ret_typ: Type) -> Expr {
+        self.vector_cmp(VectorNotequal, e, ret_typ)
+    }
+
+    /// `self >= e` for SIMD vectors
+    pub fn vector_ge(self, e: Expr, ret_typ: Type) -> Expr {
+        self.vector_cmp(VectorGe, e, ret_typ)
+    }
+
+    /// `self <= e` for SIMD vectors
+    pub fn vector_le(self, e: Expr, ret_typ: Type) -> Expr {
+        self.vector_cmp(VectorLe, e, ret_typ)
+    }
+
+    /// `self > e` for SIMD vectors
+    pub fn vector_gt(self, e: Expr, ret_typ: Type) -> Expr {
+        self.vector_cmp(VectorGt, e, ret_typ)
+    }
+
+    /// `self < e` for SIMD vectors
+    pub fn vector_lt(self, e: Expr, ret_typ: Type) -> Expr {
+        self.vector_cmp(VectorLt, e, ret_typ)
     }
 
     // Expressions defined on top of other expressions

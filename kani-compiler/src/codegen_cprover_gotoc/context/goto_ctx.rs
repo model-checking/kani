@@ -58,6 +58,9 @@ pub struct GotocCtx<'tcx> {
     pub vtable_ctx: VtableCtx,
     pub current_fn: Option<CurrentFnCtx<'tcx>>,
     pub type_map: FxHashMap<InternedString, Ty<'tcx>>,
+    /// map from symbol identifier to string literal
+    /// TODO: consider making the map from Expr to String instead
+    pub str_literals: FxHashMap<InternedString, String>,
     pub proof_harnesses: Vec<HarnessMetadata>,
     pub test_harnesses: Vec<HarnessMetadata>,
     /// a global counter for generating unique IDs for checks
@@ -84,6 +87,7 @@ impl<'tcx> GotocCtx<'tcx> {
             vtable_ctx: VtableCtx::new(emit_vtable_restrictions),
             current_fn: None,
             type_map: FxHashMap::default(),
+            str_literals: FxHashMap::default(),
             proof_harnesses: vec![],
             test_harnesses: vec![],
             global_checks_count: 0,
@@ -300,7 +304,7 @@ impl<'tcx> GotocCtx<'tcx> {
         Type::union_tag(union_name)
     }
 
-    /// Makes a __attribute__((constructor)) fnname() {body} initalizer function
+    /// Makes a `__attribute__((constructor)) fnname() {body}` initalizer function
     pub fn register_initializer(&mut self, var_name: &str, body: Stmt) -> &Symbol {
         let fn_name = Self::initializer_fn_name(var_name);
         let pretty_name = format!("{var_name}::init");
@@ -472,7 +476,8 @@ fn machine_model_from_session(sess: &Session) -> MachineModel {
             let wchar_t_width = 32;
 
             MachineModel {
-                architecture: architecture.to_string(),
+                // CBMC calls it arm64, not aarch64
+                architecture: "arm64".to_string(),
                 alignment,
                 bool_width,
                 char_is_unsigned,

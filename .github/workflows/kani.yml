@@ -20,7 +20,7 @@ jobs:
         os: [macos-11, ubuntu-18.04, ubuntu-20.04]
     steps:
       - name: Checkout Kani
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
@@ -39,7 +39,7 @@ jobs:
       KANI_ENABLE_UNSOUND_EXPERIMENTS: 1
     steps:
       - name: Checkout Kani
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
@@ -56,7 +56,7 @@ jobs:
     runs-on: ubuntu-20.04
     steps:
       - name: Checkout Kani
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
@@ -75,7 +75,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout Kani
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
@@ -124,7 +124,7 @@ jobs:
             artifact: kani-latest-x86_64-unknown-linux-gnu.tar.gz
     steps:
       - name: Checkout Kani
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup

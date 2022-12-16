@@ -22,7 +22,7 @@ KANI_DIR=$SCRIPT_DIR/..
 export KANI_FAIL_ON_UNEXPECTED_DESCRIPTION="true"
 
 # Required dependencies
-check-cbmc-version.py --major 5 --minor 69
+check-cbmc-version.py --major 5 --minor 72
 check-cbmc-viewer-version.py --major 3 --minor 5
 
 # Formatting check
@@ -39,10 +39,12 @@ fi
 cargo test -p cprover_bindings
 cargo test -p kani-compiler
 cargo test -p kani-driver
+cargo test -p kani_metadata
 
 # Check output files (--gen-c option)
 echo "Check GotoC output file generation"
 time "$KANI_DIR"/tests/output-files/check-output.sh
+echo ""
 
 # Declare testing suite information (suite and mode)
 TESTS=(
@@ -63,6 +65,11 @@ if [[ "" != "${KANI_ENABLE_UNSOUND_EXPERIMENTS-}" ]]; then
 else
   TESTS+=("no_unsound_experiments expected")
 fi
+
+# Build compiletest and print configuration. We pick suite / mode combo so there's no test.
+echo "--- Compiletest configuration"
+cargo run -p compiletest --quiet -- --suite kani --mode cargo-kani --dry-run --verbose
+echo "-----------------------------"
 
 # Extract testing suite information and run compiletest
 for testp in "${TESTS[@]}"; do

@@ -4,17 +4,21 @@
 //! This file contains the code necessary to interface with the compiler backend
 
 use crate::codegen_cprover_gotoc::GotocCtx;
-use crate::kani_middle::reachability::{collect_reachable_items, filter_crate_items};
+use crate::kani_middle::provide;
+use crate::kani_middle::reachability::{
+    collect_reachable_items, filter_closures_in_const_crate_items, filter_crate_items,
+};
 use bitflags::_core::any::Any;
-use cbmc::goto_program::{symtab_transformer, Location};
+use cbmc::goto_program::Location;
 use cbmc::{InternedString, MachineModel};
-use kani_metadata::KaniMetadata;
+use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata};
 use kani_queries::{QueryDb, ReachabilityType, UserInput};
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_codegen_ssa::{CodegenResults, CrateInfo};
 use rustc_data_structures::fx::FxHashMap;
 use rustc_errors::ErrorGuaranteed;
 use rustc_hir::def::DefKind;
+use rustc_hir::def_id::LOCAL_CRATE;
 use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
 use rustc_middle::mir::mono::{CodegenUnit, MonoItem};
@@ -28,15 +32,17 @@ use rustc_span::def_id::DefId;
 use rustc_target::abi::Endian;
 use rustc_target::spec::PanicStrategy;
 use std::collections::BTreeMap;
+use std::ffi::OsString;
 use std::fmt::Write;
 use std::fs::File;
 use std::io::BufWriter;
 use std::io::Write as IoWrite;
 use std::iter::FromIterator;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::rc::Rc;
-use tracing::{debug, error, warn};
+use std::time::Instant;
+use tracing::{debug, error, info, warn};
 
 #[derive(Clone)]
 pub struct GotocCodegenBackend {
@@ -54,9 +60,13 @@ impl CodegenBackend for GotocCodegenBackend {
         Box::new(rustc_codegen_ssa::back::metadata::DefaultMetadataLoader)
     }
 
-    fn provide(&self, _providers: &mut Providers) {}
+    fn provide(&self, providers: &mut Providers) {
+        provide::provide(providers, &self.queries);
+    }
 
-    fn provide_extern(&self, _providers: &mut ty::query::ExternProviders) {}
+    fn provide_extern(&self, providers: &mut ty::query::ExternProviders) {
+        provide::provide_extern(providers);
+    }
 
     fn codegen_crate(
         &self,
@@ -73,71 +83,73 @@ impl CodegenBackend for GotocCodegenBackend {
         check_options(tcx.sess, need_metadata_module);
         check_crate_items(&gcx);
 
-        let items = collect_codegen_items(&gcx);
+        let items = with_timer(|| collect_codegen_items(&gcx), "codegen reachability analysis");
         if items.is_empty() {
             // There's nothing to do.
             return codegen_results(tcx, rustc_metadata, gcx.symbol_table.machine_model());
         }
         dump_mir_items(tcx, &items);
 
-        // we first declare all items
-        for item in &items {
-            match *item {
-                MonoItem::Fn(instance) => {
-                    gcx.call_with_panic_debug_info(
-                        |ctx| ctx.declare_function(instance),
-                        format!("declare_function: {}", gcx.readable_instance_name(instance)),
-                        instance.def_id(),
-                    );
+        with_timer(
+            || {
+                // we first declare all items
+                for item in &items {
+                    match *item {
+                        MonoItem::Fn(instance) => {
+                            gcx.call_with_panic_debug_info(
+                                |ctx| ctx.declare_function(instance),
+                                format!(
+                                    "declare_function: {}",
+                                    gcx.readable_instance_name(instance)
+                                ),
+                                instance.def_id(),
+                            );
+                        }
+                        MonoItem::Static(def_id) => {
+                            gcx.call_with_panic_debug_info(
+                                |ctx| ctx.declare_static(def_id, *item),
+                                format!("declare_static: {def_id:?}"),
+                                def_id,
+                            );
+                        }
+                        MonoItem::GlobalAsm(_) => {} // Ignore this. We have already warned about it.
+                    }
                 }
-                MonoItem::Static(def_id) => {
-                    gcx.call_with_panic_debug_info(
-                        |ctx| ctx.declare_static(def_id, *item),
-                        format!("declare_static: {def_id:?}"),
-                        def_id,
-                    );
-                }
-                MonoItem::GlobalAsm(_) => {} // Ignore this. We have already warned about it.
-            }
-        }
 
-        // then we move on to codegen
-        for item in items {
-            match item {
-                MonoItem::Fn(instance) => {
-                    gcx.call_with_panic_debug_info(
-                        |ctx| ctx.codegen_function(instance),
-                        format!(
-                            "codegen_function: {}\n{}",
-                            gcx.readable_instance_name(instance),
-                            gcx.symbol_name(instance)
-                        ),
-                        instance.def_id(),
-                    );
+                // then we move on to codegen
+                for item in items {
+                    match item {
+                        MonoItem::Fn(instance) => {
+                            gcx.call_with_panic_debug_info(
+                                |ctx| ctx.codegen_function(instance),
+                                format!(
+                                    "codegen_function: {}\n{}",
+                                    gcx.readable_instance_name(instance),
+                                    gcx.symbol_name(instance)
+                                ),
+                                instance.def_id(),
+                            );
+                        }
+                        MonoItem::Static(def_id) => {
+                            gcx.call_with_panic_debug_info(
+                                |ctx| ctx.codegen_static(def_id, item),
+                                format!("codegen_static: {def_id:?}"),
+                                def_id,
+                            );
+                        }
+                        MonoItem::GlobalAsm(_) => {} // We have already warned above
+                    }
                 }
-                MonoItem::Static(def_id) => {
-                    gcx.call_with_panic_debug_info(
-                        |ctx| ctx.codegen_static(def_id, item),
-                        format!("codegen_static: {def_id:?}"),
-                        def_id,
-                    );
-                }
-                MonoItem::GlobalAsm(_) => {} // We have already warned above
-            }
-        }
+            },
+            "codegen",
+        );
 
         // Print compilation report.
         print_report(&gcx, tcx);
 
-        let unsupported_features = gcx.unsupported_metadata();
-
-        // perform post-processing symbol table passes
-        let passes = self.queries.get_symbol_table_passes();
-        let symtab = symtab_transformer::do_passes(gcx.symbol_table, &passes);
-
         // Map MIR types to GotoC types
         let type_map: BTreeMap<InternedString, InternedString> =
-            BTreeMap::from_iter(gcx.type_map.into_iter().map(|(k, v)| (k, v.to_string().into())));
+            BTreeMap::from_iter(gcx.type_map.iter().map(|(k, v)| (*k, v.to_string().into())));
 
         // Get the vtable function pointer restrictions if requested
         let vtable_restrictions = if gcx.vtable_ctx.emit_vtable_restrictions {
@@ -146,27 +158,23 @@ impl CodegenBackend for GotocCodegenBackend {
             None
         };
 
-        let metadata = KaniMetadata {
-            proof_harnesses: gcx.proof_harnesses,
-            unsupported_features,
-            test_harnesses: gcx.test_harnesses,
-        };
+        let metadata = generate_metadata(&gcx, tcx);
 
         // No output should be generated if user selected no_codegen.
         if !tcx.sess.opts.unstable_opts.no_codegen && tcx.sess.opts.output_types.should_codegen() {
             let outputs = tcx.output_filenames(());
             let base_filename = outputs.output_path(OutputType::Object);
             let pretty = self.queries.get_output_pretty_json();
-            write_file(&base_filename, "symtab.json", &symtab, pretty);
-            write_file(&base_filename, "type_map.json", &type_map, pretty);
-            write_file(&base_filename, "kani-metadata.json", &metadata, pretty);
+            write_file(&base_filename, ArtifactType::SymTab, &gcx.symbol_table, pretty);
+            write_file(&base_filename, ArtifactType::TypeMap, &type_map, pretty);
+            write_file(&base_filename, ArtifactType::Metadata, &metadata, pretty);
             // If they exist, write out vtable virtual call function pointer restrictions
             if let Some(restrictions) = vtable_restrictions {
-                write_file(&base_filename, "restrictions.json", &restrictions, pretty);
+                write_file(&base_filename, ArtifactType::VTableRestriction, &restrictions, pretty);
             }
             symbol_table_to_gotoc(&tcx, &base_filename);
         }
-        codegen_results(tcx, rustc_metadata, symtab.machine_model())
+        codegen_results(tcx, rustc_metadata, gcx.symbol_table.machine_model())
     }
 
     fn join_codegen(
@@ -282,7 +290,7 @@ fn check_options(session: &Session, need_metadata_module: bool) {
 fn check_crate_items(gcx: &GotocCtx) {
     let tcx = gcx.tcx;
     for item in tcx.hir_crate_items(()).items() {
-        let def_id = item.def_id.to_def_id();
+        let def_id = item.owner_id.def_id.to_def_id();
         gcx.check_attributes(def_id);
         if tcx.def_kind(def_id) == DefKind::GlobalAsm {
             if !gcx.queries.get_ignore_global_asm() {
@@ -302,21 +310,6 @@ fn check_crate_items(gcx: &GotocCtx) {
         }
     }
     tcx.sess.abort_if_errors();
-}
-
-fn write_file<T>(base_filename: &Path, extension: &str, source: &T, pretty: bool)
-where
-    T: serde::Serialize,
-{
-    let filename = base_filename.with_extension(extension);
-    debug!("output to {:?}", filename);
-    let out_file = File::create(&filename).unwrap();
-    let writer = BufWriter::new(out_file);
-    if pretty {
-        serde_json::to_writer_pretty(writer, &source).unwrap();
-    } else {
-        serde_json::to_writer(writer, &source).unwrap();
-    }
 }
 
 /// Prints a report at the end of the compilation.
@@ -365,9 +358,8 @@ fn codegen_results(
 /// - None: Skip collection and codegen all together. This is used to compile dependencies.
 /// - Legacy: Use regular compiler collection that will collect local items, and a few cross
 /// crate items (such as generic functions and functions candidate to be inlined).
-///
-/// To be implemented:
 /// - PubFns: Cross-crate reachability analysis that use the local public fns as starting point.
+/// - Tests: Cross-crate collection of all reachable items starting from test harnesses.
 fn collect_codegen_items<'tcx>(gcx: &GotocCtx<'tcx>) -> Vec<MonoItem<'tcx>> {
     let tcx = gcx.tcx;
     let reach = gcx.queries.get_reachability_analysis();
@@ -387,6 +379,14 @@ fn collect_codegen_items<'tcx>(gcx: &GotocCtx<'tcx>) -> Vec<MonoItem<'tcx>> {
             let harnesses = filter_crate_items(tcx, |_, def_id| gcx.is_proof_harness(def_id));
             collect_reachable_items(tcx, &harnesses).into_iter().collect()
         }
+        ReachabilityType::Tests => {
+            // We're iterating over crate items here, so what we have to codegen is the "test description" containing the
+            // test closure that we want to execute
+            let harnesses = filter_closures_in_const_crate_items(tcx, |_, def_id| {
+                gcx.is_test_harness_description(def_id)
+            });
+            collect_reachable_items(tcx, &harnesses).into_iter().collect()
+        }
         ReachabilityType::None => Vec::new(),
         ReachabilityType::PubFns => {
             let entry_fn = tcx.entry_fn(()).map(|(id, _)| id);
@@ -398,23 +398,27 @@ fn collect_codegen_items<'tcx>(gcx: &GotocCtx<'tcx>) -> Vec<MonoItem<'tcx>> {
     }
 }
 
-fn symbol_table_to_gotoc(tcx: &TyCtxt, file: &Path) {
-    let output_filename = file.with_extension("symtab.out");
-    let input_filename = file.with_extension("symtab.json");
+fn symbol_table_to_gotoc(tcx: &TyCtxt, file: &Path) -> PathBuf {
+    let output_filename = file.with_extension(ArtifactType::SymTabGoto);
+    let input_filename = file.with_extension(ArtifactType::SymTab);
 
     let args = vec![
         input_filename.clone().into_os_string(),
         "--out".into(),
-        output_filename.into_os_string(),
+        OsString::from(output_filename.as_os_str()),
     ];
     // TODO get symtab2gb path from self
     let mut cmd = Command::new("symtab2gb");
     cmd.args(args);
-    debug!("calling: `{:?} {:?}`", cmd.get_program(), cmd.get_args());
+    info!("[Kani] Running: `{:?} {:?}`", cmd.get_program(), cmd.get_args());
 
-    let result = cmd
-        .output()
-        .expect(&format!("Failed to generate goto model for {}", input_filename.display()));
+    let result = with_timer(
+        || {
+            cmd.output()
+                .expect(&format!("Failed to generate goto model for {}", input_filename.display()))
+        },
+        "symtab2gb",
+    );
     if !result.status.success() {
         error!("Symtab error output:\n{}", String::from_utf8_lossy(&result.stderr));
         error!("Symtab output:\n{}", String::from_utf8_lossy(&result.stdout));
@@ -424,7 +428,8 @@ fn symbol_table_to_gotoc(tcx: &TyCtxt, file: &Path) {
         );
         tcx.sess.err(&err_msg);
         tcx.sess.abort_if_errors();
-    }
+    };
+    output_filename
 }
 
 /// Print MIR for the reachable items if the `--emit mir` option was provided to rustc.
@@ -461,4 +466,53 @@ fn dump_mir_items(tcx: TyCtxt, items: &[MonoItem]) {
             write_mir_pretty(tcx, Some(def_id), &mut writer).unwrap();
         }
     }
+}
+
+/// Method that generates `KaniMetadata` from the given compilation context.
+/// This is a temporary method used until we generate a model per-harness.
+/// See <https://github.com/model-checking/kani/issues/1855> for more details.
+fn generate_metadata(gcx: &GotocCtx, tcx: TyCtxt) -> KaniMetadata {
+    let outputs = tcx.output_filenames(());
+    let model_file =
+        outputs.output_path(OutputType::Object).with_extension(ArtifactType::SymTabGoto);
+    let extend_harnesses = |mut harnesses: Vec<HarnessMetadata>| {
+        for harness in harnesses.iter_mut() {
+            harness.goto_file = Some(model_file.clone());
+        }
+        harnesses
+    };
+    KaniMetadata {
+        crate_name: tcx.crate_name(LOCAL_CRATE).to_string(),
+        proof_harnesses: extend_harnesses(gcx.proof_harnesses.clone()),
+        unsupported_features: gcx.unsupported_metadata(),
+        test_harnesses: extend_harnesses(gcx.test_harnesses.clone()),
+    }
+}
+
+pub fn write_file<T>(base_path: &Path, file_type: ArtifactType, source: &T, pretty: bool)
+where
+    T: serde::Serialize,
+{
+    let filename = base_path.with_extension(file_type);
+    debug!(?filename, "write_json");
+    let out_file = File::create(&filename).unwrap();
+    let writer = BufWriter::new(out_file);
+    if pretty {
+        serde_json::to_writer_pretty(writer, &source).unwrap();
+    } else {
+        serde_json::to_writer(writer, &source).unwrap();
+    }
+}
+
+/// Execute the provided function and measure the clock time it took for its execution.
+/// Log the time with the given description.
+pub fn with_timer<T, F>(func: F, description: &str) -> T
+where
+    F: FnOnce() -> T,
+{
+    let start = Instant::now();
+    let ret = func();
+    let elapsed = start.elapsed();
+    info!("Finished {description} in {}s", elapsed.as_secs_f32());
+    ret
 }

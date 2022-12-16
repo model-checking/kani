@@ -24,9 +24,7 @@ use rustc_target::abi::{
     VariantIdx, Variants,
 };
 use rustc_target::spec::abi::Abi;
-use std::collections::BTreeMap;
 use std::iter;
-use std::iter::FromIterator;
 use tracing::{debug, trace, warn};
 use ty::layout::HasParamEnv;
 
@@ -432,7 +430,7 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn is_unsized(&self, t: Ty<'tcx>) -> bool {
         !self
             .monomorphize(t)
-            .is_sized(self.tcx.at(rustc_span::DUMMY_SP), ty::ParamEnv::reveal_all())
+            .is_sized(*self.tcx.at(rustc_span::DUMMY_SP), ty::ParamEnv::reveal_all())
     }
 
     /// Generates the type for a single field for a dynamic vtable.
@@ -538,16 +536,8 @@ impl<'tcx> GotocCtx<'tcx> {
     /// `drop_in_place` is a function with type &self -> (), the vtable for
     /// dynamic trait objects needs a pointer to it
     pub fn trait_vtable_drop_type(&mut self, t: ty::Ty<'tcx>) -> Type {
-        if matches!(t.kind(), ty::Dynamic(..)) {
-            Type::code_with_unnamed_parameters(
-                vec![self.codegen_fat_ptr(t).to_pointer()],
-                Type::unit(),
-            )
+        Type::code_with_unnamed_parameters(vec![self.codegen_ty(t).to_pointer()], Type::unit())
             .to_pointer()
-        } else {
-            Type::code_with_unnamed_parameters(vec![self.codegen_ty(t).to_pointer()], Type::unit())
-                .to_pointer()
-        }
     }
 
     /// Given a trait of type `t`, determine the fields of the struct that will implement its vtable.
@@ -781,7 +771,7 @@ impl<'tcx> GotocCtx<'tcx> {
             // [T] -> memory location (flexible array)
             // Note: This is not valid C but CBMC seems to be ok with it.
             ty::Slice(e) => self.codegen_ty(*e).flexible_array_of(),
-            ty::Str => Type::c_char().flexible_array_of(),
+            ty::Str => Type::unsigned_int(8).flexible_array_of(),
             ty::Ref(_, t, _) | ty::RawPtr(ty::TypeAndMut { ty: t, .. }) => self.codegen_ty_ref(*t),
             ty::FnDef(def_id, substs) => {
                 let instance =
@@ -1166,7 +1156,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// 3. references to structs whose last field is a unsized object (slice / trait)
     ///    - `matches!(pointee_type.kind(), ty::Adt(..) if self.is_unsized(t))
     ///
-    pub fn codegen_fat_ptr(&mut self, pointee_type: Ty<'tcx>) -> Type {
+    fn codegen_fat_ptr(&mut self, pointee_type: Ty<'tcx>) -> Type {
         assert!(
             !self.use_thin_pointer(pointee_type),
             "Generating a fat pointer for a type requiring a thin pointer: {:?}",
@@ -1182,7 +1172,7 @@ impl<'tcx> GotocCtx<'tcx> {
             let pretty_name = format!("&{}", self.ty_pretty_name(pointee_type));
             let element_type = match pointee_type.kind() {
                 ty::Slice(elt_type) => self.codegen_ty(*elt_type),
-                ty::Str => Type::c_char(),
+                ty::Str => Type::unsigned_int(8),
                 // For adt, see https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp
                 ty::Adt(..) => self.codegen_ty(pointee_type),
                 kind => unreachable!("Generating a slice fat pointer to {:?}", kind),
@@ -1781,24 +1771,6 @@ impl<'tcx> GotocCtx<'tcx> {
 
 /// Use maps instead of lists to manage mir struct components.
 impl<'tcx> GotocCtx<'tcx> {
-    /// A mapping from mir field names to mir field types for a mir struct (for a single-variant adt)
-    pub fn mir_struct_field_types(
-        &self,
-        struct_type: Ty<'tcx>,
-    ) -> BTreeMap<InternedString, Ty<'tcx>> {
-        match struct_type.kind() {
-            ty::Adt(adt_def, adt_substs) if adt_def.variants().len() == 1 => {
-                let fields = &adt_def.variants().get(VariantIdx::from_u32(0)).unwrap().fields;
-                BTreeMap::from_iter(
-                    fields.iter().map(|field| {
-                        (field.name.to_string().into(), field.ty(self.tcx, adt_substs))
-                    }),
-                )
-            }
-            _ => unreachable!("Expected a single-variant ADT. Found {:?}", struct_type),
-        }
-    }
-
     /// Extract a trait type from a `Struct<dyn T>`.
     /// Note that `T` must be the last element of the struct.
     /// This also handles nested cases: `Struct<Struct<dyn T>>` returns `dyn T`

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! This module contains code for processing Rust attributes (like `kani::proof`).
 
-use rustc_ast::{AttrKind, Attribute, LitKind};
+use rustc_ast::{AttrKind, Attribute, LitKind, MetaItem};
 
 /// Partition all the attributes into two buckets, proof_attributes and other_attributes
 pub fn partition_kanitool_attributes(
@@ -41,6 +41,44 @@ pub fn extract_integer_argument(attr: &Attribute) -> Option<u128> {
     }
     // Return none if there are no attributes or if there's too many attributes
     else {
+        None
+    }
+}
+
+/// Extracts a vector with the path arguments of an attribute.
+/// The length of the returned vector is equal to the number of arguments in the
+/// attribute; an entry is `None` if the argument is not syntactically a path,
+/// and `Some(<path>)` otherwise. Paths are returned as strings.
+///
+/// For example, on `stub(foo::bar, 42, baz)`, this returns
+/// `vec![Some("foo::bar"), None, Some("baz")]`.
+pub fn extract_path_arguments(attr: &Attribute) -> Vec<Option<String>> {
+    let attr_args = attr.meta_item_list();
+    if attr_args.is_none() {
+        return vec![];
+    }
+    let mut paths = Vec::new();
+    for arg in attr_args.unwrap() {
+        let entry = arg.meta_item().and_then(extract_path);
+        paths.push(entry)
+    }
+    paths
+}
+
+/// Extracts a path from an attribute item, returning `None` if the item is not
+/// syntactically a path.
+fn extract_path(meta_item: &MetaItem) -> Option<String> {
+    if meta_item.is_word() {
+        Some(
+            meta_item
+                .path
+                .segments
+                .iter()
+                .map(|seg| seg.ident.as_str())
+                .collect::<Vec<&str>>()
+                .join("::"),
+        )
+    } else {
         None
     }
 }

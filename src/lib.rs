@@ -27,26 +27,43 @@ use anyhow::{bail, Context, Result};
 /// Effectively the entry point (i.e. `main` function) for both our proxy binaries.
 /// `bin` should be either `kani` or `cargo-kani`
 pub fn proxy(bin: &str) -> Result<()> {
-    // In an effort to keep our dependencies minimal, we do the bare minimum argument parsing
-    let args: Vec<OsString> = env::args_os().collect();
-    // This makes it easy to do crude arg parsing with match
-    let args_ez: Vec<Option<&str>> = args.iter().map(|x| x.to_str()).collect();
-    // "cargo kani setup" comes in as "cargo-kani kani setup"
-    // "cargo-kani setup" comes in as "cargo-kani setup"
-    match &args_ez[..] {
-        &[_, Some("setup"), Some("--use-local-bundle"), _]
-        | &[_, Some("kani"), Some("setup"), Some("--use-local-bundle"), _] => {
-            // Grab it from args, so it can be non-utf-8
-            setup::setup(Some(args[3].clone()))
-        }
-        &[_, Some("setup")] | &[_, Some("kani"), Some("setup")] => setup::setup(None),
-        _ => {
+    match parse_args(env::args_os().collect()) {
+        ArgsResult::ExplicitSetup { use_local_bundle } => setup::setup(use_local_bundle),
+        ArgsResult::Default => {
             fail_if_in_dev_environment()?;
             if !setup::appears_setup() {
                 setup::setup(None)?;
             }
             exec(bin)
         }
+    }
+}
+
+/// Minimalist argument parsing result type
+#[derive(PartialEq, Eq, Debug)]
+enum ArgsResult {
+    ExplicitSetup { use_local_bundle: Option<OsString> },
+    Default,
+}
+
+/// Parse `args` and decide what to do.
+fn parse_args(args: Vec<OsString>) -> ArgsResult {
+    // In an effort to keep our dependencies minimal, we do the bare minimum argument parsing manually.
+    // `args_ez` makes it easy to do crude arg parsing with match.
+    let args_ez: Vec<Option<&str>> = args.iter().map(|x| x.to_str()).collect();
+    // "cargo kani setup" comes in as "cargo-kani kani setup"
+    // "cargo-kani setup" comes in as "cargo-kani setup"
+    match &args_ez[..] {
+        &[_, Some("setup"), Some("--use-local-bundle"), _] => {
+            ArgsResult::ExplicitSetup { use_local_bundle: Some(args[3].clone()) }
+        }
+        &[_, Some("kani"), Some("setup"), Some("--use-local-bundle"), _] => {
+            ArgsResult::ExplicitSetup { use_local_bundle: Some(args[4].clone()) }
+        }
+        &[_, Some("setup")] | &[_, Some("kani"), Some("setup")] => {
+            ArgsResult::ExplicitSetup { use_local_bundle: None }
+        }
+        _ => ArgsResult::Default,
     }
 }
 
@@ -184,5 +201,29 @@ mod tests {
         // don't error on these:
         assert!(trial(""));
         assert!(trial("/"));
+    }
+
+    #[test]
+    fn check_arg_parsing() {
+        fn trial(args: &[&str]) -> ArgsResult {
+            parse_args(args.into_iter().map(OsString::from).collect())
+        }
+        {
+            let e = ArgsResult::Default;
+            assert_eq!(e, trial(&["cargo-kani", "kani"]));
+            assert_eq!(e, trial(&[]));
+        }
+        {
+            let e = ArgsResult::ExplicitSetup { use_local_bundle: None };
+            assert_eq!(e, trial(&["cargo-kani", "kani", "setup"]));
+            assert_eq!(e, trial(&["cargo", "kani", "setup"]));
+            assert_eq!(e, trial(&["cargo-kani", "setup"]));
+        }
+        {
+            let e = ArgsResult::ExplicitSetup { use_local_bundle: Some(OsString::from("FILE")) };
+            assert_eq!(e, trial(&["cargo-kani", "kani", "setup", "--use-local-bundle", "FILE"]));
+            assert_eq!(e, trial(&["cargo", "kani", "setup", "--use-local-bundle", "FILE"]));
+            assert_eq!(e, trial(&["cargo-kani", "setup", "--use-local-bundle", "FILE"]));
+        }
     }
 }

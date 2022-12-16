@@ -13,10 +13,12 @@
 //!   - For every static, collect initializer and drop functions.
 //!
 //! We have kept this module agnostic of any Kani code in case we can contribute this back to rustc.
+use tracing::{debug, debug_span, trace, warn};
+
 use rustc_data_structures::fingerprint::Fingerprint;
 use rustc_data_structures::fx::FxHashSet;
 use rustc_data_structures::stable_hasher::{HashStable, StableHasher};
-use rustc_hir::lang_items::LangItem;
+use rustc_hir::def_id::DefId;
 use rustc_middle::mir::interpret::{AllocId, ConstValue, ErrorHandled, GlobalAlloc, Scalar};
 use rustc_middle::mir::mono::MonoItem;
 use rustc_middle::mir::visit::Visitor as MirVisitor;
@@ -24,16 +26,14 @@ use rustc_middle::mir::{
     Body, CastKind, Constant, ConstantKind, Location, Rvalue, Terminator, TerminatorKind,
 };
 use rustc_middle::span_bug;
-use rustc_middle::traits::{ImplSource, ImplSourceUserDefinedData};
-use rustc_middle::ty::adjustment::CustomCoerceUnsized;
 use rustc_middle::ty::adjustment::PointerCast;
-use rustc_middle::ty::TypeAndMut;
 use rustc_middle::ty::{
-    self, Closure, ClosureKind, ConstKind, Instance, InstanceDef, ParamEnv, TraitRef, Ty, TyCtxt,
-    TyKind, TypeFoldable, VtblEntry,
+    Closure, ClosureKind, ConstKind, Instance, InstanceDef, ParamEnv, Ty, TyCtxt, TyKind,
+    TypeFoldable, VtblEntry, WithOptConstParam,
 };
-use rustc_span::def_id::DefId;
-use tracing::{debug, debug_span, trace, warn};
+
+use crate::kani_middle::coercion;
+use crate::kani_middle::stubbing::get_stub_name;
 
 /// Collect all reachable items starting from the given starting points.
 pub fn collect_reachable_items<'tcx>(
@@ -46,6 +46,7 @@ pub fn collect_reachable_items<'tcx>(
     for item in starting_points {
         collector.collect(*item);
     }
+    tcx.sess.abort_if_errors();
 
     // Sort the result so code generation follows deterministic order.
     // This helps us to debug the code, but it also provides the user a good experience since the
@@ -55,20 +56,44 @@ pub fn collect_reachable_items<'tcx>(
     sorted_items
 }
 
-/// Collect all items in the crate that matches the given predicate.
+/// Collect all (top-level) items in the crate that matches the given predicate.
 pub fn filter_crate_items<F>(tcx: TyCtxt, predicate: F) -> Vec<MonoItem>
 where
     F: FnMut(TyCtxt, DefId) -> bool,
 {
-    // Filter proof harnesses.
     let mut filter = predicate;
     tcx.hir_crate_items(())
         .items()
         .filter_map(|hir_id| {
-            let def_id = hir_id.def_id.to_def_id();
+            let def_id = hir_id.owner_id.def_id.to_def_id();
             filter(tcx, def_id).then(|| MonoItem::Fn(Instance::mono(tcx, def_id)))
         })
         .collect()
+}
+
+/// Use a predicate to find `const` declarations, then extract all closures from those declarations
+///
+/// Probably only specifically useful with a predicate to find `TestDescAndFn` const declarations from
+/// tests and extract the closures from them.
+pub fn filter_closures_in_const_crate_items<F>(tcx: TyCtxt, mut predicate: F) -> Vec<MonoItem>
+where
+    F: FnMut(TyCtxt, DefId) -> bool,
+{
+    let mut roots = Vec::new();
+    for hir_id in tcx.hir_crate_items(()).items() {
+        let def_id = hir_id.owner_id.def_id.to_def_id();
+        if predicate(tcx, def_id) {
+            // The predicate should only ever apply to monomorphic items
+            let instance = Instance::mono(tcx, def_id);
+            let body = tcx.instance_mir(InstanceDef::Item(WithOptConstParam::unknown(def_id)));
+            let mut extrator =
+                ConstMonoItemExtractor { tcx, body, instance, collected: FxHashSet::default() };
+            extrator.visit_body(body);
+
+            roots.extend(extrator.collected);
+        }
+    }
+    roots
 }
 
 struct MonoItemsCollector<'tcx> {
@@ -131,7 +156,7 @@ impl<'tcx> MonoItemsCollector<'tcx> {
 
         // Collect initialization.
         let alloc = self.tcx.eval_static_initializer(def_id).unwrap();
-        for &id in alloc.inner().provenance().values() {
+        for id in alloc.inner().provenance().provenances() {
             self.queue.extend(collect_alloc_items(self.tcx, id).iter());
         }
     }
@@ -237,7 +262,7 @@ impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {
             }
             ConstValue::Slice { data: alloc, start: _, end: _ }
             | ConstValue::ByRef { alloc, .. } => {
-                for &id in alloc.inner().provenance().values() {
+                for id in alloc.inner().provenance().provenances() {
                     self.collected.extend(collect_alloc_items(self.tcx, id).iter())
                 }
             }
@@ -275,10 +300,11 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
                 // If so, collect items from the impl `Trait for Concrete {}`.
                 let target_ty = self.monomorphize(target);
                 let source_ty = self.monomorphize(operand.ty(self.body, self.tcx));
-                let (src_inner, dst_inner) = extract_trait_casting(self.tcx, source_ty, target_ty);
-                if !src_inner.is_trait() && dst_inner.is_trait() {
-                    debug!(concrete_ty=?src_inner, trait_ty=?dst_inner, "collect_vtable_methods");
-                    self.collect_vtable_methods(src_inner, dst_inner);
+                let base_coercion =
+                    coercion::extract_unsize_casting(self.tcx, source_ty, target_ty);
+                if !base_coercion.src_ty.is_trait() && base_coercion.dst_ty.is_trait() {
+                    debug!(?base_coercion, "collect_vtable_methods");
+                    self.collect_vtable_methods(base_coercion.src_ty, base_coercion.dst_ty);
                 }
             }
             Rvalue::Cast(CastKind::Pointer(PointerCast::ReifyFnPointer), ref operand, _) => {
@@ -372,15 +398,47 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
 
         let tcx = self.tcx;
         match terminator.kind {
-            TerminatorKind::Call { ref func, .. } => {
+            TerminatorKind::Call { ref func, ref args, .. } => {
                 let callee_ty = func.ty(self.body, tcx);
                 let fn_ty = self.monomorphize(callee_ty);
                 if let TyKind::FnDef(def_id, substs) = *fn_ty.kind() {
-                    let instance =
+                    let instance_opt =
                         Instance::resolve(self.tcx, ParamEnv::reveal_all(), def_id, substs)
-                            .unwrap()
                             .unwrap();
-                    self.collect_instance(instance, true);
+                    match instance_opt {
+                        None => {
+                            let caller = tcx.def_path_str(self.instance.def_id());
+                            let callee = tcx.def_path_str(def_id);
+                            // Check if the current function has been stubbed.
+                            if let Some(stub) = get_stub_name(tcx, self.instance.def_id()) {
+                                // During the MIR stubbing transformation, we do not
+                                // force type variables in the stub's signature to
+                                // implement the same traits as those in the
+                                // original function/method. A trait mismatch shows
+                                // up here, when we try to resolve a trait method
+                                let generic_ty = args[0].ty(self.body, tcx).peel_refs();
+                                let receiver_ty = tcx.subst_and_normalize_erasing_regions(
+                                    substs,
+                                    ParamEnv::reveal_all(),
+                                    generic_ty,
+                                );
+                                let sep = callee.rfind("::").unwrap();
+                                let trait_ = &callee[..sep];
+                                tcx.sess.span_err(
+                                    terminator.source_info.span,
+                                    format!(
+                                        "`{receiver_ty}` doesn't implement \
+                                        `{trait_}`. The function `{caller}` \
+                                        cannot be stubbed by `{stub}` due to \
+                                        generic bounds not being met."
+                                    ),
+                                );
+                            } else {
+                                panic!("unable to resolve call to `{callee}` in `{caller}`")
+                            }
+                        }
+                        Some(instance) => self.collect_instance(instance, true),
+                    };
                 } else {
                     assert!(
                         matches!(fn_ty.kind(), TyKind::FnPtr(..)),
@@ -449,107 +507,6 @@ fn should_codegen_locally<'tcx>(tcx: TyCtxt<'tcx>, instance: &Instance<'tcx>) ->
     }
 }
 
-/// Extract the pair (`T`, `U`) for a unsized coercion where type `T` implements `Unsize<U>`.
-/// I.e., `U` is either a trait or a slice.
-/// For more details, please refer to:
-/// <https://doc.rust-lang.org/reference/type-coercions.html#unsized-coercions>
-///
-/// This is used to determine the vtable implementation that must be tracked by the fat pointer.
-///
-/// For example, if `&u8` is being converted to `&dyn Debug`, this method would return:
-/// `(u8, dyn Debug)`.
-///
-/// There are a few interesting cases (references / pointers are handled the same way):
-/// 1. Coercion between `&T` to `&U`.
-///    - This is the base case.
-///    - In this case, we extract the type that is pointed to.
-/// 2. Coercion between smart pointers like `Rc<T>` to `Rc<U>`.
-///    - Smart pointers implement the `CoerceUnsize` trait.
-///    - Use CustomCoerceUnsized information to traverse the smart pointer structure and find the
-///      underlying pointer.
-///    - Use base case to extract `T` and `U`.
-/// 3. Coercion between `&Wrapper<T>` to `&Wrapper<U>`.
-///    - Apply base case to extract the pair `(Wrapper<T>, Wrapper<U>)`.
-///    - Extract the tail element of the struct which are of type `T` and `U`, respectively.
-/// 4. Coercion between smart pointers of wrapper structs.
-///    - Apply the logic from item 2 then item 3.
-fn extract_trait_casting<'tcx>(
-    tcx: TyCtxt<'tcx>,
-    src_ty: Ty<'tcx>,
-    dst_ty: Ty<'tcx>,
-) -> (Ty<'tcx>, Ty<'tcx>) {
-    trace!(?dst_ty, ?src_ty, "find_trait_conversion");
-    let mut src_inner_ty = src_ty;
-    let mut dst_inner_ty = dst_ty;
-    (src_inner_ty, dst_inner_ty) = loop {
-        // Extract the pointee types from pointers (including smart pointers) that form the base of
-        // the conversion.
-        match (&src_inner_ty.kind(), &dst_inner_ty.kind()) {
-            (&ty::Adt(src_def, src_substs), &ty::Adt(dst_def, dst_substs))
-                if !src_def.is_box() || !dst_def.is_box() =>
-            {
-                // Handle smart pointers by using CustomCoerceUnsized to find the field being
-                // coerced.
-                assert_eq!(src_def, dst_def);
-                let src_fields = &src_def.non_enum_variant().fields;
-                let dst_fields = &dst_def.non_enum_variant().fields;
-                assert_eq!(src_fields.len(), dst_fields.len());
-
-                let CustomCoerceUnsized::Struct(coerce_index) =
-                    custom_coerce_unsize_info(tcx, src_inner_ty, dst_inner_ty);
-                assert!(coerce_index < src_fields.len());
-
-                src_inner_ty = src_fields[coerce_index].ty(tcx, src_substs);
-                dst_inner_ty = dst_fields[coerce_index].ty(tcx, dst_substs);
-            }
-            _ => {
-                // Base case is always a pointer (Box, raw_pointer or reference).
-                let src_pointee = extract_pointee(src_inner_ty).expect(&format!(
-                    "Expected source to be a pointer. Found {:?} instead",
-                    src_inner_ty
-                ));
-                let dst_pointee = extract_pointee(dst_inner_ty).expect(&format!(
-                    "Expected destination to be a pointer. Found {:?} instead",
-                    dst_inner_ty
-                ));
-                break (src_pointee, dst_pointee);
-            }
-        }
-    };
-
-    tcx.struct_lockstep_tails_erasing_lifetimes(src_inner_ty, dst_inner_ty, ParamEnv::reveal_all())
-}
-
-/// Extract pointee type from builtin pointer types.
-fn extract_pointee(typ: Ty) -> Option<Ty> {
-    typ.builtin_deref(true).map(|TypeAndMut { ty, .. }| ty)
-}
-
-/// Get information about an unsized coercion.
-/// This code was extracted from `rustc_monomorphize` crate.
-/// <https://github.com/rust-lang/rust/blob/4891d57f7aab37b5d6a84f2901c0bb8903111d53/compiler/rustc_monomorphize/src/lib.rs#L25-L46>
-fn custom_coerce_unsize_info<'tcx>(
-    tcx: TyCtxt<'tcx>,
-    source_ty: Ty<'tcx>,
-    target_ty: Ty<'tcx>,
-) -> CustomCoerceUnsized {
-    let def_id = tcx.require_lang_item(LangItem::CoerceUnsized, None);
-
-    let trait_ref = ty::Binder::dummy(TraitRef {
-        def_id,
-        substs: tcx.mk_substs_trait(source_ty, &[target_ty.into()]),
-    });
-
-    match tcx.codegen_select_candidate((ParamEnv::reveal_all(), trait_ref)) {
-        Ok(ImplSource::UserDefined(ImplSourceUserDefinedData { impl_def_id, .. })) => {
-            tcx.coerce_unsized_info(impl_def_id).custom_kind.unwrap()
-        }
-        impl_source => {
-            unreachable!("invalid `CoerceUnsized` impl_source: {:?}", impl_source);
-        }
-    }
-}
-
 /// Scans the allocation type and collect static objects.
 fn collect_alloc_items<'tcx>(tcx: TyCtxt<'tcx>, alloc_id: AllocId) -> Vec<MonoItem> {
     trace!(alloc=?tcx.global_alloc(alloc_id), ?alloc_id, "collect_alloc_items");
@@ -568,7 +525,11 @@ fn collect_alloc_items<'tcx>(tcx: TyCtxt<'tcx>, alloc_id: AllocId) -> Vec<MonoIt
         }
         GlobalAlloc::Memory(alloc) => {
             items.extend(
-                alloc.inner().provenance().values().flat_map(|id| collect_alloc_items(tcx, *id)),
+                alloc
+                    .inner()
+                    .provenance()
+                    .provenances()
+                    .flat_map(|id| collect_alloc_items(tcx, id)),
             );
         }
         GlobalAlloc::VTable(ty, trait_ref) => {
@@ -577,4 +538,51 @@ fn collect_alloc_items<'tcx>(tcx: TyCtxt<'tcx>, alloc_id: AllocId) -> Vec<MonoIt
         }
     };
     items
+}
+
+/// This MIR Visitor is intended for one specific purpose:
+/// Find the closure that exist inside a top-level const declaration generated by
+/// test declarations. This allows us to treat this closure instance as a root for
+/// the reachability analysis.
+///
+/// Entry into this visitor will be via `visit_body`
+struct ConstMonoItemExtractor<'a, 'tcx> {
+    tcx: TyCtxt<'tcx>,
+    collected: FxHashSet<MonoItem<'tcx>>,
+    instance: Instance<'tcx>,
+    body: &'a Body<'tcx>,
+}
+
+impl<'a, 'tcx> MirVisitor<'tcx> for ConstMonoItemExtractor<'a, 'tcx> {
+    #[allow(clippy::single_match)]
+    fn visit_rvalue(&mut self, rvalue: &Rvalue<'tcx>, location: Location) {
+        trace!(rvalue=?*rvalue, "visit_rvalue");
+
+        match *rvalue {
+            Rvalue::Cast(CastKind::Pointer(PointerCast::ClosureFnPointer(_)), ref operand, _) => {
+                let source_ty = operand.ty(self.body, self.tcx);
+                let source_ty = self.instance.subst_mir_and_normalize_erasing_regions(
+                    self.tcx,
+                    ParamEnv::reveal_all(),
+                    source_ty,
+                );
+                match *source_ty.kind() {
+                    Closure(def_id, substs) => {
+                        let instance = Instance::resolve_closure(
+                            self.tcx,
+                            def_id,
+                            substs,
+                            ClosureKind::FnOnce,
+                        )
+                        .expect("failed to normalize and resolve closure during codegen");
+                        self.collected.insert(MonoItem::Fn(instance.polymorphize(self.tcx)));
+                    }
+                    _ => unreachable!("Unexpected type: {:?}", source_ty),
+                }
+            }
+            _ => { /* not interesting */ }
+        }
+
+        self.super_rvalue(rvalue, location);
+    }
 }

@@ -135,8 +135,8 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    /// c.f. rustc_codegen_llvm::intrinsic impl IntrinsicCallMethods<'tcx> for Builder<'a, 'll, 'tcx>
-    /// fn codegen_intrinsic_call
+    /// c.f. `rustc_codegen_llvm::intrinsic` `impl IntrinsicCallMethods<'tcx> for Builder<'a, 'll, 'tcx>`
+    /// `fn codegen_intrinsic_call`
     /// c.f. <https://doc.rust-lang.org/std/intrinsics/index.html>
     fn codegen_intrinsic(
         &mut self,
@@ -274,40 +274,6 @@ impl<'tcx> GotocCtx<'tcx> {
             }};
         }
 
-        // Intrinsics which encode a SIMD arithmetic operation with overflow check.
-        // We expand the overflow check because CBMC overflow operations don't accept array as
-        // argument.
-        macro_rules! _codegen_simd_with_overflow_check {
-            ($op:ident, $overflow:ident) => {{
-                let a = fargs.remove(0);
-                let b = fargs.remove(0);
-                let mut check = Expr::bool_false();
-                if let Type::Vector { size, .. } = a.typ() {
-                    let a_size = size;
-                    if let Type::Vector { size, .. } = b.typ() {
-                        let b_size = size;
-                        assert_eq!(a_size, b_size, "Expected same length vectors",);
-                        for i in 0..*a_size {
-                            // create expression
-                            let index = Expr::int_constant(i, Type::ssize_t());
-                            let v_a = a.clone().index_array(index.clone());
-                            let v_b = b.clone().index_array(index);
-                            check = check.or(v_a.$overflow(v_b));
-                        }
-                    }
-                }
-                let check_stmt = self.codegen_assert(
-                    check.not(),
-                    PropertyClass::ArithmeticOverflow,
-                    format!("attempt to compute {} which would overflow", intrinsic).as_str(),
-                    loc,
-                );
-                let res = a.$op(b);
-                let expr_place = self.codegen_expr_to_place(p, res);
-                Stmt::block(vec![expr_place, check_stmt], loc)
-            }};
-        }
-
         // Intrinsics which encode a simple wrapping arithmetic operation
         macro_rules! codegen_wrapping_op {
             ($f:ident) => {{ codegen_intrinsic_binop!($f) }};
@@ -404,17 +370,10 @@ impl<'tcx> GotocCtx<'tcx> {
             }};
         }
 
-        if let Some(_stripped) = intrinsic.strip_prefix("simd_shuffle") {
-            // TODO: can be empty now (i.e. `simd_shuffle` instead of `simd_shuffle8`)
-            // `parse` fails on empty, so comment that bit of code out.
-            // To re-enable this we'll need to investigate how size is computed now.
-            // let n: u64 = stripped.parse().unwrap();
-            return unstable_codegen!(self.codegen_intrinsic_simd_shuffle(
-                fargs,
-                p,
-                cbmc_ret_ty,
-                n
-            ));
+        if let Some(stripped) = intrinsic.strip_prefix("simd_shuffle") {
+            assert!(fargs.len() == 3, "`simd_shuffle` had unexpected arguments {fargs:?}");
+            let n: u64 = self.simd_shuffle_length(stripped, farg_types, span);
+            return self.codegen_intrinsic_simd_shuffle(fargs, p, farg_types, ret_ty, n, span);
         }
 
         match intrinsic {
@@ -606,42 +565,65 @@ impl<'tcx> GotocCtx<'tcx> {
             "saturating_sub" => codegen_intrinsic_binop_with_mm!(saturating_sub),
             "sinf32" => codegen_simple_intrinsic!(Sinf),
             "sinf64" => codegen_simple_intrinsic!(Sin),
-            "simd_add" => {
-                unstable_codegen!(codegen_simd_with_overflow_check!(plus, add_overflow_p))
-            }
-            "simd_and" => unstable_codegen!(codegen_intrinsic_binop!(bitand)),
-            "simd_div" => unstable_codegen!(codegen_intrinsic_binop!(div)),
-            "simd_eq" => unstable_codegen!(codegen_intrinsic_binop!(eq)),
+            "simd_add" => self.codegen_simd_op_with_overflow(
+                Expr::plus,
+                Expr::add_overflow_p,
+                fargs,
+                intrinsic,
+                p,
+                loc,
+            ),
+            "simd_and" => codegen_intrinsic_binop!(bitand),
+            // TODO: `simd_div` and `simd_rem` don't check for overflow cases.
+            // <https://github.com/model-checking/kani/issues/1970>
+            "simd_div" => codegen_intrinsic_binop!(div),
+            "simd_eq" => self.codegen_simd_cmp(Expr::vector_eq, fargs, p, span, farg_types, ret_ty),
             "simd_extract" => {
-                let _vec = fargs.remove(0);
-                let _index = fargs.remove(0);
-                unstable_codegen!(self.codegen_expr_to_place(p, vec.index_array(index)))
+                self.codegen_intrinsic_simd_extract(fargs, p, farg_types, ret_ty, span)
             }
-            "simd_ge" => unstable_codegen!(codegen_intrinsic_binop!(ge)),
-            "simd_gt" => unstable_codegen!(codegen_intrinsic_binop!(gt)),
+            "simd_ge" => self.codegen_simd_cmp(Expr::vector_ge, fargs, p, span, farg_types, ret_ty),
+            "simd_gt" => self.codegen_simd_cmp(Expr::vector_gt, fargs, p, span, farg_types, ret_ty),
             "simd_insert" => {
-                unstable_codegen!(self.codegen_intrinsic_simd_insert(fargs, p, cbmc_ret_ty, loc))
+                self.codegen_intrinsic_simd_insert(fargs, p, cbmc_ret_ty, farg_types, span, loc)
             }
-            "simd_le" => unstable_codegen!(codegen_intrinsic_binop!(le)),
-            "simd_lt" => unstable_codegen!(codegen_intrinsic_binop!(lt)),
-            "simd_mul" => unstable_codegen!(codegen_simd_with_overflow_check!(mul, mul_overflow_p)),
-            "simd_ne" => unstable_codegen!(codegen_intrinsic_binop!(neq)),
-            "simd_or" => unstable_codegen!(codegen_intrinsic_binop!(bitor)),
-            "simd_rem" => unstable_codegen!(codegen_intrinsic_binop!(rem)),
-            "simd_shl" => unstable_codegen!(codegen_intrinsic_binop!(shl)),
+            "simd_le" => self.codegen_simd_cmp(Expr::vector_le, fargs, p, span, farg_types, ret_ty),
+            "simd_lt" => self.codegen_simd_cmp(Expr::vector_lt, fargs, p, span, farg_types, ret_ty),
+            "simd_mul" => self.codegen_simd_op_with_overflow(
+                Expr::mul,
+                Expr::mul_overflow_p,
+                fargs,
+                intrinsic,
+                p,
+                loc,
+            ),
+            "simd_ne" => {
+                self.codegen_simd_cmp(Expr::vector_neq, fargs, p, span, farg_types, ret_ty)
+            }
+            "simd_or" => codegen_intrinsic_binop!(bitor),
+            // TODO: `simd_div` and `simd_rem` don't check for overflow cases.
+            // <https://github.com/model-checking/kani/issues/1970>
+            "simd_rem" => codegen_intrinsic_binop!(rem),
+            // TODO: `simd_shl` and `simd_shr` don't check overflow cases.
+            // <https://github.com/model-checking/kani/issues/1963>
+            "simd_shl" => codegen_intrinsic_binop!(shl),
             "simd_shr" => {
-                // Remove this attribute once unstable_codegen! is removed.
-                #[allow(clippy::if_same_then_else)]
                 if fargs[0].typ().base_type().unwrap().is_signed(self.symbol_table.machine_model())
                 {
-                    unstable_codegen!(codegen_intrinsic_binop!(ashr))
+                    codegen_intrinsic_binop!(ashr)
                 } else {
-                    unstable_codegen!(codegen_intrinsic_binop!(lshr))
+                    codegen_intrinsic_binop!(lshr)
                 }
             }
             // "simd_shuffle#" => handled in an `if` preceding this match
-            "simd_sub" => unstable_codegen!(codegen_simd_with_overflow_check!(sub, sub_overflow_p)),
-            "simd_xor" => unstable_codegen!(codegen_intrinsic_binop!(bitxor)),
+            "simd_sub" => self.codegen_simd_op_with_overflow(
+                Expr::sub,
+                Expr::sub_overflow_p,
+                fargs,
+                intrinsic,
+                p,
+                loc,
+            ),
+            "simd_xor" => codegen_intrinsic_binop!(bitxor),
             "size_of" => codegen_intrinsic_const!(),
             "size_of_val" => codegen_size_align!(size),
             "sqrtf32" => unstable_codegen!(codegen_simple_intrinsic!(Sqrtf)),
@@ -1236,9 +1218,60 @@ impl<'tcx> GotocCtx<'tcx> {
         self.codegen_expr_to_place(place, expr)
     }
 
+    /// Gets the length for a `simd_shuffle*` instance, which comes in two
+    /// forms:
+    ///  1. `simd_shuffleN`, where `N` is a number which is part of the name
+    ///     (e.g., `simd_shuffle4`).
+    ///  2. `simd_shuffle`, where `N` isn't specified and must be computed from
+    ///     the length of the indexes array (the third argument).
+    fn simd_shuffle_length(
+        &mut self,
+        stripped: &str,
+        farg_types: &[Ty<'tcx>],
+        span: Option<Span>,
+    ) -> u64 {
+        let n = if stripped.is_empty() {
+            // Make sure that this is an array, since only the
+            // length-suffixed version of `simd_shuffle` (e.g.,
+            // `simd_shuffle4`) is type-checked
+            match farg_types[2].kind() {
+                ty::Array(ty, len) if matches!(ty.kind(), ty::Uint(ty::UintTy::U32)) => {
+                    len.try_eval_usize(self.tcx, ty::ParamEnv::reveal_all()).unwrap_or_else(|| {
+                        self.tcx.sess.span_err(
+                            span.unwrap(),
+                            "could not evaluate shuffle index array length",
+                        );
+                        // Return a dummy value
+                        u64::MIN
+                    })
+                }
+                _ => {
+                    let err_msg = format!(
+                        "simd_shuffle index must be an array of `u32`, got `{}`",
+                        farg_types[2]
+                    );
+                    self.tcx.sess.span_err(span.unwrap(), err_msg);
+                    // Return a dummy value
+                    u64::MIN
+                }
+            }
+        } else {
+            stripped.parse().unwrap_or_else(|_| {
+                self.tcx.sess.span_err(
+                    span.unwrap(),
+                    "bad `simd_shuffle` instruction only caught in codegen?",
+                );
+                // Return a dummy value
+                u64::MIN
+            })
+        };
+        self.tcx.sess.abort_if_errors();
+        n
+    }
+
     /// This function computes the size and alignment of a dynamically-sized type.
     /// The implementations follows closely the SSA implementation found in
-    /// rustc_codegen_ssa::glue::size_and_align_of_dst.
+    /// `rustc_codegen_ssa::glue::size_and_align_of_dst`.
     fn size_and_align_of_dst(&self, t: Ty<'tcx>, arg: Expr) -> SizeAlign {
         let layout = self.layout_of(t);
         let usizet = Type::size_t();
@@ -1331,23 +1364,71 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
+    /// `simd_extract(vector, n)` returns the `n`-th element of `vector`
+    ///
+    /// We check that both the vector's base type and the return type are the
+    /// same. In the case of some SIMD intrinsics, the backend is responsible
+    /// for performing this and similar checks, and erroring out if it proceeds.
+    fn codegen_intrinsic_simd_extract(
+        &mut self,
+        mut fargs: Vec<Expr>,
+        p: &Place<'tcx>,
+        rust_arg_types: &[Ty<'tcx>],
+        rust_ret_type: Ty<'tcx>,
+        span: Option<Span>,
+    ) -> Stmt {
+        assert!(fargs.len() == 2, "`simd_extract` had unexpected arguments {fargs:?}");
+        let vec = fargs.remove(0);
+        let index = fargs.remove(0);
+
+        let (_, vector_base_type) = rust_arg_types[0].simd_size_and_type(self.tcx);
+        if rust_ret_type != vector_base_type {
+            let err_msg = format!(
+                "expected return type `{}` (element of input `{}`), found `{}`",
+                vector_base_type, rust_arg_types[0], rust_ret_type
+            );
+            self.tcx.sess.span_err(span.unwrap(), err_msg);
+        }
+        self.tcx.sess.abort_if_errors();
+
+        self.codegen_expr_to_place(p, vec.index_array(index))
+    }
+
     /// Insert is a generic update of a single value in a SIMD vector.
     /// `P = simd_insert(vector, index, newval)` is here translated to
     /// `{ T v = vector; v[index] = (cast)newval; P = v; }`
     ///
     /// CBMC does not currently seem to implement intrinsics like insert e.g.:
     /// `**** WARNING: no body for function __builtin_ia32_vec_set_v4si`
-    fn _codegen_intrinsic_simd_insert(
+    ///
+    /// We check that both the vector's base type and the new value's type are
+    /// the same. In the case of some SIMD intrinsics, the backend is
+    /// responsible for performing this and similar checks, and erroring out if
+    /// it proceeds.
+    fn codegen_intrinsic_simd_insert(
         &mut self,
         mut fargs: Vec<Expr>,
         p: &Place<'tcx>,
         cbmc_ret_ty: Type,
+        rust_arg_types: &[Ty<'tcx>],
+        span: Option<Span>,
         loc: Location,
     ) -> Stmt {
-        assert!(fargs.len() == 3, "simd_insert had unexpected arguments {fargs:?}");
+        assert!(fargs.len() == 3, "`simd_insert` had unexpected arguments {fargs:?}");
         let vec = fargs.remove(0);
         let index = fargs.remove(0);
         let newval = fargs.remove(0);
+
+        let (_, vector_base_type) = rust_arg_types[0].simd_size_and_type(self.tcx);
+        if vector_base_type != rust_arg_types[2] {
+            let err_msg = format!(
+                "expected inserted type `{}` (element of input `{}`), found `{}`",
+                vector_base_type, rust_arg_types[0], rust_arg_types[2]
+            );
+            self.tcx.sess.span_err(span.unwrap(), err_msg);
+        }
+        self.tcx.sess.abort_if_errors();
+
         // Type checker should have ensured it's a vector type
         let elem_ty = cbmc_ret_ty.base_type().unwrap().clone();
         let (tmp, decl) = self.decl_temp_variable(cbmc_ret_ty, Some(vec), loc);
@@ -1361,8 +1442,129 @@ impl<'tcx> GotocCtx<'tcx> {
         )
     }
 
-    /// simd_shuffle constructs a new vector from the elements of two input vectors,
-    /// choosing values according to an input array of indexes.
+    /// Generates code for a SIMD vector comparison intrinsic.
+    ///
+    /// We perform some typechecks here for two reasons:
+    ///  * In the case of SIMD intrinsics, these checks depend on the backend.
+    ///  * We can emit a friendly error here, but not in `cprover_bindings`.
+    ///
+    /// We check the following:
+    ///  1. The return type must be the same length as the input types. The
+    ///     argument types have already been checked to ensure they have the same
+    ///     length (an error would've been emitted otherwise), so we can compare
+    ///     the return type against any of the argument types.
+    ///
+    ///     An example that triggers this error:
+    ///     ```rust
+    ///     let x = u64x2(0, 0);
+    ///     let y = u64x2(0, 1);
+    ///     unsafe { let invalid_simd: u32x4 = simd_eq(x, y); }
+    ///     ```
+    ///     We compare two `u64x2` vectors but try to store the result in a `u32x4`.
+    ///  2. The return type must have an integer base type.
+    ///
+    ///     An example that triggers this error:
+    ///     ```rust
+    ///     let x = u64x2(0, 0);
+    ///     let y = u64x2(0, 1);
+    ///     unsafe { let invalid_simd: f32x2 = simd_eq(x, y); }
+    ///     ```
+    ///     We compare two `u64x2` vectors but try to store the result in a `f32x4`,
+    ///     which is composed of `f32` values.
+    fn codegen_simd_cmp<F: FnOnce(Expr, Expr, Type) -> Expr>(
+        &mut self,
+        f: F,
+        mut fargs: Vec<Expr>,
+        p: &Place<'tcx>,
+        span: Option<Span>,
+        rust_arg_types: &[Ty<'tcx>],
+        rust_ret_type: Ty<'tcx>,
+    ) -> Stmt {
+        let arg1 = fargs.remove(0);
+        let arg2 = fargs.remove(0);
+        let ret_typ = self.codegen_ty(rust_ret_type);
+
+        if arg1.typ().len().unwrap() != ret_typ.len().unwrap() {
+            let err_msg = format!(
+                "expected return type with length {} (same as input type `{}`), \
+                found `{}` with length {}",
+                arg1.typ().len().unwrap(),
+                rust_arg_types[0],
+                rust_ret_type,
+                ret_typ.len().unwrap()
+            );
+            self.tcx.sess.span_err(span.unwrap(), err_msg);
+        }
+
+        if !ret_typ.base_type().unwrap().is_integer() {
+            let (_, rust_base_type) = rust_ret_type.simd_size_and_type(self.tcx);
+            let err_msg = format!(
+                "expected return type with integer elements, found `{}` with non-integer `{}`",
+                rust_ret_type, rust_base_type,
+            );
+            self.tcx.sess.span_err(span.unwrap(), err_msg);
+        }
+        self.tcx.sess.abort_if_errors();
+
+        // Create the vector comparison expression
+        let e = f(arg1, arg2, ret_typ);
+        self.codegen_expr_to_place(p, e)
+    }
+
+    /// Intrinsics which encode a SIMD arithmetic operation with overflow check.
+    /// We expand the overflow check because CBMC overflow operations don't accept array as
+    /// argument.
+    fn codegen_simd_op_with_overflow<F: FnOnce(Expr, Expr) -> Expr, G: Fn(Expr, Expr) -> Expr>(
+        &mut self,
+        op_fun: F,
+        overflow_fun: G,
+        mut fargs: Vec<Expr>,
+        intrinsic: &str,
+        p: &Place<'tcx>,
+        loc: Location,
+    ) -> Stmt {
+        let a = fargs.remove(0);
+        let b = fargs.remove(0);
+
+        let a_size = a.typ().len().unwrap();
+        let b_size = b.typ().len().unwrap();
+        assert_eq!(a_size, b_size, "expected same length vectors");
+
+        let mut check = Expr::bool_false();
+        for i in 0..a_size {
+            // create expression
+            let index = Expr::int_constant(i, Type::ssize_t());
+            let v_a = a.clone().index_array(index.clone());
+            let v_b = b.clone().index_array(index);
+            check = check.or(overflow_fun(v_a, v_b));
+        }
+        let check_stmt = self.codegen_assert_assume(
+            check.not(),
+            PropertyClass::ArithmeticOverflow,
+            format!("attempt to compute {} which would overflow", intrinsic).as_str(),
+            loc,
+        );
+        let res = op_fun(a, b);
+        let expr_place = self.codegen_expr_to_place(p, res);
+        Stmt::block(vec![expr_place, check_stmt], loc)
+    }
+
+    /// `simd_shuffle` constructs a new vector from the elements of two input
+    /// vectors, choosing values according to an input array of indexes.
+    ///
+    /// We check that:
+    ///  1. The return type length is equal to the expected length (`n`) of the
+    ///     `simd_shuffle` operation.
+    ///  2. The return type's subtype is equal to the vector's subtype (i.e.,
+    ///     the 1st argument). Both input vectors are guaranteed to be of the
+    ///     same type when they get here due to the `simd_shuffle` definition.
+    ///
+    /// In the case of some SIMD intrinsics, the backend is responsible for
+    /// performing this and similar checks, and erroring out if it proceeds.
+    ///
+    /// TODO: Check that `indexes` contains constant values which are within the
+    /// expected bounds. See
+    /// <https://github.com/model-checking/kani/issues/1960> for more details.
     ///
     /// This code mimics CBMC's `shuffle_vector_exprt::lower()` here:
     /// <https://github.com/diffblue/cbmc/blob/develop/src/ansi-c/c_expr.cpp>
@@ -1370,19 +1572,38 @@ impl<'tcx> GotocCtx<'tcx> {
     /// We can't use shuffle_vector_exprt because it's not understood by the CBMC backend,
     /// it's immediately lowered by the C frontend.
     /// Issue: <https://github.com/diffblue/cbmc/issues/6297>
-    fn _codegen_intrinsic_simd_shuffle(
+    fn codegen_intrinsic_simd_shuffle(
         &mut self,
         mut fargs: Vec<Expr>,
         p: &Place<'tcx>,
-        cbmc_ret_ty: Type,
+        rust_arg_types: &[Ty<'tcx>],
+        rust_ret_type: Ty<'tcx>,
         n: u64,
+        span: Option<Span>,
     ) -> Stmt {
-        assert!(fargs.len() == 3, "simd_shuffle had unexpected arguments {fargs:?}");
         // vector, size n: translated as vector types which cbmc treats as arrays
         let vec1 = fargs.remove(0);
         let vec2 = fargs.remove(0);
         // [u32; n]: translated wrapped in a struct
         let indexes = fargs.remove(0);
+
+        let (_, vec_subtype) = rust_arg_types[0].simd_size_and_type(self.tcx);
+        let (ret_type_len, ret_type_subtype) = rust_ret_type.simd_size_and_type(self.tcx);
+        if ret_type_len != n {
+            let err_msg = format!(
+                "expected return type of length {}, found `{}` with length {}",
+                n, rust_ret_type, ret_type_len
+            );
+            self.tcx.sess.span_err(span.unwrap(), err_msg);
+        }
+        if vec_subtype != ret_type_subtype {
+            let err_msg = format!(
+                "expected return element type `{}` (element of input `{}`), \
+                 found `{}` with element type `{}`",
+                vec_subtype, rust_arg_types[0], rust_ret_type, ret_type_subtype
+            );
+            self.tcx.sess.span_err(span.unwrap(), err_msg);
+        }
 
         // An unsigned type here causes an invariant violation in CBMC.
         // Issue: https://github.com/diffblue/cbmc/issues/6298
@@ -1392,15 +1613,17 @@ impl<'tcx> GotocCtx<'tcx> {
         // P = indexes.expanded_map(v -> if v < N then vec1[v] else vec2[v-N])
         let elems = (0..n)
             .map(|i| {
-                let i = Expr::int_constant(i, st_rep.clone());
+                let idx = Expr::int_constant(i, st_rep.clone());
                 // Must not use `indexes.index(i)` directly, because codegen wraps arrays in struct
-                let v = self.codegen_idx_array(indexes.clone(), i).cast_to(st_rep.clone());
+                let v = self.codegen_idx_array(indexes.clone(), idx).cast_to(st_rep.clone());
                 let cond = v.clone().lt(n_rep.clone());
                 let t = vec1.clone().index(v.clone());
                 let e = vec2.clone().index(v.sub(n_rep.clone()));
                 cond.ternary(t, e)
             })
             .collect();
+        self.tcx.sess.abort_if_errors();
+        let cbmc_ret_ty = self.codegen_ty(rust_ret_type);
         self.codegen_expr_to_place(p, Expr::vector_expr(cbmc_ret_ty, elems))
     }
 

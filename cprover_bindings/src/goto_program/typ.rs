@@ -308,6 +308,15 @@ impl Type {
         }
     }
 
+    /// Returns the length (number of elements) in an array or vector type
+    pub fn len(&self) -> Option<u64> {
+        match self {
+            Array { size, .. } => Some(*size),
+            Vector { size, .. } => Some(*size),
+            _ => None,
+        }
+    }
+
     pub fn sizeof(&self, st: &SymbolTable) -> u64 {
         let bits = self.sizeof_in_bits(st);
         let char_width = st.machine_model().char_width;
@@ -1041,6 +1050,19 @@ impl Type {
         Pointer { typ: Box::new(self) }
     }
 
+    /// Convert type to its signed counterpart if possible.
+    /// For types that are already signed, this will return self.
+    /// Note: This will expand any typedef.
+    pub fn to_signed(&self) -> Option<Self> {
+        let concrete = self.unwrap_typedef();
+        match concrete {
+            CInteger(CIntType::SizeT) => Some(CInteger(CIntType::SSizeT)),
+            Unsignedbv { ref width } => Some(Signedbv { width: *width }),
+            CInteger(CIntType::SSizeT) | Signedbv { .. } => Some(self.clone()),
+            _ => None,
+        }
+    }
+
     /// Convert type to its unsigned counterpart if possible.
     /// For types that are already unsigned, this will return self.
     /// Note: This will expand any typedef.
@@ -1049,7 +1071,7 @@ impl Type {
         match concrete {
             CInteger(CIntType::SSizeT) => Some(CInteger(CIntType::SizeT)),
             Signedbv { ref width } => Some(Unsignedbv { width: *width }),
-            Unsignedbv { .. } => Some(self.clone()),
+            CInteger(CIntType::SizeT) | Unsignedbv { .. } => Some(self.clone()),
             _ => None,
         }
     }
@@ -1396,8 +1418,9 @@ impl Type {
                 let return_string = return_type.to_identifier();
                 format!("variadic_code_from_{parameter_string}_to_{return_string}")
             }
-            Type::Vector { size, typ } => {
-                format!("vec_of_{size}_{}", typ.to_identifier())
+            Type::Vector { typ, size } => {
+                let typ = typ.to_identifier();
+                format!("vec_of_{size}_{typ}")
             }
         }
     }

@@ -8,35 +8,16 @@ use crate::kani_middle::attributes::{extract_integer_argument, partition_kanitoo
 use cbmc::goto_program::{Expr, Stmt, Symbol};
 use cbmc::InternString;
 use kani_metadata::HarnessMetadata;
+use kani_queries::UserInput;
 use rustc_ast::Attribute;
 use rustc_hir::def::DefKind;
 use rustc_hir::def_id::DefId;
 use rustc_middle::mir::{HasLocalDecls, Local};
-use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{self, Instance};
 use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::iter::FromIterator;
-use tracing::{debug, info_span};
-
-/// Utility to skip functions that can't currently be successfully codgenned.
-impl<'tcx> GotocCtx<'tcx> {
-    fn should_skip_current_fn(&self) -> bool {
-        let current_fn_name =
-            with_no_trimmed_paths!(self.tcx.def_path_str(self.current_fn().instance().def_id()));
-        // We cannot use self.current_fn().readable_name() because it gives the monomorphized type, which is more difficult to match on.
-        // Ideally we should not rely on the pretty-printed name here. Tracked here: https://github.com/model-checking/kani/issues/1374
-        match current_fn_name.as_str() {
-            // https://github.com/model-checking/kani/issues/202
-            "fmt::ArgumentV1::<'a>::as_usize" => true,
-            // https://github.com/model-checking/kani/issues/282
-            "bridge::closure::Closure::<'a, A, R>::call" => true,
-            name if name.contains("reusable_box::ReusableBoxFuture") => true,
-            "tokio::sync::Semaphore::acquire_owned::{closure#0}" => true,
-            _ => false,
-        }
-    }
-}
+use tracing::{debug, debug_span};
 
 /// Codegen MIR functions into gotoc
 impl<'tcx> GotocCtx<'tcx> {
@@ -91,23 +72,9 @@ impl<'tcx> GotocCtx<'tcx> {
         let old_sym = self.symbol_table.lookup(&name).unwrap();
 
         let _trace_span =
-            info_span!("CodegenFunction", name = self.current_fn().readable_name()).entered();
+            debug_span!("CodegenFunction", name = self.current_fn().readable_name()).entered();
         if old_sym.is_function_definition() {
-            tracing::info!("Double codegen of {:?}", old_sym);
-        } else if self.should_skip_current_fn() {
-            debug!("Skipping function {}", self.current_fn().readable_name());
-            self.codegen_function_prelude();
-            self.codegen_declare_variables();
-            let loc = self.codegen_span(&self.current_fn().mir().span);
-            let readable_name = format!("The function {}", self.current_fn().readable_name());
-            // We'll ideally just get rid of this eventually, but use "mimic" to avoid extra compilation warnings
-            let body = self.codegen_mimic_unimplemented(
-                &readable_name,
-                loc,
-                // There actually are links to specific issues in `should_skip_current_fn`...
-                "https://github.com/model-checking/kani/issues/new/choose",
-            );
-            self.symbol_table.update_fn_declaration_with_definition(&name, body);
+            debug!("Double codegen of {:?}", old_sym);
         } else {
             assert!(old_sym.is_function());
             let mir = self.current_fn().mir();
@@ -317,6 +284,38 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
+    /// Does this `def_id` have `#[rustc_test_marker]`?
+    pub fn is_test_harness_description(&self, def_id: DefId) -> bool {
+        let attrs = self.tcx.get_attrs_unchecked(def_id);
+
+        self.tcx.sess.contains_name(attrs, rustc_span::symbol::sym::rustc_test_marker)
+    }
+    /// Is this the closure inside of a test description const (i.e. macro expanded from a `#[test]`)?
+    ///
+    /// We're trying to detect the closure (`||`) inside code like:
+    ///
+    /// ```ignore
+    /// #[rustc_test_marker]
+    /// pub const check_2: test::TestDescAndFn = test::TestDescAndFn {
+    ///     desc: ...,
+    ///     testfn: test::StaticTestFn(|| test::assert_test_result(check_2())),
+    /// };
+    /// ```
+    pub fn is_test_harness_closure(&self, def_id: DefId) -> bool {
+        if !def_id.is_local() {
+            return false;
+        }
+
+        let local_def_id = def_id.expect_local();
+        let hir_id = self.tcx.hir().local_def_id_to_hir_id(local_def_id);
+
+        // The parent item of the closure appears to reliably be the `const` declaration item.
+        let parent_id = self.tcx.hir().get_parent_item(hir_id);
+        let parent_def_id = parent_id.to_def_id();
+
+        self.is_test_harness_description(parent_def_id)
+    }
+
     /// We record test harness information in kani-metadata, just like we record
     /// proof harness information. This is used to support e.g. cargo-kani assess.
     ///
@@ -326,34 +325,19 @@ impl<'tcx> GotocCtx<'tcx> {
     /// as it add asserts for tests that return `Result` types.
     fn record_test_harness_metadata(&mut self) {
         let def_id = self.current_fn().instance().def_id();
-        if def_id.is_local() {
-            let local_def_id = def_id.expect_local();
-            let hir_id = self.tcx.hir().local_def_id_to_hir_id(local_def_id);
-
-            // We want to detect the case where we're codegen'ing the closure inside what test "descriptions"
-            // are macro-expanded to:
-            //
-            // #[rustc_test_marker]
-            // pub const check_2: test::TestDescAndFn = test::TestDescAndFn {
-            //     desc: ...,
-            //     testfn: test::StaticTestFn(|| test::assert_test_result(check_2())),
-            // };
-
-            // The parent item of the closure appears to reliably be the `const` declaration item.
-            let parent_id = self.tcx.hir().get_parent_item(hir_id);
-            let attrs = self.tcx.get_attrs_unchecked(parent_id.to_def_id());
-
-            if self.tcx.sess.contains_name(attrs, rustc_span::symbol::sym::rustc_test_marker) {
-                let loc = self.codegen_span(&self.current_fn().mir().span);
-                self.test_harnesses.push(HarnessMetadata {
-                    pretty_name: self.current_fn().readable_name().to_owned(),
-                    mangled_name: self.current_fn().name(),
-                    original_file: loc.filename().unwrap(),
-                    original_start_line: loc.start_line().unwrap() as usize,
-                    original_end_line: loc.end_line().unwrap() as usize,
-                    unwind_value: None,
-                })
-            }
+        if self.is_test_harness_closure(def_id) {
+            let loc = self.codegen_span(&self.current_fn().mir().span);
+            self.test_harnesses.push(HarnessMetadata {
+                pretty_name: self.current_fn().readable_name().to_owned(),
+                mangled_name: self.current_fn().name(),
+                crate_name: self.current_fn().krate(),
+                original_file: loc.filename().unwrap(),
+                original_start_line: loc.start_line().unwrap() as usize,
+                original_end_line: loc.end_line().unwrap() as usize,
+                unwind_value: None,
+                // We record the actual path after codegen before we dump the metadata into a file.
+                goto_file: None,
+            })
         }
     }
 
@@ -375,10 +359,14 @@ impl<'tcx> GotocCtx<'tcx> {
         let mut harness = self.default_kanitool_proof();
         for attr in other_attributes.iter() {
             match attr.0.as_str() {
-                "stub" => self
-                    .tcx
-                    .sess
-                    .span_warn(attr.1.span, "Attribute `kani::stub` is currently ignored by Kani"),
+                "stub" => {
+                    if !self.queries.get_stubbing_enabled() {
+                        self.tcx.sess.span_warn(
+                            attr.1.span,
+                            "Stubbing is not enabled; attribute `kani::stub` will be ignored",
+                        )
+                    }
+                }
                 "unwind" => self.handle_kanitool_unwind(attr.1, &mut harness),
                 _ => {
                     self.tcx.sess.span_err(
@@ -401,10 +389,13 @@ impl<'tcx> GotocCtx<'tcx> {
         HarnessMetadata {
             pretty_name,
             mangled_name,
+            crate_name: current_fn.krate(),
             original_file: loc.filename().unwrap(),
             original_start_line: loc.start_line().unwrap() as usize,
             original_end_line: loc.end_line().unwrap() as usize,
             unwind_value: None,
+            // We record the actual path after codegen before we dump the metadata into a file.
+            goto_file: None,
         }
     }
 

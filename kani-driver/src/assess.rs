@@ -1,13 +1,15 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use std::{collections::HashMap, path::PathBuf};
+use std::collections::HashMap;
 
 use anyhow::Result;
 use comfy_table::Table;
 use kani_metadata::KaniMetadata;
 
 use crate::harness_runner::HarnessResult;
+use crate::metadata::merge_kani_metadata;
+use crate::project;
 use crate::session::KaniSession;
 
 /// Set some defaults for how we format tables
@@ -211,22 +213,21 @@ fn build_promising_tests_table(results: &[HarnessResult]) -> Table {
     }
 }
 
-pub(crate) fn cargokani_assess_main(mut ctx: KaniSession) -> Result<()> {
+pub(crate) fn cargokani_assess_main(mut session: KaniSession) -> Result<()> {
     // fix some settings
-    ctx.args.unwind = Some(1);
-    ctx.args.tests = true;
-    ctx.args.output_format = crate::args::OutputFormat::Terse;
-    ctx.codegen_pub_fns = true;
-    if ctx.args.jobs.is_none() {
+    session.args.unwind = Some(1);
+    session.args.tests = true;
+    session.args.output_format = crate::args::OutputFormat::Terse;
+    session.codegen_tests = true;
+    if session.args.jobs.is_none() {
         // assess will default to fully parallel instead of single-threaded.
         // can be overridden with e.g. `cargo kani --enable-unstable -j 8 assess`
-        ctx.args.jobs = Some(None); // -j, num_cpu
+        session.args.jobs = Some(None); // -j, num_cpu
     }
 
-    let outputs = ctx.cargo_build()?;
-    let metadata = ctx.collect_kani_metadata(&outputs.metadata)?;
+    let project = project::cargo_project(&session)?;
 
-    let crate_count = outputs.metadata.len();
+    let crate_count = project.metadata.len();
 
     // An interesting thing to print here would be "number of crates without any warnings"
     // however this will have to wait until a refactoring of how we aggregate metadata
@@ -234,42 +235,20 @@ pub(crate) fn cargokani_assess_main(mut ctx: KaniSession) -> Result<()> {
     // tracking for that: https://github.com/model-checking/kani/issues/1758
     println!("Analyzed {crate_count} crates");
 
+    let metadata = merge_kani_metadata(project.metadata.clone());
     if !metadata.unsupported_features.is_empty() {
         println!("{}", build_unsupported_features_table(&metadata));
     } else {
         println!("No crates contained Rust features unsupported by Kani");
     }
 
-    // The section is a "copy and paste" from cargo kani.
-    // We could start thinking about abtracting this stuff out into a shared function...
-    let mut goto_objs: Vec<PathBuf> = Vec::new();
-    for symtab in &outputs.symtabs {
-        let goto_obj_filename = symtab.with_extension("out");
-        goto_objs.push(goto_obj_filename);
-    }
-
-    if ctx.args.only_codegen {
+    if session.args.only_codegen {
         return Ok(());
     }
 
-    let linked_obj = outputs.outdir.join("cbmc-linked.out");
-    ctx.link_goto_binary(&goto_objs, &linked_obj)?;
-    if let Some(restrictions) = outputs.restrictions {
-        ctx.apply_vtable_restrictions(&linked_obj, &restrictions)?;
-    }
-
     // Done with the 'cargo-kani' part, now we're going to run *test* harnesses instead of proof:
-
     let harnesses = metadata.test_harnesses;
-    let report_base = ctx.args.target_dir.clone().unwrap_or(PathBuf::from("target"));
-
-    let runner = crate::harness_runner::HarnessRunner {
-        sess: &ctx,
-        linked_obj: &linked_obj,
-        report_base: &report_base,
-        symtabs: &outputs.symtabs,
-        retain_specialized_harnesses: false,
-    };
+    let runner = crate::harness_runner::HarnessRunner { sess: &session, project };
 
     let results = runner.check_all_harnesses(&harnesses)?;
 

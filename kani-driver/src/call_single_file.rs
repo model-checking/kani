@@ -1,67 +1,39 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use std::ffi::OsString;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 
 use crate::session::{KaniSession, ReachabilityMode};
-use crate::util::{alter_extension, guess_rlib_name};
-
-/// The outputs of kani-compiler operating on a single Rust source file.
-pub struct SingleOutputs {
-    /// The directory where compiler outputs should be directed.
-    /// May be '.' or a path for 'kani', usually under 'target/' for 'cargo-kani'
-    pub outdir: PathBuf,
-    /// The *.symtab.json written.
-    pub symtab: PathBuf,
-    /// The *.symtab.out binary written by symtab2gb (run from kani-compiler)
-    pub goto_obj: PathBuf,
-    /// The vtable restrictions files, if any.
-    pub restrictions: Option<PathBuf>,
-    /// The kani-metadata.json file written by kani-compiler.
-    pub metadata: PathBuf,
-}
 
 impl KaniSession {
     /// Used by `kani` and not `cargo-kani` to process a single Rust file into a `.symtab.json`
-    pub fn compile_single_rust_file(&self, file: &Path) -> Result<SingleOutputs> {
-        let outdir =
-            file.canonicalize()?.parent().context("File doesn't exist in a directory?")?.to_owned();
-        let symtab_filename = alter_extension(file, "symtab.json");
-        let goto_obj_filename = symtab_filename.with_extension("out");
-        let typemap_filename = alter_extension(file, "type_map.json");
-        let metadata_filename = alter_extension(file, "kani-metadata.json");
-        let restrictions_filename = alter_extension(file, "restrictions.json");
-        let rlib_filename = guess_rlib_name(file);
-
-        self.record_temporary_files(&[
-            &rlib_filename,
-            &symtab_filename,
-            &goto_obj_filename,
-            &typemap_filename,
-            &metadata_filename,
-        ]);
-        if self.args.restrict_vtable() {
-            self.record_temporary_files(&[&restrictions_filename]);
-        }
-
+    // TODO: Move these functions to be part of the builder.
+    pub fn compile_single_rust_file(
+        &self,
+        file: &Path,
+        crate_name: &String,
+        outdir: &Path,
+    ) -> Result<()> {
         let mut kani_args = self.kani_specific_flags();
         kani_args.push(
             match self.reachability_mode() {
                 ReachabilityMode::Legacy => "--reachability=legacy",
                 ReachabilityMode::ProofHarnesses => "--reachability=harnesses",
                 ReachabilityMode::AllPubFns => "--reachability=pub_fns",
+                ReachabilityMode::Tests => "--reachability=tests",
             }
             .into(),
         );
 
         let mut rustc_args = self.kani_rustc_flags();
-        // kani-compiler workaround part 1/2: *.symtab.json gets generated in the local
-        // directory, instead of based on file name like we expect.
-        // So let we'll `cd` to that directory and here we only pass filename.
-        rustc_args.push(file.file_name().unwrap().into());
+        rustc_args.push(file.into());
+        rustc_args.push("--out-dir".into());
+        rustc_args.push(OsString::from(outdir.as_os_str()));
+        rustc_args.push("--crate-name".into());
+        rustc_args.push(crate_name.into());
 
         if self.args.tests {
             // e.g. `tests/kani/Options/check_tests.rs` will fail because it already has it
@@ -86,26 +58,12 @@ impl KaniSession {
         let mut cmd = Command::new(&self.kani_compiler);
         cmd.args(kani_args).args(rustc_args);
 
-        // kani-compiler workaround: part 2/2: change directory for the subcommand
-        cmd.current_dir(&outdir);
-
         if self.args.quiet {
             self.run_suppress(cmd)?;
         } else {
             self.run_terminal(cmd)?;
         }
-
-        Ok(SingleOutputs {
-            outdir,
-            symtab: symtab_filename,
-            goto_obj: goto_obj_filename,
-            metadata: metadata_filename,
-            restrictions: if self.args.restrict_vtable() {
-                Some(restrictions_filename)
-            } else {
-                None
-            },
-        })
+        Ok(())
     }
 
     /// These arguments are arguments passed to kani-compiler that are `kani` specific.
@@ -115,6 +73,9 @@ impl KaniSession {
 
         if self.args.debug {
             flags.push("--log-level=debug".into());
+        } else if self.args.verbose {
+            // Print the symtab command being invoked.
+            flags.push("--log-level=info".into());
         } else {
             flags.push("--log-level=warn".into());
         }

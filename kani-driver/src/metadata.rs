@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use anyhow::{bail, Result};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use kani_metadata::{
     HarnessMetadata, InternedString, KaniMetadata, TraitDefinedMethod, VtableCtxResults,
@@ -12,17 +12,7 @@ use std::fs::File;
 use std::io::{BufReader, BufWriter};
 
 use crate::session::KaniSession;
-
-fn generate_mock_harness() -> HarnessMetadata {
-    HarnessMetadata {
-        pretty_name: String::from("harness"),
-        mangled_name: String::from("harness"),
-        original_file: String::from("target_file.rs"),
-        original_start_line: 0,
-        original_end_line: 0,
-        unwind_value: None,
-    }
-}
+use serde::Deserialize;
 
 /// From either a file or a path with multiple files, output the CBMC restrictions file we should use.
 pub fn collect_and_link_function_pointer_restrictions(
@@ -38,13 +28,13 @@ pub fn collect_and_link_function_pointer_restrictions(
         for element in path.read_dir()? {
             let path = element?.path();
             if path.as_os_str().to_str().unwrap().ends_with(".restrictions.json") {
-                let restrictions = read_restrictions(&path)?;
+                let restrictions = from_json(&path)?;
                 per_crate_restrictions.push(restrictions);
             }
         }
     } else if md.is_file() {
         assert!(path.as_os_str().to_str().unwrap().ends_with(".restrictions.json"));
-        let restrictions = read_restrictions(path)?;
+        let restrictions = from_json(path)?;
         per_crate_restrictions.push(restrictions);
     } else {
         unreachable!("Path must be restrcitions file or directory containing restrictions files")
@@ -90,25 +80,18 @@ fn link_function_pointer_restrictions(
     Ok(())
 }
 
-/// Deserialize a *.restrictions.json file
-fn read_restrictions(path: &Path) -> Result<VtableCtxResults> {
+/// Deserialize a json file into a given structure
+pub fn from_json<T: for<'a> Deserialize<'a>>(path: &Path) -> Result<T> {
     let file = File::open(path)?;
     let reader = BufReader::new(file);
-    let restrictions = serde_json::from_reader(reader)?;
-    Ok(restrictions)
-}
-
-/// Deserialize a *.restrictions.json file
-fn read_kani_metadata(path: &Path) -> Result<KaniMetadata> {
-    let file = File::open(path)?;
-    let reader = BufReader::new(file);
-    let restrictions = serde_json::from_reader(reader)?;
-    Ok(restrictions)
+    let obj = serde_json::from_reader(reader)?;
+    Ok(obj)
 }
 
 /// Consumes a vector of parsed metadata, and produces a combined structure
-fn merge_kani_metadata(files: Vec<KaniMetadata>) -> KaniMetadata {
+pub fn merge_kani_metadata(files: Vec<KaniMetadata>) -> KaniMetadata {
     let mut result = KaniMetadata {
+        crate_name: "cbmc-linked".to_string(),
         proof_harnesses: vec![],
         unsupported_features: vec![],
         test_harnesses: vec![],
@@ -125,41 +108,17 @@ fn merge_kani_metadata(files: Vec<KaniMetadata>) -> KaniMetadata {
 }
 
 impl KaniSession {
-    /// Reads a collection of kani-metadata.json files and merges the results.
-    pub fn collect_kani_metadata(&self, files: &[PathBuf]) -> Result<KaniMetadata> {
-        if self.args.dry_run {
-            // Mock an answer
-            Ok(KaniMetadata {
-                proof_harnesses: vec![generate_mock_harness()],
-                unsupported_features: vec![],
-                test_harnesses: vec![],
-            })
-        } else {
-            // TODO: one possible future improvement here would be to return some kind of Lazy
-            // value, that only computes this metadata if it turns out we need it.
-            let results: Result<Vec<_>, _> = files.iter().map(|x| read_kani_metadata(x)).collect();
-            Ok(merge_kani_metadata(results?))
-        }
-    }
-
     /// Determine which function to use as entry point, based on command-line arguments and kani-metadata.
-    pub fn determine_targets(&self, metadata: &KaniMetadata) -> Result<Vec<HarnessMetadata>> {
-        if let Some(name) = &self.args.function {
-            // --function is untranslated, create a mock harness
-            return Ok(vec![mock_proof_harness(name, None)]);
-        }
-        if let Some(name) = &self.args.harness {
+    pub fn determine_targets(
+        &self,
+        all_harnesses: &[&HarnessMetadata],
+    ) -> Result<Vec<HarnessMetadata>> {
+        if let Some(name) = self.args.harness.clone().or(self.args.function.clone()) {
             // Linear search, since this is only ever called once
-            let harness = find_proof_harness(name, &metadata.proof_harnesses)?;
+            let harness = find_proof_harness(&name, all_harnesses)?;
             return Ok(vec![harness.clone()]);
         }
-        if metadata.proof_harnesses.is_empty() {
-            // TODO: This could use a better error message, possibly with links to Kani documentation.
-            // New users may encounter this and could use a pointer to how to write proof harnesses.
-            bail!("No proof harnesses (functions with #[kani::proof]) were found to verify.");
-        } else {
-            Ok(metadata.proof_harnesses.clone())
-        }
+        Ok(all_harnesses.iter().map(|md| (*md).clone()).collect())
     }
 }
 
@@ -178,14 +137,20 @@ pub fn sort_harnesses_by_loc(harnesses: &[HarnessMetadata]) -> Vec<&HarnessMetad
     harnesses_clone
 }
 
-pub fn mock_proof_harness(name: &str, unwind_value: Option<u32>) -> HarnessMetadata {
+pub fn mock_proof_harness(
+    name: &str,
+    unwind_value: Option<u32>,
+    krate: Option<&str>,
+) -> HarnessMetadata {
     HarnessMetadata {
         pretty_name: name.into(),
         mangled_name: name.into(),
+        crate_name: krate.unwrap_or("<unknown>").into(),
         original_file: "<unknown>".into(),
         original_start_line: 0,
         original_end_line: 0,
         unwind_value,
+        goto_file: None,
     }
 }
 
@@ -194,7 +159,7 @@ pub fn mock_proof_harness(name: &str, unwind_value: Option<u32>) -> HarnessMetad
 /// but this function is written to be robust against that changing in the future.
 fn find_proof_harness<'a>(
     name: &str,
-    harnesses: &'a [HarnessMetadata],
+    harnesses: &'a [&HarnessMetadata],
 ) -> Result<&'a HarnessMetadata> {
     let mut result: Option<&'a HarnessMetadata> = None;
     for h in harnesses.iter() {
@@ -235,15 +200,18 @@ mod tests {
     #[test]
     fn check_find_proof_harness() {
         let harnesses = vec![
-            mock_proof_harness("check_one", None),
-            mock_proof_harness("module::check_two", None),
-            mock_proof_harness("module::not_check_three", None),
+            mock_proof_harness("check_one", None, None),
+            mock_proof_harness("module::check_two", None, None),
+            mock_proof_harness("module::not_check_three", None, None),
         ];
-        assert!(find_proof_harness("check_three", &harnesses).is_err());
+        let ref_harnesses = harnesses.iter().collect::<Vec<_>>();
+        assert!(find_proof_harness("check_three", &ref_harnesses).is_err());
         assert!(
-            find_proof_harness("check_two", &harnesses).unwrap().mangled_name
+            find_proof_harness("check_two", &ref_harnesses).unwrap().mangled_name
                 == "module::check_two"
         );
-        assert!(find_proof_harness("check_one", &harnesses).unwrap().mangled_name == "check_one");
+        assert!(
+            find_proof_harness("check_one", &ref_harnesses).unwrap().mangled_name == "check_one"
+        );
     }
 }

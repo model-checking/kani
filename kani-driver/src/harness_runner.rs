@@ -2,12 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use anyhow::Result;
-use kani_metadata::HarnessMetadata;
+use kani_metadata::{ArtifactType, HarnessMetadata};
 use rayon::prelude::*;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::args::OutputFormat;
 use crate::call_cbmc::{VerificationResult, VerificationStatus};
+use crate::project::Project;
 use crate::session::KaniSession;
 use crate::util::specialized_harness_name;
 
@@ -18,17 +19,8 @@ use crate::util::specialized_harness_name;
 pub(crate) struct HarnessRunner<'sess> {
     /// The underlying kani session
     pub sess: &'sess KaniSession,
-    /// The build CBMC goto binary for the "whole program" (will be specialized to each proof harness)
-    pub linked_obj: &'sess Path,
-    /// The directory we should output cbmc-viewer reports to
-    pub report_base: &'sess Path,
-    /// An unfortunate behavior difference between `kani` and `cargo kani`: `cargo kani` never deletes the specialized goto binaries, while `kani` does unless `--keep-temps` is provided
-    pub retain_specialized_harnesses: bool,
-
-    /// The collection of symtabs that went into the goto binary
-    /// (TODO: this is only for --gen-c, which possibly should not be done here (i.e. not from within harness running)?
-    ///        <https://github.com/model-checking/kani/pull/1684>)
-    pub symtabs: &'sess [PathBuf],
+    /// The project under verification.
+    pub project: Project,
 }
 
 /// The result of checking a single harness. This both hangs on to the harness metadata
@@ -60,17 +52,16 @@ impl<'sess> HarnessRunner<'sess> {
                 .par_iter()
                 .map(|harness| -> Result<HarnessResult<'a>> {
                     let harness_filename = harness.pretty_name.replace("::", "-");
-                    let report_dir = self.report_base.join(format!("report-{harness_filename}"));
-                    let specialized_obj =
-                        specialized_harness_name(self.linked_obj, &harness_filename);
-                    if !self.retain_specialized_harnesses {
-                        self.sess.record_temporary_files(&[&specialized_obj]);
-                    }
-                    self.sess.run_goto_instrument(
-                        self.linked_obj,
+                    let report_dir = self.project.outdir.join(format!("report-{harness_filename}"));
+                    let goto_file =
+                        self.project.get_harness_artifact(&harness, ArtifactType::Goto).unwrap();
+                    let specialized_obj = specialized_harness_name(goto_file, &harness_filename);
+                    self.sess.record_temporary_files(&[&specialized_obj]);
+                    self.sess.instrument_model(
+                        goto_file,
                         &specialized_obj,
-                        self.symtabs,
-                        &harness.mangled_name,
+                        &self.project,
+                        &harness,
                     )?;
 
                     let result = self.sess.check_harness(&specialized_obj, &report_dir, harness)?;
@@ -100,15 +91,11 @@ impl KaniSession {
             // Strictly speaking, we're faking success here. This is more "no error"
             Ok(VerificationResult::mock_success())
         } else {
-            let result = self.run_cbmc(binary, harness)?;
+            let result = self.with_timer(|| self.run_cbmc(binary, harness), "run_cmbc")?;
 
             // When quiet, we don't want to print anything at all.
-            // When dry-run, we don't have real results to print.
             // When output is old, we also don't have real results to print.
-            if !self.args.quiet
-                && !self.args.dry_run
-                && self.args.output_format != OutputFormat::Old
-            {
+            if !self.args.quiet && self.args.output_format != OutputFormat::Old {
                 println!("{}", result.render(&self.args.output_format));
             }
 
@@ -135,7 +122,8 @@ impl KaniSession {
             )
         }
 
-        if !self.args.quiet && !self.args.visualize && total > 1 {
+        // We currently omit a summary if there was just 1 harness
+        if !self.args.quiet && !self.args.visualize && total != 1 {
             if failing > 0 {
                 println!("Summary:");
             }
@@ -143,10 +131,18 @@ impl KaniSession {
                 println!("Verification failed for - {}", failure.harness.pretty_name);
             }
 
-            println!(
-                "Complete - {} successfully verified harnesses, {} failures, {} total.",
-                succeeding, failing, total
-            );
+            if total > 0 {
+                println!(
+                    "Complete - {} successfully verified harnesses, {} failures, {} total.",
+                    succeeding, failing, total
+                );
+            } else {
+                // TODO: This could use a better error message, possibly with links to Kani documentation.
+                // New users may encounter this and could use a pointer to how to write proof harnesses.
+                println!(
+                    "No proof harnesses (functions with #[kani::proof]) were found to verify."
+                );
+            }
         }
 
         #[cfg(feature = "unsound_experiments")]
