@@ -231,14 +231,25 @@ fn format_item_terse(_item: &ParserItem) -> Option<String> {
 /// This could be split into two functions for clarity, but at the moment
 /// it uses the flag `show_checks` which depends on the output format.
 ///
+/// This function reports the results of normal checks (e.g. assertions and
+/// arithmetic overflow checks) and cover properties (specified using the
+/// `kani::cover` macro) separately. Cover properties currently do not impact
+/// the overall verification success or failure.
+///
 /// TODO: We could `write!` to `result_str` instead
 /// <https://github.com/model-checking/kani/issues/1480>
 pub fn format_result(properties: &Vec<Property>, show_checks: bool) -> String {
     let mut result_str = String::new();
-    let mut number_tests_failed = 0;
-    let mut number_tests_unreachable = 0;
-    let mut number_tests_undetermined = 0;
+    let mut number_checks_failed = 0;
+    let mut number_checks_unreachable = 0;
+    let mut number_checks_undetermined = 0;
     let mut failed_tests: Vec<&Property> = vec![];
+
+    // cover checks
+    let mut number_covers_satisfied = 0;
+    let mut number_covers_undetermined = 0;
+    let mut number_covers_unreachable = 0;
+    let mut number_covers_unsatisfiable = 0;
 
     let mut index = 1;
 
@@ -254,14 +265,30 @@ pub fn format_result(properties: &Vec<Property>, show_checks: bool) -> String {
 
         match status {
             CheckStatus::Failure => {
-                number_tests_failed += 1;
+                number_checks_failed += 1;
                 failed_tests.push(prop);
             }
             CheckStatus::Undetermined => {
-                number_tests_undetermined += 1;
+                if prop.is_cover_property() {
+                    number_covers_undetermined += 1;
+                } else {
+                    number_checks_undetermined += 1;
+                }
             }
             CheckStatus::Unreachable => {
-                number_tests_unreachable += 1;
+                if prop.is_cover_property() {
+                    number_covers_unreachable += 1;
+                } else {
+                    number_checks_unreachable += 1;
+                }
+            }
+            CheckStatus::Satisfied => {
+                assert!(prop.is_cover_property());
+                number_covers_satisfied += 1;
+            }
+            CheckStatus::Unsatisfiable => {
+                assert!(prop.is_cover_property());
+                number_covers_unsatisfiable += 1;
             }
             _ => (),
         }
@@ -291,16 +318,23 @@ pub fn format_result(properties: &Vec<Property>, show_checks: bool) -> String {
         result_str.push_str("\nVERIFICATION RESULT:");
     }
 
-    let summary = format!("\n ** {number_tests_failed} of {} failed", properties.len());
+    let number_cover_properties = number_covers_satisfied
+        + number_covers_unreachable
+        + number_covers_unsatisfiable
+        + number_covers_undetermined;
+
+    let number_properties = properties.len() - number_cover_properties;
+
+    let summary = format!("\n ** {number_checks_failed} of {} failed", number_properties);
     result_str.push_str(&summary);
 
     let mut other_status = Vec::<String>::new();
-    if number_tests_undetermined > 0 {
-        let undetermined_str = format!("{number_tests_undetermined} undetermined");
+    if number_checks_undetermined > 0 {
+        let undetermined_str = format!("{number_checks_undetermined} undetermined");
         other_status.push(undetermined_str);
     }
-    if number_tests_unreachable > 0 {
-        let unreachable_str = format!("{number_tests_unreachable} unreachable");
+    if number_checks_unreachable > 0 {
+        let unreachable_str = format!("{number_checks_unreachable} unreachable");
         other_status.push(unreachable_str);
     }
     if !other_status.is_empty() {
@@ -310,13 +344,38 @@ pub fn format_result(properties: &Vec<Property>, show_checks: bool) -> String {
     }
     result_str.push('\n');
 
+    if number_cover_properties > 0 {
+        // Print a summary line for cover properties
+        let summary = format!(
+            "\n ** {number_covers_satisfied} of {} cover properties satisfied",
+            number_cover_properties
+        );
+        result_str.push_str(&summary);
+        let mut other_status = Vec::<String>::new();
+        if number_covers_undetermined > 0 {
+            let undetermined_str = format!("{number_covers_undetermined} undetermined");
+            other_status.push(undetermined_str);
+        }
+        if number_covers_unreachable > 0 {
+            let unreachable_str = format!("{number_covers_unreachable} unreachable");
+            other_status.push(unreachable_str);
+        }
+        if !other_status.is_empty() {
+            result_str.push_str(" (");
+            result_str.push_str(&other_status.join(","));
+            result_str.push(')');
+        }
+        result_str.push('\n');
+        result_str.push('\n');
+    }
+
     for prop in failed_tests {
         let failure_message = build_failure_message(prop.description.clone(), &prop.trace.clone());
         result_str.push_str(&failure_message);
     }
 
     let verification_result =
-        if number_tests_failed == 0 { style("SUCCESSFUL").green() } else { style("FAILED").red() };
+        if number_checks_failed == 0 { style("SUCCESSFUL").green() } else { style("FAILED").red() };
     let overall_result = format!("\nVERIFICATION:- {verification_result}\n");
     result_str.push_str(&overall_result);
 
@@ -413,7 +472,7 @@ pub fn postprocess_result(properties: Vec<Property>, extra_ptr_checks: bool) -> 
     let (properties_without_reachs, reach_checks) = filter_reach_checks(properties_with_undefined);
     // Filter out successful sanity checks introduced during compilation
     let properties_without_sanity_checks = filter_sanity_checks(properties_without_reachs);
-    // Annotate properties with the results from reachability checks
+    // Annotate properties with the results of reachability checks
     let properties_annotated =
         annotate_properties_with_reach_results(properties_without_sanity_checks, reach_checks);
     // Remove reachability check IDs from regular property descriptions
@@ -429,7 +488,9 @@ pub fn postprocess_result(properties: Vec<Property>, extra_ptr_checks: bool) -> 
         || has_failed_unwinding_asserts
         || has_reachable_undefined_functions;
 
-    update_properties_with_reach_status(properties_filtered, has_fundamental_failures)
+    let updated_properties =
+        update_properties_with_reach_status(properties_filtered, has_fundamental_failures);
+    update_results_of_cover_checks(updated_properties)
 }
 
 /// Determines if there is property with status `FAILURE` and the given description
@@ -495,7 +556,7 @@ fn get_readable_description(property: &Property) -> String {
     original
 }
 
-/// Performs a last pass to update all properties as follows:
+/// Performs a pass to update all properties as follows:
 ///  1. Descriptions are replaced with more readable ones.
 ///  2. If there were failures that made the verification result unreliable
 ///     (e.g., a reachable unsupported construct), changes all `SUCCESS` results
@@ -525,6 +586,23 @@ fn update_properties_with_reach_status(
     properties
 }
 
+/// Update the results of cover properties.
+/// We encode cover(cond) as assert(!cond), so if the assertion
+/// fails, then the cover property is satisfied and vice versa.
+/// - SUCCESS -> UNSATISFIABLE
+/// - FAILURE -> SATISFIED
+fn update_results_of_cover_checks(mut properties: Vec<Property>) -> Vec<Property> {
+    for prop in properties.iter_mut() {
+        if prop.is_cover_property() {
+            if prop.status == CheckStatus::Success {
+                prop.status = CheckStatus::Unsatisfiable;
+            } else if prop.status == CheckStatus::Failure {
+                prop.status = CheckStatus::Satisfied;
+            }
+        }
+    }
+    properties
+}
 /// Some Kani-generated asserts have a unique ID in their description of the form:
 /// ```text
 /// [KANI_CHECK_ID_<crate-fn-name>_<index>]
