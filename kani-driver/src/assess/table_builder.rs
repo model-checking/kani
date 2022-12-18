@@ -3,7 +3,7 @@
 
 //! This module contains code that helps build tables more easily.
 //!
-//! Virtually all tables are we build via the same method:
+//! Virtually all assess tables are built via the same method:
 //!
 //! 1. There is some input data with irregular structure
 //! 2. There is an implied (we avoid writing it) type with regular structure
@@ -30,7 +30,7 @@ use std::hash::Hash;
 
 use comfy_table::Table;
 
-/// A [`TableRow`] is a type where a multiple elements with the same `key` should be `merge`d into one.
+/// A [`TableRow`] is a type where multiple "rows" with the same `key` should be `merge`d into one.
 /// This type is used in conjuction with [`TableBuilder`].
 ///
 /// We further give an ordering (via `compare`) that defines how rows should appear in the final table.
@@ -60,7 +60,7 @@ pub enum ColumnType {
 pub trait RenderableTableRow {
     /// Headers, e.g. " Reason for failure | Number of tests "
     fn headers() -> Vec<&'static str>;
-    /// Colum types, e.g. [Text, Number]
+    /// Column types, e.g. [Text, Number]
     fn columns() -> Vec<ColumnType>;
     /// The row contents, e.g. ["unwind", "1"]
     fn row(&self) -> Vec<String>;

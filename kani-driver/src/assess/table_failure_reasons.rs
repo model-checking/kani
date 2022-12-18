@@ -25,7 +25,7 @@ use super::table_builder::{ColumnType, RenderableTableRow, TableBuilder, TableRo
 ///  Reason for failure           | Number of tests
 /// ------------------------------+-----------------
 ///  unwind                       |              61
-///  success                      |               6
+///  none (success)               |               6
 ///  assertion                    |               4
 ///  assertion + overflow         |               2
 /// ================================================
@@ -36,7 +36,7 @@ pub(crate) fn build(results: &[HarnessResult]) -> Table {
     for r in results {
         let failures = r.result.failed_properties();
         let classification = if failures.is_empty() {
-            "success".to_string()
+            "none (success)".to_string()
         } else {
             let mut classes: Vec<_> = failures.into_iter().map(|p| p.property_class()).collect();
             classes.sort();
@@ -50,6 +50,7 @@ pub(crate) fn build(results: &[HarnessResult]) -> Table {
     builder.render()
 }
 
+#[derive(Default)]
 pub struct FailureReasonsTableRow {
     pub reason: String,
     pub count: usize,
@@ -63,8 +64,7 @@ impl TableRow for FailureReasonsTableRow {
     }
 
     fn merge(&mut self, new: Self) {
-        assert!(new.count == 1);
-        self.count += 1;
+        self.count += new.count;
     }
 
     fn compare(&self, right: &Self) -> Ordering {
@@ -83,5 +83,17 @@ impl RenderableTableRow for FailureReasonsTableRow {
 
     fn row(&self) -> Vec<String> {
         vec![self.reason.clone(), self.count.to_string()]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn check_row_lengths() {
+        use FailureReasonsTableRow as Row;
+        assert_eq!(Row::columns().len(), Row::headers().len());
+        assert_eq!(Row::columns().len(), Row::row(&Default::default()).len());
     }
 }

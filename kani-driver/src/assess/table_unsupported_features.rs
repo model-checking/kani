@@ -47,6 +47,7 @@ pub(crate) fn build(metadata: &KaniMetadata) -> Table {
     builder.render()
 }
 
+#[derive(Default)]
 pub struct UnsupportedFeaturesTableRow {
     pub unsupported_feature: String,
     pub crates_impacted: usize,
@@ -61,8 +62,7 @@ impl TableRow for UnsupportedFeaturesTableRow {
     }
 
     fn merge(&mut self, new: Self) {
-        assert!(new.crates_impacted == 1);
-        self.crates_impacted += 1;
+        self.crates_impacted += new.crates_impacted;
         self.instances_of_use += new.instances_of_use;
     }
 
@@ -86,5 +86,17 @@ impl RenderableTableRow for UnsupportedFeaturesTableRow {
             self.crates_impacted.to_string(),
             self.instances_of_use.to_string(),
         ]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn check_row_lengths() {
+        use UnsupportedFeaturesTableRow as Row;
+        assert_eq!(Row::columns().len(), Row::headers().len());
+        assert_eq!(Row::columns().len(), Row::row(&Default::default()).len());
     }
 }

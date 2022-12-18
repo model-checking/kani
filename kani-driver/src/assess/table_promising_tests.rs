@@ -33,8 +33,9 @@ pub(crate) fn build(results: &[HarnessResult]) -> Table {
         // For now we're just reporting "successful" harnesses as candidates.
         // In the future this heuristic should be expanded. More data is required to do this, however.
         if r.result.failed_properties().is_empty() {
-            // The functions we extract are actually the closures inside the test harness macro expansion
-            // Strip that closure suffix, so we have better names:
+            // The functions assess runs are actually the closures inside the test harness macro expansion.
+            // This means they have (pretty) names like `krate::module::a_test_name::{closure#0}`
+            // Strip that closure suffix, so we have better names for showing humans:
             let name = r.harness.pretty_name.trim_end_matches("::{closure#0}").to_string();
             // Location in a format "clickable" in e.g. IDE terminals
             let location = format!("{}:{}", r.harness.original_file, r.harness.original_start_line);
@@ -46,6 +47,7 @@ pub(crate) fn build(results: &[HarnessResult]) -> Table {
     builder.render()
 }
 
+#[derive(Default)]
 pub struct PromisingTestsTableRow {
     pub name: String,
     pub location: String,
@@ -80,5 +82,17 @@ impl RenderableTableRow for PromisingTestsTableRow {
 
     fn row(&self) -> Vec<String> {
         vec![self.name.to_owned(), self.location.to_owned()]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn check_row_lengths() {
+        use PromisingTestsTableRow as Row;
+        assert_eq!(Row::columns().len(), Row::headers().len());
+        assert_eq!(Row::columns().len(), Row::row(&Default::default()).len());
     }
 }
