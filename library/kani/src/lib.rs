@@ -9,6 +9,7 @@ pub mod arbitrary;
 mod concrete_playback;
 pub mod futures;
 pub mod slice;
+pub mod tuple;
 pub mod vec;
 
 pub use arbitrary::Arbitrary;
