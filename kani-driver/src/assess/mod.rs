@@ -8,13 +8,23 @@ use crate::metadata::merge_kani_metadata;
 use crate::project;
 use crate::session::KaniSession;
 
+pub use self::args::AssessArgs;
+
+mod args;
+mod metadata;
+mod scan;
 mod table_builder;
 mod table_failure_reasons;
 mod table_promising_tests;
 mod table_unsupported_features;
 
-pub(crate) fn cargokani_assess_main(mut session: KaniSession) -> Result<()> {
-    // fix some settings
+pub(crate) fn cargokani_assess_main(mut session: KaniSession, args: AssessArgs) -> Result<()> {
+    if let Some(args::AssessSubcommand::Scan(args)) = &args.command {
+        return scan::main(session, args);
+    }
+
+    // fix (as in "make unchanging/unchangable") some settings
+    session.args.all_features = true;
     session.args.unwind = Some(1);
     session.args.tests = true;
     session.args.output_format = crate::args::OutputFormat::Terse;
@@ -46,13 +56,15 @@ pub(crate) fn cargokani_assess_main(mut session: KaniSession) -> Result<()> {
     println!("Found {} packages", packages_metadata.len());
 
     let metadata = merge_kani_metadata(packages_metadata.clone());
+    let unsupported_features = table_unsupported_features::build(&packages_metadata);
     if !metadata.unsupported_features.is_empty() {
-        println!("{}", table_unsupported_features::build(&packages_metadata));
+        println!("{}", unsupported_features.render());
     } else {
         println!("No crates contained Rust features unsupported by Kani");
     }
 
     if session.args.only_codegen {
+        metadata::write_partial_metadata(&args, unsupported_features)?;
         return Ok(());
     }
 
@@ -66,7 +78,8 @@ pub(crate) fn cargokani_assess_main(mut session: KaniSession) -> Result<()> {
     // 1. "Reason for failure" will count reasons why harnesses did not succeed
     //    e.g.  successs   6
     //          unwind     234
-    println!("{}", table_failure_reasons::build(&results));
+    let failure_reasons = table_failure_reasons::build(&results);
+    println!("{}", failure_reasons.render());
 
     // TODO: Should add another interesting table: Count the actually hit constructs (e.g. 'try', 'InlineAsm', etc)
     // The above table will just say "unsupported_construct   6" without telling us which constructs.
@@ -74,7 +87,17 @@ pub(crate) fn cargokani_assess_main(mut session: KaniSession) -> Result<()> {
 
     // 2. "Test cases that might be good proof harness starting points"
     //    e.g.  All Successes and maybe Assertions?
-    println!("{}", table_promising_tests::build(&results));
+    let promising_results = table_promising_tests::build(&results);
+    println!("{}", promising_results.render());
+
+    metadata::write_metadata(
+        &args,
+        metadata::AssessMetadataOutput {
+            unsupported_features: unsupported_features.build(),
+            failure_reasons: failure_reasons.build(),
+            promising_tests: promising_results.build(),
+        },
+    )?;
 
     Ok(())
 }

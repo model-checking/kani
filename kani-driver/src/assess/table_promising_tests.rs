@@ -3,7 +3,7 @@
 
 use std::cmp::Ordering;
 
-use comfy_table::Table;
+use serde::{Deserialize, Serialize};
 
 use crate::harness_runner::HarnessResult;
 
@@ -26,7 +26,7 @@ use super::table_builder::{ColumnType, RenderableTableRow, TableBuilder, TableRo
 ///  other::tests::test_misc                               | src/other.rs:284
 /// =============================================================================
 /// ```
-pub(crate) fn build(results: &[HarnessResult]) -> Table {
+pub(crate) fn build(results: &[HarnessResult]) -> TableBuilder<PromisingTestsTableRow> {
     let mut builder = TableBuilder::new();
 
     for r in results {
@@ -44,10 +44,10 @@ pub(crate) fn build(results: &[HarnessResult]) -> Table {
         }
     }
 
-    builder.render()
+    builder
 }
 
-#[derive(Default)]
+#[derive(Default, Debug, Serialize, Deserialize)]
 pub struct PromisingTestsTableRow {
     pub name: String,
     pub location: String,

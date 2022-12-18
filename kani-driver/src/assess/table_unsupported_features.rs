@@ -3,8 +3,8 @@
 
 use std::{cmp::Ordering, collections::HashSet};
 
-use comfy_table::Table;
 use kani_metadata::KaniMetadata;
+use serde::{Deserialize, Serialize};
 
 use super::table_builder::{ColumnType, RenderableTableRow, TableBuilder, TableRow};
 
@@ -24,7 +24,7 @@ use super::table_builder::{ColumnType, RenderableTableRow, TableBuilder, TableRo
 ///  drop_in_place              |        2 |         2
 /// ===================================================
 /// ```
-pub(crate) fn build(metadata: &[KaniMetadata]) -> Table {
+pub(crate) fn build(metadata: &[KaniMetadata]) -> TableBuilder<UnsupportedFeaturesTableRow> {
     let mut builder = TableBuilder::new();
 
     for package_metadata in metadata {
@@ -46,10 +46,10 @@ pub(crate) fn build(metadata: &[KaniMetadata]) -> Table {
         }
     }
 
-    builder.render()
+    builder
 }
 
-#[derive(Default)]
+#[derive(Default, Debug, Serialize, Deserialize)]
 pub struct UnsupportedFeaturesTableRow {
     pub unsupported_feature: String,
     pub crates_impacted: HashSet<String>,
