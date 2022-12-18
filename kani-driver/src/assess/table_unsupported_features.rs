@@ -67,7 +67,10 @@ impl TableRow for UnsupportedFeaturesTableRow {
     }
 
     fn compare(&self, right: &Self) -> Ordering {
-        self.crates_impacted.cmp(&right.crates_impacted)
+        self.crates_impacted
+            .cmp(&right.crates_impacted)
+            .reverse()
+            .then_with(|| self.instances_of_use.cmp(&right.instances_of_use).reverse())
     }
 }
 impl RenderableTableRow for UnsupportedFeaturesTableRow {
