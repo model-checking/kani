@@ -1,0 +1,11 @@
+Status: UNDETERMINED\
+Description: "cover condition: sum == 10"\
+main.rs:15:5 in function cover_undetermined
+
+ ** 0 of 1 cover properties satisfied (1 undetermined)
+
+Failed Checks: unwinding assertion loop 0
+
+VERIFICATION:- FAILED
+[Kani] info: Verification output shows one or more unwinding failures.
+[Kani] tip: Consider increasing the unwinding value or disabling `--unwinding-assertions`.
