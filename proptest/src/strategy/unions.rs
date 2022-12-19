@@ -60,18 +60,6 @@ impl<T: Strategy> Union<T> {
         Self { options }
     }
 
-    #[allow(dead_code)] // Integration in progress, See #1608.
-    pub(crate) fn try_new<E>(
-        it: impl Iterator<Item = Result<T, E>>,
-    ) -> Result<Self, E> {
-        let options: Vec<WA<T>> = it
-            .map(|r| r.map(|v| (1, Arc::new(v))))
-            .collect::<Result<_, _>>()?;
-
-        assert!(!options.is_empty());
-        Ok(Self { options })
-    }
-
     /// Create a strategy which selects from the given delegate strategies.
     ///
     /// Each strategy is assigned a non-zero weight which determines how
@@ -109,23 +97,6 @@ impl<T: Strategy> Union<T> {
         self.options.push((1, Arc::new(other)));
         self
     }
-}
-
-#[allow(dead_code)] // Merge in progress. See #1608 for details.
-fn pick_weighted<I: Iterator<Item = u32>>(
-    runner: &mut TestRunner,
-    weights1: I,
-    weights2: I,
-) -> usize {
-    let sum = weights1.map(u64::from).sum();
-    let weighted_pick = sample_uniform(runner, 0..sum);
-    weights2
-        .scan(0u64, |state, w| {
-            *state += u64::from(w);
-            Some(*state)
-        })
-        .filter(|&v| v <= weighted_pick)
-        .count()
 }
 
 impl<T: Strategy> Strategy for Union<T> {

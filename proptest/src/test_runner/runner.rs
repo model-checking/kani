@@ -12,11 +12,6 @@
 // Modifications Copyright Kani Contributors
 // See GitHub history for details.
 
-// Merge in progress: See #1608
-#![allow(dead_code)]
-#![allow(unused_variables)]
-#![allow(unused_macros)]
-
 use crate::std_facade::{Arc, BTreeMap, Box, String, Vec};
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering::SeqCst;
@@ -37,30 +32,6 @@ use crate::test_runner::errors::*;
 use crate::test_runner::reason::*;
 
 use crate::test_runner::rng::TestRng;
-
-const ALWAYS: u32 = 0;
-const SHOW_FALURES: u32 = 1;
-const TRACE: u32 = 2;
-
-#[cfg(feature = "std")]
-macro_rules! verbose_message {
-    ($runner:expr, $level:expr, $fmt:tt $($arg:tt)*) => { {
-        #[allow(unused_comparisons)]
-        {
-            if $runner.config.verbose >= $level {
-                eprintln!(concat!("proptest: ", $fmt) $($arg)*);
-            }
-        };
-        ()
-    } }
-}
-
-#[cfg(not(feature = "std"))]
-macro_rules! verbose_message {
-    ($runner:expr, $level:expr, $fmt:tt $($arg:tt)*) => {
-        let _ = $level;
-    };
-}
 
 /// State used when running a proptest test.
 #[derive(Clone)]
@@ -106,20 +77,10 @@ impl Default for TestRunner {
 
 #[cfg(feature = "fork")]
 #[derive(Debug)]
-struct ForkOutput {
-    file: Option<fs::File>,
-}
+struct ForkOutput {}
 
 #[cfg(feature = "fork")]
-impl ForkOutput {
-    fn append(&mut self, result: &TestCaseResult) {}
-
-    fn ping(&mut self) {}
-
-    fn empty() -> Self {
-        ForkOutput { file: None }
-    }
-}
+impl ForkOutput {}
 
 #[cfg(not(feature = "fork"))]
 #[derive(Debug)]
@@ -300,18 +261,6 @@ impl TestRunner {
             Err("Too many local rejects".into())
         } else {
             self.local_rejects += 1;
-            Ok(())
-        }
-    }
-
-    /// Update the state to account for a global rejection from `whence`, and
-    /// return `Ok` if the caller should keep going or `Err` to abort.
-    /// Kani Note: This function will always succeed because Kani only runs once.
-    fn reject_global<T>(&mut self, _: Reason) -> Result<(), TestError<T>> {
-        if self.global_rejects >= self.config.max_global_rejects {
-            Err(TestError::Abort("Too many global rejects".into()))
-        } else {
-            self.global_rejects += 1;
             Ok(())
         }
     }

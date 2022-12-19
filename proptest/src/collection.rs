@@ -534,13 +534,6 @@ where
     ))
 }
 
-#[allow(dead_code)] // todo: cleanup redundant code. See issue #2004.
-#[derive(Clone, Copy, Debug)]
-enum Shrink {
-    DeleteElement(usize),
-    ShrinkElement(usize),
-}
-
 /// `ValueTree` corresponding to `VecStrategy`.
 #[derive(Debug)]
 pub struct VecValueTree<T: ValueTree> {
