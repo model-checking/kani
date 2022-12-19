@@ -47,6 +47,6 @@ mod my_mod {
     }
 
     fn two() -> u32 {
-        2 
+        2
     }
 }
