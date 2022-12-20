@@ -591,6 +591,9 @@ fn update_properties_with_reach_status(
 /// fails, then the cover property is satisfied and vice versa.
 /// - SUCCESS -> UNSATISFIABLE
 /// - FAILURE -> SATISFIED
+/// Note that if the cover property was unreachable, its status at this point
+/// will be `CheckStatus::Unreachable` and not `CheckStatus::Success` since
+/// `update_properties_with_reach_status` is called beforehand
 fn update_results_of_cover_checks(mut properties: Vec<Property>) -> Vec<Property> {
     for prop in properties.iter_mut() {
         if prop.is_cover_property() {

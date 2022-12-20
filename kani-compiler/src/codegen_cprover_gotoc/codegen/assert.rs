@@ -21,6 +21,7 @@
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{Expr, Location, Stmt, Type};
 use cbmc::InternedString;
+use kani_queries::UserInput;
 use rustc_span::Span;
 use std::convert::AsRef;
 use strum_macros::{AsRefStr, EnumString};
@@ -142,6 +143,33 @@ impl<'tcx> GotocCtx<'tcx> {
     /// A shorthand for cover(true)
     pub fn codegen_cover_loc(&self, msg: &str, span: Option<Span>) -> Stmt {
         self.codegen_cover(Expr::bool_true(), msg, span)
+    }
+
+    /// Given the message for an assertion, generate a reachability check that
+    /// is meant to check whether the assertion is reachable. The function
+    /// returns a modified version of the provided message that should be used
+    /// for the assertion to allow the CBMC output parser to pair the assertion
+    /// with its reachability check.
+    /// If reachability checks are disabled, the function returns the message
+    /// unmodified and an empty (skip) statement.
+    pub fn codegen_reachability_check(
+        &mut self,
+        msg: String,
+        span: Option<Span>,
+    ) -> (String, Stmt) {
+        if self.queries.get_check_assertion_reachability() {
+            // Generate a unique ID for the assert
+            let assert_id = self.next_check_id();
+            // Generate a message for the reachability check that includes the unique ID
+            let reach_msg = GotocCtx::reachability_check_message(&assert_id);
+            // Also add the unique ID as a prefix to the assert message so that it can be
+            // easily paired with the reachability check
+            let msg = GotocCtx::add_prefix_to_msg(&msg, &assert_id);
+            // inject a reachability (cover) check
+            (msg, self.codegen_cover_loc(&reach_msg, span))
+        } else {
+            (msg, Stmt::skip(self.codegen_caller_span(&span)))
+        }
     }
 
     /// A shorthand for generating a CBMC assert-assume(false)
