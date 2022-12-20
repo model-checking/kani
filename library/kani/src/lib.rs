@@ -67,6 +67,28 @@ pub const fn assert(_cond: bool, _msg: &'static str) {
     }
 }
 
+/// Creates a cover property with the specified condition and message.
+///
+/// # Example:
+///
+/// ```rust
+/// kani::cover(slice.len() == 0, "The slice may have a length of 0");
+/// ```
+///
+/// A cover property checks if there is at least one execution that satisfies
+/// the specified condition at the location in which the function is called.
+///
+/// Cover properties are reported as:
+///  - SATISFIED: if Kani found an execution that satisfies the condition
+///  - UNSATISFIABLE: if Kani proved that the condition cannot be satisfied
+///
+/// This function is called by the [`cover!`] macro. The macro is more
+/// convenient to use.
+///
+#[inline(never)]
+#[rustc_diagnostic_item = "KaniCover"]
+pub fn cover(_cond: bool, _msg: &'static str) {}
+
 /// This creates an symbolic *valid* value of type `T`. You can assign the return value of this
 /// function to a variable that you want to make symbolic.
 ///
@@ -139,6 +161,55 @@ pub fn expect_fail(_cond: bool, _message: &'static str) {
 #[doc(hidden)]
 pub const fn panic(message: &'static str) -> ! {
     panic!("{}", message)
+}
+
+/// A macro to check if a condition is satisfiable at a specific location in the
+/// code.
+///
+/// # Example 1:
+///
+/// ```rust
+/// let mut set: BTreeSet<i32> = BTreeSet::new();
+/// set.insert(kani::any());
+/// set.insert(kani::any());
+/// // check if the set can end up with a single element (if both elements
+/// // inserted were the same)
+/// kani::cover!(set.len() == 1);
+/// ```
+/// The macro can also be called without any arguments to check if a location is
+/// reachable.
+///
+/// # Example 2:
+///
+/// ```rust
+/// match e {
+///     MyEnum::A => { /* .. */ }
+///     MyEnum::B => {
+///         // make sure the `MyEnum::B` variant is possible
+///         kani::cover!();
+///         // ..
+///     }
+/// }
+/// ```
+///
+/// A custom message can also be passed to the macro.
+///
+/// # Example 3:
+///
+/// ```rust
+/// kani::cover!(x > y, "x can be greater than y")
+/// ```
+#[macro_export]
+macro_rules! cover {
+    () => {
+        kani::cover(true, "cover location");
+    };
+    ($cond:expr $(,)?) => {
+        kani::cover($cond, concat!("cover condition: ", stringify!($cond)));
+    };
+    ($cond:expr, $msg:literal) => {
+        kani::cover($cond, $msg);
+    };
 }
 
 /// Kani proc macros must be in a separate crate

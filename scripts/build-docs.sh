@@ -65,8 +65,13 @@ $SCRIPT_DIR/mdbook build -d $KANI_DIR/docs/book/rfc
 # doc tests is in README.md. We don't run them here because
 # that would cause CI to run these tests twice.
 
+# We only build the documentation for the `kani` crate.
+# Note that all macros are re-exported by `kani`, so they will be included in
+# the documentation.
+# We also add `--cfg=kani` to the documentation, otherwise it picks up the doc
+# from the wrong definitions which are empty.
 echo "Building rustdocs..."
 cd $KANI_DIR
-cargo doc -p kani -p kani_macros --no-deps --target-dir docs/book/crates
+RUSTFLAGS="--cfg=kani" cargo doc -p kani --no-deps --target-dir docs/book/crates
 
 echo "Finished documentation build successfully."
