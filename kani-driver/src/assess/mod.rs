@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use anyhow::Result;
+use kani_metadata::KaniMetadata;
 
 use crate::metadata::merge_kani_metadata;
 use crate::project;
@@ -25,18 +26,21 @@ pub(crate) fn cargokani_assess_main(mut session: KaniSession) -> Result<()> {
     }
 
     let project = project::cargo_project(&session)?;
+    let cargo_metadata = project.cargo_metadata.as_ref().expect("built with cargo");
 
-    let crate_count = project.metadata.len();
+    let packages_metadata = reconstruct_metadata_structure(cargo_metadata, &project.metadata)?;
 
-    // An interesting thing to print here would be "number of crates without any warnings"
-    // however this will have to wait until a refactoring of how we aggregate metadata
-    // from multiple crates together here.
-    // tracking for that: https://github.com/model-checking/kani/issues/1758
-    println!("Analyzed {crate_count} crates");
+    // We don't really have a list of crates that went into building our various targets,
+    // so we can't easily count them.
 
-    let metadata = merge_kani_metadata(project.metadata.clone());
+    // It would also be interesting to classify them by whether they build without warnings or not.
+    // Tracking for the latter: https://github.com/model-checking/kani/issues/1758
+
+    println!("Found {} packages", packages_metadata.len());
+
+    let metadata = merge_kani_metadata(packages_metadata.clone());
     if !metadata.unsupported_features.is_empty() {
-        println!("{}", table_unsupported_features::build(&metadata));
+        println!("{}", table_unsupported_features::build(&packages_metadata));
     } else {
         println!("No crates contained Rust features unsupported by Kani");
     }
@@ -66,4 +70,42 @@ pub(crate) fn cargokani_assess_main(mut session: KaniSession) -> Result<()> {
     println!("{}", table_promising_tests::build(&results));
 
     Ok(())
+}
+
+/// Merges a collection of Kani metadata by figuring out which package each belongs to, from cargo metadata.
+///
+/// This function, properly speaking, should not exist. We should have this information already from `Project`.
+/// This should function should be removable when we fix how driver handles metadata:
+/// <https://github.com/model-checking/kani/issues/1758>
+fn reconstruct_metadata_structure(
+    cargo_metadata: &cargo_metadata::Metadata,
+    kani_metadata: &[KaniMetadata],
+) -> Result<Vec<KaniMetadata>> {
+    let mut search = kani_metadata.to_owned();
+    let mut results = vec![];
+    for package in &cargo_metadata.packages {
+        let mut artifacts = vec![];
+        for target in &package.targets {
+            // cargo_metadata doesn't provide name mangling help here?
+            // we need to know cargo's name changes when it's given to rustc
+            let target_name = target.name.replace('-', "_");
+            if let Some(i) = search.iter().position(|x| x.crate_name == target_name) {
+                let md = search.swap_remove(i);
+                artifacts.push(md);
+            } else {
+                println!(
+                    "Didn't find metadata for target {} in package {}",
+                    target.name, package.name
+                )
+            }
+        }
+        let mut merged = crate::metadata::merge_kani_metadata(artifacts);
+        merged.crate_name = package.name.clone();
+        results.push(merged);
+    }
+    if !search.is_empty() {
+        let search_names: Vec<_> = search.into_iter().map(|x| x.crate_name).collect();
+        println!("Found remaining (unused) metadata after reconstruction: {:?}", search_names);
+    }
+    Ok(results)
 }

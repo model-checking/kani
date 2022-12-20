@@ -32,6 +32,8 @@ pub struct CargoOutputs {
     pub restrictions: Option<PathBuf>,
     /// The kani-metadata.json files written by kani-compiler.
     pub metadata: Vec<PathBuf>,
+    /// Recording the cargo metadata from the build
+    pub cargo_metadata: Metadata,
 }
 
 impl KaniSession {
@@ -133,6 +135,7 @@ impl KaniSession {
             symtabs: glob(&outdir.join("*.symtab.json"))?,
             metadata: glob(&outdir.join("*.kani-metadata.json"))?,
             restrictions: self.args.restrict_vtable().then_some(outdir),
+            cargo_metadata: metadata,
         })
     }
 }
