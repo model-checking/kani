@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-//! This module provides Kani's derive macro for Arbitrary.
+//! This module provides Kani's `derive` macro for `Arbitrary`.
 //!
 //! ```
 //! use kani::Arbitrary;
@@ -69,7 +69,7 @@ fn fn_any_body(ident: &Ident, data: &Data) -> TokenStream {
         Data::Union(_) => {
             abort!(Span::call_site(), "Cannot derive `Arbitrary` for `{}` union", ident;
                 note = ident.span() =>
-                "The derive `Arbitrary` cannot be used for unions such as `{}`", ident
+                "`#[derive(Arbitrary)]` cannot be used for unions such as `{}`", ident
             )
         }
     }
@@ -115,7 +115,7 @@ fn init_item(ident: &Ident, fields: &Fields) -> TokenStream {
     }
 }
 
-/// Generate the body of the function `any()` for structures.
+/// Generate the body of the function `any()` for enums.
 fn fn_any_enum(ident: &Ident, data: &DataEnum) -> TokenStream {
     if data.variants.is_empty() {
         abort!(Span::call_site(), "Cannot derive `Arbitrary` for `{}`", ident;
