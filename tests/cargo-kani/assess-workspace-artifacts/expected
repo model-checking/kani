@@ -3,7 +3,6 @@ Found 2 packages
  Unsupported feature |   Crates | Instances
                      | impacted |    of use
 ---------------------+----------+-----------
- caller_location     |        2 |         3
  try                 |        2 |         3
 ============================================
 =========================================
