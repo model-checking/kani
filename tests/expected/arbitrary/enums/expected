@@ -2,43 +2,43 @@ Checking harness check_random...
 
 Status: SATISFIED\
 Description: "This should be reachable"\
-main.rs:67:1 in function check_random
+in function check_random
 
 Status: SATISFIED\
 Description: "This should be reachable"\
-main.rs:67:1 in function check_random
+in function check_random
 
 Status: SATISFIED\
 Description: "This should be reachable"\
-main.rs:67:1 in function check_random
+in function check_random
 
 Checking harness check_basic...
 
 Status: SATISFIED\
 Description: "This should be reachable"\
-main.rs:65:1 in function check_basic
+in function check_basic
 
 Status: SATISFIED\
 Description: "This should be reachable"\
-main.rs:65:1 in function check_basic
+in function check_basic
 
 Status: SATISFIED\
 Description: "This should be reachable"\
-main.rs:65:1 in function check_basic
+in function check_basic
 
 Checking harness check_continuous...
 
 Status: SATISFIED\
 Description: "This should be reachable"\
-main.rs:66:1 in function check_continuous
+in function check_continuous
 
 Status: SATISFIED\
 Description: "This should be reachable"\
-main.rs:66:1 in function check_continuous
+in function check_continuous
 
 Status: SATISFIED\
 Description: "This should be reachable"\
-main.rs:66:1 in function check_continuous
+in function check_continuous
 
  ** 3 of 3 cover properties satisfied
 
