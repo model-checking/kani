@@ -225,8 +225,6 @@ impl<'tcx> GotocCtx<'tcx> {
                     msg.description()
                 };
 
-                // TODO: switch to tagging assertions via the property class once CBMC allows that:
-                // https://github.com/diffblue/cbmc/issues/6692
                 let (msg_str, reach_stmt) =
                     self.codegen_reachability_check(msg.to_owned(), Some(term.source_info.span));
 

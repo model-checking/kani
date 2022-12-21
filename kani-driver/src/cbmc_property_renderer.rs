@@ -624,7 +624,8 @@ fn remove_check_ids_from_description(mut properties: Vec<Property>) -> Vec<Prope
     properties
 }
 
-/// Filters reachability checks with `filter_properties`
+/// Partitions `properties` into reachability checks (identified by the
+/// "reachability_check" property class) and non-reachability checks
 fn filter_reach_checks(properties: Vec<Property>) -> (Vec<Property>, Vec<Property>) {
     let (reach_checks, other_checks): (Vec<_>, Vec<_>) =
         properties.into_iter().partition(|prop| prop.property_class() == "reachability_check");

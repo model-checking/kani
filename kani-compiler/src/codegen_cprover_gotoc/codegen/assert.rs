@@ -60,7 +60,8 @@ pub enum PropertyClass {
     ///
     /// SPECIAL BEHAVIOR: None TODO: Why should this exist?
     FiniteCheck,
-    /// Checks added by Kani compiler to determine whether an assertion is reachable
+    /// Checks added by Kani compiler to determine whether a property (e.g.
+    /// `PropertyClass::Assertion` or `PropertyClass:Cover`) is reachable
     ReachabilityCheck,
     /// Checks added by Kani compiler to detect safety conditions violation.
     /// E.g., things that trigger UB or unstable behavior.
@@ -137,11 +138,11 @@ impl<'tcx> GotocCtx<'tcx> {
     // The above represent the basic operations we can perform w.r.t. assert/assume/cover
     // Below are various helper functions for constructing the above more easily.
 
-    /// Given the message for an assertion, generate a reachability check that
-    /// is meant to check whether the assertion is reachable. The function
-    /// returns a modified version of the provided message that should be used
-    /// for the assertion to allow the CBMC output parser to pair the assertion
-    /// with its reachability check.
+    /// Given the message for a property, generate a reachability check that is
+    /// meant to check whether the property is reachable. The function returns a
+    /// modified version of the provided message that should be used for the
+    /// property to allow the CBMC output parser to pair the property with its
+    /// reachability check.
     /// If reachability checks are disabled, the function returns the message
     /// unmodified and an empty (skip) statement.
     pub fn codegen_reachability_check(

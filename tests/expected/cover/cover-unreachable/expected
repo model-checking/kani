@@ -1,14 +1,14 @@
 Status: UNREACHABLE\
 Description: "cover condition: x == 2"\
-main.rs:11:13 in function cover_unreachable
+in function cover_unreachable
 
 Status: UNREACHABLE\
 Description: "Unreachable with a message"\
-main.rs:15:13 in function cover_unreachable
+in function cover_unreachable
 
 Status: SATISFIED\
 Description: "cover condition: x == 5"\
-main.rs:17:13 in function cover_unreachable
+in function cover_unreachable
 
 
  ** 1 of 3 cover properties satisfied (2 unreachable)
