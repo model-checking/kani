@@ -59,7 +59,9 @@ pub struct Project {
     /// When this flag is `true`, there should only be up to one artifact of any given type.
     /// When this flag is `false`, there may be multiple artifacts for any given type. However,
     /// only up to one artifact for each
-    merged_artifacts: bool,
+    pub merged_artifacts: bool,
+    /// Records the cargo metadata from the build, if there was any
+    pub cargo_metadata: Option<cargo_metadata::Metadata>,
 }
 
 impl Project {
@@ -171,7 +173,13 @@ pub fn cargo_project(session: &KaniSession) -> Result<Project> {
         dump_metadata(&metadata, &metadata_file);
         artifacts.push(Artifact::try_new(&metadata_file, Metadata)?);
 
-        Ok(Project { outdir, artifacts, metadata: vec![metadata], merged_artifacts: true })
+        Ok(Project {
+            outdir,
+            artifacts,
+            metadata: vec![metadata],
+            merged_artifacts: true,
+            cargo_metadata: Some(outputs.cargo_metadata),
+        })
     } else {
         // For the MIR Linker we know there is only one artifact per verification target. Use
         // that in our favor.
@@ -192,7 +200,13 @@ pub fn cargo_project(session: &KaniSession) -> Result<Project> {
             debug!(?crate_name, ?crate_metadata, "cargo_project");
             metadata.push(crate_metadata);
         }
-        Ok(Project { outdir, artifacts, metadata, merged_artifacts: false })
+        Ok(Project {
+            outdir,
+            artifacts,
+            metadata,
+            merged_artifacts: false,
+            cargo_metadata: Some(outputs.cargo_metadata),
+        })
     }
 }
 
@@ -283,6 +297,7 @@ impl<'a> StandaloneProjectBuilder<'a> {
                 .filter(|artifact| artifact.path.exists())
                 .collect(),
             merged_artifacts: false,
+            cargo_metadata: None,
         })
     }
 

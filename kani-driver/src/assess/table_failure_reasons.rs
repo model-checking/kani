@@ -68,7 +68,7 @@ impl TableRow for FailureReasonsTableRow {
     }
 
     fn compare(&self, right: &Self) -> Ordering {
-        self.count.cmp(&right.count).reverse()
+        self.count.cmp(&right.count).reverse().then_with(|| self.reason.cmp(&right.reason))
     }
 }
 

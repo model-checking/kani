@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use std::cmp::Ordering;
+use std::{cmp::Ordering, collections::HashSet};
 
 use comfy_table::Table;
 use kani_metadata::KaniMetadata;
@@ -24,24 +24,26 @@ use super::table_builder::{ColumnType, RenderableTableRow, TableBuilder, TableRo
 ///  drop_in_place              |        2 |         2
 /// ===================================================
 /// ```
-pub(crate) fn build(metadata: &KaniMetadata) -> Table {
+pub(crate) fn build(metadata: &[KaniMetadata]) -> Table {
     let mut builder = TableBuilder::new();
 
-    for item in &metadata.unsupported_features {
-        // key is unsupported feature name
-        let mut key = item.feature.clone();
-        // There are several "feature for <instance of use>" unsupported features.
-        // We aggregate those here by reducing it to just "feature".
-        // We should replace this with an enum: https://github.com/model-checking/kani/issues/1765
-        if let Some((prefix, _)) = key.split_once(" for ") {
-            key = prefix.to_string();
-        }
+    for package_metadata in metadata {
+        for item in &package_metadata.unsupported_features {
+            // key is unsupported feature name
+            let mut key = item.feature.clone();
+            // There are several "feature for <instance of use>" unsupported features.
+            // We aggregate those here by reducing it to just "feature".
+            // We should replace this with an enum: https://github.com/model-checking/kani/issues/1765
+            if let Some((prefix, _)) = key.split_once(" for ") {
+                key = prefix.to_string();
+            }
 
-        builder.add(UnsupportedFeaturesTableRow {
-            unsupported_feature: key,
-            crates_impacted: 1,
-            instances_of_use: item.locations.len(),
-        })
+            builder.add(UnsupportedFeaturesTableRow {
+                unsupported_feature: key,
+                crates_impacted: HashSet::from([package_metadata.crate_name.to_owned()]),
+                instances_of_use: item.locations.len(),
+            })
+        }
     }
 
     builder.render()
@@ -50,7 +52,7 @@ pub(crate) fn build(metadata: &KaniMetadata) -> Table {
 #[derive(Default)]
 pub struct UnsupportedFeaturesTableRow {
     pub unsupported_feature: String,
-    pub crates_impacted: usize,
+    pub crates_impacted: HashSet<String>,
     pub instances_of_use: usize,
 }
 
@@ -62,15 +64,17 @@ impl TableRow for UnsupportedFeaturesTableRow {
     }
 
     fn merge(&mut self, new: Self) {
-        self.crates_impacted += new.crates_impacted;
+        self.crates_impacted.extend(new.crates_impacted);
         self.instances_of_use += new.instances_of_use;
     }
 
     fn compare(&self, right: &Self) -> Ordering {
         self.crates_impacted
-            .cmp(&right.crates_impacted)
+            .len()
+            .cmp(&right.crates_impacted.len())
             .reverse()
             .then_with(|| self.instances_of_use.cmp(&right.instances_of_use).reverse())
+            .then_with(|| self.unsupported_feature.cmp(&right.unsupported_feature))
     }
 }
 impl RenderableTableRow for UnsupportedFeaturesTableRow {
@@ -86,7 +90,7 @@ impl RenderableTableRow for UnsupportedFeaturesTableRow {
     fn row(&self) -> Vec<String> {
         vec![
             self.unsupported_feature.clone(),
-            self.crates_impacted.to_string(),
+            self.crates_impacted.len().to_string(),
             self.instances_of_use.to_string(),
         ]
     }
