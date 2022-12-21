@@ -542,6 +542,8 @@ dependencies = [
 name = "kani_macros"
 version = "0.17.0"
 dependencies = [
+ "proc-macro-error",
+ "proc-macro2",
  "quote",
  "syn",
 ]
