@@ -1,0 +1,16 @@
+Checking harness check_comparison...
+SUCCESS\
+"assertion failed: disc >= -1 && disc <= 1"
+
+SUCCESS\
+"assertion failed: disc == 1"
+
+SUCCESS\
+"assertion failed: disc == -1"
+
+SUCCESS\
+"assertion failed: disc == 0"
+
+
+Checking harness check_enum_wrapper...
+5 of 5 cover properties satisfied
