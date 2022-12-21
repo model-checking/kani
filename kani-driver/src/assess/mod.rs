@@ -28,7 +28,14 @@ pub(crate) fn cargokani_assess_main(mut session: KaniSession) -> Result<()> {
     let project = project::cargo_project(&session)?;
     let cargo_metadata = project.cargo_metadata.as_ref().expect("built with cargo");
 
-    let packages_metadata = reconstruct_metadata_structure(cargo_metadata, &project.metadata)?;
+    let packages_metadata = if project.merged_artifacts {
+        // With the legacy linker we can't expect to find the metadata structure we'd expect
+        // so we just use it as-is. This does mean the "package count" will be wrong, but
+        // we will at least continue to see everything.
+        project.metadata.clone()
+    } else {
+        reconstruct_metadata_structure(cargo_metadata, &project.metadata)?
+    };
 
     // We don't really have a list of crates that went into building our various targets,
     // so we can't easily count them.

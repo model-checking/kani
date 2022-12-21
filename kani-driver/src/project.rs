@@ -59,7 +59,7 @@ pub struct Project {
     /// When this flag is `true`, there should only be up to one artifact of any given type.
     /// When this flag is `false`, there may be multiple artifacts for any given type. However,
     /// only up to one artifact for each
-    merged_artifacts: bool,
+    pub merged_artifacts: bool,
     /// Records the cargo metadata from the build, if there was any
     pub cargo_metadata: Option<cargo_metadata::Metadata>,
 }

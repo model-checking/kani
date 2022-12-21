@@ -6,6 +6,8 @@ name = "assess-artifacts"
 version = "0.1.0"
 edition = "2021"
 
+# See src/lib.rs for a comment on this tests's purpose
+
 [package.metadata.kani]
 flags = { assess=true, enable-unstable=true, workspace=true }
 
