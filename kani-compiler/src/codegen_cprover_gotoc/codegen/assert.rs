@@ -60,6 +60,8 @@ pub enum PropertyClass {
     ///
     /// SPECIAL BEHAVIOR: None TODO: Why should this exist?
     FiniteCheck,
+    /// Checks added by Kani compiler to determine whether an assertion is reachable
+    ReachabilityCheck,
     /// Checks added by Kani compiler to detect safety conditions violation.
     /// E.g., things that trigger UB or unstable behavior.
     ///
@@ -135,11 +137,6 @@ impl<'tcx> GotocCtx<'tcx> {
     // The above represent the basic operations we can perform w.r.t. assert/assume/cover
     // Below are various helper functions for constructing the above more easily.
 
-    /// A shorthand for cover(true)
-    pub fn codegen_cover_loc(&self, msg: &str, span: Option<Span>) -> Stmt {
-        self.codegen_cover(Expr::bool_true(), msg, span)
-    }
-
     /// Given the message for an assertion, generate a reachability check that
     /// is meant to check whether the assertion is reachable. The function
     /// returns a modified version of the provided message that should be used
@@ -152,6 +149,7 @@ impl<'tcx> GotocCtx<'tcx> {
         msg: String,
         span: Option<Span>,
     ) -> (String, Stmt) {
+        let loc = self.codegen_caller_span(&span);
         if self.queries.get_check_assertion_reachability() {
             // Generate a unique ID for the assert
             let assert_id = self.next_check_id();
@@ -160,10 +158,19 @@ impl<'tcx> GotocCtx<'tcx> {
             // Also add the unique ID as a prefix to the assert message so that it can be
             // easily paired with the reachability check
             let msg = GotocCtx::add_prefix_to_msg(&msg, &assert_id);
-            // inject a reachability (cover) check
-            (msg, self.codegen_cover_loc(&reach_msg, span))
+            // inject a reachability check, which is a (non-blocking)
+            // assert(false) whose failure indicates that this line is reachable.
+            // The property class (`PropertyClass:ReachabilityCheck`) is used by
+            // the CBMC output parser to distinguish those checks from others.
+            let check = self.codegen_assert(
+                Expr::bool_false(),
+                PropertyClass::ReachabilityCheck,
+                &reach_msg,
+                loc,
+            );
+            (msg, check)
         } else {
-            (msg, Stmt::skip(self.codegen_caller_span(&span)))
+            (msg, Stmt::skip(loc))
         }
     }
 
