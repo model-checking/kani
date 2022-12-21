@@ -17,7 +17,7 @@ use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{Instance, InstanceDef, Ty};
 use rustc_span::Span;
 use rustc_target::abi::{FieldsShape, Primitive, TagEncoding, Variants};
-use tracing::{debug, info_span, trace};
+use tracing::{debug, debug_span, trace};
 
 impl<'tcx> GotocCtx<'tcx> {
     /// Generate Goto-C for MIR [Statement]s.
@@ -26,7 +26,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// See [GotocCtx::codegen_terminator] for those.
     pub fn codegen_statement(&mut self, stmt: &Statement<'tcx>) -> Stmt {
-        let _trace_span = info_span!("CodegenStatement", statement = ?stmt).entered();
+        let _trace_span = debug_span!("CodegenStatement", statement = ?stmt).entered();
         debug!(?stmt, kind=?stmt.kind, "handling_statement");
         let location = self.codegen_span(&stmt.source_info.span);
         match &stmt.kind {
@@ -158,7 +158,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// See also [`GotocCtx::codegen_statement`] for ordinary [Statement]s.
     pub fn codegen_terminator(&mut self, term: &Terminator<'tcx>) -> Stmt {
         let loc = self.codegen_span(&term.source_info.span);
-        let _trace_span = info_span!("CodegenTerminator", statement = ?term.kind).entered();
+        let _trace_span = debug_span!("CodegenTerminator", statement = ?term.kind).entered();
         debug!("handling terminator {:?}", term);
         //TODO: Instead of doing location::none(), and updating, just putit in when we make the stmt.
         match &term.kind {
