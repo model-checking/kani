@@ -154,7 +154,7 @@ impl<'tcx> GotocCtx<'tcx> {
             // Generate a unique ID for the assert
             let assert_id = self.next_check_id();
             // Generate a message for the reachability check that includes the unique ID
-            let reach_msg = GotocCtx::reachability_check_message(&assert_id);
+            let reach_msg = assert_id.clone();
             // Also add the unique ID as a prefix to the assert message so that it can be
             // easily paired with the reachability check
             let msg = GotocCtx::add_prefix_to_msg(&msg, &assert_id);

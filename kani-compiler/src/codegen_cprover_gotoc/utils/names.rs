@@ -117,15 +117,6 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn add_prefix_to_msg(msg: &str, prefix: &str) -> String {
         format!("[{prefix}] {msg}")
     }
-
-    /// Generate a message for the reachability check of an assert with ID
-    /// `check_id`. The message is of the form:
-    /// `<ID of assert>`
-    /// The check_id is generated using the GotocCtx::next_check_id method and
-    /// is a unique string identifier for that check.
-    pub fn reachability_check_message(check_id: &str) -> String {
-        format!("{check_id}")
-    }
 }
 
 /// The full crate name should use the Codegen Unit builder to include full name resolution,
