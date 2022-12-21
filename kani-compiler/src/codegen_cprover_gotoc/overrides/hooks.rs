@@ -87,40 +87,6 @@ impl<'tcx> GotocHook<'tcx> for Cover {
     }
 }
 
-struct ExpectFail;
-impl<'tcx> GotocHook<'tcx> for ExpectFail {
-    fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-        matches_function(tcx, instance, "KaniExpectFail")
-    }
-
-    fn handle(
-        &self,
-        tcx: &mut GotocCtx<'tcx>,
-        _instance: Instance<'tcx>,
-        mut fargs: Vec<Expr>,
-        _assign_to: Place<'tcx>,
-        target: Option<BasicBlock>,
-        span: Option<Span>,
-    ) -> Stmt {
-        assert_eq!(fargs.len(), 2);
-        let target = target.unwrap();
-        let cond = fargs.remove(0).cast_to(Type::bool());
-
-        // Add "EXPECTED FAIL" to the message because compiletest relies on it
-        let msg =
-            format!("EXPECTED FAIL: {}", tcx.extract_const_message(&fargs.remove(0)).unwrap());
-
-        let loc = tcx.codegen_span_option(span);
-        Stmt::block(
-            vec![
-                tcx.codegen_assert(cond, PropertyClass::ExpectFail, &msg, loc),
-                Stmt::goto(tcx.current_fn().find_label(&target), loc),
-            ],
-            loc,
-        )
-    }
-}
-
 struct Assume;
 impl<'tcx> GotocHook<'tcx> for Assume {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
@@ -411,7 +377,6 @@ pub fn fn_hooks<'tcx>() -> GotocHooks<'tcx> {
             Rc::new(Assume),
             Rc::new(Assert),
             Rc::new(Cover),
-            Rc::new(ExpectFail),
             Rc::new(Nondet),
             Rc::new(RustAlloc),
             Rc::new(SliceFromRawPart),

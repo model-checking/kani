@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
 //! Check that user can correctly generate arbitrary types for enums.
-//! TODO: We should replace these expect_fail / assert with cover statements.
-//! <https://github.com/model-checking/kani/issues/696>
 #[derive(Copy, Clone)]
 enum Basic {
     Variant1,
@@ -43,19 +41,19 @@ macro_rules! check_enum {
             match e {
                 $enum_type::Variant1 => {
                     let val = e as $repr;
-                    kani::expect_fail(false, "This should be reachable");
+                    kani::cover!(true, "This should be reachable");
                     assert!(val == $v1);
                     return;
                 }
                 $enum_type::Variant2 => {
                     let val = e as $repr;
-                    kani::expect_fail(false, "This should be reachable");
+                    kani::cover!(true, "This should be reachable");
                     assert!(val == $v2);
                     return;
                 }
                 $enum_type::Variant3 => {
                     let val = e as $repr;
-                    kani::expect_fail(false, "This should be reachable");
+                    kani::cover!(true, "This should be reachable");
                     assert!(val == $v3);
                     return;
                 }
