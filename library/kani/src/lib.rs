@@ -138,15 +138,6 @@ fn any_raw_inner<T>() -> T {
     unimplemented!("Kani any_raw_inner");
 }
 
-/// Function used in tests for cases where the condition is not always true.
-#[inline(never)]
-#[rustc_diagnostic_item = "KaniExpectFail"]
-pub fn expect_fail(_cond: bool, _message: &'static str) {
-    if cfg!(feature = "concrete_playback") {
-        assert!(!_cond, "kani::expect_fail does not hold: {_message}");
-    }
-}
-
 /// Function used to generate panic with a static message as this is the only one currently
 /// supported by Kani display.
 ///

@@ -9,10 +9,10 @@ macro_rules! harness {
         fn $fn_name() {
             let v1 = kani::any::<$type>();
             let v2 = kani::any::<$type>();
-            kani::expect_fail(v1 == v2, "This may not be true");
-            kani::expect_fail(v1 != v2, "This may also not be true");
-            kani::expect_fail(v1 != <$type>::MAX, "v1 may be MAX");
-            kani::expect_fail(v1 != <$type>::MIN, "v1 may be MIN");
+            kani::cover!(v1 == v2, "This may be true");
+            kani::cover!(v1 != v2, "This may also be true");
+            kani::cover!(v1 == <$type>::MAX, "v1 may be MAX");
+            kani::cover!(v1 == <$type>::MIN, "v1 may be MIN");
         }
     };
 }

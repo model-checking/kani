@@ -4,6 +4,5 @@
 #[kani::proof]
 fn main() {
     let i: i32 = kani::any();
-    kani::assume(i < 10);
-    kani::expect_fail(i > 20, "Blocked by assumption above.");
+    kani::cover!(i < 0, "i may be negative");
 }
