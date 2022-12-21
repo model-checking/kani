@@ -78,6 +78,7 @@ pub const fn assert(_cond: bool, _msg: &'static str) {
 /// Cover properties are reported as:
 ///  - SATISFIED: if Kani found an execution that satisfies the condition
 ///  - UNSATISFIABLE: if Kani proved that the condition cannot be satisfied
+///  - UNREACHABLE: if Kani proved that the cover property itself is unreachable (i.e. it is vacuously UNSATISFIABLE)
 ///
 /// This function is called by the [`cover!`] macro. The macro is more
 /// convenient to use.

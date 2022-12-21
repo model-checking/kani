@@ -22,11 +22,10 @@ fn get_sign(x: i32) -> Sign {
 #[kani::proof]
 fn cover_overconstrained() {
     let x: i32 = kani::any();
-    kani::assume(x != 0);
     let sign = get_sign(x);
 
     match sign {
-        Sign::Zero => kani::cover!(),
+        Sign::Zero => kani::cover!(x != 0),
         _ => {}
     }
 }
