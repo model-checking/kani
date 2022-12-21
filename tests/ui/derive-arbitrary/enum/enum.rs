@@ -3,6 +3,9 @@
 //! Check that Kani can automatically derive Arbitrary enums.
 //! An arbitrary enum should always generate a valid arbitrary variant.
 
+extern crate kani;
+use kani::cover;
+
 #[derive(kani::Arbitrary)]
 enum Wrapper {
     Empty,
@@ -13,9 +16,17 @@ enum Wrapper {
 #[kani::proof]
 fn check_enum_wrapper() {
     match kani::any::<Wrapper>() {
-        Wrapper::Empty => assert!(true, "empty"),
-        Wrapper::Bool(b) => assert!(b as u8 == 0 || b as u8 == 1),
-        Wrapper::Char { c } => assert!(c <= char::MAX),
+        Wrapper::Empty => cover!(),
+        Wrapper::Bool(b) => {
+            cover!(b as u8 == 0);
+            cover!(b as u8 == 1);
+            assert!(b as u8 == 0 || b as u8 == 1);
+        }
+        Wrapper::Char { c } => {
+            assert!(c <= char::MAX);
+            cover!(c == 'a');
+            cover!(c == '1');
+        }
     }
 }
 

@@ -64,7 +64,7 @@ fn add_trait_bound(mut generics: Generics) -> Generics {
 /// ```
 fn fn_any_body(ident: &Ident, data: &Data) -> TokenStream {
     match data {
-        Data::Struct(struct_data) => init_item(ident, &struct_data.fields),
+        Data::Struct(struct_data) => init_symbolic_item(ident, &struct_data.fields),
         Data::Enum(enum_data) => fn_any_enum(ident, enum_data),
         Data::Union(_) => {
             abort!(Span::call_site(), "Cannot derive `Arbitrary` for `{}` union", ident;
@@ -79,7 +79,7 @@ fn fn_any_body(ident: &Ident, data: &Data) -> TokenStream {
 /// For named fields, this will generate: `Item { field1: kani::any(), field2: kani::any(), .. }`
 /// For unnamed fields, this will generate: `Item (kani::any(), kani::any(), ..)`
 /// For unit field, generate an empty initialization.
-fn init_item(ident: &Ident, fields: &Fields) -> TokenStream {
+fn init_symbolic_item(ident: &Ident, fields: &Fields) -> TokenStream {
     match fields {
         Fields::Named(ref fields) => {
             // Use the span of each `syn::Field`. This way if one of the field types does not
@@ -115,30 +115,54 @@ fn init_item(ident: &Ident, fields: &Fields) -> TokenStream {
     }
 }
 
-/// Generate the body of the function `any()` for enums.
+/// Generate the body of the function `any()` for enums. The cases are:
+/// 1. For zero-variants enumerations, this will encode a `panic!()` statement.
+/// 2. For one or more variants, the code will be something like:
+/// ```
+/// # enum Enum{
+/// #    WithoutData,
+/// #    WithUnNamedData(i32),
+/// #    WithNamedData{ i: i32},
+/// # }
+/// #
+/// # impl kani::Arbitrary for Enum {
+/// #     fn any() -> Self {
+///         match kani::any() {
+///             0 => Enum::WithoutData,
+///             1 => Enum::WithUnNamedData(kani::any()),
+///             _ => Enum::WithNamedData {i: kani::any()},
+///         }
+/// #    }
+/// # }
+/// ```
 fn fn_any_enum(ident: &Ident, data: &DataEnum) -> TokenStream {
     if data.variants.is_empty() {
-        abort!(Span::call_site(), "Cannot derive `Arbitrary` for `{}`", ident;
-            note = ident.span() => "`{}` has zero variants and cannot be instantiated", ident
+        let msg = format!(
+            "Cannot create symbolic enum `{}`. Enums with zero-variants cannot be instantiated",
+            ident
         );
-    }
-    let arms = data.variants.iter().enumerate().map(|(idx, variant)| {
-        let init = init_item(&variant.ident, &variant.fields);
-        if idx + 1 < data.variants.len() {
-            let index = Index::from(idx);
-            quote! {
-                #index => #ident::#init,
-            }
-        } else {
-            quote! {
-                _ => #ident::#init,
-            }
+        quote! {
+            panic!(#msg)
         }
-    });
+    } else {
+        let arms = data.variants.iter().enumerate().map(|(idx, variant)| {
+            let init = init_symbolic_item(&variant.ident, &variant.fields);
+            if idx + 1 < data.variants.len() {
+                let index = Index::from(idx);
+                quote! {
+                    #index => #ident::#init,
+                }
+            } else {
+                quote! {
+                    _ => #ident::#init,
+                }
+            }
+        });
 
-    quote! {
-        match kani::any() {
-            #(#arms)*
+        quote! {
+            match kani::any() {
+                #(#arms)*
+            }
         }
     }
 }

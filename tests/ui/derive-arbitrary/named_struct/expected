@@ -1,3 +1,2 @@
-Failed Checks: assertion failed: point.x >= 0
-Failed Checks: assertion failed: point.x <= 0
-Failed Checks: assertion failed: point.x != 0
+Checking harness check_arbitrary_point...
+4 of 4 cover properties satisfied

@@ -11,7 +11,8 @@ struct Point {
 #[kani::proof]
 fn check_arbitrary_point() {
     let point: Point = kani::any();
-    assert!(point.x >= 0);
-    assert!(point.x <= 0);
-    assert!(point.x != 0);
+    kani::cover!(point.x > 0);
+    kani::cover!(point.x <= 0);
+    kani::cover!(point.y > 0);
+    kani::cover!(point.y <= 0);
 }

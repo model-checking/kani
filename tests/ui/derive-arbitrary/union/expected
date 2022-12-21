@@ -4,7 +4,7 @@ error: Cannot derive `Arbitrary` for `Wrapper` union
 | #[derive(kani::Arbitrary)]\
 |          ^^^^^^^^^^^^^^^\
 |\
-note: The derive `Arbitrary` cannot be used for unions such as `Wrapper`
+note: `#[derive(Arbitrary)]` cannot be used for unions such as `Wrapper`
 
 |\
 | union Wrapper {\

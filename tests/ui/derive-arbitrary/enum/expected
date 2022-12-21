@@ -13,12 +13,4 @@ SUCCESS\
 
 
 Checking harness check_enum_wrapper...
-
-SUCCESS\
-"assertion failed: c <= char::MAX"
-
-SUCCESS\
-""empty""
-
-SUCCESS\
-"assertion failed: b as u8 == 0 || b as u8 == 1"
+5 of 5 cover properties satisfied

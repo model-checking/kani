@@ -8,10 +8,10 @@ struct Point(i32, i32);
 #[kani::proof]
 fn check_arbitrary_point() {
     let point: Point = kani::any();
-    assert!(point.0 >= 0);
-    assert!(point.0 <= 0);
-    assert!(point.0 != 0);
-    assert!(point.1 >= 0);
-    assert!(point.1 <= 0);
-    assert!(point.1 != 0);
+    kani::cover!(point.0 > 0);
+    kani::cover!(point.0 < 0);
+    kani::cover!(point.0 == 0);
+    kani::cover!(point.1 > 0);
+    kani::cover!(point.1 < 0);
+    kani::cover!(point.1 == 0);
 }
