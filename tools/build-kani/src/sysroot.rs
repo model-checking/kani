@@ -182,7 +182,7 @@ fn build_artifacts(cargo_cmd: &mut Child) -> Vec<Artifact> {
             match message.unwrap() {
                 Message::CompilerMessage(msg) => {
                     // Print message as cargo would.
-                    println!("{msg:?}");
+                    println!("{msg}");
                     None
                 }
                 Message::CompilerArtifact(artifact) => Some(artifact),
