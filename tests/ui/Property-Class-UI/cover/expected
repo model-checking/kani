@@ -1,0 +1,8 @@
+main.cover.\
+Status: SATISFIED\
+Description: "i may be negative"\
+main.rs:7:5 in function main
+
+** 1 of 1 cover properties satisfied
+
+VERIFICATION:- SUCCESSFUL

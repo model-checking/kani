@@ -56,11 +56,6 @@ pub enum PropertyClass {
     ///
     /// SPECIAL BEHAVIOR: None TODO: Why should this exist?
     ExactDiv,
-    /// The `kani::expect_fail` assertion.
-    ///
-    /// SPECIAL BEHAVIOR: Inverted interpretation of success/failure.
-    /// (Note: Possibly this should be the same as Cover, or perhaps an ExplicitCover?)
-    ExpectFail,
     /// Another instrinsic check.
     ///
     /// SPECIAL BEHAVIOR: None TODO: Why should this exist?
