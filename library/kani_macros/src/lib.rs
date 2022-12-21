@@ -8,8 +8,11 @@
 // So we have to enable this on the commandline (see kani-rustc) with:
 //   RUSTFLAGS="-Zcrate-attr=feature(register_tool) -Zcrate-attr=register_tool(kanitool)"
 
+mod derive;
+
 // proc_macro::quote is nightly-only, so we'll cobble things together instead
 use proc_macro::TokenStream;
+use proc_macro_error::proc_macro_error;
 #[cfg(kani)]
 use {
     quote::quote,
@@ -147,4 +150,11 @@ pub fn stub(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     result.extend(item);
     result
+}
+
+/// Allow users to auto generate Arbitrary implementations by using `#[derive(Arbitrary)]` macro.
+#[proc_macro_error]
+#[proc_macro_derive(Arbitrary)]
+pub fn derive_arbitrary(item: TokenStream) -> TokenStream {
+    derive::expand_derive_arbitrary(item)
 }
