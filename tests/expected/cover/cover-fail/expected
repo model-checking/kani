@@ -1,6 +1,6 @@
 Status: UNSATISFIABLE\
-Description: "cover location"\
-main.rs:29:23 in function cover_overconstrained
+Description: "cover condition: x != 0"\
+in function cover_overconstrained
 
  ** 0 of 1 cover properties satisfied
 
