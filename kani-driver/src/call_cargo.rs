@@ -41,6 +41,10 @@ impl KaniSession {
     pub fn cargo_build(&self) -> Result<CargoOutputs> {
         let build_target = env!("TARGET"); // see build.rs
         let metadata = MetadataCommand::new()
+            // This is an optimization for doing cargo builds, because we only care the local
+            // structure of the workspace. However, it is *required* for assess to correctly
+            // reconstruct the package structure, without possibly seeing spurious packages.
+            .no_deps()
             // restrict metadata command to host platform. References:
             // https://github.com/rust-lang/rust-analyzer/issues/6908
             // https://github.com/rust-lang/rust-analyzer/pull/6912
