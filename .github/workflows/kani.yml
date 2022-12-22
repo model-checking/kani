@@ -97,7 +97,7 @@ jobs:
         run: cat build/output/latest/html/bookrunner.txt
 
       - name: Print book runner failures grouped by stage
-        run: python3 scripts/ci/bookrunner_failures_by_stage.py build/output/latest/html/index.txt
+        run: python3 scripts/ci/bookrunner_failures_by_stage.py build/output/latest/html/index.html
 
       - name: Detect unexpected book runner failures
         run: ./scripts/ci/detect_bookrunner_failures.sh build/output/latest/html/bookrunner.txt
