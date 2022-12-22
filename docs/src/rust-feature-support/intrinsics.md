@@ -252,16 +252,18 @@ code to be sequential.
 
 ### Platform intrinsics
 
+Intrinsics from [the `platform_intrinsics` feature](https://rust-lang.github.io/rfcs/1199-simd-infrastructure.html#operations).
+
 Name | Support | Notes |
 --- | --- | --- |
 `simd_add` | Yes | |
 `simd_and`  | Yes | |
 `simd_div`  | Yes | Doesn't check for overflow cases [#1970](https://github.com/model-checking/kani/issues/1970) |
 `simd_eq`  | Yes | |
-`simd_extract`  | No | |
+`simd_extract`  | Yes | |
 `simd_ge`  | Yes | |
 `simd_gt`  | Yes | |
-`simd_insert`  | No | |
+`simd_insert`  | Yes | |
 `simd_le`  | Yes | |
 `simd_lt`  | Yes | |
 `simd_mul`  | Yes | |

@@ -1,0 +1,4 @@
+Check 1: main.cover.\
+Status: SATISFIED\
+Description: "i may be greater than 20"\
+main.rs:9:5 in function main

@@ -21,6 +21,7 @@
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{Expr, Location, Stmt, Type};
 use cbmc::InternedString;
+use kani_queries::UserInput;
 use rustc_span::Span;
 use std::convert::AsRef;
 use strum_macros::{AsRefStr, EnumString};
@@ -55,15 +56,13 @@ pub enum PropertyClass {
     ///
     /// SPECIAL BEHAVIOR: None TODO: Why should this exist?
     ExactDiv,
-    /// The `kani::expect_fail` assertion.
-    ///
-    /// SPECIAL BEHAVIOR: Inverted interpretation of success/failure.
-    /// (Note: Possibly this should be the same as Cover, or perhaps an ExplicitCover?)
-    ExpectFail,
     /// Another instrinsic check.
     ///
     /// SPECIAL BEHAVIOR: None TODO: Why should this exist?
     FiniteCheck,
+    /// Checks added by Kani compiler to determine whether a property (e.g.
+    /// `PropertyClass::Assertion` or `PropertyClass:Cover`) is reachable
+    ReachabilityCheck,
     /// Checks added by Kani compiler to detect safety conditions violation.
     /// E.g., things that trigger UB or unstable behavior.
     ///
@@ -139,9 +138,41 @@ impl<'tcx> GotocCtx<'tcx> {
     // The above represent the basic operations we can perform w.r.t. assert/assume/cover
     // Below are various helper functions for constructing the above more easily.
 
-    /// A shorthand for cover(true)
-    pub fn codegen_cover_loc(&self, msg: &str, span: Option<Span>) -> Stmt {
-        self.codegen_cover(Expr::bool_true(), msg, span)
+    /// Given the message for a property, generate a reachability check that is
+    /// meant to check whether the property is reachable. The function returns a
+    /// modified version of the provided message that should be used for the
+    /// property to allow the CBMC output parser to pair the property with its
+    /// reachability check.
+    /// If reachability checks are disabled, the function returns the message
+    /// unmodified and an empty (skip) statement.
+    pub fn codegen_reachability_check(
+        &mut self,
+        msg: String,
+        span: Option<Span>,
+    ) -> (String, Stmt) {
+        let loc = self.codegen_caller_span(&span);
+        if self.queries.get_check_assertion_reachability() {
+            // Generate a unique ID for the assert
+            let assert_id = self.next_check_id();
+            // Generate a message for the reachability check that includes the unique ID
+            let reach_msg = assert_id.clone();
+            // Also add the unique ID as a prefix to the assert message so that it can be
+            // easily paired with the reachability check
+            let msg = GotocCtx::add_prefix_to_msg(&msg, &assert_id);
+            // inject a reachability check, which is a (non-blocking)
+            // assert(false) whose failure indicates that this line is reachable.
+            // The property class (`PropertyClass:ReachabilityCheck`) is used by
+            // the CBMC output parser to distinguish those checks from others.
+            let check = self.codegen_assert(
+                Expr::bool_false(),
+                PropertyClass::ReachabilityCheck,
+                &reach_msg,
+                loc,
+            );
+            (msg, check)
+        } else {
+            (msg, Stmt::skip(loc))
+        }
     }
 
     /// A shorthand for generating a CBMC assert-assume(false)

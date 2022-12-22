@@ -6,7 +6,6 @@ use super::PropertyClass;
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::{Expr, Location, Stmt, Type};
-use kani_queries::UserInput;
 use rustc_hir::def_id::DefId;
 use rustc_middle::mir;
 use rustc_middle::mir::{
@@ -18,7 +17,7 @@ use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{Instance, InstanceDef, Ty};
 use rustc_span::Span;
 use rustc_target::abi::{FieldsShape, Primitive, TagEncoding, Variants};
-use tracing::{debug, info_span, trace};
+use tracing::{debug, debug_span, trace};
 
 impl<'tcx> GotocCtx<'tcx> {
     /// Generate Goto-C for MIR [Statement]s.
@@ -27,7 +26,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// See [GotocCtx::codegen_terminator] for those.
     pub fn codegen_statement(&mut self, stmt: &Statement<'tcx>) -> Stmt {
-        let _trace_span = info_span!("CodegenStatement", statement = ?stmt).entered();
+        let _trace_span = debug_span!("CodegenStatement", statement = ?stmt).entered();
         debug!(?stmt, kind=?stmt.kind, "handling_statement");
         let location = self.codegen_span(&stmt.source_info.span);
         match &stmt.kind {
@@ -159,7 +158,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// See also [`GotocCtx::codegen_statement`] for ordinary [Statement]s.
     pub fn codegen_terminator(&mut self, term: &Terminator<'tcx>) -> Stmt {
         let loc = self.codegen_span(&term.source_info.span);
-        let _trace_span = info_span!("CodegenTerminator", statement = ?term.kind).entered();
+        let _trace_span = debug_span!("CodegenTerminator", statement = ?term.kind).entered();
         debug!("handling terminator {:?}", term);
         //TODO: Instead of doing location::none(), and updating, just putit in when we make the stmt.
         match &term.kind {
@@ -226,16 +225,8 @@ impl<'tcx> GotocCtx<'tcx> {
                     msg.description()
                 };
 
-                // TODO: switch to tagging assertions via the property class once CBMC allows that:
-                // https://github.com/diffblue/cbmc/issues/6692
-                let (msg_str, reach_stmt) = if self.queries.get_check_assertion_reachability() {
-                    let check_id = self.next_check_id();
-                    let msg_str = GotocCtx::add_prefix_to_msg(msg, &check_id);
-                    let reach_msg = GotocCtx::reachability_check_message(&check_id);
-                    (msg_str, self.codegen_cover_loc(&reach_msg, Some(term.source_info.span)))
-                } else {
-                    (msg.to_string(), Stmt::skip(loc))
-                };
+                let (msg_str, reach_stmt) =
+                    self.codegen_reachability_check(msg.to_owned(), Some(term.source_info.span));
 
                 Stmt::block(
                     vec![
