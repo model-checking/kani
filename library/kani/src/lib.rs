@@ -136,13 +136,7 @@ pub(crate) unsafe fn any_raw_internal<T, const SIZE_T: usize>() -> T {
 #[inline(never)]
 #[allow(dead_code)]
 fn any_raw_inner<T>() -> T {
-    // while we could use `unreachable!()` or `panic!()` as the body of this
-    // function, both cause Kani to produce a warning on any program that uses
-    // kani::any() (see https://github.com/model-checking/kani/issues/2010).
-    // This function is handled via a hook anyway, so we just need to put a body
-    // that rustc does not complain about. An infinite loop works out nicely.
-    #[allow(clippy::empty_loop)]
-    loop {}
+    __kani_dummy_never()
 }
 
 /// Function used to generate panic with a static message as this is the only one currently
@@ -154,8 +148,22 @@ fn any_raw_inner<T>() -> T {
 #[inline(never)]
 #[rustc_diagnostic_item = "KaniPanic"]
 #[doc(hidden)]
-pub const fn panic(message: &'static str) -> ! {
-    panic!("{}", message)
+pub const fn panic(_message: &'static str) -> ! {
+    __kani_dummy_never()
+}
+
+/// This is a dummy function that is intended to be called from functions with
+/// `rustc_diagnostic_item`, i.e. that have kani hooks, to make sure they
+/// compile.
+/// While we could use `unreachable!()` or `panic!()` as the body of this
+/// function, both cause Kani to produce a warning on missing `caller_location`
+/// intrinsic (see https://github.com/model-checking/kani/issues/2010) and
+/// produce unnecessarily large MIR.  This function is handled via a hook
+/// anyway, so we just need to put a body that rustc does not complain about. An
+/// infinite loop works out nicely.
+const fn __kani_dummy_never() -> ! {
+    #[allow(clippy::empty_loop)]
+    loop {}
 }
 
 /// A macro to check if a condition is satisfiable at a specific location in the
