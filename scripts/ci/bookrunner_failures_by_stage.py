@@ -31,5 +31,6 @@ def main():
     print(' * kani-codegen: ' + str(failures[1]))
     print(' * cbmc-verification: ' + str(failures[2]))
 
+
 if __name__ == "__main__":
     main()
