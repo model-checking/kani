@@ -113,7 +113,7 @@ fn reconstruct_metadata_structure(
 ) -> Result<Vec<KaniMetadata>> {
     let mut search = kani_metadata.to_owned();
     let mut results = vec![];
-    for package in &cargo_metadata.packages {
+    for package in cargo_metadata.workspace_packages() {
         let mut artifacts = vec![];
         for target in &package.targets {
             // cargo_metadata doesn't provide name mangling help here?
