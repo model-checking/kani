@@ -15,11 +15,8 @@ def main():
     with open(args.input) as fp:
         run = BeautifulSoup(fp, 'html.parser')
 
-    failures = {}
-    failures[0] = 0
-    failures[1] = 0
-    failures[2] = 0
-    
+    failures = [0] * 3
+
     for row in run.find_all('div', attrs={'class': 'pipeline-row'}):
         stages = row.find_all('div', attrs={'class': 'pipeline-stage'})
         i = 0
