@@ -28,4 +28,12 @@ pub struct ScanArgs {
     /// Don't run assess on found packages, just re-analyze the results from a previous run
     #[arg(long, hide = true)]
     pub existing_only: bool,
+
+    /// Only consider the packages named in the given file
+    #[arg(long, hide = true)]
+    pub filter_packages_file: Option<PathBuf>,
+
+    /// Write Assess-Scan metadata (unstable file format) to the given file
+    #[arg(long, hide = true)]
+    pub emit_metadata: Option<PathBuf>,
 }

@@ -1,20 +1,19 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use std::{
-    path::{Path, PathBuf},
-    process::Command,
-    time::Instant,
-};
+use std::collections::HashSet;
+use std::path::Path;
+use std::path::PathBuf;
+use std::process::Command;
+use std::time::Instant;
 
 use anyhow::Result;
 
+use crate::assess::metadata::AssessMetadataOutput;
 use crate::session::KaniSession;
 
-use super::{
-    args::ScanArgs,
-    metadata::{aggregate_metadata, read_metadata},
-};
+use super::args::ScanArgs;
+use super::metadata::{aggregate_metadata, read_metadata};
 
 /// `cargo kani assess scan` is not a normal invocation of `cargo kani`: we don't directly build anything.
 /// Instead we perform a scan of the local directory for all cargo projects, and run assess on each of those.
@@ -49,6 +48,17 @@ pub(crate) fn main(session: KaniSession, args: &ScanArgs) -> Result<()> {
         metas
     };
     let projects: Vec<_> = project_metadata.iter().flat_map(|x| &x.packages).collect();
+    let package_filter = {
+        if let Some(path) = &args.filter_packages_file {
+            let file = std::fs::File::open(path)?;
+            let reader = std::io::BufReader::new(file);
+            use std::io::BufRead;
+            let set: HashSet<String> = reader.lines().map(|x| x.expect("text")).collect();
+            Some(set)
+        } else {
+            None
+        }
+    };
 
     for project in projects {
         println!("Found {}", project.manifest_path);
@@ -61,6 +71,12 @@ pub(crate) fn main(session: KaniSession, args: &ScanArgs) -> Result<()> {
     for workspace in &project_metadata {
         let workspace_root = workspace.workspace_root.as_std_path();
         for package in &workspace.packages {
+            if let Some(filter) = &package_filter {
+                if !filter.contains(&package.name) {
+                    println!("Skipping filtered-out package {}", package.name);
+                    continue;
+                }
+            }
             let package_start_time = Instant::now();
             let name = &package.name;
             let manifest = package.manifest_path.as_std_path();
@@ -86,6 +102,7 @@ pub(crate) fn main(session: KaniSession, args: &ScanArgs) -> Result<()> {
                 if let Ok(meta) = meta {
                     success_metas.push(meta);
                 } else {
+                    println!("Failed: {name}");
                     failed_packages.push(package);
                 }
             }
@@ -108,6 +125,18 @@ pub(crate) fn main(session: KaniSession, args: &ScanArgs) -> Result<()> {
     println!("{}", results.unsupported_features.render());
     println!("{}", results.failure_reasons.render());
     println!("{}", results.promising_tests.render());
+
+    if let Some(path) = &args.emit_metadata {
+        let output = AssessMetadataOutput {
+            unsupported_features: results.unsupported_features.build(),
+            failure_reasons: results.failure_reasons.build(),
+            promising_tests: results.promising_tests.build(),
+        };
+        let out_file = std::fs::File::create(path)?;
+        let writer = std::io::BufWriter::new(out_file);
+        // use pretty for now to keep things readable and debuggable, but this should change eventually
+        serde_json::to_writer_pretty(writer, &output)?;
+    }
 
     Ok(())
 }
