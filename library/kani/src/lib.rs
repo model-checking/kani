@@ -136,7 +136,13 @@ pub(crate) unsafe fn any_raw_internal<T, const SIZE_T: usize>() -> T {
 #[inline(never)]
 #[allow(dead_code)]
 fn any_raw_inner<T>() -> T {
-    unimplemented!("Kani any_raw_inner");
+    // while we could use `unreachable!()` or `panic!()` as the body of this
+    // function, both cause Kani to produce a warning on any program that uses
+    // kani::any() (see https://github.com/model-checking/kani/issues/2010).
+    // This function is handled via a hook anyway, so we just need to put a body
+    // that rustc does not complain about. An infinite loop works out nicely.
+    #[allow(clippy::empty_loop)]
+    loop {}
 }
 
 /// Function used to generate panic with a static message as this is the only one currently
