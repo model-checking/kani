@@ -1,11 +1,13 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+//! This module contains arguments specific to the `cargo kani assess` subcommand.
+
 use std::path::PathBuf;
 
 use clap::Parser;
 
-// `cargo kani assess` subcommand arguments
+/// `cargo kani assess` subcommand arguments
 #[derive(Default, Debug, Parser)]
 pub struct AssessArgs {
     #[command(subcommand)]
@@ -16,13 +18,14 @@ pub struct AssessArgs {
     pub emit_metadata: Option<PathBuf>,
 }
 
-// `cargo kani assess` takes optional subcommands to request specialized behavior
+/// `cargo kani assess` takes optional subcommands to request specialized behavior
 #[derive(Debug, Parser)]
 pub enum AssessSubcommand {
     /// Run assess on a directory containing multiple cargo projects, and aggregate the results
     Scan(ScanArgs),
 }
 
+/// `cargo kani assess scan` subcommand arguments
 #[derive(Debug, Parser)]
 pub struct ScanArgs {
     /// Don't run assess on found packages, just re-analyze the results from a previous run

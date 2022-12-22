@@ -47,7 +47,7 @@ pub(crate) fn build(results: &[HarnessResult]) -> TableBuilder<PromisingTestsTab
     builder
 }
 
-#[derive(Default, Debug, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct PromisingTestsTableRow {
     pub name: String,
     pub location: String,

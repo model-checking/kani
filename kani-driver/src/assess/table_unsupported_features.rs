@@ -49,7 +49,7 @@ pub(crate) fn build(metadata: &[KaniMetadata]) -> TableBuilder<UnsupportedFeatur
     builder
 }
 
-#[derive(Default, Debug, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct UnsupportedFeaturesTableRow {
     pub unsupported_feature: String,
     pub crates_impacted: HashSet<String>,

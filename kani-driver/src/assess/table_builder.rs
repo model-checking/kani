@@ -29,6 +29,7 @@ use std::collections::HashMap;
 use std::hash::Hash;
 
 use comfy_table::Table;
+use serde::{Deserialize, Serialize};
 
 /// A [`TableRow`] is a type where multiple "rows" with the same `key` should be `merge`d into one.
 /// This type is used in conjuction with [`TableBuilder`].
@@ -146,6 +147,39 @@ impl<R: TableRow> TableBuilder<R> {
         }
 
         table
+    }
+}
+
+impl<R> Serialize for TableBuilder<R>
+where
+    R: Serialize + TableRow,
+{
+    /// To serialize a TableBuilder, we use [`TableRow::build`] to contruct a vector
+    /// and simply serialize the result.
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let result = self.build();
+        result.serialize(serializer)
+    }
+}
+impl<'de, R> Deserialize<'de> for TableBuilder<R>
+where
+    R: Deserialize<'de> + TableRow,
+{
+    /// To deserialize a TableBuilder, we deserialize a vector of [`TableRow`] and
+    /// add each one to the table.
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let rows: Vec<R> = Deserialize::deserialize(deserializer)?;
+        let mut result = TableBuilder::new();
+        for row in rows {
+            result.add(row);
+        }
+        Ok(result)
     }
 }
 

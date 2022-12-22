@@ -50,7 +50,7 @@ pub(crate) fn build(results: &[HarnessResult]) -> TableBuilder<FailureReasonsTab
     builder
 }
 
-#[derive(Default, Debug, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct FailureReasonsTableRow {
     pub reason: String,
     pub count: usize,

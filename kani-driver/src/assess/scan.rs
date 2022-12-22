@@ -9,7 +9,6 @@ use std::time::Instant;
 
 use anyhow::Result;
 
-use crate::assess::metadata::AssessMetadataOutput;
 use crate::session::KaniSession;
 
 use super::args::ScanArgs;
@@ -26,7 +25,7 @@ use super::metadata::{aggregate_metadata, read_metadata};
 /// 1. Walk directory trees, don't descend into `target` and also stop when finding a `Cargo.toml`
 /// 2. Examine each `Cargo.toml` (potentially a workspace of multiple packages)
 /// 3. Aggregate all of those together.
-pub(crate) fn main(session: KaniSession, args: &ScanArgs) -> Result<()> {
+pub(crate) fn assess_scan_main(session: KaniSession, args: &ScanArgs) -> Result<()> {
     let cargo_toml_files = {
         let mut files = Vec::new();
         scan_cargo_projects(PathBuf::from("."), &mut files);
@@ -127,15 +126,10 @@ pub(crate) fn main(session: KaniSession, args: &ScanArgs) -> Result<()> {
     println!("{}", results.promising_tests.render());
 
     if let Some(path) = &args.emit_metadata {
-        let output = AssessMetadataOutput {
-            unsupported_features: results.unsupported_features.build(),
-            failure_reasons: results.failure_reasons.build(),
-            promising_tests: results.promising_tests.build(),
-        };
         let out_file = std::fs::File::create(path)?;
         let writer = std::io::BufWriter::new(out_file);
         // use pretty for now to keep things readable and debuggable, but this should change eventually
-        serde_json::to_writer_pretty(writer, &output)?;
+        serde_json::to_writer_pretty(writer, &results)?;
     }
 
     Ok(())
@@ -186,6 +180,7 @@ fn scan_cargo_projects(path: PathBuf, accumulator: &mut Vec<PathBuf>) {
     for entry in entries {
         let Ok(entry) = entry else { continue; };
         let Ok(typ) = entry.file_type() else { continue; };
+        // symlinks are not `is_dir()`
         if typ.is_dir() {
             scan_cargo_projects(entry.path(), accumulator)
         }

@@ -1,6 +1,13 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+//! Assess metadata. This format is shared between 'assess' and 'assess scan'.
+//! Assess produces this for one workspace, scan for several.
+//! It is not a stable file format: it is meant for assess to directly communicate
+//! from assess subprocesses to a parent scan process.
+//! We can build other tools that make use of it, but they need to built for or distributed
+//! with the specific version of Kani.
+
 use std::fs::File;
 use std::io::BufWriter;
 use std::path::Path;
@@ -16,29 +23,14 @@ use super::AssessArgs;
 
 /// The structure of `.kani-assess-metadata.json` files, which are emitted for each crate.
 /// This is not a stable interface.
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct AssessMetadata {
-    pub unsupported_features: Vec<UnsupportedFeaturesTableRow>,
-    pub failure_reasons: Vec<FailureReasonsTableRow>,
-    pub promising_tests: Vec<PromisingTestsTableRow>,
-}
-
-/// This should be kept identical to [`AssessMetadata`], but lifetimes will differ.
-#[derive(Serialize)]
-pub struct AssessMetadataOutput<'a> {
-    pub unsupported_features: Vec<&'a UnsupportedFeaturesTableRow>,
-    pub failure_reasons: Vec<&'a FailureReasonsTableRow>,
-    pub promising_tests: Vec<&'a PromisingTestsTableRow>,
-}
-
-/// This should be kept identical to [`AssessMetadata`], but wrapper types will differ.
-pub struct AssessMetadataAggregate {
     pub unsupported_features: TableBuilder<UnsupportedFeaturesTableRow>,
     pub failure_reasons: TableBuilder<FailureReasonsTableRow>,
     pub promising_tests: TableBuilder<PromisingTestsTableRow>,
 }
 
-pub(crate) fn write_metadata(args: &AssessArgs, build: AssessMetadataOutput) -> Result<()> {
+pub(crate) fn write_metadata(args: &AssessArgs, build: AssessMetadata) -> Result<()> {
     if let Some(path) = &args.emit_metadata {
         let out_file = File::create(&path)?;
         let writer = BufWriter::new(out_file);
@@ -54,10 +46,10 @@ pub(crate) fn write_partial_metadata(
 ) -> Result<()> {
     write_metadata(
         args,
-        AssessMetadataOutput {
-            unsupported_features: unsupported_features.build(),
-            failure_reasons: vec![],
-            promising_tests: vec![],
+        AssessMetadata {
+            unsupported_features,
+            failure_reasons: TableBuilder::new(),
+            promising_tests: TableBuilder::new(),
         },
     )
 }
@@ -67,21 +59,21 @@ pub(crate) fn read_metadata(path: &Path) -> Result<AssessMetadata> {
     crate::metadata::from_json(path)
 }
 
-pub(crate) fn aggregate_metadata(metas: Vec<AssessMetadata>) -> AssessMetadataAggregate {
-    let mut result = AssessMetadataAggregate {
+pub(crate) fn aggregate_metadata(metas: Vec<AssessMetadata>) -> AssessMetadata {
+    let mut result = AssessMetadata {
         unsupported_features: TableBuilder::new(),
         failure_reasons: TableBuilder::new(),
         promising_tests: TableBuilder::new(),
     };
     for meta in metas {
-        for item in meta.unsupported_features {
-            result.unsupported_features.add(item);
+        for item in meta.unsupported_features.build() {
+            result.unsupported_features.add(item.clone());
         }
-        for item in meta.failure_reasons {
-            result.failure_reasons.add(item);
+        for item in meta.failure_reasons.build() {
+            result.failure_reasons.add(item.clone());
         }
-        for item in meta.promising_tests {
-            result.promising_tests.add(item);
+        for item in meta.promising_tests.build() {
+            result.promising_tests.add(item.clone());
         }
     }
     result

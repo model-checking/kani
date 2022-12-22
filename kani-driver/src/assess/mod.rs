@@ -20,7 +20,7 @@ mod table_unsupported_features;
 
 pub(crate) fn cargokani_assess_main(mut session: KaniSession, args: AssessArgs) -> Result<()> {
     if let Some(args::AssessSubcommand::Scan(args)) = &args.command {
-        return scan::main(session, args);
+        return scan::assess_scan_main(session, args);
     }
 
     // fix (as in "make unchanging/unchangable") some settings
@@ -87,16 +87,12 @@ pub(crate) fn cargokani_assess_main(mut session: KaniSession, args: AssessArgs) 
 
     // 2. "Test cases that might be good proof harness starting points"
     //    e.g.  All Successes and maybe Assertions?
-    let promising_results = table_promising_tests::build(&results);
-    println!("{}", promising_results.render());
+    let promising_tests = table_promising_tests::build(&results);
+    println!("{}", promising_tests.render());
 
     metadata::write_metadata(
         &args,
-        metadata::AssessMetadataOutput {
-            unsupported_features: unsupported_features.build(),
-            failure_reasons: failure_reasons.build(),
-            promising_tests: promising_results.build(),
-        },
+        metadata::AssessMetadata { unsupported_features, failure_reasons, promising_tests },
     )?;
 
     Ok(())
