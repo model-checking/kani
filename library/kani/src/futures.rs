@@ -107,48 +107,6 @@ impl SchedulingStrategy for RoundRobin {
     }
 }
 
-/// Picks the next task nondeterministically
-#[derive(Default)]
-pub struct NondeterministicScheduling;
-
-impl SchedulingStrategy for NondeterministicScheduling {
-    fn pick_task(&mut self, num_tasks: usize) -> (usize, SchedulingAssumption) {
-        let index = crate::any();
-        crate::assume(index < num_tasks);
-        (index, SchedulingAssumption::CanAssumeRunning)
-    }
-}
-
-/// A restricted form of nondeterministic scheduling to have some fairness.
-///
-/// Each task has a counter that is increased when it is scheduled.
-/// If a task has reached a provided limit, it cannot be scheduled anymore until all other tasks have reached the limit too,
-/// at which point all the counters are reset to zero.
-pub struct NondetFairScheduling {
-    counters: Vec<u8>,
-    limit: u8,
-}
-
-impl NondetFairScheduling {
-    #[inline]
-    pub fn new(limit: u8) -> Self {
-        Self { counters: Vec::new(), limit }
-    }
-}
-
-impl SchedulingStrategy for NondetFairScheduling {
-    fn pick_task(&mut self, num_tasks: usize) -> (usize, SchedulingAssumption) {
-        if self.counters.len() != num_tasks || self.counters.iter().all(|x| *x == 0) {
-            self.counters = vec![self.limit; num_tasks];
-        }
-        let index = crate::any();
-        crate::assume(index < num_tasks);
-        crate::assume(self.counters[index] > 0);
-        self.counters[index] -= 1;
-        (index, SchedulingAssumption::CanAssumeRunning)
-    }
-}
-
 pub(crate) struct Scheduler {
     tasks: Vec<Option<BoxFuture>>,
     num_running: usize,
