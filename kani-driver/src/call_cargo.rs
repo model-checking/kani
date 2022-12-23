@@ -211,55 +211,52 @@ impl VerificationTarget {
 fn package_targets(args: &KaniArgs, package: &Package) -> Vec<VerificationTarget> {
     let mut ignored_tests = vec![];
     let mut ignored_unsupported = vec![];
-    let verification_targets = package
-        .targets
-        .iter()
-        .filter_map(|target| {
-            debug!(name=?package.name, target=?target.name, kind=?target.kind, crate_type=?target
+    let mut verification_targets = vec![];
+    for target in &package.targets {
+        debug!(name=?package.name, target=?target.name, kind=?target.kind, crate_type=?target
                 .crate_types,
                 "package_targets");
-            if target.kind.contains(&String::from(CRATE_TYPE_BIN)) {
-                // Binary targets.
-                Some(VerificationTarget::Bin(target.name.clone()))
-            } else if target.kind.contains(&String::from(CRATE_TYPE_LIB))
-                || target.kind.contains(&String::from(CRATE_TYPE_RLIB))
-            {
-                // Lib targets.
-                let unsupported_types = target
-                    .kind
-                    .iter()
-                    .filter_map(|kind| {
-                        let kind_str = kind.as_str();
-                        matches!(kind_str,
-                            CRATE_TYPE_CDYLIB | CRATE_TYPE_DYLIB | CRATE_TYPE_STATICLIB |
-                            CRATE_TYPE_PROC_MACRO
-                        ).then_some(kind_str)
-                    })
-                    .collect::<Vec<_>>();
-                if unsupported_types.is_empty() {
-                    Some(VerificationTarget::Lib)
-                } else {
-                    println!(
-                        "warning: Skipped verification of `{}` due to unsupported crate-type: `{}`.",
-                        target.name,
-                        unsupported_types.join("`, `")
-                    );
-                    None
+        for kind in &target.kind {
+            match kind.as_str() {
+                CRATE_TYPE_BIN => {
+                    // Binary targets.
+                    verification_targets.push(VerificationTarget::Bin(target.name.clone()));
                 }
-            } else if target.kind.contains(&String::from(CRATE_TYPE_TEST)) {
-                // Test target.
-                if args.tests {
-                    Some(VerificationTarget::Test(target.name.clone()))
-                } else {
-                    ignored_tests.push(target.name.as_str());
-                    None
+                CRATE_TYPE_LIB | CRATE_TYPE_RLIB | CRATE_TYPE_CDYLIB | CRATE_TYPE_DYLIB
+                | CRATE_TYPE_STATICLIB => {
+                    // Lib targets.
+                    let unsupported_types = target
+                        .kind
+                        .iter()
+                        .filter_map(|kind| {
+                            let kind_str = kind.as_str();
+                            matches!(kind_str, CRATE_TYPE_PROC_MACRO).then_some(kind_str)
+                        })
+                        .collect::<Vec<_>>();
+                    if unsupported_types.is_empty() {
+                        verification_targets.push(VerificationTarget::Lib);
+                    } else {
+                        println!(
+                            "warning: Skipped verification of `{}` due to unsupported crate-type: `{}`.",
+                            target.name,
+                            unsupported_types.join("`, `")
+                        );
+                    }
                 }
-            } else {
-                ignored_unsupported.push(target.name.as_str());
-                None
+                CRATE_TYPE_TEST => {
+                    // Test target.
+                    if args.tests {
+                        verification_targets.push(VerificationTarget::Test(target.name.clone()));
+                    } else {
+                        ignored_tests.push(target.name.as_str());
+                    }
+                }
+                _ => {
+                    ignored_unsupported.push(target.name.as_str());
+                }
             }
-        })
-        .collect();
+        }
+    }
 
     if args.verbose {
         // Print targets that were skipped only on verbose mode.
