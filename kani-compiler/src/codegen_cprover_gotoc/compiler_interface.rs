@@ -3,6 +3,7 @@
 
 //! This file contains the code necessary to interface with the compiler backend
 
+use crate::codegen_cprover_gotoc::archive::ArchiveBuilder;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{
@@ -13,20 +14,24 @@ use cbmc::goto_program::Location;
 use cbmc::{InternedString, MachineModel};
 use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata};
 use kani_queries::{QueryDb, ReachabilityType, UserInput};
+use rustc_codegen_ssa::back::metadata::create_wrapper_file;
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_codegen_ssa::{CodegenResults, CrateInfo};
 use rustc_data_structures::fx::FxHashMap;
+use rustc_data_structures::temp_dir::MaybeTempDir;
 use rustc_errors::ErrorGuaranteed;
 use rustc_hir::def::DefKind;
 use rustc_hir::def_id::LOCAL_CRATE;
+use rustc_metadata::fs::{emit_wrapper_file, METADATA_FILENAME};
 use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
 use rustc_middle::mir::mono::{CodegenUnit, MonoItem};
 use rustc_middle::mir::write_mir_pretty;
 use rustc_middle::ty::query::Providers;
 use rustc_middle::ty::{self, InstanceDef, TyCtxt};
-use rustc_session::config::{OutputFilenames, OutputType};
+use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::cstore::MetadataLoaderDyn;
+use rustc_session::output::out_filename;
 use rustc_session::Session;
 use rustc_span::def_id::DefId;
 use rustc_target::abi::Endian;
@@ -42,6 +47,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::rc::Rc;
 use std::time::Instant;
+use tempfile::Builder as TempFileBuilder;
 use tracing::{debug, error, info, warn};
 
 #[derive(Clone)]
@@ -204,14 +210,6 @@ impl CodegenBackend for GotocCodegenBackend {
         codegen_results: CodegenResults,
         outputs: &OutputFilenames,
     ) -> Result<(), ErrorGuaranteed> {
-        use crate::codegen_cprover_gotoc::archive::ArchiveBuilder;
-        use rustc_codegen_ssa::back::metadata::create_wrapper_file;
-        use rustc_data_structures::temp_dir::MaybeTempDir;
-        use rustc_metadata::fs::{emit_wrapper_file, METADATA_FILENAME};
-        use rustc_session::config::CrateType;
-        use rustc_session::output::out_filename;
-        use tempfile::Builder as TempFileBuilder;
-
         let requested_crate_types = sess.crate_types();
         if !requested_crate_types.contains(&CrateType::Rlib) {
             // Quit successfully if we don't need an `rlib`:
