@@ -151,7 +151,6 @@ static CBMC_ALT_DESCRIPTIONS: Lazy<CbmcAltDescriptions> = Lazy::new(|| {
 const UNSUPPORTED_CONSTRUCT_DESC: &str = "is not currently supported by Kani";
 const UNWINDING_ASSERT_DESC: &str = "unwinding assertion loop";
 const DEFAULT_ASSERTION: &str = "assertion";
-const REACH_CHECK_DESC: &str = "[KANI_REACHABILITY_CHECK]";
 
 impl ParserItem {
     /// Determines if an item must be skipped or not.
@@ -591,6 +590,9 @@ fn update_properties_with_reach_status(
 /// fails, then the cover property is satisfied and vice versa.
 /// - SUCCESS -> UNSATISFIABLE
 /// - FAILURE -> SATISFIED
+/// Note that if the cover property was unreachable, its status at this point
+/// will be `CheckStatus::Unreachable` and not `CheckStatus::Success` since
+/// `update_properties_with_reach_status` is called beforehand
 fn update_results_of_cover_checks(mut properties: Vec<Property>) -> Vec<Property> {
     for prop in properties.iter_mut() {
         if prop.is_cover_property() {
@@ -622,25 +624,12 @@ fn remove_check_ids_from_description(mut properties: Vec<Property>) -> Vec<Prope
     properties
 }
 
-/// Given a description, this splits properties into two groups:
-///  1. Properties that don't contain the description
-///  2. Properties that contain the description
-fn filter_properties(properties: Vec<Property>, message: &str) -> (Vec<Property>, Vec<Property>) {
-    let mut filtered_properties = Vec::<Property>::new();
-    let mut removed_properties = Vec::<Property>::new();
-    for prop in properties {
-        if prop.description.contains(message) {
-            removed_properties.push(prop);
-        } else {
-            filtered_properties.push(prop);
-        }
-    }
-    (filtered_properties, removed_properties)
-}
-
-/// Filters reachability checks with `filter_properties`
+/// Partitions `properties` into reachability checks (identified by the
+/// "reachability_check" property class) and non-reachability checks
 fn filter_reach_checks(properties: Vec<Property>) -> (Vec<Property>, Vec<Property>) {
-    filter_properties(properties, REACH_CHECK_DESC)
+    let (reach_checks, other_checks): (Vec<_>, Vec<_>) =
+        properties.into_iter().partition(|prop| prop.property_class() == "reachability_check");
+    (other_checks, reach_checks)
 }
 
 /// Filters out Kani-generated sanity checks with a `SUCCESS` status
@@ -680,11 +669,11 @@ fn filter_ptr_checks(properties: Vec<Property>) -> Vec<Property> {
 /// includes the ID of the assert for which we want to check its reachability.
 /// The description of a reachability check uses the following template:
 /// ```text
-/// [KANI_REACHABILITY_CHECK] <ID of original assert>
+/// <ID of original assert>
 /// ```
 /// e.g.:
 /// ```text
-/// [KANI_REACHABILITY_CHECK] KANI_CHECK_ID_foo.6875c808::foo_0
+/// KANI_CHECK_ID_foo.6875c808::foo_0
 /// ```
 /// This function first collects all data from reachability checks. Then,
 /// it updates the reachability status for all properties accordingly.

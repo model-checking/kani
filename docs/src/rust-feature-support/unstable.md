@@ -7,4 +7,3 @@ The following are examples of unstable features that are not supported
 in Kani:
  * Generators
  * C-variadics
- * `repr(simd)` and related intrinsics
