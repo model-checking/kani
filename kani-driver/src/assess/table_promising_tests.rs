@@ -49,7 +49,9 @@ pub(crate) fn build(results: &[HarnessResult]) -> TableBuilder<PromisingTestsTab
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct PromisingTestsTableRow {
+    /// The "pretty name" of the test, like "module::test_name"
     pub name: String,
+    /// The "clickable location" of the test, like "/full/path/to/file.rs:123"
     pub location: String,
 }
 

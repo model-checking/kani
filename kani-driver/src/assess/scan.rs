@@ -60,7 +60,7 @@ pub(crate) fn assess_scan_main(session: KaniSession, args: &ScanArgs) -> Result<
     };
 
     for project in projects {
-        println!("Found {}", project.manifest_path);
+        println!("Found {}: {}", project.name, project.manifest_path);
     }
 
     let overall_start_time = Instant::now();
@@ -69,12 +69,22 @@ pub(crate) fn assess_scan_main(session: KaniSession, args: &ScanArgs) -> Result<
     let mut success_metas = Vec::new();
     for workspace in &project_metadata {
         let workspace_root = workspace.workspace_root.as_std_path();
-        for package in &workspace.packages {
+        for package in workspace.workspace_packages() {
             if let Some(filter) = &package_filter {
                 if !filter.contains(&package.name) {
                     println!("Skipping filtered-out package {}", package.name);
                     continue;
                 }
+            }
+            // This is a hack. Some repos contains workspaces with "examples" (not actually cargo examples, but
+            // full packages as workspace members) that are named after other crates.
+            // It's not fully clear what approach we should take to fix this.
+            // For the moment, we try to filter out "example" packages through this hack.
+            // Current known instances: `syn` contains a package named `lazy_static`.
+            // (syn/examples/lazy-static/lazy-static/Cargo.toml)
+            if package.manifest_path.components().any(|x| x.as_str() == "examples") {
+                println!("Warning: Skipping (by heuristic) {} in {}", package.name, workspace.workspace_root);
+                continue;
             }
             let package_start_time = Instant::now();
             let name = &package.name;

@@ -100,6 +100,9 @@ pub(crate) fn cargokani_assess_main(mut session: KaniSession, args: AssessArgs) 
 
 /// Merges a collection of Kani metadata by figuring out which package each belongs to, from cargo metadata.
 ///
+/// Initially, `kani_metadata` is a kani metadata structure for each _target_ of every package.
+/// This function works by collecting each target
+///
 /// This function, properly speaking, should not exist. We should have this information already from `Project`.
 /// This should function should be removable when we fix how driver handles metadata:
 /// <https://github.com/model-checking/kani/issues/1758>
@@ -107,17 +110,18 @@ fn reconstruct_metadata_structure(
     cargo_metadata: &cargo_metadata::Metadata,
     kani_metadata: &[KaniMetadata],
 ) -> Result<Vec<KaniMetadata>> {
-    let mut search = kani_metadata.to_owned();
-    let mut results = vec![];
+    let mut remaining_metas = kani_metadata.to_owned();
+    let mut package_metas = vec![];
     for package in cargo_metadata.workspace_packages() {
-        let mut artifacts = vec![];
+        let mut package_artifacts = vec![];
         for target in &package.targets {
             // cargo_metadata doesn't provide name mangling help here?
-            // we need to know cargo's name changes when it's given to rustc
+            // We need to know cargo's name changes when it's given to rustc, because kani-metadata
+            // records `crate_name` as rustc sees it, but `target` is name as cargo sees it
             let target_name = target.name.replace('-', "_");
-            if let Some(i) = search.iter().position(|x| x.crate_name == target_name) {
-                let md = search.swap_remove(i);
-                artifacts.push(md);
+            if let Some(i) = remaining_metas.iter().position(|x| x.crate_name == target_name) {
+                let md = remaining_metas.swap_remove(i);
+                package_artifacts.push(md);
             } else {
                 println!(
                     "Didn't find metadata for target {} in package {}",
@@ -125,13 +129,13 @@ fn reconstruct_metadata_structure(
                 )
             }
         }
-        let mut merged = crate::metadata::merge_kani_metadata(artifacts);
+        let mut merged = crate::metadata::merge_kani_metadata(package_artifacts);
         merged.crate_name = package.name.clone();
-        results.push(merged);
+        package_metas.push(merged);
     }
-    if !search.is_empty() {
-        let search_names: Vec<_> = search.into_iter().map(|x| x.crate_name).collect();
-        println!("Found remaining (unused) metadata after reconstruction: {:?}", search_names);
+    if !remaining_metas.is_empty() {
+        let remaining_names: Vec<_> = remaining_metas.into_iter().map(|x| x.crate_name).collect();
+        println!("Found remaining (unused) metadata after reconstruction: {:?}", remaining_names);
     }
-    Ok(results)
+    Ok(package_metas)
 }

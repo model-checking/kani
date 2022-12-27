@@ -51,8 +51,11 @@ pub(crate) fn build(metadata: &[KaniMetadata]) -> TableBuilder<UnsupportedFeatur
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct UnsupportedFeaturesTableRow {
+    /// The unsupported feature name, generally given to `codegen_unimplemented` in `kani-compiler`
     pub unsupported_feature: String,
+    /// The set of packages which had an instance of this feature somewhere in their build (even if from a reachable dependency)
     pub crates_impacted: HashSet<String>,
+    /// The total count of the uses of this feature (we don't record details about where from only because that seems uninteresting so far)
     pub instances_of_use: usize,
 }
 
