@@ -83,7 +83,10 @@ pub(crate) fn assess_scan_main(session: KaniSession, args: &ScanArgs) -> Result<
             // Current known instances: `syn` contains a package named `lazy_static`.
             // (syn/examples/lazy-static/lazy-static/Cargo.toml)
             if package.manifest_path.components().any(|x| x.as_str() == "examples") {
-                println!("Warning: Skipping (by heuristic) {} in {}", package.name, workspace.workspace_root);
+                println!(
+                    "Warning: Skipping (by heuristic) {} in {}",
+                    package.name, workspace.workspace_root
+                );
                 continue;
             }
             let package_start_time = Instant::now();

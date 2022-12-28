@@ -1,8 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use std::collections::HashSet;
 use std::cmp::Ordering;
+use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
@@ -46,9 +46,13 @@ pub(crate) fn build(results: &[HarnessResult]) -> TableBuilder<FailureReasonsTab
         };
 
         let name = r.harness.pretty_name.trim_end_matches("::{closure#0}").to_string();
-        let identity = format!("{} @ {}:{}", name, r.harness.original_file, r.harness.original_start_line);
+        let identity =
+            format!("{} @ {}:{}", name, r.harness.original_file, r.harness.original_start_line);
 
-        builder.add(FailureReasonsTableRow { reason: classification, tests: HashSet::from([identity]) });
+        builder.add(FailureReasonsTableRow {
+            reason: classification,
+            tests: HashSet::from([identity]),
+        });
     }
 
     builder
@@ -74,7 +78,11 @@ impl TableRow for FailureReasonsTableRow {
     }
 
     fn compare(&self, right: &Self) -> Ordering {
-        self.tests.len().cmp(&right.tests.len()).reverse().then_with(|| self.reason.cmp(&right.reason))
+        self.tests
+            .len()
+            .cmp(&right.tests.len())
+            .reverse()
+            .then_with(|| self.reason.cmp(&right.reason))
     }
 }
 
