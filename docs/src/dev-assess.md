@@ -60,11 +60,11 @@ Assess produces a few tables of output (visually and in more detailed json forma
 
 ```text
 ======================================================
- Unsupported feature           |   Crates | Instances 
-                               | impacted |    of use 
+ Unsupported feature           |   Crates | Instances
+                               | impacted |    of use
 -------------------------------+----------+-----------
- caller_location               |       71 |       239 
- simd_bitmask                  |       39 |       160 
+ caller_location               |       71 |       239
+ simd_bitmask                  |       39 |       160
 ...
 ```
 

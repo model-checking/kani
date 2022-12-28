@@ -94,7 +94,24 @@ fi
 # Check codegen of firecracker
 time "$SCRIPT_DIR"/codegen-firecracker.sh
 
+# Test run 'cargo kani assess scan' on the existing workspace assess test
+echo "Running assess scan test:"
+(cd $KANI_DIR/tests/assess-scan-test-scaffold && \
+ cargo kani --enable-unstable assess scan && \
+ (cd foo && cargo clean) && \
+ (cd bar && cargo clean))
+EXPECTED_FILES=(bar/bar.kani-assess-metadata.json foo/foo.kani-assess-metadata.json bar/bar.kani-assess.log foo/foo.kani-assess.log)
+for file in ${EXPECTED_FILES[@]}; do
+  if [ -f $KANI_DIR/tests/assess-scan-test-scaffold/$file ]; then
+    rm $KANI_DIR/tests/assess-scan-test-scaffold/$file
+  else
+    echo "Failed to find $file" && exit 1
+  fi
+done
+echo "Done with assess scan test"
+
 # Check that documentation compiles.
+echo "Starting doc tests:"
 cargo doc --workspace --no-deps --exclude std
 
 echo

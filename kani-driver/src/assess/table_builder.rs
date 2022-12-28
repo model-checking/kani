@@ -22,7 +22,7 @@
 //!    the intermediate "regular" structure (#2 above), by instead thinking in
 //!    terms of merging rows by their [`TableRow::key`]. (Vaguely like map-reduce.)
 //! 4. Use [`TableBuilder`] to construct the table.
-//! 5. [Optional] Implement [`RenderableTableRow`] so you can print the table.
+//! 5. (Optional) Implement [`RenderableTableRow`] so you can print the table.
 
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -154,7 +154,7 @@ impl<R> Serialize for TableBuilder<R>
 where
     R: Serialize + TableRow,
 {
-    /// To serialize a TableBuilder, we use [`TableRow::build`] to contruct a vector
+    /// To serialize a TableBuilder, we use [`TableBuilder::build`] to contruct a vector
     /// and simply serialize the result.
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
