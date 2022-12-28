@@ -44,7 +44,7 @@ pub(crate) fn cargokani_assess_main(mut session: KaniSession, args: AssessArgs) 
         // we will at least continue to see everything.
         project.metadata.clone()
     } else {
-        reconstruct_metadata_structure(cargo_metadata, &project.metadata)?
+        reconstruct_metadata_structure(&session, cargo_metadata, &project.metadata)?
     };
 
     // We don't really have a list of crates that went into building our various targets,
@@ -107,12 +107,27 @@ pub(crate) fn cargokani_assess_main(mut session: KaniSession, args: AssessArgs) 
 /// This should function should be removable when we fix how driver handles metadata:
 /// <https://github.com/model-checking/kani/issues/1758>
 fn reconstruct_metadata_structure(
+    session: &KaniSession,
     cargo_metadata: &cargo_metadata::Metadata,
     kani_metadata: &[KaniMetadata],
 ) -> Result<Vec<KaniMetadata>> {
     let mut remaining_metas = kani_metadata.to_owned();
     let mut package_metas = vec![];
     for package in cargo_metadata.workspace_packages() {
+        if !session.args.package.is_empty() {
+            // If a specific package (set) is requested, skip all other packages.
+            // This is a necessary workaround because we're reconstructing which metas go to which packages
+            // based on the "crate name" given to the target, and the same workspace can have two
+            // packages with targets that have the same crate name.
+            // This is just an inherent problem with trying to reconstruct this information, and should
+            // be fixed by the issue linked in the function description.
+            // The best we can do for now is ignore packages we know we didn't build, to reduce the amount
+            // of confusion we might suffer here (which at least solves the problem for 'scan' which only
+            // builds 1 package at a time.)
+            if !session.args.package.contains(&package.name) {
+                continue;
+            }
+        }
         let mut package_artifacts = vec![];
         for target in &package.targets {
             // cargo_metadata doesn't provide name mangling help here?
@@ -124,8 +139,8 @@ fn reconstruct_metadata_structure(
                 package_artifacts.push(md);
             } else {
                 println!(
-                    "Didn't find metadata for target {} in package {}",
-                    target.name, package.name
+                    "Didn't find metadata for target {} (kind {:?}) in package {}",
+                    target.name, target.kind, package.name
                 )
             }
         }
