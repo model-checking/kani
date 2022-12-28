@@ -24,7 +24,6 @@ pub(crate) fn cargokani_assess_main(mut session: KaniSession, args: AssessArgs) 
     }
 
     // fix (as in "make unchanging/unchangable") some settings
-    session.args.all_features = true;
     session.args.unwind = Some(1);
     session.args.tests = true;
     session.args.output_format = crate::args::OutputFormat::Terse;
