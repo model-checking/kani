@@ -47,6 +47,9 @@ pub(crate) fn build(results: &[HarnessResult]) -> TableBuilder<PromisingTestsTab
     builder
 }
 
+/// Reports tests that Kani successfully analyzes, with a direct link to the test for easy viewing.
+///
+/// See [`build`]
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct PromisingTestsTableRow {
     /// The "pretty name" of the test, like "module::test_name"

@@ -25,8 +25,11 @@ use super::AssessArgs;
 /// This is not a stable interface.
 #[derive(Serialize, Deserialize)]
 pub struct AssessMetadata {
+    /// Report on the presence of `codegen_unimplemented` in the analyzed packages
     pub unsupported_features: TableBuilder<UnsupportedFeaturesTableRow>,
+    /// Report of the reasons why tests could not be analyzed by Kani
     pub failure_reasons: TableBuilder<FailureReasonsTableRow>,
+    /// Report on the tests that Kani can successfully analyze
     pub promising_tests: TableBuilder<PromisingTestsTableRow>,
 }
 

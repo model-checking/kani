@@ -58,6 +58,9 @@ pub(crate) fn build(results: &[HarnessResult]) -> TableBuilder<FailureReasonsTab
     builder
 }
 
+/// Reports the reasons that tests failed to be analyzed by Kani
+///
+/// See [`build`]
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct FailureReasonsTableRow {
     /// "Failure reasons" look like "unwind" or "assertion + overflow"

@@ -49,6 +49,9 @@ pub(crate) fn build(metadata: &[KaniMetadata]) -> TableBuilder<UnsupportedFeatur
     builder
 }
 
+/// Reports features that Kani does not yet support and records the packages that triggered these warnings.
+///
+/// See [`build`]
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct UnsupportedFeaturesTableRow {
     /// The unsupported feature name, generally given to `codegen_unimplemented` in `kani-compiler`
