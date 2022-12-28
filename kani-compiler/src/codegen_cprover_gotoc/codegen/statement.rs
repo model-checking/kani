@@ -164,8 +164,8 @@ impl<'tcx> GotocCtx<'tcx> {
             TerminatorKind::Goto { target } => {
                 Stmt::goto(self.current_fn().find_label(target), loc)
             }
-            TerminatorKind::SwitchInt { discr, switch_ty, targets } => {
-                self.codegen_switch_int(discr, *switch_ty, targets, loc)
+            TerminatorKind::SwitchInt { discr, targets } => {
+                self.codegen_switch_int(discr, targets, loc)
             }
             // The following two use `codegen_mimic_unimplemented`
             // because we don't want to raise the warning during compilation.
@@ -365,23 +365,21 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_switch_int(
         &mut self,
         discr: &Operand<'tcx>,
-        switch_ty: Ty<'tcx>,
         targets: &SwitchTargets,
         loc: Location,
     ) -> Stmt {
         let v = self.codegen_operand(discr);
-        let switch_ty = self.monomorphize(switch_ty);
+        let switch_ty = v.typ().clone();
         if targets.all_targets().len() == 1 {
             // Translate to a guarded goto
             let first_target = targets.iter().next().unwrap();
             Stmt::block(
                 vec![
-                    v.eq(Expr::int_constant(first_target.0, self.codegen_ty(switch_ty)))
-                        .if_then_else(
-                            Stmt::goto(self.current_fn().find_label(&first_target.1), loc),
-                            None,
-                            loc,
-                        ),
+                    v.eq(Expr::int_constant(first_target.0, switch_ty.clone())).if_then_else(
+                        Stmt::goto(self.current_fn().find_label(&first_target.1), loc),
+                        None,
+                        loc,
+                    ),
                     Stmt::goto(self.current_fn().find_label(&targets.otherwise()), loc),
                 ],
                 loc,
@@ -392,7 +390,7 @@ impl<'tcx> GotocCtx<'tcx> {
             let cases = targets
                 .iter()
                 .map(|(c, bb)| {
-                    Expr::int_constant(c, self.codegen_ty(switch_ty))
+                    Expr::int_constant(c, switch_ty.clone())
                         .switch_case(Stmt::goto(self.current_fn().find_label(&bb), loc))
                 })
                 .collect();

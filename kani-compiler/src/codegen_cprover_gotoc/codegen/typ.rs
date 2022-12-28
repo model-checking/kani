@@ -327,10 +327,12 @@ impl<'tcx> GotocCtx<'tcx> {
         self.sig_with_untupled_args(sig)
     }
 
-    // Adapted from `fn_sig_for_fn_abi` in compiler/rustc_middle/src/ty/layout.rs
+    // Adapted from `fn_sig_for_fn_abi` in
+    // https://github.com/rust-lang/rust/blob/739d68a76e35b22341d9930bb6338bf202ba05ba/compiler/rustc_ty_utils/src/abi.rs#L88
     // Code duplication tracked here: https://github.com/model-checking/kani/issues/1365
     fn generator_sig(
         &self,
+        did: &DefId,
         ty: Ty<'tcx>,
         substs: ty::subst::SubstsRef<'tcx>,
     ) -> ty::PolyFnSig<'tcx> {
@@ -352,10 +354,21 @@ impl<'tcx> GotocCtx<'tcx> {
         let env_ty = self.tcx.mk_adt(pin_adt_ref, pin_substs);
 
         let sig = sig.skip_binder();
-        let state_did = self.tcx.require_lang_item(LangItem::GeneratorState, None);
-        let state_adt_ref = self.tcx.adt_def(state_did);
-        let state_substs = self.tcx.intern_substs(&[sig.yield_ty.into(), sig.return_ty.into()]);
-        let ret_ty = self.tcx.mk_adt(state_adt_ref, state_substs);
+        // The `FnSig` and the `ret_ty` here is for a generators main
+        // `Generator::resume(...) -> GeneratorState` function in case we
+        // have an ordinary generator, or the `Future::poll(...) -> Poll`
+        // function in case this is a special generator backing an async construct.
+        let ret_ty = if self.tcx.generator_is_async(*did) {
+            let state_did = self.tcx.require_lang_item(LangItem::Poll, None);
+            let state_adt_ref = self.tcx.adt_def(state_did);
+            let state_substs = self.tcx.intern_substs(&[sig.return_ty.into()]);
+            self.tcx.mk_adt(state_adt_ref, state_substs)
+        } else {
+            let state_did = self.tcx.require_lang_item(LangItem::GeneratorState, None);
+            let state_adt_ref = self.tcx.adt_def(state_did);
+            let state_substs = self.tcx.intern_substs(&[sig.yield_ty.into(), sig.return_ty.into()]);
+            self.tcx.mk_adt(state_adt_ref, state_substs)
+        };
         ty::Binder::bind_with_vars(
             self.tcx.mk_fn_sig(
                 [env_ty, sig.resume_ty].iter(),
@@ -380,7 +393,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
                 sig
             }
-            ty::Generator(_, substs, _) => self.generator_sig(fntyp, substs),
+            ty::Generator(did, substs, _) => self.generator_sig(did, fntyp, substs),
             _ => unreachable!("Can't get function signature of type: {:?}", fntyp),
         })
     }
