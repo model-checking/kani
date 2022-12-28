@@ -112,7 +112,7 @@ fn reconstruct_metadata_structure(
     }
     if !search.is_empty() {
         let search_names: Vec<_> = search.into_iter().map(|x| x.crate_name).collect();
-        println!("Found remaining (unused) metadata after reconstruction: {:?}", search_names);
+        println!("Found remaining (unused) metadata after reconstruction: {search_names:?}");
     }
     Ok(results)
 }

@@ -443,8 +443,7 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
                 } else {
                     assert!(
                         matches!(fn_ty.kind(), TyKind::FnPtr(..)),
-                        "Unexpected type: {:?}",
-                        fn_ty
+                        "Unexpected type: {fn_ty:?}"
                     );
                 }
             }
@@ -509,7 +508,7 @@ fn should_codegen_locally<'tcx>(tcx: TyCtxt<'tcx>, instance: &Instance<'tcx>) ->
 }
 
 /// Scans the allocation type and collect static objects.
-fn collect_alloc_items<'tcx>(tcx: TyCtxt<'tcx>, alloc_id: AllocId) -> Vec<MonoItem> {
+fn collect_alloc_items(tcx: TyCtxt, alloc_id: AllocId) -> Vec<MonoItem> {
     trace!(alloc=?tcx.global_alloc(alloc_id), ?alloc_id, "collect_alloc_items");
     let mut items = vec![];
     match tcx.global_alloc(alloc_id) {

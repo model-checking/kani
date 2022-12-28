@@ -156,7 +156,7 @@ fn glob(path: &Path) -> Result<Vec<PathBuf>> {
 ///   - I.e.: Do whatever cargo does when there's no `default_members`.
 ///   - This is because `default_members` is not available in cargo metadata.
 ///     See <https://github.com/rust-lang/cargo/issues/8033>.
-fn packages_to_verify<'a, 'b>(args: &'a KaniArgs, metadata: &'b Metadata) -> Vec<&'b Package> {
+fn packages_to_verify<'b>(args: &KaniArgs, metadata: &'b Metadata) -> Vec<&'b Package> {
     debug!(package_selection=?args.package, workspace=args.workspace, "packages_to_verify args");
     let packages = if !args.package.is_empty() {
         args.package
