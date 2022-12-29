@@ -12,15 +12,17 @@ In the long-term, assess will become a user-facing feature, and help _Kani users
 We expect that users will have the same questions as above, but in the long term, hopefully the answers to those trend towards an uninteresting "yes."
 So the new questions might be:
 
-1. Is this project ready for verification? Projects need to be reasonable well-tested first.
-2. How much of this project might be verifiable? (For instance, which packages?)
-3. Where should I start in writing proofs?
+3. Is this project ready for verification? Projects need to be reasonable well-tested first.
+Our operating hypothesis is that code currently covered by unit tests is the code that could become covered by proofs.
+4. How much of given project (consisting of multiple packages or workspaces) or which of the user's projects might be verifiable?
+If a user wants to start trying Kani, but they have the choice of several different packages where they might try, we can help find the package with the lowest hanging fruit.
+5. Given a package, where in that package's code should the user look, in order to write the first (or next) proof?
 
 These long-term goals are only "hinted at" with the present experimental version of assess.
 Currently, we only get as far as finding out which tests successfully verify (concretely) with Kani.
 This might indicate tests that could be generalized and converted into proofs, but we currently don't do anything to group, rank, or otherwise heuristically prioritize what might be most "interesting."
 (For instance, we'd like to eventually compute coverage information and use that to help rank the results.)
-As a consequence, the output of the tool is very hard to interpret, and likely not (yet!) helpful to potential Kani users.
+As a consequence, the output of the tool is very hard to interpret, and likely not (yet!) helpful to new or potential Kani users.
 
 ## Using Assess
 
@@ -30,31 +32,36 @@ To assess a package, run:
 cargo kani --enable-unstable assess
 ```
 
-As a temporary hack (arguments shouldn't work like this), to assess a workspace, run:
+As a temporary hack (arguments shouldn't work like this), to assess a single cargo workspace, run:
 
 ```text
 cargo kani --enable-unstable --workspace assess
 ```
 
-To scan a collection of workspaces or packages that are not part of shared workspace, run:
+To scan a collection of workspaces or packages that are not part of a shared workspace, run:
 
 ```text
 cargo kani --enable-unstable assess scan
 ```
 
-And all cargo packages found below the current directory will be assessed.
-(Tip: It may need to run for awhile, so try using `screen`, `tmux` or `nohup` to avoid terminating the process if an ssh connection breaks.)
+The only difference between 'scan' and 'regular' assess is how the packages built are located.
+All versions of assess produce the same output and metrics.
+Assess will normally build just like `cargo kani` or `cargo build`, whereas `scan` will find all cargo packages beneath the current directory, even in unrelated workspaces.
+Thus, 'scan' may be helpful in the case where the user has a choice of packages and is looking for the easiest to get started with (in addition to the Kani developer use-case, of aggregating statistics across many packages).
+
+(Tip: Assess may need to run for awhile, so try using `screen`, `tmux` or `nohup` to avoid terminating the process if, for example, an ssh connection breaks.)
 
 ## What assess does
 
 Assess builds all the packages requested in "test mode" (i.e. `--tests`), and runs all the same tests that `cargo test` would, except through Kani.
 This gives end-to-end assurance we're able to actually build and run code from these packages, skipping nothing of what the verification process would need, except that the harnesses don't have any nondeterminism (`kani::any()`) and consequently don't "prove" much.
+The interesting signal comes from what tests cannot be analyzed by Kani due to unsupported features, performance problems, crash bugs, or other issues that get in the way.
 
 Currently, assess forces termination by using `unwind(1)` on all tests, so many tests will fail with unwinding assertions.
 
 ## Current Assess Results
 
-Assess produces a few tables of output (visually and in more detailed json format) so far:
+Assess produces a few tables of output (both visually in the terminal, and in a more detailed json format) so far:
 
 ### Unsupported features
 
@@ -72,6 +79,9 @@ The unsupported features table aggregates information about features that Kani d
 These correspond to uses of `codegen_unimplemented` in the `kani-compiler`, and appear as warnings during compilation.
 
 Unimplemented features are not necessarily actually hit by (dynamically) reachable code, so an immediate future improvement on this table would be to count the features *actually hit* by failing test cases, instead of just those features reported as existing in code by the compiler.
+In other words, the current unsupported features table is **not** what we'd really want to see, in order to actually prioritize implementing these features, because we may be seeing a lot of features that won't actually "move the needle" in making it more practical to write proofs.
+Because of our operating hypothesis that code covered by tests is code that could be covered by proof, measuring unsupported features by those actually hit by a test should provide a better "signal" about priorities.
+Implicitly deprioritizing unsupported features because they aren't covered by tests may not be a bug, but a feature: we may simply not want to prove anything about that code, if it hasn't been tested first, and so adding support for that feature may not be important.
 
 A few notes on terminology:
 
