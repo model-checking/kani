@@ -203,9 +203,11 @@ on the current support in Kani for Rust compiler intrinsics.
 
 ### Floating point operations
 
-Kani supports floating point numbers, but some kinds of operations on floats are "over-abstracted."
+Kani supports floating point numbers, but some supported operations on floats are "over-approximated."
+These are the trigonometric functions like `sin` and `cos` and the `sqrt` function as well.
 This means the verifier can raise errors that cannot actually happen when the code is run normally.
-For instance, ([#1342](https://github.com/model-checking/kani/issues/1342)) the sin/cos functions basically return a nondeterministic value between -1 and 1.
+For instance, ([#1342](https://github.com/model-checking/kani/issues/1342)) the `sin`/`cos` functions basically return a nondeterministic value between -1 and 1.
 In other words, they largely ignore their input and give very conservative answers.
-This range certain includes the "real" value, but it means Kani could raise spurious errors that cannot actually happen.
+This range certainly includes the "real" value, so proof soundness is still preserved, but it means Kani could raise spurious errors that cannot actually happen.
 This makes Kani unsuitable for verifying some kinds of properties (e.g. precision) about numerical algorithms.
+Proofs that fail because of this problem can sometimes be repaired by introducing "stubs" for these functions that return a more acceptable approximation.
