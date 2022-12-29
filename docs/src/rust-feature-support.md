@@ -54,7 +54,7 @@ Reference | Feature | Support | Notes |
 8.2.18 | Await expressions | No | See [Notes - Concurrency](#concurrency) |
 9 | Patterns | Partial | [#707](https://github.com/model-checking/kani/issues/707) |
 10.1.1 | Boolean type | Yes | |
-10.1.2 | Numeric types | Yes | |
+10.1.2 | Numeric types | Yes | | See [Notes - Floats](#floating-point-operations)
 10.1.3 | Textual types | Yes | |
 10.1.4 | Never type | Yes | |
 10.1.5 | Tuple types | Yes | |
@@ -200,3 +200,12 @@ related to [advanced features](#advanced-features).
 
 Please refer to [Intrinsics](rust-feature-support/intrinsics.md) for information
 on the current support in Kani for Rust compiler intrinsics.
+
+### Floating point operations
+
+Kani supports floating point numbers, but some kinds of operations on floats are "over-abstracted."
+This means the verifier can raise errors that cannot actually happen when the code is run normally.
+For instance, ([#1342](https://github.com/model-checking/kani/issues/1342)) the sin/cos functions basically return a nondeterministic value between -1 and 1.
+In other words, they largely ignore their input and give very conservative answers.
+This range certain includes the "real" value, but it means Kani could raise spurious errors that cannot actually happen.
+This makes Kani unsuitable for verifying some kinds of properties (e.g. precision) about numerical algorithms.
