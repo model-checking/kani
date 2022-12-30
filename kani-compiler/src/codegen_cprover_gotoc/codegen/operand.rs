@@ -497,18 +497,20 @@ impl<'tcx> GotocCtx<'tcx> {
         let instance = Instance::mono(self.tcx, def_id);
 
         let sym = self.ensure(&self.symbol_name(instance), |ctx, name| {
-            // check if this static is extern
-            let rlinkage = ctx.tcx.codegen_fn_attrs(def_id).linkage;
-
-            // we believe rlinkage being `Some` means the static not extern
-            // based on compiler/rustc_codegen_cranelift/src/linkage.rs#L21
-            // see https://github.com/model-checking/kani/issues/388
-            //
-            // Update: The assertion below may fail in similar environments.
-            // We are disabling it until we find out the root cause, see
-            // https://github.com/model-checking/kani/issues/400
-            //
-            // assert!(rlinkage.is_none());
+            // Rust has a notion of "extern static" variables. These are in an "extern" block,
+            // and so aren't initialized in the current codegen unit. For example (from std):
+            //      extern "C" {
+            //          #[linkage = "extern_weak"]
+            //          static __dso_handle: *mut u8;
+            //          #[linkage = "extern_weak"]
+            //          static __cxa_thread_atexit_impl: *const libc::c_void;
+            //      }
+            // CBMC shares C's notion of "extern" global variables. However, I believe
+            // CBMC actually only uses this information during C typechecking.
+            // A quick `git grep is_extern` in the CBMC sources seems to support this theory.
+            // Replacing `is_extern` with a constant `true` or `false` all pass the regression.
+            // Nevertheless, we can recognize a Rust "extern" declaration and pass that along.
+            let is_extern = ctx.tcx.is_foreign_item(def_id);
 
             let span = ctx.tcx.def_span(def_id);
             Symbol::static_variable(
@@ -517,7 +519,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 ctx.codegen_ty(instance.ty(ctx.tcx, ty::ParamEnv::reveal_all())),
                 ctx.codegen_span(&span),
             )
-            .with_is_extern(rlinkage.is_none())
+            .with_is_extern(is_extern)
             .with_is_thread_local(is_thread_local)
         });
         sym.clone().to_expr().address_of()
