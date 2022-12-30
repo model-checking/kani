@@ -157,3 +157,25 @@ Likewise, `scan` uses and produces the exact same format, across multiple worksp
 
 So far all assess metadata comes in the form of "tables" which are built with `TableBuilder<T: TableRow>`.
 This is documented further in [`src/assess/table_builder.rs`](https://github.com/model-checking/kani/blob/main/kani-driver/src/assess/table_builder.rs).
+
+## Using Assess on the top-100 crates
+
+There is a script in the Kani repo for this purpose.
+
+This will clone the top-100 crates to `/tmp/top-100-experiment` and run assess scan on them:
+
+```text
+./scripts/exps/assess-scan-on-repos.sh
+```
+
+If you'd like to preseve the results, you can direct scan to use a different directory with an environment variable:
+
+```text
+ASSESS_SCAN="~/top-100-experiment" ./scripts/exps/assess-scan-on-repos.sh
+```
+
+To re-run the experiment, it suffices to be in the experiment directory:
+
+```text
+cd ~/top-100-experiment && ~/kani/scripts/exps/assess-scan-on-repos.sh
+```
