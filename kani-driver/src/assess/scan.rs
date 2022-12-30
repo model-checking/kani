@@ -148,6 +148,7 @@ pub(crate) fn assess_scan_main(session: KaniSession, args: &ScanArgs) -> Result<
     Ok(())
 }
 
+/// Calls `cargo kani assess` on a single package.
 fn invoke_assess(
     session: &KaniSession,
     package: &str,
@@ -165,6 +166,7 @@ fn invoke_assess(
         cmd.arg("--only-codegen");
     }
     // TODO: -p likewise, probably fixed with a "CargoArgs" refactoring
+    // Additionally, this should be `--manifest-path` but `cargo kani` doesn't support that yet.
     cmd.arg("-p").arg(package);
     cmd.arg("--enable-unstable"); // This has to be after `-p` due to an argument parsing bug in kani-driver
     cmd.args(&["assess", "--emit-metadata"])

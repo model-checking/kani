@@ -18,12 +18,18 @@ mod table_failure_reasons;
 mod table_promising_tests;
 mod table_unsupported_features;
 
+/// `cargo kani assess` main entry point.
+///
+/// See <https://model-checking.github.io/kani/dev-assess.html>
 pub(crate) fn cargokani_assess_main(mut session: KaniSession, args: AssessArgs) -> Result<()> {
     if let Some(args::AssessSubcommand::Scan(args)) = &args.command {
         return scan::assess_scan_main(session, args);
     }
 
-    // fix (as in "make unchanging/unchangable") some settings
+    // Fix (as in "make unchanging/unchangable") some settings.
+    // This is a temporary hack to make things work, until we get around to refactoring how arguments
+    // work generally in kani-driver. These arguments, for instance, are all prepended to the subcommand,
+    // which is not a nice way of taking arguments.
     session.args.unwind = Some(1);
     session.args.tests = true;
     session.args.output_format = crate::args::OutputFormat::Terse;
@@ -100,7 +106,7 @@ pub(crate) fn cargokani_assess_main(mut session: KaniSession, args: AssessArgs) 
 /// Merges a collection of Kani metadata by figuring out which package each belongs to, from cargo metadata.
 ///
 /// Initially, `kani_metadata` is a kani metadata structure for each _target_ of every package.
-/// This function works by collecting each target
+/// This function works by collecting each target and merging them into a package-wide metadata.
 ///
 /// This function, properly speaking, should not exist. We should have this information already from `Project`.
 /// This should function should be removable when we fix how driver handles metadata:
