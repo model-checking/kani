@@ -12,7 +12,7 @@ In the long-term, assess will become a user-facing feature, and help _Kani users
 We expect that users will have the same questions as above, but in the long term, hopefully the answers to those trend towards an uninteresting "yes."
 So the new questions might be:
 
-3. Is this project ready for verification? Projects need to be reasonable well-tested first.
+3. Is this project ready for verification? Projects need to be reasonably well-tested first.
 Our operating hypothesis is that code currently covered by unit tests is the code that could become covered by proofs.
 4. How much of given project (consisting of multiple packages or workspaces) or which of the user's projects might be verifiable?
 If a user wants to start trying Kani, but they have the choice of several different packages where they might try, we can help find the package with the lowest hanging fruit.
@@ -75,7 +75,7 @@ Assess produces a few tables of output (both visually in the terminal, and in a 
 ...
 ```
 
-The unsupported features table aggregates information about features that Kani does not yet supported.
+The unsupported features table aggregates information about features that Kani does not yet support.
 These correspond to uses of `codegen_unimplemented` in the `kani-compiler`, and appear as warnings during compilation.
 
 Unimplemented features are not necessarily actually hit by (dynamically) reachable code, so an immediate future improvement on this table would be to count the features *actually hit* by failing test cases, instead of just those features reported as existing in code by the compiler.
@@ -133,7 +133,7 @@ This list is presently unordered; the next step for improving it would be to fin
 This format can be found in the `kani_metadata` crate, shared by `kani-compiler` and `kani-driver`.
 This is the starting point for assess.
 
-Assess obtains this metadata by essentially running a `cargo kani` with:
+Assess obtains this metadata by essentially running a `cargo kani`:
 
 1. With `--all-features` turned on
 2. With `unwind` always set to `1`
@@ -149,7 +149,7 @@ Assess produces a second metadata format, called (unsurprisingly) "assess metada
 This format records the results of what assess does.
 
 This metadata can be written to a json file by providing `--emit-metadata <file>` to `assess`.
-Likewise, `scan` can told to write out this data with the same option.
+Likewise, `scan` can be told to write out this data with the same option.
 
 Assess metadata is an aggregatable format.
 It does not apply to just one package, as assess can work on a workspace of packages.

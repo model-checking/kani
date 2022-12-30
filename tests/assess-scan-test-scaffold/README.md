@@ -1,7 +1,7 @@
 # cargo kani assess scan test scaffold
 
 This directory contains two totally unrelated (i.e. no shared workspace) packages.
-It's purpose is to test "assess scan" running in a directory containing such.
+Its purpose is to test "assess scan" running in a directory containing such.
 
 This is used from `kani-regression.sh` to include a test for scan in CI.
 The only thing we currently check is that the exit status was success and that files were emitted.

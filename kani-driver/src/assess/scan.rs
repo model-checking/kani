@@ -21,7 +21,7 @@ use super::metadata::{aggregate_metadata, read_metadata};
 /// This is actually similar to something cargo does when it's trying to find a package in a git repo
 /// (e.g. from `cargo install --git`) so we draw inspiration from `cargo::ops::cargo_read_manifest::read_packages`.
 ///
-/// A simplified version of this algorithms looks like:
+/// A simplified version of this algorithm looks like:
 /// 1. Walk directory trees, don't descend into `target` and also stop when finding a `Cargo.toml`
 /// 2. Examine each `Cargo.toml` (potentially a workspace of multiple packages)
 /// 3. Aggregate all of those together.
@@ -96,7 +96,7 @@ pub(crate) fn assess_scan_main(session: KaniSession, args: &ScanArgs) -> Result<
             // We could reasonably choose to write these under 'target/kani', but can't because that gets deleted when 'cargo kani' runs.
             // We could reasonably choose to write these under 'target', but the present way I experiment with 'assess'
             // deletes target directories to save disk space in large runs. (Builds are big!)
-            // So at present we choose to put the next to the workspace root Cargo.toml.
+            // So at present we choose to put them next to the workspace root Cargo.toml.
             let outfile = workspace_root.join(format!("{name}.kani-assess-metadata.json"));
             let logfile = workspace_root.join(format!("{name}.kani-assess.log"));
 

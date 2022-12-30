@@ -5,7 +5,7 @@
 //! Assess produces this for one workspace, scan for several.
 //! It is not a stable file format: it is meant for assess to directly communicate
 //! from assess subprocesses to a parent scan process.
-//! We can build other tools that make use of it, but they need to built for or distributed
+//! We can build other tools that make use of it, but they need to be built for or distributed
 //! with the specific version of Kani.
 
 use std::fs::File;

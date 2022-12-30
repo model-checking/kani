@@ -154,7 +154,7 @@ impl<R> Serialize for TableBuilder<R>
 where
     R: Serialize + TableRow,
 {
-    /// To serialize a TableBuilder, we use [`TableBuilder::build`] to contruct a vector
+    /// To serialize a TableBuilder, we use [`TableBuilder::build`] to construct a vector
     /// and simply serialize the result.
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
