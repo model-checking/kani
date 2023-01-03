@@ -507,12 +507,11 @@ impl<'tcx> GotocCtx<'tcx> {
             //      }
             // CBMC shares C's notion of "extern" global variables. However, CBMC mostly does
             // not use this information except when doing C typechecking.
-            // The one exception is handling static variables with no initializer in
-            // CBMC's `static_lifetime_init`:
+            // The one exception is handling static variables with no initializer (see
+            // CBMC's `static_lifetime_init`):
             //   1. If they are `is_extern` they are nondet-initialized.
             //   2. If they are `!is_extern`, they are zero-initialized.
-            // Replacing `is_extern` with a constant `true` or `false` both pass the Kani regressions.
-            // Nevertheless, we can correctly recognize a Rust "extern" declaration and pass that along.
+            // So we recognize a Rust "extern" declaration and pass that information along.
             let is_extern = ctx.tcx.is_foreign_item(def_id);
 
             let span = ctx.tcx.def_span(def_id);
