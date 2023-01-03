@@ -505,9 +505,9 @@ impl<'tcx> GotocCtx<'tcx> {
             //          #[linkage = "extern_weak"]
             //          static __cxa_thread_atexit_impl: *const libc::c_void;
             //      }
-            // CBMC shares C's notion of "extern" global variables. However, CBMC mostly does 
+            // CBMC shares C's notion of "extern" global variables. However, CBMC mostly does
             // not use this information except when doing C typechecking.
-            // The one exception is handling static variables with no initializer in 
+            // The one exception is handling static variables with no initializer in
             // CBMC's `static_lifetime_init`:
             //   1. If they are `is_extern` they are nondet-initialized.
             //   2. If they are `!is_extern`, they are zero-initialized.
