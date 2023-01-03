@@ -113,7 +113,7 @@ fn setup_python_deps(kani_dir: &Path, os: &os_info::Info) -> Result<()> {
     let pyroot = kani_dir.join("pyroot");
 
     // TODO: this is a repetition of versions from kani/kani-dependencies
-    let pkg_versions = &["cbmc-viewer==3.6"];
+    let pkg_versions = &["cbmc-viewer==3.8"];
 
     if os_hacks::should_apply_ubuntu_18_04_python_hack(os)? {
         os_hacks::setup_python_deps_on_ubuntu_18_04(&pyroot, pkg_versions)?;
