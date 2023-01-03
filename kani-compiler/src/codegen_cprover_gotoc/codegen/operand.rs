@@ -505,11 +505,14 @@ impl<'tcx> GotocCtx<'tcx> {
             //          #[linkage = "extern_weak"]
             //          static __cxa_thread_atexit_impl: *const libc::c_void;
             //      }
-            // CBMC shares C's notion of "extern" global variables. However, I believe
-            // CBMC actually only uses this information during C typechecking.
-            // A quick `git grep is_extern` in the CBMC sources seems to support this theory.
-            // Replacing `is_extern` with a constant `true` or `false` all pass the regression.
-            // Nevertheless, we can recognize a Rust "extern" declaration and pass that along.
+            // CBMC shares C's notion of "extern" global variables. However, CBMC mostly does 
+            // not use this information except when doing C typechecking.
+            // The one exception is handling static variables with no initializer in 
+            // CBMC's `static_lifetime_init`:
+            //   1. If they are `is_extern` they are nondet-initialized.
+            //   2. If they are `!is_extern`, they are zero-initialized.
+            // Replacing `is_extern` with a constant `true` or `false` both pass the Kani regressions.
+            // Nevertheless, we can correctly recognize a Rust "extern" declaration and pass that along.
             let is_extern = ctx.tcx.is_foreign_item(def_id);
 
             let span = ctx.tcx.def_span(def_id);
