@@ -1,10 +1,8 @@
+// Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-//
-// Modifications Copyright Kani Contributors
-// See GitHub history for details.
 
 //! Support for arbitrary tuples where each element implements
-//! `kani::Arbitrary`. Tuples of size up to 11 are supported in this
+//! `kani::Arbitrary`. Tuples of size up to 12 are supported in this
 //! file.
 
 use crate::Arbitrary;
@@ -14,13 +12,12 @@ use crate::Arbitrary;
 /// each index of the tuple.
 macro_rules! tuple {
     ($($typ:ident),*) => {
-	impl<$($typ : Arbitrary),*>  Arbitrary for ($($typ,)*) {
+        impl<$($typ : Arbitrary),*>  Arbitrary for ($($typ,)*) {
             #[inline(always)]
-	    fn any() -> Self {
-		($(crate::any::<$typ>(),)*)
+            fn any() -> Self {
+                ($(crate::any::<$typ>(),)*)
             }
         }
-
     }
 }
 
