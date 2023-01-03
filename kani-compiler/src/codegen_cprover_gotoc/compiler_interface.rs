@@ -213,7 +213,6 @@ impl CodegenBackend for GotocCodegenBackend {
         let requested_crate_types = sess.crate_types();
         if !requested_crate_types.contains(&CrateType::Rlib) {
             // Quit successfully if we don't need an `rlib`:
-            println!("No need for rlib");
             return Ok(());
         }
 

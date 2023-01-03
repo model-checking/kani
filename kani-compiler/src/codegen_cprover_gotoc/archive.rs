@@ -8,6 +8,9 @@
 //! Creation of ar archives like for the lib and staticlib crate type
 //! We now call the ArchiveBuilder directly, so we don't bother trying to fit into the rustc's
 //! `ArchiveBuilder`.
+//! Note that once we update to a version newer than 2022-12-04 we should be able to remove the
+//! logic here and use the compiler ArArchiveBuilder introduced here:
+//! <https://github.com/rust-lang/rust/pull/97485>
 
 use rustc_session::Session;
 use std::fs::File;
