@@ -211,3 +211,4 @@ In other words, they largely ignore their input and give very conservative answe
 This range certainly includes the "real" value, so proof soundness is still preserved, but it means Kani could raise spurious errors that cannot actually happen.
 This makes Kani unsuitable for verifying some kinds of properties (e.g. precision) about numerical algorithms.
 Proofs that fail because of this problem can sometimes be repaired by introducing "stubs" for these functions that return a more acceptable approximation.
+However, note that the actual behavior of these functions can vary by platform/os/architecture/compiler, so introducing an "overly precise" approximation may introduce unsoundness: actual system behavior may produce different values from the stub's approximation.
