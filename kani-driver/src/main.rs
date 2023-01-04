@@ -53,9 +53,10 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     args.validate();
     let session = session::KaniSession::new(args.common_opts)?;
 
-    if matches!(args.command, Some(CargoKaniSubcommand::Assess)) || session.args.assess {
-        // Run cargo assess.
-        return assess::cargokani_assess_main(session);
+    if let Some(CargoKaniSubcommand::Assess(args)) = args.command {
+        return assess::cargokani_assess_main(session, args);
+    } else if session.args.assess {
+        return assess::cargokani_assess_main(session, assess::AssessArgs::default());
     }
 
     let project = project::cargo_project(&session)?;
