@@ -229,7 +229,7 @@ impl CodegenBackend for GotocCodegenBackend {
             sess,
             CrateType::Rlib,
             outputs,
-            codegen_results.crate_info.local_crate_name.as_str(),
+            codegen_results.crate_info.local_crate_name,
         );
         builder.build(&rlib);
         Ok(())
