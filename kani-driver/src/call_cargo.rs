@@ -156,7 +156,7 @@ fn glob(path: &Path) -> Result<Vec<PathBuf>> {
 ///   - I.e.: Do whatever cargo does when there's no `default_members`.
 ///   - This is because `default_members` is not available in cargo metadata.
 ///     See <https://github.com/rust-lang/cargo/issues/8033>.
-fn packages_to_verify<'a, 'b>(args: &'a KaniArgs, metadata: &'b Metadata) -> Vec<&'b Package> {
+fn packages_to_verify<'b>(args: &KaniArgs, metadata: &'b Metadata) -> Vec<&'b Package> {
     debug!(package_selection=?args.package, workspace=args.workspace, "packages_to_verify args");
     let packages = if !args.package.is_empty() {
         args.package
@@ -211,55 +211,49 @@ impl VerificationTarget {
 fn package_targets(args: &KaniArgs, package: &Package) -> Vec<VerificationTarget> {
     let mut ignored_tests = vec![];
     let mut ignored_unsupported = vec![];
-    let verification_targets = package
-        .targets
-        .iter()
-        .filter_map(|target| {
-            debug!(name=?package.name, target=?target.name, kind=?target.kind, crate_type=?target
+    let mut verification_targets = vec![];
+    for target in &package.targets {
+        debug!(name=?package.name, target=?target.name, kind=?target.kind, crate_type=?target
                 .crate_types,
                 "package_targets");
-            if target.kind.contains(&String::from(CRATE_TYPE_BIN)) {
-                // Binary targets.
-                Some(VerificationTarget::Bin(target.name.clone()))
-            } else if target.kind.contains(&String::from(CRATE_TYPE_LIB))
-                || target.kind.contains(&String::from(CRATE_TYPE_RLIB))
-            {
-                // Lib targets.
-                let unsupported_types = target
-                    .kind
-                    .iter()
-                    .filter_map(|kind| {
-                        let kind_str = kind.as_str();
-                        matches!(kind_str,
-                            CRATE_TYPE_CDYLIB | CRATE_TYPE_DYLIB | CRATE_TYPE_STATICLIB |
-                            CRATE_TYPE_PROC_MACRO
-                        ).then_some(kind_str)
-                    })
-                    .collect::<Vec<_>>();
-                if unsupported_types.is_empty() {
-                    Some(VerificationTarget::Lib)
-                } else {
-                    println!(
-                        "warning: Skipped verification of `{}` due to unsupported crate-type: `{}`.",
-                        target.name,
-                        unsupported_types.join("`, `")
-                    );
-                    None
+        let (mut supported_lib, mut unsupported_lib) = (false, false);
+        for kind in &target.kind {
+            match kind.as_str() {
+                CRATE_TYPE_BIN => {
+                    // Binary targets.
+                    verification_targets.push(VerificationTarget::Bin(target.name.clone()));
                 }
-            } else if target.kind.contains(&String::from(CRATE_TYPE_TEST)) {
-                // Test target.
-                if args.tests {
-                    Some(VerificationTarget::Test(target.name.clone()))
-                } else {
-                    ignored_tests.push(target.name.as_str());
-                    None
+                CRATE_TYPE_LIB | CRATE_TYPE_RLIB | CRATE_TYPE_CDYLIB | CRATE_TYPE_DYLIB
+                | CRATE_TYPE_STATICLIB => {
+                    supported_lib = true;
                 }
-            } else {
-                ignored_unsupported.push(target.name.as_str());
-                None
+                CRATE_TYPE_PROC_MACRO => {
+                    unsupported_lib = true;
+                    ignored_unsupported.push(target.name.as_str());
+                }
+                CRATE_TYPE_TEST => {
+                    // Test target.
+                    if args.tests {
+                        verification_targets.push(VerificationTarget::Test(target.name.clone()));
+                    } else {
+                        ignored_tests.push(target.name.as_str());
+                    }
+                }
+                _ => {
+                    ignored_unsupported.push(target.name.as_str());
+                }
             }
-        })
-        .collect();
+        }
+        match (supported_lib, unsupported_lib) {
+            (true, true) => println!(
+                "warning: Skipped verification of `{}` due to unsupported crate-type: \
+                        `proc-macro`.",
+                target.name,
+            ),
+            (true, false) => verification_targets.push(VerificationTarget::Lib),
+            (_, _) => {}
+        }
+    }
 
     if args.verbose {
         // Print targets that were skipped only on verbose mode.

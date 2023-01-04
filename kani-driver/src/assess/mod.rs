@@ -155,7 +155,7 @@ fn reconstruct_metadata_structure(
     }
     if !remaining_metas.is_empty() {
         let remaining_names: Vec<_> = remaining_metas.into_iter().map(|x| x.crate_name).collect();
-        println!("Found remaining (unused) metadata after reconstruction: {:?}", remaining_names);
+        println!("Found remaining (unused) metadata after reconstruction: {remaining_names:?}");
     }
     Ok(package_metas)
 }

@@ -324,7 +324,7 @@ pub fn format_result(properties: &Vec<Property>, show_checks: bool) -> String {
 
     let number_properties = properties.len() - number_cover_properties;
 
-    let summary = format!("\n ** {number_checks_failed} of {} failed", number_properties);
+    let summary = format!("\n ** {number_checks_failed} of {number_properties} failed");
     result_str.push_str(&summary);
 
     let mut other_status = Vec::<String>::new();
@@ -346,8 +346,7 @@ pub fn format_result(properties: &Vec<Property>, show_checks: bool) -> String {
     if number_cover_properties > 0 {
         // Print a summary line for cover properties
         let summary = format!(
-            "\n ** {number_covers_satisfied} of {} cover properties satisfied",
-            number_cover_properties
+            "\n ** {number_covers_satisfied} of {number_cover_properties} cover properties satisfied"
         );
         result_str.push_str(&summary);
         let mut other_status = Vec::<String>::new();
@@ -420,8 +419,7 @@ fn build_failure_message(description: String, trace: &Option<Vec<TraceItem>>) ->
         let failure_function = failure_source.function.unwrap();
         let failure_line = failure_source.line.unwrap();
         return format!(
-            "Failed Checks: {}\n File: \"{}\", line {}, in {}\n",
-            description, failure_file, failure_line, failure_function
+            "Failed Checks: {description}\n File: \"{failure_file}\", line {failure_line}, in {failure_function}\n"
         );
     }
     backup_failure_message
@@ -576,8 +574,7 @@ fn update_properties_with_reach_status(
             let description = &prop.description;
             assert!(
                 prop.status == CheckStatus::Success,
-                "** ERROR: Expecting the unreachable property \"{}\" to have a status of \"SUCCESS\"",
-                description
+                "** ERROR: Expecting the unreachable property \"{description}\" to have a status of \"SUCCESS\""
             );
             prop.status = CheckStatus::Unreachable
         }
