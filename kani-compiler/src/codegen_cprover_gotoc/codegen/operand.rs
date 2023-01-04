@@ -220,7 +220,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         // TODO: Handle cases with other types such as tuples and larger integers.
                         let loc = self.codegen_span_option(span.cloned());
                         let typ = self.codegen_ty(lit_ty);
-                        let operation_name = format!("Constant slice for type {}", slice_ty);
+                        let operation_name = format!("Constant slice for type {slice_ty}");
                         return self.codegen_unimplemented_expr(
                             &operation_name,
                             typ,

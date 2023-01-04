@@ -138,8 +138,7 @@ fn init_symbolic_item(ident: &Ident, fields: &Fields) -> TokenStream {
 fn fn_any_enum(ident: &Ident, data: &DataEnum) -> TokenStream {
     if data.variants.is_empty() {
         let msg = format!(
-            "Cannot create symbolic enum `{}`. Enums with zero-variants cannot be instantiated",
-            ident
+            "Cannot create symbolic enum `{ident}`. Enums with zero-variants cannot be instantiated"
         );
         quote! {
             panic!(#msg)

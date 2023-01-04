@@ -1499,8 +1499,7 @@ impl<'tcx> GotocCtx<'tcx> {
         if !ret_typ.base_type().unwrap().is_integer() {
             let (_, rust_base_type) = rust_ret_type.simd_size_and_type(self.tcx);
             let err_msg = format!(
-                "expected return type with integer elements, found `{}` with non-integer `{}`",
-                rust_ret_type, rust_base_type,
+                "expected return type with integer elements, found `{rust_ret_type}` with non-integer `{rust_base_type}`",
             );
             self.tcx.sess.span_err(span.unwrap(), err_msg);
         }
@@ -1541,7 +1540,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let check_stmt = self.codegen_assert_assume(
             check.not(),
             PropertyClass::ArithmeticOverflow,
-            format!("attempt to compute {} which would overflow", intrinsic).as_str(),
+            format!("attempt to compute {intrinsic} which would overflow").as_str(),
             loc,
         );
         let res = op_fun(a, b);
@@ -1591,8 +1590,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let (ret_type_len, ret_type_subtype) = rust_ret_type.simd_size_and_type(self.tcx);
         if ret_type_len != n {
             let err_msg = format!(
-                "expected return type of length {}, found `{}` with length {}",
-                n, rust_ret_type, ret_type_len
+                "expected return type of length {n}, found `{rust_ret_type}` with length {ret_type_len}"
             );
             self.tcx.sess.span_err(span.unwrap(), err_msg);
         }

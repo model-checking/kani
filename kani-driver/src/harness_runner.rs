@@ -133,8 +133,7 @@ impl KaniSession {
 
             if total > 0 {
                 println!(
-                    "Complete - {} successfully verified harnesses, {} failures, {} total.",
-                    succeeding, failing, total
+                    "Complete - {succeeding} successfully verified harnesses, {failing} failures, {total} total."
                 );
             } else {
                 // TODO: This could use a better error message, possibly with links to Kani documentation.

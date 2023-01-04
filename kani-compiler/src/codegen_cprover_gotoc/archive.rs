@@ -45,8 +45,7 @@ impl<'a> ArchiveBuilder<'a> {
             BuilderKind::Gnu(ar::GnuBuilder::new(
                 File::create(&output).unwrap_or_else(|err| {
                     sess.fatal(&format!(
-                        "error opening destination during archive building: {}",
-                        err
+                        "error opening destination during archive building: {err}"
                     ));
                 }),
                 self.entries.iter().map(|(name, _)| name.clone()).collect(),

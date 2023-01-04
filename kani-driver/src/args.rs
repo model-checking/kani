@@ -430,8 +430,7 @@ impl KaniArgs {
             println!(
                 "Using concrete playback with --randomize-layout.\n\
                 The produced tests will have to be played with the same rustc arguments:\n\
-                -Z randomize-layout{}",
-                random_seed
+                -Z randomize-layout{random_seed}"
             );
         }
 

@@ -940,8 +940,7 @@ impl<'tcx> GotocCtx<'tcx> {
             // https://play.rust-lang.org/?version=nightly&mode=debug&edition=2018&gist=0f6eef4f6abeb279031444735e73d2e1
             assert!(
                 matches!(operand_type.kind(), ty::Never),
-                "Expected Never, got: {:?}",
-                operand_type
+                "Expected Never, got: {operand_type:?}"
             );
             Type::size_t().zero()
         } else {

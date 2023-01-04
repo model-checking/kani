@@ -267,8 +267,7 @@ fn check_options(session: &Session) {
         Some(1) => (),
         Some(align) => {
             let err_msg = format!(
-                "Kani requires the target architecture option `min_global_align` to be 1, but it is {}.",
-                align
+                "Kani requires the target architecture option `min_global_align` to be 1, but it is {align}."
             );
             session.err(&err_msg);
         }
@@ -322,7 +321,7 @@ fn check_crate_items(gcx: &GotocCtx) {
 }
 
 /// Prints a report at the end of the compilation.
-fn print_report<'tcx>(ctx: &GotocCtx, tcx: TyCtxt<'tcx>) {
+fn print_report(ctx: &GotocCtx, tcx: TyCtxt) {
     // Print all unsupported constructs.
     if !ctx.unsupported_constructs.is_empty() {
         // Sort alphabetically.
