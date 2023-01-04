@@ -45,7 +45,7 @@ While `kani::any()` is the only method Kani provides to inject non-determinism i
 When you need nondeterministic variables of types that don't have a `kani::any()` implementation available, you have the following options:
 
 1. Implement the `kani::Arbitrary` trait for your type, so you and downstream crates can use `kani::any()` with your type.
-2. Implement the [`bolero-generator::TypeGenerator` trait](https://docs.rs/bolero-generator/0.8.0/bolero_generator/trait.TypeGenerator.html).
+2. Implement the [`bolero_engine::TypeGenerator` trait](https://docs.rs/bolero-engine/0.8.0/bolero_engine/trait.TypeGenerator.html).
 This will enable you and downstream crates to use Kani via [Bolero](https://camshaft.github.io/bolero/).
 3. Write a function that build an object from non-deterministic variables.
 
