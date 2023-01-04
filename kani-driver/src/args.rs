@@ -45,7 +45,7 @@ pub struct CargoKaniArgs {
 #[derive(Debug, Parser)]
 pub enum CargoKaniSubcommand {
     #[command(hide = true)]
-    Assess,
+    Assess(crate::assess::AssessArgs),
 }
 
 // Common arguments for invoking Kani. This gets put into KaniContext, whereas
@@ -396,7 +396,7 @@ impl CargoKaniArgs {
     pub fn validate(&self) {
         self.common_opts.validate::<Self>();
         // --assess requires --enable-unstable, but the subcommand needs manual checking
-        if (matches!(self.command, Some(CargoKaniSubcommand::Assess)) || self.common_opts.assess)
+        if (matches!(self.command, Some(CargoKaniSubcommand::Assess(_))) || self.common_opts.assess)
             && !self.common_opts.enable_unstable
         {
             Self::command()
@@ -430,8 +430,7 @@ impl KaniArgs {
             println!(
                 "Using concrete playback with --randomize-layout.\n\
                 The produced tests will have to be played with the same rustc arguments:\n\
-                -Z randomize-layout{}",
-                random_seed
+                -Z randomize-layout{random_seed}"
             );
         }
 
@@ -519,6 +518,22 @@ mod tests {
         let _b =
             StandaloneArgs::parse_from(vec!["kani", "file.rs", "--enable-unstable", "--cbmc-args"]);
         // no assertion: the above might fail if it fails to allow 0 args to cbmc-args
+    }
+    #[test]
+    fn check_multiple_packages() {
+        // accepts repeated:
+        let a = CargoKaniArgs::parse_from(vec!["cargo-kani", "-p", "a", "-p", "b"]);
+        assert_eq!(a.common_opts.package, vec!["a".to_owned(), "b".to_owned()]);
+        let b = CargoKaniArgs::try_parse_from(vec![
+            "cargo-kani",
+            "-p",
+            "a", // no -p
+            "b",
+        ]);
+        // BUG: should not accept sequential:
+        // Related: https://github.com/model-checking/kani/issues/2025
+        // Currently asserting this backwards from how it should be!
+        assert!(!b.is_err());
     }
 
     fn check(args: &str, require_unstable: bool, pred: fn(StandaloneArgs) -> bool) {

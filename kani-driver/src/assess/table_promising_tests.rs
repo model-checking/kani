@@ -3,7 +3,7 @@
 
 use std::cmp::Ordering;
 
-use comfy_table::Table;
+use serde::{Deserialize, Serialize};
 
 use crate::harness_runner::HarnessResult;
 
@@ -26,7 +26,7 @@ use super::table_builder::{ColumnType, RenderableTableRow, TableBuilder, TableRo
 ///  other::tests::test_misc                               | src/other.rs:284
 /// =============================================================================
 /// ```
-pub(crate) fn build(results: &[HarnessResult]) -> Table {
+pub(crate) fn build(results: &[HarnessResult]) -> TableBuilder<PromisingTestsTableRow> {
     let mut builder = TableBuilder::new();
 
     for r in results {
@@ -44,12 +44,17 @@ pub(crate) fn build(results: &[HarnessResult]) -> Table {
         }
     }
 
-    builder.render()
+    builder
 }
 
-#[derive(Default)]
+/// Reports tests that Kani successfully analyzes, with a direct link to the test for easy viewing.
+///
+/// See [`build`]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct PromisingTestsTableRow {
+    /// The "pretty name" of the test, like "module::test_name"
     pub name: String,
+    /// The "clickable location" of the test, like "/full/path/to/file.rs:123"
     pub location: String,
 }
 

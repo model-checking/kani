@@ -206,7 +206,7 @@ mod tests {
     #[test]
     fn check_arg_parsing() {
         fn trial(args: &[&str]) -> ArgsResult {
-            parse_args(args.into_iter().map(OsString::from).collect())
+            parse_args(args.iter().map(OsString::from).collect())
         }
         {
             let e = ArgsResult::Default;
