@@ -94,7 +94,11 @@ fi
 # Check codegen of firecracker
 time "$SCRIPT_DIR"/codegen-firecracker.sh
 
+# Test run 'cargo kani assess scan'
+"$SCRIPT_DIR"/assess-scan-regression.sh
+
 # Check that documentation compiles.
+echo "Starting doc tests:"
 cargo doc --workspace --no-deps --exclude std
 
 echo

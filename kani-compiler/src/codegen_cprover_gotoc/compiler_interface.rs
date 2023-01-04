@@ -3,6 +3,7 @@
 
 //! This file contains the code necessary to interface with the compiler backend
 
+use crate::codegen_cprover_gotoc::archive::ArchiveBuilder;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{
@@ -13,20 +14,24 @@ use cbmc::goto_program::Location;
 use cbmc::{InternedString, MachineModel};
 use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata};
 use kani_queries::{QueryDb, ReachabilityType, UserInput};
+use rustc_codegen_ssa::back::metadata::create_wrapper_file;
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_codegen_ssa::{CodegenResults, CrateInfo};
 use rustc_data_structures::fx::FxHashMap;
+use rustc_data_structures::temp_dir::MaybeTempDir;
 use rustc_errors::ErrorGuaranteed;
 use rustc_hir::def::DefKind;
 use rustc_hir::def_id::LOCAL_CRATE;
+use rustc_metadata::fs::{emit_wrapper_file, METADATA_FILENAME};
 use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
 use rustc_middle::mir::mono::{CodegenUnit, MonoItem};
 use rustc_middle::mir::write_mir_pretty;
 use rustc_middle::ty::query::Providers;
 use rustc_middle::ty::{self, InstanceDef, TyCtxt};
-use rustc_session::config::{OutputFilenames, OutputType};
+use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::cstore::MetadataLoaderDyn;
+use rustc_session::output::out_filename;
 use rustc_session::Session;
 use rustc_span::def_id::DefId;
 use rustc_target::abi::Endian;
@@ -42,6 +47,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::rc::Rc;
 use std::time::Instant;
+use tempfile::Builder as TempFileBuilder;
 use tracing::{debug, error, info, warn};
 
 #[derive(Clone)]
@@ -72,7 +78,7 @@ impl CodegenBackend for GotocCodegenBackend {
         &self,
         tcx: TyCtxt,
         rustc_metadata: EncodedMetadata,
-        need_metadata_module: bool,
+        _need_metadata_module: bool,
     ) -> Box<dyn Any> {
         super::utils::init();
 
@@ -80,7 +86,7 @@ impl CodegenBackend for GotocCodegenBackend {
         // https://rustc-dev-guide.rust-lang.org/conventions.html#naming-conventions
         let mut gcx = GotocCtx::new(tcx, self.queries.clone());
         check_target(tcx.sess);
-        check_options(tcx.sess, need_metadata_module);
+        check_options(tcx.sess);
         check_crate_items(&gcx);
 
         let items = with_timer(|| collect_codegen_items(&gcx), "codegen reachability analysis");
@@ -188,38 +194,45 @@ impl CodegenBackend for GotocCodegenBackend {
             .unwrap())
     }
 
+    /// Emit `rlib` files during the link stage if it was requested.
+    ///
+    /// We need to emit `rlib` files normally if requested. Cargo expects these in some
+    /// circumstances and sends them to subsequent builds with `-L`.
+    ///
+    /// We CAN NOT invoke the native linker, because that will fail. We don't have real objects.
+    /// What determines whether the native linker is invoked or not is the set of `crate_types`.
+    /// Types such as `bin`, `cdylib`, `dylib` will trigger the native linker.
+    ///
+    /// Thus, we manually build the rlib file including only the `rmeta` file.
     fn link(
         &self,
         sess: &Session,
         codegen_results: CodegenResults,
         outputs: &OutputFilenames,
     ) -> Result<(), ErrorGuaranteed> {
-        // In `link`, we need to do two things:
-        // 1. We need to emit `rlib` files normally. Cargo expects these in some circumstances and sends
-        //    them to subsequent builds with `-L`.
-        // 2. We MUST NOT try to invoke the native linker, because that will fail. We don't have real objects.
-        // This is normally not a problem: usually we only get one requested `crate-type`.
-        // But let's be careful and fail loudly if we get conflicting requests:
         let requested_crate_types = sess.crate_types();
-        // Quit successfully if we don't need an `rlib`:
-        if !requested_crate_types.contains(&rustc_session::config::CrateType::Rlib) {
+        if !requested_crate_types.contains(&CrateType::Rlib) {
+            // Quit successfully if we don't need an `rlib`:
             return Ok(());
         }
-        // Fail loudly if we need an `rlib` (above!) and *also* an executable, which
-        // we can't produce, and can't easily suppress in `link_binary`:
-        if requested_crate_types.contains(&rustc_session::config::CrateType::Executable) {
-            sess.err("Build crate-type requested both rlib and executable, and Kani cannot handle this situation");
-            sess.abort_if_errors();
-        }
 
-        // All this ultimately boils down to is emitting an `rlib` that contains just one file: `lib.rmeta`
-        use rustc_codegen_ssa::back::link::link_binary;
-        link_binary(
+        // Emit the `rlib` that contains just one file: `<crate>.rmeta`
+        let mut builder = ArchiveBuilder::new(sess);
+        let tmp_dir = TempFileBuilder::new().prefix("kani").tempdir().unwrap();
+        let path = MaybeTempDir::new(tmp_dir, sess.opts.cg.save_temps);
+        let (metadata, _metadata_position) =
+            create_wrapper_file(sess, b".rmeta".to_vec(), codegen_results.metadata.raw_data());
+        let metadata = emit_wrapper_file(sess, &metadata, &path, METADATA_FILENAME);
+        builder.add_file(&metadata);
+
+        let rlib = out_filename(
             sess,
-            &crate::codegen_cprover_gotoc::archive::ArArchiveBuilderBuilder,
-            &codegen_results,
+            CrateType::Rlib,
             outputs,
-        )
+            codegen_results.crate_info.local_crate_name.as_str(),
+        );
+        builder.build(&rlib);
+        Ok(())
     }
 }
 
@@ -246,7 +259,7 @@ fn check_target(session: &Session) {
     session.abort_if_errors();
 }
 
-fn check_options(session: &Session, need_metadata_module: bool) {
+fn check_options(session: &Session) {
     // The requirements for `min_global_align` and `endian` are needed to build
     // a valid CBMC machine model in function `machine_model_from_session` from
     // src/kani-compiler/src/codegen_cprover_gotoc/context/goto_ctx.rs
@@ -254,8 +267,7 @@ fn check_options(session: &Session, need_metadata_module: bool) {
         Some(1) => (),
         Some(align) => {
             let err_msg = format!(
-                "Kani requires the target architecture option `min_global_align` to be 1, but it is {}.",
-                align
+                "Kani requires the target architecture option `min_global_align` to be 1, but it is {align}."
             );
             session.err(&err_msg);
         }
@@ -275,10 +287,6 @@ fn check_options(session: &Session, need_metadata_module: bool) {
             "Kani can only handle abort panic strategy (-C panic=abort). See for more details \
         https://github.com/model-checking/kani/issues/692",
         );
-    }
-
-    if need_metadata_module {
-        session.err("Kani cannot generate metadata module.");
     }
 
     session.abort_if_errors();
@@ -313,7 +321,7 @@ fn check_crate_items(gcx: &GotocCtx) {
 }
 
 /// Prints a report at the end of the compilation.
-fn print_report<'tcx>(ctx: &GotocCtx, tcx: TyCtxt<'tcx>) {
+fn print_report(ctx: &GotocCtx, tcx: TyCtxt) {
     // Print all unsupported constructs.
     if !ctx.unsupported_constructs.is_empty() {
         // Sort alphabetically.

@@ -135,8 +135,8 @@ impl<'tcx> GotocCtx<'tcx> {
     /// This method prints the details of a GotoC type, for debugging purposes.
     #[allow(unused)]
     pub(crate) fn debug_print_type_recursively(&self, ty: &Type) -> String {
-        fn debug_write_type<'tcx>(
-            ctx: &GotocCtx<'tcx>,
+        fn debug_write_type(
+            ctx: &GotocCtx,
             ty: &Type,
             out: &mut impl std::fmt::Write,
             indent: usize,
@@ -1782,12 +1782,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         let mut typ = struct_type;
         while let ty::Adt(adt_def, adt_substs) = typ.kind() {
-            assert_eq!(
-                adt_def.variants().len(),
-                1,
-                "Expected a single-variant ADT. Found {:?}",
-                typ
-            );
+            assert_eq!(adt_def.variants().len(), 1, "Expected a single-variant ADT. Found {typ:?}");
             let fields = &adt_def.variants().get(VariantIdx::from_u32(0)).unwrap().fields;
             let last_field = fields.last().expect("Trait should be the last element.");
             typ = last_field.ty(self.tcx, adt_substs);

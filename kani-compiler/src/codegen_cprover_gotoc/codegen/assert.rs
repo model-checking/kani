@@ -297,8 +297,7 @@ impl<'tcx> GotocCtx<'tcx> {
             "https://github.com/model-checking/kani/issues/new?template=bug_report.md";
 
         let assert_msg = format!(
-            "Kani-internal sanity check: {}. Please report failures:\n{}",
-            message, BUG_REPORT_URL
+            "Kani-internal sanity check: {message}. Please report failures:\n{BUG_REPORT_URL}"
         );
 
         self.codegen_assert_assume(cond, PropertyClass::SanityCheck, &assert_msg, loc)

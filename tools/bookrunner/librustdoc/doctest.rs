@@ -231,8 +231,7 @@ pub fn make_test(
         let (main_pre, main_post) = if returns_result {
             (
                 format!(
-                    "fn main() {{ {}fn {}() -> Result<(), impl core::fmt::Debug> {{\n",
-                    inner_attr, inner_fn_name
+                    "fn main() {{ {inner_attr}fn {inner_fn_name}() -> Result<(), impl core::fmt::Debug> {{\n"
                 ),
                 format!("\n}} {inner_fn_name}().unwrap() }}"),
             )

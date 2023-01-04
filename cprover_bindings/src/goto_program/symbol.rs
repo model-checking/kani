@@ -74,9 +74,7 @@ impl Symbol {
         // See https://github.com/model-checking/kani/issues/1361#issuecomment-1181499683
         assert!(
             name.to_string().ends_with(&base_name.map_or(String::new(), |s| s.to_string())),
-            "Symbol's base_name must be the suffix of its name.\nName: {:?}\nBase name: {:?}",
-            name,
-            base_name
+            "Symbol's base_name must be the suffix of its name.\nName: {name:?}\nBase name: {base_name:?}"
         );
         Symbol {
             name,

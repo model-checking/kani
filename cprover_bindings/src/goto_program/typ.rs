@@ -191,9 +191,7 @@ impl DatatypeComponent {
         let name = name.into();
         assert!(
             Self::typecheck_datatype_field(&typ),
-            "Illegal field.\n\tName: {}\n\tType: {:?}",
-            name,
-            typ
+            "Illegal field.\n\tName: {name}\n\tType: {typ:?}"
         );
         Field { name, typ }
     }
@@ -942,13 +940,7 @@ impl Type {
         identifier: Option<InternedString>,
         base_name: Option<InternedString>,
     ) -> Parameter {
-        assert!(
-            self.can_be_lvalue(),
-            "Expected lvalue from {:?} {:?} {:?}",
-            self,
-            identifier,
-            base_name
-        );
+        assert!(self.can_be_lvalue(), "Expected lvalue from {self:?} {identifier:?} {base_name:?}");
         Parameter { identifier, base_name, typ: self }
     }
 
@@ -1133,13 +1125,11 @@ impl Type {
     ) -> Self {
         assert!(
             Type::components_are_unique(&components),
-            "Components contain duplicates: {:?}",
-            components
+            "Components contain duplicates: {components:?}"
         );
         assert!(
             Type::components_in_valid_order_for_struct(&components),
-            "Components are not in valid order for struct: {:?}",
-            components
+            "Components are not in valid order for struct: {components:?}"
         );
 
         let tag = tag.into();
@@ -1168,13 +1158,11 @@ impl Type {
         let tag = tag.into();
         assert!(
             Type::components_are_unique(&components),
-            "Components contain duplicates: {:?}",
-            components
+            "Components contain duplicates: {components:?}"
         );
         assert!(
             Type::components_are_not_flexible_array(&components),
-            "Unions cannot contain flexible arrays: {:?}",
-            components
+            "Unions cannot contain flexible arrays: {components:?}"
         );
         Union { tag, components }
     }
