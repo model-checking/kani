@@ -375,7 +375,7 @@ impl<'tcx> GotocCtx<'tcx> {
             let first_target = targets.iter().next().unwrap();
             Stmt::block(
                 vec![
-                    v.eq(Expr::int_constant(first_target.0, switch_ty.clone())).if_then_else(
+                    v.eq(Expr::int_constant(first_target.0, switch_ty)).if_then_else(
                         Stmt::goto(self.current_fn().find_label(&first_target.1), loc),
                         None,
                         loc,
