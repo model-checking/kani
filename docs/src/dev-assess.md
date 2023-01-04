@@ -49,7 +49,9 @@ All versions of assess produce the same output and metrics.
 Assess will normally build just like `cargo kani` or `cargo build`, whereas `scan` will find all cargo packages beneath the current directory, even in unrelated workspaces.
 Thus, 'scan' may be helpful in the case where the user has a choice of packages and is looking for the easiest to get started with (in addition to the Kani developer use-case, of aggregating statistics across many packages).
 
-(Tip: Assess may need to run for awhile, so try using `screen`, `tmux` or `nohup` to avoid terminating the process if, for example, an ssh connection breaks.)
+(Tip: Assess may need to run for awhile, so try using `screen`, `tmux` or `nohup` to avoid terminating the process if, for example, an ssh connection breaks.
+Some tests can also consume huge amounts of ram when run through Kani, so you may wish to use `ulimit -v 6000000` to prevent any processes from using more than 6GB.
+You can also limit the number of concurrent tests that will be run by providing e.g. `-j 4`, currently as a prepended argument, like `--enable-unstable` or `--workspace` in the examples above.)
 
 ## What assess does
 
@@ -79,8 +81,10 @@ The unsupported features table aggregates information about features that Kani d
 These correspond to uses of `codegen_unimplemented` in the `kani-compiler`, and appear as warnings during compilation.
 
 Unimplemented features are not necessarily actually hit by (dynamically) reachable code, so an immediate future improvement on this table would be to count the features *actually hit* by failing test cases, instead of just those features reported as existing in code by the compiler.
-In other words, the current unsupported features table is **not** what we'd really want to see, in order to actually prioritize implementing these features, because we may be seeing a lot of features that won't actually "move the needle" in making it more practical to write proofs.
-Because of our operating hypothesis that code covered by tests is code that could be covered by proof, measuring unsupported features by those actually hit by a test should provide a better "signal" about priorities.
+In other words, the current unsupported features table is **not** what we want to see, in order to _perfectly_ prioritize implementing these features, because we may be counting features that no proof would ever hit.
+A perfect signal here isn't possible: there may be code that looks statically reachable, but is never dynamically reachable, and we can't tell.
+But we can use test coverage as an approximation: well-tested code will hopefully cover most of the dynamically reachable code.
+The operating hypothesis of assess is that code covered by tests is code that could be covered by proof, and so measuring unsupported features by those actually hit by a test should provide a better "signal" about priorities.
 Implicitly deprioritizing unsupported features because they aren't covered by tests may not be a bug, but a feature: we may simply not want to prove anything about that code, if it hasn't been tested first, and so adding support for that feature may not be important.
 
 A few notes on terminology:
