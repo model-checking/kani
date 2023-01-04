@@ -47,12 +47,12 @@ When you need nondeterministic variables of types that don't have a `kani::any()
 1. Implement the `kani::Arbitrary` trait for your type, so you and downstream crates can use `kani::any()` with your type.
 2. Implement the [`bolero_engine::TypeGenerator` trait](https://docs.rs/bolero-engine/0.8.0/bolero_engine/trait.TypeGenerator.html).
 This will enable you and downstream crates to use Kani via [Bolero](https://camshaft.github.io/bolero/).
-3. Write a function that build an object from non-deterministic variables.
+3. Write a function that builds an object from non-deterministic variables.
 
 We recommend the first approach for most cases.
 The first approach is simple and conventional. This option will also enable you to use it with parameterized types, such as `Option<MyType>` and arrays.
 Kani includes a derive macro that allows you to automatically derive `kani::Arbitrary` for structures and enumerations as long as all its fields also implement the `kani::Arbitrary` trait.
-One downside of this approach today is that the `kani` crate ships with Kani, but it's not available on [crates.io](https://crates.io).
+One downside of this approach today is that the `kani` crate ships with Kani, but it's not yet available on [crates.io](https://crates.io).
 So you need to annotate the Arbitrary implementation with a `#[cfg(kani)]` attribute.
 For the derive macro, use `#[cfg_attr(kani, derive(kani::Arbitrary))]`.
 
