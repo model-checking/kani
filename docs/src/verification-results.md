@@ -131,6 +131,8 @@ Check 46: cover_unsatisfiable_example.cover.1
 
 3. `UNREACHABLE`: This indicates that the `cover` property itself is unreachable (i.e. it is _vacuously_ unsatisfiable).
 
+In contrast to an `UNREACHABLE` result for assertions, an unreachable (or an unsatisfiable) cover property may indicate an incomplete proof.
+
 Example:
 In this example, a `kani::cover` call is unreachable because if the outer `if` condition holds, then the non-empty range `r2` is strictly larger than the non-empty range `r1`, in which case, the condition in the inner `if` condition is impossible.
 ```rust
