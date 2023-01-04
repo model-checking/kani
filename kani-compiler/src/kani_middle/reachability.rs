@@ -18,7 +18,9 @@ use tracing::{debug, debug_span, trace, warn};
 use rustc_data_structures::fingerprint::Fingerprint;
 use rustc_data_structures::fx::FxHashSet;
 use rustc_data_structures::stable_hasher::{HashStable, StableHasher};
+use rustc_hir::def::DefKind;
 use rustc_hir::def_id::DefId;
+use rustc_hir::ItemId;
 use rustc_middle::mir::interpret::{AllocId, ConstValue, ErrorHandled, GlobalAlloc, Scalar};
 use rustc_middle::mir::mono::MonoItem;
 use rustc_middle::mir::visit::Visitor as MirVisitor;
@@ -57,6 +59,7 @@ pub fn collect_reachable_items<'tcx>(
 }
 
 /// Collect all (top-level) items in the crate that matches the given predicate.
+/// An item can only be a root if they are: non-generic Fn / Static / GlobalASM
 pub fn filter_crate_items<F>(tcx: TyCtxt, predicate: F) -> Vec<MonoItem>
 where
     F: FnMut(TyCtxt, DefId) -> bool,
@@ -66,7 +69,12 @@ where
         .items()
         .filter_map(|hir_id| {
             let def_id = hir_id.owner_id.def_id.to_def_id();
-            filter(tcx, def_id).then(|| MonoItem::Fn(Instance::mono(tcx, def_id)))
+            let generics = tcx.generics_of(def_id);
+            if !generics.requires_monomorphization(tcx) && filter(tcx, def_id) {
+                to_mono_root(tcx, hir_id, def_id)
+            } else {
+                None
+            }
         })
         .collect()
 }
@@ -94,6 +102,19 @@ where
         }
     }
     roots
+}
+
+fn to_mono_root(tcx: TyCtxt, item_id: ItemId, def_id: DefId) -> Option<MonoItem> {
+    let kind = tcx.def_kind(def_id);
+    match kind {
+        DefKind::Static(..) => Some(MonoItem::Static(def_id)),
+        DefKind::Fn => Some(MonoItem::Fn(Instance::mono(tcx, def_id))),
+        DefKind::GlobalAsm => Some(MonoItem::GlobalAsm(item_id)),
+        _ => {
+            debug!(?def_id, ?kind, "Ignored item. Not a root type.");
+            None
+        }
+    }
 }
 
 struct MonoItemsCollector<'tcx> {
