@@ -48,7 +48,7 @@ use std::process::Command;
 use std::rc::Rc;
 use std::time::Instant;
 use tempfile::Builder as TempFileBuilder;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 #[derive(Clone)]
 pub struct GotocCodegenBackend {
@@ -310,10 +310,10 @@ fn check_crate_items(gcx: &GotocCtx) {
                 );
                 tcx.sess.err(&error_msg);
             } else {
-                warn!(
+                tcx.sess.warn(format!(
                     "Ignoring global ASM in crate {}. Verification results may be impacted.",
                     gcx.short_crate_name()
-                );
+                ));
             }
         }
     }
@@ -371,7 +371,7 @@ fn codegen_results(
 fn collect_codegen_items<'tcx>(gcx: &GotocCtx<'tcx>) -> Vec<MonoItem<'tcx>> {
     let tcx = gcx.tcx;
     let reach = gcx.queries.get_reachability_analysis();
-    debug!(?reach, "starting_points");
+    debug!(?reach, "collect_codegen_items");
     match reach {
         ReachabilityType::Legacy => {
             // Use rustc monomorphizer to retrieve items to codegen.
@@ -399,7 +399,8 @@ fn collect_codegen_items<'tcx>(gcx: &GotocCtx<'tcx>) -> Vec<MonoItem<'tcx>> {
         ReachabilityType::PubFns => {
             let entry_fn = tcx.entry_fn(()).map(|(id, _)| id);
             let local_reachable = filter_crate_items(tcx, |_, def_id| {
-                tcx.is_reachable_non_generic(def_id) || entry_fn == Some(def_id)
+                (tcx.is_reachable_non_generic(def_id) && tcx.def_kind(def_id).is_fn_like())
+                    || entry_fn == Some(def_id)
             });
             collect_reachable_items(tcx, &local_reachable).into_iter().collect()
         }
