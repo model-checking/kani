@@ -363,7 +363,7 @@ fn codegen_results(
 fn collect_codegen_items<'tcx>(gcx: &GotocCtx<'tcx>) -> Vec<MonoItem<'tcx>> {
     let tcx = gcx.tcx;
     let reach = gcx.queries.get_reachability_analysis();
-    debug!(?reach, "starting_points");
+    debug!(?reach, "collect_codegen_items");
     match reach {
         ReachabilityType::Legacy => {
             // Use rustc monomorphizer to retrieve items to codegen.

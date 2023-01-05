@@ -62,21 +62,32 @@ pub fn collect_reachable_items<'tcx>(
 /// An item can only be a root if they are: non-generic Fn / Static / GlobalASM
 pub fn filter_crate_items<F>(tcx: TyCtxt, predicate: F) -> Vec<MonoItem>
 where
-    F: FnMut(TyCtxt, DefId) -> bool,
+    F: Fn(TyCtxt, DefId) -> bool,
 {
-    let mut filter = predicate;
-    tcx.hir_crate_items(())
-        .items()
-        .filter_map(|hir_id| {
-            let def_id = hir_id.owner_id.def_id.to_def_id();
-            let generics = tcx.generics_of(def_id);
-            if !generics.requires_monomorphization(tcx) && filter(tcx, def_id) {
-                to_mono_root(tcx, hir_id, def_id)
-            } else {
-                None
-            }
-        })
-        .collect()
+    let crate_items = tcx.hir_crate_items(());
+    // Filter regular items.
+    let root_items = crate_items.items().filter_map(|item| {
+        let def_id = item.owner_id.def_id.to_def_id();
+        if !is_generic(tcx, def_id) && predicate(tcx, def_id) {
+            to_mono_root(tcx, item, def_id)
+        } else {
+            None
+        }
+    });
+
+    // Filter items from implementation blocks.
+    let impl_items = crate_items.impl_items().filter_map(|impl_item| {
+        let def_id = impl_item.owner_id.def_id.to_def_id();
+        if matches!(tcx.def_kind(def_id), DefKind::AssocFn)
+            && !is_generic(tcx, def_id)
+            && predicate(tcx, def_id)
+        {
+            Some(MonoItem::Fn(Instance::mono(tcx, def_id)))
+        } else {
+            None
+        }
+    });
+    root_items.chain(impl_items).collect()
 }
 
 /// Use a predicate to find `const` declarations, then extract all closures from those declarations
@@ -102,6 +113,11 @@ where
         }
     }
     roots
+}
+
+fn is_generic(tcx: TyCtxt, def_id: DefId) -> bool {
+    let generics = tcx.generics_of(def_id);
+    generics.requires_monomorphization(tcx)
 }
 
 fn to_mono_root(tcx: TyCtxt, item_id: ItemId, def_id: DefId) -> Option<MonoItem> {
