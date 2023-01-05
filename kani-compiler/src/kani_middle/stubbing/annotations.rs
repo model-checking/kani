@@ -98,7 +98,7 @@ fn extract_stubbing_pair(
         if let Some(def_id) = maybe_resolved {
             tracing::debug!(?def_id, "Resolved {name} to {}", tcx.def_path_str(def_id));
         } else {
-            tcx.sess.span_err(attr.span, format!("unable to resolve function/method: {}", name));
+            tcx.sess.span_err(attr.span, format!("unable to resolve function/method: {name}"));
         }
         maybe_resolved
     };

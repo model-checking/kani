@@ -41,26 +41,45 @@ The assertion we wrote in this harness was just an extra check we added to demon
 
 ## Custom nondeterministic types
 
-While `kani::any()` is the only method Kani provides to inject non-determinism into a proof harness, Kani only ships with implementations for a few types where we can guarantee safety.
-When you need nondeterministic variables of types that `kani::any()` cannot construct, you have two options:
+While `kani::any()` is the only method Kani provides to inject non-determinism into a proof harness, Kani only ships with implementations for a few `std` types where we can guarantee safety.
+When you need nondeterministic variables of types that don't have a `kani::any()` implementation available, you have the following options:
 
-1. Implement the `kani::Arbitrary` trait for your type, so you can use `kani::any()`.
-2. Just write a function.
+1. Implement the `kani::Arbitrary` trait for your type, so you and downstream crates can use `kani::any()` with your type.
+2. Implement the [`bolero_generator::TypeGenerator` trait](https://docs.rs/bolero-generator/0.8.0/bolero_generator/trait.TypeGenerator.html).
+This will enable you and downstream crates to use Kani via [Bolero](https://camshaft.github.io/bolero/).
+3. Write a function that builds an object from non-deterministic variables.
 
-The advantage of the first approach is that it's simple and conventional.
-It also means that in addition to being able to use `kani::any()` with your type, you can also use it with `Option<MyType>` (for example).
+We recommend the first approach for most cases.
+The first approach is simple and conventional. This option will also enable you to use it with parameterized types, such as `Option<MyType>` and arrays.
+Kani includes a derive macro that allows you to automatically derive `kani::Arbitrary` for structures and enumerations as long as all its fields also implement the `kani::Arbitrary` trait.
+One downside of this approach today is that the `kani` crate ships with Kani, but it's not yet available on [crates.io](https://crates.io).
+So you need to annotate the Arbitrary implementation with a `#[cfg(kani)]` attribute.
+For the derive macro, use `#[cfg_attr(kani, derive(kani::Arbitrary))]`.
 
-The advantage of the second approach is that you're able to pass in parameters, like bounds on the size of the data structure.
+The second approach is recommended for cases where you would also like to be able to apply fuzzing or property testing.
+The benefits of doing so were described in [this blog post](https://model-checking.github.io/kani-verifier-blog/2022/10/27/using-kani-with-the-bolero-property-testing-framework.html).
+Like `kani::Arbitrary`, this trait can also be used with a `derive` macro.
+One thing to be aware of is that this type allow users to generate arbitrary values that include pointers.
+In those cases, **only the values pointed to are arbitrary**, not the pointers themselves.
+
+Finally, the last approach is recommended when you need to pass in parameters, like bounds on the size of the data structure.
 (Which we'll discuss more in the next section.)
-This approach is also necessary when you are unable to implement a trait (like `Arbitrary`) on a type you're importing from another crate.
+This approach is also necessary when you need to generate a nondeterministic variable of a type that you're importing from another crate, since Rust doesn't allow you to implement a trait defined in an external crate for a type that you don't own.
 
 Either way, inside this function you would simply return an arbitrary value by generating arbitrary values for its components.
 To generate a nondeterministic struct, you would just generate nondeterministic values for each of its fields.
 For complex data structures like vectors or other containers, you can start with an empty one and add a (bounded) nondeterministic number of entries.
-For an enum, you can make use of a simple trick:
+
+For example, for a simple enum you can just annotate it with the Arbitrary derive attribute:
 
 ```rust
-{{#include tutorial/arbitrary-variables/src/rating.rs:rating_invariant}}
+{{#include tutorial/arbitrary-variables/src/rating.rs:rating_enum}}
+```
+
+But if the same enum is defined in an external crate, you can use a simple trick:
+
+```rust
+{{#include tutorial/arbitrary-variables/src/rating.rs:rating_arbitrary}}
 ```
 
 All we're doing here is making use of a nondeterministic integer to decide which variant of `Rating` to return.

@@ -31,8 +31,7 @@ static PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send + 's
             // Print the Kani message
             eprintln!("Kani unexpectedly panicked during compilation.");
             eprintln!(
-                "If you are seeing this message, please file an issue here: {}",
-                BUG_REPORT_URL
+                "If you are seeing this message, please file an issue here: {BUG_REPORT_URL}"
             );
         }));
         hook

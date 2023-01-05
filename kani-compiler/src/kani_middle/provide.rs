@@ -32,7 +32,7 @@ pub fn provide_extern(providers: &mut ExternProviders) {
 
 /// Returns the optimized code for the function associated with `def_id` by
 /// running rustc's optimization passes followed by Kani-specific passes.
-fn run_mir_passes<'tcx, const EXTERN: bool>(tcx: TyCtxt<'tcx>, def_id: DefId) -> &Body<'tcx> {
+fn run_mir_passes<const EXTERN: bool>(tcx: TyCtxt, def_id: DefId) -> &Body {
     tracing::debug!(?def_id, "Run rustc transformation passes");
     let optimized_mir = if EXTERN {
         rustc_interface::DEFAULT_EXTERN_QUERY_PROVIDERS.optimized_mir

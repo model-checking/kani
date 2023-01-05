@@ -173,8 +173,7 @@ impl<'tcx> ProjectedPlace<'tcx> {
             Self::check_expr_typ_mismatch(&goto_expr, &mir_typ_or_variant, ctx)
         {
             let msg = format!(
-                "Unexpected type mismatch in projection:\n{:?}\nExpr type\n{:?}\nType from MIR\n{:?}",
-                goto_expr, expr_ty, ty_from_mir
+                "Unexpected type mismatch in projection:\n{goto_expr:?}\nExpr type\n{expr_ty:?}\nType from MIR\n{ty_from_mir:?}"
             );
             warn!("{}", msg);
             // TODO: there's an expr type mismatch with the rust 2022-11-20 toolchain
