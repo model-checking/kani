@@ -433,9 +433,7 @@ impl Expr {
             assert_eq!(size as usize, elems.len());
             assert!(
                 elems.iter().all(|x| x.typ == *value_typ),
-                "Array type and value types don't match: \n{:?}\n{:?}",
-                typ,
-                elems
+                "Array type and value types don't match: \n{typ:?}\n{elems:?}"
             );
         } else {
             unreachable!("Can't make an array_val with non-array target type {:?}", typ);
@@ -448,9 +446,7 @@ impl Expr {
             assert_eq!(size as usize, elems.len());
             assert!(
                 elems.iter().all(|x| x.typ == *value_typ),
-                "Vector type and value types don't match: \n{:?}\n{:?}",
-                typ,
-                elems
+                "Vector type and value types don't match: \n{typ:?}\n{elems:?}"
             );
         } else {
             unreachable!("Can't make a vector_val with non-vector target type {:?}", typ);
@@ -642,9 +638,7 @@ impl Expr {
     pub fn call(self, arguments: Vec<Expr>) -> Self {
         assert!(
             Expr::typecheck_call(&self, &arguments),
-            "Function call does not type check:\nfunc: {:?}\nargs: {:?}",
-            self,
-            arguments
+            "Function call does not type check:\nfunc: {self:?}\nargs: {arguments:?}"
         );
         let typ = self.typ().return_type().unwrap().clone();
         expr!(FunctionCall { function: self, arguments }, typ)
@@ -658,9 +652,7 @@ impl Expr {
         let field: InternedString = field.into();
         assert!(
             self.typ.is_struct_tag() || self.typ.is_union_tag(),
-            "Can't apply .member operation to\n\t{:?}\n\t{}",
-            self,
-            field,
+            "Can't apply .member operation to\n\t{self:?}\n\t{field}",
         );
         if let Some(ty) = self.typ.lookup_field_type(field, symbol_table) {
             expr!(Member { lhs: self, field }, ty)
@@ -701,10 +693,7 @@ impl Expr {
         // Check that each formal field has an value
         assert!(
             fields.iter().zip(values.iter()).all(|(f, v)| f.typ() == *v.typ()),
-            "Error in struct_expr; value type does not match field type.\n\t{:?}\n\t{:?}\n\t{:?}",
-            typ,
-            fields,
-            values
+            "Error in struct_expr; value type does not match field type.\n\t{typ:?}\n\t{fields:?}\n\t{values:?}"
         );
         expr!(Struct { values }, typ)
     }
@@ -720,18 +709,14 @@ impl Expr {
     ) -> Self {
         assert!(
             typ.is_struct_tag(),
-            "Error in struct_expr; must be given a struct_tag.\n\t{:?}\n\t{:?}",
-            typ,
-            components
+            "Error in struct_expr; must be given a struct_tag.\n\t{typ:?}\n\t{components:?}"
         );
         let fields = typ.lookup_components(symbol_table).unwrap();
         let non_padding_fields: Vec<_> = fields.iter().filter(|x| !x.is_padding()).collect();
         assert_eq!(
             non_padding_fields.len(),
             components.len(),
-            "Error in struct_expr; mismatch in number of fields and components.\n\t{:?}\n\t{:?}",
-            typ,
-            components
+            "Error in struct_expr; mismatch in number of fields and components.\n\t{typ:?}\n\t{components:?}"
         );
 
         // Check that each formal field has an value
@@ -790,28 +775,21 @@ impl Expr {
     ) -> Self {
         assert!(
             typ.is_struct_tag(),
-            "Error in struct_expr; must be given struct_tag.\n\t{:?}\n\t{:?}",
-            typ,
-            non_padding_values
+            "Error in struct_expr; must be given struct_tag.\n\t{typ:?}\n\t{non_padding_values:?}"
         );
         let fields = typ.lookup_components(symbol_table).unwrap();
         let non_padding_fields: Vec<_> = fields.iter().filter(|x| !x.is_padding()).collect();
         assert_eq!(
             non_padding_fields.len(),
             non_padding_values.len(),
-            "Error in struct_expr; mismatch in number of fields and values.\n\t{:?}\n\t{:?}",
-            typ,
-            non_padding_values
+            "Error in struct_expr; mismatch in number of fields and values.\n\t{typ:?}\n\t{non_padding_values:?}"
         );
         assert!(
             non_padding_fields
                 .iter()
                 .zip(non_padding_values.iter())
                 .all(|(f, v)| f.field_typ().unwrap() == v.typ()),
-            "Error in struct_expr; value type does not match field type.\n\t{:?}\n\t{:?}\n\t{:?}",
-            typ,
-            non_padding_fields,
-            non_padding_values
+            "Error in struct_expr; value type does not match field type.\n\t{typ:?}\n\t{non_padding_fields:?}\n\t{non_padding_values:?}"
         );
 
         let values = fields
@@ -834,25 +812,18 @@ impl Expr {
     ) -> Self {
         assert!(
             typ.is_struct_tag() || typ.is_struct(),
-            "Error in struct_expr; must be given struct.\n\t{:?}\n\t{:?}",
-            typ,
-            values
+            "Error in struct_expr; must be given struct.\n\t{typ:?}\n\t{values:?}"
         );
         let typ = typ.aggr_tag().unwrap();
         let fields = typ.lookup_components(symbol_table).unwrap();
         assert_eq!(
             fields.len(),
             values.len(),
-            "Error in struct_expr; mismatch in number of padded fields and padded values.\n\t{:?}\n\t{:?}",
-            typ,
-            values
+            "Error in struct_expr; mismatch in number of padded fields and padded values.\n\t{typ:?}\n\t{values:?}"
         );
         assert!(
             fields.iter().zip(values.iter()).all(|(f, v)| &f.typ() == v.typ()),
-            "Error in struct_expr; value type does not match field type.\n\t{:?}\n\t{:?}\n\t{:?}",
-            typ,
-            fields,
-            values
+            "Error in struct_expr; value type does not match field type.\n\t{typ:?}\n\t{fields:?}\n\t{values:?}"
         );
 
         Expr::struct_expr_with_explicit_padding(typ, fields, values)
@@ -1028,10 +999,7 @@ impl Expr {
     pub fn binop(self, op: BinaryOperator, rhs: Expr) -> Expr {
         assert!(
             Expr::typecheck_binop_args(op, &self, &rhs),
-            "BinaryOperation Expression does not typecheck {:?} {:?} {:?}",
-            op,
-            self,
-            rhs
+            "BinaryOperation Expression does not typecheck {op:?} {self:?} {rhs:?}"
         );
         expr!(BinOp { op, lhs: self, rhs }, Expr::binop_return_type(op, &self, &rhs))
     }
@@ -1041,10 +1009,7 @@ impl Expr {
     pub fn vector_cmp(self, op: BinaryOperator, rhs: Expr, ret_typ: Type) -> Expr {
         assert!(
             Expr::typecheck_vector_cmp_expr(&self, &rhs, &ret_typ),
-            "vector comparison expression does not typecheck {:?} {:?} {:?}",
-            self,
-            rhs,
-            ret_typ,
+            "vector comparison expression does not typecheck {self:?} {rhs:?} {ret_typ:?}",
         );
         expr!(BinOp { op, lhs: self, rhs }, ret_typ)
     }
@@ -1483,9 +1448,7 @@ impl Expr {
     pub fn reinterpret_cast(self, t: Type) -> Expr {
         assert!(
             self.can_take_address_of(),
-            "Can't take address of {:?} when coercing to {:?}",
-            self,
-            t
+            "Can't take address of {self:?} when coercing to {t:?}"
         );
         self.address_of().cast_to(t.to_pointer()).dereference()
     }

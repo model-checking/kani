@@ -229,7 +229,7 @@ pub fn build_lib_legacy() {
     // Create sysroot folder.
     let legacy_lib = kani_sysroot_legacy_lib();
     legacy_lib.exists().then(|| fs::remove_dir_all(&legacy_lib));
-    fs::create_dir_all(&legacy_lib).expect(&format!("Failed to create {:?}", legacy_lib));
+    fs::create_dir_all(&legacy_lib).expect(&format!("Failed to create {legacy_lib:?}"));
 
     //  Copy Kani libraries to inside the legacy-lib folder.
     copy_libs(&artifacts, &legacy_lib, &is_kani_lib);

@@ -149,8 +149,7 @@ impl KaniSession {
         })?;
         let src_file_name_as_str = src_file_name_as_osstr.to_str().with_context(|| {
             format!(
-                "Couldn't convert source code file name `{:?}` from OsStr to str",
-                src_file_name_as_osstr
+                "Couldn't convert source code file name `{src_file_name_as_osstr:?}` from OsStr to str"
             )
         })?;
 
@@ -255,8 +254,7 @@ fn format_unit_test(
             "// This test has to be run with rustc option: -Z randomize-layout\n    ".to_string()
         }
         Some(Some(seed)) => format!(
-            "// This test has to be run with rust options: -Z randomize-layout -Z layout-seed={}\n    ",
-            seed,
+            "// This test has to be run with rust options: -Z randomize-layout -Z layout-seed={seed}\n    ",
         ),
     };
 
