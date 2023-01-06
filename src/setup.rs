@@ -19,19 +19,22 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 const TARGET: &str = env!("TARGET");
 
 /// The directory where Kani is installed, either:
-///  * `${KANI_HOME}/.kani/kani-<VERSION>` if the environment variable
+///  * `${KANI_HOME}/kani-<VERSION>` if the environment variable
 ///    `KANI_HOME` is set.
 ///  * `${HOME}/.kani/kani-<VERSION>` where `HOME` is the canonical definition
 ///    of home directory used by Cargo and rustup.
 pub fn kani_dir() -> Result<PathBuf> {
-    let home_dir = match env::var("KANI_HOME") {
-        Ok(val) => PathBuf::from(val),
-        Err(_) => home::home_dir().expect("couldn't find home directory"),
+    let (home_dir, origin) = match env::var("KANI_HOME") {
+        Ok(val) => (PathBuf::from(val), "KANI_HOME"),
+        Err(_) => (home::home_dir().expect("couldn't find home directory").join(".kani"), "HOME"),
     };
     if !home_dir.is_dir() {
-        bail!("got home directory which isn't a directory");
+        bail!(
+            "got home directory `{}` (from `{origin}`) which isn't a directory",
+            home_dir.display()
+        );
     }
-    let kani_dir = home_dir.join(".kani").join(format!("kani-{VERSION}"));
+    let kani_dir = home_dir.join(format!("kani-{VERSION}"));
     Ok(kani_dir)
 }
 
