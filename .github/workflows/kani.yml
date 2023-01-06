@@ -163,7 +163,6 @@ jobs:
 
       - name: Run installed tests (alt. install path)
         if: ${{ matrix.os == 'ubuntu-18.04' }}
-        env: 
         run: |
           for tag in kani-20-04-alt; do
             docker run $tag  cargo kani --version
