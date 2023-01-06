@@ -4,6 +4,18 @@
 
 use rustc_ast::{AttrKind, Attribute, LitKind, MetaItem};
 
+/// An enum for possible errors with attribute extraction
+pub enum AttrError {
+    /// The attribute has an empty argument list
+    Empty,
+
+    /// An argument is not a literal
+    NonLiteral(String),
+
+    /// The arguments are of the wrong type
+    InvalidType(String),
+}
+
 /// Partition all the attributes into two buckets, proof_attributes and other_attributes
 pub fn partition_kanitool_attributes(
     all_attributes: &[Attribute],
@@ -43,6 +55,27 @@ pub fn extract_integer_argument(attr: &Attribute) -> Option<u128> {
     else {
         None
     }
+}
+
+/// Extracts the string arguments from the attribute provided
+/// For example, `solver(/path/to/solver)` return `Some("/path/to/solver")`
+pub fn extract_string_arguments(attr: &Attribute) -> Result<Vec<String>, AttrError> {
+    let attr_args = attr.meta_item_list();
+    if attr_args.is_none() {
+        return Err(AttrError::Empty);
+    }
+    let attr_args = attr_args.unwrap();
+    attr_args
+        .iter()
+        .map(|attr_arg| attr_arg.literal().ok_or(AttrError::NonLiteral(format!("{attr_arg:?}"))))
+        .map(|literal| {
+            let kind = &literal?.kind;
+            match kind {
+                LitKind::Str(symbol, _) => Ok(symbol.as_str().to_owned()),
+                _ => Err(AttrError::InvalidType(format!("{kind:?}"))),
+            }
+        })
+        .collect()
 }
 
 /// Extracts a vector with the path arguments of an attribute.

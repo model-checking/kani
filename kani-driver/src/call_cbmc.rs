@@ -123,6 +123,11 @@ impl KaniSession {
             args.push(unwind_value.to_string().into());
         }
 
+        if let Some(solver) = &harness_metadata.solver {
+            args.push("--external-sat-solver".into());
+            args.push(solver.into());
+        }
+
         if self.args.run_sanity_checks {
             args.push("--validate-goto-model".into());
             args.push("--validate-ssa-equation".into());

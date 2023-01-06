@@ -1,0 +1,2 @@
+error: A non-literal argument was provided to `#[kani::solver]`.
+error: aborting due to previous error

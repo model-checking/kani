@@ -148,6 +148,29 @@ pub fn stub(attr: TokenStream, item: TokenStream) -> TokenStream {
     result
 }
 
+#[cfg(not(kani))]
+#[proc_macro_attribute]
+pub fn solver(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    // No-op in non-kani mode
+    item
+}
+
+/// Select the SAT solver to use with CBMC for this harness
+/// The attribute `#[kani::solver(arg)]` can only be used alongside `#[kani::proof]``
+///
+/// arg - The full path of the SAT solver binary, e.g. `/path/to/solver`
+#[cfg(kani)]
+#[proc_macro_attribute]
+pub fn solver(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let mut result = TokenStream::new();
+    // Translate #[kani::solver(arg)] to #[kanitool::stub(arg)]
+    let insert_string = "#[kanitool::solver(".to_owned() + &attr.to_string() + ")]";
+    result.extend(insert_string.parse::<TokenStream>().unwrap());
+
+    result.extend(item);
+    result
+}
+
 /// Allow users to auto generate Arbitrary implementations by using `#[derive(Arbitrary)]` macro.
 #[proc_macro_error]
 #[proc_macro_derive(Arbitrary)]

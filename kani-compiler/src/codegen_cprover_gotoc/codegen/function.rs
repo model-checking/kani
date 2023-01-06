@@ -4,7 +4,9 @@
 //! This file contains functions related to codegenning MIR functions into gotoc
 
 use crate::codegen_cprover_gotoc::GotocCtx;
-use crate::kani_middle::attributes::{extract_integer_argument, partition_kanitool_attributes};
+use crate::kani_middle::attributes::{
+    extract_integer_argument, extract_string_arguments, partition_kanitool_attributes, AttrError,
+};
 use cbmc::goto_program::{Expr, Stmt, Symbol};
 use cbmc::InternString;
 use kani_metadata::HarnessMetadata;
@@ -352,6 +354,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 original_file: loc.filename().unwrap(),
                 original_start_line: loc.start_line().unwrap() as usize,
                 original_end_line: loc.end_line().unwrap() as usize,
+                solver: None,
                 unwind_value: None,
                 // We record the actual path after codegen before we dump the metadata into a file.
                 goto_file: None,
@@ -377,6 +380,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let mut harness = self.default_kanitool_proof();
         for attr in other_attributes.iter() {
             match attr.0.as_str() {
+                "solver" => self.handle_kanitool_solver(attr.1, &mut harness),
                 "stub" => {
                     if !self.queries.get_stubbing_enabled() {
                         self.tcx.sess.span_warn(
@@ -411,6 +415,7 @@ impl<'tcx> GotocCtx<'tcx> {
             original_file: loc.filename().unwrap(),
             original_start_line: loc.start_line().unwrap() as usize,
             original_end_line: loc.end_line().unwrap() as usize,
+            solver: None,
             unwind_value: None,
             // We record the actual path after codegen before we dump the metadata into a file.
             goto_file: None,
@@ -441,6 +446,43 @@ impl<'tcx> GotocCtx<'tcx> {
                     return;
                 }
                 harness.unwind_value = Some(val.unwrap());
+            }
+        }
+    }
+
+    /// Set the solver for this proof harness
+    fn handle_kanitool_solver(&mut self, attr: &Attribute, harness: &mut HarnessMetadata) {
+        const ATTRIBUTE: &str = "#[kani::solver]";
+        // Make sure the solver is not already set
+        if harness.solver.is_some() {
+            self.tcx.sess.span_err(
+                attr.span,
+                format!("Only one '{ATTRIBUTE}' attribute is allowed per harness"),
+            );
+            return;
+        }
+        match extract_string_arguments(attr) {
+            Ok(arg) => {
+                if arg.len() == 1 {
+                    harness.solver = Some(arg[0].clone())
+                } else {
+                    self.tcx.sess.span_err(
+                        attr.span,
+                        format!("The `{ATTRIBUTE}` attribute expects a single string argument. Got {} arguments.", arg.len()),
+                    );
+                }
+            }
+            Err(err) => {
+                let msg = match err {
+                    AttrError::Empty => format!("No arguments were specified to `{ATTRIBUTE}`."),
+                    AttrError::NonLiteral(_) => {
+                        format!("A non-literal argument was provided to `{ATTRIBUTE}`.")
+                    }
+                    AttrError::InvalidType(typ) => format!(
+                        "Invalid argument type. The `{ATTRIBUTE}` attribute expects a string literal argument. Got {typ}."
+                    ),
+                };
+                self.tcx.sess.span_err(attr.span, msg);
             }
         }
     }

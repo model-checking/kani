@@ -1,0 +1,2 @@
+error: Invalid argument type. The `#[kani::solver]` attribute expects a string literal argument. Got Int(123, Unsuffixed).
+error: aborting due to previous error
