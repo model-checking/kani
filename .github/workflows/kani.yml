@@ -143,6 +143,7 @@ jobs:
         if: ${{ matrix.os == 'ubuntu-18.04' }}
         run: |
           docker build -t kani-20-04 -f scripts/ci/Dockerfile.bundle-test-ubuntu-20-04 .
+          docker build -t kani-20-04-alt -f scripts/ci/Dockerfile.bundle-test-ubuntu-20-04-alt .
           docker build -t kani-18-04 -f scripts/ci/Dockerfile.bundle-test-ubuntu-18-04 .
           # this one does its tests automatically, for reasons documented in the file:
           docker build -t kani-nixos -f scripts/ci/Dockerfile.bundle-test-nixos .
@@ -150,7 +151,7 @@ jobs:
       - name: Run installed tests
         if: ${{ matrix.os == 'ubuntu-18.04' }}
         run: |
-          for tag in kani-20-04 kani-18-04; do
+          for tag in kani-20-04 kani-20-04-alt kani-18-04; do
             docker run $tag  cargo kani --version
             docker run -w /tmp/kani/tests/cargo-kani/simple-lib  $tag  cargo kani
             docker run -w /tmp/kani/tests/cargo-kani/simple-visualize  $tag  cargo kani
