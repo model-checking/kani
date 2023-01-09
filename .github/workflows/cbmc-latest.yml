@@ -31,7 +31,6 @@ jobs:
         with:
           repository: diffblue/cbmc
           path: cbmc
-          submodules: recursive
 
       - name: Build CBMC
         run: |
@@ -61,7 +60,6 @@ jobs:
         with:
           repository: diffblue/cbmc
           path: cbmc
-          submodules: recursive
 
       - name: Build CBMC
         run: |
