@@ -34,9 +34,8 @@ pub fn kani_dir() -> Result<PathBuf> {
 
 /// Returns the custom Kani home directory: `${KANI_HOME}`
 fn custom_kani_dir(path: String) -> PathBuf {
-    let kani_dir = PathBuf::from(path);
     // We don't check if it doesn't exist since we create it later
-    kani_dir
+    PathBuf::from(path)
 }
 
 /// Returns the default Kani home directory: `${HOME}/.kani`
