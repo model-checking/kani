@@ -71,7 +71,7 @@ fn cargo_locate_project(input_args: &[OsString]) -> Result<PathBuf> {
     let current_args = crate::args::CargoKaniArgs::parse_from(input_args);
 
     if let Some(path) = current_args.common_opts.cargo.manifest_path {
-        Ok(path.clone())
+        Ok(path)
     } else {
         let cmd =
             Command::new("cargo").args(["locate-project", "--message-format", "plain"]).output()?;
