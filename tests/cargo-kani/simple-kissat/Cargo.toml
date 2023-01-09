@@ -1,0 +1,15 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+[package]
+name = "simple-kissat"
+version = "0.1.0"
+edition = "2021"
+description = "Tests that Kani can be invoked with Kissat"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+
+[kani.flags]
+enable-unstable = true
+cbmc-args = ["--external-sat-solver", "kissat" ]
