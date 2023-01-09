@@ -25,7 +25,7 @@ const TARGET: &str = env!("TARGET");
 ///    definition of home directory used by Cargo and rustup.
 pub fn kani_dir() -> Result<PathBuf> {
     let kani_dir = match env::var("KANI_HOME") {
-        Ok(val) => custom_kani_dir(val)?,
+        Ok(val) => custom_kani_dir(val),
         Err(_) => default_kani_dir()?,
     };
     let kani_dir = kani_dir.join(format!("kani-{VERSION}"));
@@ -33,12 +33,10 @@ pub fn kani_dir() -> Result<PathBuf> {
 }
 
 /// Returns the custom Kani home directory: `${KANI_HOME}`
-fn custom_kani_dir(path: String) -> Result<PathBuf> {
+fn custom_kani_dir(path: String) -> PathBuf {
     let kani_dir = PathBuf::from(path);
-    if !kani_dir.is_dir() {
-        bail!("got custom Kani directory `{}` which isn't a directory", kani_dir.display());
-    }
-    Ok(kani_dir)
+    // We don't check if it doesn't exist since we create it later
+    kani_dir
 }
 
 /// Returns the default Kani home directory: `${HOME}/.kani`
