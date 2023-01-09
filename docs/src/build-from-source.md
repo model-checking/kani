@@ -10,7 +10,7 @@ In general, the following dependencies are required to build Kani from source.
 > **NOTE**: These dependencies may be installed by running the scripts shown
 > below and don't need to be manually installed.
 
-1. Cargo installed via [rustup](https://rustup.rs/)
+1. Cargo installed via [rustup](https://.rs/)
 2. [CBMC](https://github.com/diffblue/cbmc) (latest release)
 3. [CBMC Viewer](https://github.com/awslabs/aws-viewer-for-cbmc) (latest release)
 
@@ -30,7 +30,7 @@ git submodule update --init
 ./scripts/setup/ubuntu/install_deps.sh
 ./scripts/setup/ubuntu/install_cbmc.sh
 ./scripts/setup/ubuntu/install_viewer.sh
-# If you haven't already (or from [rustup](https://rustup.rs/)):
+# If you haven't already (or from https://rustup.rs/):
 ./scripts/setup/install_rustup.sh
 source $HOME/.cargo/env
 ```
@@ -47,7 +47,7 @@ git submodule update --init
 ./scripts/setup/macos/install_deps.sh
 ./scripts/setup/macos/install_cbmc.sh
 ./scripts/setup/macos/install_viewer.sh
-# If you haven't already (or from [rustup](https://rustup.rs/)):
+# If you haven't already (or from https://rustup.rs/):
 ./scripts/setup/install_rustup.sh
 source $HOME/.cargo/env
 ```
