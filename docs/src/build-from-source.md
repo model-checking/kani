@@ -10,7 +10,7 @@ In general, the following dependencies are required to build Kani from source.
 > **NOTE**: These dependencies may be installed by running the scripts shown
 > below and don't need to be manually installed.
 
-1. Cargo installed via [rustup](https:rustup//.rs/)
+1. Cargo installed via [rustup](https://rustup.rs/)
 2. [CBMC](https://github.com/diffblue/cbmc) (latest release)
 3. [CBMC Viewer](https://github.com/awslabs/aws-viewer-for-cbmc) (latest release)
 
