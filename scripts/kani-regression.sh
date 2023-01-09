@@ -97,9 +97,9 @@ time "$SCRIPT_DIR"/codegen-firecracker.sh
 # Test run 'cargo kani assess scan'
 "$SCRIPT_DIR"/assess-scan-regression.sh
 
-# Test for --manifest-path which we cannot do through compiletest. Also exercise --all-features.
-# It should just successfully find the project and proof harness. (Then clean up.)
-cargo kani --manifest-path "$KANI_DIR/tests/cargo-kani/cargo-features-flag/Cargo.toml" --all-features --harness trivial_success
+# Test for --manifest-path which we cannot do through compiletest.
+# It should just successfully find the project and specified proof harness. (Then clean up.)
+cargo kani --manifest-path "$KANI_DIR/tests/cargo-kani/cargo-features-flag/Cargo.toml" --harness trivial_success
 cargo clean --manifest-path "$KANI_DIR/tests/cargo-kani/cargo-features-flag/Cargo.toml"
 
 # Check that documentation compiles.
