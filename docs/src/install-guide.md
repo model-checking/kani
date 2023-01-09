@@ -28,7 +28,8 @@ cargo kani setup
 ```
 
 This will build and place in `~/.cargo/bin` (in a typical environment) the `kani` and `cargo-kani` binaries.
-The second step (`cargo kani setup`) will download the Kani compiler and other necessary dependencies (and place them under `~/.kani/`).
+The second step (`cargo kani setup`) will download the Kani compiler and other necessary dependencies, and place them under `~/.kani/` by default.
+A custom path can be specified using the `KANI_HOME` variable.
 
 ## Installing an older version
 
