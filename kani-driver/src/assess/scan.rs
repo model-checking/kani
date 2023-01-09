@@ -135,8 +135,10 @@ pub(crate) fn assess_scan_main(session: KaniSession, args: &ScanArgs) -> Result<
     );
     let results = aggregate_metadata(success_metas);
     println!("{}", results.unsupported_features.render());
-    println!("{}", results.failure_reasons.render());
-    println!("{}", results.promising_tests.render());
+    if !session.args.only_codegen {
+        println!("{}", results.failure_reasons.render());
+        println!("{}", results.promising_tests.render());
+    }
 
     if let Some(path) = &args.emit_metadata {
         let out_file = std::fs::File::create(path)?;
