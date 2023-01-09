@@ -26,11 +26,16 @@ jobs:
       - name: Build Kani
         run: cargo build-dev
 
-      - name: Checkout and build CBMC
+      - name: Checkout CBMC under "cbmc"
+        uses: actions/checkout@v3
+        with:
+          repository: diffblue/cbmc
+          path: cbmc
+          submodules: recursive
+
+      - name: Build CBMC
         run: |
-          git clone --depth=1 https://github.com/diffblue/cbmc
           cd cbmc
-          git submodule update --init
           cmake -S . -Bbuild -DWITH_JBMC=OFF
           cmake --build build -- -j 4
           sudo cmake --build build --target install
@@ -51,11 +56,16 @@ jobs:
       - name: Build Kani using release mode
         run: cargo build-dev -- --release
 
-      - name: Checkout and build CBMC
+      - name: Checkout CBMC under "cbmc"
+        uses: actions/checkout@v3
+        with:
+          repository: diffblue/cbmc
+          path: cbmc
+          submodules: recursive
+
+      - name: Build CBMC
         run: |
-          git clone --depth=1 https://github.com/diffblue/cbmc
           cd cbmc
-          git submodule update --init
           cmake -S . -Bbuild -DWITH_JBMC=OFF
           cmake --build build -- -j 4
           sudo cmake --build build --target install
