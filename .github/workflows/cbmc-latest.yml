@@ -1,0 +1,71 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+name: Nightly regressions with latest CBMC
+on:
+  schedule:
+    - cron: "0 9 * * *" # Run this every day at 9 AM UTC (4 AM ET/1 AM PT)
+
+env:
+  RUST_BACKTRACE: 1
+
+jobs:
+  regression:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-11, ubuntu-18.04, ubuntu-20.04]
+    steps:
+      - name: Checkout Kani
+        uses: actions/checkout@v3
+
+      - name: Setup Kani Dependencies
+        uses: ./.github/actions/setup
+        with:
+          os: ${{ matrix.os }}
+
+      - name: Build Kani
+        run: cargo build-dev
+
+      - name: Checkout CBMC under "cbmc"
+        uses: actions/checkout@v3
+        with:
+          repository: diffblue/cbmc
+          path: cbmc
+
+      - name: Build CBMC
+        run: |
+          cd cbmc
+          cmake -S . -Bbuild -DWITH_JBMC=OFF
+          cmake --build build -- -j 4
+          sudo cmake --build build --target install
+      - name: Execute Kani regressions
+        run: ./scripts/kani-regression.sh
+
+  perf:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout Kani
+        uses: actions/checkout@v3
+
+      - name: Setup Kani Dependencies
+        uses: ./.github/actions/setup
+        with:
+          os: ubuntu-20.04
+
+      - name: Build Kani using release mode
+        run: cargo build-dev -- --release
+
+      - name: Checkout CBMC under "cbmc"
+        uses: actions/checkout@v3
+        with:
+          repository: diffblue/cbmc
+          path: cbmc
+
+      - name: Build CBMC
+        run: |
+          cd cbmc
+          cmake -S . -Bbuild -DWITH_JBMC=OFF
+          cmake --build build -- -j 4
+          sudo cmake --build build --target install
+      - name: Execute Kani performance tests
+        run: ./scripts/kani-perf.sh
