@@ -347,7 +347,10 @@ impl<'test> TestCx<'test> {
             let expected_rel_path = PathBuf::from(expected_path);
             let expected_path = self.testpaths.file.join(expected_rel_path);
             if !expected_path.exists() {
-                let err_msg = format!("test failed: couldn't find expected file in {}", expected_path.display());
+                let err_msg = format!(
+                    "test failed: couldn't find expected file in {}",
+                    expected_path.display()
+                );
                 self.error(&err_msg);
             }
             Some(fs::read_to_string(expected_path).unwrap())
@@ -356,7 +359,7 @@ impl<'test> TestCx<'test> {
         };
 
         // Create the command `sh script` and run it from the test directory
-        let mut script_path_cmd = Command::new("sh");
+        let mut script_path_cmd = Command::new("time");
         script_path_cmd.arg(script_path).current_dir(&self.testpaths.file);
         let proc_res = self.compose_and_run(script_path_cmd);
 
