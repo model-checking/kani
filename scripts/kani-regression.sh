@@ -99,8 +99,9 @@ time "$SCRIPT_DIR"/codegen-firecracker.sh
 
 # Test for --manifest-path which we cannot do through compiletest.
 # It should just successfully find the project and specified proof harness. (Then clean up.)
-cargo kani --manifest-path "$KANI_DIR/tests/cargo-kani/cargo-features-flag/Cargo.toml" --harness trivial_success
-cargo clean --manifest-path "$KANI_DIR/tests/cargo-kani/cargo-features-flag/Cargo.toml"
+FEATURES_MANIFEST_PATH="$KANI_DIR/tests/cargo-kani/cargo-features-flag/Cargo.toml"
+cargo kani --manifest-path "$FEATURES_MANIFEST_PATH" --harness trivial_success
+cargo clean --manifest-path "$FEATURES_MANIFEST_PATH"
 
 # Check that documentation compiles.
 echo "Starting doc tests:"
