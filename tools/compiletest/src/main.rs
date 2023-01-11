@@ -417,7 +417,10 @@ fn collect_exec_tests_from_dir(
         let file_path = file.path();
         let has_config_yml = file_path.join("config.yml").exists();
         if !has_config_yml {
-            fatal_error("couldn't find `config.yml` file for `exec` test");
+            fatal_error(&format!(
+                "couldn't find `config.yml` file for `exec` test in `{}`",
+                file_path.display()
+            ));
         }
 
         // Create directory for test and add it to the tests to be run
