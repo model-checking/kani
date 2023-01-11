@@ -331,8 +331,12 @@ impl<'test> TestCx<'test> {
         // Open the `config.yml` file and extract its values
         let path_yml = self.testpaths.file.join("config.yml");
         let config_file = std::fs::File::open(path_yml).expect("couldn't open `config.yml`");
-        let exec_config: ExecConfig =
-            serde_yaml::from_reader(config_file).expect("couldn't read `config.yml` values");
+        let exec_config_res = serde_yaml::from_reader(config_file);
+        if let Err(error) = &exec_config_res {
+            let err_msg = format!("couldn't parse `config.yml` file: {error}");
+            self.error(&err_msg);
+        }
+        let exec_config: ExecConfig = exec_config_res.unwrap();
 
         // Check if the `script` file exists
         let script_rel_path = PathBuf::from(exec_config.script);
@@ -358,7 +362,7 @@ impl<'test> TestCx<'test> {
             None
         };
 
-        // Create the command `sh script` and run it from the test directory
+        // Create the command `time script` and run it from the test directory
         let mut script_path_cmd = Command::new("time");
         script_path_cmd.arg(script_path).current_dir(&self.testpaths.file);
         let proc_res = self.compose_and_run(script_path_cmd);
@@ -371,7 +375,12 @@ impl<'test> TestCx<'test> {
         // Compare with exit code (0 if it wasn't provided)
         let expected_code = exec_config.code.or(Some(0));
         if proc_res.status.code() != expected_code {
-            self.fatal_proc_rec("test failed: expected different code", &proc_res);
+            let err_msg = format!(
+                "test failed: expected code {}, got code {}",
+                expected_code.unwrap(),
+                proc_res.status.code().unwrap()
+            );
+            self.fatal_proc_rec(&err_msg, &proc_res);
         }
     }
 
