@@ -1,3 +1,5 @@
 # Copyright Kani Contributors
 # SPDX-License-Identifier: Apache-2.0 OR MIT
-script: check-output.sh
+script: exit-one.sh
+expected: exit-one.expected
+code: 1
