@@ -56,7 +56,16 @@ In particular, the Kani testing suites are composed of:
                 Arguments can be specified in the `Cargo.toml` configuration file.
                 Similar to the `expected` suite, we look for `*.expected` files
                 for each harness in the package.
-* `cargo-ui`: Similar to `cargo-kani`, but focuses on the user interface like the `ui` test suite.
+ * `cargo-ui`: Similar to `cargo-kani`, but focuses on the user interface like the `ui` test suite.
+ * `exec-init`: This suite is useful to execute script-based tests, and also
+                allows checking expected output and exit codes after running them. The suite
+                expects a folder with a `config.yml` file within, which should contain:
+                 - `script`: The path to the script to be executed.
+                 - `expected` (optional): The path to the `.expected` file to
+                 use for output comparison.
+                 - `code` (optional): The exit code to be returned by executing
+                 the script (a zero exit code is expected if not specified).
+
 
 We've extended
 [`compiletest`](https://rustc-dev-guide.rust-lang.org/tests/intro.html) (the
@@ -166,3 +175,6 @@ In fact, most of them are equivalent to running `cargo kani` and performing
 checks on the output. The downside to scripting is that these tests will always
 be run, even if there have not been any changes since the last time the
 regression was run.
+
+> **NOTE**: With the addition of the `exec` mode for `compiletest`, we'll be
+> migrating these script-based tests to other suites using the `exec` mode.
