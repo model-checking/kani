@@ -53,9 +53,15 @@ for repo in $REPOS; do
     fi
 done
 
+# Use release mode to speed up the run.
+echo "Build kani on release mode..."
+pushd ${KANI_DIR}
+cargo build-dev --release
+popd
+
 echo "Starting assess scan..."
 
-cargo kani --only-codegen --enable-unstable assess scan \
+time cargo kani --only-codegen --enable-unstable assess scan \
   --filter-packages-file $NAME_FILE \
   --emit-metadata ./scan-results.json
 

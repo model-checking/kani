@@ -18,19 +18,44 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Set by our `build.rs`, reflects the Rust target triple we're building for
 const TARGET: &str = env!("TARGET");
 
-/// Where Kani has been installed. Typically `~/.kani/kani-1.x/`
-pub fn kani_dir() -> PathBuf {
-    home::home_dir().expect("Couldn't find home dir?").join(".kani").join(format!("kani-{VERSION}"))
+/// The directory where Kani is installed, either:
+///  * (custom) `${KANI_HOME}/kani-<VERSION>` if the environment variable
+///    `KANI_HOME` is set.
+///  * (default) `${HOME}/.kani/kani-<VERSION>` where `HOME` is the canonical
+///    definition of home directory used by Cargo and rustup.
+pub fn kani_dir() -> Result<PathBuf> {
+    let kani_dir = match env::var("KANI_HOME") {
+        Ok(val) => custom_kani_dir(val),
+        Err(_) => default_kani_dir()?,
+    };
+    let kani_dir = kani_dir.join(format!("kani-{VERSION}"));
+    Ok(kani_dir)
+}
+
+/// Returns the custom Kani home directory: `${KANI_HOME}`
+fn custom_kani_dir(path: String) -> PathBuf {
+    // We don't check if it doesn't exist since we create it later
+    PathBuf::from(path)
+}
+
+/// Returns the default Kani home directory: `${HOME}/.kani`
+fn default_kani_dir() -> Result<PathBuf> {
+    let home_dir = home::home_dir().expect("couldn't find home directory");
+    if !home_dir.is_dir() {
+        bail!("got home directory `{}` which isn't a directory", home_dir.display());
+    }
+    let kani_dir = home_dir.join(".kani");
+    Ok(kani_dir)
 }
 
 /// Fast check to see if we look setup already
 pub fn appears_setup() -> bool {
-    kani_dir().exists()
+    kani_dir().expect("couldn't find kani directory").exists()
 }
 
 /// Sets up Kani by unpacking/installing to `~/.kani/kani-VERSION`
 pub fn setup(use_local_bundle: Option<OsString>) -> Result<()> {
-    let kani_dir = kani_dir();
+    let kani_dir = kani_dir()?;
     let os = os_info::get();
 
     println!("[0/5] Running Kani first-time setup...");
