@@ -330,6 +330,7 @@ fn collect_tests_from_dir(
         Mode::CargoKani | Mode::CargoKaniTest => {
             collect_expected_tests_from_dir(config, dir, relative_dir_path, inputs, tests)
         }
+        Mode::Exec => collect_exec_tests_from_dir(config, dir, relative_dir_path, inputs, tests),
         _ => collect_rs_tests_from_dir(config, dir, relative_dir_path, inputs, tests),
     }
 }
@@ -381,6 +382,46 @@ fn collect_expected_tests_from_dir(
                 tests,
             )?;
         }
+    }
+    Ok(())
+}
+
+/// Collect `exec` tests from a directory.
+///
+/// Note that this method isn't recursive like
+/// `collect_expected_tests_from_dir`, as it allows us to ensure that newly
+/// added tests are running. Hence, each test must be in its own folder.
+fn collect_exec_tests_from_dir(
+    config: &Config,
+    dir: &Path,
+    relative_dir_path: &Path,
+    inputs: &Stamp,
+    tests: &mut Vec<test::TestDescAndFn>,
+) -> io::Result<()> {
+    // If we find a test `foo/bar.rs`, we have to build the
+    // output directory `$build/foo` so we can write
+    // `$build/foo/bar` into it. We do this *now* in this
+    // sequential loop because otherwise, if we do it in the
+    // tests themselves, they race for the privilege of
+    // creating the directories and sometimes fail randomly.
+    let build_dir = output_relative_path(config, relative_dir_path);
+    fs::create_dir_all(&build_dir).unwrap();
+
+    // Ensure the mode we're running is `Mode::Exec`
+    assert!(config.mode == Mode::Exec);
+
+    // Each test is expected to be in its own folder (i.e., we don't do recursion)
+    for file in fs::read_dir(dir)? {
+        // Look for `config.yml` file in folder
+        let file = file?;
+        let file_path = file.path();
+        let has_config_yml = file_path.join("config.yml").exists();
+        assert!(has_config_yml, "couldn't find `config.yml` file for `exec` test");
+
+        // Create directory for test and add it to the tests to be run
+        fs::create_dir_all(&build_dir.join(file_path.file_stem().unwrap())).unwrap();
+        let paths = TestPaths { file: file_path, relative_dir: relative_dir_path.to_path_buf() };
+        tests.extend(make_test(config, &paths, inputs));
     }
     Ok(())
 }

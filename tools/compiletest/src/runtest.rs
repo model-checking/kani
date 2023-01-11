@@ -7,7 +7,7 @@
 
 use crate::common::KaniFailStep;
 use crate::common::{output_base_dir, output_base_name};
-use crate::common::{CargoKani, CargoKaniTest, Expected, Kani, KaniFixme, Stub};
+use crate::common::{CargoKani, CargoKaniTest, Exec, Expected, Kani, KaniFixme, Stub};
 use crate::common::{Config, TestPaths};
 use crate::header::TestProps;
 use crate::json;
@@ -20,8 +20,21 @@ use std::path::PathBuf;
 use std::process::{Command, ExitStatus, Output, Stdio};
 use std::str;
 
+use serde::{Deserialize, Serialize};
+use serde_yaml;
 use tracing::*;
 use wait_timeout::ChildExt;
+
+/// Configurations for `exec` tests
+#[derive(Debug, Serialize, Deserialize)]
+struct ExecConfig {
+    // The path to the script to be executed
+    script: String,
+    // (Optional) The path to the `.expected` file to use for output comparison
+    expected: Option<String>,
+    // (Optional) The exit code to be returned by executing the script
+    code: Option<i32>,
+}
 
 #[cfg(not(windows))]
 fn disable_error_reporting<F: FnOnce() -> R, R>(f: F) -> R {
@@ -64,6 +77,7 @@ impl<'test> TestCx<'test> {
             KaniFixme => self.run_kani_test(),
             CargoKani => self.run_cargo_kani_test(false),
             CargoKaniTest => self.run_cargo_kani_test(true),
+            Exec => self.run_exec_test(),
             Expected => self.run_expected_test(),
             Stub => self.run_stub_test(),
         }
@@ -308,6 +322,54 @@ impl<'test> TestCx<'test> {
         }
 
         self.compose_and_run(kani)
+    }
+
+    /// Runs an executable file and:
+    ///  * Checks the expected output if an expected file is specified
+    ///  * Checks the exit code (assumed to be 0 by default)
+    fn run_exec_test(&self) {
+        // Open the `config.yml` file and extract its values
+        let path_yml = self.testpaths.file.join("config.yml");
+        let config_file = std::fs::File::open(path_yml).expect("couldn't open `config.yml`");
+        let exec_config: ExecConfig =
+            serde_yaml::from_reader(config_file).expect("couldn't read `config.yml` values");
+
+        // Check if the `script` file exists
+        let script_rel_path = PathBuf::from(exec_config.script);
+        let script_path = self.testpaths.file.join(script_rel_path);
+        if !script_path.exists() {
+            let err_msg = format!("test failed: couldn't find script in {}", script_path.display());
+            self.error(&err_msg);
+        }
+
+        // Check if the `expected` file exists, and load its contents into `expected_output`
+        let expected_output = if let Some(expected_path) = exec_config.expected {
+            let expected_rel_path = PathBuf::from(expected_path);
+            let expected_path = self.testpaths.file.join(expected_rel_path);
+            if !expected_path.exists() {
+                let err_msg = format!("test failed: couldn't find expected file in {}", expected_path.display());
+                self.error(&err_msg);
+            }
+            Some(fs::read_to_string(expected_path).unwrap())
+        } else {
+            None
+        };
+
+        // Create the command `sh script` and run it from the test directory
+        let mut script_path_cmd = Command::new("sh");
+        script_path_cmd.arg(script_path).current_dir(&self.testpaths.file);
+        let proc_res = self.compose_and_run(script_path_cmd);
+
+        // Compare with expected output if it was provided
+        if let Some(output) = expected_output {
+            self.verify_output(&proc_res, &output);
+        }
+
+        // Compare with exit code (0 if it wasn't provided)
+        let expected_code = exec_config.code.or(Some(0));
+        if proc_res.status.code() != expected_code {
+            self.fatal_proc_rec("test failed: expected different code", &proc_res);
+        }
     }
 
     /// Runs Kani on the test file specified by `self.testpaths.file`. An error
