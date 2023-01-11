@@ -416,7 +416,9 @@ fn collect_exec_tests_from_dir(
         let file = file?;
         let file_path = file.path();
         let has_config_yml = file_path.join("config.yml").exists();
-        assert!(has_config_yml, "couldn't find `config.yml` file for `exec` test");
+        if !has_config_yml {
+            fatal_error("couldn't find `config.yml` file for `exec` test");
+        }
 
         // Create directory for test and add it to the tests to be run
         fs::create_dir_all(&build_dir.join(file_path.file_stem().unwrap())).unwrap();
@@ -584,4 +586,12 @@ fn make_test_closure(
         runtest::run(config, &testpaths, revision.as_deref());
         Ok(())
     }))
+}
+
+/// Print a message and error out without panicking
+fn fatal_error(message: &str) {
+    println!("error: {}", message);
+    // Use resume_unwind instead of panic!() to prevent a panic message + backtrace from
+    // compiletest, which is unnecessary noise.
+    std::panic::resume_unwind(Box::new(()));
 }
