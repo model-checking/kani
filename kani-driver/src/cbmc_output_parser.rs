@@ -133,7 +133,7 @@ impl<'de> serde::Deserialize<'de> for PropertyId {
         //
         // As of CBMC 5.74.0, the property ID is `<function>.recursion`.
         // In earlier versions, it would just be `.recursion`.
-        if id_str.ends_with(".recursion")  {
+        if id_str.ends_with(".recursion") {
             let attributes: Vec<&str> = id_str.splitn(2, '.').collect();
             let fn_name = if attributes[0] == "" {
                 None
@@ -639,6 +639,38 @@ mod tests {
             trace: None,
         };
         assert_eq!(dummy_prop.property_name(), "recursion.1");
+    }
+
+    #[test]
+    fn check_property_id_deserialization_special_name() {
+        let prop_id_string = "\"alloc::raw_vec::RawVec::<u8>::allocate_in.recursion\"";
+        let prop_id_result: Result<PropertyId, serde_json::Error> =
+            serde_json::from_str(prop_id_string);
+        let prop_id = prop_id_result.unwrap();
+        assert_eq!(
+            prop_id.fn_name,
+            Some(String::from("alloc::raw_vec::RawVec::<u8>::allocate_in"))
+        );
+        assert_eq!(prop_id.class, String::from("recursion"));
+        assert_eq!(prop_id.id, 1);
+
+        let dummy_prop = Property {
+            description: "".to_string(),
+            property_id: prop_id,
+            source_location: SourceLocation {
+                function: None,
+                file: None,
+                column: None,
+                line: None,
+            },
+            status: CheckStatus::Success,
+            reach: None,
+            trace: None,
+        };
+        assert_eq!(
+            dummy_prop.property_name(),
+            "alloc::raw_vec::RawVec::<u8>::allocate_in.recursion.1"
+        );
     }
 
     #[test]
