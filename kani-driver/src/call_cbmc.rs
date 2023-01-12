@@ -294,49 +294,32 @@ mod tests {
     #[test]
     fn check_resolve_unwind_value() {
         // Command line unwind value for specific harnesses take precedence over default annotation value
-        let args_empty = ["kani"];
-        let args_only_default = ["kani", "--default-unwind", "2"];
-        let args_only_harness = ["kani", "--unwind", "1", "--harness", "check_one"];
+        let args_empty = ["kani", "x.rs"];
+        let args_only_default = ["kani", "x.rs", "--default-unwind", "2"];
+        let args_only_harness = ["kani", "x.rs", "--unwind", "1", "--harness", "check_one"];
         let args_both =
-            ["kani", "--default-unwind", "2", "--unwind", "1", "--harness", "check_one"];
+            ["kani", "x.rs", "--default-unwind", "2", "--unwind", "1", "--harness", "check_one"];
 
         let harness_none = mock_proof_harness("check_one", None, None);
         let harness_some = mock_proof_harness("check_one", Some(3), None);
 
+        fn resolve(args: &[&str], harness: &HarnessMetadata) -> Option<u32> {
+            resolve_unwind_value(
+                &args::StandaloneArgs::try_parse_from(args).unwrap().common_opts,
+                harness,
+            )
+        }
+
         // test against no unwind annotation
-        assert_eq!(
-            resolve_unwind_value(&args::KaniArgs::parse_from(args_empty), &harness_none),
-            None
-        );
-        assert_eq!(
-            resolve_unwind_value(&args::KaniArgs::parse_from(args_only_default), &harness_none),
-            Some(2)
-        );
-        assert_eq!(
-            resolve_unwind_value(&args::KaniArgs::parse_from(args_only_harness), &harness_none),
-            Some(1)
-        );
-        assert_eq!(
-            resolve_unwind_value(&args::KaniArgs::parse_from(args_both), &harness_none),
-            Some(1)
-        );
+        assert_eq!(resolve(&args_empty, &harness_none), None);
+        assert_eq!(resolve(&args_only_default, &harness_none), Some(2));
+        assert_eq!(resolve(&args_only_harness, &harness_none), Some(1));
+        assert_eq!(resolve(&args_both, &harness_none), Some(1));
 
         // test against unwind annotation
-        assert_eq!(
-            resolve_unwind_value(&args::KaniArgs::parse_from(args_empty), &harness_some),
-            Some(3)
-        );
-        assert_eq!(
-            resolve_unwind_value(&args::KaniArgs::parse_from(args_only_default), &harness_some),
-            Some(3)
-        );
-        assert_eq!(
-            resolve_unwind_value(&args::KaniArgs::parse_from(args_only_harness), &harness_some),
-            Some(1)
-        );
-        assert_eq!(
-            resolve_unwind_value(&args::KaniArgs::parse_from(args_both), &harness_some),
-            Some(1)
-        );
+        assert_eq!(resolve(&args_empty, &harness_some), Some(3));
+        assert_eq!(resolve(&args_only_default, &harness_some), Some(3));
+        assert_eq!(resolve(&args_only_harness, &harness_some), Some(1));
+        assert_eq!(resolve(&args_both, &harness_some), Some(1));
     }
 }
