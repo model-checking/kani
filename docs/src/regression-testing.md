@@ -63,7 +63,7 @@ In particular, the Kani testing suites are composed of:
                  - `script`: The path to the script to be executed.
                  - `expected` (optional): The path to the `.expected` file to
                  use for output comparison.
-                 - `code` (optional): The exit code to be returned by executing
+                 - `exit_code` (optional): The exit code to be returned by executing
                  the script (a zero exit code is expected if not specified).
 
 

@@ -33,7 +33,7 @@ struct ExecConfig {
     // (Optional) The path to the `.expected` file to use for output comparison
     expected: Option<String>,
     // (Optional) The exit code to be returned by executing the script
-    code: Option<i32>,
+    exit_code: Option<i32>,
 }
 
 #[cfg(not(windows))]
@@ -373,7 +373,7 @@ impl<'test> TestCx<'test> {
         }
 
         // Compare with exit code (0 if it wasn't provided)
-        let expected_code = exec_config.code.or(Some(0));
+        let expected_code = exec_config.exit_code.or(Some(0));
         if proc_res.status.code() != expected_code {
             let err_msg = format!(
                 "test failed: expected code {}, got code {}",
