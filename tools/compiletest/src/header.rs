@@ -34,27 +34,20 @@ impl TestProps {
         }
     }
 
-    pub fn from_file(testfile: &Path, cfg: Option<&str>, config: &Config) -> Self {
+    pub fn from_file(testfile: &Path, config: &Config) -> Self {
         let mut props = TestProps::new();
-        props.load_from(testfile, cfg, config);
+        props.load_from(testfile, config);
 
         props
     }
 
-    /// Loads properties from `testfile` into `props`. If a property is
-    /// tied to a particular revision `foo` (indicated by writing
-    /// `//[foo]`), then the property is ignored unless `cfg` is
-    /// `Some("foo")`.
-    fn load_from(&mut self, testfile: &Path, cfg: Option<&str>, config: &Config) {
+    /// Loads properties from `testfile` into `props`.
+    fn load_from(&mut self, testfile: &Path, config: &Config) {
         let mut has_edition = false;
         if !testfile.is_dir() {
             let file = File::open(testfile).unwrap();
 
-            iter_header(testfile, file, &mut |revision, ln| {
-                if revision.is_some() && revision != cfg {
-                    return;
-                }
-
+            iter_header(testfile, file, &mut |ln| {
                 if let Some(flags) = config.parse_compile_flags(ln) {
                     self.compile_flags.extend(flags.split_whitespace().map(|s| s.to_owned()));
                 }
@@ -93,7 +86,7 @@ impl TestProps {
     }
 }
 
-fn iter_header<R: Read>(testfile: &Path, rdr: R, it: &mut dyn FnMut(Option<&str>, &str)) {
+fn iter_header<R: Read>(testfile: &Path, rdr: R, it: &mut dyn FnMut(&str)) {
     if testfile.is_dir() {
         return;
     }
@@ -116,7 +109,7 @@ fn iter_header<R: Read>(testfile: &Path, rdr: R, it: &mut dyn FnMut(Option<&str>
         if ln.starts_with("fn") || ln.starts_with("mod") {
             return;
         } else if let Some(rest) = ln.strip_prefix(comment) {
-            it(None, rest.trim_start());
+            it(rest.trim_start());
         }
     }
 }
@@ -186,7 +179,6 @@ pub fn make_test_description<R: Read>(
     name: test::TestName,
     path: &Path,
     src: R,
-    cfg: Option<&str>,
 ) -> test::TestDesc {
     let mut ignore = false;
     let mut should_fail = false;
@@ -223,10 +215,7 @@ pub fn make_test_description<R: Read>(
         should_fail = true;
     }
 
-    iter_header(path, src, &mut |revision, ln| {
-        if revision.is_some() && revision != cfg {
-            return;
-        }
+    iter_header(path, src, &mut |ln| {
         should_fail |= config.parse_name_directive(ln, "should-fail");
     });
 
