@@ -119,7 +119,7 @@ fn reconstruct_metadata_structure(
     let mut remaining_metas = kani_metadata.to_owned();
     let mut package_metas = vec![];
     for package in cargo_metadata.workspace_packages() {
-        if !session.args.package.is_empty() {
+        if !session.args.cargo.package.is_empty() {
             // If a specific package (set) is requested, skip all other packages.
             // This is a necessary workaround because we're reconstructing which metas go to which packages
             // based on the "crate name" given to the target, and the same workspace can have two
@@ -129,7 +129,7 @@ fn reconstruct_metadata_structure(
             // The best we can do for now is ignore packages we know we didn't build, to reduce the amount
             // of confusion we might suffer here (which at least solves the problem for 'scan' which only
             // builds 1 package at a time.)
-            if !session.args.package.contains(&package.name) {
+            if !session.args.cargo.package.contains(&package.name) {
                 continue;
             }
         }
