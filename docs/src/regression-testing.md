@@ -57,14 +57,10 @@ In particular, the Kani testing suites are composed of:
                 Similar to the `expected` suite, we look for `*.expected` files
                 for each harness in the package.
  * `cargo-ui`: Similar to `cargo-kani`, but focuses on the user interface like the `ui` test suite.
- * `exec-init`: This suite is useful to execute script-based tests, and also
-                allows checking expected output and exit codes after running them. The suite
-                expects a folder with a `config.yml` file within, which should contain:
-                 - `script`: The path to the script to be executed.
-                 - `expected` (optional): The path to the `.expected` file to
-                 use for output comparison.
-                 - `exit_code` (optional): The exit code to be returned by executing
-                 the script (a zero exit code is expected if not specified).
+ * `script-based-init`: This suite is useful to execute script-based tests, and
+                        also allows checking expected output and exit codes after
+                        running them. The suite uses the `exec` mode, described in
+                        more detail [here](#the-exec-mode).
 
 
 We've extended
@@ -176,5 +172,49 @@ checks on the output. The downside to scripting is that these tests will always
 be run, even if there have not been any changes since the last time the
 regression was run.
 
-> **NOTE**: With the addition of the `exec` mode for `compiletest`, we'll be
-> migrating these script-based tests to other suites using the `exec` mode.
+> **NOTE**: With the addition of the `exec` mode for `compiletest` (described
+> below), we'll be migrating these script-based tests to other suites using the
+> `exec` mode. The `exec` mode allows us to take advantage of `compiletest`
+> features while executing script-based tests (e.g., parallel execution).
+
+### The `exec` mode
+
+The `exec` mode in `compiletest` allows us to execute script-based tests, in
+addition to checking expected output and exit codes after running them.
+
+In particular, tests are expected to be placed directly under the test directory
+(e.g., `script-based-init`) in a directory with a `config.yml` file, which
+should contain:
+ * `script`: The path to the script to be executed.
+ * `expected` (optional): The path to the `.expected` file to
+use for output comparison.
+ * `exit_code` (optional): The exit code to be returned by executing
+the script (a zero exit code is expected if not specified).
+
+For example, let's say want to test the script `exit-one.sh`:
+
+```bash
+echo "Exiting with code 1!"
+exit 1
+```
+
+In this case, we'll create a folder that contains the `config.yml` file:
+
+```yml
+script: exit-one.sh
+expected: exit-one.expected
+exit_code: 1
+```
+
+where `exit-one.expected` is simply a text file such as:
+
+```text
+Exiting with code 1!
+```
+
+If `expected` isn't specified, the output won't be checked. If `exit_code` isn't
+specified, the `exec` mode will check the exit code was zero.
+
+Note that all paths specified in the `config.yml` file are local to the test
+directory, which is the working directory assumed when executing the test. This
+is meant to avoid problems when executing the test manually.
