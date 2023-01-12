@@ -376,7 +376,7 @@ impl<'test> TestCx<'test> {
         let expected_code = exec_config.exit_code.or(Some(0));
         if proc_res.status.code() != expected_code {
             let err_msg = format!(
-                "test failed: exp   ected code {}, got code {}",
+                "test failed: expected code {}, got code {}",
                 expected_code.unwrap(),
                 proc_res.status.code().unwrap()
             );
