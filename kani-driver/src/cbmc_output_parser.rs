@@ -127,11 +127,20 @@ impl<'de> serde::Deserialize<'de> for PropertyId {
     {
         let id_str = String::deserialize(d)?;
 
-        // Handle a special case that doesn't respect any format. It appears at
-        // least in the test `tests/expected/dynamic-error-trait/main.rs` and its
-        // description is is: "recursion unwinding assertion"
-        if id_str == ".recursion" {
-            return Ok(PropertyId { fn_name: None, class: "recursion".to_owned(), id: 1 });
+        // Handle two special cases that doen't respect the format, and appears
+        // at least in the test `tests/expected/dynamic-error-trait/main.rs`
+        // with the description "recursion unwinding assertion".
+        //
+        // As of CBMC 5.74.0, the property ID is `<function>.recursion`.
+        // In earlier versions, it would just be `.recursion`.
+        if id_str.ends_with(".recursion")  {
+            let attributes: Vec<&str> = id_str.splitn(2, '.').collect();
+            let fn_name = if attributes[0] == "" {
+                None
+            } else {
+                Some(format!("{:#}", demangle(attributes[0])))
+            };
+            return Ok(PropertyId { fn_name, class: "recursion".to_owned(), id: 1 });
         };
 
         // Split the property name into three from the end, using `.` as the separator
