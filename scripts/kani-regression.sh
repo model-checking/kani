@@ -41,13 +41,9 @@ cargo test -p kani-compiler
 cargo test -p kani-driver
 cargo test -p kani_metadata
 
-# Check output files (--gen-c option)
-echo "Check GotoC output file generation"
-time "$KANI_DIR"/tests/output-files/check-output.sh
-echo ""
-
 # Declare testing suite information (suite and mode)
 TESTS=(
+    "script-based-pre exec"
     "kani kani"
     "expected expected"
     "ui expected"
