@@ -10,9 +10,9 @@ use crate::common::{output_base_dir, output_base_name};
 use crate::common::{CargoKani, CargoKaniTest, Exec, Expected, Kani, KaniFixme, Stub};
 use crate::common::{Config, TestPaths};
 use crate::header::TestProps;
-use crate::json;
 use crate::read2::read2;
 use crate::util::logv;
+use crate::{fatal_error, json};
 
 use std::env;
 use std::fs::{self, create_dir_all};
@@ -334,7 +334,7 @@ impl<'test> TestCx<'test> {
         let exec_config_res = serde_yaml::from_reader(config_file);
         if let Err(error) = &exec_config_res {
             let err_msg = format!("couldn't parse `config.yml` file: {error}");
-            self.error(&err_msg);
+            fatal_error(&err_msg);
         }
         let exec_config: ExecConfig = exec_config_res.unwrap();
 
@@ -343,7 +343,7 @@ impl<'test> TestCx<'test> {
         let script_path = self.testpaths.file.join(script_rel_path);
         if !script_path.exists() {
             let err_msg = format!("test failed: couldn't find script in {}", script_path.display());
-            self.error(&err_msg);
+            fatal_error(&err_msg);
         }
 
         // Check if the `expected` file exists, and load its contents into `expected_output`
@@ -355,7 +355,7 @@ impl<'test> TestCx<'test> {
                     "test failed: couldn't find expected file in {}",
                     expected_path.display()
                 );
-                self.error(&err_msg);
+                fatal_error(&err_msg);
             }
             Some(fs::read_to_string(expected_path).unwrap())
         } else {
@@ -376,7 +376,7 @@ impl<'test> TestCx<'test> {
         let expected_code = exec_config.exit_code.or(Some(0));
         if proc_res.status.code() != expected_code {
             let err_msg = format!(
-                "test failed: expected code {}, got code {}",
+                "test failed: exp   ected code {}, got code {}",
                 expected_code.unwrap(),
                 proc_res.status.code().unwrap()
             );
