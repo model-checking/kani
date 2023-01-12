@@ -43,7 +43,7 @@ cargo test -p kani_metadata
 
 # Declare testing suite information (suite and mode)
 TESTS=(
-    "script-based-init exec"
+    "script-based-pre exec"
     "kani kani"
     "expected expected"
     "ui expected"

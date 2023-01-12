@@ -57,7 +57,7 @@ In particular, the Kani testing suites are composed of:
                 Similar to the `expected` suite, we look for `*.expected` files
                 for each harness in the package.
  * `cargo-ui`: Similar to `cargo-kani`, but focuses on the user interface like the `ui` test suite.
- * `script-based-init`: This suite is useful to execute script-based tests, and
+ * `script-based-pre`: This suite is useful to execute script-based tests, and
                         also allows checking expected output and exit codes after
                         running them. The suite uses the `exec` mode, described in
                         more detail [here](#the-exec-mode).
@@ -183,7 +183,7 @@ The `exec` mode in `compiletest` allows us to execute script-based tests, in
 addition to checking expected output and exit codes after running them.
 
 In particular, tests are expected to be placed directly under the test directory
-(e.g., `script-based-init`) in a directory with a `config.yml` file, which
+(e.g., `script-based-pre`) in a directory with a `config.yml` file, which
 should contain:
  * `script`: The path to the script to be executed.
  * `expected` (optional): The path to the `.expected` file to
