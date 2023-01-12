@@ -44,10 +44,11 @@ pub mod process;
 #[macro_export]
 macro_rules! assert {
     ($cond:expr $(,)?) => {
-        kani::assert($cond, concat!("assertion failed: ", stringify!($cond)));
+        // The double negation is to resolve https://github.com/model-checking/kani/issues/2108
+        kani::assert(!!$cond, concat!("assertion failed: ", stringify!($cond)));
     };
     ($cond:expr, $($arg:tt)+) => {{
-        kani::assert($cond, concat!(stringify!($($arg)+)));
+        kani::assert(!!$cond, concat!(stringify!($($arg)+)));
         // Process the arguments of the assert inside an unreachable block. This
         // is to make sure errors in the arguments (e.g. an unknown variable or
         // an argument that does not implement the Display or Debug traits) are
