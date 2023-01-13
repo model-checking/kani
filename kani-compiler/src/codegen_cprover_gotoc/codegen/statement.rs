@@ -33,9 +33,8 @@ impl<'tcx> GotocCtx<'tcx> {
             StatementKind::Assign(box (l, r)) => {
                 let lty = self.place_ty(l);
                 let rty = self.rvalue_ty(r);
-                let llayout = self.layout_of(lty);
                 // we ignore assignment for all zero size types
-                if llayout.is_zst() {
+                if self.is_zst(lty) {
                     Stmt::skip(location)
                 } else if lty.is_fn_ptr() && rty.is_fn() && !rty.is_fn_ptr() {
                     // implicit address of a function pointer, e.g.
@@ -405,7 +404,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// As part of **calling** a function (closure actually), we may need to un-tuple arguments.
     ///
     /// See [GotocCtx::ty_needs_closure_untupled]
-    fn codegen_untuple_closure_args(
+    fn codegen_untupled_args(
         &mut self,
         instance: Instance<'tcx>,
         fargs: &mut Vec<Expr>,
@@ -431,17 +430,21 @@ impl<'tcx> GotocCtx<'tcx> {
         // first or the second position.
         // Note 2: For empty closures, the only argument needed is the environment struct.
         if !fargs.is_empty() {
+            let tuple_ty = self.operand_ty(last_mir_arg.unwrap());
+            if self.is_zst(tuple_ty) {
+                // Don't pass anything if all tuple elements are ZST.
+                // ZST arguments are ignored.
+                return;
+            }
             let tupe = fargs.remove(fargs.len() - 1);
-            let tupled_args: Vec<Type> = match self.operand_ty(last_mir_arg.unwrap()).kind() {
-                ty::Tuple(tupled_args) => tupled_args.iter().map(|s| self.codegen_ty(s)).collect(),
-                _ => unreachable!("Argument to function with Abi::RustCall is not a tuple"),
-            };
-
-            // Unwrap as needed
-            for (i, _) in tupled_args.iter().enumerate() {
-                // Access the tupled parameters through the `member` operation
-                let index_param = tupe.clone().member(&i.to_string(), &self.symbol_table);
-                fargs.push(index_param);
+            if let ty::Tuple(tupled_args) = tuple_ty.kind() {
+                for (idx, arg_ty) in tupled_args.iter().enumerate() {
+                    if !self.is_zst(arg_ty) {
+                        // Access the tupled parameters through the `member` operation
+                        let idx_expr = tupe.clone().member(&idx.to_string(), &self.symbol_table);
+                        fargs.push(idx_expr);
+                    }
+                }
             }
         }
     }
@@ -460,15 +463,23 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// N.B. public only because instrinsics use this directly, too.
     pub(crate) fn codegen_funcall_args(&mut self, args: &[Operand<'tcx>]) -> Vec<Expr> {
-        args.iter()
-            .map(|o| {
-                if self.operand_ty(o).is_bool() {
-                    self.codegen_operand(o).cast_to(Type::c_bool())
+        let fargs = args
+            .iter()
+            .filter_map(|o| {
+                let op_ty = self.operand_ty(o);
+                if op_ty.is_bool() {
+                    Some(self.codegen_operand(o).cast_to(Type::c_bool()))
+                } else if !self.is_zst(op_ty) {
+                    Some(self.codegen_operand(o))
                 } else {
-                    self.codegen_operand(o)
+                    // We ignore ZST types.
+                    debug!(arg=?o, "codegen_funcall_args ignore");
+                    None
                 }
             })
-            .collect()
+            .collect();
+        debug!(?fargs, "codegen_funcall_args");
+        fargs
     }
 
     /// Generates Goto-C for a MIR [TerminatorKind::Call] statement.
@@ -506,8 +517,9 @@ impl<'tcx> GotocCtx<'tcx> {
                         .unwrap()
                         .unwrap();
 
-                if self.ty_needs_closure_untupled(funct) {
-                    self.codegen_untuple_closure_args(instance, &mut fargs, args.last());
+                // TODO(celina): Move this check to be inside codegen_funcall_args.
+                if self.ty_needs_untupled_args(funct) {
+                    self.codegen_untupled_args(instance, &mut fargs, args.last());
                 }
 
                 if let Some(hk) = self.hooks.hook_applies(self.tcx, instance) {
@@ -608,6 +620,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> Vec<Stmt> {
         let vtable_field_name = self.vtable_field_name(def_id, idx);
         trace!(?self_ty, ?place, ?vtable_field_name, "codegen_virtual_funcall");
+        debug!(?fargs, "codegen_virtual_funcall");
 
         let trait_fat_ptr = self.extract_ptr(fargs[0].clone(), self_ty);
         assert!(

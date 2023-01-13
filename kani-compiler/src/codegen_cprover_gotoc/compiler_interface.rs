@@ -448,15 +448,10 @@ fn dump_mir_items(tcx: TyCtxt, items: &[MonoItem]) {
     fn visible_item<'tcx>(item: &MonoItem<'tcx>) -> Option<(MonoItem<'tcx>, DefId)> {
         match item {
             // Exclude FnShims and others that cannot be dumped.
-            MonoItem::Fn(instance)
-                if matches!(
-                    instance.def,
-                    InstanceDef::FnPtrShim(..) | InstanceDef::ClosureOnceShim { .. }
-                ) =>
-            {
-                None
+            MonoItem::Fn(instance) if matches!(instance.def, InstanceDef::Item(..)) => {
+                Some((*item, instance.def_id()))
             }
-            MonoItem::Fn(instance) => Some((*item, instance.def_id())),
+            MonoItem::Fn(..) => None,
             MonoItem::Static(def_id) => Some((*item, *def_id)),
             MonoItem::GlobalAsm(_) => None,
         }

@@ -640,13 +640,13 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_pointer_cast(
         &mut self,
         k: &PointerCast,
-        o: &Operand<'tcx>,
+        operand: &Operand<'tcx>,
         t: Ty<'tcx>,
         loc: Location,
     ) -> Expr {
-        debug!(cast=?k, op=?o, ?loc, "codegen_pointer_cast");
+        debug!(cast=?k, op=?operand, ?loc, "codegen_pointer_cast");
         match k {
-            PointerCast::ReifyFnPointer => match self.operand_ty(o).kind() {
+            PointerCast::ReifyFnPointer => match self.operand_ty(operand).kind() {
                 ty::FnDef(def_id, substs) => {
                     let instance =
                         Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), *def_id, substs)
@@ -658,17 +658,22 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
                 _ => unreachable!(),
             },
-            PointerCast::UnsafeFnPointer => self.codegen_operand(o),
-            PointerCast::ClosureFnPointer(_) => {
-                let dest_typ = self.codegen_ty(t);
-                self.codegen_unimplemented_expr(
-                    "PointerCast::ClosureFnPointer",
-                    dest_typ,
-                    loc,
-                    "https://github.com/model-checking/kani/issues/274",
-                )
-            }
-            PointerCast::MutToConstPointer => self.codegen_operand(o),
+            PointerCast::UnsafeFnPointer => self.codegen_operand(operand),
+            PointerCast::ClosureFnPointer(_) => match self.operand_ty(operand).kind() {
+                ty::Closure(def_id, substs) => {
+                    let instance = Instance::resolve_closure(
+                        self.tcx,
+                        *def_id,
+                        substs,
+                        ty::ClosureKind::FnOnce,
+                    )
+                    .expect("failed to normalize and resolve closure during codegen")
+                    .polymorphize(self.tcx);
+                    self.codegen_func_expr(instance, None).address_of()
+                }
+                _ => unreachable!("{:?} cannot be cast to a fn ptr", operand),
+            },
+            PointerCast::MutToConstPointer => self.codegen_operand(operand),
             PointerCast::ArrayToPointer => {
                 // TODO: I am not sure whether it is correct or not.
                 //
@@ -677,11 +682,11 @@ impl<'tcx> GotocCtx<'tcx> {
                 // if we had to, then [o] necessarily has type [T; n] where *T is a fat pointer, meaning
                 // T is either [T] or str. but neither type is sized, which shouldn't participate in
                 // codegen.
-                match self.operand_ty(o).kind() {
+                match self.operand_ty(operand).kind() {
                     ty::RawPtr(ty::TypeAndMut { ty, .. }) => {
                         // ty must be an array
                         if let ty::Array(_, _) = ty.kind() {
-                            let oe = self.codegen_operand(o);
+                            let oe = self.codegen_operand(operand);
                             oe.dereference() // : struct [T; n]
                                 .member("0", &self.symbol_table) // : T[n]
                                 .array_to_ptr() // : T*
@@ -693,8 +698,8 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
             }
             PointerCast::Unsize => {
-                let src_goto_expr = self.codegen_operand(o);
-                let src_mir_type = self.operand_ty(o);
+                let src_goto_expr = self.codegen_operand(operand);
+                let src_mir_type = self.operand_ty(operand);
                 let dst_mir_type = t;
                 self.codegen_unsized_cast(src_goto_expr, src_mir_type, dst_mir_type)
             }

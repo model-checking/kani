@@ -256,9 +256,9 @@ impl<'tcx> GotocCtx<'tcx> {
         out
     }
 
-    /// Closures expect their last arg untupled at call site, see comment at
-    /// ty_needs_closure_untupled.
-    fn sig_with_closure_untupled(&self, sig: ty::PolyFnSig<'tcx>) -> ty::PolyFnSig<'tcx> {
+    /// Function shims expect their last arg untupled at call site, see comment at
+    /// ty_needs_untupled_shim.
+    fn sig_with_untupled_shim(&self, sig: ty::PolyFnSig<'tcx>) -> ty::PolyFnSig<'tcx> {
         debug!("sig_with_closure_untupled sig: {:?}", sig);
         let fn_sig = sig.skip_binder();
         if let Some((tupe, prev_args)) = fn_sig.inputs().split_last() {
@@ -324,7 +324,7 @@ impl<'tcx> GotocCtx<'tcx> {
         );
 
         // The parameter types are tupled, but we want to have them in a vector
-        self.sig_with_closure_untupled(sig)
+        self.sig_with_untupled_shim(sig)
     }
 
     // Adapted from `fn_sig_for_fn_abi` in compiler/rustc_middle/src/ty/layout.rs
@@ -374,11 +374,10 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Closure(def_id, subst) => self.closure_sig(*def_id, subst),
             ty::FnPtr(..) | ty::FnDef(..) => {
                 let sig = fntyp.fn_sig(self.tcx);
-                // Some virtual calls through a vtable may actually be closures
-                // or shims that also need the arguments untupled, even though
-                // the kind of the trait type is not a ty::Closure.
-                if self.ty_needs_closure_untupled(fntyp) {
-                    return self.sig_with_closure_untupled(sig);
+                // Calls through vtable or Fn pointer may actually be shims that also need the
+                // arguments untupled.
+                if self.ty_needs_untupled_args(fntyp) {
+                    return self.sig_with_untupled_shim(sig);
                 }
                 sig
             }
@@ -421,6 +420,11 @@ impl<'tcx> GotocCtx<'tcx> {
 
     pub fn place_ty(&self, p: &Place<'tcx>) -> Ty<'tcx> {
         self.monomorphize(p.ty(self.current_fn().mir().local_decls(), self.tcx).ty)
+    }
+
+    /// Is the MIR type a zero-sized type.
+    pub fn is_zst(&self, t: Ty<'tcx>) -> bool {
+        self.layout_of(t).is_zst()
     }
 
     /// Is the MIR type an unsized type
@@ -931,7 +935,9 @@ impl<'tcx> GotocCtx<'tcx> {
         self.codegen_struct_fields(flds, &layout.layout, Size::ZERO)
     }
 
-    /// A closure in Rust MIR takes two arguments:
+    /// TODO: Is this really the case?? It seems to me that things that require some sort of Fn
+    /// shims are the ones that really need untuple.
+    ///  A closure in Rust MIR takes two arguments:
     ///
     ///    0. a struct representing the environment
     ///    1. a tuple containing the parameters
@@ -955,7 +961,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// so we follow the example elsewhere in Rust to use the ABI call type.
     ///
     /// See `make_call_args` in `rustc_mir_transform/src/inline.rs`
-    pub fn ty_needs_closure_untupled(&self, ty: Ty<'tcx>) -> bool {
+    pub fn ty_needs_untupled_args(&self, ty: Ty<'tcx>) -> bool {
         // Note that [Abi::RustCall] is not [Abi::Rust].
         // Documentation is sparse, but it does seem to correspond to the need for untupling.
         match ty.kind() {
@@ -1294,7 +1300,11 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_function_sig(&mut self, sig: PolyFnSig<'tcx>) -> Type {
         let sig = self.monomorphize(sig);
         let sig = self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig);
-        let params = sig.inputs().iter().map(|t| self.codegen_ty(*t)).collect();
+        let params = sig
+            .inputs()
+            .iter()
+            .filter_map(|t| if self.is_zst(*t) { None } else { Some(self.codegen_ty(*t)) })
+            .collect();
 
         if sig.c_variadic {
             Type::variadic_code_with_unnamed_parameters(params, self.codegen_ty(sig.output()))
@@ -1679,33 +1689,45 @@ impl<'tcx> GotocCtx<'tcx> {
         let sig = self.current_fn().sig();
         let sig = self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig);
         // we don't call [codegen_function_sig] because we want to get a bit more metainformation.
+        let is_vtable_shim =
+            matches!(self.current_fn().instance().def, ty::InstanceDef::VTableShim(..));
         let mut params: Vec<Parameter> = sig
             .inputs()
             .iter()
             .enumerate()
-            .map(|(i, t)| {
-                let lc = Local::from_usize(i + 1);
-                let mut ident = self.codegen_var_name(&lc);
+            .filter_map(|(i, t)| {
+                if self.is_zst(*t) && !(i == 0 && is_vtable_shim) {
+                    // We ignore zero-sized parameters.
+                    // See https://github.com/model-checking/kani/issues/274 for more details.
+                    None
+                } else {
+                    let lc = Local::from_usize(i + 1);
+                    let mut ident = self.codegen_var_name(&lc);
 
-                // `spread_arg` indicates that the last argument is tupled
-                // at the LLVM/codegen level, so we need to declare the indivual
-                // components as parameters with a special naming convention
-                // so that we can "retuple" them in the function prelude.
-                // See: compiler/rustc_codegen_llvm/src/gotoc/mod.rs:codegen_function_prelude
-                if let Some(spread) = self.current_fn().mir().spread_arg {
-                    if lc.index() >= spread.index() {
-                        let (name, _) = self.codegen_spread_arg_name(&lc);
-                        ident = name;
+                    // `spread_arg` indicates that the last argument is tupled
+                    // at the LLVM/codegen level, so we need to declare the indivual
+                    // components as parameters with a special naming convention
+                    // so that we can "retuple" them in the function prelude.
+                    // See: compiler/rustc_codegen_llvm/src/gotoc/mod.rs:codegen_function_prelude
+                    if let Some(spread) = self.current_fn().mir().spread_arg {
+                        if lc.index() >= spread.index() {
+                            let (name, _) = self.codegen_spread_arg_name(&lc);
+                            ident = name;
+                        }
                     }
+                    Some(
+                        self.codegen_ty(*t)
+                            .as_parameter(Some(ident.clone().into()), Some(ident.into())),
+                    )
                 }
-                self.codegen_ty(*t).as_parameter(Some(ident.clone().into()), Some(ident.into()))
             })
             .collect();
 
         // For vtable shims, we need to modify fn(self, ...) to fn(self: *mut Self, ...),
         // since the vtable functions expect a pointer as the first argument. See the comment
         // and similar code in compiler/rustc_mir/src/shim.rs.
-        if let ty::InstanceDef::VTableShim(..) = self.current_fn().instance().def {
+        // TODO(celina): Use fn_abi_of_instance instead of sig so we don't need to do this manually.
+        if is_vtable_shim {
             if let Some(self_param) = params.first() {
                 let ident = self_param.identifier();
                 let ty = self_param.typ().clone();
@@ -1751,7 +1773,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         .map(|idx| {
                             let name = fields[idx].name.to_string().intern();
                             let field_ty = fields[idx].ty(ctx.tcx, adt_substs);
-                            let typ = if !ctx.layout_of(field_ty).is_zst() {
+                            let typ = if !ctx.is_zst(field_ty) {
                                 last_type.clone()
                             } else {
                                 ctx.codegen_ty(field_ty)
@@ -1839,7 +1861,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     let fields = &adt_def.variants().get(VariantIdx::from_u32(0)).unwrap().fields;
                     let mut non_zsts = fields
                         .iter()
-                        .filter(|field| !ctx.layout_of(field.ty(ctx.tcx, adt_substs)).is_zst())
+                        .filter(|field| !ctx.is_zst(field.ty(ctx.tcx, adt_substs)))
                         .map(|non_zst| (non_zst.name.to_string(), non_zst.ty(ctx.tcx, adt_substs)));
                     let (name, next) = non_zsts.next().expect("Expected one non-zst field.");
                     self.curr = next;

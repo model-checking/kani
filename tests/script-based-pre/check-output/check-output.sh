@@ -30,7 +30,8 @@ cd $(dirname $0)
 
 echo "Running single-file check..."
 rm -rf *.c
-RUST_BACKTRACE=1 kani --gen-c --enable-unstable singlefile.rs --quiet
+RUST_BACKTRACE=1 kani --gen-c --enable-unstable singlefile.rs >& kani.log || \
+    { ret=$?; echo "== Failed to run Kani"; cat kani.log; exit 1; }
 if ! [ -e singlefile.for-main.c ]
 then
     echo "Error: no GotoC file generated. Expected: singlefile.for-main.c"
@@ -67,7 +68,8 @@ echo
 (cd multifile
 echo "Running multi-file check..."
 rm -rf build
-RUST_BACKTRACE=1 cargo kani --target-dir build --gen-c --enable-unstable --quiet
+RUST_BACKTRACE=1 cargo kani --target-dir build --gen-c --enable-unstable >& kani.log || \
+    { ret=$?; echo "== Failed to run Kani"; cat kani.log; exit 1; }
 cd build/kani/${TARGET}/debug/deps/
 
 mangled=$(ls multifile*.for-main.c)
