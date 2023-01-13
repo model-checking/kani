@@ -150,6 +150,7 @@ static CBMC_ALT_DESCRIPTIONS: Lazy<CbmcAltDescriptions> = Lazy::new(|| {
 
 const UNSUPPORTED_CONSTRUCT_DESC: &str = "is not currently supported by Kani";
 const UNWINDING_ASSERT_DESC: &str = "unwinding assertion loop";
+const UNWINDING_ASSERT_REC_DESC: &str = "recursion unwinding assertion";
 const DEFAULT_ASSERTION: &str = "assertion";
 
 impl ParserItem {
@@ -388,7 +389,7 @@ pub fn format_result(properties: &Vec<Property>, show_checks: bool) -> String {
         more details.",
         );
     }
-    if has_check_failure(properties, UNWINDING_ASSERT_DESC) {
+    if has_unwinding_assertion_failures(properties) {
         result_str.push_str("[Kani] info: Verification output shows one or more unwinding failures.\n\
         [Kani] tip: Consider increasing the unwinding value or disabling `--unwinding-assertions`.\n");
     }
@@ -460,7 +461,7 @@ pub fn postprocess_result(properties: Vec<Property>, extra_ptr_checks: bool) -> 
     // First, determine if there are reachable unsupported constructs or unwinding assertions
     let has_reachable_unsupported_constructs =
         has_check_failure(&properties, UNSUPPORTED_CONSTRUCT_DESC);
-    let has_failed_unwinding_asserts = has_check_failure(&properties, UNWINDING_ASSERT_DESC);
+    let has_failed_unwinding_asserts = has_unwinding_assertion_failures(&properties);
     // Then, determine if there are reachable undefined functions, and change
     // their description to highlight this fact
     let (properties_with_undefined, has_reachable_undefined_functions) =
@@ -498,6 +499,12 @@ fn has_check_failure(properties: &Vec<Property>, description: &str) -> bool {
         }
     }
     false
+}
+
+// Determines if there were unwinding assertion failures in a set of properties
+fn has_unwinding_assertion_failures(properties: &Vec<Property>) -> bool {
+    has_check_failure(&properties, UNWINDING_ASSERT_DESC)
+        || has_check_failure(&properties, UNWINDING_ASSERT_REC_DESC)
 }
 
 /// Replaces the description of all properties from functions with a missing

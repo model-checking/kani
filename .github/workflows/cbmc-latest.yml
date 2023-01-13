@@ -1,9 +1,15 @@
 # Copyright Kani Contributors
 # SPDX-License-Identifier: Apache-2.0 OR MIT
-name: Nightly regressions with latest CBMC
+
+# We use block scalar notation to allow us to add ":" to the workflow name.
+name: >-
+  Nightly: CBMC Latest
+
 on:
   schedule:
     - cron: "0 9 * * *" # Run this every day at 9 AM UTC (4 AM ET/1 AM PT)
+  workflow_dispatch:    # Allow manual dispatching for a custom branch / tag.
+
 
 env:
   RUST_BACKTRACE: 1
