@@ -46,17 +46,17 @@ pub fn dylib_env_var() -> &'static str {
     if cfg!(target_os = "macos") { "DYLD_LIBRARY_PATH" } else { "LD_LIBRARY_PATH" }
 }
 
-pub fn run(config: Config, testpaths: &TestPaths, revision: Option<&str>) {
+pub fn run(config: Config, testpaths: &TestPaths) {
     if config.verbose {
         // We're going to be dumping a lot of info. Start on a new line.
         print!("\n\n");
     }
     debug!("running {:?}", testpaths.file.display());
-    let props = TestProps::from_file(&testpaths.file, revision, &config);
+    let props = TestProps::from_file(&testpaths.file, &config);
 
-    let cx = TestCx { config: &config, props: &props, testpaths, revision };
+    let cx = TestCx { config: &config, props: &props, testpaths };
     create_dir_all(&cx.output_base_dir()).unwrap();
-    cx.run_revision();
+    cx.run();
     cx.create_stamp();
 }
 
@@ -65,13 +65,11 @@ struct TestCx<'test> {
     config: &'test Config,
     props: &'test TestProps,
     testpaths: &'test TestPaths,
-    revision: Option<&'test str>,
 }
 
 impl<'test> TestCx<'test> {
-    /// Code executed for each revision in turn (or, if there are no
-    /// revisions, exactly once, with revision == None).
-    fn run_revision(&self) {
+    /// Code executed
+    fn run(&self) {
         match self.config.mode {
             Kani => self.run_kani_test(),
             KaniFixme => self.run_kani_test(),
@@ -128,10 +126,8 @@ impl<'test> TestCx<'test> {
     }
 
     fn dump_output(&self, out: &str, err: &str) {
-        let revision = if let Some(r) = self.revision { format!("{r}.") } else { String::new() };
-
-        self.dump_output_file(out, &format!("{revision}out"));
-        self.dump_output_file(err, &format!("{revision}err"));
+        self.dump_output_file(out, "out");
+        self.dump_output_file(err, "err");
         self.maybe_dump_to_stdout(out, err);
     }
 
@@ -141,29 +137,23 @@ impl<'test> TestCx<'test> {
     }
 
     /// Creates a filename for output with the given extension.
-    /// E.g., `/.../testname.revision.mode/testname.extension`.
+    /// E.g., `/.../testname.mode/testname.extension`.
     fn make_out_name(&self, extension: &str) -> PathBuf {
         self.output_base_name().with_extension(extension)
     }
 
-    /// The revision, ignored for incremental compilation since it wants all revisions in
-    /// the same directory.
-    fn safe_revision(&self) -> Option<&str> {
-        self.revision
-    }
-
     /// Gets the absolute path to the directory where all output for the given
-    /// test/revision should reside.
-    /// E.g., `/path/to/build/host-triple/test/ui/relative/testname.revision.mode/`.
+    /// test should reside.
+    /// E.g., `/path/to/build/host-triple/test/ui/relative/testname.mode/`.
     fn output_base_dir(&self) -> PathBuf {
-        output_base_dir(self.config, self.testpaths, self.safe_revision())
+        output_base_dir(self.config, self.testpaths)
     }
 
     /// Gets the absolute path to the base filename used as output for the given
-    /// test/revision.
-    /// E.g., `/.../relative/testname.revision.mode/testname`.
+    /// test.
+    /// E.g., `/.../relative/testname.mode/testname`.
     fn output_base_name(&self) -> PathBuf {
-        output_base_name(self.config, self.testpaths, self.safe_revision())
+        output_base_name(self.config, self.testpaths)
     }
 
     fn maybe_dump_to_stdout(&self, out: &str, err: &str) {
@@ -177,10 +167,7 @@ impl<'test> TestCx<'test> {
     }
 
     fn error(&self, err: &str) {
-        match self.revision {
-            Some(rev) => println!("\nerror in revision `{rev}`: {err}"),
-            None => println!("\nerror: {err}"),
-        }
+        println!("\nerror: {err}");
     }
 
     fn fatal_proc_rec(&self, err: &str, proc_res: &ProcRes) -> ! {
@@ -480,7 +467,7 @@ impl<'test> TestCx<'test> {
     }
 
     fn create_stamp(&self) {
-        let stamp = crate::stamp(self.config, self.testpaths, self.revision);
+        let stamp = crate::stamp(self.config, self.testpaths);
         fs::write(&stamp, "we only support one configuration").unwrap();
     }
 }
