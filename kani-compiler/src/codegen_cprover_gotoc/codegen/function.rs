@@ -100,6 +100,8 @@ impl<'tcx> GotocCtx<'tcx> {
         self.reset_current_fn();
     }
 
+    /// Codegen changes required due to the function ABI.
+    /// We currently untuple arguments for RustCall ABI where the `spread_arg` is set.
     fn codegen_function_prelude(&mut self) {
         let mir = self.current_fn().mir();
         if let Some(spread_arg) = mir.spread_arg {
@@ -110,17 +112,17 @@ impl<'tcx> GotocCtx<'tcx> {
     /// MIR functions have a `spread_arg` field that specifies whether the
     /// final argument to the function is "spread" at the LLVM/codegen level
     /// from a tuple into its individual components. (Used for the "rust-
-    /// call" ABI, necessary because the function traits cannot have an
+    /// call" ABI, necessary because the function traits and closures cannot have an
     /// argument list in MIR that is both generic and variadic, so Rust
     /// allows a generic tuple).
     ///
     /// These tuples are used in the MIR to invoke a shim, and it's used in the shim body.
     ///
     /// If `spread_arg` is Some, then the wrapped value is the local that is
-    /// to be "spread"/untupled. However, the shim body itself will refer to the members of
+    /// to be "spread"/untupled. However, the function body itself may refer to the members of
     /// the tuple instead of the individual spread parameters, so we need to add to the
-    /// function prelude code that _retuples_, that is, writes the parameters
-    /// back to the local tuple that will be used in the body.
+    /// function prelude code that _retuples_, that is, writes the arguments
+    /// back to a local tuple that can be used in the body.
     ///
     /// See:
     /// <https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp/topic/Determine.20untupled.20closure.20args.20from.20Instance.3F>

@@ -256,9 +256,9 @@ impl<'tcx> GotocCtx<'tcx> {
         out
     }
 
-    /// Function shims expect their last arg untupled at call site, see comment at
-    /// ty_needs_untupled_shim.
-    fn sig_with_untupled_shim(&self, sig: ty::PolyFnSig<'tcx>) -> ty::PolyFnSig<'tcx> {
+    /// Function shims and closures expect their last arg untupled at call site, see comment at
+    /// ty_needs_untupled_args.
+    fn sig_with_untupled_args(&self, sig: ty::PolyFnSig<'tcx>) -> ty::PolyFnSig<'tcx> {
         debug!("sig_with_closure_untupled sig: {:?}", sig);
         let fn_sig = sig.skip_binder();
         if let Some((tupe, prev_args)) = fn_sig.inputs().split_last() {
@@ -324,7 +324,7 @@ impl<'tcx> GotocCtx<'tcx> {
         );
 
         // The parameter types are tupled, but we want to have them in a vector
-        self.sig_with_untupled_shim(sig)
+        self.sig_with_untupled_args(sig)
     }
 
     // Adapted from `fn_sig_for_fn_abi` in compiler/rustc_middle/src/ty/layout.rs
@@ -374,10 +374,9 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Closure(def_id, subst) => self.closure_sig(*def_id, subst),
             ty::FnPtr(..) | ty::FnDef(..) => {
                 let sig = fntyp.fn_sig(self.tcx);
-                // Calls through vtable or Fn pointer may actually be shims that also need the
-                // arguments untupled.
+                // Calls through vtable or Fn pointer for an ABI that may require untupled arguments.
                 if self.ty_needs_untupled_args(fntyp) {
-                    return self.sig_with_untupled_shim(sig);
+                    return self.sig_with_untupled_args(sig);
                 }
                 sig
             }
@@ -935,9 +934,7 @@ impl<'tcx> GotocCtx<'tcx> {
         self.codegen_struct_fields(flds, &layout.layout, Size::ZERO)
     }
 
-    /// TODO: Is this really the case?? It seems to me that things that require some sort of Fn
-    /// shims are the ones that really need untuple.
-    ///  A closure in Rust MIR takes two arguments:
+    /// A closure / some shims in Rust MIR takes two arguments:
     ///
     ///    0. a struct representing the environment
     ///    1. a tuple containing the parameters

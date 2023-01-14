@@ -401,9 +401,9 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    /// As part of **calling** a function (closure actually), we may need to un-tuple arguments.
+    /// As part of **calling** a function (or closure), we may need to un-tuple arguments.
     ///
-    /// See [GotocCtx::ty_needs_closure_untupled]
+    /// See [GotocCtx::ty_needs_untupled_args]
     fn codegen_untupled_args(
         &mut self,
         instance: Instance<'tcx>,
@@ -415,15 +415,14 @@ impl<'tcx> GotocCtx<'tcx> {
             self.readable_instance_name(instance),
             fargs
         );
-        // A closure takes two arguments:
-        //     0. a struct representing the environment
+        // A closure / shim takes two arguments:
+        //     0. a struct (or a pointer to) representing the environment
         //     1. a tuple containing the parameters
         //
-        // However, for some reason, Rust decides to generate a function which still
-        // takes the first argument as the environment struct, but the tuple of parameters
-        // are flattened as subsequent parameters.
+        // However, Rust generates a function which takes the first argument as the environment
+        // struct, but the tuple of parameters are flattened as subsequent parameters.
         // Therefore, we have to project out the corresponding fields when we detect
-        // an invocation of a closure.
+        // an invocation of a RustCall ABI function.
         //
         // Note: In some cases, the environment struct has type FnDef, so we skip it in
         // ignore_var_ty. So the tuple is always the last arg, but it might be in the
