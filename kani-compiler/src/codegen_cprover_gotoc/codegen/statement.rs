@@ -462,14 +462,20 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Generate Goto-C for each argument to a function call.
     ///
     /// N.B. public only because instrinsics use this directly, too.
-    pub(crate) fn codegen_funcall_args(&mut self, args: &[Operand<'tcx>]) -> Vec<Expr> {
+    /// When `skip_zst` is set to `true`, the return value will not include any argument that is ZST.
+    /// This is used because we ignore ZST arguments, except for intrinsics.
+    pub(crate) fn codegen_funcall_args(
+        &mut self,
+        args: &[Operand<'tcx>],
+        skip_zst: bool,
+    ) -> Vec<Expr> {
         let fargs = args
             .iter()
             .filter_map(|o| {
                 let op_ty = self.operand_ty(o);
                 if op_ty.is_bool() {
                     Some(self.codegen_operand(o).cast_to(Type::c_bool()))
-                } else if !self.is_zst(op_ty) {
+                } else if !self.is_zst(op_ty) || !skip_zst {
                     Some(self.codegen_operand(o))
                 } else {
                     // We ignore ZST types.
@@ -509,7 +515,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         let loc = self.codegen_span(&span);
         let funct = self.operand_ty(func);
-        let mut fargs = self.codegen_funcall_args(args);
+        let mut fargs = self.codegen_funcall_args(args, true);
         match &funct.kind() {
             ty::FnDef(defid, subst) => {
                 let instance =
