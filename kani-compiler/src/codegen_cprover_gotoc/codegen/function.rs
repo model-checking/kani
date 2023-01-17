@@ -238,7 +238,7 @@ impl<'tcx> GotocCtx<'tcx> {
         if !proof_attributes.is_empty() {
             let span = proof_attributes.first().unwrap().span;
             if proof_attributes.len() > 1 {
-                self.tcx.sess.span_warn(proof_attributes[0].span, "Duplicated attribute");
+                self.tcx.sess.span_warn(proof_attributes[0].span, "Duplicate attribute");
             }
 
             if self.tcx.def_kind(def_id) != DefKind::Fn {
