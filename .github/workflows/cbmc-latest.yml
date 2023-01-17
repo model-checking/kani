@@ -21,6 +21,22 @@ jobs:
       matrix:
         os: [macos-11, ubuntu-18.04, ubuntu-20.04, ubuntu-22.04]
     steps:
+      - name: Checkout CBMC under "cbmc"
+        uses: actions/checkout@v3
+        with:
+          repository: diffblue/cbmc
+          path: cbmc
+
+      - name: Build CBMC
+        run: |
+          cd cbmc
+          cmake -S . -Bbuild -DWITH_JBMC=OFF
+          cmake --build build -- -j 4
+          sudo cmake --build build --target install
+          # Cleanup cbmc directory
+          cd ..
+          rm -rf cbmc
+
       - name: Checkout Kani
         uses: actions/checkout@v3
 
@@ -28,10 +44,17 @@ jobs:
         uses: ./.github/actions/setup
         with:
           os: ${{ matrix.os }}
+          install_cbmc: 'false'
 
       - name: Build Kani
         run: cargo build-dev
 
+      - name: Execute Kani regressions
+        run: ./scripts/kani-regression.sh
+
+  perf:
+    runs-on: ubuntu-20.04
+    steps:
       - name: Checkout CBMC under "cbmc"
         uses: actions/checkout@v3
         with:
@@ -44,12 +67,10 @@ jobs:
           cmake -S . -Bbuild -DWITH_JBMC=OFF
           cmake --build build -- -j 4
           sudo cmake --build build --target install
-      - name: Execute Kani regressions
-        run: ./scripts/kani-regression.sh
+          # Cleanup cbmc directory
+          cd ..
+          rm -rf cbmc
 
-  perf:
-    runs-on: ubuntu-20.04
-    steps:
       - name: Checkout Kani
         uses: actions/checkout@v3
 
@@ -57,21 +78,10 @@ jobs:
         uses: ./.github/actions/setup
         with:
           os: ubuntu-20.04
+          install_cbmc: 'false'
 
       - name: Build Kani using release mode
         run: cargo build-dev -- --release
 
-      - name: Checkout CBMC under "cbmc"
-        uses: actions/checkout@v3
-        with:
-          repository: diffblue/cbmc
-          path: cbmc
-
-      - name: Build CBMC
-        run: |
-          cd cbmc
-          cmake -S . -Bbuild -DWITH_JBMC=OFF
-          cmake --build build -- -j 4
-          sudo cmake --build build --target install
       - name: Execute Kani performance tests
         run: ./scripts/kani-perf.sh
