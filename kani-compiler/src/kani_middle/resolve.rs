@@ -10,7 +10,7 @@
 use std::collections::VecDeque;
 
 use rustc_hir::def::{DefKind, Res};
-use rustc_hir::def_id::{DefId, LocalDefId, CRATE_DEF_INDEX};
+use rustc_hir::def_id::{DefId, LocalDefId, CRATE_DEF_INDEX, LOCAL_CRATE};
 use rustc_hir::{ItemKind, UseKind};
 use rustc_middle::ty::TyCtxt;
 
@@ -217,7 +217,7 @@ fn resolve_in_foreign_module(
 fn module_to_string(tcx: TyCtxt, current_module: LocalDefId) -> String {
     let def_id = current_module.to_def_id();
     if def_id.is_crate_root() {
-        "crate root".to_string()
+        format!("module `{}`", tcx.crate_name(LOCAL_CRATE))
     } else {
         format!("module `{}`", tcx.def_path_str(def_id))
     }

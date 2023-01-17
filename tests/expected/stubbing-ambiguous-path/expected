@@ -1,4 +1,4 @@
-error: glob imports in local crate root make it impossible to unambiguously resolve path; the possibilities are:\
+error: glob imports in local module `main` make it impossible to unambiguously resolve path; the possibilities are:\
            mod1::foo\
            mod2::foo
 
