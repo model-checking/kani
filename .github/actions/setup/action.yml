@@ -5,6 +5,10 @@ inputs:
   os:
     description: In which Operating System is this running
     required: true
+  install_cbmc:
+    description: Whether to install CBMC
+    required: false
+    default: 'true'
 runs:
   using: composite
   steps:
@@ -15,6 +19,7 @@ runs:
       - name: Install CBMC
         run: ./scripts/setup/${{ inputs.os }}/install_cbmc.sh
         shell: bash
+        if: ${{ inputs.install_cbmc }}
 
       - name: Install cbmc-viewer
         run: ./scripts/setup/${{ inputs.os }}/install_viewer.sh
