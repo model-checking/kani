@@ -98,7 +98,7 @@ pub struct KaniArgs {
     /// Generate C file equivalent to inputted program.
     /// This feature is unstable and it requires `--enable-unstable` to be used
     #[arg(long, hide_short_help = true, requires("enable_unstable"),
-        conflicts_with_all(&["function", "legacy_linker"]))]
+        conflicts_with_all(&["function"]))]
     pub gen_c: bool,
 
     /// Directory for all generated artifacts.
@@ -135,19 +135,9 @@ pub struct KaniArgs {
     #[arg(long, hide_short_help = true)]
     pub only_codegen: bool,
 
-    /// Disable the new MIR Linker. Using this option may result in missing symbols from the
-    /// `std` library. See <https://github.com/model-checking/kani/issues/1213> for more details.
+    /// Enable the new MIR Linker. This is a no-op since we no longer support any other linker.
     #[arg(long, hide = true)]
-    pub legacy_linker: bool,
-
-    /// Enable the new MIR Linker. This is already the default option and it will be removed once
-    /// the linker is stable.
-    /// The MIR Linker affects how Kani prunes the code to be analyzed. It also fixes previous
-    /// issues with missing `std` function definitions.
-    /// See <https://model-checking.github.io/kani/rfc/rfcs/0001-mir-linker.html> for more details.
-    #[arg(long, conflicts_with("legacy_linker"), hide = true)]
     pub mir_linker: bool,
-
     /// Specify the value used for loop unwinding in CBMC
     #[arg(long)]
     pub default_unwind: Option<u32>,
