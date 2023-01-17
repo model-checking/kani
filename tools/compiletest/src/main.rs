@@ -369,7 +369,7 @@ fn collect_expected_tests_from_dir(
             fs::create_dir_all(&build_dir.join(file_path.file_stem().unwrap())).unwrap();
             let paths =
                 TestPaths { file: file_path, relative_dir: relative_dir_path.to_path_buf() };
-            tests.extend(make_test(config, &paths, inputs));
+            tests.push(make_test(config, &paths, inputs));
         } else if file_path.is_dir() {
             // recurse on subdirectory
             let relative_file_path = relative_dir_path.join(file.file_name());
@@ -426,7 +426,7 @@ fn collect_exec_tests_from_dir(
         // Create directory for test and add it to the tests to be run
         fs::create_dir_all(&build_dir.join(file_path.file_stem().unwrap())).unwrap();
         let paths = TestPaths { file: file_path, relative_dir: relative_dir_path.to_path_buf() };
-        tests.extend(make_test(config, &paths, inputs));
+        tests.push(make_test(config, &paths, inputs));
     }
     Ok(())
 }
@@ -457,7 +457,7 @@ fn collect_rs_tests_from_dir(
             debug!("found test file: {:?}", file_path.display());
             let paths =
                 TestPaths { file: file_path, relative_dir: relative_dir_path.to_path_buf() };
-            tests.extend(make_test(config, &paths, inputs))
+            tests.push(make_test(config, &paths, inputs))
         } else if file_path.is_dir() {
             let relative_file_path = relative_dir_path.join(file.file_name());
             if &file_name != "auxiliary" {
@@ -484,39 +484,25 @@ pub fn is_test(file_name: &OsString) -> bool {
     !invalid_prefixes.iter().any(|p| file_name.starts_with(p))
 }
 
-fn make_test(config: &Config, testpaths: &TestPaths, inputs: &Stamp) -> Vec<test::TestDescAndFn> {
+fn make_test(config: &Config, testpaths: &TestPaths, inputs: &Stamp) -> test::TestDescAndFn {
     let test_path = PathBuf::from(&testpaths.file);
-    let revisions = vec![None];
 
-    revisions
-        .into_iter()
-        .map(|revision: Option<&String>| {
-            let src_file =
-                std::fs::File::open(&test_path).expect("open test file to parse ignores");
-            let cfg = revision.map(|v| &**v);
-            let test_name = crate::make_test_name(config, testpaths, revision);
-            let mut desc = make_test_description(config, test_name, &test_path, src_file, cfg);
-            // Ignore tests that already run and are up to date with respect to inputs.
-            if !config.force_rerun {
-                desc.ignore |=
-                    is_up_to_date(config, testpaths, revision.map(|s| s.as_str()), inputs);
-            }
-            test::TestDescAndFn { desc, testfn: make_test_closure(config, testpaths, revision) }
-        })
-        .collect()
+    let src_file = std::fs::File::open(&test_path).expect("open test file to parse ignores");
+    let test_name = crate::make_test_name(config, testpaths);
+    let mut desc = make_test_description(config, test_name, &test_path, src_file);
+    // Ignore tests that already run and are up to date with respect to inputs.
+    if !config.force_rerun {
+        desc.ignore |= is_up_to_date(config, testpaths, inputs);
+    }
+    test::TestDescAndFn { desc, testfn: make_test_closure(config, testpaths) }
 }
 
-fn stamp(config: &Config, testpaths: &TestPaths, revision: Option<&str>) -> PathBuf {
-    output_base_dir(config, testpaths, revision).join("stamp")
+fn stamp(config: &Config, testpaths: &TestPaths) -> PathBuf {
+    output_base_dir(config, testpaths).join("stamp")
 }
 
-fn is_up_to_date(
-    config: &Config,
-    testpaths: &TestPaths,
-    revision: Option<&str>,
-    inputs: &Stamp,
-) -> bool {
-    let stamp_name = stamp(config, testpaths, revision);
+fn is_up_to_date(config: &Config, testpaths: &TestPaths, inputs: &Stamp) -> bool {
+    let stamp_name = stamp(config, testpaths);
     // Check timestamps.
     let inputs = inputs.clone();
 
@@ -557,11 +543,7 @@ impl Stamp {
     }
 }
 
-fn make_test_name(
-    config: &Config,
-    testpaths: &TestPaths,
-    revision: Option<&String>,
-) -> test::TestName {
+fn make_test_name(config: &Config, testpaths: &TestPaths) -> test::TestName {
     // Convert a complete path to something like
     //
     //    ui/foo/bar/baz.rs
@@ -569,24 +551,14 @@ fn make_test_name(
         .join(&testpaths.relative_dir)
         .join(&testpaths.file.file_name().unwrap());
 
-    test::DynTestName(format!(
-        "[{}] {}{}",
-        config.mode,
-        path.display(),
-        revision.map_or("".to_string(), |rev| format!("#{rev}"))
-    ))
+    test::DynTestName(format!("[{}] {}", config.mode, path.display()))
 }
 
-fn make_test_closure(
-    config: &Config,
-    testpaths: &TestPaths,
-    revision: Option<&String>,
-) -> test::TestFn {
+fn make_test_closure(config: &Config, testpaths: &TestPaths) -> test::TestFn {
     let config = config.clone();
     let testpaths = testpaths.clone();
-    let revision = revision.cloned();
     test::DynTestFn(Box::new(move || {
-        runtest::run(config, &testpaths, revision.as_deref());
+        runtest::run(config, &testpaths);
         Ok(())
     }))
 }

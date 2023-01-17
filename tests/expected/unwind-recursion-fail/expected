@@ -1,0 +1,8 @@
+UNDETERMINED\
+assertion failed: f == 120
+UNDETERMINED\
+attempt to subtract with overflow
+UNDETERMINED\
+attempt to multiply with overflow
+[Kani] info: Verification output shows one or more unwinding failures.
+[Kani] tip: Consider increasing the unwinding value or disabling `--unwinding-assertions`.
