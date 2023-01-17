@@ -19,7 +19,7 @@ runs:
       - name: Install CBMC
         run: ./scripts/setup/${{ inputs.os }}/install_cbmc.sh
         shell: bash
-        if: ${{ inputs.install_cbmc }}
+        if: ${{format('{0}', inputs.install_cbmc) != 'false'}}
 
       - name: Install cbmc-viewer
         run: ./scripts/setup/${{ inputs.os }}/install_viewer.sh
