@@ -23,12 +23,11 @@ echo
 
 # At the moment, we only test codegen for the virtio module
 cd $KANI_DIR/firecracker/src/devices/src/virtio/
-# Disable warnings until https://github.com/model-checking/kani/issues/573 is fixed
+export KANI_LOG=error
 export RUSTC_LOG=error
 export RUST_BACKTRACE=1
-# Use the legacy linker for now since we want to maximize the code that we are compiling from firecracker.
-# The MIR Linker will by default only collect code relevant to proof harnesses, however, firecracker has none.
-cargo kani --only-codegen --legacy-linker
+# Use cargo assess since this is now our default way of assessing Kani suitability to verify a crate.
+cargo kani --enable-unstable --only-codegen assess
 
 echo
 echo "Finished Firecracker codegen regression successfully..."

@@ -74,9 +74,7 @@ impl KaniSession {
     /// Determine which symbols Kani should codegen (i.e. by slicing away symbols
     /// that are considered unreachable.)
     pub fn reachability_mode(&self) -> ReachabilityMode {
-        if self.args.legacy_linker {
-            ReachabilityMode::Legacy
-        } else if self.codegen_tests {
+        if self.codegen_tests {
             ReachabilityMode::Tests
         } else if self.args.function.is_some() {
             ReachabilityMode::AllPubFns
@@ -87,7 +85,6 @@ impl KaniSession {
 }
 
 pub enum ReachabilityMode {
-    Legacy,
     ProofHarnesses,
     AllPubFns,
     Tests,
