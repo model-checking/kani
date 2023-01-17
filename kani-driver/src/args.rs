@@ -3,6 +3,7 @@
 
 #[cfg(feature = "unsound_experiments")]
 use crate::unsound_experiments::UnsoundExperimentArgs;
+use crate::util::warning;
 
 use clap::{error::Error, error::ErrorKind, CommandFactory, ValueEnum};
 use std::ffi::OsString;
@@ -135,9 +136,14 @@ pub struct KaniArgs {
     #[arg(long, hide_short_help = true)]
     pub only_codegen: bool,
 
-    /// Enable the new MIR Linker. This is a no-op since we no longer support any other linker.
+    /// Deprecated flag. This is a no-op since we no longer support the legacy linker and
+    /// it will be removed in a future Kani release.
+    #[arg(long, hide = true, conflicts_with("mir_linker"))]
+    pub legacy_linker: bool,
+    /// Deprecated flag. This is a no-op since we no longer support any other linker.
     #[arg(long, hide = true)]
     pub mir_linker: bool,
+
     /// Specify the value used for loop unwinding in CBMC
     #[arg(long)]
     pub default_unwind: Option<u32>,
@@ -462,6 +468,14 @@ impl KaniArgs {
             );
         }
 
+        if self.mir_linker {
+            self.print_deprecated("--mir-linker");
+        }
+
+        if self.legacy_linker {
+            self.print_deprecated("--legacy-linker");
+        }
+
         // TODO: these conflicting flags reflect what's necessary to pass current tests unmodified.
         // We should consider improving the error messages slightly in a later pull request.
         if natives_unwind && extra_unwind {
@@ -524,6 +538,14 @@ impl KaniArgs {
         }
 
         Ok(())
+    }
+
+    fn print_deprecated(&self, option: &str) {
+        if !self.quiet {
+            warning(&format!(
+                "The `{option}` flag is deprecated and it will be removed in future versions"
+            ))
+        }
     }
 }
 
