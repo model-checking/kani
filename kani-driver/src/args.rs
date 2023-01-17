@@ -543,7 +543,7 @@ impl KaniArgs {
     fn print_deprecated(&self, option: &str) {
         if !self.quiet {
             warning(&format!(
-                "The `{option}` flag is deprecated and it will be removed in future versions"
+                "The `{option}` option is deprecated. This option no longer has any effect and should be removed"
             ))
         }
     }
