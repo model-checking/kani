@@ -1,4 +1,4 @@
-warning: Duplicated attribute\
+warning: Duplicate attribute\
 main.rs:\
 |\
 | #[kani::proof]\
