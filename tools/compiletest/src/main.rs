@@ -566,7 +566,7 @@ fn make_test_closure(config: &Config, testpaths: &TestPaths) -> test::TestFn {
 
 /// Print a message and error out without panicking
 fn fatal_error(message: &str) {
-    println!("error: {}", message);
+    println!("error: {message}");
     // Use resume_unwind instead of panic!() to prevent a panic message + backtrace from
     // compiletest, which is unnecessary noise.
     std::panic::resume_unwind(Box::new(()));
