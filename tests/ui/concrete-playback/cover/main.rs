@@ -5,6 +5,6 @@
 
 #[kani::proof]
 pub fn harness() {
-    let x: i32 = kani::any();
+    let x: u32 = kani::any();
     kani::cover!(x != 0 && x / 2 == 0);
 }
