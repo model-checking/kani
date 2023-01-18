@@ -118,8 +118,8 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// These tuples are used in the MIR to invoke a shim, and it's used in the shim body.
     ///
-    /// If `spread_arg` is Some, then the wrapped value is the local that is
-    /// to be "spread"/untupled. However, the function body itself may refer to the members of
+    /// The `spread_arg` represents the the local variable that is to be "spread"/untupled.
+    /// However, the function body itself may refer to the members of
     /// the tuple instead of the individual spread parameters, so we need to add to the
     /// function prelude code that _retuples_, that is, writes the arguments
     /// back to a local tuple that can be used in the body.

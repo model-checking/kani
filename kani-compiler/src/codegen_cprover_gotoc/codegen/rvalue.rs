@@ -659,8 +659,8 @@ impl<'tcx> GotocCtx<'tcx> {
                 _ => unreachable!(),
             },
             PointerCast::UnsafeFnPointer => self.codegen_operand(operand),
-            PointerCast::ClosureFnPointer(_) => match self.operand_ty(operand).kind() {
-                ty::Closure(def_id, substs) => {
+            PointerCast::ClosureFnPointer(_) => {
+                if let ty::Closure(def_id, substs) = self.operand_ty(operand).kind() {
                     let instance = Instance::resolve_closure(
                         self.tcx,
                         *def_id,
@@ -670,9 +670,10 @@ impl<'tcx> GotocCtx<'tcx> {
                     .expect("failed to normalize and resolve closure during codegen")
                     .polymorphize(self.tcx);
                     self.codegen_func_expr(instance, None).address_of()
+                } else {
+                    unreachable!("{:?} cannot be cast to a fn ptr", operand)
                 }
-                _ => unreachable!("{:?} cannot be cast to a fn ptr", operand),
-            },
+            }
             PointerCast::MutToConstPointer => self.codegen_operand(operand),
             PointerCast::ArrayToPointer => {
                 // TODO: I am not sure whether it is correct or not.

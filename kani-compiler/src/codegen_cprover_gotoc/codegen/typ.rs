@@ -1693,7 +1693,8 @@ impl<'tcx> GotocCtx<'tcx> {
             .iter()
             .enumerate()
             .filter_map(|(i, t)| {
-                if self.is_zst(*t) && !(i == 0 && is_vtable_shim) {
+                let is_vtable_shim_self = i == 0 && is_vtable_shim;
+                if self.is_zst(*t) && !is_vtable_shim_self {
                     // We ignore zero-sized parameters.
                     // See https://github.com/model-checking/kani/issues/274 for more details.
                     None

@@ -403,7 +403,16 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// As part of **calling** a function (or closure), we may need to un-tuple arguments.
     ///
-    /// See [GotocCtx::ty_needs_untupled_args]
+    /// This function will replace the last `fargs` argument by its un-tupled version.
+    ///
+    /// Some context: A closure / shim takes two arguments:
+    ///     0. a struct (or a pointer to) representing the environment
+    ///     1. a tuple containing the parameters (if not empty)
+    ///
+    /// However, Rust generates a function where the tuple of parameters are flattened
+    /// as subsequent parameters.
+    ///
+    /// See [GotocCtx::ty_needs_untupled_args] for more details.
     fn codegen_untupled_args(
         &mut self,
         instance: Instance<'tcx>,
@@ -415,19 +424,6 @@ impl<'tcx> GotocCtx<'tcx> {
             self.readable_instance_name(instance),
             fargs
         );
-        // A closure / shim takes two arguments:
-        //     0. a struct (or a pointer to) representing the environment
-        //     1. a tuple containing the parameters
-        //
-        // However, Rust generates a function which takes the first argument as the environment
-        // struct, but the tuple of parameters are flattened as subsequent parameters.
-        // Therefore, we have to project out the corresponding fields when we detect
-        // an invocation of a RustCall ABI function.
-        //
-        // Note: In some cases, the environment struct has type FnDef, so we skip it in
-        // ignore_var_ty. So the tuple is always the last arg, but it might be in the
-        // first or the second position.
-        // Note 2: For empty closures, the only argument needed is the environment struct.
         if !fargs.is_empty() {
             let tuple_ty = self.operand_ty(last_mir_arg.unwrap());
             if self.is_zst(tuple_ty) {
