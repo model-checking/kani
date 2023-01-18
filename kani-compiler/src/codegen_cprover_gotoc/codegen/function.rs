@@ -235,27 +235,26 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Check that if an item is tagged with a proof_attribute, it is a valid harness.
     fn check_proof_attribute(&self, def_id: DefId, proof_attributes: Vec<&Attribute>) {
-        if !proof_attributes.is_empty() {
-            let span = proof_attributes.first().unwrap().span;
-            if proof_attributes.len() > 1 {
-                self.tcx.sess.span_warn(proof_attributes[0].span, "Duplicate attribute");
-            }
+        assert!(!proof_attributes.is_empty());
+        let span = proof_attributes.first().unwrap().span;
+        if proof_attributes.len() > 1 {
+            self.tcx.sess.span_warn(proof_attributes[0].span, "Duplicate attribute");
+        }
 
-            if self.tcx.def_kind(def_id) != DefKind::Fn {
+        if self.tcx.def_kind(def_id) != DefKind::Fn {
+            self.tcx
+                .sess
+                .span_err(span, "The kani::proof attribute can only be applied to functions.");
+        } else if self.tcx.generics_of(def_id).requires_monomorphization(self.tcx) {
+            self.tcx
+                .sess
+                .span_err(span, "The proof attribute cannot be applied to generic functions.");
+        } else {
+            let instance = Instance::mono(self.tcx, def_id);
+            if !self.fn_abi_of_instance(instance, ty::List::empty()).args.is_empty() {
                 self.tcx
                     .sess
-                    .span_err(span, "The kani::proof attribute can only be applied to functions.");
-            } else if self.tcx.generics_of(def_id).requires_monomorphization(self.tcx) {
-                self.tcx
-                    .sess
-                    .span_err(span, "The proof attribute cannot be applied to generic functions.");
-            } else {
-                let instance = Instance::mono(self.tcx, def_id);
-                if !self.fn_abi_of_instance(instance, ty::List::empty()).args.is_empty() {
-                    self.tcx
-                        .sess
-                        .span_err(span, "Functions used as harnesses can not have any arguments.");
-                }
+                    .span_err(span, "Functions used as harnesses can not have any arguments.");
             }
         }
     }
@@ -263,13 +262,7 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn is_proof_harness(&self, def_id: DefId) -> bool {
         let all_attributes = self.tcx.get_attrs_unchecked(def_id);
         let (proof_attributes, _) = partition_kanitool_attributes(all_attributes);
-        if !proof_attributes.is_empty() {
-            self.check_proof_attribute(def_id, proof_attributes);
-            self.tcx.sess.abort_if_errors();
-            true
-        } else {
-            false
-        }
+        !proof_attributes.is_empty()
     }
 
     /// Check that all attributes assigned to an item is valid.
