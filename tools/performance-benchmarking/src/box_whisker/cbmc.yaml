@@ -1,0 +1,17 @@
+graphs:
+  - median: 0.7
+    high: 0.9
+    low: 0.8
+    top: 1
+    bottom: 0.2
+    title: release-->optimized
+    losers:
+      s2n_foo_bar: 1
+      freertos_list_update: 1
+      s2n_begin_session: 1
+      e_sdk_clear_seed: 1
+    winners:
+      s2n_init: 0.32
+      s2n_ed25519_gulp: 0.29
+      freertos_list_remove: 0.11
+      e_sdk_random_token: 0.10

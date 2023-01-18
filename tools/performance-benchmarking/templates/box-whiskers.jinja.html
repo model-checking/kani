@@ -1,0 +1,31 @@
+<h3>Runtime increase</h3>
+
+<h4>from release --> optimized</h4>
+
+<h4>(lower is better)</h4>
+
+{% for graph in data["graphs"] %}
+<div class="box-whiskers-container">
+<div class="box-whiskers-graph-container">
+{{ data["svg"] }}
+</div>
+<div class="bottom-tables">
+<div class="winners">
+<table>
+<tr><td>Biggest winners</td></tr>
+{% for winner, value in graph["winners"].items() %}
+<tr><td><a href="/">{{ winner }}</a></td><td>{{ value }}x</td></tr>
+{% endfor %}
+</table>
+</div>
+<div class="losers">
+<table>
+<tr><td>Biggest losers</td></tr>
+{% for loser, value in graph["losers"].items() %}
+<tr><td><a href="/">{{ loser }}</a></td><td>{{ value }}x</td></tr>
+{% endfor %}
+</table>
+</div>
+</div>
+</div>
+{% endfor %}
