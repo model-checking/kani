@@ -53,7 +53,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         if let Some(target) = target {
             let loc = self.codegen_span(&span);
-            let fargs = self.codegen_funcall_args(args);
+            let fargs = self.codegen_funcall_args(args, false);
             Stmt::block(
                 vec![
                     self.codegen_intrinsic(instance, fargs, destination, Some(span)),
