@@ -13,6 +13,7 @@ use rustc_ast::Attribute;
 use rustc_hir::def::DefKind;
 use rustc_hir::def_id::DefId;
 use rustc_middle::mir::{Body, HasLocalDecls, Local};
+use rustc_middle::ty::layout::FnAbiOf;
 use rustc_middle::ty::{self, Instance};
 use std::collections::BTreeMap;
 use std::convert::TryInto;
@@ -249,46 +250,46 @@ impl<'tcx> GotocCtx<'tcx> {
         self.reset_current_fn();
     }
 
-    pub fn is_proof_harness(&self, def_id: DefId) -> bool {
-        let all_attributes = self.tcx.get_attrs_unchecked(def_id);
-        let (proof_attributes, _) = partition_kanitool_attributes(all_attributes);
-        if !proof_attributes.is_empty() {
-            let span = proof_attributes.first().unwrap().span;
-            if self.tcx.def_kind(def_id) != DefKind::Fn {
-                self.tcx
-                    .sess
-                    .span_err(span, "The kani::proof attribute can only be applied to functions.");
-            } else if self.tcx.generics_of(def_id).requires_monomorphization(self.tcx) {
-                self.tcx
-                    .sess
-                    .span_err(span, "The proof attribute cannot be applied to generic functions.");
-            }
-            self.tcx.sess.abort_if_errors();
-            true
+    /// Check that if an item is tagged with a proof_attribute, it is a valid harness.
+    fn check_proof_attribute(&self, def_id: DefId, proof_attributes: Vec<&Attribute>) {
+        assert!(!proof_attributes.is_empty());
+        let span = proof_attributes.first().unwrap().span;
+        if proof_attributes.len() > 1 {
+            self.tcx.sess.span_warn(proof_attributes[0].span, "Duplicate attribute");
+        }
+
+        if self.tcx.def_kind(def_id) != DefKind::Fn {
+            self.tcx
+                .sess
+                .span_err(span, "The kani::proof attribute can only be applied to functions.");
+        } else if self.tcx.generics_of(def_id).requires_monomorphization(self.tcx) {
+            self.tcx
+                .sess
+                .span_err(span, "The proof attribute cannot be applied to generic functions.");
         } else {
-            false
+            let instance = Instance::mono(self.tcx, def_id);
+            if !self.fn_abi_of_instance(instance, ty::List::empty()).args.is_empty() {
+                self.tcx
+                    .sess
+                    .span_err(span, "Functions used as harnesses can not have any arguments.");
+            }
         }
     }
 
-    // Check that all attributes assigned to an item is valid.
+    pub fn is_proof_harness(&self, def_id: DefId) -> bool {
+        let all_attributes = self.tcx.get_attrs_unchecked(def_id);
+        let (proof_attributes, _) = partition_kanitool_attributes(all_attributes);
+        !proof_attributes.is_empty()
+    }
+
+    /// Check that all attributes assigned to an item is valid.
+    /// Errors will be added to the session. Invoke self.tcx.sess.abort_if_errors() to terminate
+    /// the session in case of an error.
     pub fn check_attributes(&self, def_id: DefId) {
         let all_attributes = self.tcx.get_attrs_unchecked(def_id);
         let (proof_attributes, other_attributes) = partition_kanitool_attributes(all_attributes);
         if !proof_attributes.is_empty() {
-            let span = proof_attributes.first().unwrap().span;
-            if self.tcx.def_kind(def_id) != DefKind::Fn {
-                self.tcx
-                    .sess
-                    .span_err(span, "The kani::proof attribute can only be applied to functions.");
-            } else if self.tcx.generics_of(def_id).requires_monomorphization(self.tcx) {
-                self.tcx
-                    .sess
-                    .span_err(span, "The proof attribute cannot be applied to generic functions.");
-            } else if proof_attributes.len() > 1 {
-                self.tcx
-                    .sess
-                    .span_warn(proof_attributes[0].span, "Only one '#[kani::proof]' allowed");
-            }
+            self.check_proof_attribute(def_id, proof_attributes);
         } else if !other_attributes.is_empty() {
             self.tcx.sess.span_err(
                 other_attributes[0].1.span,

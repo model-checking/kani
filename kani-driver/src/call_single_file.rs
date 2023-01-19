@@ -20,7 +20,6 @@ impl KaniSession {
         let mut kani_args = self.kani_specific_flags();
         kani_args.push(
             match self.reachability_mode() {
-                ReachabilityMode::Legacy => "--reachability=legacy",
                 ReachabilityMode::ProofHarnesses => "--reachability=harnesses",
                 ReachabilityMode::AllPubFns => "--reachability=pub_fns",
                 ReachabilityMode::Tests => "--reachability=tests",

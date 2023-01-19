@@ -116,7 +116,10 @@ impl KaniSession {
         let failing = failures.len();
         let total = succeeding + failing;
 
-        if self.args.concrete_playback.is_some() && !self.args.quiet && failures.is_empty() {
+        if self.args.concrete_playback.is_some()
+            && !self.args.quiet
+            && results.iter().all(|r| !r.result.generated_concrete_test)
+        {
             println!(
                 "INFO: The concrete playback feature never generated unit tests because there were no failing harnesses."
             )

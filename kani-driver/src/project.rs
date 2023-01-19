@@ -4,16 +4,13 @@
 //! The goal is to provide one project view independent on the build system (cargo / standalone
 //! rustc) and its configuration (e.g.: linker type).
 //!
-//! For `--legacy-linker` and `--function`, we still have a hack in-place that merges all the
-//! artifacts together. The reason is the following:
-//!  - For `--legacy-linker`, the compiler generate one goto file per crate, including each
-//!    target and all their dependencies. Ideally, the linking be done on a per-target base, but
-//!    this would require extra logic. Since we are planning to remove the `--legacy-linker` in
-//!    the near future, we decided not to invest time there.
+//! For `--function`, we still have a hack in-place that merges all the artifacts together.
+//! The reason is the following:
 //!  - For `--function`, the compiler doesn't generate any metadata that indicates which
 //!    functions each goto model includes. Thus, we don't have an easy way to tell which goto
 //!    files are relevant for the function verification. This is also another flag that we don't
-//!    expect to stabilize, so we also opted to use the same hack of merging everything together.
+//!    expect to stabilize, so we also opted to use the same hack as implemented before the MIR
+//!    Linker was introduced to merge everything together.
 //!
 //! Note that for `--function` we also inject a mock `HarnessMetadata` to the project. This
 //! allows the rest of the driver to handle a function under verification the same way it handle
@@ -53,8 +50,8 @@ pub struct Project {
     artifacts: Vec<Artifact>,
     /// A flag that indicated whether all artifacts have been merged or not.
     ///
-    /// This allow us to provide a consistent behavior for `--legacy-linker` and `--function`.
-    /// For these two options, we still merge all the artifacts together, so the
+    /// This allow us to provide a consistent behavior for `--function`.
+    /// For these this option, we still merge all the artifacts together, so the
     /// `merged_artifacts` flag will be set to `true`.
     /// When this flag is `true`, there should only be up to one artifact of any given type.
     /// When this flag is `false`, there may be multiple artifacts for any given type. However,
@@ -152,8 +149,8 @@ pub fn cargo_project(session: &KaniSession) -> Result<Project> {
     let outputs = session.cargo_build()?;
     let mut artifacts = vec![];
     let outdir = outputs.outdir.canonicalize()?;
-    if session.args.legacy_linker || session.args.function.is_some() {
-        // For the legacy linker or `--function` support, we still use a glob to link everything.
+    if session.args.function.is_some() {
+        // For the `--function` support, we still use a glob to link everything.
         // Yes, this is broken, but it has been broken for quite some time. :(
         // Merge goto files.
         let joined_name = "cbmc-linked";

@@ -88,6 +88,13 @@ pub fn specialized_harness_name(linked_obj: &Path, harness_filename: &str) -> Pa
     alter_extension(linked_obj, &format!("for-{harness_filename}.out"))
 }
 
+/// Print a warning message. This will add a "warning:" tag before the message and style accordinly.
+pub fn warning(msg: &str) {
+    let warning = console::style("warning:").bold().yellow();
+    let msg_fmt = console::style(msg).bold();
+    println!("{warning} {msg_fmt}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
