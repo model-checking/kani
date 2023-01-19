@@ -342,11 +342,11 @@ fn print_report(ctx: &GotocCtx, tcx: TyCtxt) {
 
     if !ctx.concurrent_constructs.is_empty() {
         let mut msg = String::from(
-            "Kani does not support concurrency for now. The following constructs will be treated \
+            "Kani currently does not support concurrency. The following constructs will be treated \
             as sequential operations:\n",
         );
         for (construct, locations) in ctx.concurrent_constructs.iter() {
-            writeln!(&mut msg, "    - {} ({})", construct, locations.len()).unwrap();
+            writeln!(&mut msg, "    - {construct} ({})", locations.len()).unwrap();
         }
         tcx.sess.warn(&msg);
     }
