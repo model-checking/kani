@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 #[kani::proof]
-fn foo(x: i32) {
+fn foo() {
+    let x: i32 = kani::any();
     if x > 5 {
         // fails
         assert!(x < 4);

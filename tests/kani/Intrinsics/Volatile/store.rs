@@ -26,3 +26,13 @@ fn main() {
     unsafe { std::intrinsics::volatile_store(unaligned, 42) };
     assert!(packed.unaligned == 42);
 }
+
+/// Check that volatile store also works for ZST.
+#[kani::proof]
+pub fn check_zst_volatile_store() {
+    let mut dst = ();
+    unsafe {
+        std::intrinsics::volatile_store(&mut dst, ());
+    }
+    assert_eq!(dst, ());
+}

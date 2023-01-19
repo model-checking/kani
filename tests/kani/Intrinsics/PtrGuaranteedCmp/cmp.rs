@@ -6,14 +6,20 @@
 #![feature(core_intrinsics)]
 use std::intrinsics::ptr_guaranteed_cmp;
 
-#[kani::proof]
-fn test_ptr_eq(ptr1: *const u8, ptr2: *const u8) {
-    kani::assume(ptr1 == ptr2);
-    assert_eq!(ptr_guaranteed_cmp(ptr1, ptr2), 1);
+fn ptr_eq(ptr1: *const u8, ptr2: *const u8) -> bool {
+    ptr_guaranteed_cmp(ptr1, ptr2) == 1
+}
+
+fn ptr_ne(ptr1: *const u8, ptr2: *const u8) -> bool {
+    ptr_guaranteed_cmp(ptr1, ptr2) == 0
 }
 
 #[kani::proof]
-fn test_ptr_ne(ptr1: *const u8, ptr2: *const u8) {
-    kani::assume(ptr1 != ptr2);
-    assert_eq!(ptr_guaranteed_cmp(ptr1, ptr2), 0);
+fn check_ptr_guaranteed_cmp() {
+    let v1: u8 = kani::any();
+    let v2: u8 = kani::any();
+    assert!(ptr_eq(&v1, &v1));
+    assert!(ptr_eq(&v2, &v2));
+    assert!(ptr_ne(&v2, &v1));
+    assert!(ptr_ne(&v1, &v2));
 }

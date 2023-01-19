@@ -339,6 +339,17 @@ fn print_report(ctx: &GotocCtx, tcx: TyCtxt) {
         details.";
         tcx.sess.warn(&msg);
     }
+
+    if !ctx.concurrent_constructs.is_empty() {
+        let mut msg = String::from(
+            "Kani currently does not support concurrency. The following constructs will be treated \
+            as sequential operations:\n",
+        );
+        for (construct, locations) in ctx.concurrent_constructs.iter() {
+            writeln!(&mut msg, "    - {construct} ({})", locations.len()).unwrap();
+        }
+        tcx.sess.warn(&msg);
+    }
 }
 
 /// Return a struct that contains information about the codegen results as expected by `rustc`.
@@ -448,15 +459,10 @@ fn dump_mir_items(tcx: TyCtxt, items: &[MonoItem]) {
     fn visible_item<'tcx>(item: &MonoItem<'tcx>) -> Option<(MonoItem<'tcx>, DefId)> {
         match item {
             // Exclude FnShims and others that cannot be dumped.
-            MonoItem::Fn(instance)
-                if matches!(
-                    instance.def,
-                    InstanceDef::FnPtrShim(..) | InstanceDef::ClosureOnceShim { .. }
-                ) =>
-            {
-                None
+            MonoItem::Fn(instance) if matches!(instance.def, InstanceDef::Item(..)) => {
+                Some((*item, instance.def_id()))
             }
-            MonoItem::Fn(instance) => Some((*item, instance.def_id())),
+            MonoItem::Fn(..) => None,
             MonoItem::Static(def_id) => Some((*item, *def_id)),
             MonoItem::GlobalAsm(_) => None,
         }

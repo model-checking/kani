@@ -5,7 +5,7 @@
 //! generating concrete playback unit tests, and adding them to the user's source code.
 
 use crate::args::ConcretePlaybackMode;
-use crate::call_cbmc::{VerificationResult, VerificationStatus};
+use crate::call_cbmc::VerificationResult;
 use crate::session::KaniSession;
 use anyhow::{Context, Result};
 use concrete_vals_extractor::{extract_harness_values, ConcreteVal};
@@ -23,16 +23,12 @@ impl KaniSession {
     pub fn gen_and_add_concrete_playback(
         &self,
         harness: &HarnessMetadata,
-        verification_result: &VerificationResult,
+        verification_result: &mut VerificationResult,
     ) -> Result<()> {
         let playback_mode = match self.args.concrete_playback {
             Some(playback_mode) => playback_mode,
             None => return Ok(()),
         };
-
-        if verification_result.status == VerificationStatus::Success {
-            return Ok(());
-        }
 
         if let Some(result_items) = &verification_result.results {
             match extract_harness_values(result_items) {
@@ -71,6 +67,7 @@ impl KaniSession {
                             .expect("Failed to modify source code");
                         }
                     }
+                    verification_result.generated_concrete_test = true;
                 }
             }
         }
@@ -309,7 +306,8 @@ mod concrete_vals_extractor {
     /// This will return None if the failure is not related to a user assertion.
     pub fn extract_harness_values(result_items: &[Property]) -> Option<Vec<ConcreteVal>> {
         let mut failures = result_items.iter().filter(|prop| {
-            prop.property_class() == "assertion" && prop.status == CheckStatus::Failure
+            (prop.property_class() == "assertion" && prop.status == CheckStatus::Failure)
+                || (prop.property_class() == "cover" && prop.status == CheckStatus::Satisfied)
         });
 
         // Process the first assertion failure.
