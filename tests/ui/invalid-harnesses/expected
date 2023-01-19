@@ -1,0 +1,17 @@
+warning: Duplicate attribute\
+invalid.rs:\
+|\
+| #[kani::proof]\
+| ^^^^^^^^^^^^^^
+
+error: Functions used as harnesses can not have any arguments.\
+invalid.rs:\
+|\
+| #[kani::proof]
+| ^^^^^^^^^^^^^^
+
+error: The proof attribute cannot be applied to generic functions.\
+invalid.rs:\
+|\
+| #[kani::proof]\
+| ^^^^^^^^^^^^^^
