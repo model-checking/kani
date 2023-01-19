@@ -109,11 +109,11 @@ where:
   This will be used to compile dependencies up to the MIR level.
    `kani-compiler` will still generate artifacts with the crate's MIR.
  - `tests`: Use the functions marked as tests with `#[tests]` as the starting points for the analysis.
- - `legacy`: Keep `kani-compiler` current behavior by using
-   `rustc_monomorphizer::collect_and_partition_mono_items()` which respects the crate boundary.
-   This will generate a goto-program for each crate compiled by `kani-compiler`, and it will still have the same
-   `std` linking issues.
-   *This option will be only used internally after the `rfc` stabilization.*
+ - `legacy`: Mimics `rustc` behavior by invoking
+   `rustc_monomorphizer::collect_and_partition_mono_items()` to collect the items to be generated.
+   This will not include many items that go beyond the crate boundary.
+   *This option was only kept for now for internal usage in some of our compiler tests.*
+   *It cannot be used as part of the end to end verification flow, and it will be removed in the future.*
 
 These flags will not be exposed to the final user.
 They will only be used for the communication between `kani-driver` and `kani-compiler`.
