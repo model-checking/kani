@@ -3,10 +3,11 @@
 use super::super::codegen::TypeExt;
 use crate::codegen_cprover_gotoc::codegen::typ::{is_pointer, pointee_type};
 use crate::codegen_cprover_gotoc::GotocCtx;
-use cbmc::btree_string_map;
-use cbmc::goto_program::{Expr, ExprValue, SymbolTable, Type};
+use cbmc::goto_program::{Expr, ExprValue, Location, SymbolTable, Type};
+use cbmc::{btree_string_map, InternedString};
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{Instance, Ty};
+use tracing::debug;
 
 // Should move into rvalue
 //make this a member function
@@ -65,6 +66,20 @@ impl<'tcx> GotocCtx<'tcx> {
             },
             _ => None,
         }
+    }
+
+    /// Store an occurrence of a concurrent construct that was treated as a sequential operation.
+    ///
+    /// Kani does not currently support concurrency and the compiler assumes that when generating
+    /// code for some specialized concurrent constructs that this is the case. We store all types of
+    /// operations that had this special handling and print a warning at the end of the compilation.
+    pub fn store_concurrent_construct(&mut self, operation_name: &str, loc: Location) {
+        debug!(op=?operation_name, location=?loc.short_string(), "store_seq_construct");
+
+        // Save this occurrence so we can emit a warning in the compilation report.
+        let key: InternedString = operation_name.into();
+        let entry = self.concurrent_constructs.entry(key).or_default();
+        entry.push(loc);
     }
 }
 

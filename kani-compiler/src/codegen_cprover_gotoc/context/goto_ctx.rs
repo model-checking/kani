@@ -71,6 +71,10 @@ pub struct GotocCtx<'tcx> {
     pub global_checks_count: u64,
     /// A map of unsupported constructs that were found while codegen
     pub unsupported_constructs: FxHashMap<InternedString, Vec<Location>>,
+    /// A map of concurrency constructs that are treated sequentially.
+    /// We collect them and print one warning at the end if not empty instead of printing one
+    /// warning at each occurrence.
+    pub concurrent_constructs: FxHashMap<InternedString, Vec<Location>>,
 }
 
 /// Constructor
@@ -96,6 +100,7 @@ impl<'tcx> GotocCtx<'tcx> {
             test_harnesses: vec![],
             global_checks_count: 0,
             unsupported_constructs: FxHashMap::default(),
+            concurrent_constructs: FxHashMap::default(),
         }
     }
 }

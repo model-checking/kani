@@ -8,7 +8,7 @@ use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use crate::kani_middle::coercion::{
     extract_unsize_casting, CoerceUnsizedInfo, CoerceUnsizedIterator, CoercionBase,
 };
-use crate::{emit_concurrency_warning, unwrap_or_return_codegen_unimplemented};
+use crate::unwrap_or_return_codegen_unimplemented;
 use cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
 use cbmc::MachineModel;
 use cbmc::{btree_string_map, InternString, InternedString};
@@ -408,7 +408,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             Rvalue::ThreadLocalRef(def_id) => {
                 // Since Kani is single-threaded, we treat a thread local like a static variable:
-                emit_concurrency_warning!("thread local", loc, "a static variable");
+                self.store_concurrent_construct("thread local (replaced by static variable)", loc);
                 self.codegen_static_pointer(*def_id, true)
             }
             // A CopyForDeref is equivalent to a read from a place at the codegen level.
