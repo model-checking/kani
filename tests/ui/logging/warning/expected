@@ -1,1 +1,1 @@
-warning: Only one '#[kani::proof]' allowed
+warning: Duplicate attribute
