@@ -12,7 +12,7 @@ use kani_queries::UserInput;
 use rustc_ast::Attribute;
 use rustc_hir::def::DefKind;
 use rustc_hir::def_id::DefId;
-use rustc_middle::mir::{HasLocalDecls, Local};
+use rustc_middle::mir::{Body, HasLocalDecls, Local};
 use rustc_middle::ty::layout::FnAbiOf;
 use rustc_middle::ty::{self, Instance};
 use std::collections::BTreeMap;
@@ -47,14 +47,19 @@ impl<'tcx> GotocCtx<'tcx> {
             let base_name = self.codegen_var_base_name(&lc);
             let name = self.codegen_var_name(&lc);
             let ldata = &ldecls[lc];
-            let t = self.monomorphize(ldata.ty);
-            let t = self.codegen_ty(t);
+            let var_ty = self.monomorphize(ldata.ty);
+            let var_type = self.codegen_ty(var_ty);
             let loc = self.codegen_span(&ldata.source_info.span);
             // Indices [1, N] represent the function parameters where N is the number of parameters.
-            let sym =
-                Symbol::variable(name, base_name, t, self.codegen_span(&ldata.source_info.span))
-                    .with_is_hidden(!ldata.is_user_variable())
-                    .with_is_parameter(idx > 0 && idx <= num_args);
+            // Except that ZST fields are not included as parameters.
+            let sym = Symbol::variable(
+                name,
+                base_name,
+                var_type,
+                self.codegen_span(&ldata.source_info.span),
+            )
+            .with_is_hidden(!ldata.is_user_variable())
+            .with_is_parameter((idx > 0 && idx <= num_args) && !self.is_zst(var_ty));
             let sym_e = sym.to_expr();
             self.symbol_table.insert(sym);
 
@@ -96,29 +101,41 @@ impl<'tcx> GotocCtx<'tcx> {
         self.reset_current_fn();
     }
 
+    /// Codegen changes required due to the function ABI.
+    /// We currently untuple arguments for RustCall ABI where the `spread_arg` is set.
+    fn codegen_function_prelude(&mut self) {
+        let mir = self.current_fn().mir();
+        if let Some(spread_arg) = mir.spread_arg {
+            self.codegen_spread_arg(mir, spread_arg);
+        }
+    }
+
     /// MIR functions have a `spread_arg` field that specifies whether the
     /// final argument to the function is "spread" at the LLVM/codegen level
     /// from a tuple into its individual components. (Used for the "rust-
-    /// call" ABI, necessary because dynamic trait closure cannot have an
+    /// call" ABI, necessary because the function traits and closures cannot have an
     /// argument list in MIR that is both generic and variadic, so Rust
     /// allows a generic tuple).
     ///
-    /// If `spread_arg` is Some, then the wrapped value is the local that is
-    /// to be "spread"/untupled. However, the MIR function body itself expects
-    /// the tuple instead of the individual components, so we need to generate
-    /// a function prelude that _retuples_, that is, writes the components
-    /// back to the tuple local for use in the body.
+    /// These tuples are used in the MIR to invoke a shim, and it's used in the shim body.
+    ///
+    /// The `spread_arg` represents the the local variable that is to be "spread"/untupled.
+    /// However, the function body itself may refer to the members of
+    /// the tuple instead of the individual spread parameters, so we need to add to the
+    /// function prelude code that _retuples_, that is, writes the arguments
+    /// back to a local tuple that can be used in the body.
     ///
     /// See:
     /// <https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp/topic/Determine.20untupled.20closure.20args.20from.20Instance.3F>
-    fn codegen_function_prelude(&mut self) {
-        let mir = self.current_fn().mir();
-        if mir.spread_arg.is_none() {
-            // No special tuple argument, no work to be done.
+    fn codegen_spread_arg(&mut self, mir: &Body<'tcx>, spread_arg: Local) {
+        tracing::debug!(current=?self.current_fn, "codegen_spread_arg");
+        let spread_data = &mir.local_decls()[spread_arg];
+        let tup_ty = self.monomorphize(spread_data.ty);
+        if self.is_zst(tup_ty) {
+            // No need to spread a ZST since it will be ignored.
             return;
         }
-        let spread_arg = mir.spread_arg.unwrap();
-        let spread_data = &mir.local_decls()[spread_arg];
+
         let loc = self.codegen_span(&spread_data.source_info.span);
 
         // Get the function signature from MIR, _before_ we untuple
@@ -159,7 +176,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // };
         // ```
         // Note how the compiler has reordered the fields to improve packing.
-        let tup_typ = self.codegen_ty(self.monomorphize(spread_data.ty));
+        let tup_type = self.codegen_ty(tup_ty);
 
         // We need to marshall the arguments into the tuple
         // The arguments themselves have been tacked onto the explicit function paramaters by
@@ -192,7 +209,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let (name, base_name) = self.codegen_spread_arg_name(&lc);
                 let sym = Symbol::variable(name, base_name, self.codegen_ty(arg_t), loc)
                     .with_is_hidden(false)
-                    .with_is_parameter(true);
+                    .with_is_parameter(!self.is_zst(arg_t));
                 // The spread arguments are additional function paramaters that are patched in
                 // They are to the function signature added in the `fn_typ` function.
                 // But they were never added to the symbol table, which we currently do here.
@@ -204,12 +221,12 @@ impl<'tcx> GotocCtx<'tcx> {
                 (arg_i.to_string().intern(), sym.to_expr())
             }));
         let marshalled_tuple_value =
-            Expr::struct_expr(tup_typ.clone(), marshalled_tuple_fields, &self.symbol_table)
+            Expr::struct_expr(tup_type.clone(), marshalled_tuple_fields, &self.symbol_table)
                 .with_location(loc);
         self.declare_variable(
             self.codegen_var_name(&spread_arg),
             self.codegen_var_base_name(&spread_arg),
-            tup_typ,
+            tup_type,
             Some(marshalled_tuple_value),
             loc,
         );

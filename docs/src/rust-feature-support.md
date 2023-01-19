@@ -154,9 +154,7 @@ not formally defined which makes it harder to ensure that we can properly model
 all their use cases.
 
 In particular, there are some outstanding issues to note here:
- * Unimplemented `PointerCast::ClosureFnPointer` in
-   [#274](https://github.com/model-checking/kani/issues/274) and `Variant` case
-   in projections type in
+ * Sanity check `Variant` type in projections
    [#448](https://github.com/model-checking/kani/issues/448).
  * Unexpected fat pointer results in
    [#277](https://github.com/model-checking/kani/issues/277),
