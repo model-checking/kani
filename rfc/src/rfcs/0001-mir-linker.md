@@ -1,8 +1,8 @@
 - **Feature Name:** MIR Linker (mir_linker)
 - **RFC Tracking Issue**: <https://github.com/model-checking/kani/issues/1588>
 - **RFC PR:** <https://github.com/model-checking/kani/pull/1600>
-- **Status:** Unstable
-- **Version:** 2
+- **Status:** Stable
+- **Version:** 3
 
 -------------------
 
@@ -23,7 +23,7 @@ The approach introduced in this RFC will have the following secondary benefits.
   - Compared to linking against the standard library goto-models that take more than 5 GB.
 - In a potential assessment mode, only analyze code that is reachable from all public items in the target crate.
 
-One downside is that if we decide to include a pre-compiled version of the std, our release bundle will double in size
+One downside is that we will include a pre-compiled version of the std, our release bundle will double in size
 (See [Rational and Alternatives](0001-mir-linker.md#rational-and-alternatives)
 for more information on the size overhead).
 This will negatively impact the time taken to set up Kani
@@ -97,7 +97,7 @@ The two options to be included in this RFC is starting from all local harnesses
 The `kani-compiler` behavior will be customizable via a new flag:
 
   ```
-  --reachability=[ harnesses | pub_fns |  none | legacy ]
+  --reachability=[ harnesses | pub_fns |  none | legacy | tests ]
   ```
 
 where:
@@ -108,11 +108,12 @@ where:
  reachability analysis. No goto-program will be generated.
   This will be used to compile dependencies up to the MIR level.
    `kani-compiler` will still generate artifacts with the crate's MIR.
- - `legacy`: Keep `kani-compiler` current behavior by using
-   `rustc_monomorphizer::collect_and_partition_mono_items()` which respects the crate boundary.
-   This will generate a goto-program for each crate compiled by `kani-compiler`, and it will still have the same
-   `std` linking issues.
-   *This option will be removed as part of the `rfc` stabilization.*
+ - `tests`: Use the functions marked as tests with `#[tests]` as the starting points for the analysis.
+ - `legacy`: Mimics `rustc` behavior by invoking
+   `rustc_monomorphizer::collect_and_partition_mono_items()` to collect the items to be generated.
+   This will not include many items that go beyond the crate boundary.
+   *This option was only kept for now for internal usage in some of our compiler tests.*
+   *It cannot be used as part of the end to end verification flow, and it will be removed in the future.*
 
 These flags will not be exposed to the final user.
 They will only be used for the communication between `kani-driver` and `kani-compiler`.
@@ -203,7 +204,7 @@ See the table bellow for the breakdown of time (in seconds) taken for each major
 the harness verification:
 
 
-| Stage                     | MIR Linker | Alternative |
+| Stage                     | MIR Linker | Alternative 1 |
 ----------------------------|------------|-------------|
 | compilation               |   22.2s    |    64.7s    |
 | goto-program generation |   2.4s     |    90.7s    |
@@ -229,14 +230,16 @@ These results were obtained by looking at the artifacts generated during the sam
 
 ## Open questions
 
-- Should we build or download the sysroot during `kani setup`?
-- What's the best way to enable support to run Kani in the entire `workspace`?
-  - One possibility is to run `cargo rustc` per package.
-- Should we codegen all static items no matter what? Static objects can only be initialized via constant function.
-  Thus, it shouldn't have any side effect.
-  That relies on all constant initializers being evaluated during compilation.
+- ~~Should we build or download the sysroot during `kani setup`?~~
+  We include pre-built MIR artifacts for the `std` library.
+- ~~What's the best way to enable support to run Kani in the entire `workspace`?~~
+  We decided to run `cargo rustc` per package.
+- ~~Should we codegen all static items no matter what?~~
+ We only generate code for static items that are collected by the reachability analysis.
+ Static objects can only be initialized via constant function.
+ Thus, it shouldn't have any side effect.
 - ~~What's the best way to handle `cargo kani --tests`?~~
-  For now, we are going to use the test profile and iterate over all the targets available in the crate:
+  We are going to use the test profile and iterate over all the targets available in the crate:
   - `cargo rustc --profile test -- --reachability=harnesses`
 
 
