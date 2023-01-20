@@ -5,25 +5,6 @@
 # To enable "unsound_experimental features, run as follows:
 # `KANI_ENABLE_UNSOUND_EXPERIMENTS=1 scripts/kani-regression.sh`
 
-# Check if kissat has the minimum required version
-function check_kissat_version {
-  if [ -z "${KISSAT_VERSION:-}" ]; then
-    echo "$0: ERROR: KISSAT_VERSION is not set"
-    return 1
-  fi
-  cmd="kissat --version"
-  if kissat_version=$($cmd); then
-    # Perform a lexicographic comparison of the version
-    if [[ $kissat_version < $KISSAT_VERSION ]]; then
-      echo "ERROR: Kissat version is $kissat_version. Expected at least $KISSAT_VERSION."
-      return 1
-    fi
-  else
-    echo "ERROR: Couldn't run command '$cmd'"
-    return 1
-  fi
-}
-
 if [[ -z $KANI_REGRESSION_KEEP_GOING ]]; then
   set -o errexit
 fi
@@ -41,10 +22,9 @@ KANI_DIR=$SCRIPT_DIR/..
 export KANI_FAIL_ON_UNEXPECTED_DESCRIPTION="true"
 
 # Required dependencies
-source "${KANI_DIR}/kani-dependencies"
 check-cbmc-version.py --major 5 --minor 75
 check-cbmc-viewer-version.py --major 3 --minor 5
-check_kissat_version
+check_kissat_version.sh
 
 # Formatting check
 ${SCRIPT_DIR}/kani-fmt.sh --check
