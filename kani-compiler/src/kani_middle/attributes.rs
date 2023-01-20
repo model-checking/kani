@@ -33,7 +33,7 @@ pub fn extract_integer_argument(attr: &Attribute) -> Option<u128> {
     let attr_args = attr.meta_item_list()?;
     // Only extracts one integer value as argument
     if attr_args.len() == 1 {
-        let x = attr_args[0].literal()?;
+        let x = attr_args[0].lit()?;
         match x.kind {
             LitKind::Int(y, ..) => Some(y),
             _ => None,
