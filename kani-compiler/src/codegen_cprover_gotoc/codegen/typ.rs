@@ -20,7 +20,7 @@ use rustc_middle::ty::{
 use rustc_middle::ty::{List, TypeFoldable};
 use rustc_span::def_id::DefId;
 use rustc_target::abi::{
-    Abi::Vector, FieldsShape, Integer, Layout, Primitive, Size, TagEncoding, TyAndLayout,
+    Abi::Vector, FieldsShape, Integer, LayoutS, Primitive, Size, TagEncoding, TyAndLayout,
     VariantIdx, Variants,
 };
 use rustc_target::spec::abi::Abi;
@@ -327,10 +327,12 @@ impl<'tcx> GotocCtx<'tcx> {
         self.sig_with_untupled_args(sig)
     }
 
-    // Adapted from `fn_sig_for_fn_abi` in compiler/rustc_middle/src/ty/layout.rs
+    // Adapted from `fn_sig_for_fn_abi` in
+    // https://github.com/rust-lang/rust/blob/739d68a76e35b22341d9930bb6338bf202ba05ba/compiler/rustc_ty_utils/src/abi.rs#L88
     // Code duplication tracked here: https://github.com/model-checking/kani/issues/1365
     fn generator_sig(
         &self,
+        did: &DefId,
         ty: Ty<'tcx>,
         substs: ty::subst::SubstsRef<'tcx>,
     ) -> ty::PolyFnSig<'tcx> {
@@ -352,10 +354,21 @@ impl<'tcx> GotocCtx<'tcx> {
         let env_ty = self.tcx.mk_adt(pin_adt_ref, pin_substs);
 
         let sig = sig.skip_binder();
-        let state_did = self.tcx.require_lang_item(LangItem::GeneratorState, None);
-        let state_adt_ref = self.tcx.adt_def(state_did);
-        let state_substs = self.tcx.intern_substs(&[sig.yield_ty.into(), sig.return_ty.into()]);
-        let ret_ty = self.tcx.mk_adt(state_adt_ref, state_substs);
+        // The `FnSig` and the `ret_ty` here is for a generators main
+        // `Generator::resume(...) -> GeneratorState` function in case we
+        // have an ordinary generator, or the `Future::poll(...) -> Poll`
+        // function in case this is a special generator backing an async construct.
+        let ret_ty = if self.tcx.generator_is_async(*did) {
+            let state_did = self.tcx.require_lang_item(LangItem::Poll, None);
+            let state_adt_ref = self.tcx.adt_def(state_did);
+            let state_substs = self.tcx.intern_substs(&[sig.return_ty.into()]);
+            self.tcx.mk_adt(state_adt_ref, state_substs)
+        } else {
+            let state_did = self.tcx.require_lang_item(LangItem::GeneratorState, None);
+            let state_adt_ref = self.tcx.adt_def(state_did);
+            let state_substs = self.tcx.intern_substs(&[sig.yield_ty.into(), sig.return_ty.into()]);
+            self.tcx.mk_adt(state_adt_ref, state_substs)
+        };
         ty::Binder::bind_with_vars(
             self.tcx.mk_fn_sig(
                 [env_ty, sig.resume_ty].iter(),
@@ -380,7 +393,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
                 sig
             }
-            ty::Generator(_, substs, _) => self.generator_sig(fntyp, substs),
+            ty::Generator(did, substs, _) => self.generator_sig(did, fntyp, substs),
             _ => unreachable!("Can't get function signature of type: {:?}", fntyp),
         })
     }
@@ -865,10 +878,10 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_alignment_padding(
         &self,
         size: Size,
-        layout: &Layout,
+        layout: &LayoutS<VariantIdx>,
         idx: usize,
     ) -> Option<DatatypeComponent> {
-        let align = Size::from_bits(layout.align().abi.bits());
+        let align = Size::from_bits(layout.align.abi.bits());
         let overhang = Size::from_bits(size.bits() % align.bits());
         if overhang != Size::ZERO {
             self.codegen_struct_padding(size, size + align - overhang, idx)
@@ -890,16 +903,16 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_struct_fields(
         &mut self,
         flds: Vec<(String, Ty<'tcx>)>,
-        layout: &Layout,
+        layout: &LayoutS<VariantIdx>,
         initial_offset: Size,
     ) -> Vec<DatatypeComponent> {
-        match &layout.fields() {
+        match &layout.fields {
             FieldsShape::Arbitrary { offsets, memory_index } => {
                 assert_eq!(flds.len(), offsets.len());
                 assert_eq!(offsets.len(), memory_index.len());
                 let mut final_fields = Vec::with_capacity(flds.len());
                 let mut offset = initial_offset;
-                for idx in layout.fields().index_by_increasing_offset() {
+                for idx in layout.fields.index_by_increasing_offset() {
                     let fld_offset = offsets[idx];
                     let (fld_name, fld_ty) = &flds[idx];
                     if let Some(padding) =
@@ -922,7 +935,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             // Primitives, such as NEVER, have no fields
             FieldsShape::Primitive => vec![],
-            _ => unreachable!("{}\n{:?}", self.current_fn().readable_name(), layout.fields()),
+            _ => unreachable!("{}\n{:?}", self.current_fn().readable_name(), layout.fields),
         }
     }
 
@@ -931,7 +944,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let flds: Vec<_> =
             tys.iter().enumerate().map(|(i, t)| (GotocCtx::tuple_fld_name(i), *t)).collect();
         // tuple cannot have other initial offset
-        self.codegen_struct_fields(flds, &layout.layout, Size::ZERO)
+        self.codegen_struct_fields(flds, &layout.layout.0, Size::ZERO)
     }
 
     /// A closure / some shims in Rust MIR takes two arguments:
@@ -1136,7 +1149,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             fields.extend(ctx.codegen_alignment_padding(
                 offset,
-                &type_and_layout.layout,
+                &type_and_layout.layout.0,
                 fields.len(),
             ));
             fields
@@ -1338,7 +1351,7 @@ impl<'tcx> GotocCtx<'tcx> {
         self.ensure_struct(self.ty_mangled_name(ty), self.ty_pretty_name(ty), |ctx, _| {
             let variant = &def.variants().raw[0];
             let layout = ctx.layout_of(ty);
-            ctx.codegen_variant_struct_fields(variant, subst, &layout.layout, Size::ZERO)
+            ctx.codegen_variant_struct_fields(variant, subst, &layout.layout.0, Size::ZERO)
         })
     }
 
@@ -1347,7 +1360,7 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         variant: &VariantDef,
         subst: &'tcx InternalSubsts<'tcx>,
-        layout: &Layout,
+        layout: &LayoutS<VariantIdx>,
         initial_offset: Size,
     ) -> Vec<DatatypeComponent> {
         let flds: Vec<_> =
@@ -1430,7 +1443,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         Some(variant) => {
                             // a single enum is pretty much like a struct
                             let layout = gcx.layout_of(ty).layout;
-                            gcx.codegen_variant_struct_fields(variant, subst, &layout, Size::ZERO)
+                            gcx.codegen_variant_struct_fields(variant, subst, &layout.0, Size::ZERO)
                         }
                     }
                 })
@@ -1516,9 +1529,9 @@ impl<'tcx> GotocCtx<'tcx> {
         ty: Ty<'tcx>,
         adtdef: &'tcx AdtDef,
         subst: &'tcx InternalSubsts<'tcx>,
-        variants: &IndexVec<VariantIdx, Layout>,
+        variants: &IndexVec<VariantIdx, LayoutS<VariantIdx>>,
     ) -> Type {
-        let non_zst_count = variants.iter().filter(|layout| layout.size().bytes() > 0).count();
+        let non_zst_count = variants.iter().filter(|layout| layout.size.bytes() > 0).count();
         let mangled_name = self.ty_mangled_name(ty);
         let pretty_name = self.ty_pretty_name(ty);
         tracing::trace!(?pretty_name, ?variants, ?subst, ?non_zst_count, "codegen_enum: Niche");
@@ -1535,12 +1548,12 @@ impl<'tcx> GotocCtx<'tcx> {
 
     pub(crate) fn variant_min_offset(
         &self,
-        variants: &IndexVec<VariantIdx, Layout>,
+        variants: &IndexVec<VariantIdx, LayoutS<VariantIdx>>,
     ) -> Option<Size> {
         variants
             .iter()
             .filter_map(|lo| {
-                if lo.fields().count() == 0 {
+                if lo.fields.count() == 0 {
                     None
                 } else {
                     // get the offset of the leftmost field, which is the one
@@ -1548,10 +1561,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     // in the order of increasing offsets. Note that this is not
                     // necessarily the 0th field since the compiler may reorder
                     // fields.
-                    Some(
-                        lo.fields()
-                            .offset(lo.fields().index_by_increasing_offset().next().unwrap()),
-                    )
+                    Some(lo.fields.offset(lo.fields.index_by_increasing_offset().next().unwrap()))
                 }
             })
             .min()
@@ -1622,7 +1632,7 @@ impl<'tcx> GotocCtx<'tcx> {
         pretty_name: InternedString,
         def: &'tcx AdtDef,
         subst: &'tcx InternalSubsts<'tcx>,
-        layouts: &IndexVec<VariantIdx, Layout>,
+        layouts: &IndexVec<VariantIdx, LayoutS<VariantIdx>>,
         initial_offset: Size,
     ) -> Vec<DatatypeComponent> {
         def.variants()
@@ -1654,7 +1664,7 @@ impl<'tcx> GotocCtx<'tcx> {
         pretty_name: InternedString,
         case: &VariantDef,
         subst: &'tcx InternalSubsts<'tcx>,
-        variant: &Layout,
+        variant: &LayoutS<VariantIdx>,
         initial_offset: Size,
     ) -> Type {
         let case_name = format!("{name}::{}", case.name);

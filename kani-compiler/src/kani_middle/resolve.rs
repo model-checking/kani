@@ -305,8 +305,8 @@ fn resolve_in_module(tcx: TyCtxt, current_module: DefId, segments: Segments) -> 
 }
 
 /// Resolves a path by exploring a non-glob use statement.
-fn resolve_in_use(tcx: TyCtxt, use_path: &rustc_hir::Path, segments: Segments) -> Option<DefId> {
-    if let Res::Def(def_kind, def_id) = use_path.res {
+fn resolve_in_use(tcx: TyCtxt, use_path: &rustc_hir::UsePath, segments: Segments) -> Option<DefId> {
+    if let Res::Def(def_kind, def_id) = use_path.res[0] {
         tracing::debug!(
             "Resolving `{}` via `use` import of `{}`",
             segments_to_string(&segments),
@@ -340,7 +340,7 @@ fn resolve_in_use(tcx: TyCtxt, use_path: &rustc_hir::Path, segments: Segments) -
 fn resolve_in_glob_uses(
     tcx: TyCtxt,
     current_module: LocalDefId,
-    glob_imports: Vec<&rustc_hir::Path>,
+    glob_imports: Vec<&rustc_hir::UsePath>,
     segments: &Segments,
 ) -> Option<DefId> {
     let glob_resolves = glob_imports
@@ -377,10 +377,10 @@ fn resolve_in_glob_uses(
 /// Resolves a path by exploring a glob use statement.
 fn resolve_in_glob_use(
     tcx: TyCtxt,
-    use_path: &rustc_hir::Path,
+    use_path: &rustc_hir::UsePath,
     segments: Segments,
 ) -> Option<DefId> {
-    if let Res::Def(DefKind::Mod, def_id) = use_path.res {
+    if let Res::Def(DefKind::Mod, def_id) = use_path.res[0] {
         resolve_in_module(tcx, def_id, segments)
     } else {
         None

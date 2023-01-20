@@ -59,8 +59,7 @@ impl<'a> ArchiveBuilder<'a> {
         let entries = self.entries.iter().map(|(entry_name, file)| {
             let data = std::fs::read(file).unwrap_or_else(|err| {
                 sess.fatal(&format!(
-                    "error while reading object file during archive building: {}",
-                    err
+                    "error while reading object file during archive building: {err}"
                 ));
             });
             (entry_name, data)
