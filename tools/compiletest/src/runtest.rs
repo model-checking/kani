@@ -7,12 +7,12 @@
 
 use crate::common::KaniFailStep;
 use crate::common::{output_base_dir, output_base_name};
-use crate::common::{CargoKani, CargoKaniTest, Expected, Kani, KaniFixme, Stub};
+use crate::common::{CargoKani, CargoKaniTest, Exec, Expected, Kani, KaniFixme, Stub};
 use crate::common::{Config, TestPaths};
 use crate::header::TestProps;
-use crate::json;
 use crate::read2::read2;
 use crate::util::logv;
+use crate::{fatal_error, json};
 
 use std::env;
 use std::fs::{self, create_dir_all};
@@ -20,8 +20,21 @@ use std::path::PathBuf;
 use std::process::{Command, ExitStatus, Output, Stdio};
 use std::str;
 
+use serde::{Deserialize, Serialize};
+use serde_yaml;
 use tracing::*;
 use wait_timeout::ChildExt;
+
+/// Configurations for `exec` tests
+#[derive(Debug, Serialize, Deserialize)]
+struct ExecConfig {
+    // The path to the script to be executed
+    script: String,
+    // (Optional) The path to the `.expected` file to use for output comparison
+    expected: Option<String>,
+    // (Optional) The exit code to be returned by executing the script
+    exit_code: Option<i32>,
+}
 
 #[cfg(not(windows))]
 fn disable_error_reporting<F: FnOnce() -> R, R>(f: F) -> R {
@@ -33,17 +46,17 @@ pub fn dylib_env_var() -> &'static str {
     if cfg!(target_os = "macos") { "DYLD_LIBRARY_PATH" } else { "LD_LIBRARY_PATH" }
 }
 
-pub fn run(config: Config, testpaths: &TestPaths, revision: Option<&str>) {
+pub fn run(config: Config, testpaths: &TestPaths) {
     if config.verbose {
         // We're going to be dumping a lot of info. Start on a new line.
         print!("\n\n");
     }
     debug!("running {:?}", testpaths.file.display());
-    let props = TestProps::from_file(&testpaths.file, revision, &config);
+    let props = TestProps::from_file(&testpaths.file, &config);
 
-    let cx = TestCx { config: &config, props: &props, testpaths, revision };
+    let cx = TestCx { config: &config, props: &props, testpaths };
     create_dir_all(&cx.output_base_dir()).unwrap();
-    cx.run_revision();
+    cx.run();
     cx.create_stamp();
 }
 
@@ -52,18 +65,17 @@ struct TestCx<'test> {
     config: &'test Config,
     props: &'test TestProps,
     testpaths: &'test TestPaths,
-    revision: Option<&'test str>,
 }
 
 impl<'test> TestCx<'test> {
-    /// Code executed for each revision in turn (or, if there are no
-    /// revisions, exactly once, with revision == None).
-    fn run_revision(&self) {
+    /// Code executed
+    fn run(&self) {
         match self.config.mode {
             Kani => self.run_kani_test(),
             KaniFixme => self.run_kani_test(),
             CargoKani => self.run_cargo_kani_test(false),
             CargoKaniTest => self.run_cargo_kani_test(true),
+            Exec => self.run_exec_test(),
             Expected => self.run_expected_test(),
             Stub => self.run_stub_test(),
         }
@@ -114,10 +126,8 @@ impl<'test> TestCx<'test> {
     }
 
     fn dump_output(&self, out: &str, err: &str) {
-        let revision = if let Some(r) = self.revision { format!("{r}.") } else { String::new() };
-
-        self.dump_output_file(out, &format!("{revision}out"));
-        self.dump_output_file(err, &format!("{revision}err"));
+        self.dump_output_file(out, "out");
+        self.dump_output_file(err, "err");
         self.maybe_dump_to_stdout(out, err);
     }
 
@@ -127,29 +137,23 @@ impl<'test> TestCx<'test> {
     }
 
     /// Creates a filename for output with the given extension.
-    /// E.g., `/.../testname.revision.mode/testname.extension`.
+    /// E.g., `/.../testname.mode/testname.extension`.
     fn make_out_name(&self, extension: &str) -> PathBuf {
         self.output_base_name().with_extension(extension)
     }
 
-    /// The revision, ignored for incremental compilation since it wants all revisions in
-    /// the same directory.
-    fn safe_revision(&self) -> Option<&str> {
-        self.revision
-    }
-
     /// Gets the absolute path to the directory where all output for the given
-    /// test/revision should reside.
-    /// E.g., `/path/to/build/host-triple/test/ui/relative/testname.revision.mode/`.
+    /// test should reside.
+    /// E.g., `/path/to/build/host-triple/test/ui/relative/testname.mode/`.
     fn output_base_dir(&self) -> PathBuf {
-        output_base_dir(self.config, self.testpaths, self.safe_revision())
+        output_base_dir(self.config, self.testpaths)
     }
 
     /// Gets the absolute path to the base filename used as output for the given
-    /// test/revision.
-    /// E.g., `/.../relative/testname.revision.mode/testname`.
+    /// test.
+    /// E.g., `/.../relative/testname.mode/testname`.
     fn output_base_name(&self) -> PathBuf {
-        output_base_name(self.config, self.testpaths, self.safe_revision())
+        output_base_name(self.config, self.testpaths)
     }
 
     fn maybe_dump_to_stdout(&self, out: &str, err: &str) {
@@ -163,10 +167,7 @@ impl<'test> TestCx<'test> {
     }
 
     fn error(&self, err: &str) {
-        match self.revision {
-            Some(rev) => println!("\nerror in revision `{rev}`: {err}"),
-            None => println!("\nerror: {err}"),
-        }
+        println!("\nerror: {err}");
     }
 
     fn fatal_proc_rec(&self, err: &str, proc_res: &ProcRes) -> ! {
@@ -310,6 +311,66 @@ impl<'test> TestCx<'test> {
         self.compose_and_run(kani)
     }
 
+    /// Runs an executable file and:
+    ///  * Checks the expected output if an expected file is specified
+    ///  * Checks the exit code (assumed to be 0 by default)
+    fn run_exec_test(&self) {
+        // Open the `config.yml` file and extract its values
+        let path_yml = self.testpaths.file.join("config.yml");
+        let config_file = std::fs::File::open(path_yml).expect("couldn't open `config.yml`");
+        let exec_config_res = serde_yaml::from_reader(config_file);
+        if let Err(error) = &exec_config_res {
+            let err_msg = format!("couldn't parse `config.yml` file: {error}");
+            fatal_error(&err_msg);
+        }
+        let exec_config: ExecConfig = exec_config_res.unwrap();
+
+        // Check if the `script` file exists
+        let script_rel_path = PathBuf::from(exec_config.script);
+        let script_path = self.testpaths.file.join(script_rel_path);
+        if !script_path.exists() {
+            let err_msg = format!("test failed: couldn't find script in {}", script_path.display());
+            fatal_error(&err_msg);
+        }
+
+        // Check if the `expected` file exists, and load its contents into `expected_output`
+        let expected_output = if let Some(expected_path) = exec_config.expected {
+            let expected_rel_path = PathBuf::from(expected_path);
+            let expected_path = self.testpaths.file.join(expected_rel_path);
+            if !expected_path.exists() {
+                let err_msg = format!(
+                    "test failed: couldn't find expected file in {}",
+                    expected_path.display()
+                );
+                fatal_error(&err_msg);
+            }
+            Some(fs::read_to_string(expected_path).unwrap())
+        } else {
+            None
+        };
+
+        // Create the command `time script` and run it from the test directory
+        let mut script_path_cmd = Command::new("time");
+        script_path_cmd.arg(script_path).current_dir(&self.testpaths.file);
+        let proc_res = self.compose_and_run(script_path_cmd);
+
+        // Compare with expected output if it was provided
+        if let Some(output) = expected_output {
+            self.verify_output(&proc_res, &output);
+        }
+
+        // Compare with exit code (0 if it wasn't provided)
+        let expected_code = exec_config.exit_code.or(Some(0));
+        if proc_res.status.code() != expected_code {
+            let err_msg = format!(
+                "test failed: expected code {}, got code {}",
+                expected_code.unwrap(),
+                proc_res.status.code().unwrap()
+            );
+            self.fatal_proc_rec(&err_msg, &proc_res);
+        }
+    }
+
     /// Runs Kani on the test file specified by `self.testpaths.file`. An error
     /// message is printed to stdout if verification output does not contain
     /// the expected output in `expected` file.
@@ -406,7 +467,7 @@ impl<'test> TestCx<'test> {
     }
 
     fn create_stamp(&self) {
-        let stamp = crate::stamp(self.config, self.testpaths, self.revision);
+        let stamp = crate::stamp(self.config, self.testpaths);
         fs::write(&stamp, "we only support one configuration").unwrap();
     }
 }

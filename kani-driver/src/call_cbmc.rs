@@ -38,6 +38,8 @@ pub struct VerificationResult {
     pub exit_status: i32,
     /// The runtime duration of this CBMC invocation.
     pub runtime: Duration,
+    /// Whether concrete playback generated a test
+    pub generated_concrete_test: bool,
 }
 
 impl KaniSession {
@@ -51,7 +53,8 @@ impl KaniSession {
 
         let start_time = Instant::now();
 
-        let verification_results = if self.args.output_format == crate::args::OutputFormat::Old {
+        let mut verification_results = if self.args.output_format == crate::args::OutputFormat::Old
+        {
             if self.run_terminal(cmd).is_err() {
                 VerificationResult::mock_failure()
             } else {
@@ -80,7 +83,7 @@ impl KaniSession {
             }
         };
 
-        self.gen_and_add_concrete_playback(harness, &verification_results)?;
+        self.gen_and_add_concrete_playback(harness, &mut verification_results)?;
         Ok(verification_results)
     }
 
@@ -204,6 +207,7 @@ impl VerificationResult {
                 results: Some(results),
                 exit_status: output.process_status,
                 runtime,
+                generated_concrete_test: false,
             }
         } else {
             // We never got results from CBMC - something went wrong (e.g. crash) so it's failure
@@ -213,6 +217,7 @@ impl VerificationResult {
                 results: None,
                 exit_status: output.process_status,
                 runtime,
+                generated_concrete_test: false,
             }
         }
     }
@@ -224,6 +229,7 @@ impl VerificationResult {
             results: None,
             exit_status: 42, // on success, exit code is ignored, so put something weird here
             runtime: Duration::from_secs(0),
+            generated_concrete_test: false,
         }
     }
 
@@ -237,6 +243,7 @@ impl VerificationResult {
             // so again use something weird:
             exit_status: 42,
             runtime: Duration::from_secs(0),
+            generated_concrete_test: false,
         }
     }
 
@@ -294,49 +301,32 @@ mod tests {
     #[test]
     fn check_resolve_unwind_value() {
         // Command line unwind value for specific harnesses take precedence over default annotation value
-        let args_empty = ["kani"];
-        let args_only_default = ["kani", "--default-unwind", "2"];
-        let args_only_harness = ["kani", "--unwind", "1", "--harness", "check_one"];
+        let args_empty = ["kani", "x.rs"];
+        let args_only_default = ["kani", "x.rs", "--default-unwind", "2"];
+        let args_only_harness = ["kani", "x.rs", "--unwind", "1", "--harness", "check_one"];
         let args_both =
-            ["kani", "--default-unwind", "2", "--unwind", "1", "--harness", "check_one"];
+            ["kani", "x.rs", "--default-unwind", "2", "--unwind", "1", "--harness", "check_one"];
 
         let harness_none = mock_proof_harness("check_one", None, None);
         let harness_some = mock_proof_harness("check_one", Some(3), None);
 
+        fn resolve(args: &[&str], harness: &HarnessMetadata) -> Option<u32> {
+            resolve_unwind_value(
+                &args::StandaloneArgs::try_parse_from(args).unwrap().common_opts,
+                harness,
+            )
+        }
+
         // test against no unwind annotation
-        assert_eq!(
-            resolve_unwind_value(&args::KaniArgs::parse_from(args_empty), &harness_none),
-            None
-        );
-        assert_eq!(
-            resolve_unwind_value(&args::KaniArgs::parse_from(args_only_default), &harness_none),
-            Some(2)
-        );
-        assert_eq!(
-            resolve_unwind_value(&args::KaniArgs::parse_from(args_only_harness), &harness_none),
-            Some(1)
-        );
-        assert_eq!(
-            resolve_unwind_value(&args::KaniArgs::parse_from(args_both), &harness_none),
-            Some(1)
-        );
+        assert_eq!(resolve(&args_empty, &harness_none), None);
+        assert_eq!(resolve(&args_only_default, &harness_none), Some(2));
+        assert_eq!(resolve(&args_only_harness, &harness_none), Some(1));
+        assert_eq!(resolve(&args_both, &harness_none), Some(1));
 
         // test against unwind annotation
-        assert_eq!(
-            resolve_unwind_value(&args::KaniArgs::parse_from(args_empty), &harness_some),
-            Some(3)
-        );
-        assert_eq!(
-            resolve_unwind_value(&args::KaniArgs::parse_from(args_only_default), &harness_some),
-            Some(3)
-        );
-        assert_eq!(
-            resolve_unwind_value(&args::KaniArgs::parse_from(args_only_harness), &harness_some),
-            Some(1)
-        );
-        assert_eq!(
-            resolve_unwind_value(&args::KaniArgs::parse_from(args_both), &harness_some),
-            Some(1)
-        );
+        assert_eq!(resolve(&args_empty, &harness_some), Some(3));
+        assert_eq!(resolve(&args_only_default, &harness_some), Some(3));
+        assert_eq!(resolve(&args_only_harness, &harness_some), Some(1));
+        assert_eq!(resolve(&args_both, &harness_some), Some(1));
     }
 }

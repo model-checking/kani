@@ -5,15 +5,15 @@ Concrete playback
 #[test]
 fn kani_concrete_playback_harness
     let concrete_vals: Vec<Vec<u8>> = vec![
-        // -9223372036854775808l
+        // -9223372036854775808
         vec![0, 0, 0, 0, 0, 0, 0, 128],
-        // -101l
+        // -101
         vec![155, 255, 255, 255, 255, 255, 255, 255],
-        // 0l
+        // 0
         vec![0, 0, 0, 0, 0, 0, 0, 0],
-        // 101l
+        // 101
         vec![101, 0, 0, 0, 0, 0, 0, 0],
-        // 9223372036854775807l
+        // 9223372036854775807
         vec![255, 255, 255, 255, 255, 255, 255, 127]
     ];
     kani::concrete_playback_run(concrete_vals, harness);

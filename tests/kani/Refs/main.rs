@@ -1,7 +1,5 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// This test takes too long with all the std symbols. Use --legacy-linker for now.
-// kani-flags: --legacy-linker
 
 //! This harness was based on firecracker argument parsing code from arg_parser.rs in
 //! firecracker/src/utils/src. It used to get stuck in post-processing with unwind of two or more.

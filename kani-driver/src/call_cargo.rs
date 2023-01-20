@@ -40,13 +40,7 @@ impl KaniSession {
     /// Calls `cargo_build` to generate `*.symtab.json` files in `target_dir`
     pub fn cargo_build(&self) -> Result<CargoOutputs> {
         let build_target = env!("TARGET"); // see build.rs
-        let metadata = MetadataCommand::new()
-            // restrict metadata command to host platform. References:
-            // https://github.com/rust-lang/rust-analyzer/issues/6908
-            // https://github.com/rust-lang/rust-analyzer/pull/6912
-            .other_options(vec![String::from("--filter-platform"), build_target.to_owned()])
-            .exec()
-            .context("Failed to get cargo metadata.")?;
+        let metadata = self.cargo_metadata(build_target)?;
         let target_dir = self
             .args
             .target_dir
@@ -66,8 +60,19 @@ impl KaniSession {
         let rustc_args = self.kani_rustc_flags();
 
         let mut cargo_args: Vec<OsString> = vec!["rustc".into()];
-        if self.args.all_features {
+        if let Some(path) = &self.args.cargo.manifest_path {
+            cargo_args.push("--manifest-path".into());
+            cargo_args.push(path.into());
+        }
+        if self.args.cargo.all_features {
             cargo_args.push("--all-features".into());
+        }
+        if self.args.cargo.no_default_features {
+            cargo_args.push("--no-default-features".into());
+        }
+        let features = self.args.cargo.features();
+        if !features.is_empty() {
+            cargo_args.push(format!("--features={}", features.join(",")).into());
         }
 
         cargo_args.push("--target".into());
@@ -90,10 +95,6 @@ impl KaniSession {
         // Arguments that will only be passed to the target package.
         let mut pkg_args: Vec<OsString> = vec![];
         match self.reachability_mode() {
-            ReachabilityMode::Legacy => {
-                // For this mode, we change `kani_args` not `pkg_args`
-                kani_args.push("--reachability=legacy".into());
-            }
             ReachabilityMode::ProofHarnesses => {
                 pkg_args.extend(["--".into(), "--reachability=harnesses".into()]);
             }
@@ -138,6 +139,34 @@ impl KaniSession {
             cargo_metadata: metadata,
         })
     }
+
+    fn cargo_metadata(&self, build_target: &str) -> Result<Metadata> {
+        let mut cmd = MetadataCommand::new();
+
+        // restrict metadata command to host platform. References:
+        // https://github.com/rust-lang/rust-analyzer/issues/6908
+        // https://github.com/rust-lang/rust-analyzer/pull/6912
+        cmd.other_options(vec![String::from("--filter-platform"), build_target.to_owned()]);
+
+        // Set a --manifest-path if we're given one
+        if let Some(path) = &self.args.cargo.manifest_path {
+            cmd.manifest_path(path);
+        }
+        // Pass down features enables, which may affect dependencies or build metadata
+        // (multiple calls to features are ok with cargo_metadata:)
+        if self.args.cargo.all_features {
+            cmd.features(cargo_metadata::CargoOpt::AllFeatures);
+        }
+        if self.args.cargo.no_default_features {
+            cmd.features(cargo_metadata::CargoOpt::NoDefaultFeatures);
+        }
+        let features = self.args.cargo.features();
+        if !features.is_empty() {
+            cmd.features(cargo_metadata::CargoOpt::SomeFeatures(features));
+        }
+
+        cmd.exec().context("Failed to get cargo metadata.")
+    }
 }
 
 /// Given a `path` with glob characters in it (e.g. `*.json`), return a vector of matching files
@@ -157,9 +186,10 @@ fn glob(path: &Path) -> Result<Vec<PathBuf>> {
 ///   - This is because `default_members` is not available in cargo metadata.
 ///     See <https://github.com/rust-lang/cargo/issues/8033>.
 fn packages_to_verify<'b>(args: &KaniArgs, metadata: &'b Metadata) -> Vec<&'b Package> {
-    debug!(package_selection=?args.package, workspace=args.workspace, "packages_to_verify args");
-    let packages = if !args.package.is_empty() {
-        args.package
+    debug!(package_selection=?args.cargo.package, workspace=args.cargo.workspace, "packages_to_verify args");
+    let packages = if !args.cargo.package.is_empty() {
+        args.cargo
+            .package
             .iter()
             .map(|pkg_name| {
                 metadata
@@ -170,7 +200,7 @@ fn packages_to_verify<'b>(args: &KaniArgs, metadata: &'b Metadata) -> Vec<&'b Pa
             })
             .collect()
     } else {
-        match (args.workspace, metadata.root_package()) {
+        match (args.cargo.workspace, metadata.root_package()) {
             (true, _) | (_, None) => metadata.workspace_packages(),
             (_, Some(root_pkg)) => vec![root_pkg],
         }

@@ -3,15 +3,16 @@
 
 #[cfg(feature = "unsound_experiments")]
 use crate::unsound_experiments::UnsoundExperimentArgs;
+use crate::util::warning;
 
-use clap::{error::Error, error::ErrorKind, CommandFactory, Parser, ValueEnum};
+use clap::{error::Error, error::ErrorKind, CommandFactory, ValueEnum};
 use std::ffi::OsString;
 use std::path::PathBuf;
 
 // By default we configure CBMC to use 16 bits to represent the object bits in pointers.
 const DEFAULT_OBJECT_BITS: u32 = 16;
 
-#[derive(Debug, Parser)]
+#[derive(Debug, clap::Parser)]
 #[command(
     version,
     name = "kani",
@@ -26,7 +27,7 @@ pub struct StandaloneArgs {
     pub common_opts: KaniArgs,
 }
 
-#[derive(Debug, Parser)]
+#[derive(Debug, clap::Parser)]
 #[command(
     version,
     name = "cargo-kani",
@@ -42,7 +43,7 @@ pub struct CargoKaniArgs {
 }
 
 // cargo-kani takes optional subcommands to request specialized behavior
-#[derive(Debug, Parser)]
+#[derive(Debug, clap::Subcommand)]
 pub enum CargoKaniSubcommand {
     #[command(hide = true)]
     Assess(crate::assess::AssessArgs),
@@ -50,7 +51,7 @@ pub enum CargoKaniSubcommand {
 
 // Common arguments for invoking Kani. This gets put into KaniContext, whereas
 // anything above is "local" to "main"'s control flow.
-#[derive(Debug, Parser)]
+#[derive(Debug, clap::Args)]
 pub struct KaniArgs {
     /// Temporary option to trigger assess mode for out test suite
     /// where we are able to add options but not subcommands
@@ -98,8 +99,7 @@ pub struct KaniArgs {
     /// Generate C file equivalent to inputted program.
     /// This feature is unstable and it requires `--enable-unstable` to be used
     #[arg(long, hide_short_help = true, requires("enable_unstable"),
-        conflicts_with_all(&["function", "legacy_linker"])
-)]
+        conflicts_with_all(&["function"]))]
     pub gen_c: bool,
 
     /// Directory for all generated artifacts.
@@ -136,28 +136,13 @@ pub struct KaniArgs {
     #[arg(long, hide_short_help = true)]
     pub only_codegen: bool,
 
-    /// Disable the new MIR Linker. Using this option may result in missing symbols from the
-    /// `std` library. See <https://github.com/model-checking/kani/issues/1213> for more details.
-    #[arg(long, hide = true)]
+    /// Deprecated flag. This is a no-op since we no longer support the legacy linker and
+    /// it will be removed in a future Kani release.
+    #[arg(long, hide = true, conflicts_with("mir_linker"))]
     pub legacy_linker: bool,
-
-    /// Enable the new MIR Linker. This is already the default option and it will be removed once
-    /// the linker is stable.
-    /// The MIR Linker affects how Kani prunes the code to be analyzed. It also fixes previous
-    /// issues with missing `std` function definitions.
-    /// See <https://model-checking.github.io/kani/rfc/rfcs/0001-mir-linker.html> for more details.
-    #[arg(long, conflicts_with("legacy_linker"), hide = true)]
+    /// Deprecated flag. This is a no-op since we no longer support any other linker.
+    #[arg(long, hide = true)]
     pub mir_linker: bool,
-
-    /// Compiles Kani harnesses in all features of all packages selected on the command-line.
-    #[arg(long)]
-    pub all_features: bool,
-    /// Run Kani on all packages in the workspace.
-    #[arg(long)]
-    pub workspace: bool,
-    /// Run Kani on the specified packages.
-    #[arg(long, short, conflicts_with("workspace"), num_args(1..))]
-    pub package: Vec<String>,
 
     /// Specify the value used for loop unwinding in CBMC
     #[arg(long)]
@@ -241,6 +226,10 @@ pub struct KaniArgs {
         conflicts_with("concrete_playback")
     )]
     pub enable_stubbing: bool,
+
+    /// Arguments to pass down to Cargo
+    #[command(flatten)]
+    pub cargo: CargoArgs,
 }
 
 impl KaniArgs {
@@ -270,6 +259,51 @@ impl KaniArgs {
             Some(None) => None,       // -j
             Some(Some(x)) => Some(x), // -j=x
         }
+    }
+}
+
+/// Arguments that Kani pass down into Cargo essentially uninterpreted.
+/// These generally have to do with selection of packages or activation of features.
+/// These do not (currently) include cargo args that kani pays special attention to:
+/// for instance, we keep `--tests` and `--target-dir` elsewhere.
+#[derive(Debug, clap::Args)]
+pub struct CargoArgs {
+    /// Activate all package features
+    #[arg(long)]
+    pub all_features: bool,
+    /// Do not activate the `default` feature
+    #[arg(long)]
+    pub no_default_features: bool,
+    // This tolerates spaces too, but we say "comma" only because this is the least error-prone approach...
+    /// Comma separated list of features to activate
+    #[arg(short = 'F', long)]
+    features: Vec<String>,
+
+    /// Path to Cargo.toml
+    #[arg(long, name = "PATH")]
+    pub manifest_path: Option<PathBuf>,
+
+    /// Build all packages in the workspace
+    #[arg(long)]
+    pub workspace: bool,
+    /// Run Kani on the specified packages.
+    #[arg(long, short, conflicts_with("workspace"), num_args(1..))]
+    pub package: Vec<String>,
+}
+
+impl CargoArgs {
+    /// Parse the string we're given into a list of feature names
+    ///
+    /// clap can't do this for us because it accepts multiple different delimeters
+    pub fn features(&self) -> Vec<String> {
+        let mut result = Vec::new();
+
+        for s in &self.features {
+            for piece in s.split(&[' ', ',']) {
+                result.push(piece.to_owned());
+            }
+        }
+        result
     }
 }
 
@@ -314,7 +348,7 @@ impl AbstractionType {
     }
 }
 
-#[derive(Debug, Parser)]
+#[derive(Debug, clap::Args)]
 pub struct CheckArgs {
     // Rust argument parsers (/clap) don't have the convenient '--flag' and '--no-flag' boolean pairs, so approximate
     // We're put both here then create helper functions to "intepret"
@@ -409,7 +443,7 @@ impl CargoKaniArgs {
     }
 }
 impl KaniArgs {
-    pub fn validate<T: Parser>(&self) {
+    pub fn validate<T: clap::Parser>(&self) {
         self.validate_inner()
             .or_else(|e| -> Result<(), ()> { e.format(&mut T::command()).exit() })
             .unwrap()
@@ -432,6 +466,14 @@ impl KaniArgs {
                 The produced tests will have to be played with the same rustc arguments:\n\
                 -Z randomize-layout{random_seed}"
             );
+        }
+
+        if self.mir_linker {
+            self.print_deprecated("--mir-linker");
+        }
+
+        if self.legacy_linker {
+            self.print_deprecated("--legacy-linker");
         }
 
         // TODO: these conflicting flags reflect what's necessary to pass current tests unmodified.
@@ -497,15 +539,25 @@ impl KaniArgs {
 
         Ok(())
     }
+
+    fn print_deprecated(&self, option: &str) {
+        if !self.quiet {
+            warning(&format!(
+                "The `{option}` option is deprecated. This option no longer has any effect and should be removed"
+            ))
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use clap::Parser;
+
     use super::*;
 
     #[test]
     fn check_arg_parsing() {
-        let a = StandaloneArgs::parse_from(vec![
+        let a = StandaloneArgs::try_parse_from(vec![
             "kani",
             "file.rs",
             "--enable-unstable",
@@ -513,17 +565,23 @@ mod tests {
             "--multiple",
             "args",
             "--here",
-        ]);
+        ])
+        .unwrap();
         assert_eq!(a.common_opts.cbmc_args, vec!["--multiple", "args", "--here"]);
-        let _b =
-            StandaloneArgs::parse_from(vec!["kani", "file.rs", "--enable-unstable", "--cbmc-args"]);
+        let _b = StandaloneArgs::try_parse_from(vec![
+            "kani",
+            "file.rs",
+            "--enable-unstable",
+            "--cbmc-args",
+        ])
+        .unwrap();
         // no assertion: the above might fail if it fails to allow 0 args to cbmc-args
     }
     #[test]
     fn check_multiple_packages() {
         // accepts repeated:
-        let a = CargoKaniArgs::parse_from(vec!["cargo-kani", "-p", "a", "-p", "b"]);
-        assert_eq!(a.common_opts.package, vec!["a".to_owned(), "b".to_owned()]);
+        let a = CargoKaniArgs::try_parse_from(vec!["cargo-kani", "-p", "a", "-p", "b"]).unwrap();
+        assert_eq!(a.common_opts.cargo.package, vec!["a".to_owned(), "b".to_owned()]);
         let b = CargoKaniArgs::try_parse_from(vec![
             "cargo-kani",
             "-p",
@@ -576,7 +634,11 @@ mod tests {
     fn check_dry_run_fails() {
         // We don't support --dry-run anymore but we print a friendly reminder for now.
         let args = vec!["kani", "file.rs", "--dry-run"];
-        let err = StandaloneArgs::parse_from(&args).common_opts.validate_inner().unwrap_err();
+        let err = StandaloneArgs::try_parse_from(&args)
+            .unwrap()
+            .common_opts
+            .validate_inner()
+            .unwrap_err();
         assert_eq!(err.kind(), ErrorKind::ValueValidation);
     }
 
@@ -584,7 +646,7 @@ mod tests {
     #[test]
     fn check_invalid_input_fails() {
         let args = vec!["kani", "."];
-        let err = StandaloneArgs::parse_from(&args).valid_input().unwrap_err();
+        let err = StandaloneArgs::try_parse_from(&args).unwrap().valid_input().unwrap_err();
         assert_eq!(err.kind(), ErrorKind::InvalidValue);
     }
 
@@ -644,7 +706,7 @@ mod tests {
 
     /// Check if parsing the given argument string results in the given error.
     fn expect_validation_error(arg: &str, err: ErrorKind) {
-        let args = StandaloneArgs::parse_from(arg.split_whitespace());
+        let args = StandaloneArgs::try_parse_from(arg.split_whitespace()).unwrap();
         assert_eq!(args.common_opts.validate_inner().unwrap_err().kind(), err);
     }
 
@@ -673,5 +735,18 @@ mod tests {
             parse_unstable_enabled("--enable-stubbing --harness foo --concrete-playback=print")
                 .unwrap_err();
         assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
+    }
+
+    #[test]
+    fn check_features_parsing() {
+        fn parse(args: &[&str]) -> Vec<String> {
+            CargoKaniArgs::try_parse_from(args).unwrap().common_opts.cargo.features()
+        }
+
+        // spaces, commas, multiple repeated args, all ok
+        assert_eq!(parse(&["kani", "--features", "a b c"]), ["a", "b", "c"]);
+        assert_eq!(parse(&["kani", "--features", "a,b,c"]), ["a", "b", "c"]);
+        assert_eq!(parse(&["kani", "--features", "a", "--features", "b,c"]), ["a", "b", "c"]);
+        assert_eq!(parse(&["kani", "--features", "a b", "-Fc"]), ["a", "b", "c"]);
     }
 }

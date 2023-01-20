@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use anyhow::{bail, Result};
+use clap::Parser;
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -13,7 +14,7 @@ use toml::Value;
 ///
 /// The arguments passed via command line have precedence over the ones from the Cargo.toml.
 pub fn join_args(input_args: Vec<OsString>) -> Result<Vec<OsString>> {
-    let toml_path = cargo_locate_project();
+    let toml_path = cargo_locate_project(&input_args);
     if toml_path.is_err() {
         // We're not inside a Cargo project. Don't error... yet.
         return Ok(input_args);
@@ -65,16 +66,23 @@ fn merge_args(
 }
 
 /// `locate-project` produces a response like: `/full/path/to/src/cargo-kani/Cargo.toml`
-fn cargo_locate_project() -> Result<PathBuf> {
-    let cmd =
-        Command::new("cargo").args(["locate-project", "--message-format", "plain"]).output()?;
-    if !cmd.status.success() {
-        let err = std::str::from_utf8(&cmd.stderr)?;
-        bail!("{}", err);
+fn cargo_locate_project(input_args: &[OsString]) -> Result<PathBuf> {
+    // Try parsing our command line arguments as they presently look, to see if a "manifest-path" has been given.
+    let current_args = crate::args::CargoKaniArgs::parse_from(input_args);
+
+    if let Some(path) = current_args.common_opts.cargo.manifest_path {
+        Ok(path)
+    } else {
+        let cmd =
+            Command::new("cargo").args(["locate-project", "--message-format", "plain"]).output()?;
+        if !cmd.status.success() {
+            let err = std::str::from_utf8(&cmd.stderr)?;
+            bail!("{}", err);
+        }
+        let path = std::str::from_utf8(&cmd.stdout)?;
+        // A trim is essential: remove the trailing newline
+        Ok(path.trim().into())
     }
-    let path = std::str::from_utf8(&cmd.stdout)?;
-    // A trim is essential: remove the trailing newline
-    Ok(path.trim().into())
 }
 
 /// Parse a config toml string and extract the cargo-kani arguments we should try injecting.

@@ -13,22 +13,7 @@ use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{self, Ty};
 use rustc_middle::ty::{Instance, InstanceDef};
 use rustc_span::Span;
-use tracing::{debug, warn};
-
-#[macro_export]
-macro_rules! emit_concurrency_warning {
-    ($intrinsic: expr, $loc: expr) => {{
-        emit_concurrency_warning!($intrinsic, $loc, "a sequential operation");
-    }};
-    ($intrinsic: expr, $loc: expr, $treated_as: expr) => {{
-        warn!(
-            "Kani does not support concurrency for now. `{}` in {} treated as {}.",
-            $intrinsic,
-            $loc.short_string(),
-            $treated_as,
-        );
-    }};
-}
+use tracing::debug;
 
 struct SizeAlign {
     size: Expr,
@@ -68,7 +53,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         if let Some(target) = target {
             let loc = self.codegen_span(&span);
-            let fargs = self.codegen_funcall_args(args);
+            let fargs = self.codegen_funcall_args(args, false);
             Stmt::block(
                 vec![
                     self.codegen_intrinsic(instance, fargs, destination, Some(span)),
@@ -345,7 +330,7 @@ impl<'tcx> GotocCtx<'tcx> {
         macro_rules! codegen_atomic_binop {
             ($op: ident) => {{
                 let loc = self.codegen_span_option(span);
-                emit_concurrency_warning!(intrinsic, loc);
+                self.store_concurrent_construct(intrinsic, loc);
                 let var1_ref = fargs.remove(0);
                 let var1 = var1_ref.dereference();
                 let (tmp, decl_stmt) =
@@ -833,7 +818,7 @@ impl<'tcx> GotocCtx<'tcx> {
         p: &Place<'tcx>,
         loc: Location,
     ) -> Stmt {
-        emit_concurrency_warning!(intrinsic, loc);
+        self.store_concurrent_construct(intrinsic, loc);
         let var1_ref = fargs.remove(0);
         let var1 = var1_ref.dereference().with_location(loc);
         let res_stmt = self.codegen_expr_to_place(p, var1);
@@ -861,7 +846,7 @@ impl<'tcx> GotocCtx<'tcx> {
         p: &Place<'tcx>,
         loc: Location,
     ) -> Stmt {
-        emit_concurrency_warning!(intrinsic, loc);
+        self.store_concurrent_construct(intrinsic, loc);
         let var1_ref = fargs.remove(0);
         let var1 = var1_ref.dereference().with_location(loc);
         let (tmp, decl_stmt) =
@@ -897,7 +882,7 @@ impl<'tcx> GotocCtx<'tcx> {
         p: &Place<'tcx>,
         loc: Location,
     ) -> Stmt {
-        emit_concurrency_warning!(intrinsic, loc);
+        self.store_concurrent_construct(intrinsic, loc);
         let var1_ref = fargs.remove(0);
         let var1 = var1_ref.dereference().with_location(loc);
         let (tmp, decl_stmt) =
@@ -910,7 +895,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Atomic no-ops (e.g., atomic_fence) are transformed into SKIP statements
     fn codegen_atomic_noop(&mut self, intrinsic: &str, loc: Location) -> Stmt {
-        emit_concurrency_warning!(intrinsic, loc);
+        self.store_concurrent_construct(intrinsic, loc);
         let skip_stmt = Stmt::skip(loc);
         Stmt::atomic_block(vec![skip_stmt], loc)
     }

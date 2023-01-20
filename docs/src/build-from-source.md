@@ -19,7 +19,7 @@ Kani has been tested in [Ubuntu](#install-dependencies-on-ubuntu) and [macOS](##
 
 ### Install dependencies on Ubuntu
 
-Support is available for Ubuntu 18.04 and 20.04.
+Support is available for Ubuntu 18.04, 20.04 and 22.04.
 The simplest way to install dependencies (especially if you're using a fresh VM)
 is following our CI scripts:
 
@@ -32,7 +32,7 @@ git submodule update --init
 ./scripts/setup/ubuntu/install_cbmc.sh
 ./scripts/setup/ubuntu/install_viewer.sh
 ./scripts/setup/install_kissat.sh
-# If you haven't already:
+# If you haven't already (or from https://rustup.rs/):
 ./scripts/setup/install_rustup.sh
 source $HOME/.cargo/env
 ```
@@ -50,7 +50,7 @@ git submodule update --init
 ./scripts/setup/macos/install_cbmc.sh
 ./scripts/setup/macos/install_viewer.sh
 ./scripts/setup/install_kissat.sh
-# If you haven't already:
+# If you haven't already (or from https://rustup.rs/):
 ./scripts/setup/install_rustup.sh
 source $HOME/.cargo/env
 ```
