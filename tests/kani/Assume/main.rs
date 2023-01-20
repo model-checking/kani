@@ -9,7 +9,7 @@ fn main() {
 }
 
 #[kani::proof]
-fn verify_any_value_where() {
-    let i: i32 = kani::any_value_where(|x| *x < 10, "Only single digit values are legal");
+fn verify_any_where() {
+    let i: i32 = kani::any_where(|x| *x < 10, "Only single digit values are legal");
     assert!(i < 20);
 }
