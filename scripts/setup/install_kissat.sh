@@ -12,6 +12,17 @@ if [ -z "${KISSAT_VERSION:-}" ]; then
   exit 1
 fi
 
+# Check if the correct Kissat version is already installed
+if command -v kissat > /dev/null; then
+  if kissat_version=$(kissat --version); then
+    if [[ $kissat_version == $KISSAT_VERSION ]]; then
+      # Already installed
+      exit 0
+    else
+      echo "Warning: Overriding Kissat version ${kissat_version} with ${KISSAT_VERSION}"
+    fi
+  fi
+fi
 
 # Kissat release
 FILE="rel-${KISSAT_VERSION}.tar.gz"
