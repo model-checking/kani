@@ -156,6 +156,7 @@ jobs:
             docker run -w /tmp/kani/tests/cargo-kani/simple-lib  $tag  cargo kani
             docker run -w /tmp/kani/tests/cargo-kani/simple-visualize  $tag  cargo kani
             docker run -w /tmp/kani/tests/cargo-kani/build-rs-works  $tag  cargo kani
+            docker run -w /tmp/kani/tests/cargo-kani/simple-kissat  $tag  cargo kani
             docker run $tag  cargo-kani setup --use-local-bundle ./${{ matrix.artifact }}
           done
           # While the above test OS issues, now try testing with nightly as default:

@@ -25,6 +25,10 @@ runs:
         run: ./scripts/setup/${{ inputs.os }}/install_viewer.sh
         shell: bash
 
+      - name: Install Kissat
+        run: ./scripts/setup/install_kissat.sh
+        shell: bash
+
       - name: Install Rust toolchain
         run: ./scripts/setup/install_rustup.sh
         shell: bash
