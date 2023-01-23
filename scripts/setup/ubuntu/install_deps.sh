@@ -52,3 +52,9 @@ PYTHON_DEPS=(
 )
 
 python3 -m pip install "${PYTHON_DEPS[@]}"
+
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+
+${SCRIPT_DIR}/install_cbmc.sh
+${SCRIPT_DIR}/install_viewer.sh
+${SCRIPT_DIR}/../install_kissat.sh

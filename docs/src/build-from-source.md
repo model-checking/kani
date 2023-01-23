@@ -29,9 +29,6 @@ git clone https://github.com/model-checking/kani.git
 cd kani
 git submodule update --init
 ./scripts/setup/ubuntu/install_deps.sh
-./scripts/setup/ubuntu/install_cbmc.sh
-./scripts/setup/ubuntu/install_viewer.sh
-./scripts/setup/install_kissat.sh
 # If you haven't already (or from https://rustup.rs/):
 ./scripts/setup/install_rustup.sh
 source $HOME/.cargo/env
@@ -47,9 +44,6 @@ git clone https://github.com/model-checking/kani.git
 cd kani
 git submodule update --init
 ./scripts/setup/macos/install_deps.sh
-./scripts/setup/macos/install_cbmc.sh
-./scripts/setup/macos/install_viewer.sh
-./scripts/setup/install_kissat.sh
 # If you haven't already (or from https://rustup.rs/):
 ./scripts/setup/install_rustup.sh
 source $HOME/.cargo/env
