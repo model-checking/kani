@@ -813,7 +813,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     )
                 }
             }
-            ty::Projection(_) | ty::Opaque(_, _) => {
+            ty::Alias(..) => {
                 unreachable!("Type should've been normalized already")
             }
 
@@ -1226,7 +1226,7 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Dynamic(..) | ty::Slice(_) | ty::Str => {
                 unreachable!("Should have generated a fat pointer")
             }
-            ty::Projection(_) | ty::Opaque(..) => {
+            ty::Alias(..) => {
                 unreachable!("Should have been removed by normalization")
             }
 

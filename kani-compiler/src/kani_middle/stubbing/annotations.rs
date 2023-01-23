@@ -40,7 +40,7 @@ impl Callbacks for CollectorCallbacks {
         _compiler: &Compiler,
         queries: &'tcx Queries<'tcx>,
     ) -> Compilation {
-        queries.global_ctxt().unwrap().peek_mut().enter(|tcx| {
+        queries.global_ctxt().unwrap().enter(|tcx| {
             for item in tcx.hir_crate_items(()).items() {
                 let local_def_id = item.owner_id.def_id;
                 let def_id = local_def_id.to_def_id();
