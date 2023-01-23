@@ -16,19 +16,6 @@ runs:
         run: ./scripts/setup/${{ inputs.os }}/install_deps.sh
         shell: bash
 
-      - name: Install CBMC
-        run: ./scripts/setup/${{ inputs.os }}/install_cbmc.sh
-        shell: bash
-        if: ${{format('{0}', inputs.install_cbmc) != 'false'}}
-
-      - name: Install cbmc-viewer
-        run: ./scripts/setup/${{ inputs.os }}/install_viewer.sh
-        shell: bash
-
-      - name: Install Kissat
-        run: ./scripts/setup/install_kissat.sh
-        shell: bash
-
       - name: Install Rust toolchain
         run: ./scripts/setup/install_rustup.sh
         shell: bash
