@@ -86,6 +86,7 @@ pub fn parse_config(args: Vec<String>) -> Config {
         .optflag("h", "help", "show this message")
         .optopt("", "edition", "default Rust edition", "EDITION")
         .optopt("", "timeout", "the timeout for each test in seconds", "TIMEOUT")
+        .optflag("", "no-fail-fast", "run all tests regardless of failure")
         .optflag("", "dry-run", "don't actually run the tests")
     ;
 
@@ -157,6 +158,7 @@ pub fn parse_config(args: Vec<String>) -> Config {
         color,
         edition: matches.opt_str("edition"),
         force_rerun: matches.opt_present("force-rerun"),
+        fail_fast: !matches.opt_present("no-fail-fast"),
         dry_run: matches.opt_present("dry-run"),
         timeout,
     }
@@ -176,6 +178,8 @@ pub fn log_config(config: &Config) {
     logv(c, format!("verbose: {}", config.verbose));
     logv(c, format!("quiet: {}", config.quiet));
     logv(c, format!("timeout: {:?}", config.timeout));
+    logv(c, format!("fail-fast: {:?}", config.fail_fast));
+    logv(c, format!("dry-run: {:?}", config.dry_run));
     logv(
         c,
         format!(
@@ -285,7 +289,7 @@ pub fn test_opts(config: &Config) -> test::TestOpts {
         list: false,
         options: test::Options::new(),
         time_options: None,
-        fail_fast: true,
+        fail_fast: config.fail_fast,
         force_run_in_process: false,
     }
 }
