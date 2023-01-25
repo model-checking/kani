@@ -5,10 +5,6 @@ inputs:
   os:
     description: In which Operating System is this running
     required: true
-  install_cbmc:
-    description: Whether to install CBMC
-    required: false
-    default: 'true'
 runs:
   using: composite
   steps:
