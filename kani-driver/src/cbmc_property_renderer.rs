@@ -168,6 +168,7 @@ impl ParserItem {
 pub fn kani_cbmc_output_filter(
     item: ParserItem,
     extra_ptr_checks: bool,
+    quiet: bool,
     output_format: &OutputFormat,
 ) -> Option<ParserItem> {
     // Some items (e.g., messages) are skipped.
@@ -178,9 +179,11 @@ pub fn kani_cbmc_output_filter(
     let processed_item = process_item(item, extra_ptr_checks);
     // Both formatting and printing could be handled by objects which
     // implement a trait `Printer`.
-    let formatted_item = format_item(&processed_item, output_format);
-    if let Some(fmt_item) = formatted_item {
-        println!("{fmt_item}");
+    if !quiet {
+        let formatted_item = format_item(&processed_item, output_format);
+        if let Some(fmt_item) = formatted_item {
+            println!("{fmt_item}");
+        }
     }
     // TODO: Record processed items and dump them into a JSON file
     // <https://github.com/model-checking/kani/issues/942>
