@@ -5,22 +5,22 @@ inputs:
   os:
     description: In which Operating System is this running
     required: true
-  install_cbmc:
-    description: Whether to install CBMC
+  kani_dir:
+    description: Path to Kani's root directory
     required: false
-    default: 'true'
+    default: '.'
 runs:
   using: composite
   steps:
       - name: Install dependencies
-        run: ./scripts/setup/${{ inputs.os }}/install_deps.sh
+        run: cd ${{ inputs.kani_dir }} && ./scripts/setup/${{ inputs.os }}/install_deps.sh
         shell: bash
 
       - name: Install Rust toolchain
-        run: ./scripts/setup/install_rustup.sh
+        run: cd ${{ inputs.kani_dir }} && ./scripts/setup/install_rustup.sh
         shell: bash
 
       - name: Update submodules
         run: |
-          git submodule update --init --depth 1
+          cd ${{ inputs.kani_dir }} && git submodule update --init --depth 1
         shell: bash
