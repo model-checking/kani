@@ -43,14 +43,12 @@ jobs:
           path: cbmc
 
       - name: Build CBMC
+        working-directory: ./cbmc
         run: |
-          cd cbmc
           cmake -S . -Bbuild -DWITH_JBMC=OFF
           cmake --build build -- -j 4
-          sudo cmake --build build --target install
-          # Cleanup cbmc directory
-          cd ..
-          rm -rf cbmc
+          # Prepend the bin directory to $PATH
+          echo "${GITHUB_WORKSPACE}/cbmc/build/bin" >> $GITHUB_PATH
 
       - name: Execute Kani regressions
         working-directory: ./kani
@@ -81,14 +79,12 @@ jobs:
           path: cbmc
 
       - name: Build CBMC
+        working-directory: ./cbmc
         run: |
-          cd cbmc
           cmake -S . -Bbuild -DWITH_JBMC=OFF
           cmake --build build -- -j 4
-          sudo cmake --build build --target install
-          # Cleanup cbmc directory
-          cd ..
-          rm -rf cbmc
+          # Prepend the bin directory to $PATH
+          echo "${GITHUB_WORKSPACE}/cbmc/build/bin" >> $GITHUB_PATH
 
       - name: Execute Kani performance tests
         working-directory: ./kani
