@@ -72,6 +72,7 @@ impl KaniSession {
                     kani_cbmc_output_filter(
                         i,
                         self.args.extra_pointer_checks,
+                        self.args.quiet,
                         &self.args.output_format,
                     )
                 })?;
