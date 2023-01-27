@@ -7,7 +7,9 @@ use std::ffi::OsString;
 use std::fmt::Write;
 use std::path::Path;
 use std::process::Command;
+use std::str::FromStr;
 use std::time::{Duration, Instant};
+use strum_macros::{AsRefStr, EnumString, EnumVariantNames};
 
 use crate::args::{KaniArgs, OutputFormat};
 use crate::cbmc_output_parser::{
@@ -20,6 +22,21 @@ use crate::session::KaniSession;
 pub enum VerificationStatus {
     Success,
     Failure,
+}
+
+/// An enum for CBMC solver options. Kani handles all the variants, except for
+/// the "Custom" one, which it passes as is to CBMC's `--external-sat-solver`
+/// option.
+#[derive(Debug, Clone, AsRefStr, EnumString, EnumVariantNames, PartialEq, Eq)]
+#[strum(serialize_all = "snake_case")]
+pub enum CbmcSolver {
+    /// A custom solver variant whose argument gets passed to
+    /// `--external-sat-solver`. The specified binary must exist in path.
+    #[strum(disabled, serialize="SAT solver binary")]
+    Custom(String),
+
+    /// The kissat solver that is included in the Kani bundle
+    Kissat,
 }
 
 /// Our (kani-driver) notions of CBMC results.
@@ -123,10 +140,7 @@ impl KaniSession {
             args.push(unwind_value.to_string().into());
         }
 
-        if let Some(solver) = &harness_metadata.solver {
-            args.push("--external-sat-solver".into());
-            args.push(solver.into());
-        }
+        self.handle_solver_args(&harness_metadata.solver, &mut args)?;
 
         if self.args.run_sanity_checks {
             args.push("--validate-goto-model".into());
@@ -190,6 +204,41 @@ impl KaniSession {
         }
 
         args
+    }
+
+    fn handle_solver_args(
+        &self,
+        harness_solver: &Option<String>,
+        args: &mut Vec<OsString>,
+    ) -> Result<()> {
+        let solver_str = if let Some(solver) = &self.args.solver {
+            // --solver option takes precedence over attributes
+            solver
+        } else if let Some(solver) = harness_solver {
+            solver
+        } else {
+            // Nothing to do
+            return Ok(());
+        };
+
+        let solver =
+            CbmcSolver::from_str(solver_str).unwrap_or(CbmcSolver::Custom(solver_str.clone()));
+        match solver {
+            CbmcSolver::Kissat => {
+                args.push("--external-sat-solver".into());
+                args.push("kissat".into());
+            }
+            CbmcSolver::Custom(custom_solver) => {
+                // Check if the specified binary exists in path
+                if !Path::new(&custom_solver).exists() {
+                    eprintln!("Error: Specified solver \"{custom_solver}\" not found in path");
+                    bail!("cbmc solver argument handling failed")
+                }
+                args.push("--external-sat-solver".into());
+                args.push(custom_solver.into());
+            }
+        }
+        Ok(())
     }
 }
 

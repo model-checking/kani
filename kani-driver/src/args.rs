@@ -1,6 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+use crate::call_cbmc::CbmcSolver;
 #[cfg(feature = "unsound_experiments")]
 use crate::unsound_experiments::UnsoundExperimentArgs;
 use crate::util::warning;
@@ -8,6 +9,7 @@ use crate::util::warning;
 use clap::{error::Error, error::ErrorKind, CommandFactory, ValueEnum};
 use std::ffi::OsString;
 use std::path::PathBuf;
+use strum::VariantNames;
 
 // By default we configure CBMC to use 16 bits to represent the object bits in pointers.
 const DEFAULT_OBJECT_BITS: u32 = 16;
@@ -150,6 +152,9 @@ pub struct KaniArgs {
     /// Specify the value used for loop unwinding for the specified harness in CBMC
     #[arg(long, requires("harness"))]
     pub unwind: Option<u32>,
+    /// Specify the CBMC solver to use. Overrides the harness `solver` attribute.
+    #[arg(long, value_parser = clap::builder::PossibleValuesParser::new(CbmcSolver::VARIANTS))]
+    pub solver: Option<String>,
     /// Pass through directly to CBMC; must be the last flag.
     /// This feature is unstable and it requires `--enable_unstable` to be used
     #[arg(

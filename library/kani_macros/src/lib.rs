@@ -158,7 +158,7 @@ pub fn solver(_attr: TokenStream, item: TokenStream) -> TokenStream {
 /// Select the SAT solver to use with CBMC for this harness
 /// The attribute `#[kani::solver(arg)]` can only be used alongside `#[kani::proof]``
 ///
-/// arg - The full path of the SAT solver binary, e.g. `/path/to/solver`
+/// arg - name of solver, e.g. "kissat"
 #[cfg(kani)]
 #[proc_macro_attribute]
 pub fn solver(attr: TokenStream, item: TokenStream) -> TokenStream {

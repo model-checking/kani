@@ -58,7 +58,7 @@ pub fn extract_integer_argument(attr: &Attribute) -> Option<u128> {
 }
 
 /// Extracts the string arguments from the attribute provided
-/// For example, `solver(/path/to/solver)` return `Some("/path/to/solver")`
+/// For example, `solver("foo")` return `Some("foo")`
 pub fn extract_string_arguments(attr: &Attribute) -> Result<Vec<String>, AttrError> {
     let attr_args = attr.meta_item_list();
     if attr_args.is_none() {
@@ -67,7 +67,7 @@ pub fn extract_string_arguments(attr: &Attribute) -> Result<Vec<String>, AttrErr
     let attr_args = attr_args.unwrap();
     attr_args
         .iter()
-        .map(|attr_arg| attr_arg.literal().ok_or(AttrError::NonLiteral(format!("{attr_arg:?}"))))
+        .map(|attr_arg| attr_arg.lit().ok_or(AttrError::NonLiteral(format!("{attr_arg:?}"))))
         .map(|literal| {
             let kind = &literal?.kind;
             match kind {
