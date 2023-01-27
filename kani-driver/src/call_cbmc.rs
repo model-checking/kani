@@ -32,7 +32,7 @@ pub enum VerificationStatus {
 pub enum CbmcSolver {
     /// A custom solver variant whose argument gets passed to
     /// `--external-sat-solver`. The specified binary must exist in path.
-    #[strum(disabled, serialize="SAT solver binary")]
+    #[strum(disabled, serialize = "SAT solver binary")]
     Custom(String),
 
     /// The kissat solver that is included in the Kani bundle
