@@ -95,6 +95,13 @@ pub fn warning(msg: &str) {
     println!("{warning} {msg_fmt}")
 }
 
+/// Print a warning message. This will add a "warning:" tag before the message and style accordinly.
+pub fn error(msg: &str) {
+    let error = console::style("error:").bold().red();
+    let msg_fmt = console::style(msg).bold();
+    println!("{error} {msg_fmt}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
