@@ -1,9 +1,11 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+use self::metadata::{write_metadata, AssessMetadata};
 use anyhow::Result;
 use kani_metadata::KaniMetadata;
 
+use crate::assess::table_builder::TableBuilder;
 use crate::metadata::merge_kani_metadata;
 use crate::project;
 use crate::session::KaniSession;
@@ -21,11 +23,23 @@ mod table_unsupported_features;
 /// `cargo kani assess` main entry point.
 ///
 /// See <https://model-checking.github.io/kani/dev-assess.html>
-pub(crate) fn cargokani_assess_main(mut session: KaniSession, args: AssessArgs) -> Result<()> {
+pub(crate) fn run_assess(session: KaniSession, args: AssessArgs) -> Result<()> {
     if let Some(args::AssessSubcommand::Scan(args)) = &args.command {
         return scan::assess_scan_main(session, args);
     }
 
+    let result = assess_project(session);
+    match result {
+        Ok(metadata) => write_metadata(&args, metadata),
+        Err(err) => {
+            let metadata = AssessMetadata::from_error(err.as_ref());
+            write_metadata(&args, metadata)?;
+            Err(err.context("Failed to assess project."))
+        }
+    }
+}
+
+fn assess_project(mut session: KaniSession) -> Result<AssessMetadata> {
     // Fix (as in "make unchanging/unchangable") some settings.
     // This is a temporary hack to make things work, until we get around to refactoring how arguments
     // work generally in kani-driver. These arguments, for instance, are all prepended to the subcommand,
@@ -69,8 +83,11 @@ pub(crate) fn cargokani_assess_main(mut session: KaniSession, args: AssessArgs) 
     }
 
     if session.args.only_codegen {
-        metadata::write_partial_metadata(&args, unsupported_features)?;
-        return Ok(());
+        return Ok(AssessMetadata::new(
+            unsupported_features,
+            TableBuilder::new(),
+            TableBuilder::new(),
+        ));
     }
 
     // Done with the 'cargo-kani' part, now we're going to run *test* harnesses instead of proof:
@@ -95,12 +112,7 @@ pub(crate) fn cargokani_assess_main(mut session: KaniSession, args: AssessArgs) 
     let promising_tests = table_promising_tests::build(&results);
     println!("{}", promising_tests.render());
 
-    metadata::write_metadata(
-        &args,
-        metadata::AssessMetadata { unsupported_features, failure_reasons, promising_tests },
-    )?;
-
-    Ok(())
+    Ok(AssessMetadata::new(unsupported_features, failure_reasons, promising_tests))
 }
 
 /// Merges a collection of Kani metadata by figuring out which package each belongs to, from cargo metadata.
