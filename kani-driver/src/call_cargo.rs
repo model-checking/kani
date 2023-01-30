@@ -198,7 +198,7 @@ impl KaniSession {
                             print_msg(&msg.message, strip_color)?;
                             let _ = cargo_process.wait();
                             return Err(anyhow::Error::msg(msg.message).context(format!(
-                                "Failed to compile {} due to an internal compiler error.",
+                                "Failed to compile `{}` due to an internal compiler error.",
                                 msg.target.name
                             )));
                         }
