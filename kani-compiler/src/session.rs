@@ -46,10 +46,7 @@ static JSON_PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send
         let hook = panic::take_hook();
         panic::set_hook(Box::new(|info| {
             // Print stack trace.
-            let msg = format!(
-                "Kani unexpectedly panicked at {}",
-                info.location().map_or(String::from("Unknown Location"), |loc| loc.to_string())
-            );
+            let msg = format!("Kani unexpectedly panicked at {info}.",);
             let fallback_bundle =
                 fallback_fluent_bundle(rustc_errors::DEFAULT_LOCALE_RESOURCES, false);
             let mut emitter = JsonEmitter::basic(
