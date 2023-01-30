@@ -5,6 +5,10 @@
 
 use crate::parser;
 use clap::ArgMatches;
+use rustc_errors::{
+    emitter::Emitter, emitter::HumanReadableErrorType, fallback_fluent_bundle, json::JsonEmitter,
+    ColorConfig, Diagnostic,
+};
 use std::panic;
 use std::str::FromStr;
 use std::sync::LazyLock;
@@ -18,7 +22,7 @@ const LOG_ENV_VAR: &str = "KANI_LOG";
 const BUG_REPORT_URL: &str =
     "https://github.com/model-checking/kani/issues/new?labels=bug&template=bug_report.md";
 
-// Custom panic hook.
+// Custom panic hook when running under user friendly message format.
 #[allow(clippy::type_complexity)]
 static PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send + 'static>> =
     LazyLock::new(|| {
@@ -30,9 +34,33 @@ static PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send + 's
 
             // Print the Kani message
             eprintln!("Kani unexpectedly panicked during compilation.");
-            eprintln!(
-                "If you are seeing this message, please file an issue here: {BUG_REPORT_URL}"
+            eprintln!("Please file an issue here: {BUG_REPORT_URL}");
+        }));
+        hook
+    });
+
+// Custom panic hook when executing under json error format `--error-format=json`.
+#[allow(clippy::type_complexity)]
+static JSON_PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send + 'static>> =
+    LazyLock::new(|| {
+        let hook = panic::take_hook();
+        panic::set_hook(Box::new(|info| {
+            // Print stack trace.
+            let msg = format!("Kani unexpectedly panicked at {info}.",);
+            let fallback_bundle =
+                fallback_fluent_bundle(rustc_errors::DEFAULT_LOCALE_RESOURCES, false);
+            let mut emitter = JsonEmitter::basic(
+                false,
+                HumanReadableErrorType::Default(ColorConfig::Never),
+                None,
+                fallback_bundle,
+                None,
+                false,
+                false,
             );
+            let diagnostic = Diagnostic::new(rustc_errors::Level::Bug, msg);
+            emitter.emit_diagnostic(&diagnostic);
+            (*JSON_PANIC_HOOK)(info);
         }));
         hook
     });
@@ -93,4 +121,9 @@ fn hier_logs(args: &ArgMatches, filter: EnvFilter) {
 fn init_panic_hook() {
     // Install panic hook
     LazyLock::force(&PANIC_HOOK); // Install ice hook
+}
+
+pub fn json_panic_hook() {
+    // Install panic hook
+    LazyLock::force(&JSON_PANIC_HOOK); // Install ice hook
 }

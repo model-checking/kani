@@ -44,6 +44,9 @@ use kani_queries::{QueryDb, ReachabilityType, UserInput};
 use rustc_data_structures::fx::FxHashMap;
 use rustc_driver::{Callbacks, RunCompiler};
 use rustc_hir::definitions::DefPathHash;
+use rustc_interface::Config;
+use rustc_session::config::ErrorOutputType;
+use session::json_panic_hook;
 use std::ffi::OsStr;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -141,7 +144,13 @@ fn main() -> Result<(), &'static str> {
 struct KaniCallbacks {}
 
 /// Use default function implementations.
-impl Callbacks for KaniCallbacks {}
+impl Callbacks for KaniCallbacks {
+    fn config(&mut self, config: &mut Config) {
+        if matches!(config.opts.error_format, ErrorOutputType::Json { .. }) {
+            json_panic_hook();
+        }
+    }
+}
 
 /// The Kani root folder has all binaries inside bin/ and libraries inside lib/.
 /// This folder can also be used as a rustc sysroot.
