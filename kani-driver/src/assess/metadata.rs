@@ -57,7 +57,7 @@ impl AssessMetadata {
 
     pub fn from_error(err: &dyn std::error::Error) -> AssessMetadata {
         let error = Some(SessionError {
-            root_cause: err.source().map(|e| e.to_string()),
+            root_cause: err.source().map(|e| format!("{e:#}")),
             msg: err.to_string(),
         });
         AssessMetadata {

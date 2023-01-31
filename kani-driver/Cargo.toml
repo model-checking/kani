@@ -32,7 +32,6 @@ rustc-demangle = "0.1.21"
 pathdiff = "0.2.1"
 rayon = "1.5.3"
 comfy-table = "6.0.0"
-strip-ansi-escapes = "0.1"
 tracing = {version = "0.1", features = ["max_level_trace", "release_max_level_debug"]}
 tracing-subscriber = {version = "0.3.8", features = ["env-filter", "json", "fmt"]}
 tracing-tree = "0.2.2"
