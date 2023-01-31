@@ -37,6 +37,9 @@ pub enum CbmcSolver {
 
     /// The kissat solver that is included in the Kani bundle
     Kissat,
+
+    /// MiniSAT (CBMC's default solver)
+    Minisat,
 }
 
 /// Our (kani-driver) notions of CBMC results.
@@ -227,6 +230,10 @@ impl KaniSession {
             CbmcSolver::Kissat => {
                 args.push("--external-sat-solver".into());
                 args.push("kissat".into());
+            }
+            CbmcSolver::Minisat => {
+                // Minisat is currently CBMC's default solver, so no need to
+                // pass any arguments
             }
             CbmcSolver::Custom(custom_solver) => {
                 // Check if the specified binary exists in path
