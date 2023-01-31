@@ -716,13 +716,16 @@ mod tests {
 
     #[test]
     fn check_trace_value_deserialization_works() {
-        let data = format!(r#"{{
+        let data = format!(
+            r#"{{
             "binary": "{:0>1000}",
             "data": "0",
             "name": "integer",
             "type": "unsigned __CPROVER_bitvector[960]",
             "width": 960
-        }}"#, 0);
+        }}"#,
+            0
+        );
         let trace_value: Result<TraceValue, _> = serde_json::from_str(&data);
         assert!(trace_value.is_ok());
     }
@@ -751,5 +754,4 @@ mod tests {
         assert!(parser_item.is_ok());
         assert!(result_struct.is_ok());
     }
-
 }
