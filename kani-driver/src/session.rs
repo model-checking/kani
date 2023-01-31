@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::Mutex;
 use std::time::Instant;
+use strum_macros::Display;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Registry};
 use tracing_tree::HierarchicalLayer;
@@ -84,8 +85,12 @@ impl KaniSession {
     }
 }
 
+#[derive(Debug, Copy, Clone, Display)]
+#[strum(serialize_all = "snake_case")]
 pub enum ReachabilityMode {
+    #[strum(to_string = "harnesses")]
     ProofHarnesses,
+    #[strum(to_string = "pub_fns")]
     AllPubFns,
     Tests,
 }

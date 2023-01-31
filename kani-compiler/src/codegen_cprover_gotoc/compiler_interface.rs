@@ -45,19 +45,19 @@ use std::io::Write as IoWrite;
 use std::iter::FromIterator;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tempfile::Builder as TempFileBuilder;
 use tracing::{debug, error, info};
 
 #[derive(Clone)]
 pub struct GotocCodegenBackend {
-    queries: Rc<QueryDb>,
+    queries: Arc<Mutex<QueryDb>>,
 }
 
 impl GotocCodegenBackend {
-    pub fn new(queries: &Rc<QueryDb>) -> Self {
-        GotocCodegenBackend { queries: Rc::clone(queries) }
+    pub fn new(queries: Arc<Mutex<QueryDb>>) -> Self {
+        GotocCodegenBackend { queries }
     }
 }
 
@@ -67,7 +67,7 @@ impl CodegenBackend for GotocCodegenBackend {
     }
 
     fn provide(&self, providers: &mut Providers) {
-        provide::provide(providers, &self.queries);
+        provide::provide(providers, &self.queries.lock().unwrap());
     }
 
     fn provide_extern(&self, providers: &mut ty::query::ExternProviders) {
@@ -84,7 +84,7 @@ impl CodegenBackend for GotocCodegenBackend {
 
         // Follow rustc naming convention (cx is abbrev for context).
         // https://rustc-dev-guide.rust-lang.org/conventions.html#naming-conventions
-        let mut gcx = GotocCtx::new(tcx, self.queries.clone());
+        let mut gcx = GotocCtx::new(tcx, (*self.queries.lock().unwrap()).clone());
         check_target(tcx.sess);
         check_options(tcx.sess);
         check_crate_items(&gcx);
@@ -170,7 +170,7 @@ impl CodegenBackend for GotocCodegenBackend {
         if !tcx.sess.opts.unstable_opts.no_codegen && tcx.sess.opts.output_types.should_codegen() {
             let outputs = tcx.output_filenames(());
             let base_filename = outputs.output_path(OutputType::Object);
-            let pretty = self.queries.get_output_pretty_json();
+            let pretty = self.queries.lock().unwrap().get_output_pretty_json();
             write_file(&base_filename, ArtifactType::SymTab, &gcx.symbol_table, pretty);
             write_file(&base_filename, ArtifactType::TypeMap, &type_map, pretty);
             write_file(&base_filename, ArtifactType::Metadata, &metadata, pretty);

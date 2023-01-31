@@ -41,7 +41,6 @@ pub const SYSROOT: &str = "sysroot";
 
 /// Option name used to select which reachability analysis to perform.
 pub const REACHABILITY: &str = "reachability";
-pub const REACHABILITY_FLAG: &str = "--reachability";
 
 /// Option name used to specify which harness is the target.
 pub const HARNESS: &str = "harness";
@@ -53,12 +52,6 @@ pub const ENABLE_STUBBING: &str = "enable-stubbing";
 pub const RUSTC_OPTIONS: &str = "rustc-options";
 
 pub const RUSTC_VERSION: &str = "rustc-version";
-
-/// Environmental variable used to retrieve extra Kani command arguments.
-const KANIFLAGS_ENV_VAR: &str = "KANIFLAGS";
-
-/// Flag used to indicated that we should retrieve more arguments from `KANIFLAGS' env variable.
-const KANI_ARGS_FLAG: &str = "--kani-flags";
 
 /// Configure command options for the Kani compiler.
 pub fn parser() -> Command {
@@ -199,41 +192,28 @@ impl KaniCompilerParser for ArgMatches {
     }
 }
 
-/// Retrieves the arguments from the command line and process hack to incorporate CARGO arguments.
+/// We add a `--kani-backend=goto-c` argument to select the goto-c backend, however,
+/// `rustc` doesn't parse that.
 ///
-/// The kani-compiler requires the flags related to the kani libraries to be
-/// in front of the ones that control rustc.
+/// Hence, we have to filter that argument from the list of arguments before invoking `rustc` parser.
 ///
-/// For cargo kani, cargo sometimes adds flags before the custom RUSTFLAGS, hence,
-/// we use a special environment variable to set Kani specific flags. These flags
-/// should only be enabled if --kani-flags is present.
-/// FIXME: Remove this hack once we use cargo build-plan instead.
-pub fn command_arguments(args: &Vec<String>) -> Vec<String> {
+/// All other arguments are today located inside `--llvm-args`.
+pub fn extract_backend_flag(args: Vec<String>) -> (String, Vec<String>) {
     assert!(!args.is_empty(), "Arguments should always include executable name");
-    let has_kani_flags = args.iter().any(|arg| arg.eq(KANI_ARGS_FLAG));
-    if has_kani_flags {
-        let mut filter_args = vec![KANI_ARGS_FLAG];
-        let mut new_args: Vec<String> = Vec::new();
-        new_args.push(args[0].clone());
-        // For cargo kani, --reachability is included as a rustc argument.
-        let reachability = args.iter().find(|arg| arg.starts_with(REACHABILITY_FLAG));
-        if let Some(value) = reachability {
-            new_args.push(value.clone());
-            filter_args.push(value)
-        }
-        // Add all the other kani specific arguments are inside $KANIFLAGS.
-        let env_flags = env::var(KANIFLAGS_ENV_VAR).unwrap_or_default();
-        new_args.extend(
-            shell_words::split(&env_flags)
-                .expect(&format!("Cannot parse {KANIFLAGS_ENV_VAR} value '{env_flags}'")),
-        );
-        // Add the leftover arguments for rustc at the end.
-        new_args
-            .extend(args[1..].iter().filter(|&arg| !filter_args.contains(&arg.as_str())).cloned());
-        new_args
-    } else {
-        args.clone()
-    }
+    const BACKEND_OPT: &str = "--kani-backend=";
+    let mut backend = String::new();
+    let new_args = args
+        .into_iter()
+        .filter(|arg| {
+            if arg.starts_with(BACKEND_OPT) {
+                backend = arg.strip_prefix(BACKEND_OPT).unwrap().to_string();
+                false
+            } else {
+                true
+            }
+        })
+        .collect();
+    (backend, new_args)
 }
 
 #[cfg(test)]
