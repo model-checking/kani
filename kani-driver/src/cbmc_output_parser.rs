@@ -285,7 +285,7 @@ pub struct TraceValue {
     pub name: String,
     pub binary: Option<String>,
     pub data: Option<TraceData>,
-    pub width: Option<u8>,
+    pub width: Option<u32>,
 }
 
 /// Enum that represents a trace data item.
