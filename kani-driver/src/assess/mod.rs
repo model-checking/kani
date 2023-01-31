@@ -34,7 +34,7 @@ pub(crate) fn run_assess(session: KaniSession, args: AssessArgs) -> Result<()> {
         Err(err) => {
             let metadata = AssessMetadata::from_error(err.as_ref());
             write_metadata(&args, metadata)?;
-            Err(err.context("Failed to assess project."))
+            Err(err.context("Failed to assess project"))
         }
     }
 }
