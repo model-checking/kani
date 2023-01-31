@@ -716,14 +716,40 @@ mod tests {
 
     #[test]
     fn check_trace_value_deserialization_works() {
-        let data = r#"{
-            "binary": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        let data = format!(r#"{{
+            "binary": "{:0>1000}",
             "data": "0",
             "name": "integer",
             "type": "unsigned __CPROVER_bitvector[960]",
             "width": 960
-        }"#;
-        let trace_value: Result<TraceValue, _> = serde_json::from_str(data);
+        }}"#, 0);
+        let trace_value: Result<TraceValue, _> = serde_json::from_str(&data);
         assert!(trace_value.is_ok());
     }
+
+    /// Checks that a valid CBMC "result" item can be deserialized into a
+    /// `ParserItem` or `ResultStruct`.
+    #[test]
+    fn check_result_deserialization_works() {
+        let data = r#"{
+            "result": [
+                {
+                    "description": "assertion failed: 1 > 2",
+                    "property": "long_function_name.assertion.1",
+                    "sourceLocation": {
+                        "column": "16",
+                        "file": "/home/ubuntu/file.rs",
+                        "function": "long_function_name",
+                        "line": "815"
+                    },
+                    "status": "SUCCESS"
+                }
+            ]
+        }"#;
+        let parser_item: Result<ParserItem, _> = serde_json::from_str(&data);
+        let result_struct: Result<ResultStruct, _> = serde_json::from_str(&data);
+        assert!(parser_item.is_ok());
+        assert!(result_struct.is_ok());
+    }
+
 }
