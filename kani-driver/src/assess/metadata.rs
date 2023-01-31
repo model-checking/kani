@@ -27,7 +27,6 @@ use super::AssessArgs;
 /// This is not a stable interface.
 #[derive(Serialize, Deserialize)]
 pub struct AssessMetadata {
-    // TODO: The assess cache should check this field to know whether the version should change.
     /// Kani version that was used to generate the metadata.
     #[serde(rename = "kani_version")]
     pub version: String,
