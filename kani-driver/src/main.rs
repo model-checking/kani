@@ -48,7 +48,7 @@ fn main() -> ExitCode {
 
     if let Err(error) = result {
         // We are using the debug format for now to print the all the context.
-        // We should consider create a standard for error reporting.
+        // We should consider creating a standard for error reporting.
         debug!(?error, "main_failure");
         util::error(&format!("{error:#}"));
         ExitCode::FAILURE
