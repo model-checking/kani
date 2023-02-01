@@ -126,20 +126,6 @@ mod tests {
     }
 
     #[test]
-    fn check_join_osstring() {
-        assert_eq!(
-            join_osstring(&["a".into(), "b".into(), "cd".into()], " "),
-            OsString::from("a b cd")
-        );
-        assert_eq!(join_osstring(&[], " "), OsString::from(""));
-        assert_eq!(join_osstring(&["a".into()], " "), OsString::from("a"));
-        assert_eq!(
-            join_osstring(&["a".into(), "b".into(), "cd".into()], ", "),
-            OsString::from("a, b, cd")
-        );
-    }
-
-    #[test]
     fn check_render_command() {
         let mut c1 = Command::new("a");
         c1.arg("b");

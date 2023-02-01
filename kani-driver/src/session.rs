@@ -229,6 +229,19 @@ fn bin_folder() -> Result<PathBuf> {
     Ok(dir)
 }
 
+/// Return the path for the folder where the pre-compiled rust libraries are located.
+pub fn lib_folder() -> Result<PathBuf> {
+    Ok(base_folder()?.join("lib"))
+}
+
+/// Return the base folder for the entire kani installation.
+pub fn base_folder() -> Result<PathBuf> {
+    Ok(bin_folder()?
+        .parent()
+        .context("Failed to find Kani's base installation folder.")?
+        .to_path_buf())
+}
+
 impl InstallType {
     pub fn new() -> Result<Self> {
         // Case 1: We've checked out the development repo and we're built under `target/kani`

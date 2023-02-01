@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use crate::args::KaniArgs;
+use crate::call_single_file::to_rustc_arg;
 use crate::session::KaniSession;
 use anyhow::{bail, Context, Result};
 use cargo_metadata::diagnostic::{Diagnostic, DiagnosticLevel};
@@ -58,7 +59,8 @@ impl KaniSession {
             fs::remove_dir_all(&target_dir)?;
         }
 
-        let rustc_args = self.kani_rustc_flags();
+        let mut rustc_args = self.kani_rustc_flags();
+        rustc_args.push(to_rustc_arg(self.kani_compiler_flags()).into());
 
         let mut cargo_args: Vec<OsString> = vec!["rustc".into()];
         if let Some(path) = &self.args.cargo.manifest_path {
@@ -98,9 +100,8 @@ impl KaniSession {
         }
 
         // Arguments that will only be passed to the target package.
-        let mut pkg_args: Vec<OsString> = vec![];
-        pkg_args
-            .extend(["--".into(), format!("--reachability={}", self.reachability_mode()).into()]);
+        let mut pkg_args: Vec<String> = vec![];
+        pkg_args.extend(["--".to_string(), self.reachability_arg()]);
 
         let mut found_target = false;
         let packages = packages_to_verify(&self.args, &metadata);

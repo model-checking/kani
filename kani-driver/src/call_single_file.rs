@@ -2,104 +2,22 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use anyhow::Result;
+use std::ffi::OsString;
 use std::path::Path;
 use std::process::Command;
-use std::{ffi::OsString, path::PathBuf};
 
-use crate::session::{KaniSession, ReachabilityMode};
+use crate::session::{base_folder, lib_folder, KaniSession};
 
 impl KaniSession {
     /// Used by `kani` and not `cargo-kani` to process a single Rust file into a `.symtab.json`
     // TODO: Move these functions to be part of the builder.
-
-    /// This function generates all rustc configurations required by our goto-c codegen.
-    fn rustc_gotoc_flags(lib_path: &str) -> Vec<String> {
-        // The option below provides a mechanism by which definitions in the
-        // standard library can be overriden. See
-        // https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp/topic/.E2.9C.94.20Globally.20override.20an.20std.20macro/near/268873354
-        // for more details.
-        let kani_std_rlib = PathBuf::from(lib_path).join("libstd.rlib");
-        let kani_std_wrapper = format!("noprelude:std={}", kani_std_rlib.to_str().unwrap());
-        let args = vec![
-            "-C",
-            "overflow-checks=on",
-            "-C",
-            "panic=abort",
-            "-Z",
-            "unstable-options",
-            "-Z",
-            "panic_abort_tests=yes",
-            "-Z",
-            "trim-diagnostic-paths=no",
-            "-Z",
-            "human_readable_cgu_names",
-            "-Z",
-            "always-encode-mir",
-            "--cfg=kani",
-            "-Z",
-            "crate-attr=feature(register_tool)",
-            "-Z",
-            "crate-attr=register_tool(kanitool)",
-            "-L",
-            lib_path,
-            "--extern",
-            "kani",
-            "--extern",
-            kani_std_wrapper.as_str(),
-        ];
-        args.iter().map(|s| s.to_string()).collect()
-    }
-
-    /// Convert an argument from OsStr to String.
-    /// If conversion fails, panic with a custom message.
-    fn convert_arg(arg: &OsStr) -> String {
-        arg.to_str()
-            .expect(format!("[Error] Cannot parse argument \"{arg:?}\".").as_str())
-            .to_string()
-    }
-
-    /// Generate the arguments to pass to rustc_driver.
-    fn generate_rustc_args(args: &ArgMatches) -> Vec<String> {
-        let mut rustc_args = vec![String::from("rustc")];
-        if args.get_flag(parser::GOTO_C) {
-            let mut default_path = kani_root();
-            if args.reachability_type() == ReachabilityType::Legacy {
-                default_path.push("legacy-lib")
-            } else {
-                default_path.push("lib");
-            }
-            let gotoc_args = rustc_gotoc_flags(
-                args.get_one::<String>(parser::KANI_LIB)
-                    .unwrap_or(&default_path.to_str().unwrap().to_string()),
-            );
-            rustc_args.extend_from_slice(&gotoc_args);
-        }
-
-        if args.get_flag(parser::RUSTC_VERSION) {
-            rustc_args.push(String::from("--version"))
-        }
-
-        if args.get_flag(parser::JSON_OUTPUT) {
-            rustc_args.push(String::from("--error-format=json"));
-        }
-
-        if let Some(extra_flags) = args.get_raw(parser::RUSTC_OPTIONS) {
-            extra_flags.for_each(|arg| rustc_args.push(convert_arg(arg)));
-        }
-        let sysroot = sysroot_path(args);
-        rustc_args.push(String::from("--sysroot"));
-        rustc_args.push(convert_arg(sysroot.as_os_str()));
-        tracing::debug!(?rustc_args, "Compile");
-        rustc_args
-    }
-
     pub fn compile_single_rust_file(
         &self,
         file: &Path,
         crate_name: &String,
         outdir: &Path,
     ) -> Result<()> {
-        let mut kani_args = self.kani_specific_flags();
+        let mut kani_args = self.kani_compiler_flags();
         kani_args.push(format!("--reachability={}", self.reachability_mode()));
 
         let mut rustc_args = self.kani_rustc_flags();
@@ -130,7 +48,8 @@ impl KaniSession {
         // Note that the order of arguments is important. Kani specific flags should precede
         // rustc ones.
         let mut cmd = Command::new(&self.kani_compiler);
-        cmd.args(kani_args).args(rustc_args);
+        let kani_compiler_args = to_rustc_arg(kani_args);
+        cmd.arg(kani_compiler_args).args(rustc_args);
 
         if self.args.quiet {
             self.run_suppress(cmd)?;
@@ -140,9 +59,13 @@ impl KaniSession {
         Ok(())
     }
 
-    /// These arguments are arguments passed to kani-compiler that are `kani` specific.
-    /// These are also used by call_cargo to pass as the env var KANIFLAGS.
-    pub fn kani_specific_flags(&self) -> Vec<String> {
+    /// Create a compiler option that represents the reachability mod.
+    pub fn reachability_arg(&self) -> String {
+        to_rustc_arg(vec![format!("--reachability={}", self.reachability_mode())])
+    }
+
+    /// These arguments are arguments passed to kani-compiler that are `kani` compiler specific.
+    pub fn kani_compiler_flags(&self) -> Vec<String> {
         let mut flags = vec![];
 
         if self.args.debug {
@@ -168,7 +91,7 @@ impl KaniSession {
             flags.push("--enable-stubbing".into());
         }
         if let Some(harness) = &self.args.harness {
-            flags.push(format!("--harness={harness}").into());
+            flags.push(format!("--harness={harness}"));
         }
 
         #[cfg(feature = "unsound_experiments")]
@@ -177,10 +100,48 @@ impl KaniSession {
         flags
     }
 
-    /// These arguments are arguments passed to kani-compiler that are `rustc` specific.
-    /// These are also used by call_cargo to pass as the env var KANIFLAGS.
+    /// This function generates all rustc configurations required by our goto-c codegen.
+    ///
+    /// We override the `std` library using the mechanism described here:
+    /// <https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp/topic/.E2.9C.94.20Globally.20override.20an.20std.20macro/near/268873354>
+    /// for more details.
     pub fn kani_rustc_flags(&self) -> Vec<OsString> {
-        let mut flags = Vec::<OsString>::new();
+        let lib_path = lib_folder().unwrap();
+        let kani_std_rlib = lib_path.join("libstd.rlib");
+        let kani_std_wrapper = format!("noprelude:std={}", kani_std_rlib.to_str().unwrap());
+        let sysroot = base_folder().unwrap();
+        let args = vec![
+            "-C",
+            "overflow-checks=on",
+            "-C",
+            "panic=abort",
+            "-C",
+            "symbol-mangling-version=v0",
+            "-Z",
+            "unstable-options",
+            "-Z",
+            "panic_abort_tests=yes",
+            "-Z",
+            "trim-diagnostic-paths=no",
+            "-Z",
+            "human_readable_cgu_names",
+            "-Z",
+            "always-encode-mir",
+            "--cfg=kani",
+            "-Z",
+            "crate-attr=feature(register_tool)",
+            "-Z",
+            "crate-attr=register_tool(kanitool)",
+            "--sysroot",
+            sysroot.to_str().unwrap(),
+            "-L",
+            lib_path.to_str().unwrap(),
+            "--extern",
+            "kani",
+            "--extern",
+            kani_std_wrapper.as_str(),
+        ];
+        let mut flags: Vec<_> = args.iter().map(OsString::from).collect();
         if self.args.use_abs {
             flags.push("-Z".into());
             flags.push("force-unstable-if-unmarked=yes".into()); // ??
@@ -199,15 +160,23 @@ impl KaniSession {
             }
         }
 
-        flags.push("-C".into());
-        flags.push("symbol-mangling-version=v0".into());
-
         // e.g. compiletest will set 'compile-flags' here and we should pass those down to rustc
         // and we fail in `tests/kani/Match/match_bool.rs`
         if let Ok(str) = std::env::var("RUSTFLAGS") {
             flags.extend(str.split(' ').map(OsString::from));
         }
 
+        // This argument will select the Kani flavour of the compiler. It will be removed before
+        // rustc driver is invoked.
+        flags.push("--kani-compiler".into());
+
         flags
     }
+}
+
+/// This function can be used to convert a Kani compiler specific argument into a rustc one.
+/// We currently pass Kani specific arguments using the `--llvm-args` structure which is the
+/// hacky mechanism used by other rustc backend to receive arguments unknown to rustc.
+pub fn to_rustc_arg(kani_args: Vec<String>) -> String {
+    format!(r#"-Cllvm-args={}"#, kani_args.join(" "))
 }

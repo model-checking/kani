@@ -1,11 +1,9 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use clap::value_parser;
 use clap::{builder::PossibleValuesParser, command, Arg, ArgAction, ArgMatches, Command};
 use kani_queries::ReachabilityType;
 use std::env;
-use std::ffi::OsString;
 use std::str::FromStr;
 use strum::VariantNames as _;
 
@@ -36,9 +34,6 @@ pub const PRETTY_OUTPUT_FILES: &str = "pretty-json-files";
 /// Option used for suppressing global ASM error.
 pub const IGNORE_GLOBAL_ASM: &str = "ignore-global-asm";
 
-/// Option name used to override the sysroot.
-pub const SYSROOT: &str = "sysroot";
-
 /// Option name used to select which reachability analysis to perform.
 pub const REACHABILITY: &str = "reachability";
 
@@ -48,15 +43,9 @@ pub const HARNESS: &str = "harness";
 /// Option name used to enable stubbing.
 pub const ENABLE_STUBBING: &str = "enable-stubbing";
 
-/// Option name used to pass extra rustc-options.
-pub const RUSTC_OPTIONS: &str = "rustc-options";
-
-pub const RUSTC_VERSION: &str = "rustc-version";
-
 /// Configure command options for the Kani compiler.
 pub fn parser() -> Command {
     let app = command!()
-        .disable_version_flag(true)
         .arg(
             Arg::new("kani-compiler-version")
                 .short('?')
@@ -105,32 +94,6 @@ pub fn parser() -> Command {
                 .long(RESTRICT_FN_PTRS)
                 .help("Restrict the targets of virtual table function pointer calls.")
                 .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(SYSROOT)
-                .long(SYSROOT)
-                .help("Override the system root.")
-                .long_help(
-                    "The \"sysroot\" is the location where Kani will look for the Rust \
-                distribution.",
-                )
-                .action(ArgAction::Set),
-        )
-        .arg(
-            // TODO: Move this to a cargo wrapper. This should return kani version.
-            Arg::new(RUSTC_VERSION)
-                .short('V')
-                .long("version")
-                .help("Gets underlying rustc version.")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(RUSTC_OPTIONS)
-                .help("Arguments to be passed down to rustc.")
-                .trailing_var_arg(true) // This allow us to fwd commands to rustc.
-                .allow_hyphen_values(true)
-                .value_parser(value_parser!(OsString)) // Allow invalid UTF-8
-                .action(ArgAction::Append),
         )
         .arg(
             Arg::new(ASSERTION_REACH_CHECKS)

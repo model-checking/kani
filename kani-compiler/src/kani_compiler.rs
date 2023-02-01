@@ -18,6 +18,7 @@ use rustc_middle::ty::TyCtxt;
 use rustc_session::config::ErrorOutputType;
 use std::process::ExitCode;
 use std::sync::{Arc, Mutex};
+use tracing::debug;
 
 pub fn run(mut args: Vec<String>) -> ExitCode {
     let mut kani_compiler = KaniCompiler::new();
@@ -60,7 +61,7 @@ impl KaniCompiler {
     }
 
     pub fn post_process(&mut self, old_args: Vec<String>) -> Vec<String> {
-        let stubs = self.stubs.take().unwrap_or_default();
+        let stubs = self.stubs.replace(FxHashMap::default()).unwrap_or_default();
         if stubs.is_empty() {
             vec![]
         } else {
@@ -88,7 +89,9 @@ impl KaniCompiler {
 impl Callbacks for KaniCompiler {
     fn config(&mut self, config: &mut Config) {
         if self.args.is_none() {
-            let matches = parser::parser().get_matches_from(&config.opts.cg.llvm_args);
+            let mut args = vec!["kani-compiler".to_string()];
+            args.extend(config.opts.cg.llvm_args.iter().cloned());
+            let matches = parser::parser().get_matches_from(&args);
             init_session(
                 &matches,
                 matches!(config.opts.error_format, ErrorOutputType::Json { .. }),
@@ -102,6 +105,7 @@ impl Callbacks for KaniCompiler {
             queries.set_output_pretty_json(matches.get_flag(parser::PRETTY_OUTPUT_FILES));
             queries.set_ignore_global_asm(matches.get_flag(parser::IGNORE_GLOBAL_ASM));
             queries.set_reachability_analysis(matches.reachability_type());
+
             #[cfg(feature = "unsound_experiments")]
             crate::unsound_experiments::arg_parser::add_unsound_experiment_args_to_queries(
                 &mut queries,
@@ -115,6 +119,7 @@ impl Callbacks for KaniCompiler {
                 queries.set_stubbing_enabled(true);
             }
             self.args = Some(matches);
+            debug!(?queries, "config end");
         }
     }
 
@@ -127,6 +132,7 @@ impl Callbacks for KaniCompiler {
         if self.stubs.is_none() && self.queries.lock().unwrap().get_stubbing_enabled() {
             rustc_queries.global_ctxt().unwrap().peek_mut().enter(|tcx| {
                 let stubs = self.stubs.insert(self.collect_stubs(tcx));
+                debug!(?stubs, "after_analysis");
                 if stubs.is_empty() { Compilation::Continue } else { Compilation::Stop }
             })
         } else {
