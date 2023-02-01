@@ -28,6 +28,9 @@ pub enum AssessSubcommand {
 /// `cargo kani assess scan` subcommand arguments
 #[derive(Debug, Parser)]
 pub struct ScanArgs {
+    // TODO: When assess scan is invoked using `--existing-only`, it should check if the Kani version
+    // from the existing metadata files matches the current version. Otherwise, the results may no
+    // longer hold.
     /// Don't run assess on found packages, just re-analyze the results from a previous run
     #[arg(long, hide = true)]
     pub existing_only: bool,
