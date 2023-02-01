@@ -30,16 +30,16 @@ pub enum VerificationStatus {
 #[derive(Debug, Clone, AsRefStr, EnumString, EnumVariantNames, PartialEq, Eq)]
 #[strum(serialize_all = "snake_case")]
 pub enum CbmcSolver {
-    /// A custom solver variant whose argument gets passed to
-    /// `--external-sat-solver`. The specified binary must exist in path.
-    #[strum(disabled, serialize = "SAT solver binary")]
-    Custom(String),
-
     /// The kissat solver that is included in the Kani bundle
     Kissat,
 
     /// MiniSAT (CBMC's default solver)
     Minisat,
+
+    /// A custom solver variant whose argument gets passed to
+    /// `--external-sat-solver`. The specified binary must exist in path.
+    #[strum(disabled, serialize = "<SAT_SOLVER_BINARY>")]
+    Custom(String),
 }
 
 /// Our (kani-driver) notions of CBMC results.
