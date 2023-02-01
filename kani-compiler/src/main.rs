@@ -37,31 +37,21 @@ mod parser;
 mod session;
 mod unsound_experiments;
 
+use rustc_driver::{RunCompiler, TimePassesCallbacks};
 use std::env;
-
-use kani_compiler::KaniCallbacks;
-use kani_queries::QueryDb;
-use rustc_driver::RunCompiler;
+use std::process::ExitCode;
 
 /// Main function. Configure arguments and run the compiler.
-fn main() -> Result<(), &'static str> {
+fn main() -> ExitCode {
     session::init_panic_hook();
-    let (backend, rustc_args) = parser::extract_backend_flag(env::args().collect());
+    let (kani_compiler, rustc_args) = parser::is_kani_compiler(env::args().collect());
 
     // Configure and run compiler.
-    let queries = QueryDb::new();
-    let mut callbacks = KaniCallbacks { queries: queries.clone() };
-    let mut compiler = RunCompiler::new(&rustc_args, &mut callbacks);
-    if !backend.is_empty() {
-        assert_eq!(backend, "goto-c", "Unsupported backend selected");
-        if cfg!(feature = "cprover") {
-            compiler.set_make_codegen_backend(Some(Box::new(move |_cfg| {
-                Box::new(codegen_cprover_gotoc::GotocCodegenBackend::new(queries))
-            })));
-        } else {
-            return Err("Kani was configured without 'cprover' feature. You must enable this \
-            feature in order to use --goto-c argument.");
-        }
+    if kani_compiler {
+        kani_compiler::run(rustc_args)
+    } else {
+        let mut callbacks = TimePassesCallbacks::default();
+        let compiler = RunCompiler::new(&rustc_args, &mut callbacks);
+        if compiler.run().is_err() { ExitCode::FAILURE } else { ExitCode::SUCCESS }
     }
-    compiler.run().or(Err("Failed to compile crate."))
 }

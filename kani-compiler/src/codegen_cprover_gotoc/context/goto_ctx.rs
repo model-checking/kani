@@ -42,7 +42,6 @@ use rustc_target::abi::Endian;
 use rustc_target::abi::{HasDataLayout, TargetDataLayout};
 use rustc_target::spec::Target;
 use std::path::Path;
-use std::rc::Rc;
 
 pub struct GotocCtx<'tcx> {
     /// the typing context

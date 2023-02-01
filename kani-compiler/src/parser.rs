@@ -192,28 +192,28 @@ impl KaniCompilerParser for ArgMatches {
     }
 }
 
-/// We add a `--kani-backend=goto-c` argument to select the goto-c backend, however,
-/// `rustc` doesn't parse that.
+/// Return whether we should run our flavour of the compiler, and which arguments to pass to rustc.
 ///
-/// Hence, we have to filter that argument from the list of arguments before invoking `rustc` parser.
+/// We add a `--kani-compiler` argument to run the Kani version of the compiler, which needs to be
+/// filtered out before passing the arguments to rustc.
 ///
-/// All other arguments are today located inside `--llvm-args`.
-pub fn extract_backend_flag(args: Vec<String>) -> (String, Vec<String>) {
+/// All other Kani arguments are today located inside `--llvm-args`.
+pub fn is_kani_compiler(args: Vec<String>) -> (bool, Vec<String>) {
     assert!(!args.is_empty(), "Arguments should always include executable name");
-    const BACKEND_OPT: &str = "--kani-backend=";
-    let mut backend = String::new();
+    const KANI_COMPILER: &str = "--kani-compiler";
+    let mut has_kani_compiler = false;
     let new_args = args
         .into_iter()
         .filter(|arg| {
-            if arg.starts_with(BACKEND_OPT) {
-                backend = arg.strip_prefix(BACKEND_OPT).unwrap().to_string();
+            if arg == KANI_COMPILER {
+                has_kani_compiler = true;
                 false
             } else {
                 true
             }
         })
         .collect();
-    (backend, new_args)
+    (has_kani_compiler, new_args)
 }
 
 #[cfg(test)]
@@ -254,18 +254,19 @@ mod parser_test {
     fn test_cargo_kani_hack_noop() {
         let args = ["kani-compiler", "some/path"];
         let args = args.map(String::from);
-        let new_args = command_arguments(&Vec::from(args.clone()));
+        let (is_kani, new_args) = is_kani_compiler(Vec::from(args.clone()));
         assert_eq!(args.as_slice(), new_args.as_slice());
+        assert!(!is_kani);
     }
 
     #[test]
     fn test_cargo_kani_hack_no_args() {
-        env::remove_var(KANIFLAGS_ENV_VAR);
-        let args = ["kani-compiler", "some/path", "--kani-flags"];
+        let args = ["kani_compiler", "some/path", "--kani-compiler"];
         let args = args.map(String::from);
-        let new_args = command_arguments(&Vec::from(args.clone()));
-        assert_eq!(new_args.len(), 2, "New args should not include --kani-flags");
+        let (is_kani, new_args) = is_kani_compiler(Vec::from(args.clone()));
+        assert_eq!(new_args.len(), 2, "New args should not include --kani-compiler");
         assert_eq!(new_args[0], args[0]);
         assert_eq!(new_args[1], args[1]);
+        assert!(is_kani);
     }
 }

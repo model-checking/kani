@@ -3,53 +3,135 @@
 
 //! This module defines all compiler extensions that form the Kani compiler.
 
+use crate::codegen_cprover_gotoc::GotocCodegenBackend;
 use crate::kani_middle::stubbing;
 use crate::parser::{self, KaniCompilerParser};
 use crate::session::init_session;
 use clap::ArgMatches;
 use kani_queries::{QueryDb, ReachabilityType, UserInput};
+use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_data_structures::fx::FxHashMap;
-use rustc_driver::{Callbacks, RunCompiler};
+use rustc_driver::{Callbacks, Compilation, RunCompiler};
 use rustc_hir::definitions::DefPathHash;
 use rustc_interface::Config;
+use rustc_middle::ty::TyCtxt;
 use rustc_session::config::ErrorOutputType;
-use std::env;
-use std::rc::Rc;
+use std::process::ExitCode;
 use std::sync::{Arc, Mutex};
 
-#[cfg(todo)]
-fn config() {}
+pub fn run(mut args: Vec<String>) -> ExitCode {
+    let mut kani_compiler = KaniCompiler::new();
+    while !args.is_empty() {
+        let queries = kani_compiler.queries.clone();
+        let mut compiler = RunCompiler::new(&args, &mut kani_compiler);
+        compiler.set_make_codegen_backend(Some(Box::new(move |_cfg| backend(queries))));
+        if compiler.run().is_err() {
+            return ExitCode::FAILURE;
+        }
+
+        args = kani_compiler.post_process(args);
+    }
+    ExitCode::SUCCESS
+}
+
+#[cfg(feature = "cprover")]
+fn backend(queries: Arc<Mutex<QueryDb>>) -> Box<dyn CodegenBackend> {
+    Box::new(GotocCodegenBackend::new(queries))
+}
+
+#[cfg(not(feature = "cprover"))]
+fn backend(queries: Arc<Mutex<QueryDb>>) -> Box<CodegenBackend> {
+    compile_error!("No backend is available. Only supported value today is `cprover`");
+}
 
 /// Empty struct since we don't support any callbacks yet.
-pub struct KaniCallbacks {
+struct KaniCompiler {
+    /// Store the queries database. The queries should be initialized as part of `config`.
     pub queries: Arc<Mutex<QueryDb>>,
+    /// Store the stubs that shall be applied if any.
+    stubs: Option<FxHashMap<DefPathHash, DefPathHash>>,
+    /// Store the arguments for kani compiler.
+    args: Option<ArgMatches>,
+}
+
+impl KaniCompiler {
+    pub fn new() -> KaniCompiler {
+        KaniCompiler { queries: QueryDb::new(), stubs: None, args: None }
+    }
+
+    pub fn post_process(&mut self, old_args: Vec<String>) -> Vec<String> {
+        let stubs = self.stubs.take().unwrap_or_default();
+        if stubs.is_empty() {
+            vec![]
+        } else {
+            let mut new_args = old_args;
+            new_args.push(stubbing::mk_rustc_arg(&stubs));
+            new_args
+        }
+    }
+
+    fn collect_stubs(&self, tcx: TyCtxt) -> FxHashMap<DefPathHash, DefPathHash> {
+        let all_stubs = stubbing::collect_stub_mappings(tcx);
+        if all_stubs.is_empty() {
+            FxHashMap::default()
+        } else if let Some(harness) = self.args.as_ref().unwrap().get_one::<String>(parser::HARNESS)
+        {
+            find_harness_stub_mapping(harness, all_stubs).unwrap_or_default()
+        } else {
+            // No harness was provided. Nothing to do.
+            FxHashMap::default()
+        }
+    }
 }
 
 /// Use default function implementations.
-impl Callbacks for KaniCallbacks {
+impl Callbacks for KaniCompiler {
     fn config(&mut self, config: &mut Config) {
-        println!("config: {:?}", config.opts.cg.llvm_args);
-        let matches = parser::parser().get_matches_from(&config.opts.cg.llvm_args);
-        init_session(&matches, matches!(config.opts.error_format, ErrorOutputType::Json { .. }));
+        if self.args.is_none() {
+            let matches = parser::parser().get_matches_from(&config.opts.cg.llvm_args);
+            init_session(
+                &matches,
+                matches!(config.opts.error_format, ErrorOutputType::Json { .. }),
+            );
 
-        // Configure queries.
-        let queries = &mut (*self.queries.lock().unwrap());
-        queries.set_emit_vtable_restrictions(matches.get_flag(parser::RESTRICT_FN_PTRS));
-        queries.set_check_assertion_reachability(matches.get_flag(parser::ASSERTION_REACH_CHECKS));
-        queries.set_output_pretty_json(matches.get_flag(parser::PRETTY_OUTPUT_FILES));
-        queries.set_ignore_global_asm(matches.get_flag(parser::IGNORE_GLOBAL_ASM));
-        queries.set_reachability_analysis(matches.reachability_type());
-        #[cfg(feature = "unsound_experiments")]
-        crate::unsound_experiments::arg_parser::add_unsound_experiment_args_to_queries(
-            &mut queries,
-            &matches,
-        );
+            // Configure queries.
+            let queries = &mut (*self.queries.lock().unwrap());
+            queries.set_emit_vtable_restrictions(matches.get_flag(parser::RESTRICT_FN_PTRS));
+            queries
+                .set_check_assertion_reachability(matches.get_flag(parser::ASSERTION_REACH_CHECKS));
+            queries.set_output_pretty_json(matches.get_flag(parser::PRETTY_OUTPUT_FILES));
+            queries.set_ignore_global_asm(matches.get_flag(parser::IGNORE_GLOBAL_ASM));
+            queries.set_reachability_analysis(matches.reachability_type());
+            #[cfg(feature = "unsound_experiments")]
+            crate::unsound_experiments::arg_parser::add_unsound_experiment_args_to_queries(
+                &mut queries,
+                &matches,
+            );
 
-        // If appropriate, collect and set the stub mapping.
-        if matches.get_flag(parser::ENABLE_STUBBING)
-            && queries.get_reachability_analysis() == ReachabilityType::Harnesses
-        {
-            queries.set_stubbing_enabled(true);
+            // If appropriate, collect and set the stub mapping.
+            if matches.get_flag(parser::ENABLE_STUBBING)
+                && queries.get_reachability_analysis() == ReachabilityType::Harnesses
+            {
+                queries.set_stubbing_enabled(true);
+            }
+            self.args = Some(matches);
+        }
+    }
+
+    // TODO: What if we try after_expansion??
+    fn after_analysis<'tcx>(
+        &mut self,
+        _compiler: &rustc_interface::interface::Compiler,
+        rustc_queries: &'tcx rustc_interface::Queries<'tcx>,
+    ) -> Compilation {
+        if self.stubs.is_none() && self.queries.lock().unwrap().get_stubbing_enabled() {
+            rustc_queries.global_ctxt().unwrap().peek_mut().enter(|tcx| {
+                let stubs = self.stubs.insert(self.collect_stubs(tcx));
+                if stubs.is_empty() { Compilation::Continue } else { Compilation::Stop }
+            })
+        } else {
+            // There is no need to initialize stubs, keep compiling.
+            Compilation::Continue
         }
     }
 }
@@ -70,38 +152,4 @@ fn find_harness_stub_mapping(
         }
     }
     None
-}
-
-fn init_stub(rustc_args: &Vec<String>) -> Result<Option<String>, &str> {
-    let all_stub_mappings =
-        stubbing::collect_stub_mappings(&rustc_args).or(Err("Failed to compile crate"))?;
-    let harness = matches.get_one::<String>(parser::HARNESS).unwrap();
-    let mapping = find_harness_stub_mapping(harness, all_stub_mappings).unwrap_or_default();
-    rustc_args.push(stubbing::mk_rustc_arg(mapping));
-}
-
-#[cfg(test)]
-mod args_test {
-    use super::*;
-    use crate::parser;
-    #[cfg(unix)]
-    #[test]
-    #[should_panic]
-    fn test_invalid_arg_fails() {
-        use std::ffi::OsString;
-        use std::os::unix::ffi::OsStrExt;
-
-        // The value 0x80 is an invalid character.
-        let source = [0x68, 0x65, 0x6C, 0x6C, 0x80];
-        let os_str = OsStr::from_bytes(&source[..]);
-        assert_eq!(os_str.to_str(), None);
-
-        let matches = parser::parser().get_matches_from(vec![
-            OsString::from("kani-compiler").as_os_str(),
-            OsString::from("--sysroot").as_os_str(),
-            OsString::from("any").as_os_str(),
-            os_str,
-        ]);
-        generate_rustc_args(&matches);
-    }
 }
