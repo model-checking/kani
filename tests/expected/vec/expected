@@ -27,8 +27,8 @@ free called for new[] object
 SUCCESS\
 free called for stack-allocated object
 SUCCESS\
-assertion failed: x[0] == 10
+assertion holds: x[0] == 10
 SUCCESS\
-assertion failed: y == 10
+assertion holds: y == 10
 FAILURE\
-assertion failed: y != 10
+assertion holds: y != 10

@@ -1,2 +1,2 @@
 FAILURE\
-assertion failed: high_offset == wrapped_offset.try_into().unwrap()
+assertion holds: high_offset == wrapped_offset.try_into().unwrap()

@@ -1,6 +1,6 @@
 UNREACHABLE\
-assertion failed: false
+assertion holds: false
 UNREACHABLE\
-assertion failed: false
+assertion holds: false
 SUCCESS\
-assertion failed: a == *b
+assertion holds: a == *b

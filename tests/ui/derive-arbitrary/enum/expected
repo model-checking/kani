@@ -1,15 +1,15 @@
 Checking harness check_comparison...
 SUCCESS\
-"assertion failed: disc >= -1 && disc <= 1"
+"assertion holds: disc >= -1 && disc <= 1"
 
 SUCCESS\
-"assertion failed: disc == 1"
+"assertion holds: disc == 1"
 
 SUCCESS\
-"assertion failed: disc == -1"
+"assertion holds: disc == -1"
 
 SUCCESS\
-"assertion failed: disc == 0"
+"assertion holds: disc == 0"
 
 
 Checking harness check_enum_wrapper...

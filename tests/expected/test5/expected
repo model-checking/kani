@@ -1,7 +1,7 @@
 SUCCESS\
-assertion failed: div(4, 2) == 2
+assertion holds: div(4, 2) == 2
 FAILURE\
-assertion failed: div(6, 2) == 2
+assertion holds: div(6, 2) == 2
 SUCCESS\
 attempt to divide by zero
 SUCCESS\

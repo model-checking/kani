@@ -11,22 +11,22 @@ attempt to multiply with overflow
 SUCCESS\
 attempt to multiply with overflow
 SUCCESS\
-assertion failed: rec.vol(3) == 150
+assertion holds: rec.vol(3) == 150
 SUCCESS\
-assertion failed: impl_area(rec.clone()) == 50
+assertion holds: impl_area(rec.clone()) == 50
 SUCCESS\
-assertion failed: vol == 100
+assertion holds: vol == 100
 SUCCESS\
-assertion failed: square.vol(3) == 27
+assertion holds: square.vol(3) == 27
 SUCCESS\
-assertion failed: do_vol(&square, 2) == 18
+assertion holds: do_vol(&square, 2) == 18
 SUCCESS\
-assertion failed: impl_area(square.clone()) == 9
+assertion holds: impl_area(square.clone()) == 9
 SUCCESS\
-assertion failed: !square.compare_area(&square)
+assertion holds: !square.compare_area(&square)
 SUCCESS\
-assertion failed: !square.compare_area(&rec)
+assertion holds: !square.compare_area(&rec)
 SUCCESS\
-assertion failed: rec.compare_area(&square)
+assertion holds: rec.compare_area(&square)
 SUCCESS\
-assertion failed: !rec.compare_area(&rec)
+assertion holds: !rec.compare_area(&rec)

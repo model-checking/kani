@@ -1,2 +1,2 @@
 SUCCESS\
-assertion failed: p.sum() == 3
+assertion holds: p.sum() == 3

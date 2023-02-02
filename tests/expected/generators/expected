@@ -1,8 +1,8 @@
 SUCCESS\
-Description: "assertion failed: res == GeneratorState::Yielded(val)"
+Description: "assertion holds: res == GeneratorState::Yielded(val)"
 
 SUCCESS\
-Description: "assertion failed: res == GeneratorState::Complete(!val)"
+Description: "assertion holds: res == GeneratorState::Complete(!val)"
 
 UNREACHABLE\
 Description: "generator resumed after completion"

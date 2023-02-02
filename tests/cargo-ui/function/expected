@@ -1,4 +1,4 @@
 Status: SUCCESS\
-"assertion failed: 1 + 2 == 3"
+"assertion holds: 1 + 2 == 3"
 
 VERIFICATION:- SUCCESSFUL

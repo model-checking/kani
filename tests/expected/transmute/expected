@@ -1,4 +1,4 @@
 SUCCESS\
-assertion failed: bitpattern == 0x3F800000
+assertion holds: bitpattern == 0x3F800000
 SUCCESS\
-assertion failed: f == 1.0
+assertion holds: f == 1.0

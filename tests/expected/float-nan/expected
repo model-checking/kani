@@ -1,10 +1,10 @@
 SUCCESS\
-assertion failed: 1.0 / f != 0.0 / f
+assertion holds: 1.0 / f != 0.0 / f
 SUCCESS\
-assertion failed: !(1.0 / f == 0.0 / f)
+assertion holds: !(1.0 / f == 0.0 / f)
 FAILURE\
-assertion failed: 1.0 / f == 0.0 / f
+assertion holds: 1.0 / f == 0.0 / f
 FAILURE\
-assertion failed: 0.0 / f == 0.0 / f
+assertion holds: 0.0 / f == 0.0 / f
 SUCCESS\
-assertion failed: 0.0 / f != 0.0 / f
+assertion holds: 0.0 / f != 0.0 / f

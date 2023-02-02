@@ -1,2 +1,2 @@
 FAILURE\
-assertion failed: x < 4096
+assertion holds: x < 4096

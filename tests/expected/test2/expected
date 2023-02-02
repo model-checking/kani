@@ -3,8 +3,8 @@ attempt to shift right with overflow
 SUCCESS\
 attempt to add with overflow
 FAILURE\
-assertion failed: i == 3
+assertion holds: i == 3
 UNREACHABLE\
-assertion failed: i == 2
+assertion holds: i == 2
 UNREACHABLE\
-assertion failed: i == 2 || i == 3
+assertion holds: i == 2 || i == 3

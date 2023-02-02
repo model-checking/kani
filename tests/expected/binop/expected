@@ -1,84 +1,84 @@
 SUCCESS\
 attempt to add with overflow
 SUCCESS\
-assertion failed: a + b == correct
+assertion holds: a + b == correct
 SUCCESS\
 attempt to add with overflow
 FAILURE\
-assertion failed: a + b == wrong
+assertion holds: a + b == wrong
 SUCCESS\
 attempt to subtract with overflow
 SUCCESS\
-assertion failed: a - b == correct
+assertion holds: a - b == correct
 SUCCESS\
 attempt to subtract with overflow
 FAILURE\
-assertion failed: a - b == wrong
+assertion holds: a - b == wrong
 SUCCESS\
 attempt to multiply with overflow
 SUCCESS\
-assertion failed: a * b == correct
+assertion holds: a * b == correct
 SUCCESS\
 attempt to multiply with overflow
 FAILURE\
-assertion failed: a * b == wrong
+assertion holds: a * b == wrong
 SUCCESS\
 attempt to divide by zero
 SUCCESS\
 attempt to divide with overflow
 SUCCESS\
-assertion failed: a / b == correct
+assertion holds: a / b == correct
 SUCCESS\
 attempt to divide by zero
 SUCCESS\
 attempt to divide with overflow
 FAILURE\
-assertion failed: a / b == wrong
+assertion holds: a / b == wrong
 SUCCESS\
 attempt to calculate the remainder with a divisor of zero
 SUCCESS\
 attempt to calculate the remainder with overflow
 SUCCESS\
-assertion failed: a % b == correct
+assertion holds: a % b == correct
 SUCCESS\
 attempt to calculate the remainder with a divisor of zero
 SUCCESS\
 attempt to calculate the remainder with overflow
 FAILURE\
-assertion failed: a % b == wrong
+assertion holds: a % b == wrong
 SUCCESS\
 attempt to shift left with overflow
 SUCCESS\
-assertion failed: a << b == correct
+assertion holds: a << b == correct
 SUCCESS\
 attempt to shift left with overflow
 FAILURE\
-assertion failed: a << b == wrong
+assertion holds: a << b == wrong
 SUCCESS\
 attempt to shift right with overflow
 SUCCESS\
-assertion failed: a >> b == correct
+assertion holds: a >> b == correct
 SUCCESS\
 attempt to shift right with overflow
 FAILURE\
-assertion failed: a >> b == wrong
+assertion holds: a >> b == wrong
 SUCCESS\
 attempt to shift right with overflow
 SUCCESS\
-assertion failed: a >> b == correct
+assertion holds: a >> b == correct
 SUCCESS\
 attempt to shift right with overflow
 FAILURE\
-assertion failed: a >> b == wrong
+assertion holds: a >> b == wrong
 SUCCESS\
-assertion failed: a & b == correct
+assertion holds: a & b == correct
 FAILURE\
-assertion failed: a & b == wrong
+assertion holds: a & b == wrong
 SUCCESS\
-assertion failed: a | b == correct
+assertion holds: a | b == correct
 FAILURE\
-assertion failed: a | b == wrong
+assertion holds: a | b == wrong
 SUCCESS\
-assertion failed: a ^ b == correct
+assertion holds: a ^ b == correct
 FAILURE\
-assertion failed: a ^ b == wrong
+assertion holds: a ^ b == wrong

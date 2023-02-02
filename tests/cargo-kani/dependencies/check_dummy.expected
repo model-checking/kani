@@ -1,2 +1,2 @@
 SUCCESS\
-assertion failed: x > 2
+assertion holds: x > 2

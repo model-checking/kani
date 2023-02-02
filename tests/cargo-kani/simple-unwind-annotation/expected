@@ -1,2 +1,2 @@
 FAILURE\
-assertion failed: counter < 10
+assertion holds: counter < 10

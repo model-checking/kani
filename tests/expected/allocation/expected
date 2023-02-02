@@ -1,4 +1,4 @@
 SUCCESS\
-assertion failed: foo() == None
+assertion holds: foo() == None
 SUCCESS\
-assertion failed: foo() == y
+assertion holds: foo() == y

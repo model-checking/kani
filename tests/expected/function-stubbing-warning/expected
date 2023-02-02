@@ -1,2 +1,2 @@
 Stubbing is not enabled; attribute `kani::stub` will be ignored
-Failed Checks: assertion failed: foo() == 42
+Failed Checks: assertion holds: foo() == 42

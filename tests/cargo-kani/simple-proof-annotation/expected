@@ -1,2 +1,2 @@
 FAILURE\
-assertion failed: 3 == 4
+assertion holds: 3 == 4

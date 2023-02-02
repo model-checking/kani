@@ -1,4 +1,4 @@
 SUCCESS\
-assertion failed: bar.a() == 3
+assertion holds: bar.a() == 3
 SUCCESS\
-assertion failed: bar.b() == 5
+assertion holds: bar.b() == 5

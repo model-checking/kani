@@ -1,4 +1,4 @@
 SUCCESS\
-assertion failed: x == y.data
+assertion holds: x == y.data
 SUCCESS\
-assertion failed: z == w.data
+assertion holds: z == w.data

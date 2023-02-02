@@ -1,4 +1,4 @@
 Status: SUCCESS\
-Description: "assertion failed: v2 == vec![1]"
+Description: "assertion holds: v2 == vec![1]"
 
 VERIFICATION:- SUCCESSFUL

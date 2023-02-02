@@ -1,2 +1,2 @@
 SUCCESS\
-assertion failed: x != 11
+assertion holds: x != 11

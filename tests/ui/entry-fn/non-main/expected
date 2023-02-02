@@ -1,4 +1,4 @@
 SUCCESS\
-assertion failed: pos != 0
+assertion holds: pos != 0
 
 VERIFICATION:- SUCCESSFUL

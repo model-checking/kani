@@ -1,2 +1,2 @@
 SUCCESS\
-assertion failed: z == 2
+assertion holds: z == 2

@@ -1,8 +1,8 @@
 FAILURE\
-assertion failed: 10 == foo()
+assertion holds: 10 == foo()
 SUCCESS\
-assertion failed: 12 == foo()
+assertion holds: 12 == foo()
 SUCCESS\
-assertion failed: 10 == foo()
+assertion holds: 10 == foo()
 FAILURE\
-assertion failed: 12 == foo()
+assertion holds: 12 == foo()

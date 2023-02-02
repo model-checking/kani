@@ -1,2 +1,2 @@
 SUCCESS\
-assertion failed: p.sum() == a.wrapping_add(b)
+assertion holds: p.sum() == a.wrapping_add(b)

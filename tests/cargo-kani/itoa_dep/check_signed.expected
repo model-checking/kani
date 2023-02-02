@@ -1,5 +1,5 @@
 Status: SUCCESS\
-Description: "assertion failed: result == &output"
+Description: "assertion holds: result == &output"
 
 Status: FAILURE\
 Description: "memcpy source region readable"

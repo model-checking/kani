@@ -1,10 +1,10 @@
 SUCCESS\
-assertion failed: x == 10
+assertion holds: x == 10
 UNREACHABLE\
-assertion failed: false
+assertion holds: false
 UNREACHABLE\
-assertion failed: false
+assertion holds: false
 SUCCESS\
-assertion failed: x == 30 && y == 60.0
+assertion holds: x == 30 && y == 60.0
 FAILURE\
-assertion failed: x == 31
+assertion holds: x == 31

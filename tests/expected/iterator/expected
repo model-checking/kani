@@ -3,4 +3,4 @@ unreachable code
 SUCCESS\
 attempt to multiply with overflow
 SUCCESS\
-assertion failed: z == 6
+assertion holds: z == 6

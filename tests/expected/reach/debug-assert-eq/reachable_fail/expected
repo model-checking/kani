@@ -1,3 +1,3 @@
 FAILURE\
-Description: "assertion failed: x == 10"
-Failed Checks: assertion failed: x == 10
+Description: "assertion holds: x == 10"
+Failed Checks: assertion holds: x == 10

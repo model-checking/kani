@@ -1,5 +1,5 @@
 UNDETERMINED\
-assertion failed: f == 120
+assertion holds: f == 120
 UNDETERMINED\
 attempt to subtract with overflow
 UNDETERMINED\

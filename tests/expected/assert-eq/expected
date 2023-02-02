@@ -1,6 +1,6 @@
 SUCCESS\
-assertion failed: x + 1 == y
+assertion holds: x + 1 == y
 FAILURE\
-assertion failed: x == y
+assertion holds: x == y
 UNREACHABLE\
-assertion failed: x != y
+assertion holds: x != y

@@ -1,9 +1,9 @@
 SUCCESS\
-assertion failed: q.len() == 2
+assertion holds: q.len() == 2
 SUCCESS\
-assertion failed: q.pop_front().unwrap() == x
+assertion holds: q.pop_front().unwrap() == x
 SUCCESS\
-assertion failed: q.pop_front().unwrap() == y
+assertion holds: q.pop_front().unwrap() == y
 SUCCESS\
 max allocation size exceeded
 SUCCESS\

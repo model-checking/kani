@@ -1,4 +1,4 @@
 SUCCESS\
-assertion failed: mm.size == 2
+assertion holds: mm.size == 2
 FAILURE\
-assertion failed: mm.size == 3
+assertion holds: mm.size == 3

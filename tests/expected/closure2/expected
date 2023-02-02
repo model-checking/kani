@@ -3,6 +3,6 @@ attempt to add with overflow
 SUCCESS\
 attempt to add with overflow
 SUCCESS\
-assertion failed: z == 102
+assertion holds: z == 102
 SUCCESS\
-assertion failed: g(z) == 206
+assertion holds: g(z) == 206

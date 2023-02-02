@@ -1,18 +1,18 @@
 SUCCESS\
 attempt to subtract with overflow
 FAILURE\
-assertion failed: a == 10.0 && i == 1
+assertion holds: a == 10.0 && i == 1
 FAILURE\
-assertion failed: a == 9.0 && i == 0
+assertion holds: a == 9.0 && i == 0
 FAILURE\
-assertion failed: a == 9.0 && i == 1
+assertion holds: a == 9.0 && i == 1
 SUCCESS\
-assertion failed: a == 10.0 && i == 0
+assertion holds: a == 10.0 && i == 0
 SUCCESS\
-assertion failed: a == 9.0 || i == 0
+assertion holds: a == 9.0 || i == 0
 SUCCESS\
-assertion failed: a == 10.0 || i == 1
+assertion holds: a == 10.0 || i == 1
 FAILURE\
-assertion failed: a == 9.0 || i == 1
+assertion holds: a == 9.0 || i == 1
 SUCCESS\
-assertion failed: a == 10.0 || i == 0
+assertion holds: a == 10.0 || i == 0

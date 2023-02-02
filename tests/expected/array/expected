@@ -1,6 +1,6 @@
 SUCCESS\
-assertion failed: y[0] == 1
+assertion holds: y[0] == 1
 SUCCESS\
-assertion failed: y[1] == 2
+assertion holds: y[1] == 2
 FAILURE\
 index out of bounds: the length is less than or equal to the given index
