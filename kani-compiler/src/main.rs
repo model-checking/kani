@@ -173,11 +173,7 @@ fn generate_rustc_args(args: &ArgMatches) -> Vec<String> {
     let mut rustc_args = vec![String::from("rustc")];
     if args.get_flag(parser::GOTO_C) {
         let mut default_path = kani_root();
-        if args.reachability_type() == ReachabilityType::Legacy {
-            default_path.push("legacy-lib")
-        } else {
-            default_path.push("lib");
-        }
+        default_path.push("lib");
         let gotoc_args = rustc_gotoc_flags(
             args.get_one::<String>(parser::KANI_LIB)
                 .unwrap_or(&default_path.to_str().unwrap().to_string()),
@@ -262,8 +258,7 @@ fn sysroot_path(args: &ArgMatches) -> PathBuf {
     let sysroot_arg = args.get_one::<String>(parser::SYSROOT);
     let path = if let Some(s) = sysroot_arg {
         PathBuf::from(s)
-    } else if args.reachability_type() == ReachabilityType::Legacy || !args.get_flag(parser::GOTO_C)
-    {
+    } else if !args.get_flag(parser::GOTO_C) {
         toolchain_sysroot_path()
     } else {
         kani_root()
