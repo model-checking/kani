@@ -148,10 +148,12 @@ static CBMC_ALT_DESCRIPTIONS: Lazy<CbmcAltDescriptions> = Lazy::new(|| {
     map
 });
 
+const EMPTY_ASSERT_DESC: &str = "assertion";
+const ORIGINAL_ASSERT_DESC_PREFIX: &str = "assertion failed";
 const UNSUPPORTED_CONSTRUCT_DESC: &str = "is not currently supported by Kani";
 const UNWINDING_ASSERT_DESC: &str = "unwinding assertion loop";
 const UNWINDING_ASSERT_REC_DESC: &str = "recursion unwinding assertion";
-const DEFAULT_ASSERTION: &str = "assertion";
+const UPDATED_ASSERT_DESC_PREFIX: &str = "assertion holds";
 
 impl ParserItem {
     /// Determines if an item must be skipped or not.
@@ -516,7 +518,7 @@ fn modify_undefined_function_checks(mut properties: Vec<Property>) -> (Vec<Prope
     let mut has_unknown_location_checks = false;
     for mut prop in &mut properties {
         if let Some(function) = &prop.source_location.function
-            && prop.description == DEFAULT_ASSERTION
+            && prop.description == EMPTY_ASSERT_DESC
             && prop.source_location.file.is_none()
         {
             // Missing functions come with mangled names.
@@ -543,10 +545,15 @@ fn modify_undefined_function_checks(mut properties: Vec<Property>) -> (Vec<Prope
 ///     * If it's `Some(string)`, we replace the original property with `string`.
 ///
 /// For CBMC checks, this will ensure that check failures do not include any
-/// temporary variable in their descriptions.
+/// temporary variable in their descriptions. It will also update the description
+/// for assertion-based checks so they're less confusing.
 fn get_readable_description(property: &Property) -> String {
     let original = property.description.clone();
     let class_id = property.property_class();
+
+    if class_id == "assertion" && original.starts_with(ORIGINAL_ASSERT_DESC_PREFIX) {
+        return original.replacen(ORIGINAL_ASSERT_DESC_PREFIX, UPDATED_ASSERT_DESC_PREFIX, 1);
+    }
 
     let description_alternatives = CBMC_ALT_DESCRIPTIONS.get(&class_id as &str);
     if let Some(alt_descriptions) = description_alternatives {
