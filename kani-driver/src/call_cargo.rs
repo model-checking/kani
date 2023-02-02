@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use crate::args::KaniArgs;
-use crate::session::{KaniSession, ReachabilityMode};
+use crate::session::KaniSession;
 use anyhow::{bail, Context, Result};
 use cargo_metadata::diagnostic::{Diagnostic, DiagnosticLevel};
 use cargo_metadata::{Message, Metadata, MetadataCommand, Package};
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
@@ -58,8 +58,9 @@ impl KaniSession {
             fs::remove_dir_all(&target_dir)?;
         }
 
-        let mut kani_args = self.kani_specific_flags();
-        let rustc_args = self.kani_rustc_flags();
+        let kani_args = self.kani_compiler_flags();
+        let mut rustc_args = self.kani_rustc_flags();
+        rustc_args.push("--kani-flags".into());
 
         let mut cargo_args: Vec<OsString> = vec!["rustc".into()];
         if let Some(path) = &self.args.cargo.manifest_path {
@@ -99,21 +100,8 @@ impl KaniSession {
         }
 
         // Arguments that will only be passed to the target package.
-        let mut pkg_args: Vec<OsString> = vec![];
-        match self.reachability_mode() {
-            ReachabilityMode::ProofHarnesses => {
-                pkg_args.extend(["--".into(), "--reachability=harnesses".into()]);
-            }
-            ReachabilityMode::AllPubFns => {
-                pkg_args.extend(["--".into(), "--reachability=pub_fns".into()]);
-            }
-            ReachabilityMode::Tests => {
-                pkg_args.extend(["--".into(), "--reachability=tests".into()]);
-            }
-        }
-
-        // Only joing them at the end. All kani flags must come first.
-        kani_args.extend_from_slice(&rustc_args);
+        let mut pkg_args: Vec<String> = vec![];
+        pkg_args.extend(["--".to_string(), format!("--reachability={}", self.reachability_mode())]);
 
         let mut found_target = false;
         let packages = packages_to_verify(&self.args, &metadata);
@@ -125,8 +113,8 @@ impl KaniSession {
                     .args(&target.to_args())
                     .args(&pkg_args)
                     .env("RUSTC", &self.kani_compiler)
-                    .env("RUSTFLAGS", "--kani-flags")
-                    .env("KANIFLAGS", &crate::util::join_osstring(&kani_args, " "))
+                    .env("KANIFLAGS", kani_args.join(" "))
+                    .env("CARGO_ENCODED_RUSTFLAGS", rustc_args.join(OsStr::new("\x1f")))
                     .env("CARGO_TERM_PROGRESS_WHEN", "never");
 
                 self.run_cargo(cmd)?;
