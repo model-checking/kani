@@ -10,14 +10,14 @@
 // and generates this verification output:
 //
 // [main.unwind.0] line 30 unwinding assertion loop 0: FAILURE
-// [main.assertion.1] line 34 assertion holds: a == 0: SUCCESS
+// [main.assertion.1] line 34 assertion failed: a == 0: SUCCESS
 //
 // ** 1 of 2 failed (2 iterations)
 // VERIFICATION FAILED
 //
 // But with `--no-default-checks` we will avoid introducing a unwinding assertion:
 //
-// [main.assertion.1] line 34 assertion holds: a == 0: SUCCESS
+// [main.assertion.1] line 34 assertion failed: a == 0: SUCCESS
 //
 // ** 0 of 1 failed (1 iterations)
 // VERIFICATION SUCCESSFUL
