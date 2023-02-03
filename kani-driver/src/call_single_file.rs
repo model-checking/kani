@@ -94,6 +94,10 @@ impl KaniSession {
             flags.push(format!("--harness={harness}"));
         }
 
+        // This argument will select the Kani flavour of the compiler. It will be removed before
+        // rustc driver is invoked.
+        flags.push("--goto-c".into());
+
         #[cfg(feature = "unsound_experiments")]
         flags.extend(self.args.unsound_experiments.process_args());
 
@@ -101,10 +105,6 @@ impl KaniSession {
     }
 
     /// This function generates all rustc configurations required by our goto-c codegen.
-    ///
-    /// We override the `std` library using the mechanism described here:
-    /// <https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp/topic/.E2.9C.94.20Globally.20override.20an.20std.20macro/near/268873354>
-    /// for more details.
     pub fn kani_rustc_flags(&self) -> Vec<OsString> {
         let lib_path = lib_folder().unwrap();
         let kani_std_rlib = lib_path.join("libstd.rlib");

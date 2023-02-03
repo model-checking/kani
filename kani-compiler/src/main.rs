@@ -6,7 +6,7 @@
 //!
 //! Like miri, clippy, and other tools developed on the top of rustc, we rely on the
 //! rustc_private feature and a specific version of rustc.
-//#![deny(warnings)]
+#![deny(warnings)]
 #![feature(extern_types)]
 #![recursion_limit = "256"]
 #![feature(box_patterns)]
@@ -47,6 +47,7 @@ fn main() -> ExitCode {
     let (kani_compiler, rustc_args) = parser::is_kani_compiler(env::args().collect());
 
     // Configure and run compiler.
+<<<<<<< HEAD
     if kani_compiler {
         kani_compiler::run(rustc_args)
     } else {
