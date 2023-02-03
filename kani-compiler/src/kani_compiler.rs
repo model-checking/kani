@@ -130,8 +130,7 @@ impl Callbacks for KaniCompiler {
 
             #[cfg(feature = "unsound_experiments")]
             crate::unsound_experiments::arg_parser::add_unsound_experiment_args_to_queries(
-                &mut queries,
-                &matches,
+                queries, &matches,
             );
 
             // If appropriate, collect and set the stub mapping.

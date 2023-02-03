@@ -1,7 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-#[cfg(not(feature = "unsound_experiments"))]
 use std::sync::{Arc, Mutex};
 use strum_macros::{AsRefStr, EnumString, EnumVariantNames};
 
@@ -9,10 +8,7 @@ use strum_macros::{AsRefStr, EnumString, EnumVariantNames};
 mod unsound_experiments;
 
 #[cfg(feature = "unsound_experiments")]
-use {
-    crate::unsound_experiments::UnsoundExperiments,
-    std::sync::{Arc, Mutex},
-};
+use crate::unsound_experiments::UnsoundExperiments;
 
 #[derive(Debug, Clone, Copy, AsRefStr, EnumString, EnumVariantNames, PartialEq, Eq)]
 #[strum(serialize_all = "snake_case")]
@@ -56,6 +52,8 @@ pub trait UserInput {
 
     #[cfg(feature = "unsound_experiments")]
     fn get_unsound_experiments(&self) -> UnsoundExperiments;
+    #[cfg(feature = "unsound_experiments")]
+    fn set_unsound_experiments(&mut self, experiments: UnsoundExperiments);
 }
 
 /// This structure should only be used behind a synchronized reference or a snapshot.
@@ -81,7 +79,7 @@ impl QueryDb {
             reachability_analysis: ReachabilityType::None,
             stubbing_enabled: false,
             #[cfg(feature = "unsound_experiments")]
-            unsound_experiments: false,
+            unsound_experiments: unsound_experiments::UnsoundExperiments { zero_init_vars: false },
         }))
     }
 }
@@ -136,7 +134,12 @@ impl UserInput for QueryDb {
     }
 
     #[cfg(feature = "unsound_experiments")]
-    fn get_unsound_experiments(&self) -> Arc<Mutex<UnsoundExperiments>> {
-        self.unsound_experiments.clone()
+    fn get_unsound_experiments(&self) -> UnsoundExperiments {
+        self.unsound_experiments
+    }
+
+    #[cfg(feature = "unsound_experiments")]
+    fn set_unsound_experiments(&mut self, experiments: UnsoundExperiments) {
+        self.unsound_experiments = experiments
     }
 }
