@@ -47,7 +47,6 @@ fn main() -> ExitCode {
     let (kani_compiler, rustc_args) = parser::is_kani_compiler(env::args().collect());
 
     // Configure and run compiler.
-<<<<<<< HEAD
     if kani_compiler {
         kani_compiler::run(rustc_args)
     } else {

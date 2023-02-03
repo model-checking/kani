@@ -2,6 +2,18 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 //! This module defines all compiler extensions that form the Kani compiler.
+//!
+//! The [KaniCompiler] can be used across multiple rustc driver runs ([RunCompiler::run()]),
+//! which is used to implement stubs.
+//!
+//! In the first run, [KaniCompiler::config] will implement the compiler configuration and it will
+//! also collect any stubs that may need to be applied. This method will be a no-op for any
+//! subsequent runs. The [KaniCompiler] will parse options that are passed via `-C llvm-args`.
+//!
+//! If no stubs need to be applied, the compiler will proceed to generate goto code, and it won't
+//! need any extra runs. However, if stubs are required, we will have to restart the rustc driver
+//! in order to apply the stubs. For the subsequent runs, we add the stub configuration to
+//! `-C llvm-args`.
 
 use crate::codegen_cprover_gotoc::GotocCodegenBackend;
 use crate::kani_middle::stubbing;
@@ -20,6 +32,8 @@ use std::process::ExitCode;
 use std::sync::{Arc, Mutex};
 use tracing::debug;
 
+/// Run the Kani flavour of the compiler.
+/// This may require multiple runs of the rustc driver ([RunCompiler::run]).
 pub fn run(mut args: Vec<String>) -> ExitCode {
     let mut kani_compiler = KaniCompiler::new();
     while !args.is_empty() {
@@ -30,16 +44,19 @@ pub fn run(mut args: Vec<String>) -> ExitCode {
             return ExitCode::FAILURE;
         }
 
-        args = kani_compiler.post_process(args);
+        args = kani_compiler.post_process(args).unwrap_or_default();
+        debug!("Finish driver run. {}", if args.is_empty() { "Done" } else { "Run again" });
     }
     ExitCode::SUCCESS
 }
 
+/// Configure the cprover backend that generate goto-programs.
 #[cfg(feature = "cprover")]
 fn backend(queries: Arc<Mutex<QueryDb>>) -> Box<dyn CodegenBackend> {
     Box::new(GotocCodegenBackend::new(queries))
 }
 
+/// Fallback backend. It will trigger an error if no backend has been enabled.
 #[cfg(not(feature = "cprover"))]
 fn backend(queries: Arc<Mutex<QueryDb>>) -> Box<CodegenBackend> {
     compile_error!("No backend is available. Only supported value today is `cprover`");
@@ -56,21 +73,26 @@ struct KaniCompiler {
 }
 
 impl KaniCompiler {
+    /// Create a new [KaniCompiler] instance.
     pub fn new() -> KaniCompiler {
         KaniCompiler { queries: QueryDb::new(), stubs: None, args: None }
     }
 
-    pub fn post_process(&mut self, old_args: Vec<String>) -> Vec<String> {
+    /// Method to be invoked after a rustc driver run.
+    /// It will return a list of arguments that should be used in a subsequent call to rustc
+    /// driver. It will return None if it has finished compiling everything.
+    pub fn post_process(&mut self, old_args: Vec<String>) -> Option<Vec<String>> {
         let stubs = self.stubs.replace(FxHashMap::default()).unwrap_or_default();
         if stubs.is_empty() {
-            vec![]
+            None
         } else {
             let mut new_args = old_args;
             new_args.push(stubbing::mk_rustc_arg(&stubs));
-            new_args
+            Some(new_args)
         }
     }
 
+    /// Collect the stubs that shall be applied in the next run.
     fn collect_stubs(&self, tcx: TyCtxt) -> FxHashMap<DefPathHash, DefPathHash> {
         let all_stubs = stubbing::collect_stub_mappings(tcx);
         if all_stubs.is_empty() {
@@ -123,7 +145,7 @@ impl Callbacks for KaniCompiler {
         }
     }
 
-    // TODO: What if we try after_expansion??
+    /// Collect stubs and return whether we should restart rustc's driver or not.
     fn after_analysis<'tcx>(
         &mut self,
         _compiler: &rustc_interface::interface::Compiler,
