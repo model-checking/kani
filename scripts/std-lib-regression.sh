@@ -50,8 +50,7 @@ cd std_lib_test
 
 # Add some content to the rust file including an std function that is non-generic.
 echo '
-#[kani::proof]
-fn check_format() {
+pub fn main() {
     assert!("2021".parse::<u32>().unwrap() == 2021);
 }
 ' > src/lib.rs
@@ -68,7 +67,7 @@ echo "Starting cargo build with Kani"
 export RUST_BACKTRACE=1
 export RUSTC_LOG=error
 export KANIFLAGS="--goto-c --ignore-global-asm --reachability=legacy"
-export RUSTFLAGS="--kani-flags"
+export RUSTFLAGS="--kani-flags -C panic=abort"
 export RUSTC="$KANI_DIR/target/kani/bin/kani-compiler"
 # Compile rust to iRep
 $WRAPPER cargo build --verbose -Z build-std --lib --target $TARGET
