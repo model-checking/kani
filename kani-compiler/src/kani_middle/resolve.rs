@@ -116,7 +116,7 @@ fn to_path(tcx: TyCtxt, current_module: LocalDefId, name: &str) -> Option<Path> 
             let current_module_hir_id = tcx.hir().local_def_id_to_hir_id(current_module);
             let crate_root = match tcx.hir().parent_iter(current_module_hir_id).last() {
                 None => current_module,
-                Some((hir_id, _)) => tcx.hir().local_def_id(hir_id),
+                Some((hir_id, _)) => hir_id.owner.def_id,
             };
             return Some(Path::new(
                 Base::LocalModule { id: crate_root, may_be_external_path },
@@ -139,7 +139,7 @@ fn to_path(tcx: TyCtxt, current_module: LocalDefId, name: &str) -> Option<Path> 
             tracing::debug!("Unable to normalize path `{name}`: too many `super` qualifiers");
             None
         })?;
-        base_module = tcx.hir().local_def_id(parent);
+        base_module = parent.owner.def_id;
     }
 
     Some(Path::new(Base::LocalModule { id: base_module, may_be_external_path }, segments))
