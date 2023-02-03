@@ -3,7 +3,6 @@
 
 #![cfg(feature = "unsound_experiments")]
 use clap::Parser;
-use std::ffi::OsString;
 #[derive(Debug, Parser)]
 pub struct UnsoundExperimentArgs {
     /// Zero initilize variables.
@@ -16,7 +15,7 @@ pub struct UnsoundExperimentArgs {
 }
 
 impl UnsoundExperimentArgs {
-    pub fn process_args(&self) -> Vec<OsString> {
+    pub fn process_args(&self) -> Vec<String> {
         self.print_warnings();
         let mut flags = vec![];
         if self.unsound_experiment_zero_init_vars {

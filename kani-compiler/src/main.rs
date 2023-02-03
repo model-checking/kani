@@ -47,48 +47,9 @@ use rustc_hir::definitions::DefPathHash;
 use rustc_interface::Config;
 use rustc_session::config::ErrorOutputType;
 use session::json_panic_hook;
+use std::env;
 use std::ffi::OsStr;
-use std::path::PathBuf;
 use std::rc::Rc;
-use std::{env, fs};
-
-/// This function generates all rustc configurations required by our goto-c codegen.
-fn rustc_gotoc_flags(lib_path: &str) -> Vec<String> {
-    // The option below provides a mechanism by which definitions in the
-    // standard library can be overriden. See
-    // https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp/topic/.E2.9C.94.20Globally.20override.20an.20std.20macro/near/268873354
-    // for more details.
-    let kani_std_rlib = PathBuf::from(lib_path).join("libstd.rlib");
-    let kani_std_wrapper = format!("noprelude:std={}", kani_std_rlib.to_str().unwrap());
-    let args = vec![
-        "-C",
-        "overflow-checks=on",
-        "-C",
-        "panic=abort",
-        "-Z",
-        "unstable-options",
-        "-Z",
-        "panic_abort_tests=yes",
-        "-Z",
-        "trim-diagnostic-paths=no",
-        "-Z",
-        "human_readable_cgu_names",
-        "-Z",
-        "always-encode-mir",
-        "--cfg=kani",
-        "-Z",
-        "crate-attr=feature(register_tool)",
-        "-Z",
-        "crate-attr=register_tool(kanitool)",
-        "-L",
-        lib_path,
-        "--extern",
-        "kani",
-        "--extern",
-        kani_std_wrapper.as_str(),
-    ];
-    args.iter().map(|s| s.to_string()).collect()
-}
 
 /// Main function. Configure arguments and run the compiler.
 fn main() -> Result<(), &'static str> {
@@ -152,39 +113,9 @@ impl Callbacks for KaniCallbacks {
     }
 }
 
-/// The Kani root folder has all binaries inside bin/ and libraries inside lib/.
-/// This folder can also be used as a rustc sysroot.
-fn kani_root() -> PathBuf {
-    match env::current_exe() {
-        Ok(exe_path) => {
-            let mut path = fs::canonicalize(&exe_path).unwrap_or(exe_path);
-            // Current folder (bin/)
-            path.pop();
-            // Top folder
-            path.pop();
-            path
-        }
-        Err(e) => panic!("Failed to get current exe path: {e}"),
-    }
-}
-
 /// Generate the arguments to pass to rustc_driver.
 fn generate_rustc_args(args: &ArgMatches) -> Vec<String> {
     let mut rustc_args = vec![String::from("rustc")];
-    if args.get_flag(parser::GOTO_C) {
-        let mut default_path = kani_root();
-        if args.reachability_type() == ReachabilityType::Legacy {
-            default_path.push("legacy-lib")
-        } else {
-            default_path.push("lib");
-        }
-        let gotoc_args = rustc_gotoc_flags(
-            args.get_one::<String>(parser::KANI_LIB)
-                .unwrap_or(&default_path.to_str().unwrap().to_string()),
-        );
-        rustc_args.extend_from_slice(&gotoc_args);
-    }
-
     if args.get_flag(parser::RUSTC_VERSION) {
         rustc_args.push(String::from("--version"))
     }
@@ -196,9 +127,6 @@ fn generate_rustc_args(args: &ArgMatches) -> Vec<String> {
     if let Some(extra_flags) = args.get_raw(parser::RUSTC_OPTIONS) {
         extra_flags.for_each(|arg| rustc_args.push(convert_arg(arg)));
     }
-    let sysroot = sysroot_path(args);
-    rustc_args.push(String::from("--sysroot"));
-    rustc_args.push(convert_arg(sysroot.as_os_str()));
     tracing::debug!(?rustc_args, "Compile");
     rustc_args
 }
@@ -207,73 +135,6 @@ fn generate_rustc_args(args: &ArgMatches) -> Vec<String> {
 /// If conversion fails, panic with a custom message.
 fn convert_arg(arg: &OsStr) -> String {
     arg.to_str().expect(format!("[Error] Cannot parse argument \"{arg:?}\".").as_str()).to_string()
-}
-
-/// Get the sysroot, for our specific version of Rust nightly.
-///
-/// Rust normally finds its sysroot by looking at where itself (the `rustc`
-/// executable) is located. This will fail for us because we're `kani-compiler`
-/// and not located under the rust sysroot.
-///
-/// We do know the actual name of the toolchain we need, however.
-/// We look for our toolchain in the usual place for rustup.
-///
-/// We previously used to pass `--sysroot` in `KANIFLAGS` from `kani-driver`,
-/// but this failed to have effect when building a `build.rs` file.
-/// This wasn't used anywhere but passing down here, so we've just migrated
-/// the code to find the sysroot path directly into this function.
-///
-/// This function will soon be removed.
-#[deprecated]
-fn toolchain_sysroot_path() -> PathBuf {
-    // If we're installed normally, we'll find `$KANI/toolchain` as a symlink to our desired toolchain
-    {
-        let kani_root = kani_root();
-        let toolchain_path = kani_root.join("toolchain");
-        if toolchain_path.exists() {
-            return toolchain_path;
-        }
-    }
-
-    // rustup sets some environment variables during build, but this is not clearly documented.
-    // https://github.com/rust-lang/rustup/blob/master/src/toolchain.rs (search for RUSTUP_HOME)
-    // We're using RUSTUP_TOOLCHAIN here, which is going to be set by our `rust-toolchain.toml` file.
-    // This is a *compile-time* constant, not a dynamic lookup at runtime, so this is reliable.
-    let toolchain = env!("RUSTUP_TOOLCHAIN");
-
-    // We use the home crate to do a *runtime* determination of where rustup toolchains live
-    let rustup = home::rustup_home().expect("Couldn't find RUSTUP_HOME");
-    let path = rustup.join("toolchains").join(toolchain);
-
-    if !path.exists() {
-        panic!("Couldn't find Kani Rust toolchain {toolchain}. Tried: {}", path.display());
-    }
-    path
-}
-
-/// Get the sysroot relative to the binary location.
-///
-/// Kani uses a custom sysroot. The `std` library and dependencies are compiled in debug mode and
-/// include the entire MIR definitions needed by Kani.
-///
-/// We do provide a `--sysroot` option that users may want to use instead.
-#[allow(deprecated)]
-fn sysroot_path(args: &ArgMatches) -> PathBuf {
-    let sysroot_arg = args.get_one::<String>(parser::SYSROOT);
-    let path = if let Some(s) = sysroot_arg {
-        PathBuf::from(s)
-    } else if args.reachability_type() == ReachabilityType::Legacy || !args.get_flag(parser::GOTO_C)
-    {
-        toolchain_sysroot_path()
-    } else {
-        kani_root()
-    };
-
-    if !path.exists() {
-        panic!("Couldn't find Kani Rust toolchain {:?}.", path.display());
-    }
-    tracing::debug!(?path, ?sysroot_arg, "Sysroot path.");
-    path
 }
 
 /// Find the stub mapping for the given harness.
