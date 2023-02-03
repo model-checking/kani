@@ -114,6 +114,8 @@ impl KaniSession {
                     .args(&pkg_args)
                     .env("RUSTC", &self.kani_compiler)
                     .env("KANIFLAGS", kani_args.join(" "))
+                    // Use CARGO_ENCODED_RUSTFLAGS instead of RUSTFLAGS is preferred. See
+                    // https://doc.rust-lang.org/cargo/reference/environment-variables.html
                     .env("CARGO_ENCODED_RUSTFLAGS", rustc_args.join(OsStr::new("\x1f")))
                     .env("CARGO_TERM_PROGRESS_WHEN", "never");
 
