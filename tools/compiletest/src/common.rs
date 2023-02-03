@@ -134,6 +134,10 @@ pub struct Config {
     /// Timeout duration for each test.
     pub timeout: Option<Duration>,
 
+    /// Whether we will abort execution when a failure occurs.
+    /// When set to false, this will execute the entire test suite regardless of any failure.
+    pub fail_fast: bool,
+
     /// Whether we will run the tests or not.
     pub dry_run: bool,
 }
