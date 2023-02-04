@@ -76,7 +76,6 @@ RUST_FLAGS=(
 )
 export RUSTFLAGS="${RUST_FLAGS[@]}"
 export RUSTC="$KANI_DIR/target/kani/bin/kani-compiler"
-export KANI_LOG=debug
 # Compile rust to iRep
 $WRAPPER cargo build --verbose -Z build-std --lib --target $TARGET
 
