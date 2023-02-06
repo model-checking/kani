@@ -456,7 +456,7 @@ impl<'tcx> GotocCtx<'tcx> {
         if harness.solver.is_some() {
             self.tcx.sess.span_err(
                 attr.span,
-                format!("Only one '#[kani::solver]' attribute is allowed per harness"),
+                "Only one '#[kani::solver]' attribute is allowed per harness",
             );
             return;
         }
