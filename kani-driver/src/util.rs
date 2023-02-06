@@ -41,19 +41,6 @@ pub fn executable_basename(argv0: &Option<&OsString>) -> Option<OsString> {
     None
 }
 
-/// Joining an OsString with a delimeter is missing from Rust libraries, so
-/// let's write out own, and with convenient types...
-pub fn join_osstring(elems: &[OsString], joiner: &str) -> OsString {
-    let mut str = OsString::new();
-    for (i, arg) in elems.iter().enumerate() {
-        if i != 0 {
-            str.push(OsString::from(joiner));
-        }
-        str.push(arg);
-    }
-    str
-}
-
 /// Render a Command as a string, to log it (e.g. in dry runs)
 pub fn render_command(cmd: &Command) -> OsString {
     let mut str = OsString::new();
@@ -136,20 +123,6 @@ mod tests {
         assert_eq!(executable_basename(&Some(&OsString::from("./foo.exe"))), Some("foo".into()));
         assert_eq!(executable_basename(&Some(&OsString::from("foo.exe"))), Some("foo".into()));
         assert_eq!(executable_basename(&Some(&OsString::from("foo"))), Some("foo".into()));
-    }
-
-    #[test]
-    fn check_join_osstring() {
-        assert_eq!(
-            join_osstring(&["a".into(), "b".into(), "cd".into()], " "),
-            OsString::from("a b cd")
-        );
-        assert_eq!(join_osstring(&[], " "), OsString::from(""));
-        assert_eq!(join_osstring(&["a".into()], " "), OsString::from("a"));
-        assert_eq!(
-            join_osstring(&["a".into(), "b".into(), "cd".into()], ", "),
-            OsString::from("a, b, cd")
-        );
     }
 
     #[test]

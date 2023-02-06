@@ -3,6 +3,7 @@
 
 use crate::codegen_cprover_gotoc::GotocCtx;
 use rustc_middle::mir::{BasicBlock, BasicBlockData};
+use tracing::debug;
 
 impl<'tcx> GotocCtx<'tcx> {
     /// Generates Goto-C for a basic block.
@@ -12,6 +13,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// This function does not return a value, but mutates state with
     /// `self.current_fn_mut().push_onto_block(...)`
     pub fn codegen_block(&mut self, bb: BasicBlock, bbd: &BasicBlockData<'tcx>) {
+        debug!(?bb, "Codegen basicblock");
         self.current_fn_mut().set_current_bb(bb);
         let label: String = self.current_fn().find_label(&bb);
         // the first statement should be labelled. if there is no statements, then the
