@@ -14,6 +14,7 @@ use kani_queries::UserInput;
 use rustc_ast::Attribute;
 use rustc_hir::def::DefKind;
 use rustc_hir::def_id::DefId;
+use rustc_middle::mir::traversal::reverse_postorder;
 use rustc_middle::mir::{Body, HasLocalDecls, Local};
 use rustc_middle::ty::layout::FnAbiOf;
 use rustc_middle::ty::{self, Instance};
@@ -90,7 +91,7 @@ impl<'tcx> GotocCtx<'tcx> {
             self.codegen_function_prelude();
             self.codegen_declare_variables();
 
-            mir.basic_blocks.iter_enumerated().for_each(|(bb, bbd)| self.codegen_block(bb, bbd));
+            reverse_postorder(mir).for_each(|(bb, bbd)| self.codegen_block(bb, bbd));
 
             let loc = self.codegen_span(&mir.span);
             let stmts = self.current_fn_mut().extract_block();

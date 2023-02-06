@@ -35,6 +35,8 @@ use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
 use std::process::{Child, ChildStdout};
 
+const RESULT_ITEM_PREFIX: &str = "  {\n    \"result\":";
+
 /// A parser item is a top-level unit of output from the CBMC json format.
 /// See the parser for more information on how they are processed.
 #[derive(Debug, Deserialize)]
@@ -55,6 +57,17 @@ pub enum ParserItem {
     ProverStatus {
         _c_prover_status: String,
     },
+}
+
+/// Struct that is equivalent to `ParserItem::Result`.
+///
+/// Note: this struct is only used to provide better error messages when there
+/// are issues deserializing a `ParserItem::Result`. See `Parser::parse_item`
+/// for more details.
+#[allow(unused)]
+#[derive(Debug, Deserialize)]
+struct ResultStruct {
+    result: Vec<Property>,
 }
 
 /// Struct that represents a single property in the set of CBMC results.
@@ -285,7 +298,7 @@ pub struct TraceValue {
     pub name: String,
     pub binary: Option<String>,
     pub data: Option<TraceData>,
-    pub width: Option<u8>,
+    pub width: Option<u32>,
 }
 
 /// Enum that represents a trace data item.
@@ -419,6 +432,25 @@ impl<'a, 'b> Parser<'a, 'b> {
         let result_item: Result<ParserItem, _> = serde_json::from_str(string_without_delimiter);
         if let Ok(item) = result_item {
             return item;
+        }
+        // If we failed to parse a `ParserItem::Result` earlier, we will get
+        // this error message when we attempt to parse it using the complete
+        // string:
+        // ```
+        // thread '<unnamed>' panicked at 'called `Result::unwrap()` on an `Err` value:
+        // Error("data did not match any variant of untagged enum ParserItem", line: 0, column: 0)'
+        // ```
+        // This error message doesn't provide information about what went wrong
+        // while parsing due to `ParserItem` being an untagged enum. A more
+        // informative error message will be produced if we attempt to
+        // deserialize it into a struct. The attempt will still fail, but it
+        // shouldn't be hard to debug with that information. The same strategy
+        // can be used for other `ParserItem` variants, but they're normally
+        // easier to debug.
+        if string_without_delimiter.starts_with(RESULT_ITEM_PREFIX) {
+            let result_item: Result<ResultStruct, _> =
+                serde_json::from_str(string_without_delimiter);
+            result_item.unwrap();
         }
         let complete_string = &self.input_so_far[0..self.input_so_far.len()];
         let result_item: Result<ParserItem, _> = serde_json::from_str(complete_string);
@@ -680,5 +712,46 @@ mod tests {
         let prop_id_result: Result<PropertyId, serde_json::Error> =
             serde_json::from_str(prop_id_string);
         let _prop_id = prop_id_result.unwrap();
+    }
+
+    #[test]
+    fn check_trace_value_deserialization_works() {
+        let data = format!(
+            r#"{{
+            "binary": "{:0>1000}",
+            "data": "0",
+            "name": "integer",
+            "type": "unsigned __CPROVER_bitvector[960]",
+            "width": 960
+        }}"#,
+            0
+        );
+        let trace_value: Result<TraceValue, _> = serde_json::from_str(&data);
+        assert!(trace_value.is_ok());
+    }
+
+    /// Checks that a valid CBMC "result" item can be deserialized into a
+    /// `ParserItem` or `ResultStruct`.
+    #[test]
+    fn check_result_deserialization_works() {
+        let data = r#"{
+            "result": [
+                {
+                    "description": "assertion failed: 1 > 2",
+                    "property": "long_function_name.assertion.1",
+                    "sourceLocation": {
+                        "column": "16",
+                        "file": "/home/ubuntu/file.rs",
+                        "function": "long_function_name",
+                        "line": "815"
+                    },
+                    "status": "SUCCESS"
+                }
+            ]
+        }"#;
+        let parser_item: Result<ParserItem, _> = serde_json::from_str(&data);
+        let result_struct: Result<ResultStruct, _> = serde_json::from_str(&data);
+        assert!(parser_item.is_ok());
+        assert!(result_struct.is_ok());
     }
 }
