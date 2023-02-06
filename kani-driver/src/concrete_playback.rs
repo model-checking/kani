@@ -427,7 +427,7 @@ mod tests {
         let harness_name = "test_proof_harness";
         let concrete_vals = [ConcreteVal { byte_arr: vec![0, 0], interp_val: "0".to_string() }];
         let unit_test = format_unit_test(harness_name, &concrete_vals);
-        let full_func: Vec<&str> = unit_test.unit_test_str.split("\n").collect();
+        let full_func: Vec<&str> = unit_test.unit_test_str.split('\n').collect();
         let split_unit_test_name = split_unit_test_name(&unit_test.unit_test_name);
         let expected_after_func_name = vec![
             format!("{SPACES_4}let concrete_vals: Vec<Vec<u8>> = vec!["),
