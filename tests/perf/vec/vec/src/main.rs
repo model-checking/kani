@@ -8,7 +8,7 @@
 
 #[kani::proof]
 #[kani::unwind(5)]
-#[kani::solver("minisat")]
+#[kani::solver(minisat)]
 fn main() {
     let v1: Vec<Vec<i32>> = vec![vec![1], vec![]];
 
