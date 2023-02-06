@@ -9,27 +9,38 @@
 // kani::unwind(2) takes longer than 10m on a M1 Mac. For details,
 // please see: https://github.com/model-checking/kani/issues/1286
 
-use std::sync::mpsc::*;
+#[cfg(target_os = "linux")]
+mod fixme_harness {
+    use std::sync::mpsc::*;
 
-static mut CELL: i32 = 0;
+    static mut CELL: i32 = 0;
 
-struct DropSetCELLToOne {}
+    struct DropSetCELLToOne {}
 
-impl Drop for DropSetCELLToOne {
-    fn drop(&mut self) {
-        unsafe {
-            CELL = 1;
+    impl Drop for DropSetCELLToOne {
+        fn drop(&mut self) {
+            unsafe {
+                CELL = 1;
+            }
         }
+    }
+
+    #[kani::unwind(1)]
+    #[kani::proof]
+    fn main() {
+        {
+            let (send, recv) = channel::<DropSetCELLToOne>();
+            send.send(DropSetCELLToOne {}).unwrap();
+            let _to_drop: DropSetCELLToOne = recv.recv().unwrap();
+        }
+        assert_eq!(unsafe { CELL }, 1, "Drop should be called");
     }
 }
 
-#[kani::unwind(1)]
-#[kani::proof]
-fn main() {
-    {
-        let (send, recv) = channel::<DropSetCELLToOne>();
-        send.send(DropSetCELLToOne {}).unwrap();
-        let _to_drop: DropSetCELLToOne = recv.recv().unwrap();
+#[cfg(target_os = "macos")]
+mod forced_failure {
+    #[kani::proof]
+    fn just_panic() {
+        panic!("This test only fails on linux");
     }
-    assert_eq!(unsafe { CELL }, 1, "Drop should be called");
 }

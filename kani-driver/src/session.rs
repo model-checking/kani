@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::Mutex;
 use std::time::Instant;
+use strum_macros::Display;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Registry};
 use tracing_tree::HierarchicalLayer;
@@ -84,8 +85,12 @@ impl KaniSession {
     }
 }
 
+#[derive(Debug, Copy, Clone, Display)]
+#[strum(serialize_all = "snake_case")]
 pub enum ReachabilityMode {
+    #[strum(to_string = "harnesses")]
     ProofHarnesses,
+    #[strum(to_string = "pub_fns")]
     AllPubFns,
     Tests,
 }
@@ -222,6 +227,19 @@ fn bin_folder() -> Result<PathBuf> {
     let exe = std::env::current_exe().context("Cannot determine current executable location")?;
     let dir = exe.parent().context("Executable isn't in a directory")?.to_owned();
     Ok(dir)
+}
+
+/// Return the path for the folder where the pre-compiled rust libraries are located.
+pub fn lib_folder() -> Result<PathBuf> {
+    Ok(base_folder()?.join("lib"))
+}
+
+/// Return the base folder for the entire kani installation.
+pub fn base_folder() -> Result<PathBuf> {
+    Ok(bin_folder()?
+        .parent()
+        .context("Failed to find Kani's base installation folder.")?
+        .to_path_buf())
 }
 
 impl InstallType {
