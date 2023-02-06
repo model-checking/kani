@@ -213,10 +213,11 @@ fn scan_cargo_projects(path: PathBuf, accumulator: &mut Vec<PathBuf>) {
 }
 
 /// Print failures if any happened.
-fn print_failures(failures: Vec<(&Package, Option<AssessMetadata>)>) {
+fn print_failures(mut failures: Vec<(&Package, Option<AssessMetadata>)>) {
     if !failures.is_empty() {
         println!("Failed to assess packages:");
         let unknown = "Unknown".to_string();
+        failures.sort_by_key(|(pkg, _)| &pkg.name);
         for (pkg, meta) in failures {
             println!(
                 "  - `{}`: {}",
