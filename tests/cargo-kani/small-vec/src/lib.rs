@@ -4,6 +4,7 @@
 use smallvec::{smallvec, SmallVec};
 
 #[kani::proof]
+#[kani::unwind(4)]
 pub fn check_vec() {
     // Create small vec with three elements.
     let chars: SmallVec<[char; 3]> = smallvec![kani::any(), kani::any(), kani::any()];

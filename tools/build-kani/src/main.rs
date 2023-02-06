@@ -10,9 +10,7 @@
 mod parser;
 mod sysroot;
 
-use crate::sysroot::{
-    build_bin, build_lib, build_lib_legacy, kani_sysroot_legacy_lib, kani_sysroot_lib,
-};
+use crate::sysroot::{build_bin, build_lib, kani_sysroot_lib};
 use anyhow::{bail, Result};
 use clap::Parser;
 use std::{ffi::OsString, path::Path, process::Command};
@@ -23,7 +21,6 @@ fn main() -> Result<()> {
     match args.subcommand {
         parser::Commands::BuildDev(build_parser) => {
             build_lib();
-            build_lib_legacy();
             build_bin(&build_parser.args);
         }
         parser::Commands::Bundle(bundle_parser) => {
@@ -76,7 +73,6 @@ fn prebundle(dir: &Path) -> Result<()> {
     build_bin(&["--release"]);
     // And that libraries have been built too.
     build_lib();
-    build_lib_legacy();
     Ok(())
 }
 
@@ -104,7 +100,6 @@ fn bundle_kani(dir: &Path) -> Result<()> {
 
     // 4. Pre-compiled library files
     cp_dir(&kani_sysroot_lib(), dir)?;
-    cp_dir(&kani_sysroot_legacy_lib(), dir)?;
 
     // 5. Record the exact toolchain we use
     std::fs::write(dir.join("rust-toolchain-version"), env!("RUSTUP_TOOLCHAIN"))?;
@@ -114,6 +109,7 @@ fn bundle_kani(dir: &Path) -> Result<()> {
 
     Ok(())
 }
+
 /// Copy CBMC files into `dir`
 fn bundle_cbmc(dir: &Path) -> Result<()> {
     // In an effort to avoid creating new places where we must specify the exact version
