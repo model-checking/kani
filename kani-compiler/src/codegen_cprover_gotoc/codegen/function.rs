@@ -454,10 +454,9 @@ impl<'tcx> GotocCtx<'tcx> {
     fn handle_kanitool_solver(&mut self, attr: &Attribute, harness: &mut HarnessMetadata) {
         // Make sure the solver is not already set
         if harness.solver.is_some() {
-            self.tcx.sess.span_err(
-                attr.span,
-                "Only one '#[kani::solver]' attribute is allowed per harness",
-            );
+            self.tcx
+                .sess
+                .span_err(attr.span, "Only one '#[kani::solver]' attribute is allowed per harness");
             return;
         }
         harness.solver = self.extract_solver_argument(attr);
