@@ -93,4 +93,4 @@ jobs:
       - name: Execute Kani performance ignored tests
         working-directory: ./kani
         continue-on-error: true
-        run: cargo run -p compiletest -- --suite perf --mode cargo-kani-test ignore --ignored
+        run: cargo run -p compiletest -- --suite perf --mode cargo-kani-test ignore --ignored --no-fail-fast
