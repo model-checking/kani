@@ -2,14 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use anyhow::{bail, Result};
-use kani_metadata::HarnessMetadata;
+use kani_metadata::{CbmcSolver, HarnessMetadata};
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::path::Path;
 use std::process::Command;
-use std::str::FromStr;
 use std::time::{Duration, Instant};
-use strum_macros::{AsRefStr, EnumString, EnumVariantNames};
 
 use crate::args::{KaniArgs, OutputFormat};
 use crate::cbmc_output_parser::{
@@ -22,24 +20,6 @@ use crate::session::KaniSession;
 pub enum VerificationStatus {
     Success,
     Failure,
-}
-
-/// An enum for CBMC solver options. Kani handles all the variants, except for
-/// the "Custom" one, which it passes as is to CBMC's `--external-sat-solver`
-/// option.
-#[derive(Debug, Clone, AsRefStr, EnumString, EnumVariantNames, PartialEq, Eq)]
-#[strum(serialize_all = "snake_case")]
-pub enum CbmcSolver {
-    /// The kissat solver that is included in the Kani bundle
-    Kissat,
-
-    /// MiniSAT (CBMC's default solver)
-    Minisat,
-
-    /// A custom solver variant whose argument gets passed to
-    /// `--external-sat-solver`. The specified binary must exist in path.
-    #[strum(disabled, serialize = "<SAT_SOLVER_BINARY>")]
-    Custom(String),
 }
 
 /// Our (kani-driver) notions of CBMC results.
@@ -211,10 +191,10 @@ impl KaniSession {
 
     fn handle_solver_args(
         &self,
-        harness_solver: &Option<String>,
+        harness_solver: &Option<CbmcSolver>,
         args: &mut Vec<OsString>,
     ) -> Result<()> {
-        let solver_str = if let Some(solver) = &self.args.solver {
+        let solver = if let Some(solver) = &self.args.solver {
             // --solver option takes precedence over attributes
             solver
         } else if let Some(solver) = harness_solver {
@@ -224,8 +204,6 @@ impl KaniSession {
             return Ok(());
         };
 
-        let solver =
-            CbmcSolver::from_str(solver_str).unwrap_or(CbmcSolver::Custom(solver_str.clone()));
         match solver {
             CbmcSolver::Kissat => {
                 args.push("--external-sat-solver".into());
@@ -237,8 +215,10 @@ impl KaniSession {
             }
             CbmcSolver::Custom(custom_solver) => {
                 // Check if the specified binary exists in path
-                if !Path::new(&custom_solver).exists() {
-                    eprintln!("Error: Specified solver \"{custom_solver}\" not found in path");
+                if which::which(custom_solver).is_err() {
+                    eprintln!(
+                        "Error: The specified solver \"{custom_solver}\" was not found in path"
+                    );
                     bail!("cbmc solver argument handling failed")
                 }
                 args.push("--external-sat-solver".into());

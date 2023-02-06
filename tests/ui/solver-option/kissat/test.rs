@@ -5,7 +5,7 @@
 //! Checks that the solver option overrides the solver attribute
 
 #[kani::proof]
-#[kani::solver("non_existing_solver")]
+#[kani::solver(minisat)]
 fn check_solver_option() {
     let v = vec![kani::any(), 3];
     let v_copy = v.clone();

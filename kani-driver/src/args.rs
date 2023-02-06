@@ -1,11 +1,12 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use crate::call_cbmc::CbmcSolver;
 #[cfg(feature = "unsound_experiments")]
 use crate::unsound_experiments::UnsoundExperimentArgs;
 use crate::util::warning;
+use kani_metadata::CbmcSolver;
 
+use clap::builder::TypedValueParser;
 use clap::{error::Error, error::ErrorKind, CommandFactory, ValueEnum};
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -153,8 +154,8 @@ pub struct KaniArgs {
     #[arg(long, requires("harness"))]
     pub unwind: Option<u32>,
     /// Specify the CBMC solver to use. Overrides the harness `solver` attribute.
-    #[arg(long, value_parser = clap::builder::PossibleValuesParser::new(CbmcSolver::VARIANTS))]
-    pub solver: Option<String>,
+    #[arg(long, value_parser = clap::builder::PossibleValuesParser::new(CbmcSolver::VARIANTS).map(|s| s.parse::<CbmcSolver>().unwrap()))]
+    pub solver: Option<CbmcSolver>,
     /// Pass through directly to CBMC; must be the last flag.
     /// This feature is unstable and it requires `--enable_unstable` to be used
     #[arg(

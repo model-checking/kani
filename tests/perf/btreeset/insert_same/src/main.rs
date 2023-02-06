@@ -10,7 +10,7 @@ use std::collections::BTreeSet;
 
 #[kani::proof]
 #[kani::unwind(3)]
-#[kani::solver("kissat")]
+#[kani::solver(minisat)]
 fn main() {
     let mut set: BTreeSet<i32> = BTreeSet::new();
     let x = kani::any();

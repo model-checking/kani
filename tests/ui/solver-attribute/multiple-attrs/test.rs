@@ -2,6 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 #[kani::proof]
-#[kani::solver("solver1")]
-#[kani::solver("solver2")]
+#[kani::solver(kissat)]
+#[kani::solver(kissat)]
 fn check() {}

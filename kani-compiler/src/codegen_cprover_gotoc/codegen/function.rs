@@ -4,14 +4,12 @@
 //! This file contains functions related to codegenning MIR functions into gotoc
 
 use crate::codegen_cprover_gotoc::GotocCtx;
-use crate::kani_middle::attributes::{
-    extract_integer_argument, extract_string_arguments, partition_kanitool_attributes, AttrError,
-};
+use crate::kani_middle::attributes::{extract_integer_argument, partition_kanitool_attributes};
 use cbmc::goto_program::{Expr, Stmt, Symbol};
 use cbmc::InternString;
-use kani_metadata::HarnessMetadata;
+use kani_metadata::{CbmcSolver, HarnessMetadata};
 use kani_queries::UserInput;
-use rustc_ast::Attribute;
+use rustc_ast::{Attribute, MetaItemKind};
 use rustc_hir::def::DefKind;
 use rustc_hir::def_id::DefId;
 use rustc_middle::mir::traversal::reverse_postorder;
@@ -21,6 +19,7 @@ use rustc_middle::ty::{self, Instance};
 use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::iter::FromIterator;
+use std::str::FromStr;
 use tracing::{debug, debug_span};
 
 /// Codegen MIR functions into gotoc
@@ -453,37 +452,66 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Set the solver for this proof harness
     fn handle_kanitool_solver(&mut self, attr: &Attribute, harness: &mut HarnessMetadata) {
-        const ATTRIBUTE: &str = "#[kani::solver]";
         // Make sure the solver is not already set
         if harness.solver.is_some() {
             self.tcx.sess.span_err(
                 attr.span,
-                format!("Only one '{ATTRIBUTE}' attribute is allowed per harness"),
+                format!("Only one '#[kani::solver]' attribute is allowed per harness"),
             );
             return;
         }
-        match extract_string_arguments(attr) {
-            Ok(arg) => {
-                if arg.len() == 1 {
-                    harness.solver = Some(arg[0].clone())
-                } else {
-                    self.tcx.sess.span_err(
-                        attr.span,
-                        format!("The `{ATTRIBUTE}` attribute expects a single string argument. Got {} arguments.", arg.len()),
-                    );
+        harness.solver = self.extract_solver_argument(attr);
+    }
+
+    fn extract_solver_argument(&mut self, attr: &Attribute) -> Option<CbmcSolver> {
+        // TODO: Argument validation should be done as part of the kani_macros crate
+        // https://github.com/model-checking/kani/issues/2192
+        const ATTRIBUTE: &str = "#[kani::solver]";
+        let invalid_arg_err = |attr: &Attribute| {
+            self.tcx.sess.span_err(
+                attr.span,
+                format!("Invalid argument to `{ATTRIBUTE}` attribute. Expecting one of the supported solvers, e.g. `kissat` or a SAT solver binary, e.g. `custom=\"sat-solver-binary\"`.")
+            )
+        };
+
+        let attr_args = attr.meta_item_list().unwrap();
+        if attr_args.len() != 1 {
+            self.tcx.sess.span_err(
+                attr.span,
+                format!(
+                    "The `{ATTRIBUTE}` attribute expects a single argument. Got {} arguments.",
+                    attr_args.len()
+                ),
+            );
+            return None;
+        }
+        let attr_arg = &attr_args[0];
+        let meta_item = attr_arg.meta_item();
+        if meta_item.is_none() {
+            invalid_arg_err(attr);
+            return None;
+        }
+        let meta_item = meta_item.unwrap();
+        let ident = meta_item.ident().unwrap();
+        let ident_str = ident.as_str();
+        match &meta_item.kind {
+            MetaItemKind::Word => {
+                let solver = CbmcSolver::from_str(ident_str);
+                match solver {
+                    Ok(solver) => Some(solver),
+                    Err(_) => {
+                        self.tcx.sess.span_err(attr.span, format!("Unknown solver `{ident_str}`"));
+                        None
+                    }
                 }
             }
-            Err(err) => {
-                let msg = match err {
-                    AttrError::Empty => format!("No arguments were specified to `{ATTRIBUTE}`."),
-                    AttrError::NonLiteral(_) => {
-                        format!("A non-literal argument was provided to `{ATTRIBUTE}`.")
-                    }
-                    AttrError::InvalidType(typ) => format!(
-                        "Invalid argument type. The `{ATTRIBUTE}` attribute expects a string literal argument. Got {typ}."
-                    ),
-                };
-                self.tcx.sess.span_err(attr.span, msg);
+            MetaItemKind::NameValue(lit) if ident_str == "custom" && lit.kind.is_str() => {
+                //Some(CbmcSolver::Custom(meta_item.name_value_literal().unwrap().token_lit.symbol.to_string()))
+                Some(CbmcSolver::Custom(lit.token_lit.symbol.to_string()))
+            }
+            _ => {
+                invalid_arg_err(attr);
+                None
             }
         }
     }

@@ -1,1 +1,2 @@
-Error: Specified solver "non_existing_solver" not found in path
+Error: The specified solver "non_existing_solver" was not found in path
+error: cbmc solver argument handling failed

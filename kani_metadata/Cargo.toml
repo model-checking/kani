@@ -13,3 +13,5 @@ publish = false
 [dependencies]
 serde = {version = "1", features = ["derive"]}
 cbmc = { path = "../cprover_bindings", package = "cprover_bindings" }
+strum = "0.24.1"
+strum_macros = "0.24.3"
