@@ -202,8 +202,18 @@ impl KaniSession {
                     | Message::BuildFinished(_) => {
                         // do nothing
                     }
+                    Message::TextLine(msg) => {
+                        if !self.args.quiet {
+                            println!("{msg}");
+                        }
+                    }
+
                     // Non-exhaustive enum.
-                    _ => {}
+                    _ => {
+                        if !self.args.quiet {
+                            println!("{message:?}");
+                        }
+                    }
                 }
             }
             let status = cargo_process.wait()?;
