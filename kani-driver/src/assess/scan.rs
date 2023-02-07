@@ -8,10 +8,12 @@ use std::process::Command;
 use std::time::Instant;
 
 use anyhow::Result;
+use cargo_metadata::Package;
 
 use crate::session::KaniSession;
 
 use super::args::ScanArgs;
+use super::metadata::AssessMetadata;
 use super::metadata::{aggregate_metadata, read_metadata};
 
 /// `cargo kani assess scan` is not a normal invocation of `cargo kani`: we don't directly build anything.
@@ -106,17 +108,21 @@ pub(crate) fn assess_scan_main(session: KaniSession, args: &ScanArgs) -> Result<
                 invoke_assess(&session, name, manifest, &outfile, &logfile)
             };
 
-            if result.is_err() {
-                println!("Failed: {name}");
-                failed_packages.push(package);
-            } else {
-                let meta = read_metadata(&outfile);
-                if let Ok(meta) = meta {
-                    success_metas.push(meta);
-                } else {
+            let meta = read_metadata(&outfile);
+            if let Ok(meta) = meta {
+                if meta.error.is_some() {
                     println!("Failed: {name}");
-                    failed_packages.push(package);
+                    // Some execution error that we have collected.
+                    failed_packages.push((package, Some(meta)))
+                } else {
+                    success_metas.push(meta);
                 }
+            } else {
+                println!("Failed: {name}");
+                failed_packages.push((
+                    package,
+                    result.err().map(|err| AssessMetadata::from_error(err.as_ref())),
+                ));
             }
             //TODO: cargo clean?
             println!(
@@ -134,7 +140,9 @@ pub(crate) fn assess_scan_main(session: KaniSession, args: &ScanArgs) -> Result<
         failed_packages.len()
     );
     let results = aggregate_metadata(success_metas);
+    print_failures(failed_packages);
     println!("{}", results.unsupported_features.render());
+
     if !session.args.only_codegen {
         println!("{}", results.failure_reasons.render());
         println!("{}", results.promising_tests.render());
@@ -201,5 +209,24 @@ fn scan_cargo_projects(path: PathBuf, accumulator: &mut Vec<PathBuf>) {
         if typ.is_dir() {
             scan_cargo_projects(entry.path(), accumulator)
         }
+    }
+}
+
+/// Print failures if any happened.
+fn print_failures(mut failures: Vec<(&Package, Option<AssessMetadata>)>) {
+    if !failures.is_empty() {
+        println!("Failed to assess packages:");
+        let unknown = "Unknown".to_string();
+        failures.sort_by_key(|(pkg, _)| &pkg.name);
+        for (pkg, meta) in failures {
+            println!(
+                "  - `{}`: {}",
+                pkg.name,
+                meta.as_ref().map_or(&unknown, |md| {
+                    md.error.as_ref().map_or(&unknown, |error| &error.msg)
+                }),
+            );
+        }
+        println!();
     }
 }
