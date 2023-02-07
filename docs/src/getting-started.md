@@ -1,9 +1,11 @@
 # Getting started
 
-Kani is an open-source verification tool that uses automated reasoning to analyze Rust programs.
+Kani is an open-source verification tool that uses [model checking](./tool-comparison.md) to analyze Rust programs.
 Kani is particularly useful for verifying unsafe code in Rust, where many of the Rust’s usual guarantees are no longer checked by the compiler.
 Some example properties you can prove with Kani include memory safety properties (e.g., null pointer dereferences, use-after-free, etc.), the absence of certain runtime errors (i.e., index out of bounds, panics), and the absence of some types of unexpected behavior (e.g., arithmetic overflows).
 Kani can also prove custom properties provided in the form of user-specified assertions.
+As Kani uses model checking, Kani will either prove the property, disprove the
+property (with a counterexample), or may run out of resources.
 
 Kani uses proof harnesses to analyze programs.
 Proof harnesses are similar to test harnesses, especially property-based test harnesses.
@@ -15,7 +17,7 @@ Releases are published [here](https://github.com/model-checking/kani/releases).
 Major changes to Kani are documented in the [RFC Book](https://model-checking.github.io/kani/rfc).
 
 There is support for a fair amount of Rust language features, but not all (e.g., concurrency).
-Please see [Limitations - Rust feature support](./rust-feature-support.md) for a detailed list of supported features.
+Please see [Limitations](./limitations.md) for a detailed list of supported features.
 
 Kani releases every two weeks.
 As part of every release, Kani will synchronize with a recent nightly release of Rust, and so is generally up-to-date with the latest Rust language features.
