@@ -71,6 +71,8 @@ For example, Kani cannot handle the panic unwind strategy, and it will fail comp
 configuration.
 
 In general, it's preferred that error messages follow [these guidelines](https://rustc-dev-guide.rust-lang.org/diagnostics.html#diagnostic-output-style-guide) used for `rustc` development.
+If the errors are being emitted from `kani-compiler`, you should use the compiler error message utilities (e.g., the `Session::span_err` method). However, if the
+errors are being emitted from `kani-driver`, you should use the functions provided in the `util` module in `kani-driver`.
 
 ### Internal compiler errors
 
