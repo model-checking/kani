@@ -70,11 +70,13 @@ Make sure to add user-friendly errors for constructs that we can't handle.
 For example, Kani cannot handle the panic unwind strategy, and it will fail compilation if the crate uses this
 configuration.
 
+In general, it's preferred that error messages follow [these guidelines](https://rustc-dev-guide.rust-lang.org/diagnostics.html#diagnostic-output-style-guide) used for `rustc` development.
+
 ### Internal compiler errors
 
 Even though this doesn't provide users the best experience, you are encouraged to add checks in the compiler for any
 assumptions you make during development.
-Those check can be on the form of `assert!()` or `unreachable!()`
+Those checks can be on the form of `assert!()` or `unreachable!()`
 statement.
 Please provide a meaningful message to help user understand why something failed, and try to explain, at least with 
 a comment, why this is the case.
