@@ -63,6 +63,10 @@ macro_rules! assert {
         if false {
             #[cfg(not(feature = "std"))]
             __kani__workaround_core_assert!(true, $($arg)+);
+            // In a `no_std` setting where `std` is used as a feature, defining
+            // the alias for `core::assert` doesn't work, so we need to use
+            // `core::assert` directly (see
+            // https://github.com/model-checking/kani/issues/2187)
             #[cfg(feature = "std")]
             core::assert!(true, $($arg)+);
         }
@@ -170,6 +174,7 @@ macro_rules! unreachable {
         if false {
             #[cfg(not(feature = "std"))]
             __kani__workaround_core_assert!(true, $fmt, $($arg)+);
+            // See comment in `assert` definition
             #[cfg(feature = "std")]
             core::assert!(true, $fmt, $($arg)+);
         }
@@ -205,6 +210,7 @@ macro_rules! panic {
         if false {
             #[cfg(not(feature = "std"))]
             __kani__workaround_core_assert!(true, $($arg)+);
+            // See comment in `assert` definition
             #[cfg(feature = "std")]
             core::assert!(true, $($arg)+);
         }
