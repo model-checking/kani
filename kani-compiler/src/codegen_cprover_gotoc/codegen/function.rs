@@ -456,7 +456,7 @@ impl<'tcx> GotocCtx<'tcx> {
         if harness.solver.is_some() {
             self.tcx
                 .sess
-                .span_err(attr.span, "Only one '#[kani::solver]' attribute is allowed per harness");
+                .span_err(attr.span, "only one '#[kani::solver]' attribute is allowed per harness");
             return;
         }
         harness.solver = self.extract_solver_argument(attr);
@@ -469,7 +469,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let invalid_arg_err = |attr: &Attribute| {
             self.tcx.sess.span_err(
                 attr.span,
-                format!("Invalid argument to `{ATTRIBUTE}` attribute. Expecting one of the supported solvers, e.g. `kissat` or a SAT solver binary, e.g. `custom=\"<SAT_SOLVER_BINARY>\"`.")
+                format!("invalid argument to `{ATTRIBUTE}` attribute. Expecting one of the supported solvers, e.g. `kissat` or a SAT solver binary, e.g. `custom=\"<SAT_SOLVER_BINARY>\"`.")
             )
         };
 
@@ -478,7 +478,7 @@ impl<'tcx> GotocCtx<'tcx> {
             self.tcx.sess.span_err(
                 attr.span,
                 format!(
-                    "The `{ATTRIBUTE}` attribute expects a single argument. Got {} arguments.",
+                    "the `{ATTRIBUTE}` attribute expects a single argument. Got {} arguments.",
                     attr_args.len()
                 ),
             );
@@ -499,7 +499,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 match solver {
                     Ok(solver) => Some(solver),
                     Err(_) => {
-                        self.tcx.sess.span_err(attr.span, format!("Unknown solver `{ident_str}`"));
+                        self.tcx.sess.span_err(attr.span, format!("unknown solver `{ident_str}`"));
                         None
                     }
                 }

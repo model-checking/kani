@@ -1,4 +1,4 @@
-error: The `#[kani::solver]` attribute expects a single argument. Got 0 arguments.\
+error: the `#[kani::solver]` attribute expects a single argument. Got 0 arguments.\
 test.rs:\
   |\
 5 | #[kani::solver]\

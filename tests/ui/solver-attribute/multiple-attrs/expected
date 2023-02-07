@@ -1,4 +1,4 @@
-error: Only one '#[kani::solver]' attribute is allowed per harness\
+error: only one '#[kani::solver]' attribute is allowed per harness\
 test.rs:\
   |\
 5 | #[kani::solver(kissat)]\

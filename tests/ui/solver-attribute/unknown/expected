@@ -1,4 +1,4 @@
-error: Unknown solver `foo`\
+error: unknown solver `foo`\
 test.rs:\
   |\
 5 | #[kani::solver(foo)]\
