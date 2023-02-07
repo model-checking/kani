@@ -1,6 +1,15 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+//! Module that provides functions which are convenient for different purposes.
+//!
+//! In particular, the `warning` and `error` functions must be used for
+//! diagnostic output across the `kani-driver` components. Please follow the
+//! recommendations in <https://model-checking.github.io/kani/conventions.html>
+//! when reporting any kind of diagnostic for users. Note that it's recommended
+//! to use the Rust compiler's error message utilities if you're working on the
+//! `kani-compiler`.
+
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
