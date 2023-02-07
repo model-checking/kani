@@ -1,6 +1,6 @@
-error: Invalid argument to `#[kani::solver]` attribute. Expecting one of the supported solvers, e.g. `kissat` or a SAT solver binary, e.g. `custom="sat-solver-binary"`.
-test.rs:5:1
-  |
-5 | #[kani::solver(123)]
+error: Invalid argument to `#[kani::solver]` attribute. Expecting one of the supported solvers, e.g. `kissat` or a SAT solver binary, e.g. `custom="<SAT_SOLVER_BINARY>"`.\
+test.rs:\
+  |\
+5 | #[kani::solver(123)]\
   | ^^^^^^^^^^^^^^^^^^^^
 error: aborting due to previous error

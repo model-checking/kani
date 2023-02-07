@@ -216,10 +216,7 @@ impl KaniSession {
             CbmcSolver::Custom(custom_solver) => {
                 // Check if the specified binary exists in path
                 if which::which(custom_solver).is_err() {
-                    eprintln!(
-                        "Error: The specified solver \"{custom_solver}\" was not found in path"
-                    );
-                    bail!("cbmc solver argument handling failed")
+                    bail!("The specified solver \"{custom_solver}\" was not found in path")
                 }
                 args.push("--external-sat-solver".into());
                 args.push(custom_solver.into());
