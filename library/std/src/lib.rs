@@ -171,7 +171,7 @@ macro_rules! unreachable {
             #[cfg(not(feature = "std"))]
             __kani__workaround_core_assert!(true, $fmt, $($arg)+);
             #[cfg(feature = "std")]
-            core::assert!(true, $($arg)+);
+            core::assert!(true, $fmt, $($arg)+);
         }
         kani::panic(concat!("internal error: entered unreachable code: ",
         stringify!($fmt, $($arg)*)))}};
