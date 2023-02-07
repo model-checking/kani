@@ -9,7 +9,7 @@ on:
 jobs:
   Release:
     name: Release
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     permissions:
       contents: write
     outputs:
@@ -58,11 +58,11 @@ jobs:
       contents: write
     strategy:
       matrix:
-        os: [macos-11, ubuntu-18.04]
+        os: [macos-11, ubuntu-20.04]
         include:
           - os: macos-11
             target: x86_64-apple-darwin
-          - os: ubuntu-18.04
+          - os: ubuntu-20.04
             target: x86_64-unknown-linux-gnu
     steps:
       - name: Checkout code

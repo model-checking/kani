@@ -17,7 +17,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-11, ubuntu-18.04, ubuntu-20.04, ubuntu-22.04]
+        os: [macos-11, ubuntu-20.04, ubuntu-22.04]
     steps:
       - name: Checkout Kani
         uses: actions/checkout@v3
@@ -119,11 +119,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-11, ubuntu-18.04]
+        os: [macos-11, ubuntu-20.04]
         include:
           - os: macos-11
             artifact: kani-latest-x86_64-apple-darwin.tar.gz
-          - os: ubuntu-18.04
+          - os: ubuntu-20.04
             artifact: kani-latest-x86_64-unknown-linux-gnu.tar.gz
     steps:
       - name: Checkout Kani
@@ -140,16 +140,15 @@ jobs:
           cargo package -p kani-verifier
 
       - name: Build container test
-        if: ${{ matrix.os == 'ubuntu-18.04' }}
+        if: ${{ matrix.os == 'ubuntu-20.04' }}
         run: |
           docker build -t kani-20-04 -f scripts/ci/Dockerfile.bundle-test-ubuntu-20-04 .
           docker build -t kani-20-04-alt -f scripts/ci/Dockerfile.bundle-test-ubuntu-20-04-alt .
-          docker build -t kani-18-04 -f scripts/ci/Dockerfile.bundle-test-ubuntu-18-04 .
           # this one does its tests automatically, for reasons documented in the file:
           docker build -t kani-nixos -f scripts/ci/Dockerfile.bundle-test-nixos .
 
       - name: Run installed tests
-        if: ${{ matrix.os == 'ubuntu-18.04' }}
+        if: ${{ matrix.os == 'ubuntu-20.04' }}
         run: |
           for tag in kani-20-04 kani-20-04-alt kani-18-04; do
             docker run $tag  cargo kani --version
