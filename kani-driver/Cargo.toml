@@ -26,7 +26,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 clap = { version = "4.1.3", features = ["derive"] }
 glob = "0.3"
-toml = "0.6"
+toml = "0.7"
 regex = "1.6"
 rustc-demangle = "0.1.21"
 pathdiff = "0.2.1"
@@ -37,6 +37,7 @@ strum_macros = {version = "0.24.0"}
 tracing = {version = "0.1", features = ["max_level_trace", "release_max_level_debug"]}
 tracing-subscriber = {version = "0.3.8", features = ["env-filter", "json", "fmt"]}
 tracing-tree = "0.2.2"
+which = "4.4.0"
 
 # A good set of suggested dependencies can be found in rustup:
 # https://github.com/rust-lang/rustup/blob/master/Cargo.toml
