@@ -28,6 +28,6 @@ pub enum CbmcSolver {
 
     /// A custom solver variant whose argument gets passed to
     /// `--external-sat-solver`. The specified binary must exist in path.
-    #[strum(disabled, serialize = "<SAT_SOLVER_BINARY>")]
+    #[strum(disabled, serialize = "custom=<SAT_SOLVER_BINARY>")]
     Custom(String),
 }
