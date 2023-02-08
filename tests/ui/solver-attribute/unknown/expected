@@ -1,6 +1,6 @@
 error: unknown solver `foo`\
 test.rs:\
-  |\
-5 | #[kani::solver(foo)]\
-  | ^^^^^^^^^^^^^^^^^^^^
+|\
+| #[kani::solver(foo)]\
+| ^^^^^^^^^^^^^^^^^^^^
 error: aborting due to previous error
