@@ -17,6 +17,7 @@ pub fn add_unsound_experiments_to_parser(app: Command) -> Command {
 }
 
 pub fn add_unsound_experiment_args_to_queries(queries: &mut QueryDb, matches: &ArgMatches) {
-    queries.get_unsound_experiments().lock().unwrap().zero_init_vars =
-        matches.get_flag(ZERO_INIT_VARS);
+    let mut experiments = queries.get_unsound_experiments();
+    experiments.zero_init_vars = matches.get_flag(ZERO_INIT_VARS);
+    queries.set_unsound_experiments(experiments);
 }

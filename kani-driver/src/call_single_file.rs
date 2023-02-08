@@ -48,7 +48,8 @@ impl KaniSession {
         // Note that the order of arguments is important. Kani specific flags should precede
         // rustc ones.
         let mut cmd = Command::new(&self.kani_compiler);
-        cmd.args(kani_args).args(rustc_args);
+        let kani_compiler_args = to_rustc_arg(kani_args);
+        cmd.arg(kani_compiler_args).args(rustc_args);
 
         if self.args.quiet {
             self.run_suppress(cmd)?;
@@ -56,6 +57,11 @@ impl KaniSession {
             self.run_terminal(cmd)?;
         }
         Ok(())
+    }
+
+    /// Create a compiler option that represents the reachability mod.
+    pub fn reachability_arg(&self) -> String {
+        to_rustc_arg(vec![format!("--reachability={}", self.reachability_mode())])
     }
 
     /// These arguments are arguments passed to kani-compiler that are `kani` compiler specific.
@@ -160,6 +166,24 @@ impl KaniSession {
             flags.extend(str.split(' ').map(OsString::from));
         }
 
+        // This argument will select the Kani flavour of the compiler. It will be removed before
+        // rustc driver is invoked.
+        flags.push("--kani-compiler".into());
+
         flags
     }
+}
+
+/// This function can be used to convert Kani compiler specific arguments into a rustc one.
+/// We currently pass Kani specific arguments using the `--llvm-args` structure which is the
+/// hacky mechanism used by other rustc backend to receive arguments unknown to rustc.
+///
+/// Note that Cargo caching mechanism takes the building context into consideration, which
+/// includes the value of the rust flags. By using `--llvm-args`, we ensure that Cargo takes into
+/// consideration all arguments that are used to configure Kani compiler. For example, enabling the
+/// reachability checks will force recompilation if they were disabled in previous build.
+/// For more details on this caching mechanism, see the
+/// [fingerprint documentation](https://github.com/rust-lang/cargo/blob/82c3bb79e3a19a5164e33819ef81bfc2c984bc56/src/cargo/core/compiler/fingerprint/mod.rs)
+pub fn to_rustc_arg(kani_args: Vec<String>) -> String {
+    format!(r#"-Cllvm-args={}"#, kani_args.join(" "))
 }

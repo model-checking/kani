@@ -66,8 +66,15 @@ cp ${KANI_DIR}/rust-toolchain.toml .
 echo "Starting cargo build with Kani"
 export RUST_BACKTRACE=1
 export RUSTC_LOG=error
-export KANIFLAGS="--goto-c --ignore-global-asm --reachability=legacy"
-export RUSTFLAGS="--kani-flags -C panic=abort"
+
+RUST_FLAGS=(
+    "--kani-compiler"
+    "-Cpanic=abort"
+    "-Cllvm-args=--goto-c"
+    "-Cllvm-args=--ignore-global-asm"
+    "-Cllvm-args=--reachability=legacy"
+)
+export RUSTFLAGS="${RUST_FLAGS[@]}"
 export RUSTC="$KANI_DIR/target/kani/bin/kani-compiler"
 # Compile rust to iRep
 $WRAPPER cargo build --verbose -Z build-std --lib --target $TARGET
