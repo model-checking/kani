@@ -469,7 +469,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let invalid_arg_err = |attr: &Attribute| {
             self.tcx.sess.span_err(
                 attr.span,
-                format!("invalid argument to `{ATTRIBUTE}` attribute. Expecting one of the supported solvers, e.g. `kissat` or a SAT solver binary, e.g. `custom=\"<SAT_SOLVER_BINARY>\"`.")
+                format!("invalid argument for `{ATTRIBUTE}` attribute, expected one of the supported solvers (e.g. `kissat`) or a SAT solver binary (e.g. `custom=\"<SAT_SOLVER_BINARY>\"`)")
             )
         };
 
