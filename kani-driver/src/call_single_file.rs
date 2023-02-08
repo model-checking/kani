@@ -174,9 +174,16 @@ impl KaniSession {
     }
 }
 
-/// This function can be used to convert a Kani compiler specific argument into a rustc one.
+/// This function can be used to convert Kani compiler specific arguments into a rustc one.
 /// We currently pass Kani specific arguments using the `--llvm-args` structure which is the
 /// hacky mechanism used by other rustc backend to receive arguments unknown to rustc.
+///
+/// Note that Cargo caching mechanism takes the building context into consideration, which
+/// includes the value of the rust flags. By using `--llvm-args`, we ensure that Cargo takes into
+/// consideration all arguments that are used to configure Kani compiler. For example, enabling the
+/// reachability checks will force recompilation if they were disabled in previous build.
+/// For more details on this caching mechanism, see the
+/// [fingerprint documentation](https://github.com/rust-lang/cargo/blob/82c3bb79e3a19a5164e33819ef81bfc2c984bc56/src/cargo/core/compiler/fingerprint/mod.rs)
 pub fn to_rustc_arg(kani_args: Vec<String>) -> String {
     format!(r#"-Cllvm-args={}"#, kani_args.join(" "))
 }

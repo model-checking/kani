@@ -52,6 +52,10 @@ use tracing::{debug, error, info};
 
 #[derive(Clone)]
 pub struct GotocCodegenBackend {
+    /// The query is shared with [crate::kani_compiler::KaniCompiler] and it is initialized as part
+    /// of `rustc` initialization, which may happen after this object is created.
+    /// Since we don't have any guarantees on when the compiler creates the Backend object, neither
+    /// in which thread it will be used, we prefer to explicitly synchronize any query access.
     queries: Arc<Mutex<QueryDb>>,
 }
 

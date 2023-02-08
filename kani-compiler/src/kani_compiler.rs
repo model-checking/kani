@@ -62,7 +62,11 @@ fn backend(queries: Arc<Mutex<QueryDb>>) -> Box<CodegenBackend> {
     compile_error!("No backend is available. Only supported value today is `cprover`");
 }
 
-/// Empty struct since we don't support any callbacks yet.
+/// This object controls the compiler behavior.
+///
+/// It is responsible for initializing the query database, as well as controlling the compiler
+/// state machine. For stubbing, we may require multiple iterations of the rustc driver, which is
+/// controlled and configured via KaniCompiler.
 struct KaniCompiler {
     /// Store the queries database. The queries should be initialized as part of `config`.
     pub queries: Arc<Mutex<QueryDb>>,
