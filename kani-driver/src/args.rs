@@ -642,6 +642,25 @@ mod tests {
         .unwrap();
         // no assertion: the above might fail if it fails to allow 0 args to cbmc-args
     }
+
+    #[test]
+    fn check_multiple_harnesses() {
+        // accepts repeated:
+        let args =
+            StandaloneArgs::try_parse_from("kani input.rs --harness a --harness b".split(" "))
+                .unwrap();
+        assert_eq!(args.common_opts.harnesses, vec!["a".to_owned(), "b".to_owned()]);
+    }
+
+    #[test]
+    fn check_multiple_harnesses_without_flag_fail() {
+        let result = StandaloneArgs::try_parse_from(
+            "kani input.rs --harness harness_1 harness_2".split(" "),
+        );
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+    }
+
     #[test]
     fn check_multiple_packages() {
         // accepts repeated:
