@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use anyhow::{bail, Result};
-use kani_metadata::HarnessMetadata;
+use kani_metadata::{CbmcSolver, HarnessMetadata};
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::path::Path;
@@ -123,6 +123,8 @@ impl KaniSession {
             args.push(unwind_value.to_string().into());
         }
 
+        self.handle_solver_args(&harness_metadata.solver, &mut args)?;
+
         if self.args.run_sanity_checks {
             args.push("--validate-goto-model".into());
             args.push("--validate-ssa-equation".into());
@@ -185,6 +187,42 @@ impl KaniSession {
         }
 
         args
+    }
+
+    fn handle_solver_args(
+        &self,
+        harness_solver: &Option<CbmcSolver>,
+        args: &mut Vec<OsString>,
+    ) -> Result<()> {
+        let solver = if let Some(solver) = &self.args.solver {
+            // `--solver` option takes precedence over attributes
+            solver
+        } else if let Some(solver) = harness_solver {
+            solver
+        } else {
+            // Nothing to do
+            return Ok(());
+        };
+
+        match solver {
+            CbmcSolver::Kissat => {
+                args.push("--external-sat-solver".into());
+                args.push("kissat".into());
+            }
+            CbmcSolver::Minisat => {
+                // Minisat is currently CBMC's default solver, so no need to
+                // pass any arguments
+            }
+            CbmcSolver::Custom(custom_solver) => {
+                // Check if the specified binary exists in path
+                if which::which(custom_solver).is_err() {
+                    bail!("the specified solver \"{custom_solver}\" was not found in path")
+                }
+                args.push("--external-sat-solver".into());
+                args.push(custom_solver.into());
+            }
+        }
+        Ok(())
     }
 }
 

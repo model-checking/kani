@@ -4,10 +4,17 @@
 #[cfg(feature = "unsound_experiments")]
 use crate::unsound_experiments::UnsoundExperimentArgs;
 use crate::util::warning;
+use kani_metadata::CbmcSolver;
 
-use clap::{error::Error, error::ErrorKind, CommandFactory, ValueEnum};
+use clap::builder::{PossibleValue, TypedValueParser};
+use clap::{
+    error::ContextKind, error::ContextValue, error::Error, error::ErrorKind, CommandFactory,
+    ValueEnum,
+};
 use std::ffi::OsString;
 use std::path::PathBuf;
+use std::str::FromStr;
+use strum::VariantNames;
 
 // By default we configure CBMC to use 16 bits to represent the object bits in pointers.
 const DEFAULT_OBJECT_BITS: u32 = 16;
@@ -150,6 +157,9 @@ pub struct KaniArgs {
     /// Specify the value used for loop unwinding for the specified harness in CBMC
     #[arg(long, requires("harness"))]
     pub unwind: Option<u32>,
+    /// Specify the CBMC solver to use. Overrides the harness `solver` attribute.
+    #[arg(long, value_parser = CbmcSolverValueParser::new(CbmcSolver::VARIANTS))]
+    pub solver: Option<CbmcSolver>,
     /// Pass through directly to CBMC; must be the last flag.
     /// This feature is unstable and it requires `--enable_unstable` to be used
     #[arg(
@@ -546,6 +556,61 @@ impl KaniArgs {
                 "The `{option}` option is deprecated. This option no longer has any effect and should be removed"
             ))
         }
+    }
+}
+
+/// clap parser for `CbmcSolver`
+#[derive(Clone, Debug)]
+pub struct CbmcSolverValueParser(Vec<PossibleValue>);
+
+impl CbmcSolverValueParser {
+    pub fn new(values: impl Into<CbmcSolverValueParser>) -> Self {
+        values.into()
+    }
+}
+
+impl TypedValueParser for CbmcSolverValueParser {
+    type Value = CbmcSolver;
+
+    fn parse_ref(
+        &self,
+        cmd: &clap::builder::Command,
+        arg: Option<&clap::builder::Arg>,
+        value: &std::ffi::OsStr,
+    ) -> Result<Self::Value, clap::error::Error> {
+        let value = value.to_str().unwrap();
+        // `value` is one of the possible `CbmcSolver` values or `custom=<binary>`
+        let segments: Vec<&str> = value.split('=').collect();
+
+        let mut err = clap::Error::new(ErrorKind::InvalidValue).with_cmd(cmd);
+        err.insert(ContextKind::InvalidArg, ContextValue::String(arg.unwrap().to_string()));
+        err.insert(ContextKind::InvalidValue, ContextValue::String(value.to_string()));
+
+        if segments.len() == 2 {
+            if segments[0] != "custom" {
+                return Err(err);
+            }
+            return Ok(CbmcSolver::Custom(segments[1].into()));
+        } else if segments.len() == 1 {
+            let solver = CbmcSolver::from_str(value);
+            return solver.map_err(|_| err);
+        }
+        Err(err)
+    }
+
+    /// Used for the help message
+    fn possible_values(&self) -> Option<Box<dyn Iterator<Item = PossibleValue> + '_>> {
+        Some(Box::new(self.0.iter().cloned()))
+    }
+}
+
+impl<I, T> From<I> for CbmcSolverValueParser
+where
+    I: IntoIterator<Item = T>,
+    T: Into<PossibleValue>,
+{
+    fn from(values: I) -> Self {
+        Self(values.into_iter().map(|t| t.into()).collect())
     }
 }
 

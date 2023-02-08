@@ -535,6 +535,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tracing-tree",
+ "which",
 ]
 
 [[package]]
@@ -562,6 +563,8 @@ version = "0.20.0"
 dependencies = [
  "cprover_bindings",
  "serde",
+ "strum",
+ "strum_macros",
 ]
 
 [[package]]
