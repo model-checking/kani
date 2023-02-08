@@ -38,7 +38,9 @@ impl KaniSession {
                     harness.pretty_name
                 ),
                 Some(concrete_vals) => {
-                    let concrete_playback = format_unit_test(&harness.pretty_name, &concrete_vals);
+                    //    let harness_name = &harness_metadata.mangled_name;
+                    let pretty_name = harness.get_harness_name_unqualified();
+                    let concrete_playback = format_unit_test(&pretty_name, &concrete_vals);
                     match playback_mode {
                         ConcretePlaybackMode::Print => {
                             println!(
