@@ -469,7 +469,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let invalid_arg_err = |attr: &Attribute| {
             self.tcx.sess.span_err(
                 attr.span,
-                format!("invalid argument for `{ATTRIBUTE}` attribute, expected one of the supported solvers (e.g. `kissat`) or a SAT solver binary (e.g. `custom=\"<SAT_SOLVER_BINARY>\"`)")
+                format!("invalid argument for `{ATTRIBUTE}` attribute, expected one of the supported solvers (e.g. `kissat`) or a SAT solver binary (e.g. `bin=\"<SAT_SOLVER_BINARY>\"`)")
             )
         };
 
@@ -504,8 +504,8 @@ impl<'tcx> GotocCtx<'tcx> {
                     }
                 }
             }
-            MetaItemKind::NameValue(lit) if ident_str == "custom" && lit.kind.is_str() => {
-                Some(CbmcSolver::Custom(lit.token_lit.symbol.to_string()))
+            MetaItemKind::NameValue(lit) if ident_str == "bin" && lit.kind.is_str() => {
+                Some(CbmcSolver::Binary(lit.token_lit.symbol.to_string()))
             }
             _ => {
                 invalid_arg_err(attr);
