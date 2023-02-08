@@ -579,7 +579,7 @@ impl TypedValueParser for CbmcSolverValueParser {
         value: &std::ffi::OsStr,
     ) -> Result<Self::Value, clap::error::Error> {
         let value = value.to_str().unwrap();
-        // `value` is one of the possible `CbmcSolver` values or `custom=<binary>`
+        // `value` is one of the possible `CbmcSolver` values or `bin=<binary>`
         let segments: Vec<&str> = value.split('=').collect();
 
         let mut err = clap::Error::new(ErrorKind::InvalidValue).with_cmd(cmd);
@@ -587,10 +587,10 @@ impl TypedValueParser for CbmcSolverValueParser {
         err.insert(ContextKind::InvalidValue, ContextValue::String(value.to_string()));
 
         if segments.len() == 2 {
-            if segments[0] != "custom" {
+            if segments[0] != "bin" {
                 return Err(err);
             }
-            return Ok(CbmcSolver::Custom(segments[1].into()));
+            return Ok(CbmcSolver::Binary(segments[1].into()));
         } else if segments.len() == 1 {
             let solver = CbmcSolver::from_str(value);
             return solver.map_err(|_| err);

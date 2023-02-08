@@ -213,13 +213,13 @@ impl KaniSession {
                 // Minisat is currently CBMC's default solver, so no need to
                 // pass any arguments
             }
-            CbmcSolver::Custom(custom_solver) => {
+            CbmcSolver::Binary(solver_binary) => {
                 // Check if the specified binary exists in path
-                if which::which(custom_solver).is_err() {
-                    bail!("the specified solver \"{custom_solver}\" was not found in path")
+                if which::which(solver_binary).is_err() {
+                    bail!("the specified solver \"{solver_binary}\" was not found in path")
                 }
                 args.push("--external-sat-solver".into());
-                args.push(custom_solver.into());
+                args.push(solver_binary.into());
             }
         }
         Ok(())
