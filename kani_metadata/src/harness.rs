@@ -8,7 +8,7 @@ use std::path::PathBuf;
 /// We emit this structure for each annotated proof harness (`#[kani::proof]`) we find.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HarnessMetadata {
-    /// The name the user gave to the function.
+    /// The fully qualified name the user gave to the function (i.e. includes the module path).
     pub pretty_name: String,
     /// The name of the function in the CBMC symbol table.
     pub mangled_name: String,

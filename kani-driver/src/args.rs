@@ -128,9 +128,9 @@ pub struct KaniArgs {
     /// This is an unstable feature. Consider using --harness instead
     #[arg(long, hide = true, requires("enable_unstable"))]
     pub function: Option<String>,
-    /// Entry point for verification (proof harness)
-    #[arg(long, conflicts_with = "function")]
-    pub harness: Option<String>,
+    /// Entry point for verification (proof harness).
+    #[arg(long = "harness", conflicts_with = "function", num_args(1))]
+    pub harnesses: Vec<String>,
 
     /// Link external C files referenced by Rust code.
     /// This is an experimental feature and requires `--enable-unstable` to be used
@@ -155,7 +155,7 @@ pub struct KaniArgs {
     #[arg(long)]
     pub default_unwind: Option<u32>,
     /// Specify the value used for loop unwinding for the specified harness in CBMC
-    #[arg(long, requires("harness"))]
+    #[arg(long, requires("harnesses"))]
     pub unwind: Option<u32>,
     /// Specify the CBMC solver to use. Overrides the harness `solver` attribute.
     #[arg(long, value_parser = CbmcSolverValueParser::new(CbmcSolver::VARIANTS))]
@@ -232,7 +232,7 @@ pub struct KaniArgs {
         long,
         hide_short_help = true,
         requires("enable_unstable"),
-        requires("harness"),
+        requires("harnesses"),
         conflicts_with("concrete_playback")
     )]
     pub enable_stubbing: bool,

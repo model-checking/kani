@@ -16,27 +16,27 @@ use crate::util::specialized_harness_name;
 /// "background information" that the controlling driver (e.g. cargo-kani or kani) computed.
 ///
 /// This struct is basically just a nicer way of passing many arguments to [`Self::check_all_harnesses`]
-pub(crate) struct HarnessRunner<'sess> {
+pub(crate) struct HarnessRunner<'sess, 'pr> {
     /// The underlying kani session
     pub sess: &'sess KaniSession,
     /// The project under verification.
-    pub project: Project,
+    pub project: &'pr Project,
 }
 
 /// The result of checking a single harness. This both hangs on to the harness metadata
 /// (as a means to identify which harness), and provides that harness's verification result.
-pub(crate) struct HarnessResult<'sess> {
-    pub harness: &'sess HarnessMetadata,
+pub(crate) struct HarnessResult<'pr> {
+    pub harness: &'pr HarnessMetadata,
     pub result: VerificationResult,
 }
 
-impl<'sess> HarnessRunner<'sess> {
+impl<'sess, 'pr> HarnessRunner<'sess, 'pr> {
     /// Given a [`HarnessRunner`] (to abstract over how these harnesses were generated), this runs
     /// the proof-checking process for each harness in `harnesses`.
-    pub(crate) fn check_all_harnesses<'a>(
+    pub(crate) fn check_all_harnesses(
         &self,
-        harnesses: &'a [HarnessMetadata],
-    ) -> Result<Vec<HarnessResult<'a>>> {
+        harnesses: &'pr [&HarnessMetadata],
+    ) -> Result<Vec<HarnessResult<'pr>>> {
         let sorted_harnesses = crate::metadata::sort_harnesses_by_loc(harnesses);
 
         let pool = {
@@ -47,10 +47,10 @@ impl<'sess> HarnessRunner<'sess> {
             builder.build()?
         };
 
-        let results = pool.install(|| -> Result<Vec<HarnessResult<'a>>> {
+        let results = pool.install(|| -> Result<Vec<HarnessResult<'pr>>> {
             sorted_harnesses
                 .par_iter()
-                .map(|harness| -> Result<HarnessResult<'a>> {
+                .map(|harness| -> Result<HarnessResult<'pr>> {
                     let harness_filename = harness.pretty_name.replace("::", "-");
                     let report_dir = self.project.outdir.join(format!("report-{harness_filename}"));
                     let goto_file =

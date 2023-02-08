@@ -101,8 +101,10 @@ impl KaniCompiler {
         let all_stubs = stubbing::collect_stub_mappings(tcx);
         if all_stubs.is_empty() {
             FxHashMap::default()
-        } else if let Some(harness) = self.args.as_ref().unwrap().get_one::<String>(parser::HARNESS)
+        } else if let Some(mut harnesses) =
+            self.args.as_ref().unwrap().get_many::<String>(parser::HARNESS)
         {
+            let harness = harnesses.next().unwrap();
             find_harness_stub_mapping(harness, all_stubs).unwrap_or_default()
         } else {
             // No harness was provided. Nothing to do.
