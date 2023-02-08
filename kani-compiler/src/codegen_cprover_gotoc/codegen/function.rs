@@ -7,9 +7,9 @@ use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::attributes::{extract_integer_argument, partition_kanitool_attributes};
 use cbmc::goto_program::{Expr, Stmt, Symbol};
 use cbmc::InternString;
-use kani_metadata::HarnessMetadata;
+use kani_metadata::{CbmcSolver, HarnessMetadata};
 use kani_queries::UserInput;
-use rustc_ast::Attribute;
+use rustc_ast::{Attribute, MetaItemKind};
 use rustc_hir::def::DefKind;
 use rustc_hir::def_id::DefId;
 use rustc_middle::mir::traversal::reverse_postorder;
@@ -19,6 +19,7 @@ use rustc_middle::ty::{self, Instance};
 use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::iter::FromIterator;
+use std::str::FromStr;
 use tracing::{debug, debug_span};
 
 /// Codegen MIR functions into gotoc
@@ -353,6 +354,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 original_file: loc.filename().unwrap(),
                 original_start_line: loc.start_line().unwrap() as usize,
                 original_end_line: loc.end_line().unwrap() as usize,
+                solver: None,
                 unwind_value: None,
                 // We record the actual path after codegen before we dump the metadata into a file.
                 goto_file: None,
@@ -378,6 +380,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let mut harness = self.default_kanitool_proof();
         for attr in other_attributes.iter() {
             match attr.0.as_str() {
+                "solver" => self.handle_kanitool_solver(attr.1, &mut harness),
                 "stub" => {
                     if !self.queries.get_stubbing_enabled() {
                         self.tcx.sess.span_warn(
@@ -412,6 +415,7 @@ impl<'tcx> GotocCtx<'tcx> {
             original_file: loc.filename().unwrap(),
             original_start_line: loc.start_line().unwrap() as usize,
             original_end_line: loc.end_line().unwrap() as usize,
+            solver: None,
             unwind_value: None,
             // We record the actual path after codegen before we dump the metadata into a file.
             goto_file: None,
@@ -442,6 +446,70 @@ impl<'tcx> GotocCtx<'tcx> {
                     return;
                 }
                 harness.unwind_value = Some(val.unwrap());
+            }
+        }
+    }
+
+    /// Set the solver for this proof harness
+    fn handle_kanitool_solver(&mut self, attr: &Attribute, harness: &mut HarnessMetadata) {
+        // Make sure the solver is not already set
+        if harness.solver.is_some() {
+            self.tcx
+                .sess
+                .span_err(attr.span, "only one '#[kani::solver]' attribute is allowed per harness");
+            return;
+        }
+        harness.solver = self.extract_solver_argument(attr);
+    }
+
+    fn extract_solver_argument(&mut self, attr: &Attribute) -> Option<CbmcSolver> {
+        // TODO: Argument validation should be done as part of the `kani_macros` crate
+        // <https://github.com/model-checking/kani/issues/2192>
+        const ATTRIBUTE: &str = "#[kani::solver]";
+        let invalid_arg_err = |attr: &Attribute| {
+            self.tcx.sess.span_err(
+                attr.span,
+                format!("invalid argument for `{ATTRIBUTE}` attribute, expected one of the supported solvers (e.g. `kissat`) or a SAT solver binary (e.g. `custom=\"<SAT_SOLVER_BINARY>\"`)")
+            )
+        };
+
+        let attr_args = attr.meta_item_list().unwrap();
+        if attr_args.len() != 1 {
+            self.tcx.sess.span_err(
+                attr.span,
+                format!(
+                    "the `{ATTRIBUTE}` attribute expects a single argument. Got {} arguments.",
+                    attr_args.len()
+                ),
+            );
+            return None;
+        }
+        let attr_arg = &attr_args[0];
+        let meta_item = attr_arg.meta_item();
+        if meta_item.is_none() {
+            invalid_arg_err(attr);
+            return None;
+        }
+        let meta_item = meta_item.unwrap();
+        let ident = meta_item.ident().unwrap();
+        let ident_str = ident.as_str();
+        match &meta_item.kind {
+            MetaItemKind::Word => {
+                let solver = CbmcSolver::from_str(ident_str);
+                match solver {
+                    Ok(solver) => Some(solver),
+                    Err(_) => {
+                        self.tcx.sess.span_err(attr.span, format!("unknown solver `{ident_str}`"));
+                        None
+                    }
+                }
+            }
+            MetaItemKind::NameValue(lit) if ident_str == "custom" && lit.kind.is_str() => {
+                Some(CbmcSolver::Custom(lit.token_lit.symbol.to_string()))
+            }
+            _ => {
+                invalid_arg_err(attr);
+                None
             }
         }
     }
