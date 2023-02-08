@@ -163,7 +163,7 @@ pub fn solver(_attr: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn solver(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut result = TokenStream::new();
-    // Translate #[kani::solver(arg)] to #[kanitool::stub(arg)]
+    // Translate `#[kani::solver(arg)]` to `#[kanitool::solver(arg)]`
     let insert_string = "#[kanitool::solver(".to_owned() + &attr.to_string() + ")]";
     result.extend(insert_string.parse::<TokenStream>().unwrap());
 
