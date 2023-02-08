@@ -1,4 +1,4 @@
-error: invalid argument to `#[kani::solver]` attribute. Expecting one of the supported solvers, e.g. `kissat` or a SAT solver binary, e.g. `custom="<SAT_SOLVER_BINARY>"`.\
+error: invalid argument for `#[kani::solver]` attribute, expected one of the supported solvers (e.g. `kissat`) or a SAT solver binary (e.g. `custom="<SAT_SOLVER_BINARY>"`)\
 test.rs:\
   |\
 5 | #[kani::solver(123)]\
