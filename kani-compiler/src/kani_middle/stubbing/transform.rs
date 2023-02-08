@@ -113,7 +113,7 @@ fn check_compatibility<'a, 'tcx>(
 const RUSTC_ARG_PREFIX: &str = "kani_stubs=";
 
 /// Serializes the stub mapping into a rustc argument.
-pub fn mk_rustc_arg(stub_mapping: FxHashMap<DefPathHash, DefPathHash>) -> String {
+pub fn mk_rustc_arg(stub_mapping: &FxHashMap<DefPathHash, DefPathHash>) -> String {
     // Serialize each `DefPathHash` as a pair of `u64`s, and the whole mapping
     // as an association list.
     let mut pairs = Vec::new();

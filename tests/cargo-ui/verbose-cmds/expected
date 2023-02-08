@@ -1,5 +1,4 @@
-KANIFLAGS=
-RUSTC=
+CARGO_ENCODED_RUSTFLAGS=
 cargo rustc
 Running: `goto-cc
 Running: `goto-instrument
