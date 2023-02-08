@@ -580,7 +580,7 @@ impl TypedValueParser for CbmcSolverValueParser {
     ) -> Result<Self::Value, clap::error::Error> {
         let value = value.to_str().unwrap();
         // `value` is one of the possible CbmcSolver values or `custom=<binary>`
-        let segments: Vec<&str> = value.split("=").collect();
+        let segments: Vec<&str> = value.split('=').collect();
 
         let mut err = clap::Error::new(ErrorKind::InvalidValue).with_cmd(cmd);
         err.insert(ContextKind::InvalidArg, ContextValue::String(arg.unwrap().to_string()));
