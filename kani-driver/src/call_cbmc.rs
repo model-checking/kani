@@ -195,7 +195,7 @@ impl KaniSession {
         args: &mut Vec<OsString>,
     ) -> Result<()> {
         let solver = if let Some(solver) = &self.args.solver {
-            // --solver option takes precedence over attributes
+            // `--solver` option takes precedence over attributes
             solver
         } else if let Some(solver) = harness_solver {
             solver

@@ -463,8 +463,8 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     fn extract_solver_argument(&mut self, attr: &Attribute) -> Option<CbmcSolver> {
-        // TODO: Argument validation should be done as part of the kani_macros crate
-        // https://github.com/model-checking/kani/issues/2192
+        // TODO: Argument validation should be done as part of the `kani_macros` crate
+        // <https://github.com/model-checking/kani/issues/2192>
         const ATTRIBUTE: &str = "#[kani::solver]";
         let invalid_arg_err = |attr: &Attribute| {
             self.tcx.sess.span_err(
