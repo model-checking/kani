@@ -208,6 +208,55 @@ impl KaniSession {
     }
 }
 
+/// Format a unit test for a number of concrete values.
+fn format_unit_test(harness_name: &str, concrete_vals: &[ConcreteVal]) -> UnitTest {
+    // Hash the concrete values along with the proof harness name.
+    let mut hasher = DefaultHasher::new();
+    harness_name.hash(&mut hasher);
+    concrete_vals.hash(&mut hasher);
+    let hash = hasher.finish();
+    let func_name = format!("kani_concrete_playback_{harness_name}_{hash}");
+
+    let func_before_concrete_vals = [
+        "#[test]".to_string(),
+        format!("fn {func_name}() {{"),
+        format!("{:<4}let concrete_vals: Vec<Vec<u8>> = vec![", " "),
+    ]
+    .into_iter();
+    let formatted_concrete_vals = format_concrete_vals(concrete_vals);
+    let func_after_concrete_vals = [
+        format!("{:<4}];", " "),
+        format!("{:<4}kani::concrete_playback_run(concrete_vals, {harness_name});", " "),
+        "}".to_string(),
+    ]
+    .into_iter();
+
+    let full_func: Vec<_> = func_before_concrete_vals
+        .chain(formatted_concrete_vals)
+        .chain(func_after_concrete_vals)
+        .collect();
+
+    let full_func_code: String = full_func.join("\n");
+    UnitTest { unit_test_str: full_func_code, unit_test_name: func_name }
+}
+
+/// Format an initializer expression for a number of concrete values.
+fn format_concrete_vals(concrete_vals: &[ConcreteVal]) -> impl Iterator<Item = String> + '_ {
+    /*
+    Given a number of byte vectors, format them as:
+    // interp_concrete_val_1
+    vec![concrete_val_1],
+    // interp_concrete_val_2
+    vec![concrete_val_2], ...
+    */
+    concrete_vals.iter().flat_map(|concrete_val| {
+        [
+            format!("{:<8}// {}", " ", concrete_val.interp_val),
+            format!("{:<8}vec!{:?},", " ", concrete_val.byte_arr),
+        ]
+    })
+}
+
 struct FileLineRange {
     file: String,
     line_range: Option<(usize, usize)>,
@@ -323,58 +372,6 @@ mod concrete_vals_extractor {
     }
 }
 
-const SPACES_4: &str = "    ";
-const SPACES_8: &str = "        ";
-
-/// Format a unit test for a number of concrete values.
-fn format_unit_test(harness_name: &str, concrete_vals: &[ConcreteVal]) -> UnitTest {
-    // Hash the concrete values along with the proof harness name.
-    let mut hasher = DefaultHasher::new();
-    harness_name.hash(&mut hasher);
-    concrete_vals.hash(&mut hasher);
-    let hash = hasher.finish();
-    let func_name = format!("kani_concrete_playback_{harness_name}_{hash}");
-
-    let func_before_concrete_vals = [
-        "#[test]".to_string(),
-        format!("fn {func_name}() {{"),
-        format!("{SPACES_4}let concrete_vals: Vec<Vec<u8>> = vec!["),
-    ]
-    .into_iter();
-    let formatted_concrete_vals = format_concrete_vals(concrete_vals);
-    let func_after_concrete_vals = [
-        format!("{SPACES_4}];"),
-        format!("{SPACES_4}kani::concrete_playback_run(concrete_vals, {harness_name});"),
-        "}".to_string(),
-    ]
-    .into_iter();
-
-    let full_func: Vec<_> = func_before_concrete_vals
-        .chain(formatted_concrete_vals)
-        .chain(func_after_concrete_vals)
-        .collect();
-
-    let full_func_code: String = full_func.join("\n");
-    UnitTest { unit_test_str: full_func_code, unit_test_name: func_name }
-}
-
-/// Format an initializer expression for a number of concrete values.
-fn format_concrete_vals(concrete_vals: &[ConcreteVal]) -> impl Iterator<Item = String> + '_ {
-    /*
-    Given a number of byte vectors, format them as:
-    // interp_concrete_val_1
-    vec![concrete_val_1],
-    // interp_concrete_val_2
-    vec![concrete_val_2], ...
-    */
-    concrete_vals.iter().flat_map(|concrete_val| {
-        [
-            format!("{SPACES_8}// {}", concrete_val.interp_val),
-            format!("{SPACES_8}vec!{:?},", concrete_val.byte_arr),
-        ]
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::concrete_vals_extractor::*;
@@ -399,10 +396,10 @@ mod tests {
         ];
         let actual: Vec<_> = format_concrete_vals(&concrete_vals).collect();
         let expected = vec![
-            format!("{SPACES_8}// 0"),
-            format!("{SPACES_8}vec![0, 0],"),
-            format!("{SPACES_8}// 0l"),
-            format!("{SPACES_8}vec![0, 0, 0, 0, 0, 0, 0, 0],"),
+            format!("{:<8}// 0", " "),
+            format!("{:<8}vec![0, 0],", " "),
+            format!("{:<8}// 0l", " "),
+            format!("{:<8}vec![0, 0, 0, 0, 0, 0, 0, 0],", " "),
         ];
         assert_eq!(actual, expected);
     }
@@ -432,11 +429,11 @@ mod tests {
         let full_func: Vec<&str> = unit_test.unit_test_str.split('\n').collect();
         let split_unit_test_name = split_unit_test_name(&unit_test.unit_test_name);
         let expected_after_func_name = vec![
-            format!("{SPACES_4}let concrete_vals: Vec<Vec<u8>> = vec!["),
-            format!("{SPACES_8}// 0"),
-            format!("{SPACES_8}vec![0, 0],"),
-            format!("{SPACES_4}];"),
-            format!("{SPACES_4}kani::concrete_playback_run(concrete_vals, {harness_name});"),
+            format!("{:<4}let concrete_vals: Vec<Vec<u8>> = vec![", " "),
+            format!("{:<8}// 0", " "),
+            format!("{:<8}vec![0, 0],", " "),
+            format!("{:<4}];", " "),
+            format!("{:<4}kani::concrete_playback_run(concrete_vals, {harness_name});", " "),
             "}".to_string(),
         ];
 

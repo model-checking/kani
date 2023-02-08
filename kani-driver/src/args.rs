@@ -590,7 +590,6 @@ mod tests {
         ]);
         // BUG: should not accept sequential:
         // Related: https://github.com/model-checking/kani/issues/2025
-        // Currently asserting this backwards from how it should be!
         assert!(b.is_ok());
     }
 
