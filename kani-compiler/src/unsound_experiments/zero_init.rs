@@ -15,7 +15,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Otherwise, returns `None` which leaves the variable uninitilized.
     /// In CBMC, this translates to a NONDET value.
     pub fn codegen_default_initializer(&mut self, e: &Expr) -> Option<Expr> {
-        if self.queries.get_unsound_experiments().lock().unwrap().zero_init_vars {
+        if self.queries.get_unsound_experiments().zero_init_vars {
             Some(e.typ().zero_initializer(&self.symbol_table))
         } else {
             None
@@ -35,7 +35,7 @@ impl<'tcx> GotocCtx<'tcx> {
         if layout.is_zst() || dst_type.sizeof_in_bits(&self.symbol_table) == 0 {
             // We ignore assignment for all zero size types
             Stmt::skip(loc)
-        } else if self.queries.get_unsound_experiments().lock().unwrap().zero_init_vars {
+        } else if self.queries.get_unsound_experiments().zero_init_vars {
             let init = goto_place.typ().zero_initializer(&self.symbol_table);
             goto_place.assign(init, loc)
         } else {

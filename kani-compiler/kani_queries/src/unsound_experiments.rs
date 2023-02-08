@@ -3,7 +3,7 @@
 
 #![cfg(feature = "unsound_experiments")]
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct UnsoundExperiments {
     /// Zero initilize variables.
     /// This is useful for experiments to see whether assigning constant values produces better
