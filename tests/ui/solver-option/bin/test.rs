@@ -1,8 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: --solver custom=kissat
+// kani-flags: --solver bin=kissat
 
-//! Checks that `--solver` accepts `custom=<binary>`
+//! Checks that `--solver` accepts `bin=<binary>`
 
 #[kani::proof]
 fn check_solver_option() {
