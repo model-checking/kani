@@ -655,6 +655,7 @@ mod tests {
         ]);
         // BUG: should not accept sequential:
         // Related: https://github.com/model-checking/kani/issues/2025
+        // This assert should ideally return an error, and the assertion should instead be assert!(b.is_err())
         assert!(b.is_ok());
     }
 

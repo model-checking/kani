@@ -208,7 +208,7 @@ impl KaniSession {
     }
 }
 
-/// Format a unit test for a number of concrete values.
+/// Generate a formatted unit test from a list of concrete values.
 fn format_unit_test(harness_name: &str, concrete_vals: &[ConcreteVal]) -> UnitTest {
     // Hash the concrete values along with the proof harness name.
     let mut hasher = DefaultHasher::new();
@@ -388,6 +388,7 @@ mod tests {
         assert_eq!(actual, expected);
     }
 
+    /// Check that the generated unit tests have the right formatting and indentation
     #[test]
     fn format_two_concrete_vals() {
         let concrete_vals = [
@@ -413,7 +414,7 @@ mod tests {
     /// This function splits the name into "kani_concrete_playback_{harness_name}" and "{hash}".
     fn split_unit_test_name(unit_test_name: &str) -> SplitUnitTestName {
         let underscore_locs: Vec<_> = unit_test_name.match_indices('_').collect();
-        let last_underscore_idx = underscore_locs[underscore_locs.len() - 1].0;
+        let last_underscore_idx = underscore_locs.last().unwrap().0;
         SplitUnitTestName {
             before_hash: unit_test_name[..last_underscore_idx].to_string(),
             hash: unit_test_name[last_underscore_idx + 1..].to_string(),
@@ -471,6 +472,7 @@ mod tests {
         assert_ne!(hash_base, hash_diff_interp_val);
     }
 
+    /// Test util functions which extract the counter example values from a property.
     #[test]
     fn check_concrete_vals_extractor() {
         let processed_items = [Property {
