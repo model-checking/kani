@@ -86,7 +86,9 @@ impl KaniSession {
         if self.args.ignore_global_asm {
             flags.push("--ignore-global-asm".into());
         }
-
+        if self.args.write_goto_binary {
+            flags.push("--write-goto-binary".into());
+        }
         if self.args.enable_stubbing {
             flags.push("--enable-stubbing".into());
         }

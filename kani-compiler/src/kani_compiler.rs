@@ -140,6 +140,7 @@ impl Callbacks for KaniCompiler {
                 .set_check_assertion_reachability(matches.get_flag(parser::ASSERTION_REACH_CHECKS));
             queries.set_output_pretty_json(matches.get_flag(parser::PRETTY_OUTPUT_FILES));
             queries.set_ignore_global_asm(matches.get_flag(parser::IGNORE_GLOBAL_ASM));
+            queries.set_write_goto_binary(matches.get_flag(parser::WRITE_GOTO_BINARY));
             queries.set_reachability_analysis(matches.reachability_type());
 
             #[cfg(feature = "unsound_experiments")]

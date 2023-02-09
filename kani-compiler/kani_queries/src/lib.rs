@@ -44,6 +44,9 @@ pub trait UserInput {
     fn set_ignore_global_asm(&mut self, global_asm: bool);
     fn get_ignore_global_asm(&self) -> bool;
 
+    fn set_write_goto_binary(&mut self, write_goto_binary: bool);
+    fn get_write_goto_binary(&self) -> bool;
+
     fn set_reachability_analysis(&mut self, reachability: ReachabilityType);
     fn get_reachability_analysis(&self) -> ReachabilityType;
 
@@ -63,6 +66,7 @@ pub struct QueryDb {
     emit_vtable_restrictions: bool,
     json_pretty_print: bool,
     ignore_global_asm: bool,
+    write_goto_binary: bool,
     reachability_analysis: ReachabilityType,
     stubbing_enabled: bool,
     #[cfg(feature = "unsound_experiments")]
@@ -76,6 +80,7 @@ impl QueryDb {
             emit_vtable_restrictions: false,
             json_pretty_print: false,
             ignore_global_asm: false,
+            write_goto_binary: false,
             reachability_analysis: ReachabilityType::None,
             stubbing_enabled: false,
             #[cfg(feature = "unsound_experiments")]
@@ -131,6 +136,14 @@ impl UserInput for QueryDb {
 
     fn get_stubbing_enabled(&self) -> bool {
         self.stubbing_enabled
+    }
+
+    fn set_write_goto_binary(&mut self, write_goto_binary: bool) {
+        self.write_goto_binary = write_goto_binary;
+    }
+
+    fn get_write_goto_binary(&self) -> bool {
+        self.write_goto_binary
     }
 
     #[cfg(feature = "unsound_experiments")]
