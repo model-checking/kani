@@ -1,14 +1,14 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use anyhow::{bail, Error, Result};
+use anyhow::Result;
 use std::path::Path;
 use tracing::debug;
 
 use kani_metadata::{
     HarnessMetadata, InternedString, KaniMetadata, TraitDefinedMethod, VtableCtxResults,
 };
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap};
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
 
@@ -123,8 +123,7 @@ impl KaniSession {
         if harnesses.is_empty() {
             Ok(Vec::from(all_harnesses))
         } else {
-            // Linear search, since this is only ever called once
-            let harnesses = find_proof_harness(harnesses, all_harnesses)?;
+            let harnesses = find_proof_harnesses(harnesses, all_harnesses);
             Ok(harnesses)
         }
     }
@@ -166,46 +165,22 @@ pub fn mock_proof_harness(
 /// Search for a proof harness with a particular name.
 /// At the present time, we use `no_mangle` so collisions shouldn't happen,
 /// but this function is written to be robust against that changing in the future.
-fn find_proof_harness<'a>(
+fn find_proof_harnesses<'a>(
     targets: BTreeSet<&String>,
     all_harnesses: &[&'a HarnessMetadata],
-) -> Result<Vec<&'a HarnessMetadata>> {
+) -> Vec<&'a HarnessMetadata> {
     debug!(?targets, "find_proof_harness");
     let mut result = vec![];
-    let mut targets_found = BTreeMap::new();
     for md in all_harnesses.iter() {
-        // Either an exact match, or...
-        let matches = targets
-            .get(&md.pretty_name)
-            .or_else(|| targets.get(&String::from(md.get_harness_name_unqualified())))
-            .copied();
-        if let Some(name) = matches {
+        // Either an exact match, or a substring match. We check the exact first since it's cheaper.
+        if targets.contains(&md.pretty_name)
+            || targets.contains(&md.get_harness_name_unqualified().to_string())
+            || targets.iter().any(|target| md.pretty_name.contains(*target))
+        {
             result.push(*md);
-            targets_found.try_insert(name, md).map_err(|err| {
-                Error::msg(format!(
-                    "conflicting proof harnesses named {}:\n {}\n {}",
-                    err.entry.key(),
-                    err.entry.get().pretty_name,
-                    err.value.pretty_name
-                ))
-            })?;
         }
     }
-    // Check if all harnesses were found.
-    if targets_found.len() < targets.len() {
-        let missing_harnesses: Vec<_> = targets
-            .iter()
-            .copied()
-            .cloned()
-            .filter(|name| !targets_found.contains_key(name))
-            .collect();
-        bail!(
-            "failed to find {}: {} ",
-            if missing_harnesses.len() == 1 { "harness" } else { "harnesses" },
-            missing_harnesses.join(&", ")
-        );
-    }
-    Ok(result)
+    result
 }
 
 #[cfg(test)]
@@ -220,21 +195,20 @@ mod tests {
             mock_proof_harness("module::not_check_three", None, None),
         ];
         let ref_harnesses = harnesses.iter().collect::<Vec<_>>();
-        assert!(
-            find_proof_harness(BTreeSet::from([&"check_three".to_string()]), &ref_harnesses)
-                .is_err()
+        assert_eq!(
+            find_proof_harnesses(BTreeSet::from([&"check_three".to_string()]), &ref_harnesses)
+                .len(),
+            1
         );
         assert!(
-            find_proof_harness(BTreeSet::from([&"check_two".to_string()]), &ref_harnesses)
-                .unwrap()
+            find_proof_harnesses(BTreeSet::from([&"check_two".to_string()]), &ref_harnesses)
                 .first()
                 .unwrap()
                 .mangled_name
                 == "module::check_two"
         );
         assert!(
-            find_proof_harness(BTreeSet::from([&"check_one".to_string()]), &ref_harnesses)
-                .unwrap()
+            find_proof_harnesses(BTreeSet::from([&"check_one".to_string()]), &ref_harnesses)
                 .first()
                 .unwrap()
                 .mangled_name

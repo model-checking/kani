@@ -139,11 +139,31 @@ impl KaniSession {
                     "Complete - {succeeding} successfully verified harnesses, {failing} failures, {total} total."
                 );
             } else {
-                // TODO: This could use a better error message, possibly with links to Kani documentation.
-                // New users may encounter this and could use a pointer to how to write proof harnesses.
-                println!(
-                    "No proof harnesses (functions with #[kani::proof]) were found to verify."
-                );
+                match (self.args.harnesses.as_slice(), &self.args.function) {
+                    ([], None) =>
+                    // TODO: This could use a better error message, possibly with links to Kani documentation.
+                    // New users may encounter this and could use a pointer to how to write proof harnesses.
+                    {
+                        println!(
+                            "No proof harnesses (functions with #[kani::proof]) were found to verify."
+                        )
+                    }
+                    ([harness], None) => {
+                        println!("No harnesses matched the harness filter: `{harness}`",)
+                    }
+                    (harnesses, None) => {
+                        println!(
+                            "No harnesses matched the harness filters: `{}`",
+                            harnesses.join("`, `")
+                        )
+                    }
+                    ([], Some(func)) => {
+                        println!("No function named {func} was found")
+                    }
+                    _ => unreachable!(
+                        "Invalid configuration. Cannot specify harness and function at the same time"
+                    ),
+                };
             }
         }
 

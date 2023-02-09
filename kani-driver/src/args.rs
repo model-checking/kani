@@ -128,8 +128,14 @@ pub struct KaniArgs {
     /// This is an unstable feature. Consider using --harness instead
     #[arg(long, hide = true, requires("enable_unstable"))]
     pub function: Option<String>,
-    /// Entry point for verification (proof harness).
-    #[arg(long = "harness", conflicts_with = "function", num_args(1))]
+    /// If specified, only run harnesses that match this filter. This option can be provided
+    /// multiple times, which will run all tests matching any of the filters.
+    #[arg(
+        long = "harness",
+        conflicts_with = "function",
+        num_args(1),
+        value_name = "HARNESS_FILTER"
+    )]
     pub harnesses: Vec<String>,
 
     /// Link external C files referenced by Rust code.
