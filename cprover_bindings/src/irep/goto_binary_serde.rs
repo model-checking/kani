@@ -849,3 +849,249 @@ where
         Ok(())
     }
 }
+
+/// Unit tests for GOTO binary serialization/deserialization.
+#[cfg(test)]
+mod tests {
+    use super::GotoBinarySerializer;
+    use super::IrepNumbering;
+    use crate::cbmc_string::InternString;
+    use crate::irep::goto_binary_serde::GotoBinaryDeserializer;
+    use crate::irep::Irep;
+    use crate::irep::IrepId;
+    use crate::linear_map;
+    use crate::InternedString;
+    use linear_map::LinearMap;
+
+    /// Utility function : creates a Irep representing a single symbol.
+    fn make_symbol_expr(identifier: &str) -> Irep {
+        Irep {
+            id: IrepId::Symbol,
+            sub: vec![],
+            named_sub: linear_map![(IrepId::Identifier, Irep::just_string_id(identifier),)],
+        }
+    }
+
+    /// Utility function: creates an expression by folding the symbol expressions with the given operator.
+    fn fold_with_op(identifiers: &Vec<&str>, id: IrepId) -> Irep {
+        identifiers.iter().fold(make_symbol_expr("dummy"), |acc, identifier| Irep {
+            id: id.clone(),
+            sub: vec![acc, make_symbol_expr(identifier)],
+            named_sub: LinearMap::new(),
+        })
+    }
+
+    #[test]
+    /// Create two structurally identical ireps and check that they get the same number.
+    fn test_irep_numbering_eq() {
+        let mut numbering = IrepNumbering::new();
+        let identifiers = vec![
+            "foo", "bar", "baz", "zab", "rab", "oof", "foo", "bar", "baz", "zab", "rab", "oof",
+        ];
+        let num1 = numbering.number_irep(&fold_with_op(&identifiers, IrepId::And));
+        let num2 = numbering.number_irep(&fold_with_op(&identifiers, IrepId::And));
+        assert_eq!(num1, num2);
+    }
+
+    #[test]
+    /// Create two ireps with different named subs and check that they get different numbers.
+    fn test_irep_numbering_ne_named_sub() {
+        let mut numbering = IrepNumbering::new();
+
+        let identifiers1 = vec![
+            "foo", "bar", "baz", "zab", "rab", "oof", "foo", "bar", "baz", "zab", "rab", "oof",
+        ];
+        let num1 = numbering.number_irep(&fold_with_op(&identifiers1, IrepId::And));
+
+        let identifiers2 = vec![
+            "foo", "bar", "HERE", "zab", "rab", "oof", "foo", "bar", "baz", "zab", "rab", "oof",
+        ];
+        let num2 = numbering.number_irep(&fold_with_op(&identifiers2, IrepId::And));
+        assert_ne!(num1, num2);
+    }
+
+    #[test]
+    /// Create two ireps with different ids and check that they get different numbers.
+    fn test_irep_numbering_ne_id() {
+        let mut numbering = IrepNumbering::new();
+
+        let identifiers = vec![
+            "foo", "bar", "baz", "zab", "rab", "oof", "foo", "bar", "baz", "zab", "rab", "oof",
+        ];
+        let num1 = numbering.number_irep(&fold_with_op(&identifiers, IrepId::And));
+        let num2 = numbering.number_irep(&fold_with_op(&identifiers, IrepId::Or));
+
+        assert_ne!(num1, num2);
+    }
+
+    #[test]
+    /// Write and read back all possible u8 values.
+    fn test_write_u8() {
+        let mut vec: Vec<u8> = Vec::new();
+        let mut serializer = GotoBinarySerializer::new(&mut vec);
+
+        // write all possible u8 values
+        for u in std::u8::MIN..std::u8::MAX {
+            serializer.write_u8(u).unwrap();
+        }
+        serializer.flush().unwrap();
+
+        // read back from byte stream
+        for u in std::u8::MIN..std::u8::MAX {
+            assert_eq!(vec[u as usize], u);
+        }
+    }
+
+    #[test]
+    /// Write and read back usize values covering the whole usize bit-width.
+    fn test_write_usize() {
+        // Generate all powers of two to cover the whole bitwidth
+        let mut powers_of_two: Vec<usize> = Vec::new();
+        powers_of_two.push(0);
+        for i in 0..usize::BITS {
+            let num = 1usize << i;
+            powers_of_two.push(num);
+        }
+        powers_of_two.push(usize::MAX);
+
+        // Serialize using variable length encoding
+        let mut vec: Vec<u8> = Vec::new();
+        let mut serializer = GotoBinarySerializer::new(&mut vec);
+        for number in powers_of_two.iter() {
+            serializer.write_usize_varenc(*number).unwrap();
+        }
+        serializer.flush().unwrap();
+
+        // Deserialize byte stream and check equality
+        let mut deserializer = GotoBinaryDeserializer::new(std::io::Cursor::new(vec));
+        for number in powers_of_two.iter() {
+            let decoded = deserializer.read_usize_varenc().unwrap();
+            assert_eq!(decoded, *number);
+        }
+    }
+
+    #[test]
+    /// Write and read back unique strings.
+    fn test_write_read_unique_string_ref() {
+        let strings: Vec<InternedString> = vec![
+            "some_string".intern(),
+            "some other string".intern(),
+            "some string containing 0 and some other things".intern(),
+            "some string containing \\ and some other things".intern(),
+            "some string containing \\ and # and $ and % and \n \t and 1231231".intern(),
+        ];
+
+        // Serialize unique strings
+        let mut vec: Vec<u8> = Vec::new();
+        let mut serializer = GotoBinarySerializer::new(&mut vec);
+        for string in strings.iter() {
+            serializer.write_string_ref(string).unwrap();
+        }
+        serializer.flush().unwrap();
+
+        // Deserialize contents one by one and check equality
+        let mut deserializer = GotoBinaryDeserializer::new(std::io::Cursor::new(vec));
+        for string in strings.iter() {
+            let decoded = deserializer.read_numbered_string_ref().unwrap().string;
+            assert_eq!(decoded, *string);
+        }
+    }
+
+    #[test]
+    /// Write and read back repeated strings.
+    fn test_write_read_multiple_string_ref() {
+        let mut vec: Vec<u8> = Vec::new();
+        let foo = String::from("foo").intern();
+        let bar = String::from("bar").intern();
+        let baz = String::from("baz").intern();
+        let strings = vec![foo, bar, foo, bar, foo, baz, baz, bar, foo];
+
+        // Serialize the same strings several times in arbitrary order
+        let mut serializer = GotoBinarySerializer::new(&mut vec);
+        for string in strings.iter() {
+            serializer.write_string_ref(&string).unwrap();
+        }
+
+        // Deserialize the byte stream and check equality
+        let mut deserializer = GotoBinaryDeserializer::new(std::io::Cursor::new(vec));
+        for string in strings.iter() {
+            let decoded = deserializer.read_numbered_string_ref().unwrap().string;
+            assert_eq!(decoded.to_string(), string.to_string());
+        }
+    }
+
+    #[test]
+    /// Write and read back distinct ireps.
+    fn test_write_irep_ref() {
+        let identifiers1 = vec!["foo", "bar", "baz", "same", "zab", "rab", "oof"];
+        let irep1 = &fold_with_op(&identifiers1, IrepId::And);
+
+        let mut vec: Vec<u8> = Vec::new();
+        let mut serializer = GotoBinarySerializer::new(&mut vec);
+
+        // Number an irep
+        let num1 = serializer.numbering.number_irep(&irep1);
+
+        // Number an structurally different irep
+        let identifiers2 = vec!["foo", "bar", "baz", "different", "zab", "rab", "oof"];
+        let irep2 = &fold_with_op(&identifiers2, IrepId::And);
+        let num2 = serializer.numbering.number_irep(&irep2);
+
+        // Check that they have the different numbers.
+        assert_ne!(num1, num2);
+
+        // write both numbered ireps
+        serializer.write_numbered_irep_ref(&num1).unwrap();
+        serializer.write_numbered_irep_ref(&num2).unwrap();
+
+        // check that the serializer knows it wrote the same irep twice
+        assert!(serializer.irep_count[num1.number] == 1);
+        assert!(serializer.irep_count[num2.number] == 1);
+
+        // Deserialize two ireps from the byte stream
+        let mut deserializer = GotoBinaryDeserializer::new(std::io::Cursor::new(vec));
+        let num3 = deserializer.read_numbered_irep_ref().unwrap();
+        let num4 = deserializer.read_numbered_irep_ref().unwrap();
+
+        // Check that they have different numbers.
+        assert_ne!(num3, num4);
+    }
+
+    #[test]
+    /// Write and read back several identical ireps.
+    fn test_write_read_irep_ref() {
+        let identifiers = vec![
+            "foo", "bar", "baz", "zab", "rab", "oof", "foo", "bar", "baz", "zab", "rab", "oof",
+        ];
+
+        let mut vec: Vec<u8> = Vec::new();
+        {
+            // Write two structurally identical ireps
+            let mut serializer = GotoBinarySerializer::new(&mut vec);
+            let irep1 = &fold_with_op(&identifiers, IrepId::And);
+            let irep2 = &fold_with_op(&identifiers, IrepId::And);
+            serializer.write_irep_ref(irep1).unwrap();
+            serializer.write_irep_ref(irep2).unwrap();
+            serializer.write_irep_ref(irep1).unwrap();
+            serializer.write_irep_ref(irep2).unwrap();
+            serializer.write_irep_ref(irep1).unwrap();
+            serializer.write_irep_ref(irep1).unwrap();
+        }
+
+        {
+            // Deserialize the byte stream and check that we get the same numbered ireps
+            let mut deserializer = GotoBinaryDeserializer::new(std::io::Cursor::new(vec));
+            let irep1 = deserializer.read_numbered_irep_ref().unwrap();
+            let irep2 = deserializer.read_numbered_irep_ref().unwrap();
+            let irep3 = deserializer.read_numbered_irep_ref().unwrap();
+            let irep4 = deserializer.read_numbered_irep_ref().unwrap();
+            let irep5 = deserializer.read_numbered_irep_ref().unwrap();
+            let irep6 = deserializer.read_numbered_irep_ref().unwrap();
+            assert_eq!(irep1, irep2);
+            assert_eq!(irep1, irep3);
+            assert_eq!(irep1, irep4);
+            assert_eq!(irep1, irep5);
+            assert_eq!(irep1, irep6);
+        }
+    }
+}
