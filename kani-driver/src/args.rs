@@ -482,8 +482,7 @@ impl KaniArgs {
             return Err(Error::raw(
                 ErrorKind::MissingRequiredArgument,
                 "Missing argument: --visualize now requires --enable-unstable
-                due to recent issues involving incorrect coverage results.
-                More details in <https://github.com/model-checking/kani/issues/2048>",
+                due to recent issues involving incorrect results.",
             ));
         }
         if self.mir_linker {
