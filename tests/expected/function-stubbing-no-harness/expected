@@ -1,1 +1,1 @@
-No harnesses matched the harness filter: `foo`
+error: no harnesses matched the harness filter: `foo`

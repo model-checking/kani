@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use kani_metadata::{ArtifactType, HarnessMetadata};
 use rayon::prelude::*;
 use std::path::Path;
@@ -10,7 +10,7 @@ use crate::args::OutputFormat;
 use crate::call_cbmc::{VerificationResult, VerificationStatus};
 use crate::project::Project;
 use crate::session::KaniSession;
-use crate::util::specialized_harness_name;
+use crate::util::{error, specialized_harness_name};
 
 /// A HarnessRunner is responsible for checking all proof harnesses. The data in this structure represents
 /// "background information" that the controlling driver (e.g. cargo-kani or kani) computed.
@@ -141,7 +141,7 @@ impl KaniSession {
             } else {
                 match (self.args.harnesses.as_slice(), &self.args.function) {
                     ([], None) =>
-                    // TODO: This could use a better error message, possibly with links to Kani documentation.
+                    // TODO: This could use a better message, possibly with links to Kani documentation.
                     // New users may encounter this and could use a pointer to how to write proof harnesses.
                     {
                         println!(
@@ -149,19 +149,15 @@ impl KaniSession {
                         )
                     }
                     ([harness], None) => {
-                        println!("No harnesses matched the harness filter: `{harness}`",)
+                        bail!("no harnesses matched the harness filter: `{harness}`")
                     }
-                    (harnesses, None) => {
-                        println!(
-                            "No harnesses matched the harness filters: `{}`",
-                            harnesses.join("`, `")
-                        )
-                    }
-                    ([], Some(func)) => {
-                        println!("No function named {func} was found")
-                    }
+                    (harnesses, None) => bail!(
+                        "no harnesses matched the harness filters: `{}`",
+                        harnesses.join("`, `")
+                    ),
+                    ([], Some(func)) => error(&format!("No function named {func} was found")),
                     _ => unreachable!(
-                        "Invalid configuration. Cannot specify harness and function at the same time"
+                        "invalid configuration. Cannot specify harness and function at the same time"
                     ),
                 };
             }

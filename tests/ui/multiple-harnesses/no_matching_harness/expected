@@ -1,1 +1,1 @@
-No harnesses matched the harness filters: `non_existing`, `invalid`
+error: no harnesses matched the harness filters: `non_existing`, `invalid`
