@@ -8,7 +8,7 @@ use std::path::Path;
 use std::process::Command;
 
 use crate::session::KaniSession;
-use crate::util::alter_extension;
+use crate::util::{alter_extension, warning};
 
 impl KaniSession {
     /// Run CBMC appropriately to produce 3 output XML files, then run cbmc-viewer on them to produce a report.
@@ -56,6 +56,7 @@ impl KaniSession {
         // Let the user know
         if !self.args.quiet {
             println!("Report written to: {}/html/index.html", report_dir.to_string_lossy());
+            warning("coverage information has been disabled for `--visualize` reports");
             // If using VS Code with Remote-SSH, suggest an option for remote viewing:
             if std::env::var("VSCODE_IPC_HOOK_CLI").is_ok()
                 && std::env::var("SSH_CONNECTION").is_ok()
