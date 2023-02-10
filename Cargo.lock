@@ -230,6 +230,7 @@ version = "0.22.0"
 dependencies = [
  "lazy_static",
  "linear-map",
+ "memuse",
  "num",
  "num-traits",
  "serde",
@@ -657,6 +658,12 @@ checksum = "5de893c32cde5f383baa4c04c5d6dbdd735cfd4a794b0debdb2bb1b421da5ff4"
 dependencies = [
  "autocfg",
 ]
+
+[[package]]
+name = "memuse"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2145869435ace5ea6ea3d35f59be559317ec9a0d04e1812d5f185a87b6d36f1a"
 
 [[package]]
 name = "mio"

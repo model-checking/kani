@@ -1,10 +1,12 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! GOTO binary serializer.
+//! #![allow(dead_code, unused)]
+use memuse::DynamicUsage;
+
 use crate::irep::{Irep, IrepId, Symbol, SymbolTable};
 use crate::{InternString, InternedString};
 use std::collections::HashMap;
-use std::fmt::format;
 use std::fs::File;
 use std::hash::Hash;
 use std::io::{self, BufReader};
@@ -20,6 +22,14 @@ pub fn write_goto_binary_file(filename: &PathBuf, source: &crate::goto_program::
     serializer.write_file(irep_symbol_table).unwrap();
 }
 
+/// Reads a symbol table from a file expected to be in goto binary format in version 5.
+pub fn read_goto_binary_file(filename: &PathBuf) {
+    let file = File::open(filename).unwrap();
+    let reader = BufReader::new(file);
+    let mut deserializer = GotoBinaryDeserializer::new(reader);
+    deserializer.read_file().unwrap();
+}
+
 /// A numbered InternedString. The number is guaranteed to be in [0,N].
 /// Had to introduce this indirection because InternedString does not let you access
 /// its unique id, so we have to build one ourselves.
@@ -30,31 +40,26 @@ struct NumberedString {
 }
 
 /// A key representing an Irep as the vector of unique numbers describing its contents.
-/// If:
-/// - `#sub` is the number of sub
-/// - `#named_sub` is the number of named sub
-/// Then:
-/// - the size of the key is `3 + #sub + 2 * #named_sub`.
-/// - the unique numbers must be pushed in the following order:
-/// ```
-/// number(id)
-/// #sub
-/// number(sub[0])
-/// ...
-/// number(sub[#sub-1])
-/// #named_sub
-/// number(named_sub[0].key)
-/// number(named_sub[0].value)
-/// ...
-/// number(named_sub[#named_sub-1].key)
-/// number(named_sub[#named_sub-1].value)
-/// ```
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 struct IrepKey {
     numbers: Vec<usize>,
 }
 
 impl IrepKey {
+    /// The key is built as follows:
+    /// ```
+    /// id
+    /// sub.len()
+    /// sub[0]
+    /// ...
+    /// sub[sub.len()-1]
+    /// named_sub.len()
+    /// named_sub[0].0
+    /// named_sub[0].1
+    /// ...
+    /// named_sub[named_sub.len()-1].0
+    /// named_sub[named_sub.len()-1].1
+    /// ```
     fn new(id: usize, sub: &[usize], named_sub: &[(usize, usize)]) -> Self {
         let mut vec: Vec<usize> = Vec::new();
         let size = sub.len() + 2 * named_sub.len() + 3;
@@ -225,8 +230,8 @@ impl NumberedIrep {
         )
     }
 }
-/// GOTO binary serializer. Uses an IrepNumbering to implement sharing during
-/// serialization.
+
+/// GOTO binary serializer.
 struct GotoBinarySerializer<'a, W>
 where
     W: Write,
@@ -259,6 +264,11 @@ where
             irep_count: Vec::new(),
             string_count: Vec::new(),
         }
+    }
+
+    /// Returns statistics about the serializer.
+    fn get_stats(&self) -> GotoBinarySerializerStats {
+        GotoBinarySerializerStats::new(self)
     }
 
     /// Adds an InternedString uid to the "written" cache, returns true iff was never written before.
@@ -467,14 +477,6 @@ where
     }
 }
 
-/// Reads a symbol table from a file expected to be in goto binary format in version 5.
-pub fn read_goto_binary_file(filename: &PathBuf) {
-    let file = File::open(filename).unwrap();
-    let reader = BufReader::new(file);
-    let mut deserializer = GotoBinaryDeserializer::new(reader);
-    deserializer.read_file().unwrap()
-}
-
 /// GOTO binary deserializer. Reads GOTO constructs from the byte stream of a reader.
 struct GotoBinaryDeserializer<R>
 where
@@ -514,6 +516,10 @@ where
             irep_count: Vec::new(),
             irep_map: Vec::new(),
         }
+    }
+
+    fn get_stats(&self) -> GotoBinaryDeserializerStats {
+        GotoBinaryDeserializerStats::new(self)
     }
 
     /// Returns Err if the found value is not the expected value.
@@ -848,6 +854,240 @@ where
     }
 }
 
+////////////////////////////////////////
+//// Dynamic memory usage computation
+////////////////////////////////////////
+
+impl DynamicUsage for NumberedIrep {
+    fn dynamic_usage(&self) -> usize {
+        std::mem::size_of::<Self>()
+    }
+
+    fn dynamic_usage_bounds(&self) -> (usize, Option<usize>) {
+        let s = std::mem::size_of::<IrepKey>();
+        (s, Some(s))
+    }
+}
+
+impl DynamicUsage for IrepKey {
+    fn dynamic_usage(&self) -> usize {
+        std::mem::size_of::<Self>() + self.numbers.dynamic_usage()
+    }
+
+    fn dynamic_usage_bounds(&self) -> (usize, Option<usize>) {
+        let (lower, upper) = self.numbers.dynamic_usage_bounds();
+        let s = std::mem::size_of::<Self>();
+        (lower + s, upper.map(|x| x + s))
+    }
+}
+
+impl DynamicUsage for IrepNumberingInv {
+    fn dynamic_usage(&self) -> usize {
+        std::mem::size_of::<Self>() + self.index.dynamic_usage() + self.keys.dynamic_usage()
+    }
+
+    fn dynamic_usage_bounds(&self) -> (usize, Option<usize>) {
+        let (lindex, uindex) = self.index.dynamic_usage_bounds();
+        let (lkeys, ukeys) = self.keys.dynamic_usage_bounds();
+        let s = std::mem::size_of::<IrepKey>();
+        (lindex + lkeys + s, uindex.and_then(|s1| ukeys.map(|s2| s1 + s2 + s)))
+    }
+}
+
+impl DynamicUsage for InternedString {
+    fn dynamic_usage(&self) -> usize {
+        std::mem::size_of::<Self>()
+    }
+    fn dynamic_usage_bounds(&self) -> (usize, Option<usize>) {
+        let s = std::mem::size_of::<Self>();
+        (s, Some(s))
+    }
+}
+
+impl DynamicUsage for NumberedString {
+    fn dynamic_usage(&self) -> usize {
+        std::mem::size_of::<Self>()
+    }
+    fn dynamic_usage_bounds(&self) -> (usize, Option<usize>) {
+        let s = std::mem::size_of::<Self>();
+        (s, Some(s))
+    }
+}
+
+impl DynamicUsage for IrepNumbering {
+    fn dynamic_usage(&self) -> usize {
+        std::mem::size_of::<Self>()
+            + self.string_cache.dynamic_usage()
+            + self.inv_string_cache.dynamic_usage()
+            + self.cache.dynamic_usage()
+            + self.inv_cache.dynamic_usage()
+    }
+
+    fn dynamic_usage_bounds(&self) -> (usize, Option<usize>) {
+        let s = std::mem::size_of::<Self>();
+        let (l1, u1) = self.string_cache.dynamic_usage_bounds();
+        let (l2, u2) = self.inv_string_cache.dynamic_usage_bounds();
+        let (l3, u3) = self.cache.dynamic_usage_bounds();
+        let (l4, u4) = self.inv_cache.dynamic_usage_bounds();
+        let l = l1 + l2 + l3 + l4 + s;
+        let u = u1
+            .and_then(|u1| u2.and_then(|u2| u3.and_then(|u3| u4.map(|u4| u1 + u2 + u3 + u4 + s))));
+        (l, u)
+    }
+}
+
+impl<'a, W> DynamicUsage for GotoBinarySerializer<'a, W>
+where
+    W: Write,
+{
+    fn dynamic_usage(&self) -> usize {
+        std::mem::size_of::<Self>()
+            + self.buf.dynamic_usage()
+            + self.numbering.dynamic_usage()
+            + self.irep_count.dynamic_usage()
+            + self.string_count.dynamic_usage()
+    }
+
+    fn dynamic_usage_bounds(&self) -> (usize, Option<usize>) {
+        let s = std::mem::size_of::<Self>();
+        let (l1, u1) = self.buf.dynamic_usage_bounds();
+        let (l2, u2) = self.numbering.dynamic_usage_bounds();
+        let (l3, u3) = self.irep_count.dynamic_usage_bounds();
+        let (l4, u4) = self.string_count.dynamic_usage_bounds();
+        let l = l1 + l2 + l3 + l4 + s;
+        let u = u1
+            .and_then(|u1| u2.and_then(|u2| u3.and_then(|u3| u4.map(|u4| u1 + u2 + u3 + u4 + s))));
+        (l, u)
+    }
+}
+
+impl<R> DynamicUsage for GotoBinaryDeserializer<R>
+where
+    R: Read,
+{
+    fn dynamic_usage(&self) -> usize {
+        std::mem::size_of::<Self>()
+            + self.numbering.dynamic_usage()
+            + self.irep_count.dynamic_usage()
+            + self.irep_map.dynamic_usage()
+            + self.string_count.dynamic_usage()
+            + self.string_map.dynamic_usage()
+    }
+
+    fn dynamic_usage_bounds(&self) -> (usize, Option<usize>) {
+        let s = std::mem::size_of::<Self>();
+        let (l1, u1) = self.numbering.dynamic_usage_bounds();
+        let (l2, u2) = self.irep_count.dynamic_usage_bounds();
+        let (l3, u3) = self.irep_map.dynamic_usage_bounds();
+        let (l4, u4) = self.string_count.dynamic_usage_bounds();
+        let (l5, u5) = self.string_map.dynamic_usage_bounds();
+        let l = l1 + l2 + l3 + l4 + l5 + s;
+        let u = u1.and_then(|u1| {
+            u2.and_then(|u2| {
+                u3.and_then(|u3| u4.and_then(|u4| u5.map(|u5| u1 + u2 + u3 + u4 + u5 + s)))
+            })
+        });
+        (l, u)
+    }
+}
+
+#[derive(Debug)]
+/// Structural sharing statistics
+struct SharingStats {
+    // Number of structurally unique objects
+    nof_unique: usize,
+
+    // Minimum count for a unique object
+    min_count: usize,
+
+    // Unique identifier of the min count object
+    min_id: Option<usize>,
+
+    // Maximum count for a unique object
+    max_count: usize,
+
+    // Unique identifier of the max count object
+    max_id: Option<usize>,
+
+    // Average count for objects
+    avg_count: f64,
+}
+
+impl SharingStats {
+    fn new(elems: &[usize]) -> Self {
+        let mut nof_unique: usize = 0;
+        let mut min_count: usize = usize::MAX;
+        let mut min_id: Option<usize> = None;
+        let mut max_count: usize = 0;
+        let mut max_id: Option<usize> = None;
+        let mut avg_count: f64 = 0.0;
+
+        for (id, count) in elems.iter().enumerate() {
+            if *count == 0 {
+                continue;
+            }
+            if *count < min_count {
+                min_count = *count;
+                min_id = Some(id);
+            };
+            if *count > max_count {
+                max_count = *count;
+                max_id = Some(id);
+            };
+            nof_unique = nof_unique + 1;
+            let incr = (*count as f64 - avg_count) / (nof_unique as f64);
+            avg_count = avg_count + incr;
+        }
+        SharingStats { nof_unique, min_count, min_id, max_count, max_id, avg_count }
+    }
+}
+
+#[derive(Debug)]
+/// Statistics for GotoBinarySerializer.
+struct GotoBinarySerializerStats {
+    /// Number of bytes used by the serializer
+    allocated_bytes: usize,
+
+    /// Sharing statistics for NumberedStrings
+    string_stats: SharingStats,
+
+    /// Sharing statistics for NumberedIreps
+    irep_stats: SharingStats,
+}
+
+impl GotoBinarySerializerStats {
+    fn new<'a, W: Write>(s: &GotoBinarySerializer<'a, W>) -> Self {
+        GotoBinarySerializerStats {
+            allocated_bytes: s.dynamic_usage(),
+            string_stats: SharingStats::new(&s.string_count),
+            irep_stats: SharingStats::new(&s.irep_count),
+        }
+    }
+}
+
+#[derive(Debug)]
+/// Statistics for GotoBinarySerializer.
+struct GotoBinaryDeserializerStats {
+    /// Number of bytes used by the deserializer
+    allocated_bytes: usize,
+
+    /// Sharing statistics for NumberedStrings
+    string_stats: SharingStats,
+
+    /// Sharing statistics for NumberedIreps
+    irep_stats: SharingStats,
+}
+
+impl GotoBinaryDeserializerStats {
+    fn new<R: Read>(s: &GotoBinaryDeserializer<R>) -> Self {
+        GotoBinaryDeserializerStats {
+            allocated_bytes: s.dynamic_usage(),
+            string_stats: SharingStats::new(&s.string_count),
+            irep_stats: SharingStats::new(&s.irep_count),
+        }
+    }
+}
+
 /// Unit tests for GOTO binary serialization/deserialization.
 #[cfg(test)]
 mod tests {
@@ -860,6 +1100,7 @@ mod tests {
     use crate::linear_map;
     use crate::InternedString;
     use linear_map::LinearMap;
+    use memuse::DynamicUsage;
 
     /// Utility function : creates a Irep representing a single symbol.
     fn make_symbol_expr(identifier: &str) -> Irep {
@@ -1009,6 +1250,7 @@ mod tests {
         for string in strings.iter() {
             serializer.write_string_ref(&string).unwrap();
         }
+        println!("Serializer stats {:?}", serializer.get_stats());
 
         // Deserialize the byte stream and check equality
         let mut deserializer = GotoBinaryDeserializer::new(std::io::Cursor::new(vec));
@@ -1045,6 +1287,7 @@ mod tests {
         // check that the serializer knows it wrote the same irep twice
         assert!(serializer.irep_count[num1.number] == 1);
         assert!(serializer.irep_count[num2.number] == 1);
+        println!("Serializer stats {:?}", serializer.get_stats());
 
         // Deserialize two ireps from the byte stream
         let mut deserializer = GotoBinaryDeserializer::new(std::io::Cursor::new(vec));
@@ -1074,6 +1317,7 @@ mod tests {
             serializer.write_irep_ref(irep2).unwrap();
             serializer.write_irep_ref(irep1).unwrap();
             serializer.write_irep_ref(irep1).unwrap();
+            println!("Serializer stats {:?}", serializer.get_stats());
         }
 
         {
