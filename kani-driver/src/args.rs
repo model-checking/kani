@@ -481,7 +481,7 @@ impl KaniArgs {
         if self.visualize && !self.enable_unstable {
             return Err(Error::raw(
                 ErrorKind::MissingRequiredArgument,
-                "Missing argument: --visualize is now requires --enable-unstable\n
+                "Missing argument: --visualize is now requires --enable-unstable
                 due to recent issues involving incorrect coverage results.
                 More details in <https://github.com/model-checking/kani/issues/2048>",
             ));
