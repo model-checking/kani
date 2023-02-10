@@ -4,6 +4,7 @@
 use crate::irep::{Irep, IrepId, Symbol, SymbolTable};
 use crate::{InternString, InternedString};
 use std::collections::HashMap;
+use std::fmt::format;
 use std::fs::File;
 use std::hash::Hash;
 use std::io::{self, BufReader};
@@ -11,15 +12,12 @@ use std::io::{BufWriter, Bytes, Error, ErrorKind, Read, Write};
 use std::path::PathBuf;
 
 /// Writes a symbol table to a file in goto binary format in version 5.
-pub fn write_goto_binary_file(
-    symbol_table: &crate::goto_program::SymbolTable,
-    filename: &PathBuf,
-) -> io::Result<()> {
-    let out_file = File::create(filename).expect("could not create output file {filename}");
+pub fn write_goto_binary_file(filename: &PathBuf, source: &crate::goto_program::SymbolTable) {
+    let out_file = File::create(filename).unwrap();
     let mut writer = BufWriter::new(out_file);
     let mut serializer = GotoBinarySerializer::new(&mut writer);
-    let irep_symbol_table = &symbol_table.to_irep();
-    serializer.write_file(irep_symbol_table)
+    let irep_symbol_table = &source.to_irep();
+    serializer.write_file(irep_symbol_table).unwrap();
 }
 
 /// A numbered InternedString. The number is guaranteed to be in [0,N].
@@ -470,11 +468,11 @@ where
 }
 
 /// Reads a symbol table from a file expected to be in goto binary format in version 5.
-pub fn read_goto_binary_file(filename: &PathBuf) -> io::Result<()> {
-    let file = File::open(filename).expect("could not open input file {filename}");
+pub fn read_goto_binary_file(filename: &PathBuf) {
+    let file = File::open(filename).unwrap();
     let reader = BufReader::new(file);
     let mut deserializer = GotoBinaryDeserializer::new(reader);
-    deserializer.read_file()
+    deserializer.read_file().unwrap()
 }
 
 /// GOTO binary deserializer. Reads GOTO constructs from the byte stream of a reader.

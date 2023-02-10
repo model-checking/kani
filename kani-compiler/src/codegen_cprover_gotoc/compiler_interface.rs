@@ -183,30 +183,20 @@ impl CodegenBackend for GotocCodegenBackend {
             let base_filename = outputs.output_path(OutputType::Object);
             let pretty = self.queries.lock().unwrap().get_output_pretty_json();
 
-            let write_goto_binary = gcx.queries.get_write_goto_binary();
-            if write_goto_binary {
-                // write a GOTO binary ourselves
+            if gcx.queries.get_write_goto_binary() {
                 write_goto_binary_file(
-                    &gcx.symbol_table,
                     &base_filename.with_extension(ArtifactType::SymTabGoto),
-                )
-                .unwrap(); // is this the right way to handle errors here ?
+                    &gcx.symbol_table,
+                );
             } else {
                 write_file(&base_filename, ArtifactType::SymTab, &gcx.symbol_table, pretty);
+                symbol_table_to_gotoc(&tcx, &base_filename);
             }
-
-            write_file(&base_filename, ArtifactType::SymTab, &gcx.symbol_table, pretty);
-            write_file(&base_filename, ArtifactType::SymTab, &gcx.symbol_table, pretty);
             write_file(&base_filename, ArtifactType::TypeMap, &type_map, pretty);
             write_file(&base_filename, ArtifactType::Metadata, &metadata, pretty);
             // If they exist, write out vtable virtual call function pointer restrictions
             if let Some(restrictions) = vtable_restrictions {
                 write_file(&base_filename, ArtifactType::VTableRestriction, &restrictions, pretty);
-            }
-
-            if !write_goto_binary {
-                // skip the symbtab2gb call if we wrote a GOTO binary ourselves
-                symbol_table_to_gotoc(&tcx, &base_filename);
             }
         }
         codegen_results(tcx, rustc_metadata, gcx.symbol_table.machine_model())
