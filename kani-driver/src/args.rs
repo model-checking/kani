@@ -478,6 +478,14 @@ impl KaniArgs {
             );
         }
 
+        if self.visualize && !self.enable_unstable {
+            return Err(Error::raw(
+                ErrorKind::MissingRequiredArgument,
+                "Missing argument: --visualize is now requires --enable-unstable\n
+                due to recent issues involving incorrect coverage results.
+                More details in <https://github.com/model-checking/kani/issues/2048>",
+            ));
+        }
         if self.mir_linker {
             self.print_deprecated("--mir-linker");
         }
