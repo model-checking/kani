@@ -478,12 +478,16 @@ impl KaniArgs {
             );
         }
 
-        if self.visualize && !self.enable_unstable {
-            return Err(Error::raw(
-                ErrorKind::MissingRequiredArgument,
-                "Missing argument: --visualize now requires --enable-unstable
-                due to open issues involving incorrect results.",
-            ));
+        if self.visualize {
+            if !self.enable_unstable {
+                return Err(Error::raw(
+                    ErrorKind::MissingRequiredArgument,
+                    "Missing argument: --visualize now requires --enable-unstable
+                    due to open issues involving incorrect results.",
+                ));
+            } else {
+                warning("coverage information has been disabled for --visualize reports");
+            }
         }
         if self.mir_linker {
             self.print_deprecated("--mir-linker");
