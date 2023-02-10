@@ -20,18 +20,11 @@ impl KaniSession {
         harness_metadata: &HarnessMetadata,
     ) -> Result<()> {
         let results_filename = alter_extension(file, "results.xml");
-        let coverage_filename = alter_extension(file, "coverage.xml");
         let property_filename = alter_extension(file, "property.xml");
 
-        self.record_temporary_files(&[&results_filename, &coverage_filename, &property_filename]);
+        self.record_temporary_files(&[&results_filename, &property_filename]);
 
         self.cbmc_variant(file, &["--xml-ui", "--trace"], &results_filename, harness_metadata)?;
-        self.cbmc_variant(
-            file,
-            &["--xml-ui", "--cover", "location"],
-            &coverage_filename,
-            harness_metadata,
-        )?;
         self.cbmc_variant(
             file,
             &["--xml-ui", "--show-properties"],
@@ -42,8 +35,6 @@ impl KaniSession {
         let args: Vec<OsString> = vec![
             "--result".into(),
             results_filename.into(),
-            "--coverage".into(),
-            coverage_filename.into(),
             "--property".into(),
             property_filename.into(),
             "--srcdir".into(),
