@@ -482,7 +482,7 @@ impl KaniArgs {
             return Err(Error::raw(
                 ErrorKind::MissingRequiredArgument,
                 "Missing argument: --visualize now requires --enable-unstable
-                due to recent issues involving incorrect results.",
+                due to open issues involving incorrect results.",
             ));
         }
         if self.mir_linker {
