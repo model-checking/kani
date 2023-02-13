@@ -66,6 +66,7 @@ pub struct QueryDb {
     emit_vtable_restrictions: bool,
     json_pretty_print: bool,
     ignore_global_asm: bool,
+    /// When set, instructs the compiler to produce the symbol table for CBMC in goto binary format instead of JSON format.
     write_goto_binary: bool,
     reachability_analysis: ReachabilityType,
     stubbing_enabled: bool,

@@ -1,8 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! GOTO binary serializer.
-//! #![allow(dead_code, unused)]
-use memuse::DynamicUsage;
 
 use crate::irep::{Irep, IrepId, Symbol, SymbolTable};
 use crate::{InternString, InternedString};
@@ -14,6 +12,12 @@ use std::io::{BufWriter, Bytes, Error, ErrorKind, Read, Write};
 use std::path::PathBuf;
 
 /// Writes a symbol table to a file in goto binary format in version 5.
+///
+/// In CBMC, the serialization rules are defined in :
+/// - src/goto-programs/write_goto_binary.h
+/// - src/util/irep_serialization.h
+/// - src/util/irep_hash_container.h
+/// - src/util/irep_hash.h
 pub fn write_goto_binary_file(filename: &PathBuf, source: &crate::goto_program::SymbolTable) {
     let out_file = File::create(filename).unwrap();
     let mut writer = BufWriter::new(out_file);
@@ -23,6 +27,12 @@ pub fn write_goto_binary_file(filename: &PathBuf, source: &crate::goto_program::
 }
 
 /// Reads a symbol table from a file expected to be in goto binary format in version 5.
+//
+/// In CBMC, the deserialization rules are defined in :
+/// - src/goto-programs/read_goto_binary.h
+/// - src/util/irep_serialization.h
+/// - src/util/irep_hash_container.h
+/// - src/util/irep_hash.h
 pub fn read_goto_binary_file(filename: &PathBuf) {
     let file = File::open(filename).unwrap();
     let reader = BufReader::new(file);
@@ -30,8 +40,8 @@ pub fn read_goto_binary_file(filename: &PathBuf) {
     deserializer.read_file().unwrap();
 }
 
-/// A numbered InternedString. The number is guaranteed to be in [0,N].
-/// Had to introduce this indirection because InternedString does not let you access
+/// A numbered [InternedString]. The number is guaranteed to be in [0,N].
+/// Had to introduce this indirection because [InternedString] does not let you access
 /// its unique id, so we have to build one ourselves.
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 struct NumberedString {
@@ -39,14 +49,19 @@ struct NumberedString {
     string: InternedString,
 }
 
-/// A key representing an Irep as the vector of unique numbers describing its contents.
+/// An [Irep] represented by the vector of unique numbers of its contents.
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 struct IrepKey {
     numbers: Vec<usize>,
 }
 
 impl IrepKey {
-    /// The key is built as follows:
+    /// Packs an [Irep]'s contents unique numbers into a new key object:
+    /// - `id` must be the unique number assigned to an [Irep]'s [Irep::id] field.
+    /// - `sub` must be the vector if unique number assigned to an [Irep]'s [Irep::sub] field.
+    /// - `named_sub` must be the vector if unique number assigned to an [Irep]'s [Irep::named_sub] field.
+    ///
+    /// The `id`, `sub` and `named_sub` passed as arguments are packed as follows in the key's `number` field:
     /// ```
     /// id
     /// sub.len()
@@ -61,9 +76,8 @@ impl IrepKey {
     /// named_sub[named_sub.len()-1].1
     /// ```
     fn new(id: usize, sub: &[usize], named_sub: &[(usize, usize)]) -> Self {
-        let mut vec: Vec<usize> = Vec::new();
         let size = sub.len() + 2 * named_sub.len() + 3;
-        vec.reserve_exact(size);
+        let mut vec: Vec<usize> = Vec::with_capacity(size);
         vec.push(id);
         vec.push(sub.len());
         vec.extend_from_slice(sub);
@@ -76,12 +90,12 @@ impl IrepKey {
     }
 }
 
-/// Inverse cache of unique NumberedIrep objects.
+/// Inverse cache of unique [NumberedIrep] objects.
 struct IrepNumberingInv {
-    // Maps irep numbers to numbered ireps
+    /// Maps [Irep] numbers to [NumberedIrep]s;
     index: Vec<NumberedIrep>,
 
-    // Stores the concactenation of all irep keys seen by the IrepNumbering owning this object
+    /// Stores the concactenation of all [IrepKey] seen by the [IrepNumbering] object owning this inverse numbering.
     keys: Vec<usize>,
 }
 
@@ -90,29 +104,32 @@ impl IrepNumberingInv {
         IrepNumberingInv { index: Vec::new(), keys: Vec::new() }
     }
 
-    fn add_key(&mut self, key: &IrepKey, number: usize) {
-        assert_eq!(number, self.index.len());
+    /// Adds a key to the mapping and returns the unique number assigned to that key.
+    fn add_key(&mut self, key: &IrepKey) -> usize {
+        let number = self.index.len();
         self.index.push(NumberedIrep { number: number, start_index: self.keys.len() });
         self.keys.extend(&key.numbers);
+        number
     }
 
+    /// Returns a NumberedIrep from its unique number if it exists, None otherwise.
     fn numbered_irep_from_number(&self, irep_number: usize) -> Option<NumberedIrep> {
-        self.index.get(irep_number).map(|result| *result)
+        self.index.get(irep_number).copied()
     }
 }
 
-/// Unique numbering of InternedString, IrepId and Irep based on their contents.
+/// A numbering of [InternedString], [IrepId] and [Irep] based on their contents.
 struct IrepNumbering {
-    /// Maps each key to its unique number
+    /// Map from [InternedString] to their unique numbers.
     string_cache: HashMap<InternedString, usize>,
 
-    /// Inverse string cache
+    /// Inverse string cache.
     inv_string_cache: Vec<NumberedString>,
 
-    /// Maps each irep key to its unique number
+    /// Map from [IrepKey] to their unique numbers.
     cache: HashMap<IrepKey, usize>,
 
-    /// Inverse cache
+    /// Inverse cache, allows to get a NumberedIrep from its unique number.
     inv_cache: IrepNumberingInv,
 }
 
@@ -126,15 +143,17 @@ impl IrepNumbering {
         }
     }
 
+    /// Returns a [NumberedString] from its number if it exists, None otherwise.
     fn numbered_string_from_number(&mut self, string_number: usize) -> Option<NumberedString> {
-        self.inv_string_cache.get(string_number).map(|result| *result)
+        self.inv_string_cache.get(string_number).copied()
     }
 
+    /// Returns a [NumberedIrep] from its number if it exists, None otherwise.
     fn numbered_irep_from_number(&mut self, irep_number: usize) -> Option<NumberedIrep> {
         self.inv_cache.numbered_irep_from_number(irep_number)
     }
 
-    /// Translates an InternedString to a NumberedString.
+    /// Turns a [InternedString] into a [NumberedString].
     fn number_string(&mut self, string: &InternedString) -> NumberedString {
         let len = self.string_cache.len();
         let entry = self.string_cache.entry(*string);
@@ -145,15 +164,15 @@ impl IrepNumbering {
         self.inv_string_cache[number]
     }
 
-    /// Translates an IrepId to a NumberedString. The IrepId get the number of their
+    /// Turns a [IrepId] to a [NumberedString]. The [IrepId] gets the number of its
     /// string representation.
     fn number_irep_id(&mut self, irep_id: &IrepId) -> NumberedString {
         self.number_string(&irep_id.to_string().intern())
     }
 
-    /// Translates an Irep to a NumberedIrep. The irep is recursively traversed
-    /// and numbered in a bottom-up fashion. Structurally identical Irep
-    /// result in the same NumberedIrep.
+    /// Turns an [Irep] into a [NumberedIrep]. The [Irep] is recursively traversed
+    /// and numbered in a bottom-up fashion. Structurally identical [Irep]s
+    /// result in the same [NumberedIrep].
     fn number_irep(&mut self, irep: &Irep) -> NumberedIrep {
         // build the key
         let id = self.number_irep_id(&irep.id).number;
@@ -167,68 +186,66 @@ impl IrepNumbering {
         self.get_or_insert(&key)
     }
 
-    /// Gets the existing NumberedIrep from the Irepkey or inserts a fresh
+    /// Gets the existing [NumberedIrep] from the [IrepKey] or inserts a fresh
     /// one and returns it.
     fn get_or_insert(&mut self, key: &IrepKey) -> NumberedIrep {
         if let Some(number) = self.cache.get(key) {
             // Return the NumberedIrep from the inverse cache
             return self.inv_cache.index[*number];
         }
-        let next_number = self.cache.len();
-        self.inv_cache.add_key(&key, next_number);
-        self.cache.insert(key.clone(), next_number);
-        return self.inv_cache.index[next_number];
-    }
-}
-
-/// A uniquely numbered Irep. Its meaning can on be correctly interpreted with
-/// respect to the Numbering instance that produced it.
-#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
-struct NumberedIrep {
-    // The unique number of this NumberedIrep.
-    number: usize,
-    // Start index of the IrepKey of this NumberedIrep in the IrepNumbering cache.
-    start_index: usize,
-}
-
-impl NumberedIrep {
-    /// Returns the unique number of the `id` field of this NumberedIrep.
-    /// It is found at index `start_index` in the inverse cache.
-    fn id(&self, cache: &IrepNumbering) -> NumberedString {
-        cache.inv_string_cache[cache.inv_cache.keys[self.start_index]]
+        // This is where the key gets its unique number assigneds.
+        let number = self.inv_cache.add_key(&key);
+        self.cache.insert(key.clone(), number);
+        return self.inv_cache.index[number];
     }
 
-    /// Returns `#sub`, the number of `sub` ireps of this NumberedIrep.
-    /// It is found at `start_index + 1` in the inverse cache.
-    fn nof_sub(&self, cache: &IrepNumbering) -> usize {
-        cache.inv_cache.keys[self.start_index + 1]
+    /// Returns the unique number of the `id` field of the given [NumberedIrep].
+    fn id(&self, numbered_irep: &NumberedIrep) -> NumberedString {
+        self.inv_string_cache[self.inv_cache.keys[numbered_irep.start_index]]
     }
 
-    /// Returns the numbered irep for the ith `sub` of this numbered irep.
-    fn sub(&self, cache: &IrepNumbering, sub_idx: usize) -> NumberedIrep {
-        let sub_number = cache.inv_cache.keys[self.start_index + sub_idx + 2];
-        cache.inv_cache.index[sub_number]
+    /// Returns `#sub`, the number of `sub` [Irep]s of the given [NumberedIrep].
+    /// It is found at `numbered_irep.start_index + 1` in the inverse cache.
+    fn nof_sub(&self, numbered_irep: &NumberedIrep) -> usize {
+        self.inv_cache.keys[numbered_irep.start_index + 1]
     }
 
-    /// Returns `#named_sub`, the number of named subs of this numbered irep.
-    /// It is found at `start_index + #sub + 2` in the inverse cache.
-    fn nof_named_sub(&self, cache: &IrepNumbering) -> usize {
-        cache.inv_cache.keys[self.start_index + self.nof_sub(cache) + 2]
+    /// Returns the [NumberedIrep] for the ith `sub` of the given [NumberedIrep].
+    fn sub(&self, numbered_irep: &NumberedIrep, sub_idx: usize) -> NumberedIrep {
+        let sub_number = self.inv_cache.keys[numbered_irep.start_index + sub_idx + 2];
+        self.inv_cache.index[sub_number]
     }
 
-    /// Returns a pair formed of a NumberedString and NumberedIrep describing the named
-    /// sub number `i` of this numbered irep.
+    /// Returns `#named_sub`, the number of named subs of the given [NumberedIrep].
+    /// It is found at `numbered_irep.start_index + #sub + 2` in the inverse cache.
+    fn nof_named_sub(&self, numbered_irep: &NumberedIrep) -> usize {
+        self.inv_cache.keys[numbered_irep.start_index + self.nof_sub(numbered_irep) + 2]
+    }
+
+    /// Returns the pair of [NumberedString] and [NumberedIrep] for the named
+    /// sub number `i` of this [NumberedIrep].
     fn named_sub(
         &self,
-        cache: &IrepNumbering,
+        numbered_irep: &NumberedIrep,
         named_sub_idx: usize,
     ) -> (NumberedString, NumberedIrep) {
-        let start_index = self.start_index + self.nof_sub(cache) + 2 * named_sub_idx + 3;
+        let start_index =
+            numbered_irep.start_index + self.nof_sub(numbered_irep) + 2 * named_sub_idx + 3;
         (
-            cache.inv_string_cache[cache.inv_cache.keys[start_index]],
-            cache.inv_cache.index[cache.inv_cache.keys[start_index + 1]],
+            self.inv_string_cache[self.inv_cache.keys[start_index]],
+            self.inv_cache.index[self.inv_cache.keys[start_index + 1]],
         )
     }
+}
+
+/// A uniquely numbered [Irep].
+/// A NumberedIrep can be viewed as a generational index into a [IrepNumbering] instance.
+#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
+struct NumberedIrep {
+    /// The unique number of this NumberedIrep.
+    number: usize,
+    /// Start index of the [IrepKey] of this [NumberedIrep] in the inverse cache of the [IrepNumbering] that produced it.
+    start_index: usize,
 }
 
 /// GOTO binary serializer.
@@ -266,9 +283,10 @@ where
         }
     }
 
-    /// Returns statistics about the serializer.
-    fn get_stats(&self) -> GotoBinarySerializerStats {
-        GotoBinarySerializerStats::new(self)
+    #[cfg(test)]
+    /// Returns memory consumption and sharing statistics about the serializer.
+    fn get_stats(&self) -> GotoBinarySharingStats {
+        GotoBinarySharingStats::from_serializer(self)
     }
 
     /// Adds an InternedString uid to the "written" cache, returns true iff was never written before.
@@ -306,6 +324,10 @@ where
     }
 
     /// Writes a usize to the temporary buffer using 7-bit variable length encoding.
+    /// A usize value gets serialized as a list of u8. The usize value get shifted right in place, 7 bits at a time, the shifted
+    /// bits are stored in the LSBs of a u8. The MSB of the u8 is used to indicate the continuation or the end of the encoding:
+    /// - it is set to true if some true bits remain in the usize value,
+    /// - it is set to zero all remaining bits of the usize value are zero.
     fn write_usize_varenc(&mut self, mut u: usize) -> io::Result<()> {
         loop {
             let mut v: u8 = (u & 0x7f) as u8;
@@ -362,17 +384,17 @@ where
         self.write_usize_varenc(num)?;
 
         if self.is_first_write_irep(num) {
-            let id = &irep.id(&self.numbering);
+            let id = &self.numbering.id(&irep);
             self.write_numbered_string_ref(id)?;
 
-            for sub_idx in 0..(irep.nof_sub(&self.numbering)) {
+            for sub_idx in 0..(self.numbering.nof_sub(&irep)) {
                 self.write_u8(b'S')?;
-                self.write_numbered_irep_ref(&irep.sub(&self.numbering, sub_idx))?;
+                self.write_numbered_irep_ref(&self.numbering.sub(&irep, sub_idx))?;
             }
 
-            for named_sub_idx in 0..(irep.nof_named_sub(&self.numbering)) {
+            for named_sub_idx in 0..(self.numbering.nof_named_sub(&irep)) {
                 self.write_u8(b'N')?;
-                let (k, v) = irep.named_sub(&self.numbering, named_sub_idx);
+                let (k, v) = self.numbering.named_sub(&irep, named_sub_idx);
                 self.write_numbered_string_ref(&k)?;
                 self.write_numbered_irep_ref(&v)?;
             }
@@ -518,8 +540,10 @@ where
         }
     }
 
-    fn get_stats(&self) -> GotoBinaryDeserializerStats {
-        GotoBinaryDeserializerStats::new(self)
+    #[cfg(test)]
+    /// Returns memory consumption and sharing statistics about the deserializer.
+    fn get_stats(&self) -> GotoBinarySharingStats {
+        GotoBinarySharingStats::from_deserializer(self)
     }
 
     /// Returns Err if the found value is not the expected value.
@@ -857,7 +881,10 @@ where
 ////////////////////////////////////////
 //// Dynamic memory usage computation
 ////////////////////////////////////////
+#[cfg(test)]
+use memuse::DynamicUsage;
 
+#[cfg(test)]
 impl DynamicUsage for NumberedIrep {
     fn dynamic_usage(&self) -> usize {
         std::mem::size_of::<Self>()
@@ -869,6 +896,7 @@ impl DynamicUsage for NumberedIrep {
     }
 }
 
+#[cfg(test)]
 impl DynamicUsage for IrepKey {
     fn dynamic_usage(&self) -> usize {
         std::mem::size_of::<Self>() + self.numbers.dynamic_usage()
@@ -881,6 +909,7 @@ impl DynamicUsage for IrepKey {
     }
 }
 
+#[cfg(test)]
 impl DynamicUsage for IrepNumberingInv {
     fn dynamic_usage(&self) -> usize {
         std::mem::size_of::<Self>() + self.index.dynamic_usage() + self.keys.dynamic_usage()
@@ -894,6 +923,7 @@ impl DynamicUsage for IrepNumberingInv {
     }
 }
 
+#[cfg(test)]
 impl DynamicUsage for InternedString {
     fn dynamic_usage(&self) -> usize {
         std::mem::size_of::<Self>()
@@ -904,6 +934,7 @@ impl DynamicUsage for InternedString {
     }
 }
 
+#[cfg(test)]
 impl DynamicUsage for NumberedString {
     fn dynamic_usage(&self) -> usize {
         std::mem::size_of::<Self>()
@@ -914,6 +945,7 @@ impl DynamicUsage for NumberedString {
     }
 }
 
+#[cfg(test)]
 impl DynamicUsage for IrepNumbering {
     fn dynamic_usage(&self) -> usize {
         std::mem::size_of::<Self>()
@@ -936,6 +968,7 @@ impl DynamicUsage for IrepNumbering {
     }
 }
 
+#[cfg(test)]
 impl<'a, W> DynamicUsage for GotoBinarySerializer<'a, W>
 where
     W: Write,
@@ -961,6 +994,7 @@ where
     }
 }
 
+#[cfg(test)]
 impl<R> DynamicUsage for GotoBinaryDeserializer<R>
 where
     R: Read,
@@ -991,28 +1025,30 @@ where
     }
 }
 
+#[cfg(test)]
 #[derive(Debug)]
 /// Structural sharing statistics
 struct SharingStats {
     // Number of structurally unique objects
-    nof_unique: usize,
+    _nof_unique: usize,
 
     // Minimum count for a unique object
-    min_count: usize,
+    _min_count: usize,
 
     // Unique identifier of the min count object
-    min_id: Option<usize>,
+    _min_id: Option<usize>,
 
     // Maximum count for a unique object
-    max_count: usize,
+    _max_count: usize,
 
     // Unique identifier of the max count object
-    max_id: Option<usize>,
+    _max_id: Option<usize>,
 
     // Average count for objects
-    avg_count: f64,
+    _avg_count: f64,
 }
 
+#[cfg(test)]
 impl SharingStats {
     fn new(elems: &[usize]) -> Self {
         let mut nof_unique: usize = 0;
@@ -1038,52 +1074,46 @@ impl SharingStats {
             let incr = (*count as f64 - avg_count) / (nof_unique as f64);
             avg_count = avg_count + incr;
         }
-        SharingStats { nof_unique, min_count, min_id, max_count, max_id, avg_count }
-    }
-}
-
-#[derive(Debug)]
-/// Statistics for GotoBinarySerializer.
-struct GotoBinarySerializerStats {
-    /// Number of bytes used by the serializer
-    allocated_bytes: usize,
-
-    /// Sharing statistics for NumberedStrings
-    string_stats: SharingStats,
-
-    /// Sharing statistics for NumberedIreps
-    irep_stats: SharingStats,
-}
-
-impl GotoBinarySerializerStats {
-    fn new<'a, W: Write>(s: &GotoBinarySerializer<'a, W>) -> Self {
-        GotoBinarySerializerStats {
-            allocated_bytes: s.dynamic_usage(),
-            string_stats: SharingStats::new(&s.string_count),
-            irep_stats: SharingStats::new(&s.irep_count),
+        SharingStats {
+            _nof_unique: nof_unique,
+            _min_count: min_count,
+            _min_id: min_id,
+            _max_count: max_count,
+            _max_id: max_id,
+            _avg_count: avg_count,
         }
     }
 }
 
+#[cfg(test)]
 #[derive(Debug)]
 /// Statistics for GotoBinarySerializer.
-struct GotoBinaryDeserializerStats {
-    /// Number of bytes used by the deserializer
-    allocated_bytes: usize,
+struct GotoBinarySharingStats {
+    /// Number of bytes used by the serializer
+    _allocated_bytes: usize,
 
     /// Sharing statistics for NumberedStrings
-    string_stats: SharingStats,
+    _string_stats: SharingStats,
 
     /// Sharing statistics for NumberedIreps
-    irep_stats: SharingStats,
+    _irep_stats: SharingStats,
 }
 
-impl GotoBinaryDeserializerStats {
-    fn new<R: Read>(s: &GotoBinaryDeserializer<R>) -> Self {
-        GotoBinaryDeserializerStats {
-            allocated_bytes: s.dynamic_usage(),
-            string_stats: SharingStats::new(&s.string_count),
-            irep_stats: SharingStats::new(&s.irep_count),
+#[cfg(test)]
+impl GotoBinarySharingStats {
+    fn from_serializer<'a, W: Write>(s: &GotoBinarySerializer<'a, W>) -> Self {
+        GotoBinarySharingStats {
+            _allocated_bytes: s.dynamic_usage(),
+            _string_stats: SharingStats::new(&s.string_count),
+            _irep_stats: SharingStats::new(&s.irep_count),
+        }
+    }
+
+    fn from_deserializer<R: Read>(s: &GotoBinaryDeserializer<R>) -> Self {
+        GotoBinarySharingStats {
+            _allocated_bytes: s.dynamic_usage(),
+            _string_stats: SharingStats::new(&s.string_count),
+            _irep_stats: SharingStats::new(&s.irep_count),
         }
     }
 }
@@ -1100,7 +1130,6 @@ mod tests {
     use crate::linear_map;
     use crate::InternedString;
     use linear_map::LinearMap;
-    use memuse::DynamicUsage;
 
     /// Utility function : creates a Irep representing a single symbol.
     fn make_symbol_expr(identifier: &str) -> Irep {
@@ -1258,6 +1287,7 @@ mod tests {
             let decoded = deserializer.read_numbered_string_ref().unwrap().string;
             assert_eq!(decoded.to_string(), string.to_string());
         }
+        println!("Deserializer stats {:?}", deserializer.get_stats());
     }
 
     #[test]
@@ -1293,6 +1323,7 @@ mod tests {
         let mut deserializer = GotoBinaryDeserializer::new(std::io::Cursor::new(vec));
         let num3 = deserializer.read_numbered_irep_ref().unwrap();
         let num4 = deserializer.read_numbered_irep_ref().unwrap();
+        println!("Deserializer stats {:?}", deserializer.get_stats());
 
         // Check that they have different numbers.
         assert_ne!(num3, num4);
@@ -1329,6 +1360,7 @@ mod tests {
             let irep4 = deserializer.read_numbered_irep_ref().unwrap();
             let irep5 = deserializer.read_numbered_irep_ref().unwrap();
             let irep6 = deserializer.read_numbered_irep_ref().unwrap();
+            println!("Deserializer stats {:?}", deserializer.get_stats());
             assert_eq!(irep1, irep2);
             assert_eq!(irep1, irep3);
             assert_eq!(irep1, irep4);
