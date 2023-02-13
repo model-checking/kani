@@ -44,10 +44,11 @@ pub mod process;
 #[macro_export]
 macro_rules! assert {
     ($cond:expr $(,)?) => {
-        kani::assert($cond, concat!("assertion failed: ", stringify!($cond)));
+        // The double negation is to resolve https://github.com/model-checking/kani/issues/2108
+        kani::assert(!!$cond, concat!("assertion failed: ", stringify!($cond)));
     };
     ($cond:expr, $($arg:tt)+) => {{
-        kani::assert($cond, concat!(stringify!($($arg)+)));
+        kani::assert(!!$cond, concat!(stringify!($($arg)+)));
         // Process the arguments of the assert inside an unreachable block. This
         // is to make sure errors in the arguments (e.g. an unknown variable or
         // an argument that does not implement the Display or Debug traits) are
@@ -60,7 +61,14 @@ macro_rules! assert {
         // strategy, which is tracked in
         // https://github.com/model-checking/kani/issues/692
         if false {
+            #[cfg(not(feature = "std"))]
             __kani__workaround_core_assert!(true, $($arg)+);
+            // In a `no_std` setting where `std` is used as a feature, defining
+            // the alias for `core::assert` doesn't work, so we need to use
+            // `core::assert` directly (see
+            // https://github.com/model-checking/kani/issues/2187)
+            #[cfg(feature = "std")]
+            core::assert!(true, $($arg)+);
         }
     }};
 }
@@ -164,7 +172,11 @@ macro_rules! unreachable {
     // handle.
     ($fmt:expr, $($arg:tt)*) => {{
         if false {
+            #[cfg(not(feature = "std"))]
             __kani__workaround_core_assert!(true, $fmt, $($arg)+);
+            // See comment in `assert` definition
+            #[cfg(feature = "std")]
+            core::assert!(true, $fmt, $($arg)+);
         }
         kani::panic(concat!("internal error: entered unreachable code: ",
         stringify!($fmt, $($arg)*)))}};
@@ -196,7 +208,11 @@ macro_rules! panic {
     // `panic!("Error: {}", code);`
     ($($arg:tt)+) => {{
         if false {
+            #[cfg(not(feature = "std"))]
             __kani__workaround_core_assert!(true, $($arg)+);
+            // See comment in `assert` definition
+            #[cfg(feature = "std")]
+            core::assert!(true, $($arg)+);
         }
         kani::panic(stringify!($($arg)+));
     }};

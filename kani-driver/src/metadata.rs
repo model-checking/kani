@@ -149,6 +149,7 @@ pub fn mock_proof_harness(
         original_file: "<unknown>".into(),
         original_start_line: 0,
         original_end_line: 0,
+        solver: None,
         unwind_value,
         goto_file: None,
     }

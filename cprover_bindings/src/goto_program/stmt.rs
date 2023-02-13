@@ -264,9 +264,7 @@ impl Stmt {
     ) -> Self {
         assert!(
             Expr::typecheck_call(&function, &arguments),
-            "Function call does not type check:\nfunc: {:?}\nargs: {:?}",
-            function,
-            arguments
+            "Function call does not type check:\nfunc: {function:?}\nargs: {arguments:?}"
         );
         if let Some(lhs) = &lhs {
             assert_eq!(lhs.typ(), function.typ().return_type().unwrap())

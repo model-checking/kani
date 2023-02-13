@@ -2,11 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use crate::args::KaniArgs;
-use crate::session::{KaniSession, ReachabilityMode};
+use crate::call_single_file::to_rustc_arg;
+use crate::session::KaniSession;
 use anyhow::{bail, Context, Result};
-use cargo_metadata::{Metadata, MetadataCommand, Package};
-use std::ffi::OsString;
+use cargo_metadata::diagnostic::{Diagnostic, DiagnosticLevel};
+use cargo_metadata::{Message, Metadata, MetadataCommand, Package};
+use std::ffi::{OsStr, OsString};
 use std::fs;
+use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tracing::{debug, trace};
@@ -40,13 +43,7 @@ impl KaniSession {
     /// Calls `cargo_build` to generate `*.symtab.json` files in `target_dir`
     pub fn cargo_build(&self) -> Result<CargoOutputs> {
         let build_target = env!("TARGET"); // see build.rs
-        let metadata = MetadataCommand::new()
-            // restrict metadata command to host platform. References:
-            // https://github.com/rust-lang/rust-analyzer/issues/6908
-            // https://github.com/rust-lang/rust-analyzer/pull/6912
-            .other_options(vec![String::from("--filter-platform"), build_target.to_owned()])
-            .exec()
-            .context("Failed to get cargo metadata.")?;
+        let metadata = self.cargo_metadata(build_target)?;
         let target_dir = self
             .args
             .target_dir
@@ -62,12 +59,23 @@ impl KaniSession {
             fs::remove_dir_all(&target_dir)?;
         }
 
-        let mut kani_args = self.kani_specific_flags();
-        let rustc_args = self.kani_rustc_flags();
+        let mut rustc_args = self.kani_rustc_flags();
+        rustc_args.push(to_rustc_arg(self.kani_compiler_flags()).into());
 
         let mut cargo_args: Vec<OsString> = vec!["rustc".into()];
-        if self.args.all_features {
+        if let Some(path) = &self.args.cargo.manifest_path {
+            cargo_args.push("--manifest-path".into());
+            cargo_args.push(path.into());
+        }
+        if self.args.cargo.all_features {
             cargo_args.push("--all-features".into());
+        }
+        if self.args.cargo.no_default_features {
+            cargo_args.push("--no-default-features".into());
+        }
+        let features = self.args.cargo.features();
+        if !features.is_empty() {
+            cargo_args.push(format!("--features={}", features.join(",")).into());
         }
 
         cargo_args.push("--target".into());
@@ -75,6 +83,10 @@ impl KaniSession {
 
         cargo_args.push("--target-dir".into());
         cargo_args.push(target_dir.into());
+
+        // Configuration needed to parse cargo compilation status.
+        cargo_args.push("--message-format".into());
+        cargo_args.push("json-diagnostic-rendered-ansi".into());
 
         if self.args.tests {
             // Use test profile in order to pull dev-dependencies and compile using `--test`.
@@ -88,25 +100,8 @@ impl KaniSession {
         }
 
         // Arguments that will only be passed to the target package.
-        let mut pkg_args: Vec<OsString> = vec![];
-        match self.reachability_mode() {
-            ReachabilityMode::Legacy => {
-                // For this mode, we change `kani_args` not `pkg_args`
-                kani_args.push("--reachability=legacy".into());
-            }
-            ReachabilityMode::ProofHarnesses => {
-                pkg_args.extend(["--".into(), "--reachability=harnesses".into()]);
-            }
-            ReachabilityMode::AllPubFns => {
-                pkg_args.extend(["--".into(), "--reachability=pub_fns".into()]);
-            }
-            ReachabilityMode::Tests => {
-                pkg_args.extend(["--".into(), "--reachability=tests".into()]);
-            }
-        }
-
-        // Only joing them at the end. All kani flags must come first.
-        kani_args.extend_from_slice(&rustc_args);
+        let mut pkg_args: Vec<String> = vec![];
+        pkg_args.extend(["--".to_string(), self.reachability_arg()]);
 
         let mut found_target = false;
         let packages = packages_to_verify(&self.args, &metadata);
@@ -118,10 +113,12 @@ impl KaniSession {
                     .args(&target.to_args())
                     .args(&pkg_args)
                     .env("RUSTC", &self.kani_compiler)
-                    .env("RUSTFLAGS", "--kani-flags")
-                    .env("KANIFLAGS", &crate::util::join_osstring(&kani_args, " "));
+                    // Use CARGO_ENCODED_RUSTFLAGS instead of RUSTFLAGS is preferred. See
+                    // https://doc.rust-lang.org/cargo/reference/environment-variables.html
+                    .env("CARGO_ENCODED_RUSTFLAGS", rustc_args.join(OsStr::new("\x1f")))
+                    .env("CARGO_TERM_PROGRESS_WHEN", "never");
 
-                self.run_terminal(cmd)?;
+                self.run_cargo(cmd)?;
                 found_target = true;
             }
         }
@@ -138,6 +135,105 @@ impl KaniSession {
             cargo_metadata: metadata,
         })
     }
+
+    fn cargo_metadata(&self, build_target: &str) -> Result<Metadata> {
+        let mut cmd = MetadataCommand::new();
+
+        // restrict metadata command to host platform. References:
+        // https://github.com/rust-lang/rust-analyzer/issues/6908
+        // https://github.com/rust-lang/rust-analyzer/pull/6912
+        cmd.other_options(vec![String::from("--filter-platform"), build_target.to_owned()]);
+
+        // Set a --manifest-path if we're given one
+        if let Some(path) = &self.args.cargo.manifest_path {
+            cmd.manifest_path(path);
+        }
+        // Pass down features enables, which may affect dependencies or build metadata
+        // (multiple calls to features are ok with cargo_metadata:)
+        if self.args.cargo.all_features {
+            cmd.features(cargo_metadata::CargoOpt::AllFeatures);
+        }
+        if self.args.cargo.no_default_features {
+            cmd.features(cargo_metadata::CargoOpt::NoDefaultFeatures);
+        }
+        let features = self.args.cargo.features();
+        if !features.is_empty() {
+            cmd.features(cargo_metadata::CargoOpt::SomeFeatures(features));
+        }
+
+        cmd.exec().context("Failed to get cargo metadata.")
+    }
+
+    /// Run cargo and collect any error found.
+    /// TODO: We should also use this to collect the artifacts generated by cargo.
+    fn run_cargo(&self, cargo_cmd: Command) -> Result<()> {
+        let support_color = atty::is(atty::Stream::Stdout);
+        if let Some(mut cargo_process) = self.run_piped(cargo_cmd)? {
+            let reader = BufReader::new(cargo_process.stdout.take().unwrap());
+            let mut error_count = 0;
+            for message in Message::parse_stream(reader) {
+                let message = message.unwrap();
+                match message {
+                    Message::CompilerMessage(msg) => match msg.message.level {
+                        DiagnosticLevel::FailureNote => {
+                            print_msg(&msg.message, support_color)?;
+                        }
+                        DiagnosticLevel::Error => {
+                            error_count += 1;
+                            print_msg(&msg.message, support_color)?;
+                        }
+                        DiagnosticLevel::Ice => {
+                            print_msg(&msg.message, support_color)?;
+                            let _ = cargo_process.wait();
+                            return Err(anyhow::Error::msg(msg.message).context(format!(
+                                "Failed to compile `{}` due to an internal compiler error.",
+                                msg.target.name
+                            )));
+                        }
+                        _ => {
+                            if !self.args.quiet {
+                                print_msg(&msg.message, support_color)?;
+                            }
+                        }
+                    },
+                    Message::CompilerArtifact(_)
+                    | Message::BuildScriptExecuted(_)
+                    | Message::BuildFinished(_) => {
+                        // do nothing
+                    }
+                    Message::TextLine(msg) => {
+                        if !self.args.quiet {
+                            println!("{msg}");
+                        }
+                    }
+
+                    // Non-exhaustive enum.
+                    _ => {
+                        if !self.args.quiet {
+                            println!("{message:?}");
+                        }
+                    }
+                }
+            }
+            let status = cargo_process.wait()?;
+            if !status.success() {
+                bail!(
+                    "Failed to execute cargo ({status}). Found {error_count} compilation errors."
+                );
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Print the compiler message following the coloring schema.
+fn print_msg(diagnostic: &Diagnostic, use_rendered: bool) -> Result<()> {
+    if use_rendered {
+        print!("{diagnostic}");
+    } else {
+        print!("{}", console::strip_ansi_codes(diagnostic.rendered.as_ref().unwrap()));
+    }
+    Ok(())
 }
 
 /// Given a `path` with glob characters in it (e.g. `*.json`), return a vector of matching files
@@ -156,10 +252,11 @@ fn glob(path: &Path) -> Result<Vec<PathBuf>> {
 ///   - I.e.: Do whatever cargo does when there's no `default_members`.
 ///   - This is because `default_members` is not available in cargo metadata.
 ///     See <https://github.com/rust-lang/cargo/issues/8033>.
-fn packages_to_verify<'a, 'b>(args: &'a KaniArgs, metadata: &'b Metadata) -> Vec<&'b Package> {
-    debug!(package_selection=?args.package, workspace=args.workspace, "packages_to_verify args");
-    let packages = if !args.package.is_empty() {
-        args.package
+fn packages_to_verify<'b>(args: &KaniArgs, metadata: &'b Metadata) -> Vec<&'b Package> {
+    debug!(package_selection=?args.cargo.package, workspace=args.cargo.workspace, "packages_to_verify args");
+    let packages = if !args.cargo.package.is_empty() {
+        args.cargo
+            .package
             .iter()
             .map(|pkg_name| {
                 metadata
@@ -170,7 +267,7 @@ fn packages_to_verify<'a, 'b>(args: &'a KaniArgs, metadata: &'b Metadata) -> Vec
             })
             .collect()
     } else {
-        match (args.workspace, metadata.root_package()) {
+        match (args.cargo.workspace, metadata.root_package()) {
             (true, _) | (_, None) => metadata.workspace_packages(),
             (_, Some(root_pkg)) => vec![root_pkg],
         }
@@ -211,55 +308,49 @@ impl VerificationTarget {
 fn package_targets(args: &KaniArgs, package: &Package) -> Vec<VerificationTarget> {
     let mut ignored_tests = vec![];
     let mut ignored_unsupported = vec![];
-    let verification_targets = package
-        .targets
-        .iter()
-        .filter_map(|target| {
-            debug!(name=?package.name, target=?target.name, kind=?target.kind, crate_type=?target
+    let mut verification_targets = vec![];
+    for target in &package.targets {
+        debug!(name=?package.name, target=?target.name, kind=?target.kind, crate_type=?target
                 .crate_types,
                 "package_targets");
-            if target.kind.contains(&String::from(CRATE_TYPE_BIN)) {
-                // Binary targets.
-                Some(VerificationTarget::Bin(target.name.clone()))
-            } else if target.kind.contains(&String::from(CRATE_TYPE_LIB))
-                || target.kind.contains(&String::from(CRATE_TYPE_RLIB))
-            {
-                // Lib targets.
-                let unsupported_types = target
-                    .kind
-                    .iter()
-                    .filter_map(|kind| {
-                        let kind_str = kind.as_str();
-                        matches!(kind_str,
-                            CRATE_TYPE_CDYLIB | CRATE_TYPE_DYLIB | CRATE_TYPE_STATICLIB |
-                            CRATE_TYPE_PROC_MACRO
-                        ).then_some(kind_str)
-                    })
-                    .collect::<Vec<_>>();
-                if unsupported_types.is_empty() {
-                    Some(VerificationTarget::Lib)
-                } else {
-                    println!(
-                        "warning: Skipped verification of `{}` due to unsupported crate-type: `{}`.",
-                        target.name,
-                        unsupported_types.join("`, `")
-                    );
-                    None
+        let (mut supported_lib, mut unsupported_lib) = (false, false);
+        for kind in &target.kind {
+            match kind.as_str() {
+                CRATE_TYPE_BIN => {
+                    // Binary targets.
+                    verification_targets.push(VerificationTarget::Bin(target.name.clone()));
                 }
-            } else if target.kind.contains(&String::from(CRATE_TYPE_TEST)) {
-                // Test target.
-                if args.tests {
-                    Some(VerificationTarget::Test(target.name.clone()))
-                } else {
-                    ignored_tests.push(target.name.as_str());
-                    None
+                CRATE_TYPE_LIB | CRATE_TYPE_RLIB | CRATE_TYPE_CDYLIB | CRATE_TYPE_DYLIB
+                | CRATE_TYPE_STATICLIB => {
+                    supported_lib = true;
                 }
-            } else {
-                ignored_unsupported.push(target.name.as_str());
-                None
+                CRATE_TYPE_PROC_MACRO => {
+                    unsupported_lib = true;
+                    ignored_unsupported.push(target.name.as_str());
+                }
+                CRATE_TYPE_TEST => {
+                    // Test target.
+                    if args.tests {
+                        verification_targets.push(VerificationTarget::Test(target.name.clone()));
+                    } else {
+                        ignored_tests.push(target.name.as_str());
+                    }
+                }
+                _ => {
+                    ignored_unsupported.push(target.name.as_str());
+                }
             }
-        })
-        .collect();
+        }
+        match (supported_lib, unsupported_lib) {
+            (true, true) => println!(
+                "warning: Skipped verification of `{}` due to unsupported crate-type: \
+                        `proc-macro`.",
+                target.name,
+            ),
+            (true, false) => verification_targets.push(VerificationTarget::Lib),
+            (_, _) => {}
+        }
+    }
 
     if args.verbose {
         // Print targets that were skipped only on verbose mode.

@@ -4,10 +4,12 @@
 use serde::{Deserialize, Serialize};
 
 pub use artifact::ArtifactType;
+pub use cbmc_solver::CbmcSolver;
 pub use harness::*;
 pub use vtable::*;
 
 pub mod artifact;
+mod cbmc_solver;
 mod harness;
 mod vtable;
 

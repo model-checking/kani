@@ -2,4 +2,3 @@ error: unable to resolve function/method: crate::other_crate2::mock
 error: unable to resolve function/method: super::other_crate2::mock
 error: unable to resolve function/method: self::other_crate2::mock
 error: unable to resolve function/method: other_crate1::mock
-error: could not compile `stubbing-do-not-resolve` due to 4 previous errors

@@ -1,0 +1,6 @@
+error: the `#[kani::solver]` attribute expects a single argument. Got 0 arguments.\
+test.rs:\
+|\
+| #[kani::solver]\
+| ^^^^^^^^^^^^^^^
+error: aborting due to previous error

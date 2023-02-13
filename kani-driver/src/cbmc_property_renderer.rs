@@ -150,6 +150,7 @@ static CBMC_ALT_DESCRIPTIONS: Lazy<CbmcAltDescriptions> = Lazy::new(|| {
 
 const UNSUPPORTED_CONSTRUCT_DESC: &str = "is not currently supported by Kani";
 const UNWINDING_ASSERT_DESC: &str = "unwinding assertion loop";
+const UNWINDING_ASSERT_REC_DESC: &str = "recursion unwinding assertion";
 const DEFAULT_ASSERTION: &str = "assertion";
 
 impl ParserItem {
@@ -167,6 +168,7 @@ impl ParserItem {
 pub fn kani_cbmc_output_filter(
     item: ParserItem,
     extra_ptr_checks: bool,
+    quiet: bool,
     output_format: &OutputFormat,
 ) -> Option<ParserItem> {
     // Some items (e.g., messages) are skipped.
@@ -177,9 +179,11 @@ pub fn kani_cbmc_output_filter(
     let processed_item = process_item(item, extra_ptr_checks);
     // Both formatting and printing could be handled by objects which
     // implement a trait `Printer`.
-    let formatted_item = format_item(&processed_item, output_format);
-    if let Some(fmt_item) = formatted_item {
-        println!("{fmt_item}");
+    if !quiet {
+        let formatted_item = format_item(&processed_item, output_format);
+        if let Some(fmt_item) = formatted_item {
+            println!("{fmt_item}");
+        }
     }
     // TODO: Record processed items and dump them into a JSON file
     // <https://github.com/model-checking/kani/issues/942>
@@ -324,7 +328,7 @@ pub fn format_result(properties: &Vec<Property>, show_checks: bool) -> String {
 
     let number_properties = properties.len() - number_cover_properties;
 
-    let summary = format!("\n ** {number_checks_failed} of {} failed", number_properties);
+    let summary = format!("\n ** {number_checks_failed} of {number_properties} failed");
     result_str.push_str(&summary);
 
     let mut other_status = Vec::<String>::new();
@@ -346,8 +350,7 @@ pub fn format_result(properties: &Vec<Property>, show_checks: bool) -> String {
     if number_cover_properties > 0 {
         // Print a summary line for cover properties
         let summary = format!(
-            "\n ** {number_covers_satisfied} of {} cover properties satisfied",
-            number_cover_properties
+            "\n ** {number_covers_satisfied} of {number_cover_properties} cover properties satisfied"
         );
         result_str.push_str(&summary);
         let mut other_status = Vec::<String>::new();
@@ -389,7 +392,7 @@ pub fn format_result(properties: &Vec<Property>, show_checks: bool) -> String {
         more details.",
         );
     }
-    if has_check_failure(properties, UNWINDING_ASSERT_DESC) {
+    if has_unwinding_assertion_failures(properties) {
         result_str.push_str("[Kani] info: Verification output shows one or more unwinding failures.\n\
         [Kani] tip: Consider increasing the unwinding value or disabling `--unwinding-assertions`.\n");
     }
@@ -420,8 +423,7 @@ fn build_failure_message(description: String, trace: &Option<Vec<TraceItem>>) ->
         let failure_function = failure_source.function.unwrap();
         let failure_line = failure_source.line.unwrap();
         return format!(
-            "Failed Checks: {}\n File: \"{}\", line {}, in {}\n",
-            description, failure_file, failure_line, failure_function
+            "Failed Checks: {description}\n File: \"{failure_file}\", line {failure_line}, in {failure_function}\n"
         );
     }
     backup_failure_message
@@ -462,7 +464,7 @@ pub fn postprocess_result(properties: Vec<Property>, extra_ptr_checks: bool) -> 
     // First, determine if there are reachable unsupported constructs or unwinding assertions
     let has_reachable_unsupported_constructs =
         has_check_failure(&properties, UNSUPPORTED_CONSTRUCT_DESC);
-    let has_failed_unwinding_asserts = has_check_failure(&properties, UNWINDING_ASSERT_DESC);
+    let has_failed_unwinding_asserts = has_unwinding_assertion_failures(&properties);
     // Then, determine if there are reachable undefined functions, and change
     // their description to highlight this fact
     let (properties_with_undefined, has_reachable_undefined_functions) =
@@ -500,6 +502,12 @@ fn has_check_failure(properties: &Vec<Property>, description: &str) -> bool {
         }
     }
     false
+}
+
+// Determines if there were unwinding assertion failures in a set of properties
+fn has_unwinding_assertion_failures(properties: &Vec<Property>) -> bool {
+    has_check_failure(&properties, UNWINDING_ASSERT_DESC)
+        || has_check_failure(&properties, UNWINDING_ASSERT_REC_DESC)
 }
 
 /// Replaces the description of all properties from functions with a missing
@@ -576,8 +584,7 @@ fn update_properties_with_reach_status(
             let description = &prop.description;
             assert!(
                 prop.status == CheckStatus::Success,
-                "** ERROR: Expecting the unreachable property \"{}\" to have a status of \"SUCCESS\"",
-                description
+                "** ERROR: Expecting the unreachable property \"{description}\" to have a status of \"SUCCESS\""
             );
             prop.status = CheckStatus::Unreachable
         }

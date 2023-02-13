@@ -44,16 +44,12 @@ pub fn proof(attr: TokenStream, item: TokenStream) -> TokenStream {
     let fn_item = parse_macro_input!(item as ItemFn);
     let attrs = fn_item.attrs;
     let vis = fn_item.vis;
-    let fn_name = fn_item.sig.ident.clone();
-    let test_name = quote!(#fn_name);
     let sig = fn_item.sig;
     let body = fn_item.block;
 
     let kani_attributes = quote!(
+        #[allow(dead_code)]
         #[kanitool::proof]
-        #[export_name = concat!(module_path!(), "::", stringify!(#test_name))]
-        // no_mangle is a temporary hack to make the function "public" so it gets codegen'd
-        #[no_mangle]
     );
 
     assert!(attr.is_empty(), "#[kani::proof] does not take any arguments for now");
@@ -146,6 +142,29 @@ pub fn stub(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     // Translate #[kani::stub(original, replacement)] to #[kanitool::stub(original, replacement)]
     let insert_string = "#[kanitool::stub(".to_owned() + &attr.to_string() + ")]";
+    result.extend(insert_string.parse::<TokenStream>().unwrap());
+
+    result.extend(item);
+    result
+}
+
+#[cfg(not(kani))]
+#[proc_macro_attribute]
+pub fn solver(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    // No-op in non-kani mode
+    item
+}
+
+/// Select the SAT solver to use with CBMC for this harness
+/// The attribute `#[kani::solver(arg)]` can only be used alongside `#[kani::proof]``
+///
+/// arg - name of solver, e.g. kissat
+#[cfg(kani)]
+#[proc_macro_attribute]
+pub fn solver(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let mut result = TokenStream::new();
+    // Translate `#[kani::solver(arg)]` to `#[kanitool::solver(arg)]`
+    let insert_string = "#[kanitool::solver(".to_owned() + &attr.to_string() + ")]";
     result.extend(insert_string.parse::<TokenStream>().unwrap());
 
     result.extend(item);

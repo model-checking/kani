@@ -1,4 +1,6 @@
 ![](./kani-logo.png)
+![Kani regression](https://github.com/model-checking/kani/actions/workflows/kani.yml/badge.svg)
+![Nightly: CBMC Latest](https://github.com/model-checking/kani/actions/workflows/cbmc-latest.yml/badge.svg)
 
 The Kani Rust Verifier is a bit-precise model checker for Rust.
 

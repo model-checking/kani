@@ -1,0 +1,15 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+[package]
+name = "unsupported-lib"
+version = "0.1.0"
+edition = "2021"
+description = "Test for https://github.com/model-checking/kani/issues/2038"
+
+[lib]
+name = "lib"
+crate-type = ["lib"]
+proc-macro = true
+path = "../src/lib.rs"
+
+[package.metadata.kani.flags]

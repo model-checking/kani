@@ -9,6 +9,7 @@ pub mod arbitrary;
 mod concrete_playback;
 pub mod futures;
 pub mod slice;
+pub mod tuple;
 pub mod vec;
 
 pub use arbitrary::Arbitrary;
@@ -106,6 +107,31 @@ pub fn cover(_cond: bool, _msg: &'static str) {}
 #[inline(always)]
 pub fn any<T: Arbitrary>() -> T {
     T::any()
+}
+
+/// This creates a symbolic *valid* value of type `T`.
+/// The value is constrained to be a value accepted by the predicate passed to the filter.
+/// You can assign the return value of this function to a variable that you want to make symbolic.
+/// The explanation field gives a mechanism to explain why the assumption is required for the proof.
+///
+/// # Example:
+///
+/// In the snippet below, we are verifying the behavior of the function `fn_under_verification`
+/// under all possible `NonZeroU8` input values between 0 and 12.
+///
+/// ```rust
+/// let inputA = kani::any_where::<std::num::NonZeroU8>(|x| *x < 12, "explanation");
+/// fn_under_verification(inputA);
+/// ```
+///
+/// Note: This is a safe construct and can only be used with types that implement the `Arbitrary`
+/// trait. The Arbitrary trait is used to build a symbolic value that represents all possible
+/// valid values for type `T`.
+#[inline(always)]
+pub fn any_where<T: Arbitrary, F: FnOnce(&T) -> bool>(f: F, _msg: &'static str) -> T {
+    let result = T::any();
+    assume(f(&result));
+    result
 }
 
 /// This function creates a symbolic value of type `T`. This may result in an invalid value.

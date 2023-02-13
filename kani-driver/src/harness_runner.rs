@@ -91,7 +91,7 @@ impl KaniSession {
             // Strictly speaking, we're faking success here. This is more "no error"
             Ok(VerificationResult::mock_success())
         } else {
-            let result = self.with_timer(|| self.run_cbmc(binary, harness), "run_cmbc")?;
+            let result = self.with_timer(|| self.run_cbmc(binary, harness), "run_cbmc")?;
 
             // When quiet, we don't want to print anything at all.
             // When output is old, we also don't have real results to print.
@@ -116,7 +116,10 @@ impl KaniSession {
         let failing = failures.len();
         let total = succeeding + failing;
 
-        if self.args.concrete_playback.is_some() && !self.args.quiet && failures.is_empty() {
+        if self.args.concrete_playback.is_some()
+            && !self.args.quiet
+            && results.iter().all(|r| !r.result.generated_concrete_test)
+        {
             println!(
                 "INFO: The concrete playback feature never generated unit tests because there were no failing harnesses."
             )
@@ -133,8 +136,7 @@ impl KaniSession {
 
             if total > 0 {
                 println!(
-                    "Complete - {} successfully verified harnesses, {} failures, {} total.",
-                    succeeding, failing, total
+                    "Complete - {succeeding} successfully verified harnesses, {failing} failures, {total} total."
                 );
             } else {
                 // TODO: This could use a better error message, possibly with links to Kani documentation.

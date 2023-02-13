@@ -5,7 +5,6 @@
 //! In this folder, you can find the following folders:
 //! - `bin/`: Where all Kani binaries will be located.
 //! - `lib/`: Kani libraries as well as rust standard libraries.
-//! - `legacy-lib/`: Kani libraries built based on the the toolchain standard libraries.
 //!
 //! Rustc expects the sysroot to have a specific folder layout:
 //! `{SYSROOT}/rustlib/<target-triplet>/lib/<libraries>`
@@ -48,15 +47,6 @@ pub fn kani_sysroot() -> PathBuf {
 /// Returns the path to where Kani and std pre-compiled libraries are stored.
 pub fn kani_sysroot_lib() -> PathBuf {
     path_buf!(kani_sysroot(), "lib")
-}
-
-/// Returns the path to where Kani pre-compiled library are stored.
-///
-/// The legacy libraries are compiled on the top of rustup sysroot. Using it results in missing
-/// symbols. This is still needed though because when we use the rust monomorphizer as our
-/// reachability algorithm, the resulting boundaries are different than the new sysroot.
-pub fn kani_sysroot_legacy_lib() -> PathBuf {
-    path_buf!(kani_sysroot(), "legacy-lib")
 }
 
 /// Returns the path to where Kani's pre-compiled binaries are stored.
@@ -195,44 +185,6 @@ fn build_artifacts(cargo_cmd: &mut Child) -> Vec<Artifact> {
             }
         })
         .collect()
-}
-
-/// Build Kani libraries using the regular rust toolchain standard libraries.
-/// We should be able to remove this once the MIR linker is stable.
-pub fn build_lib_legacy() {
-    // Run cargo build with -Z build-std
-    let target_dir = env!("KANI_LEGACY_LIBS");
-    let args = [
-        "build",
-        "-p",
-        "std",
-        "-p",
-        "kani",
-        "-p",
-        "kani_macros",
-        "--target-dir",
-        target_dir,
-        "--message-format",
-        "json-diagnostic-rendered-ansi",
-    ];
-    let mut child = Command::new("cargo")
-        .env("CARGO_ENCODED_RUSTFLAGS", ["--cfg=kani"].join("\x1f"))
-        .args(args)
-        .stdout(Stdio::piped())
-        .spawn()
-        .expect("Failed to build Kani libraries.");
-
-    // Collect the build artifacts.
-    let artifacts = build_artifacts(&mut child);
-    let _ = child.wait().expect("Couldn't get cargo's exit status");
-
-    // Create sysroot folder.
-    let legacy_lib = kani_sysroot_legacy_lib();
-    legacy_lib.exists().then(|| fs::remove_dir_all(&legacy_lib));
-    fs::create_dir_all(&legacy_lib).expect(&format!("Failed to create {:?}", legacy_lib));
-
-    //  Copy Kani libraries to inside the legacy-lib folder.
-    copy_libs(&artifacts, &legacy_lib, &is_kani_lib);
 }
 
 /// Extra arguments to be given to `cargo build` while building Kani's binaries.

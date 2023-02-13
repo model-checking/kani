@@ -1,9 +1,14 @@
 # Copyright Kani Contributors
 # SPDX-License-Identifier: Apache-2.0 OR MIT
-name: Kani's slow tests
+
+# We use block scalar notation to allow us to add ":" to the workflow name.
+name: >-
+  Nightly: Slow tests
+
 on:
   schedule:
     - cron: "30 5 * * *" # Run this every day at 05:30 UTC
+  workflow_dispatch:     # Allow manual dispatching for a custom branch / tag.
 
 env:
   RUST_BACKTRACE: 1
@@ -13,7 +18,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-11, ubuntu-18.04, ubuntu-20.04]
+        os: [macos-11, ubuntu-18.04, ubuntu-20.04, ubuntu-22.04]
     steps:
       - name: Checkout Kani
         uses: actions/checkout@v3

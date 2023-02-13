@@ -22,8 +22,9 @@ KANI_DIR=$SCRIPT_DIR/..
 export KANI_FAIL_ON_UNEXPECTED_DESCRIPTION="true"
 
 # Required dependencies
-check-cbmc-version.py --major 5 --minor 72
+check-cbmc-version.py --major 5 --minor 75
 check-cbmc-viewer-version.py --major 3 --minor 5
+check_kissat_version.sh
 
 # Formatting check
 ${SCRIPT_DIR}/kani-fmt.sh --check
@@ -41,13 +42,9 @@ cargo test -p kani-compiler
 cargo test -p kani-driver
 cargo test -p kani_metadata
 
-# Check output files (--gen-c option)
-echo "Check GotoC output file generation"
-time "$KANI_DIR"/tests/output-files/check-output.sh
-echo ""
-
 # Declare testing suite information (suite and mode)
 TESTS=(
+    "script-based-pre exec"
     "kani kani"
     "expected expected"
     "ui expected"
@@ -77,7 +74,8 @@ for testp in "${TESTS[@]}"; do
   suite=${testl[0]}
   mode=${testl[1]}
   echo "Check compiletest suite=$suite mode=$mode"
-  cargo run -p compiletest --quiet -- --suite $suite --mode $mode --quiet
+  cargo run -p compiletest --quiet -- --suite $suite --mode $mode \
+      --quiet --no-fail-fast
 done
 
 # Check codegen for the standard library
@@ -94,7 +92,17 @@ fi
 # Check codegen of firecracker
 time "$SCRIPT_DIR"/codegen-firecracker.sh
 
+# Test run 'cargo kani assess scan'
+"$SCRIPT_DIR"/assess-scan-regression.sh
+
+# Test for --manifest-path which we cannot do through compiletest.
+# It should just successfully find the project and specified proof harness. (Then clean up.)
+FEATURES_MANIFEST_PATH="$KANI_DIR/tests/cargo-kani/cargo-features-flag/Cargo.toml"
+cargo kani --manifest-path "$FEATURES_MANIFEST_PATH" --harness trivial_success
+cargo clean --manifest-path "$FEATURES_MANIFEST_PATH"
+
 # Check that documentation compiles.
+echo "Starting doc tests:"
 cargo doc --workspace --no-deps --exclude std
 
 echo

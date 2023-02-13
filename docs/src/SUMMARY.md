@@ -23,6 +23,7 @@
   - [Working with CBMC](./cbmc-hacks.md)
   - [Working with `rustc`](./rustc-hacks.md)
   - [Command cheat sheets](./cheat-sheets.md)
+  - [cargo kani assess](./dev-assess.md)
   - [Testing](./testing.md)
     - [Regression testing](./regression-testing.md)
     - [Book runner](./bookrunner.md)

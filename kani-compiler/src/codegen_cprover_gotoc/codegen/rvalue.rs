@@ -8,7 +8,7 @@ use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use crate::kani_middle::coercion::{
     extract_unsize_casting, CoerceUnsizedInfo, CoerceUnsizedIterator, CoercionBase,
 };
-use crate::{emit_concurrency_warning, unwrap_or_return_codegen_unimplemented};
+use crate::unwrap_or_return_codegen_unimplemented;
 use cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
 use cbmc::MachineModel;
 use cbmc::{btree_string_map, InternString, InternedString};
@@ -408,7 +408,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             Rvalue::ThreadLocalRef(def_id) => {
                 // Since Kani is single-threaded, we treat a thread local like a static variable:
-                emit_concurrency_warning!("thread local", loc, "a static variable");
+                self.store_concurrent_construct("thread local (replaced by static variable)", loc);
                 self.codegen_static_pointer(*def_id, true)
             }
             // A CopyForDeref is equivalent to a read from a place at the codegen level.
@@ -640,13 +640,13 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_pointer_cast(
         &mut self,
         k: &PointerCast,
-        o: &Operand<'tcx>,
+        operand: &Operand<'tcx>,
         t: Ty<'tcx>,
         loc: Location,
     ) -> Expr {
-        debug!(cast=?k, op=?o, ?loc, "codegen_pointer_cast");
+        debug!(cast=?k, op=?operand, ?loc, "codegen_pointer_cast");
         match k {
-            PointerCast::ReifyFnPointer => match self.operand_ty(o).kind() {
+            PointerCast::ReifyFnPointer => match self.operand_ty(operand).kind() {
                 ty::FnDef(def_id, substs) => {
                     let instance =
                         Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), *def_id, substs)
@@ -658,17 +658,23 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
                 _ => unreachable!(),
             },
-            PointerCast::UnsafeFnPointer => self.codegen_operand(o),
+            PointerCast::UnsafeFnPointer => self.codegen_operand(operand),
             PointerCast::ClosureFnPointer(_) => {
-                let dest_typ = self.codegen_ty(t);
-                self.codegen_unimplemented_expr(
-                    "PointerCast::ClosureFnPointer",
-                    dest_typ,
-                    loc,
-                    "https://github.com/model-checking/kani/issues/274",
-                )
+                if let ty::Closure(def_id, substs) = self.operand_ty(operand).kind() {
+                    let instance = Instance::resolve_closure(
+                        self.tcx,
+                        *def_id,
+                        substs,
+                        ty::ClosureKind::FnOnce,
+                    )
+                    .expect("failed to normalize and resolve closure during codegen")
+                    .polymorphize(self.tcx);
+                    self.codegen_func_expr(instance, None).address_of()
+                } else {
+                    unreachable!("{:?} cannot be cast to a fn ptr", operand)
+                }
             }
-            PointerCast::MutToConstPointer => self.codegen_operand(o),
+            PointerCast::MutToConstPointer => self.codegen_operand(operand),
             PointerCast::ArrayToPointer => {
                 // TODO: I am not sure whether it is correct or not.
                 //
@@ -677,11 +683,11 @@ impl<'tcx> GotocCtx<'tcx> {
                 // if we had to, then [o] necessarily has type [T; n] where *T is a fat pointer, meaning
                 // T is either [T] or str. but neither type is sized, which shouldn't participate in
                 // codegen.
-                match self.operand_ty(o).kind() {
+                match self.operand_ty(operand).kind() {
                     ty::RawPtr(ty::TypeAndMut { ty, .. }) => {
                         // ty must be an array
                         if let ty::Array(_, _) = ty.kind() {
-                            let oe = self.codegen_operand(o);
+                            let oe = self.codegen_operand(operand);
                             oe.dereference() // : struct [T; n]
                                 .member("0", &self.symbol_table) // : T[n]
                                 .array_to_ptr() // : T*
@@ -693,8 +699,8 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
             }
             PointerCast::Unsize => {
-                let src_goto_expr = self.codegen_operand(o);
-                let src_mir_type = self.operand_ty(o);
+                let src_goto_expr = self.codegen_operand(operand);
+                let src_mir_type = self.operand_ty(operand);
                 let dst_mir_type = t;
                 self.codegen_unsized_cast(src_goto_expr, src_mir_type, dst_mir_type)
             }
@@ -940,8 +946,7 @@ impl<'tcx> GotocCtx<'tcx> {
             // https://play.rust-lang.org/?version=nightly&mode=debug&edition=2018&gist=0f6eef4f6abeb279031444735e73d2e1
             assert!(
                 matches!(operand_type.kind(), ty::Never),
-                "Expected Never, got: {:?}",
-                operand_type
+                "Expected Never, got: {operand_type:?}"
             );
             Type::size_t().zero()
         } else {

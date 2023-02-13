@@ -13,12 +13,13 @@ In general, the following dependencies are required to build Kani from source.
 1. Cargo installed via [rustup](https://rustup.rs/)
 2. [CBMC](https://github.com/diffblue/cbmc) (latest release)
 3. [CBMC Viewer](https://github.com/awslabs/aws-viewer-for-cbmc) (latest release)
+4. [Kissat](https://github.com/arminbiere/kissat) (Release 3.0.0)
 
 Kani has been tested in [Ubuntu](#install-dependencies-on-ubuntu) and [macOS](##install-dependencies-on-macos) platforms.
 
 ### Install dependencies on Ubuntu
 
-Support is available for Ubuntu 18.04 and 20.04.
+Support is available for Ubuntu 18.04, 20.04 and 22.04.
 The simplest way to install dependencies (especially if you're using a fresh VM)
 is following our CI scripts:
 
@@ -28,9 +29,7 @@ git clone https://github.com/model-checking/kani.git
 cd kani
 git submodule update --init
 ./scripts/setup/ubuntu/install_deps.sh
-./scripts/setup/ubuntu/install_cbmc.sh
-./scripts/setup/ubuntu/install_viewer.sh
-# If you haven't already:
+# If you haven't already (or from https://rustup.rs/):
 ./scripts/setup/install_rustup.sh
 source $HOME/.cargo/env
 ```
@@ -45,9 +44,7 @@ git clone https://github.com/model-checking/kani.git
 cd kani
 git submodule update --init
 ./scripts/setup/macos/install_deps.sh
-./scripts/setup/macos/install_cbmc.sh
-./scripts/setup/macos/install_viewer.sh
-# If you haven't already:
+# If you haven't already (or from https://rustup.rs/):
 ./scripts/setup/install_rustup.sh
 source $HOME/.cargo/env
 ```

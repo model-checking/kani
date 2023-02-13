@@ -7,16 +7,19 @@ use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::attributes::{extract_integer_argument, partition_kanitool_attributes};
 use cbmc::goto_program::{Expr, Stmt, Symbol};
 use cbmc::InternString;
-use kani_metadata::HarnessMetadata;
+use kani_metadata::{CbmcSolver, HarnessMetadata};
 use kani_queries::UserInput;
-use rustc_ast::Attribute;
+use rustc_ast::{Attribute, MetaItemKind};
 use rustc_hir::def::DefKind;
 use rustc_hir::def_id::DefId;
-use rustc_middle::mir::{HasLocalDecls, Local};
+use rustc_middle::mir::traversal::reverse_postorder;
+use rustc_middle::mir::{Body, HasLocalDecls, Local};
+use rustc_middle::ty::layout::FnAbiOf;
 use rustc_middle::ty::{self, Instance};
 use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::iter::FromIterator;
+use std::str::FromStr;
 use tracing::{debug, debug_span};
 
 /// Codegen MIR functions into gotoc
@@ -46,14 +49,19 @@ impl<'tcx> GotocCtx<'tcx> {
             let base_name = self.codegen_var_base_name(&lc);
             let name = self.codegen_var_name(&lc);
             let ldata = &ldecls[lc];
-            let t = self.monomorphize(ldata.ty);
-            let t = self.codegen_ty(t);
+            let var_ty = self.monomorphize(ldata.ty);
+            let var_type = self.codegen_ty(var_ty);
             let loc = self.codegen_span(&ldata.source_info.span);
             // Indices [1, N] represent the function parameters where N is the number of parameters.
-            let sym =
-                Symbol::variable(name, base_name, t, self.codegen_span(&ldata.source_info.span))
-                    .with_is_hidden(!ldata.is_user_variable())
-                    .with_is_parameter(idx > 0 && idx <= num_args);
+            // Except that ZST fields are not included as parameters.
+            let sym = Symbol::variable(
+                name,
+                base_name,
+                var_type,
+                self.codegen_span(&ldata.source_info.span),
+            )
+            .with_is_hidden(!ldata.is_user_variable())
+            .with_is_parameter((idx > 0 && idx <= num_args) && !self.is_zst(var_ty));
             let sym_e = sym.to_expr();
             self.symbol_table.insert(sym);
 
@@ -82,7 +90,7 @@ impl<'tcx> GotocCtx<'tcx> {
             self.codegen_function_prelude();
             self.codegen_declare_variables();
 
-            mir.basic_blocks.iter_enumerated().for_each(|(bb, bbd)| self.codegen_block(bb, bbd));
+            reverse_postorder(mir).for_each(|(bb, bbd)| self.codegen_block(bb, bbd));
 
             let loc = self.codegen_span(&mir.span);
             let stmts = self.current_fn_mut().extract_block();
@@ -95,29 +103,41 @@ impl<'tcx> GotocCtx<'tcx> {
         self.reset_current_fn();
     }
 
+    /// Codegen changes required due to the function ABI.
+    /// We currently untuple arguments for RustCall ABI where the `spread_arg` is set.
+    fn codegen_function_prelude(&mut self) {
+        let mir = self.current_fn().mir();
+        if let Some(spread_arg) = mir.spread_arg {
+            self.codegen_spread_arg(mir, spread_arg);
+        }
+    }
+
     /// MIR functions have a `spread_arg` field that specifies whether the
     /// final argument to the function is "spread" at the LLVM/codegen level
     /// from a tuple into its individual components. (Used for the "rust-
-    /// call" ABI, necessary because dynamic trait closure cannot have an
+    /// call" ABI, necessary because the function traits and closures cannot have an
     /// argument list in MIR that is both generic and variadic, so Rust
     /// allows a generic tuple).
     ///
-    /// If `spread_arg` is Some, then the wrapped value is the local that is
-    /// to be "spread"/untupled. However, the MIR function body itself expects
-    /// the tuple instead of the individual components, so we need to generate
-    /// a function prelude that _retuples_, that is, writes the components
-    /// back to the tuple local for use in the body.
+    /// These tuples are used in the MIR to invoke a shim, and it's used in the shim body.
+    ///
+    /// The `spread_arg` represents the the local variable that is to be "spread"/untupled.
+    /// However, the function body itself may refer to the members of
+    /// the tuple instead of the individual spread parameters, so we need to add to the
+    /// function prelude code that _retuples_, that is, writes the arguments
+    /// back to a local tuple that can be used in the body.
     ///
     /// See:
     /// <https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp/topic/Determine.20untupled.20closure.20args.20from.20Instance.3F>
-    fn codegen_function_prelude(&mut self) {
-        let mir = self.current_fn().mir();
-        if mir.spread_arg.is_none() {
-            // No special tuple argument, no work to be done.
+    fn codegen_spread_arg(&mut self, mir: &Body<'tcx>, spread_arg: Local) {
+        tracing::debug!(current=?self.current_fn, "codegen_spread_arg");
+        let spread_data = &mir.local_decls()[spread_arg];
+        let tup_ty = self.monomorphize(spread_data.ty);
+        if self.is_zst(tup_ty) {
+            // No need to spread a ZST since it will be ignored.
             return;
         }
-        let spread_arg = mir.spread_arg.unwrap();
-        let spread_data = &mir.local_decls()[spread_arg];
+
         let loc = self.codegen_span(&spread_data.source_info.span);
 
         // Get the function signature from MIR, _before_ we untuple
@@ -158,7 +178,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // };
         // ```
         // Note how the compiler has reordered the fields to improve packing.
-        let tup_typ = self.codegen_ty(self.monomorphize(spread_data.ty));
+        let tup_type = self.codegen_ty(tup_ty);
 
         // We need to marshall the arguments into the tuple
         // The arguments themselves have been tacked onto the explicit function paramaters by
@@ -191,7 +211,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let (name, base_name) = self.codegen_spread_arg_name(&lc);
                 let sym = Symbol::variable(name, base_name, self.codegen_ty(arg_t), loc)
                     .with_is_hidden(false)
-                    .with_is_parameter(true);
+                    .with_is_parameter(!self.is_zst(arg_t));
                 // The spread arguments are additional function paramaters that are patched in
                 // They are to the function signature added in the `fn_typ` function.
                 // But they were never added to the symbol table, which we currently do here.
@@ -203,12 +223,12 @@ impl<'tcx> GotocCtx<'tcx> {
                 (arg_i.to_string().intern(), sym.to_expr())
             }));
         let marshalled_tuple_value =
-            Expr::struct_expr(tup_typ.clone(), marshalled_tuple_fields, &self.symbol_table)
+            Expr::struct_expr(tup_type.clone(), marshalled_tuple_fields, &self.symbol_table)
                 .with_location(loc);
         self.declare_variable(
             self.codegen_var_name(&spread_arg),
             self.codegen_var_base_name(&spread_arg),
-            tup_typ,
+            tup_type,
             Some(marshalled_tuple_value),
             loc,
         );
@@ -232,46 +252,46 @@ impl<'tcx> GotocCtx<'tcx> {
         self.reset_current_fn();
     }
 
-    pub fn is_proof_harness(&self, def_id: DefId) -> bool {
-        let all_attributes = self.tcx.get_attrs_unchecked(def_id);
-        let (proof_attributes, _) = partition_kanitool_attributes(all_attributes);
-        if !proof_attributes.is_empty() {
-            let span = proof_attributes.first().unwrap().span;
-            if self.tcx.def_kind(def_id) != DefKind::Fn {
-                self.tcx
-                    .sess
-                    .span_err(span, "The kani::proof attribute can only be applied to functions.");
-            } else if self.tcx.generics_of(def_id).requires_monomorphization(self.tcx) {
-                self.tcx
-                    .sess
-                    .span_err(span, "The proof attribute cannot be applied to generic functions.");
-            }
-            self.tcx.sess.abort_if_errors();
-            true
+    /// Check that if an item is tagged with a proof_attribute, it is a valid harness.
+    fn check_proof_attribute(&self, def_id: DefId, proof_attributes: Vec<&Attribute>) {
+        assert!(!proof_attributes.is_empty());
+        let span = proof_attributes.first().unwrap().span;
+        if proof_attributes.len() > 1 {
+            self.tcx.sess.span_warn(proof_attributes[0].span, "Duplicate attribute");
+        }
+
+        if self.tcx.def_kind(def_id) != DefKind::Fn {
+            self.tcx
+                .sess
+                .span_err(span, "The kani::proof attribute can only be applied to functions.");
+        } else if self.tcx.generics_of(def_id).requires_monomorphization(self.tcx) {
+            self.tcx
+                .sess
+                .span_err(span, "The proof attribute cannot be applied to generic functions.");
         } else {
-            false
+            let instance = Instance::mono(self.tcx, def_id);
+            if !self.fn_abi_of_instance(instance, ty::List::empty()).args.is_empty() {
+                self.tcx
+                    .sess
+                    .span_err(span, "Functions used as harnesses can not have any arguments.");
+            }
         }
     }
 
-    // Check that all attributes assigned to an item is valid.
+    pub fn is_proof_harness(&self, def_id: DefId) -> bool {
+        let all_attributes = self.tcx.get_attrs_unchecked(def_id);
+        let (proof_attributes, _) = partition_kanitool_attributes(all_attributes);
+        !proof_attributes.is_empty()
+    }
+
+    /// Check that all attributes assigned to an item is valid.
+    /// Errors will be added to the session. Invoke self.tcx.sess.abort_if_errors() to terminate
+    /// the session in case of an error.
     pub fn check_attributes(&self, def_id: DefId) {
         let all_attributes = self.tcx.get_attrs_unchecked(def_id);
         let (proof_attributes, other_attributes) = partition_kanitool_attributes(all_attributes);
         if !proof_attributes.is_empty() {
-            let span = proof_attributes.first().unwrap().span;
-            if self.tcx.def_kind(def_id) != DefKind::Fn {
-                self.tcx
-                    .sess
-                    .span_err(span, "The kani::proof attribute can only be applied to functions.");
-            } else if self.tcx.generics_of(def_id).requires_monomorphization(self.tcx) {
-                self.tcx
-                    .sess
-                    .span_err(span, "The proof attribute cannot be applied to generic functions.");
-            } else if proof_attributes.len() > 1 {
-                self.tcx
-                    .sess
-                    .span_warn(proof_attributes[0].span, "Only one '#[kani::proof]' allowed");
-            }
+            self.check_proof_attribute(def_id, proof_attributes);
         } else if !other_attributes.is_empty() {
             self.tcx.sess.span_err(
                 other_attributes[0].1.span,
@@ -334,6 +354,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 original_file: loc.filename().unwrap(),
                 original_start_line: loc.start_line().unwrap() as usize,
                 original_end_line: loc.end_line().unwrap() as usize,
+                solver: None,
                 unwind_value: None,
                 // We record the actual path after codegen before we dump the metadata into a file.
                 goto_file: None,
@@ -359,6 +380,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let mut harness = self.default_kanitool_proof();
         for attr in other_attributes.iter() {
             match attr.0.as_str() {
+                "solver" => self.handle_kanitool_solver(attr.1, &mut harness),
                 "stub" => {
                     if !self.queries.get_stubbing_enabled() {
                         self.tcx.sess.span_warn(
@@ -393,6 +415,7 @@ impl<'tcx> GotocCtx<'tcx> {
             original_file: loc.filename().unwrap(),
             original_start_line: loc.start_line().unwrap() as usize,
             original_end_line: loc.end_line().unwrap() as usize,
+            solver: None,
             unwind_value: None,
             // We record the actual path after codegen before we dump the metadata into a file.
             goto_file: None,
@@ -423,6 +446,70 @@ impl<'tcx> GotocCtx<'tcx> {
                     return;
                 }
                 harness.unwind_value = Some(val.unwrap());
+            }
+        }
+    }
+
+    /// Set the solver for this proof harness
+    fn handle_kanitool_solver(&mut self, attr: &Attribute, harness: &mut HarnessMetadata) {
+        // Make sure the solver is not already set
+        if harness.solver.is_some() {
+            self.tcx
+                .sess
+                .span_err(attr.span, "only one '#[kani::solver]' attribute is allowed per harness");
+            return;
+        }
+        harness.solver = self.extract_solver_argument(attr);
+    }
+
+    fn extract_solver_argument(&mut self, attr: &Attribute) -> Option<CbmcSolver> {
+        // TODO: Argument validation should be done as part of the `kani_macros` crate
+        // <https://github.com/model-checking/kani/issues/2192>
+        const ATTRIBUTE: &str = "#[kani::solver]";
+        let invalid_arg_err = |attr: &Attribute| {
+            self.tcx.sess.span_err(
+                attr.span,
+                format!("invalid argument for `{ATTRIBUTE}` attribute, expected one of the supported solvers (e.g. `kissat`) or a SAT solver binary (e.g. `bin=\"<SAT_SOLVER_BINARY>\"`)")
+            )
+        };
+
+        let attr_args = attr.meta_item_list().unwrap();
+        if attr_args.len() != 1 {
+            self.tcx.sess.span_err(
+                attr.span,
+                format!(
+                    "the `{ATTRIBUTE}` attribute expects a single argument. Got {} arguments.",
+                    attr_args.len()
+                ),
+            );
+            return None;
+        }
+        let attr_arg = &attr_args[0];
+        let meta_item = attr_arg.meta_item();
+        if meta_item.is_none() {
+            invalid_arg_err(attr);
+            return None;
+        }
+        let meta_item = meta_item.unwrap();
+        let ident = meta_item.ident().unwrap();
+        let ident_str = ident.as_str();
+        match &meta_item.kind {
+            MetaItemKind::Word => {
+                let solver = CbmcSolver::from_str(ident_str);
+                match solver {
+                    Ok(solver) => Some(solver),
+                    Err(_) => {
+                        self.tcx.sess.span_err(attr.span, format!("unknown solver `{ident_str}`"));
+                        None
+                    }
+                }
+            }
+            MetaItemKind::NameValue(lit) if ident_str == "bin" && lit.kind.is_str() => {
+                Some(CbmcSolver::Binary(lit.token_lit.symbol.to_string()))
+            }
+            _ => {
+                invalid_arg_err(attr);
+                None
             }
         }
     }

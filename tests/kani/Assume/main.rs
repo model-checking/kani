@@ -7,3 +7,9 @@ fn main() {
     kani::assume(i < 10);
     assert!(i < 20);
 }
+
+#[kani::proof]
+fn verify_any_where() {
+    let i: i32 = kani::any_where(|x| *x < 10, "Only single digit values are legal");
+    assert!(i < 20);
+}

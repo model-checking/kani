@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use std::cmp::Ordering;
+use std::collections::HashSet;
 
-use comfy_table::Table;
+use serde::{Deserialize, Serialize};
 
 use crate::harness_runner::HarnessResult;
 
@@ -30,7 +31,7 @@ use super::table_builder::{ColumnType, RenderableTableRow, TableBuilder, TableRo
 ///  assertion + overflow         |               2
 /// ================================================
 /// ```
-pub(crate) fn build(results: &[HarnessResult]) -> Table {
+pub(crate) fn build(results: &[HarnessResult]) -> TableBuilder<FailureReasonsTableRow> {
     let mut builder = TableBuilder::new();
 
     for r in results {
@@ -44,16 +45,28 @@ pub(crate) fn build(results: &[HarnessResult]) -> Table {
             classes.join(" + ")
         };
 
-        builder.add(FailureReasonsTableRow { reason: classification, count: 1 });
+        let name = r.harness.pretty_name.trim_end_matches("::{closure#0}").to_string();
+        let identity =
+            format!("{} @ {}:{}", name, r.harness.original_file, r.harness.original_start_line);
+
+        builder.add(FailureReasonsTableRow {
+            reason: classification,
+            tests: HashSet::from([identity]),
+        });
     }
 
-    builder.render()
+    builder
 }
 
-#[derive(Default)]
+/// Reports the reasons that tests failed to be analyzed by Kani
+///
+/// See [`build`]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct FailureReasonsTableRow {
+    /// "Failure reasons" look like "unwind" or "assertion + overflow"
     pub reason: String,
-    pub count: usize,
+    /// Tests are identified by "pretty_name @ /full/path/file.rs:line"
+    pub tests: HashSet<String>,
 }
 
 impl TableRow for FailureReasonsTableRow {
@@ -64,11 +77,15 @@ impl TableRow for FailureReasonsTableRow {
     }
 
     fn merge(&mut self, new: Self) {
-        self.count += new.count;
+        self.tests.extend(new.tests);
     }
 
     fn compare(&self, right: &Self) -> Ordering {
-        self.count.cmp(&right.count).reverse().then_with(|| self.reason.cmp(&right.reason))
+        self.tests
+            .len()
+            .cmp(&right.tests.len())
+            .reverse()
+            .then_with(|| self.reason.cmp(&right.reason))
     }
 }
 
@@ -82,7 +99,7 @@ impl RenderableTableRow for FailureReasonsTableRow {
     }
 
     fn row(&self) -> Vec<String> {
-        vec![self.reason.clone(), self.count.to_string()]
+        vec![self.reason.clone(), self.tests.len().to_string()]
     }
 }
 

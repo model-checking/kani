@@ -89,7 +89,7 @@ fn fail_if_in_dev_environment() -> Result<()> {
 /// Executes `kani-driver` in `bin` mode (kani or cargo-kani)
 /// augmenting environment variables to accomodate our release environment
 fn exec(bin: &str) -> Result<()> {
-    let kani_dir = setup::kani_dir();
+    let kani_dir = setup::kani_dir()?;
     let program = kani_dir.join("bin").join("kani-driver");
     let pyroot = kani_dir.join("pyroot");
     let bin_kani = kani_dir.join("bin");
@@ -206,7 +206,7 @@ mod tests {
     #[test]
     fn check_arg_parsing() {
         fn trial(args: &[&str]) -> ArgsResult {
-            parse_args(args.into_iter().map(OsString::from).collect())
+            parse_args(args.iter().map(OsString::from).collect())
         }
         {
             let e = ArgsResult::Default;

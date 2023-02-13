@@ -5,7 +5,7 @@
 //! generating concrete playback unit tests, and adding them to the user's source code.
 
 use crate::args::ConcretePlaybackMode;
-use crate::call_cbmc::{VerificationResult, VerificationStatus};
+use crate::call_cbmc::VerificationResult;
 use crate::session::KaniSession;
 use anyhow::{Context, Result};
 use concrete_vals_extractor::{extract_harness_values, ConcreteVal};
@@ -23,16 +23,12 @@ impl KaniSession {
     pub fn gen_and_add_concrete_playback(
         &self,
         harness: &HarnessMetadata,
-        verification_result: &VerificationResult,
+        verification_result: &mut VerificationResult,
     ) -> Result<()> {
         let playback_mode = match self.args.concrete_playback {
             Some(playback_mode) => playback_mode,
             None => return Ok(()),
         };
-
-        if verification_result.status == VerificationStatus::Success {
-            return Ok(());
-        }
 
         if let Some(result_items) = &verification_result.results {
             match extract_harness_values(result_items) {
@@ -42,8 +38,8 @@ impl KaniSession {
                     harness.pretty_name
                 ),
                 Some(concrete_vals) => {
-                    let concrete_playback =
-                        format_unit_test(&harness, &concrete_vals, self.args.randomize_layout);
+                    let pretty_name = harness.get_harness_name_unqualified();
+                    let concrete_playback = format_unit_test(&pretty_name, &concrete_vals);
                     match playback_mode {
                         ConcretePlaybackMode::Print => {
                             println!(
@@ -71,6 +67,7 @@ impl KaniSession {
                             .expect("Failed to modify source code");
                         }
                     }
+                    verification_result.generated_concrete_test = true;
                 }
             }
         }
@@ -149,8 +146,7 @@ impl KaniSession {
         })?;
         let src_file_name_as_str = src_file_name_as_osstr.to_str().with_context(|| {
             format!(
-                "Couldn't convert source code file name `{:?}` from OsStr to str",
-                src_file_name_as_osstr
+                "Couldn't convert source code file name `{src_file_name_as_osstr:?}` from OsStr to str"
             )
         })?;
 
@@ -211,15 +207,40 @@ impl KaniSession {
     }
 }
 
-/// Generate a unit test from a list of concrete values.
-/// `randomize_layout_seed` is `None` when layout is not randomized,
-/// `Some(None)` when layout is randomized without seed, and
-/// `Some(Some(seed))` when layout is randomized with the seed `seed`.
-fn format_unit_test(
-    harness_metadata: &HarnessMetadata,
-    concrete_vals: &[ConcreteVal],
-    randomize_layout_seed: Option<Option<u64>>,
-) -> UnitTest {
+/// Generate a formatted unit test from a list of concrete values.
+fn format_unit_test(harness_name: &str, concrete_vals: &[ConcreteVal]) -> UnitTest {
+    // Hash the concrete values along with the proof harness name.
+    let mut hasher = DefaultHasher::new();
+    harness_name.hash(&mut hasher);
+    concrete_vals.hash(&mut hasher);
+    let hash = hasher.finish();
+    let func_name = format!("kani_concrete_playback_{harness_name}_{hash}");
+
+    let func_before_concrete_vals = [
+        "#[test]".to_string(),
+        format!("fn {func_name}() {{"),
+        format!("{:<4}let concrete_vals: Vec<Vec<u8>> = vec![", " "),
+    ]
+    .into_iter();
+    let formatted_concrete_vals = format_concrete_vals(concrete_vals);
+    let func_after_concrete_vals = [
+        format!("{:<4}];", " "),
+        format!("{:<4}kani::concrete_playback_run(concrete_vals, {harness_name});", " "),
+        "}".to_string(),
+    ]
+    .into_iter();
+
+    let full_func: Vec<_> = func_before_concrete_vals
+        .chain(formatted_concrete_vals)
+        .chain(func_after_concrete_vals)
+        .collect();
+
+    let full_func_code: String = full_func.join("\n");
+    UnitTest { unit_test_str: full_func_code, unit_test_name: func_name }
+}
+
+/// Format an initializer expression for a number of concrete values.
+fn format_concrete_vals(concrete_vals: &[ConcreteVal]) -> impl Iterator<Item = String> + '_ {
     /*
     Given a number of byte vectors, format them as:
     // interp_concrete_val_1
@@ -227,52 +248,12 @@ fn format_unit_test(
     // interp_concrete_val_2
     vec![concrete_val_2], ...
     */
-    let vec_whitespace = " ".repeat(8);
-    let vecs_as_str = concrete_vals
-        .iter()
-        .map(|concrete_val| {
-            format!(
-                "{vec_whitespace}// {}\n{vec_whitespace}vec!{:?}",
-                concrete_val.interp_val, concrete_val.byte_arr
-            )
-        })
-        .collect::<Vec<String>>()
-        .join(",\n");
-    let harness_name = &harness_metadata.mangled_name;
-    let pretty_name = &harness_metadata.get_harness_name_unqualified();
-
-    // Hash the generated det val string along with the proof harness name.
-    let mut hasher = DefaultHasher::new();
-    harness_name.hash(&mut hasher);
-    vecs_as_str.hash(&mut hasher);
-    let hash = hasher.finish();
-
-    let concrete_playback_func_name = format!("kani_concrete_playback_{pretty_name}_{hash}");
-
-    let randomize_layout_message = match randomize_layout_seed {
-        None => String::new(),
-        Some(None) => {
-            "// This test has to be run with rustc option: -Z randomize-layout\n    ".to_string()
-        }
-        Some(Some(seed)) => format!(
-            "// This test has to be run with rust options: -Z randomize-layout -Z layout-seed={}\n    ",
-            seed,
-        ),
-    };
-
-    #[rustfmt::skip]
-    let concrete_playback = format!(
-"#[test]
-fn {concrete_playback_func_name}() {{
-    {randomize_layout_message}\
-    let concrete_vals: Vec<Vec<u8>> = vec![
-{vecs_as_str}
-    ];
-    kani::concrete_playback_run(concrete_vals, {pretty_name});
-}}"
-    );
-
-    UnitTest { unit_test_str: concrete_playback, unit_test_name: concrete_playback_func_name }
+    concrete_vals.iter().flat_map(|concrete_val| {
+        [
+            format!("{:<8}// {}", " ", concrete_val.interp_val),
+            format!("{:<8}vec!{:?},", " ", concrete_val.byte_arr),
+        ]
+    })
 }
 
 struct FileLineRange {
@@ -302,6 +283,7 @@ struct UnitTest {
 mod concrete_vals_extractor {
     use crate::cbmc_output_parser::{CheckStatus, Property, TraceItem};
 
+    #[derive(Hash)]
     pub struct ConcreteVal {
         pub byte_arr: Vec<u8>,
         pub interp_val: String,
@@ -311,7 +293,8 @@ mod concrete_vals_extractor {
     /// This will return None if the failure is not related to a user assertion.
     pub fn extract_harness_values(result_items: &[Property]) -> Option<Vec<ConcreteVal>> {
         let mut failures = result_items.iter().filter(|prop| {
-            prop.property_class() == "assertion" && prop.status == CheckStatus::Failure
+            (prop.property_class() == "assertion" && prop.status == CheckStatus::Failure)
+                || (prop.property_class() == "cover" && prop.status == CheckStatus::Satisfied)
         });
 
         // Process the first assertion failure.
@@ -385,5 +368,150 @@ mod concrete_vals_extractor {
             }
         }
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::concrete_vals_extractor::*;
+    use super::*;
+    use crate::cbmc_output_parser::{
+        CheckStatus, Property, PropertyId, SourceLocation, TraceData, TraceItem, TraceValue,
+    };
+
+    #[test]
+    fn format_zero_concrete_vals() {
+        let concrete_vals: [ConcreteVal; 0] = [];
+        let actual: Vec<_> = format_concrete_vals(&concrete_vals).collect();
+        let expected: Vec<String> = Vec::new();
+        assert_eq!(actual, expected);
+    }
+
+    /// Check that the generated unit tests have the right formatting and indentation
+    #[test]
+    fn format_two_concrete_vals() {
+        let concrete_vals = [
+            ConcreteVal { byte_arr: vec![0, 0], interp_val: "0".to_string() },
+            ConcreteVal { byte_arr: vec![0, 0, 0, 0, 0, 0, 0, 0], interp_val: "0l".to_string() },
+        ];
+        let actual: Vec<_> = format_concrete_vals(&concrete_vals).collect();
+        let expected = vec![
+            format!("{:<8}// 0", " "),
+            format!("{:<8}vec![0, 0],", " "),
+            format!("{:<8}// 0l", " "),
+            format!("{:<8}vec![0, 0, 0, 0, 0, 0, 0, 0],", " "),
+        ];
+        assert_eq!(actual, expected);
+    }
+
+    struct SplitUnitTestName {
+        before_hash: String,
+        hash: String,
+    }
+
+    /// Unit test names are formatted as "kani_concrete_playback_{harness_name}_{hash}".
+    /// This function splits the name into "kani_concrete_playback_{harness_name}" and "{hash}".
+    fn split_unit_test_name(unit_test_name: &str) -> SplitUnitTestName {
+        let underscore_locs: Vec<_> = unit_test_name.match_indices('_').collect();
+        let last_underscore_idx = underscore_locs.last().unwrap().0;
+        SplitUnitTestName {
+            before_hash: unit_test_name[..last_underscore_idx].to_string(),
+            hash: unit_test_name[last_underscore_idx + 1..].to_string(),
+        }
+    }
+
+    /// Since hashes can not be relied on in tests, this compares all parts of a unit test except the hash.
+    #[test]
+    fn format_unit_test_full_func() {
+        let harness_name = "test_proof_harness";
+        let concrete_vals = [ConcreteVal { byte_arr: vec![0, 0], interp_val: "0".to_string() }];
+        let unit_test = format_unit_test(harness_name, &concrete_vals);
+        let full_func: Vec<&str> = unit_test.unit_test_str.split('\n').collect();
+        let split_unit_test_name = split_unit_test_name(&unit_test.unit_test_name);
+        let expected_after_func_name = vec![
+            format!("{:<4}let concrete_vals: Vec<Vec<u8>> = vec![", " "),
+            format!("{:<8}// 0", " "),
+            format!("{:<8}vec![0, 0],", " "),
+            format!("{:<4}];", " "),
+            format!("{:<4}kani::concrete_playback_run(concrete_vals, {harness_name});", " "),
+            "}".to_string(),
+        ];
+
+        assert_eq!(full_func[0], "#[test]");
+        assert_eq!(
+            split_unit_test_name.before_hash,
+            format!("kani_concrete_playback_{harness_name}")
+        );
+        assert_eq!(full_func[1], format!("fn {}() {{", unit_test.unit_test_name));
+        assert_eq!(full_func[2..], expected_after_func_name);
+    }
+
+    /// Generates a unit test and returns its hash.
+    fn extract_hash_from_unit_test(harness_name: &str, concrete_vals: &[ConcreteVal]) -> String {
+        let unit_test = format_unit_test(harness_name, concrete_vals);
+        split_unit_test_name(&unit_test.unit_test_name).hash
+    }
+
+    /// Two hashes should not be the same if either the harness_name or the concrete_vals changes.
+    #[test]
+    fn check_hashes_are_unique() {
+        let harness_name_1 = "test_proof_harness1";
+        let harness_name_2 = "test_proof_harness2";
+        let concrete_vals_1 = [ConcreteVal { byte_arr: vec![0, 0], interp_val: "0".to_string() }];
+        let concrete_vals_2 = [ConcreteVal { byte_arr: vec![1, 0], interp_val: "0".to_string() }];
+        let concrete_vals_3 = [ConcreteVal { byte_arr: vec![0, 0], interp_val: "1".to_string() }];
+
+        let hash_base = extract_hash_from_unit_test(harness_name_1, &concrete_vals_1);
+        let hash_diff_harness_name = extract_hash_from_unit_test(harness_name_2, &concrete_vals_1);
+        let hash_diff_concrete_byte = extract_hash_from_unit_test(harness_name_1, &concrete_vals_2);
+        let hash_diff_interp_val = extract_hash_from_unit_test(harness_name_1, &concrete_vals_3);
+
+        assert_ne!(hash_base, hash_diff_harness_name);
+        assert_ne!(hash_base, hash_diff_concrete_byte);
+        assert_ne!(hash_base, hash_diff_interp_val);
+    }
+
+    /// Test util functions which extract the counter example values from a property.
+    #[test]
+    fn check_concrete_vals_extractor() {
+        let processed_items = [Property {
+            description: "".to_string(),
+            property_id: PropertyId {
+                fn_name: Some("".to_string()),
+                class: "assertion".to_string(),
+                id: 1,
+            },
+            status: CheckStatus::Failure,
+            reach: None,
+            source_location: SourceLocation {
+                column: None,
+                file: None,
+                function: None,
+                line: None,
+            },
+            trace: Some(vec![TraceItem {
+                thread: 0,
+                step_type: "assignment".to_string(),
+                hidden: false,
+                lhs: Some("goto_symex$$return_value".to_string()),
+                source_location: Some(SourceLocation {
+                    column: None,
+                    file: None,
+                    function: Some("kani::any_raw_internal::<u8>".to_string()),
+                    line: None,
+                }),
+                value: Some(TraceValue {
+                    name: "".to_string(),
+                    binary: Some("0000001100000001".to_string()),
+                    data: Some(TraceData::NonBool("385".to_string())),
+                    width: Some(16),
+                }),
+            }]),
+        }];
+        let concrete_vals = extract_harness_values(&processed_items).unwrap();
+        let concrete_val = &concrete_vals[0];
+
+        assert_eq!(concrete_val.byte_arr, vec![1, 3]);
+        assert_eq!(concrete_val.interp_val, "385");
     }
 }

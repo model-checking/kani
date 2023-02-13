@@ -4,13 +4,8 @@
 
 use rustc_ast::Attribute;
 use rustc_data_structures::fx::FxHashMap;
-use rustc_driver::RunCompiler;
-use rustc_driver::{Callbacks, Compilation};
-use rustc_errors::ErrorGuaranteed;
 use rustc_hir::def_id::{DefId, LocalDefId};
 use rustc_hir::definitions::DefPathHash;
-use rustc_interface::interface::Compiler;
-use rustc_interface::Queries;
 use rustc_middle::ty::TyCtxt;
 
 use crate::kani_middle::attributes::{extract_path_arguments, partition_kanitool_attributes};
@@ -19,50 +14,28 @@ use crate::kani_middle::resolve::resolve_path;
 /// Collects the stubs from the harnesses in a crate, running rustc (to
 /// expansion) with the supplied arguments `rustc_args`.
 pub fn collect_stub_mappings(
-    rustc_args: &[String],
-) -> Result<FxHashMap<String, FxHashMap<DefPathHash, DefPathHash>>, ErrorGuaranteed> {
-    let mut callbacks = CollectorCallbacks::default();
-    let compiler = RunCompiler::new(rustc_args, &mut callbacks);
-    compiler.run().map(|_| callbacks.stub_mapping)
-}
-
-/// A rustc callback that is used to collect the stub mappings specified for
-/// each harness.
-#[derive(Default)]
-struct CollectorCallbacks {
-    stub_mapping: FxHashMap<String, FxHashMap<DefPathHash, DefPathHash>>,
-}
-
-impl Callbacks for CollectorCallbacks {
-    /// The main callback, invoked after the HIR has been created.
-    fn after_expansion<'tcx>(
-        &mut self,
-        _compiler: &Compiler,
-        queries: &'tcx Queries<'tcx>,
-    ) -> Compilation {
-        queries.global_ctxt().unwrap().peek_mut().enter(|tcx| {
-            for item in tcx.hir_crate_items(()).items() {
-                let local_def_id = item.owner_id.def_id;
-                let def_id = local_def_id.to_def_id();
-                let (proof, other) = partition_kanitool_attributes(tcx.get_attrs_unchecked(def_id));
-                // Ignore anything that is not a harness
-                if proof.is_empty() {
-                    continue;
-                }
-                let mut stub_pairs = FxHashMap::default();
-                for (name, attr) in other {
-                    if name == "stub" {
-                        update_stub_mapping(tcx, local_def_id, attr, &mut stub_pairs);
-                    }
-                }
-                let harness_name = tcx.def_path_str(def_id);
-                self.stub_mapping.insert(harness_name, stub_pairs);
+    tcx: TyCtxt,
+) -> FxHashMap<String, FxHashMap<DefPathHash, DefPathHash>> {
+    tcx.hir_crate_items(())
+        .items()
+        .filter_map(|item| {
+            let local_def_id = item.owner_id.def_id;
+            let def_id = local_def_id.to_def_id();
+            let (proof, other) = partition_kanitool_attributes(tcx.get_attrs_unchecked(def_id));
+            // Ignore anything that is not a harness
+            if proof.is_empty() {
+                return None;
             }
-            tcx.sess.abort_if_errors();
-            // We do not need to continue compilation after we've collected the stub mappings
-            Compilation::Stop
+            let mut stub_pairs = FxHashMap::default();
+            for (name, attr) in other {
+                if name == "stub" {
+                    update_stub_mapping(tcx, local_def_id, attr, &mut stub_pairs);
+                }
+            }
+            let harness_name = tcx.def_path_str(def_id);
+            Some((harness_name, stub_pairs))
         })
-    }
+        .collect()
 }
 
 /// Given a `kani::stub` attribute, tries to extract a pair of paths (the
@@ -98,7 +71,7 @@ fn extract_stubbing_pair(
         if let Some(def_id) = maybe_resolved {
             tracing::debug!(?def_id, "Resolved {name} to {}", tcx.def_path_str(def_id));
         } else {
-            tcx.sess.span_err(attr.span, format!("unable to resolve function/method: {}", name));
+            tcx.sess.span_err(attr.span, format!("unable to resolve function/method: {name}"));
         }
         maybe_resolved
     };

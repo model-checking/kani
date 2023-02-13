@@ -1,0 +1,91 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+# We use block scalar notation to allow us to add ":" to the workflow name.
+name: >-
+  Nightly: CBMC Latest
+
+on:
+  schedule:
+    - cron: "0 9 * * *" # Run this every day at 9 AM UTC (4 AM ET/1 AM PT)
+  workflow_dispatch:    # Allow manual dispatching for a custom branch / tag.
+
+
+env:
+  RUST_BACKTRACE: 1
+
+jobs:
+  regression:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-11, ubuntu-18.04, ubuntu-20.04, ubuntu-22.04]
+    steps:
+      - name: Checkout Kani under "kani"
+        uses: actions/checkout@v3
+        with:
+          path: kani
+
+      - name: Setup Kani Dependencies
+        uses: ./kani/.github/actions/setup
+        with:
+          os: ${{ matrix.os }}
+          kani_dir: 'kani'
+
+      - name: Build Kani
+        working-directory: ./kani
+        run: cargo build-dev
+
+      - name: Checkout CBMC under "cbmc"
+        uses: actions/checkout@v3
+        with:
+          repository: diffblue/cbmc
+          path: cbmc
+
+      - name: Build CBMC
+        working-directory: ./cbmc
+        run: |
+          cmake -S . -Bbuild -DWITH_JBMC=OFF
+          cmake --build build -- -j 4
+          # Prepend the bin directory to $PATH
+          echo "${GITHUB_WORKSPACE}/cbmc/build/bin" >> $GITHUB_PATH
+
+      - name: Execute Kani regressions
+        working-directory: ./kani
+        run: ./scripts/kani-regression.sh
+
+  perf:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout Kani under "kani"
+        uses: actions/checkout@v3
+        with:
+          path: kani
+
+      - name: Setup Kani Dependencies
+        uses: ./kani/.github/actions/setup
+        with:
+          os: ubuntu-20.04
+          kani_dir: 'kani'
+
+      - name: Build Kani using release mode
+        working-directory: ./kani
+        run: cargo build-dev -- --release
+
+      - name: Checkout CBMC under "cbmc"
+        uses: actions/checkout@v3
+        with:
+          repository: diffblue/cbmc
+          path: cbmc
+
+      - name: Build CBMC
+        working-directory: ./cbmc
+        run: |
+          cmake -S . -Bbuild -DWITH_JBMC=OFF
+          cmake --build build -- -j 4
+          # Prepend the bin directory to $PATH
+          echo "${GITHUB_WORKSPACE}/cbmc/build/bin" >> $GITHUB_PATH
+
+      - name: Execute Kani performance tests
+        working-directory: ./kani
+        run: ./scripts/kani-perf.sh

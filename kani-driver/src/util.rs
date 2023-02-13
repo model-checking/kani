@@ -1,6 +1,15 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+//! Module that provides functions which are convenient for different purposes.
+//!
+//! In particular, the `warning` and `error` functions must be used for
+//! diagnostic output across the `kani-driver` components. Please follow the
+//! recommendations in <https://model-checking.github.io/kani/conventions.html>
+//! when reporting any kind of diagnostic for users. Note that it's recommended
+//! to use the Rust compiler's error message utilities if you're working on the
+//! `kani-compiler`.
+
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -41,19 +50,6 @@ pub fn executable_basename(argv0: &Option<&OsString>) -> Option<OsString> {
     None
 }
 
-/// Joining an OsString with a delimeter is missing from Rust libraries, so
-/// let's write out own, and with convenient types...
-pub fn join_osstring(elems: &[OsString], joiner: &str) -> OsString {
-    let mut str = OsString::new();
-    for (i, arg) in elems.iter().enumerate() {
-        if i != 0 {
-            str.push(OsString::from(joiner));
-        }
-        str.push(arg);
-    }
-    str
-}
-
 /// Render a Command as a string, to log it (e.g. in dry runs)
 pub fn render_command(cmd: &Command) -> OsString {
     let mut str = OsString::new();
@@ -86,6 +82,20 @@ pub fn render_command(cmd: &Command) -> OsString {
 /// Generate the filename for a specialized harness from the base linked object
 pub fn specialized_harness_name(linked_obj: &Path, harness_filename: &str) -> PathBuf {
     alter_extension(linked_obj, &format!("for-{harness_filename}.out"))
+}
+
+/// Print a warning message. This will add a "warning:" tag before the message and style accordingly.
+pub fn warning(msg: &str) {
+    let warning = console::style("warning:").bold().yellow();
+    let msg_fmt = console::style(msg).bold();
+    println!("{warning} {msg_fmt}")
+}
+
+/// Print an error message. This will add an "error:" tag before the message and style accordingly.
+pub fn error(msg: &str) {
+    let error = console::style("error:").bold().red();
+    let msg_fmt = console::style(msg).bold();
+    println!("{error} {msg_fmt}")
 }
 
 #[cfg(test)]
@@ -122,20 +132,6 @@ mod tests {
         assert_eq!(executable_basename(&Some(&OsString::from("./foo.exe"))), Some("foo".into()));
         assert_eq!(executable_basename(&Some(&OsString::from("foo.exe"))), Some("foo".into()));
         assert_eq!(executable_basename(&Some(&OsString::from("foo"))), Some("foo".into()));
-    }
-
-    #[test]
-    fn check_join_osstring() {
-        assert_eq!(
-            join_osstring(&["a".into(), "b".into(), "cd".into()], " "),
-            OsString::from("a b cd")
-        );
-        assert_eq!(join_osstring(&[], " "), OsString::from(""));
-        assert_eq!(join_osstring(&["a".into()], " "), OsString::from("a"));
-        assert_eq!(
-            join_osstring(&["a".into(), "b".into(), "cd".into()], ", "),
-            OsString::from("a, b, cd")
-        );
     }
 
     #[test]

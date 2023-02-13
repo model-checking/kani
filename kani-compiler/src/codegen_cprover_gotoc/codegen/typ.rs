@@ -20,7 +20,7 @@ use rustc_middle::ty::{
 use rustc_middle::ty::{List, TypeFoldable};
 use rustc_span::def_id::DefId;
 use rustc_target::abi::{
-    Abi::Vector, FieldsShape, Integer, Layout, Primitive, Size, TagEncoding, TyAndLayout,
+    Abi::Vector, FieldsShape, Integer, LayoutS, Primitive, Size, TagEncoding, TyAndLayout,
     VariantIdx, Variants,
 };
 use rustc_target::spec::abi::Abi;
@@ -135,8 +135,8 @@ impl<'tcx> GotocCtx<'tcx> {
     /// This method prints the details of a GotoC type, for debugging purposes.
     #[allow(unused)]
     pub(crate) fn debug_print_type_recursively(&self, ty: &Type) -> String {
-        fn debug_write_type<'tcx>(
-            ctx: &GotocCtx<'tcx>,
+        fn debug_write_type(
+            ctx: &GotocCtx,
             ty: &Type,
             out: &mut impl std::fmt::Write,
             indent: usize,
@@ -256,9 +256,9 @@ impl<'tcx> GotocCtx<'tcx> {
         out
     }
 
-    /// Closures expect their last arg untupled at call site, see comment at
-    /// ty_needs_closure_untupled.
-    fn sig_with_closure_untupled(&self, sig: ty::PolyFnSig<'tcx>) -> ty::PolyFnSig<'tcx> {
+    /// Function shims and closures expect their last arg untupled at call site, see comment at
+    /// ty_needs_untupled_args.
+    fn sig_with_untupled_args(&self, sig: ty::PolyFnSig<'tcx>) -> ty::PolyFnSig<'tcx> {
         debug!("sig_with_closure_untupled sig: {:?}", sig);
         let fn_sig = sig.skip_binder();
         if let Some((tupe, prev_args)) = fn_sig.inputs().split_last() {
@@ -324,13 +324,15 @@ impl<'tcx> GotocCtx<'tcx> {
         );
 
         // The parameter types are tupled, but we want to have them in a vector
-        self.sig_with_closure_untupled(sig)
+        self.sig_with_untupled_args(sig)
     }
 
-    // Adapted from `fn_sig_for_fn_abi` in compiler/rustc_middle/src/ty/layout.rs
+    // Adapted from `fn_sig_for_fn_abi` in
+    // https://github.com/rust-lang/rust/blob/739d68a76e35b22341d9930bb6338bf202ba05ba/compiler/rustc_ty_utils/src/abi.rs#L88
     // Code duplication tracked here: https://github.com/model-checking/kani/issues/1365
     fn generator_sig(
         &self,
+        did: &DefId,
         ty: Ty<'tcx>,
         substs: ty::subst::SubstsRef<'tcx>,
     ) -> ty::PolyFnSig<'tcx> {
@@ -352,10 +354,21 @@ impl<'tcx> GotocCtx<'tcx> {
         let env_ty = self.tcx.mk_adt(pin_adt_ref, pin_substs);
 
         let sig = sig.skip_binder();
-        let state_did = self.tcx.require_lang_item(LangItem::GeneratorState, None);
-        let state_adt_ref = self.tcx.adt_def(state_did);
-        let state_substs = self.tcx.intern_substs(&[sig.yield_ty.into(), sig.return_ty.into()]);
-        let ret_ty = self.tcx.mk_adt(state_adt_ref, state_substs);
+        // The `FnSig` and the `ret_ty` here is for a generators main
+        // `Generator::resume(...) -> GeneratorState` function in case we
+        // have an ordinary generator, or the `Future::poll(...) -> Poll`
+        // function in case this is a special generator backing an async construct.
+        let ret_ty = if self.tcx.generator_is_async(*did) {
+            let state_did = self.tcx.require_lang_item(LangItem::Poll, None);
+            let state_adt_ref = self.tcx.adt_def(state_did);
+            let state_substs = self.tcx.intern_substs(&[sig.return_ty.into()]);
+            self.tcx.mk_adt(state_adt_ref, state_substs)
+        } else {
+            let state_did = self.tcx.require_lang_item(LangItem::GeneratorState, None);
+            let state_adt_ref = self.tcx.adt_def(state_did);
+            let state_substs = self.tcx.intern_substs(&[sig.yield_ty.into(), sig.return_ty.into()]);
+            self.tcx.mk_adt(state_adt_ref, state_substs)
+        };
         ty::Binder::bind_with_vars(
             self.tcx.mk_fn_sig(
                 [env_ty, sig.resume_ty].iter(),
@@ -374,15 +387,13 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Closure(def_id, subst) => self.closure_sig(*def_id, subst),
             ty::FnPtr(..) | ty::FnDef(..) => {
                 let sig = fntyp.fn_sig(self.tcx);
-                // Some virtual calls through a vtable may actually be closures
-                // or shims that also need the arguments untupled, even though
-                // the kind of the trait type is not a ty::Closure.
-                if self.ty_needs_closure_untupled(fntyp) {
-                    return self.sig_with_closure_untupled(sig);
+                // Calls through vtable or Fn pointer for an ABI that may require untupled arguments.
+                if self.ty_needs_untupled_args(fntyp) {
+                    return self.sig_with_untupled_args(sig);
                 }
                 sig
             }
-            ty::Generator(_, substs, _) => self.generator_sig(fntyp, substs),
+            ty::Generator(did, substs, _) => self.generator_sig(did, fntyp, substs),
             _ => unreachable!("Can't get function signature of type: {:?}", fntyp),
         })
     }
@@ -421,6 +432,11 @@ impl<'tcx> GotocCtx<'tcx> {
 
     pub fn place_ty(&self, p: &Place<'tcx>) -> Ty<'tcx> {
         self.monomorphize(p.ty(self.current_fn().mir().local_decls(), self.tcx).ty)
+    }
+
+    /// Is the MIR type a zero-sized type.
+    pub fn is_zst(&self, t: Ty<'tcx>) -> bool {
+        self.layout_of(t).is_zst()
     }
 
     /// Is the MIR type an unsized type
@@ -862,10 +878,10 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_alignment_padding(
         &self,
         size: Size,
-        layout: &Layout,
+        layout: &LayoutS<VariantIdx>,
         idx: usize,
     ) -> Option<DatatypeComponent> {
-        let align = Size::from_bits(layout.align().abi.bits());
+        let align = Size::from_bits(layout.align.abi.bits());
         let overhang = Size::from_bits(size.bits() % align.bits());
         if overhang != Size::ZERO {
             self.codegen_struct_padding(size, size + align - overhang, idx)
@@ -887,16 +903,16 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_struct_fields(
         &mut self,
         flds: Vec<(String, Ty<'tcx>)>,
-        layout: &Layout,
+        layout: &LayoutS<VariantIdx>,
         initial_offset: Size,
     ) -> Vec<DatatypeComponent> {
-        match &layout.fields() {
+        match &layout.fields {
             FieldsShape::Arbitrary { offsets, memory_index } => {
                 assert_eq!(flds.len(), offsets.len());
                 assert_eq!(offsets.len(), memory_index.len());
                 let mut final_fields = Vec::with_capacity(flds.len());
                 let mut offset = initial_offset;
-                for idx in layout.fields().index_by_increasing_offset() {
+                for idx in layout.fields.index_by_increasing_offset() {
                     let fld_offset = offsets[idx];
                     let (fld_name, fld_ty) = &flds[idx];
                     if let Some(padding) =
@@ -919,7 +935,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             // Primitives, such as NEVER, have no fields
             FieldsShape::Primitive => vec![],
-            _ => unreachable!("{}\n{:?}", self.current_fn().readable_name(), layout.fields()),
+            _ => unreachable!("{}\n{:?}", self.current_fn().readable_name(), layout.fields),
         }
     }
 
@@ -928,10 +944,10 @@ impl<'tcx> GotocCtx<'tcx> {
         let flds: Vec<_> =
             tys.iter().enumerate().map(|(i, t)| (GotocCtx::tuple_fld_name(i), *t)).collect();
         // tuple cannot have other initial offset
-        self.codegen_struct_fields(flds, &layout.layout, Size::ZERO)
+        self.codegen_struct_fields(flds, &layout.layout.0, Size::ZERO)
     }
 
-    /// A closure in Rust MIR takes two arguments:
+    /// A closure / some shims in Rust MIR takes two arguments:
     ///
     ///    0. a struct representing the environment
     ///    1. a tuple containing the parameters
@@ -955,7 +971,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// so we follow the example elsewhere in Rust to use the ABI call type.
     ///
     /// See `make_call_args` in `rustc_mir_transform/src/inline.rs`
-    pub fn ty_needs_closure_untupled(&self, ty: Ty<'tcx>) -> bool {
+    pub fn ty_needs_untupled_args(&self, ty: Ty<'tcx>) -> bool {
         // Note that [Abi::RustCall] is not [Abi::Rust].
         // Documentation is sparse, but it does seem to correspond to the need for untupling.
         match ty.kind() {
@@ -1133,7 +1149,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             fields.extend(ctx.codegen_alignment_padding(
                 offset,
-                &type_and_layout.layout,
+                &type_and_layout.layout.0,
                 fields.len(),
             ));
             fields
@@ -1294,7 +1310,11 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_function_sig(&mut self, sig: PolyFnSig<'tcx>) -> Type {
         let sig = self.monomorphize(sig);
         let sig = self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig);
-        let params = sig.inputs().iter().map(|t| self.codegen_ty(*t)).collect();
+        let params = sig
+            .inputs()
+            .iter()
+            .filter_map(|t| if self.is_zst(*t) { None } else { Some(self.codegen_ty(*t)) })
+            .collect();
 
         if sig.c_variadic {
             Type::variadic_code_with_unnamed_parameters(params, self.codegen_ty(sig.output()))
@@ -1331,7 +1351,7 @@ impl<'tcx> GotocCtx<'tcx> {
         self.ensure_struct(self.ty_mangled_name(ty), self.ty_pretty_name(ty), |ctx, _| {
             let variant = &def.variants().raw[0];
             let layout = ctx.layout_of(ty);
-            ctx.codegen_variant_struct_fields(variant, subst, &layout.layout, Size::ZERO)
+            ctx.codegen_variant_struct_fields(variant, subst, &layout.layout.0, Size::ZERO)
         })
     }
 
@@ -1340,7 +1360,7 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         variant: &VariantDef,
         subst: &'tcx InternalSubsts<'tcx>,
-        layout: &Layout,
+        layout: &LayoutS<VariantIdx>,
         initial_offset: Size,
     ) -> Vec<DatatypeComponent> {
         let flds: Vec<_> =
@@ -1423,7 +1443,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         Some(variant) => {
                             // a single enum is pretty much like a struct
                             let layout = gcx.layout_of(ty).layout;
-                            gcx.codegen_variant_struct_fields(variant, subst, &layout, Size::ZERO)
+                            gcx.codegen_variant_struct_fields(variant, subst, &layout.0, Size::ZERO)
                         }
                     }
                 })
@@ -1509,9 +1529,9 @@ impl<'tcx> GotocCtx<'tcx> {
         ty: Ty<'tcx>,
         adtdef: &'tcx AdtDef,
         subst: &'tcx InternalSubsts<'tcx>,
-        variants: &IndexVec<VariantIdx, Layout>,
+        variants: &IndexVec<VariantIdx, LayoutS<VariantIdx>>,
     ) -> Type {
-        let non_zst_count = variants.iter().filter(|layout| layout.size().bytes() > 0).count();
+        let non_zst_count = variants.iter().filter(|layout| layout.size.bytes() > 0).count();
         let mangled_name = self.ty_mangled_name(ty);
         let pretty_name = self.ty_pretty_name(ty);
         tracing::trace!(?pretty_name, ?variants, ?subst, ?non_zst_count, "codegen_enum: Niche");
@@ -1528,12 +1548,12 @@ impl<'tcx> GotocCtx<'tcx> {
 
     pub(crate) fn variant_min_offset(
         &self,
-        variants: &IndexVec<VariantIdx, Layout>,
+        variants: &IndexVec<VariantIdx, LayoutS<VariantIdx>>,
     ) -> Option<Size> {
         variants
             .iter()
             .filter_map(|lo| {
-                if lo.fields().count() == 0 {
+                if lo.fields.count() == 0 {
                     None
                 } else {
                     // get the offset of the leftmost field, which is the one
@@ -1541,10 +1561,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     // in the order of increasing offsets. Note that this is not
                     // necessarily the 0th field since the compiler may reorder
                     // fields.
-                    Some(
-                        lo.fields()
-                            .offset(lo.fields().index_by_increasing_offset().next().unwrap()),
-                    )
+                    Some(lo.fields.offset(lo.fields.index_by_increasing_offset().next().unwrap()))
                 }
             })
             .min()
@@ -1615,7 +1632,7 @@ impl<'tcx> GotocCtx<'tcx> {
         pretty_name: InternedString,
         def: &'tcx AdtDef,
         subst: &'tcx InternalSubsts<'tcx>,
-        layouts: &IndexVec<VariantIdx, Layout>,
+        layouts: &IndexVec<VariantIdx, LayoutS<VariantIdx>>,
         initial_offset: Size,
     ) -> Vec<DatatypeComponent> {
         def.variants()
@@ -1647,7 +1664,7 @@ impl<'tcx> GotocCtx<'tcx> {
         pretty_name: InternedString,
         case: &VariantDef,
         subst: &'tcx InternalSubsts<'tcx>,
-        variant: &Layout,
+        variant: &LayoutS<VariantIdx>,
         initial_offset: Size,
     ) -> Type {
         let case_name = format!("{name}::{}", case.name);
@@ -1679,33 +1696,46 @@ impl<'tcx> GotocCtx<'tcx> {
         let sig = self.current_fn().sig();
         let sig = self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig);
         // we don't call [codegen_function_sig] because we want to get a bit more metainformation.
+        let is_vtable_shim =
+            matches!(self.current_fn().instance().def, ty::InstanceDef::VTableShim(..));
         let mut params: Vec<Parameter> = sig
             .inputs()
             .iter()
             .enumerate()
-            .map(|(i, t)| {
-                let lc = Local::from_usize(i + 1);
-                let mut ident = self.codegen_var_name(&lc);
+            .filter_map(|(i, t)| {
+                let is_vtable_shim_self = i == 0 && is_vtable_shim;
+                if self.is_zst(*t) && !is_vtable_shim_self {
+                    // We ignore zero-sized parameters.
+                    // See https://github.com/model-checking/kani/issues/274 for more details.
+                    None
+                } else {
+                    let lc = Local::from_usize(i + 1);
+                    let mut ident = self.codegen_var_name(&lc);
 
-                // `spread_arg` indicates that the last argument is tupled
-                // at the LLVM/codegen level, so we need to declare the indivual
-                // components as parameters with a special naming convention
-                // so that we can "retuple" them in the function prelude.
-                // See: compiler/rustc_codegen_llvm/src/gotoc/mod.rs:codegen_function_prelude
-                if let Some(spread) = self.current_fn().mir().spread_arg {
-                    if lc.index() >= spread.index() {
-                        let (name, _) = self.codegen_spread_arg_name(&lc);
-                        ident = name;
+                    // `spread_arg` indicates that the last argument is tupled
+                    // at the LLVM/codegen level, so we need to declare the indivual
+                    // components as parameters with a special naming convention
+                    // so that we can "retuple" them in the function prelude.
+                    // See: compiler/rustc_codegen_llvm/src/gotoc/mod.rs:codegen_function_prelude
+                    if let Some(spread) = self.current_fn().mir().spread_arg {
+                        if lc.index() >= spread.index() {
+                            let (name, _) = self.codegen_spread_arg_name(&lc);
+                            ident = name;
+                        }
                     }
+                    Some(
+                        self.codegen_ty(*t)
+                            .as_parameter(Some(ident.clone().into()), Some(ident.into())),
+                    )
                 }
-                self.codegen_ty(*t).as_parameter(Some(ident.clone().into()), Some(ident.into()))
             })
             .collect();
 
         // For vtable shims, we need to modify fn(self, ...) to fn(self: *mut Self, ...),
         // since the vtable functions expect a pointer as the first argument. See the comment
         // and similar code in compiler/rustc_mir/src/shim.rs.
-        if let ty::InstanceDef::VTableShim(..) = self.current_fn().instance().def {
+        // TODO(celina): Use fn_abi_of_instance instead of sig so we don't need to do this manually.
+        if is_vtable_shim {
             if let Some(self_param) = params.first() {
                 let ident = self_param.identifier();
                 let ty = self_param.typ().clone();
@@ -1751,7 +1781,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         .map(|idx| {
                             let name = fields[idx].name.to_string().intern();
                             let field_ty = fields[idx].ty(ctx.tcx, adt_substs);
-                            let typ = if !ctx.layout_of(field_ty).is_zst() {
+                            let typ = if !ctx.is_zst(field_ty) {
                                 last_type.clone()
                             } else {
                                 ctx.codegen_ty(field_ty)
@@ -1782,12 +1812,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         let mut typ = struct_type;
         while let ty::Adt(adt_def, adt_substs) = typ.kind() {
-            assert_eq!(
-                adt_def.variants().len(),
-                1,
-                "Expected a single-variant ADT. Found {:?}",
-                typ
-            );
+            assert_eq!(adt_def.variants().len(), 1, "Expected a single-variant ADT. Found {typ:?}");
             let fields = &adt_def.variants().get(VariantIdx::from_u32(0)).unwrap().fields;
             let last_field = fields.last().expect("Trait should be the last element.");
             typ = last_field.ty(self.tcx, adt_substs);
@@ -1844,7 +1869,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     let fields = &adt_def.variants().get(VariantIdx::from_u32(0)).unwrap().fields;
                     let mut non_zsts = fields
                         .iter()
-                        .filter(|field| !ctx.layout_of(field.ty(ctx.tcx, adt_substs)).is_zst())
+                        .filter(|field| !ctx.is_zst(field.ty(ctx.tcx, adt_substs)))
                         .map(|non_zst| (non_zst.name.to_string(), non_zst.ty(ctx.tcx, adt_substs)));
                     let (name, next) = non_zsts.next().expect("Expected one non-zst field.");
                     self.curr = next;

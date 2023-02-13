@@ -13,22 +13,7 @@ use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{self, Ty};
 use rustc_middle::ty::{Instance, InstanceDef};
 use rustc_span::Span;
-use tracing::{debug, warn};
-
-#[macro_export]
-macro_rules! emit_concurrency_warning {
-    ($intrinsic: expr, $loc: expr) => {{
-        emit_concurrency_warning!($intrinsic, $loc, "a sequential operation");
-    }};
-    ($intrinsic: expr, $loc: expr, $treated_as: expr) => {{
-        warn!(
-            "Kani does not support concurrency for now. `{}` in {} treated as {}.",
-            $intrinsic,
-            $loc.short_string(),
-            $treated_as,
-        );
-    }};
-}
+use tracing::debug;
 
 struct SizeAlign {
     size: Expr,
@@ -68,7 +53,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         if let Some(target) = target {
             let loc = self.codegen_span(&span);
-            let fargs = self.codegen_funcall_args(args);
+            let fargs = self.codegen_funcall_args(args, false);
             Stmt::block(
                 vec![
                     self.codegen_intrinsic(instance, fargs, destination, Some(span)),
@@ -345,7 +330,7 @@ impl<'tcx> GotocCtx<'tcx> {
         macro_rules! codegen_atomic_binop {
             ($op: ident) => {{
                 let loc = self.codegen_span_option(span);
-                emit_concurrency_warning!(intrinsic, loc);
+                self.store_concurrent_construct(intrinsic, loc);
                 let var1_ref = fargs.remove(0);
                 let var1 = var1_ref.dereference();
                 let (tmp, decl_stmt) =
@@ -833,7 +818,7 @@ impl<'tcx> GotocCtx<'tcx> {
         p: &Place<'tcx>,
         loc: Location,
     ) -> Stmt {
-        emit_concurrency_warning!(intrinsic, loc);
+        self.store_concurrent_construct(intrinsic, loc);
         let var1_ref = fargs.remove(0);
         let var1 = var1_ref.dereference().with_location(loc);
         let res_stmt = self.codegen_expr_to_place(p, var1);
@@ -861,7 +846,7 @@ impl<'tcx> GotocCtx<'tcx> {
         p: &Place<'tcx>,
         loc: Location,
     ) -> Stmt {
-        emit_concurrency_warning!(intrinsic, loc);
+        self.store_concurrent_construct(intrinsic, loc);
         let var1_ref = fargs.remove(0);
         let var1 = var1_ref.dereference().with_location(loc);
         let (tmp, decl_stmt) =
@@ -897,7 +882,7 @@ impl<'tcx> GotocCtx<'tcx> {
         p: &Place<'tcx>,
         loc: Location,
     ) -> Stmt {
-        emit_concurrency_warning!(intrinsic, loc);
+        self.store_concurrent_construct(intrinsic, loc);
         let var1_ref = fargs.remove(0);
         let var1 = var1_ref.dereference().with_location(loc);
         let (tmp, decl_stmt) =
@@ -910,7 +895,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Atomic no-ops (e.g., atomic_fence) are transformed into SKIP statements
     fn codegen_atomic_noop(&mut self, intrinsic: &str, loc: Location) -> Stmt {
-        emit_concurrency_warning!(intrinsic, loc);
+        self.store_concurrent_construct(intrinsic, loc);
         let skip_stmt = Stmt::skip(loc);
         Stmt::atomic_block(vec![skip_stmt], loc)
     }
@@ -1499,8 +1484,7 @@ impl<'tcx> GotocCtx<'tcx> {
         if !ret_typ.base_type().unwrap().is_integer() {
             let (_, rust_base_type) = rust_ret_type.simd_size_and_type(self.tcx);
             let err_msg = format!(
-                "expected return type with integer elements, found `{}` with non-integer `{}`",
-                rust_ret_type, rust_base_type,
+                "expected return type with integer elements, found `{rust_ret_type}` with non-integer `{rust_base_type}`",
             );
             self.tcx.sess.span_err(span.unwrap(), err_msg);
         }
@@ -1541,7 +1525,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let check_stmt = self.codegen_assert_assume(
             check.not(),
             PropertyClass::ArithmeticOverflow,
-            format!("attempt to compute {} which would overflow", intrinsic).as_str(),
+            format!("attempt to compute {intrinsic} which would overflow").as_str(),
             loc,
         );
         let res = op_fun(a, b);
@@ -1591,8 +1575,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let (ret_type_len, ret_type_subtype) = rust_ret_type.simd_size_and_type(self.tcx);
         if ret_type_len != n {
             let err_msg = format!(
-                "expected return type of length {}, found `{}` with length {}",
-                n, rust_ret_type, ret_type_len
+                "expected return type of length {n}, found `{rust_ret_type}` with length {ret_type_len}"
             );
             self.tcx.sess.span_err(span.unwrap(), err_msg);
         }

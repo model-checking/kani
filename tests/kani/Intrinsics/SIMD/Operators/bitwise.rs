@@ -57,8 +57,8 @@ extern "platform-intrinsic" {
 }
 macro_rules! compare_simd_op_with_normal_op {
     ($simd_op: ident, $normal_op: tt, $simd_type: ident) => {
-        let tup_x = (kani::any(), kani::any());
-        let tup_y = (kani::any(), kani::any());
+        let tup_x: (_,_) = kani::any();
+        let tup_y: (_,_) = kani::any();
         let x = $simd_type(tup_x.0, tup_x.1);
         let y = $simd_type(tup_y.0, tup_y.1);
         let res_and = unsafe { $simd_op(x, y) };

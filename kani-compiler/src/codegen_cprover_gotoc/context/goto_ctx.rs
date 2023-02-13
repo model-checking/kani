@@ -29,22 +29,26 @@ use rustc_data_structures::rustc_erase_owner;
 use rustc_data_structures::sync::MetadataRef;
 use rustc_middle::mir::interpret::Allocation;
 use rustc_middle::span_bug;
-use rustc_middle::ty::layout::{HasParamEnv, HasTyCtxt, LayoutError, LayoutOfHelpers, TyAndLayout};
+use rustc_middle::ty::layout::{
+    FnAbiError, FnAbiOfHelpers, FnAbiRequest, HasParamEnv, HasTyCtxt, LayoutError, LayoutOfHelpers,
+    TyAndLayout,
+};
 use rustc_middle::ty::{self, Instance, Ty, TyCtxt};
 use rustc_session::cstore::MetadataLoader;
 use rustc_session::Session;
-use rustc_span::source_map::Span;
+use rustc_span::source_map::{respan, Span};
+use rustc_target::abi::call::FnAbi;
 use rustc_target::abi::Endian;
 use rustc_target::abi::{HasDataLayout, TargetDataLayout};
 use rustc_target::spec::Target;
 use std::path::Path;
-use std::rc::Rc;
 
 pub struct GotocCtx<'tcx> {
     /// the typing context
     pub tcx: TyCtxt<'tcx>,
-    /// the query system for kani
-    pub queries: Rc<QueryDb>,
+    /// a snapshot of the query values. The queries shouldn't change at this point,
+    /// so we just keep a copy.
+    pub queries: QueryDb,
     /// the generated symbol table for gotoc
     pub symbol_table: SymbolTable,
     pub hooks: GotocHooks<'tcx>,
@@ -67,11 +71,15 @@ pub struct GotocCtx<'tcx> {
     pub global_checks_count: u64,
     /// A map of unsupported constructs that were found while codegen
     pub unsupported_constructs: FxHashMap<InternedString, Vec<Location>>,
+    /// A map of concurrency constructs that are treated sequentially.
+    /// We collect them and print one warning at the end if not empty instead of printing one
+    /// warning at each occurrence.
+    pub concurrent_constructs: FxHashMap<InternedString, Vec<Location>>,
 }
 
 /// Constructor
 impl<'tcx> GotocCtx<'tcx> {
-    pub fn new(tcx: TyCtxt<'tcx>, queries: Rc<QueryDb>) -> GotocCtx<'tcx> {
+    pub fn new(tcx: TyCtxt<'tcx>, queries: QueryDb) -> GotocCtx<'tcx> {
         let fhks = fn_hooks();
         let mm = machine_model_from_session(tcx.sess);
         let symbol_table = SymbolTable::new(mm);
@@ -92,6 +100,7 @@ impl<'tcx> GotocCtx<'tcx> {
             test_harnesses: vec![],
             global_checks_count: 0,
             unsupported_constructs: FxHashMap::default(),
+            concurrent_constructs: FxHashMap::default(),
         }
     }
 }
@@ -380,6 +389,39 @@ impl<'tcx> HasDataLayout for GotocCtx<'tcx> {
         self.tcx.data_layout()
     }
 }
+
+/// Implement error handling for extracting function ABI information.
+impl<'tcx> FnAbiOfHelpers<'tcx> for GotocCtx<'tcx> {
+    type FnAbiOfResult = &'tcx FnAbi<'tcx, Ty<'tcx>>;
+
+    #[inline]
+    fn handle_fn_abi_err(
+        &self,
+        err: FnAbiError<'tcx>,
+        span: Span,
+        fn_abi_request: FnAbiRequest<'tcx>,
+    ) -> ! {
+        if let FnAbiError::Layout(LayoutError::SizeOverflow(_)) = err {
+            self.tcx.sess.emit_fatal(respan(span, err))
+        } else {
+            match fn_abi_request {
+                FnAbiRequest::OfFnPtr { sig, extra_args } => {
+                    span_bug!(
+                        span,
+                        "Error: {err}\n while running `fn_abi_of_fn_ptr. ({sig}, {extra_args:?})`",
+                    );
+                }
+                FnAbiRequest::OfInstance { instance, extra_args } => {
+                    span_bug!(
+                        span,
+                        "Error: {err}\n while running `fn_abi_of_instance. ({instance}, {extra_args:?})`",
+                    );
+                }
+            }
+        }
+    }
+}
+
 pub struct GotocMetadataLoader();
 impl MetadataLoader for GotocMetadataLoader {
     fn get_rlib_metadata(&self, _: &Target, _filename: &Path) -> Result<MetadataRef, String> {

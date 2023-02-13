@@ -33,9 +33,8 @@ impl<'tcx> GotocCtx<'tcx> {
             StatementKind::Assign(box (l, r)) => {
                 let lty = self.place_ty(l);
                 let rty = self.rvalue_ty(r);
-                let llayout = self.layout_of(lty);
                 // we ignore assignment for all zero size types
-                if llayout.is_zst() {
+                if self.is_zst(lty) {
                     Stmt::skip(location)
                 } else if lty.is_fn_ptr() && rty.is_fn() && !rty.is_fn_ptr() {
                     // implicit address of a function pointer, e.g.
@@ -165,8 +164,8 @@ impl<'tcx> GotocCtx<'tcx> {
             TerminatorKind::Goto { target } => {
                 Stmt::goto(self.current_fn().find_label(target), loc)
             }
-            TerminatorKind::SwitchInt { discr, switch_ty, targets } => {
-                self.codegen_switch_int(discr, *switch_ty, targets, loc)
+            TerminatorKind::SwitchInt { discr, targets } => {
+                self.codegen_switch_int(discr, targets, loc)
             }
             // The following two use `codegen_mimic_unimplemented`
             // because we don't want to raise the warning during compilation.
@@ -366,23 +365,21 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_switch_int(
         &mut self,
         discr: &Operand<'tcx>,
-        switch_ty: Ty<'tcx>,
         targets: &SwitchTargets,
         loc: Location,
     ) -> Stmt {
         let v = self.codegen_operand(discr);
-        let switch_ty = self.monomorphize(switch_ty);
+        let switch_ty = v.typ().clone();
         if targets.all_targets().len() == 1 {
             // Translate to a guarded goto
             let first_target = targets.iter().next().unwrap();
             Stmt::block(
                 vec![
-                    v.eq(Expr::int_constant(first_target.0, self.codegen_ty(switch_ty)))
-                        .if_then_else(
-                            Stmt::goto(self.current_fn().find_label(&first_target.1), loc),
-                            None,
-                            loc,
-                        ),
+                    v.eq(Expr::int_constant(first_target.0, switch_ty)).if_then_else(
+                        Stmt::goto(self.current_fn().find_label(&first_target.1), loc),
+                        None,
+                        loc,
+                    ),
                     Stmt::goto(self.current_fn().find_label(&targets.otherwise()), loc),
                 ],
                 loc,
@@ -393,7 +390,7 @@ impl<'tcx> GotocCtx<'tcx> {
             let cases = targets
                 .iter()
                 .map(|(c, bb)| {
-                    Expr::int_constant(c, self.codegen_ty(switch_ty))
+                    Expr::int_constant(c, switch_ty.clone())
                         .switch_case(Stmt::goto(self.current_fn().find_label(&bb), loc))
                 })
                 .collect();
@@ -402,10 +399,19 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    /// As part of **calling** a function (closure actually), we may need to un-tuple arguments.
+    /// As part of **calling** a function (or closure), we may need to un-tuple arguments.
     ///
-    /// See [GotocCtx::ty_needs_closure_untupled]
-    fn codegen_untuple_closure_args(
+    /// This function will replace the last `fargs` argument by its un-tupled version.
+    ///
+    /// Some context: A closure / shim takes two arguments:
+    ///     0. a struct (or a pointer to) representing the environment
+    ///     1. a tuple containing the parameters (if not empty)
+    ///
+    /// However, Rust generates a function where the tuple of parameters are flattened
+    /// as subsequent parameters.
+    ///
+    /// See [GotocCtx::ty_needs_untupled_args] for more details.
+    fn codegen_untupled_args(
         &mut self,
         instance: Instance<'tcx>,
         fargs: &mut Vec<Expr>,
@@ -416,32 +422,22 @@ impl<'tcx> GotocCtx<'tcx> {
             self.readable_instance_name(instance),
             fargs
         );
-        // A closure takes two arguments:
-        //     0. a struct representing the environment
-        //     1. a tuple containing the parameters
-        //
-        // However, for some reason, Rust decides to generate a function which still
-        // takes the first argument as the environment struct, but the tuple of parameters
-        // are flattened as subsequent parameters.
-        // Therefore, we have to project out the corresponding fields when we detect
-        // an invocation of a closure.
-        //
-        // Note: In some cases, the environment struct has type FnDef, so we skip it in
-        // ignore_var_ty. So the tuple is always the last arg, but it might be in the
-        // first or the second position.
-        // Note 2: For empty closures, the only argument needed is the environment struct.
         if !fargs.is_empty() {
+            let tuple_ty = self.operand_ty(last_mir_arg.unwrap());
+            if self.is_zst(tuple_ty) {
+                // Don't pass anything if all tuple elements are ZST.
+                // ZST arguments are ignored.
+                return;
+            }
             let tupe = fargs.remove(fargs.len() - 1);
-            let tupled_args: Vec<Type> = match self.operand_ty(last_mir_arg.unwrap()).kind() {
-                ty::Tuple(tupled_args) => tupled_args.iter().map(|s| self.codegen_ty(s)).collect(),
-                _ => unreachable!("Argument to function with Abi::RustCall is not a tuple"),
-            };
-
-            // Unwrap as needed
-            for (i, _) in tupled_args.iter().enumerate() {
-                // Access the tupled parameters through the `member` operation
-                let index_param = tupe.clone().member(&i.to_string(), &self.symbol_table);
-                fargs.push(index_param);
+            if let ty::Tuple(tupled_args) = tuple_ty.kind() {
+                for (idx, arg_ty) in tupled_args.iter().enumerate() {
+                    if !self.is_zst(arg_ty) {
+                        // Access the tupled parameters through the `member` operation
+                        let idx_expr = tupe.clone().member(&idx.to_string(), &self.symbol_table);
+                        fargs.push(idx_expr);
+                    }
+                }
             }
         }
     }
@@ -459,16 +455,30 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Generate Goto-C for each argument to a function call.
     ///
     /// N.B. public only because instrinsics use this directly, too.
-    pub(crate) fn codegen_funcall_args(&mut self, args: &[Operand<'tcx>]) -> Vec<Expr> {
-        args.iter()
-            .map(|o| {
-                if self.operand_ty(o).is_bool() {
-                    self.codegen_operand(o).cast_to(Type::c_bool())
+    /// When `skip_zst` is set to `true`, the return value will not include any argument that is ZST.
+    /// This is used because we ignore ZST arguments, except for intrinsics.
+    pub(crate) fn codegen_funcall_args(
+        &mut self,
+        args: &[Operand<'tcx>],
+        skip_zst: bool,
+    ) -> Vec<Expr> {
+        let fargs = args
+            .iter()
+            .filter_map(|o| {
+                let op_ty = self.operand_ty(o);
+                if op_ty.is_bool() {
+                    Some(self.codegen_operand(o).cast_to(Type::c_bool()))
+                } else if !self.is_zst(op_ty) || !skip_zst {
+                    Some(self.codegen_operand(o))
                 } else {
-                    self.codegen_operand(o)
+                    // We ignore ZST types.
+                    debug!(arg=?o, "codegen_funcall_args ignore");
+                    None
                 }
             })
-            .collect()
+            .collect();
+        debug!(?fargs, "codegen_funcall_args");
+        fargs
     }
 
     /// Generates Goto-C for a MIR [TerminatorKind::Call] statement.
@@ -498,7 +508,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         let loc = self.codegen_span(&span);
         let funct = self.operand_ty(func);
-        let mut fargs = self.codegen_funcall_args(args);
+        let mut fargs = self.codegen_funcall_args(args, true);
         match &funct.kind() {
             ty::FnDef(defid, subst) => {
                 let instance =
@@ -506,8 +516,9 @@ impl<'tcx> GotocCtx<'tcx> {
                         .unwrap()
                         .unwrap();
 
-                if self.ty_needs_closure_untupled(funct) {
-                    self.codegen_untuple_closure_args(instance, &mut fargs, args.last());
+                // TODO(celina): Move this check to be inside codegen_funcall_args.
+                if self.ty_needs_untupled_args(funct) {
+                    self.codegen_untupled_args(instance, &mut fargs, args.last());
                 }
 
                 if let Some(hk) = self.hooks.hook_applies(self.tcx, instance) {
@@ -608,6 +619,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> Vec<Stmt> {
         let vtable_field_name = self.vtable_field_name(def_id, idx);
         trace!(?self_ty, ?place, ?vtable_field_name, "codegen_virtual_funcall");
+        debug!(?fargs, "codegen_virtual_funcall");
 
         let trait_fat_ptr = self.extract_ptr(fargs[0].clone(), self_ty);
         assert!(
