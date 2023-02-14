@@ -107,7 +107,7 @@ impl IrepNumberingInv {
     /// Adds a key to the mapping and returns the unique number assigned to that key.
     fn add_key(&mut self, key: &IrepKey) -> usize {
         let number = self.index.len();
-        self.index.push(NumberedIrep { number: number, start_index: self.keys.len() });
+        self.index.push(NumberedIrep { number, start_index: self.keys.len() });
         self.keys.extend(&key.numbers);
         number
     }
@@ -196,7 +196,7 @@ impl IrepNumbering {
         // This is where the key gets its unique number assigneds.
         let number = self.inv_cache.add_key(&key);
         self.cache.insert(key.clone(), number);
-        return self.inv_cache.index[number];
+        self.inv_cache.index[number]
     }
 
     /// Returns the unique number of the `id` field of the given [NumberedIrep].
@@ -331,14 +331,14 @@ where
     fn write_usize_varenc(&mut self, mut u: usize) -> io::Result<()> {
         loop {
             let mut v: u8 = (u & 0x7f) as u8;
-            u = u >> 7;
+            u >>= 7;
             if u == 0 {
                 // all remaining bits of u are zero
                 self.buf.push(v);
                 break;
             }
             // there are more bits in u, set the 8th bit to indicate continuation
-            v = v | 0x80;
+            v |= 0x80;
             self.buf.push(v);
         }
         Ok(())
@@ -355,7 +355,7 @@ where
                 for c in raw_str.chars() {
                     if c.is_ascii() {
                         if c == '0' || c == '\\' {
-                            self.buf.push('\\' as u8);
+                            self.buf.push(b'\\');
                         }
                         self.buf.push(c as u8);
                     } else {
@@ -551,7 +551,7 @@ where
         if found != expected {
             return Err(Error::new(
                 ErrorKind::Other,
-                format!("expected {} in byte stream, found {} instead)", expected, found),
+                format!("expected {expected} in byte stream, found {found} instead)"),
             ));
         }
         Ok(found)
@@ -573,7 +573,7 @@ where
             self.string_map.resize(num_binary + 1, None);
         }
         let old = self.string_map[num_binary];
-        if !old.is_none() {
+        if old.is_some() {
             panic!("string number already mapped");
         }
         self.string_map[num_binary] = Some(num);
@@ -595,7 +595,7 @@ where
             self.irep_map.resize(num_binary + 1, None);
         }
         let old = self.irep_map[num_binary];
-        if !old.is_none() {
+        if old.is_some() {
             panic!("irep number already mapped");
         }
         self.irep_map[num_binary] = Some(num);
@@ -604,15 +604,9 @@ where
     /// Reads a u8 from the byte stream.
     fn read_u8(&mut self) -> io::Result<u8> {
         match self.bytes.next() {
-            Some(Ok(u)) => {
-                return Ok(u);
-            }
-            Some(Err(error)) => {
-                return Err(error);
-            }
-            None => {
-                return Err(Error::new(ErrorKind::Other, "unexpected end of input"));
-            }
+            Some(Ok(u)) => Ok(u),
+            Some(Err(error)) => Err(error),
+            None => Err(Error::new(ErrorKind::Other, "unexpected end of input")),
         }
     }
 
@@ -630,9 +624,9 @@ where
                             "serialized value is too large to fit in usize",
                         ));
                     };
-                    result = result | (((u & 0x7f) as usize) << shift);
+                    result |= ((u & 0x7f) as usize) << shift;
                     shift = shift.checked_add(7).unwrap();
-                    if u & (0x80 as u8) == 0 {
+                    if u & (0x80_u8) == 0 {
                         return Ok(result);
                     }
                 }
@@ -711,10 +705,10 @@ where
             }
         } else {
             // We already read this irep, fetch it from the numbering
-            return Ok(self
+            Ok(self
                 .numbering
                 .numbered_string_from_number(self.string_map[string_number].unwrap())
-                .unwrap());
+                .unwrap())
         }
     }
 
@@ -769,10 +763,10 @@ where
                 }
             }
         } else {
-            return Ok(self
+            Ok(self
                 .numbering
                 .numbered_irep_from_number(self.irep_map[irep_number].unwrap())
-                .unwrap());
+                .unwrap())
         }
     }
 
