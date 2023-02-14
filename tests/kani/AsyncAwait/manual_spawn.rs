@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
 // compile-flags: --edition 2018
-// kani-flags: --harness deterministic_schedule
+// kani-flags: --harness round_robin_schedule
 
 //! This file tests a hand-written spawn infrastructure and executor.
 //! This should be replaced with code from the Kani library as soon as the executor can get merged.
@@ -275,16 +275,18 @@ pub fn yield_now() -> impl Future<Output = ()> {
 
 #[kani::proof]
 #[kani::unwind(4)]
-fn deterministic_schedule() {
+fn round_robin_schedule() {
     let x = Arc::new(AtomicI64::new(0)); // Surprisingly, Arc verified faster than Rc
     let x2 = x.clone();
     spawnable_block_on(
         async move {
             let x3 = x2.clone();
             spawn(async move {
+                assert_eq!(x3.load(Ordering::Relaxed), 0); // to check the order of the round-robin
                 x3.fetch_add(1, Ordering::Relaxed);
             });
             yield_now().await;
+            assert_eq!(x2.load(Ordering::Relaxed), 1); // to check the order of the round-robin
             x2.fetch_add(1, Ordering::Relaxed);
         },
         RoundRobin::default(),
