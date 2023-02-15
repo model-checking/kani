@@ -657,9 +657,9 @@ mod tests {
         // no assertion: the above might fail if it fails to allow 0 args to cbmc-args
     }
 
+    /// Ensure users can pass multiple harnesses options and that the value is accumulated.
     #[test]
     fn check_multiple_harnesses() {
-        // accepts repeated:
         let args =
             StandaloneArgs::try_parse_from("kani input.rs --harness a --harness b".split(" "))
                 .unwrap();
