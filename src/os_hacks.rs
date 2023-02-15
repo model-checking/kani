@@ -148,7 +148,8 @@ fn setup_nixos_patchelf(kani_dir: &Path) -> Result<()> {
     for filename in &["kani-compiler", "kani-driver"] {
         patch_interp(&bin.join(filename))?;
     }
-    for filename in &["cbmc", "goto-analyzer", "goto-cc", "goto-instrument", "symtab2gb"] {
+    for filename in &["cbmc", "goto-analyzer", "goto-cc", "goto-instrument", "kissat", "symtab2gb"]
+    {
         let file = bin.join(filename);
         patch_interp(&file)?;
         patch_rpath(&file)?;

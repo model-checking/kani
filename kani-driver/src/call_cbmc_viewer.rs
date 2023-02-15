@@ -8,7 +8,7 @@ use std::path::Path;
 use std::process::Command;
 
 use crate::session::KaniSession;
-use crate::util::alter_extension;
+use crate::util::{alter_extension, warning};
 
 impl KaniSession {
     /// Run CBMC appropriately to produce 3 output XML files, then run cbmc-viewer on them to produce a report.
@@ -20,18 +20,11 @@ impl KaniSession {
         harness_metadata: &HarnessMetadata,
     ) -> Result<()> {
         let results_filename = alter_extension(file, "results.xml");
-        let coverage_filename = alter_extension(file, "coverage.xml");
         let property_filename = alter_extension(file, "property.xml");
 
-        self.record_temporary_files(&[&results_filename, &coverage_filename, &property_filename]);
+        self.record_temporary_files(&[&results_filename, &property_filename]);
 
         self.cbmc_variant(file, &["--xml-ui", "--trace"], &results_filename, harness_metadata)?;
-        self.cbmc_variant(
-            file,
-            &["--xml-ui", "--cover", "location"],
-            &coverage_filename,
-            harness_metadata,
-        )?;
         self.cbmc_variant(
             file,
             &["--xml-ui", "--show-properties"],
@@ -42,8 +35,6 @@ impl KaniSession {
         let args: Vec<OsString> = vec![
             "--result".into(),
             results_filename.into(),
-            "--coverage".into(),
-            coverage_filename.into(),
             "--property".into(),
             property_filename.into(),
             "--srcdir".into(),
@@ -65,6 +56,7 @@ impl KaniSession {
         // Let the user know
         if !self.args.quiet {
             println!("Report written to: {}/html/index.html", report_dir.to_string_lossy());
+            warning("coverage information has been disabled for `--visualize` reports");
             // If using VS Code with Remote-SSH, suggest an option for remote viewing:
             if std::env::var("VSCODE_IPC_HOOK_CLI").is_ok()
                 && std::env::var("SSH_CONNECTION").is_ok()
