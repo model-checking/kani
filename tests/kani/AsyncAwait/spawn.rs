@@ -15,7 +15,7 @@ use std::sync::{
 fn round_robin_schedule() {
     let x = Arc::new(AtomicI64::new(0)); // Surprisingly, Arc verified faster than Rc
     let x2 = x.clone();
-    kani::spawnable_block_on(
+    kani::block_on_with_spawn(
         async move {
             let x3 = x2.clone();
             kani::spawn(async move {

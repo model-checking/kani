@@ -16,7 +16,7 @@ use std::{
 /// to be woken up when a resource becomes available, this is not supported by Kani.
 /// As a consequence, this function completely ignores the waker infrastructure and just polls the given future in a busy loop.
 ///
-/// Note that spawn is not supported with this function. Use [`spawnable_block_on`] if you need it.
+/// Note that spawn is not supported with this function. Use [`block_on_with_spawn`] if you need it.
 pub fn block_on<T>(mut fut: impl Future<Output = T>) -> T {
     let waker = unsafe { Waker::from_raw(NOOP_RAW_WAKER) };
     let cx = &mut Context::from_waker(&waker);
@@ -183,7 +183,7 @@ pub fn spawn<F: Future<Output = ()> + Sync + 'static>(fut: F) -> JoinHandle {
     unsafe {
         GLOBAL_EXECUTOR
             .as_mut()
-            .expect("`spawn` should only be called within `spawnable_block_on`")
+            .expect("`spawn` should only be called within `block_on_with_spawn`")
             .spawn(fut)
     }
 }
@@ -191,7 +191,7 @@ pub fn spawn<F: Future<Output = ()> + Sync + 'static>(fut: F) -> JoinHandle {
 /// Polls the given future and the tasks it may spawn until all of them complete
 ///
 /// Contrary to [`block_on`], this allows `spawn`ing other futures
-pub fn spawnable_block_on<F: Future<Output = ()> + Sync + 'static>(
+pub fn block_on_with_spawn<F: Future<Output = ()> + Sync + 'static>(
     fut: F,
     scheduling_plan: impl SchedulingStrategy,
 ) {
