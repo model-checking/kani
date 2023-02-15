@@ -4,13 +4,14 @@
 use anyhow::Result;
 use kani_metadata::{ArtifactType, HarnessMetadata};
 use rayon::prelude::*;
+use std::cmp::Ordering;
 use std::path::Path;
 
 use crate::args::OutputFormat;
 use crate::call_cbmc::{VerificationResult, VerificationStatus};
 use crate::project::Project;
 use crate::session::KaniSession;
-use crate::util::specialized_harness_name;
+use crate::util::{specialized_harness_name, warning};
 
 /// A HarnessRunner is responsible for checking all proof harnesses. The data in this structure represents
 /// "background information" that the controlling driver (e.g. cargo-kani or kani) computed.
@@ -103,6 +104,33 @@ impl KaniSession {
         }
     }
 
+    /// Prints a warning at the end of the verification if harness contained a stub but stubs were
+    /// not enabled.
+    fn stubbing_statuses(&self, results: &[HarnessResult]) {
+        if !self.args.enable_stubbing {
+            let ignored_stubs: Vec<_> = results
+                .iter()
+                .filter_map(|result| {
+                    (!result.harness.attributes.stubs.is_empty())
+                        .then_some(result.harness.pretty_name.as_str())
+                })
+                .collect();
+            match ignored_stubs.len().cmp(&1) {
+                Ordering::Equal => warning(&format!(
+                    "harness `{}` contained stubs which were ignored.\n\
+                    To enable stubbing, pass options `--enable-unstable --enable-stubbing`",
+                    ignored_stubs[0]
+                )),
+                Ordering::Greater => warning(&format!(
+                    "harnesses `{}` contained stubs which were ignored.\n\
+                    To enable stubbing, pass options `--enable-unstable --enable-stubbing`",
+                    ignored_stubs.join("`, `")
+                )),
+                Ordering::Less => {}
+            }
+        }
+    }
+
     /// Concludes a session by printing a summary report and exiting the process with an
     /// error code (if applicable).
     ///
@@ -146,6 +174,8 @@ impl KaniSession {
                 );
             }
         }
+
+        self.stubbing_statuses(results);
 
         #[cfg(feature = "unsound_experiments")]
         self.args.unsound_experiments.print_warnings();

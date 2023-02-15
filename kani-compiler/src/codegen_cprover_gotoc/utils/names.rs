@@ -14,11 +14,6 @@ use rustc_middle::ty::{Instance, TyCtxt};
 use tracing::debug;
 
 impl<'tcx> GotocCtx<'tcx> {
-    /// The short crate name without versioning information.
-    pub fn short_crate_name(&self) -> String {
-        self.tcx.crate_name(LOCAL_CRATE).to_string()
-    }
-
     /// The full crate name including versioning info
     pub fn full_crate_name(&self) -> &str {
         &self.full_crate_name
