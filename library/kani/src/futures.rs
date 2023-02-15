@@ -16,7 +16,7 @@ use std::{
 /// to be woken up when a resource becomes available, this is not supported by Kani.
 /// As a consequence, this function completely ignores the waker infrastructure and just polls the given future in a busy loop.
 ///
-/// Note that spawn is not supported with this function. Use [`block_on_with_spawn`] if you need it.
+/// Note that [`spawn`] is not supported with this function. Use [`block_on_with_spawn`] if you need it.
 pub fn block_on<T>(mut fut: impl Future<Output = T>) -> T {
     let waker = unsafe { Waker::from_raw(NOOP_RAW_WAKER) };
     let cx = &mut Context::from_waker(&waker);
@@ -44,6 +44,7 @@ const NOOP_RAW_WAKER: RawWaker = {
     RawWaker::new(std::ptr::null(), &RawWakerVTable::new(clone_waker, noop, noop, noop))
 };
 
+/// The global executor used by [`spawn`] and [`block_on_with_spawn`] to run tasks.
 static mut GLOBAL_EXECUTOR: Option<Scheduler> = None;
 
 type BoxFuture = Pin<Box<dyn Future<Output = ()> + Sync + 'static>>;
@@ -61,12 +62,7 @@ pub enum SchedulingAssumption {
 ///
 /// If your harness spawns several tasks, Kani's scheduler has to decide in what order to poll them.
 /// This order may depend on the needs of your verification goal.
-/// For example, you sometimes may wish to verify all possible schedulings, i.e. a nondeterministic scheduling strategy,
-/// provided by [`NondeterministicScheduling`].
-///
-/// However, this one may poll the same task over and over, which is often undesirable.
-/// To ensure some "fairness" in how the tasks are picked, there is [`NondetFairScheduling`].
-/// This is probably what you want when verifying a harness under nondeterministic schedulings.
+/// For example, you sometimes may wish to verify all possible schedulings, i.e. a nondeterministic scheduling strategy.
 ///
 /// Nondeterministic scheduling strategies can be very slow to verify because they require Kani to check a large number of permutations of tasks.
 /// So if you want to verify a harness that uses `spawn`, but don't care about concurrency issues, you can simply use a deterministic scheduling strategy,
@@ -179,6 +175,9 @@ impl Future for JoinHandle {
     }
 }
 
+/// Spawns a task on the current global executor (which is set by [`block_on_with_spawn`])
+///
+/// This function can only be called inside a future passed to [`block_on_with_spawn`].
 pub fn spawn<F: Future<Output = ()> + Sync + 'static>(fut: F) -> JoinHandle {
     unsafe {
         GLOBAL_EXECUTOR
@@ -196,6 +195,7 @@ pub fn block_on_with_spawn<F: Future<Output = ()> + Sync + 'static>(
     scheduling_plan: impl SchedulingStrategy,
 ) {
     unsafe {
+        assert!(GLOBAL_EXECUTOR.is_none(), "`block_on_with_spawn` should not be nested");
         GLOBAL_EXECUTOR = Some(Scheduler::new());
         GLOBAL_EXECUTOR.as_mut().unwrap().block_on(fut, scheduling_plan);
         GLOBAL_EXECUTOR = None;
@@ -204,7 +204,7 @@ pub fn block_on_with_spawn<F: Future<Output = ()> + Sync + 'static>(
 
 /// Suspends execution of the current future, to allow the scheduler to poll another future
 ///
-/// Specifically, it returns a future that
+/// Specifically, it returns a future that isn't ready until the second time it is polled.
 pub fn yield_now() -> impl Future<Output = ()> {
     struct YieldNow {
         yielded: bool,
