@@ -14,9 +14,10 @@ use std::collections::hash_map::DefaultHasher;
 use std::ffi::OsString;
 use std::fs::{self, File};
 use std::hash::{Hash, Hasher};
-use std::io::{Read, Write};
+use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::Path;
 use std::process::Command;
+use tempfile;
 
 impl KaniSession {
     /// The main driver for generating concrete playback unit tests and adding them to source code.
@@ -39,30 +40,31 @@ impl KaniSession {
                 ),
                 Some(concrete_vals) => {
                     let pretty_name = harness.get_harness_name_unqualified();
-                    let concrete_playback = format_unit_test(&pretty_name, &concrete_vals);
+                    let generated_unit_test = format_unit_test(&pretty_name, &concrete_vals);
                     match playback_mode {
                         ConcretePlaybackMode::Print => {
                             println!(
                                 "Concrete playback unit test for `{}`:\n```\n{}\n```",
-                                &harness.pretty_name, &concrete_playback.unit_test_str
+                                &harness.pretty_name,
+                                &generated_unit_test.code.join("\n")
                             );
                             println!(
                                 "INFO: To automatically add the concrete playback unit test `{}` to the \
                         src code, run Kani with `--concrete-playback=inplace`.",
-                                &concrete_playback.unit_test_name
+                                &generated_unit_test.name
                             );
                         }
                         ConcretePlaybackMode::InPlace => {
                             if !self.args.quiet {
                                 println!(
                                     "INFO: Now modifying the source code to include the concrete playback unit test `{}`.",
-                                    &concrete_playback.unit_test_name
+                                    &generated_unit_test.name
                                 );
                             }
                             self.modify_src_code(
                                 &harness.original_file,
                                 harness.original_end_line,
-                                &concrete_playback,
+                                &generated_unit_test,
                             )
                             .expect("Failed to modify source code");
                         }
@@ -79,86 +81,77 @@ impl KaniSession {
         &self,
         src_path: &str,
         proof_harness_end_line: usize,
-        concrete_playback: &UnitTest,
+        unit_test: &UnitTest,
     ) -> Result<()> {
-        let mut src_file = File::open(src_path)
-            .with_context(|| format!("Couldn't open user's source code file `{src_path}`"))?;
-        let mut src_as_str = String::new();
-        src_file.read_to_string(&mut src_as_str).with_context(|| {
-            format!("Couldn't read user's source code file `{src_path}` as a string")
-        })?;
+        let unit_test_already_in_src =
+            self.add_test_inplace(src_path, proof_harness_end_line, unit_test)?;
 
-        // Short circuit if unit test already in source code.
-        if src_as_str.contains(&concrete_playback.unit_test_name) {
-            if !self.args.quiet {
-                println!(
-                    "Concrete playback unit test `{}/{}` already found in source code, so skipping modification.",
-                    src_path, concrete_playback.unit_test_name,
-                );
-            }
+        if unit_test_already_in_src {
             return Ok(());
         }
 
-        // Split the code into two different parts around the insertion point.
-        let src_newline_matches: Vec<_> = src_as_str.match_indices('\n').collect();
-        // If the proof harness ends on the last line of source code, there won't be a newline.
-        let insertion_pt = if proof_harness_end_line == src_newline_matches.len() + 1 {
-            src_as_str.len()
-        } else {
-            // Existing newline goes with 2nd src half. We also manually add newline before unit test.
-            src_newline_matches[proof_harness_end_line - 1].0
-        };
-        let src_before_concrete_playback = &src_as_str[..insertion_pt];
-        let src_after_concrete_playback = &src_as_str[insertion_pt..];
-
-        // Write new source lines to a tmp file, and then rename it to the actual user's source file.
-        // Renames are usually automic, so we won't corrupt the user's source file during a crash.
-        let tmp_src_path = src_path.to_string() + ".concrete_playback_overwrite";
-        let mut tmp_src_file = File::create(&tmp_src_path)
-            .with_context(|| format!("Couldn't create tmp source code file `{tmp_src_path}`"))?;
-        write!(
-            tmp_src_file,
-            "{}\n{}{}",
-            src_before_concrete_playback,
-            concrete_playback.unit_test_str,
-            src_after_concrete_playback
-        )
-        .with_context(|| {
-            format!("Couldn't write new src str into tmp src file `{tmp_src_path}`")
-        })?;
-        fs::rename(&tmp_src_path, src_path).with_context(|| {
-            format!("Couldn't rename tmp src file `{tmp_src_path}` to actual src file `{src_path}`")
-        })?;
-
         // Run rustfmt on just the inserted lines.
-        let source_path = Path::new(src_path);
-        let parent_dir_as_path = source_path.parent().with_context(|| {
-            format!("Expected source file `{}` to be in a directory", source_path.display())
-        })?;
-        let parent_dir_as_str = parent_dir_as_path.to_str().with_context(|| {
-            format!(
-                "Couldn't convert source file parent directory `{}` from  str",
-                parent_dir_as_path.display()
-            )
-        })?;
-        let src_file_name_as_osstr = source_path.file_name().with_context(|| {
-            format!("Couldn't get the file name from the source file `{}`", source_path.display())
-        })?;
-        let src_file_name_as_str = src_file_name_as_osstr.to_str().with_context(|| {
-            format!(
-                "Couldn't convert source code file name `{src_file_name_as_osstr:?}` from OsStr to str"
-            )
-        })?;
-
-        let concrete_playback_num_lines = concrete_playback.unit_test_str.matches('\n').count() + 1;
+        let concrete_playback_num_lines = unit_test.code.len();
         let unit_test_start_line = proof_harness_end_line + 1;
         let unit_test_end_line = unit_test_start_line + concrete_playback_num_lines - 1;
+        let src_path = Path::new(src_path);
+        let (path, file_name) = extract_parent_dir_and_src_file(src_path)?;
         let file_line_ranges = vec![FileLineRange {
-            file: src_file_name_as_str.to_string(),
+            file: file_name,
             line_range: Some((unit_test_start_line, unit_test_end_line)),
         }];
-        self.run_rustfmt(&file_line_ranges, Some(parent_dir_as_str))?;
+        self.run_rustfmt(&file_line_ranges, Some(&path))?;
         Ok(())
+    }
+
+    /// Writes the new source code to a temporary file. Returns whether the unit test was already in the old source code.
+    fn add_test_inplace(
+        &self,
+        source_path: &str,
+        proof_harness_end_line: usize,
+        unit_test: &UnitTest,
+    ) -> Result<bool> {
+        let source_file = File::open(source_path)?;
+        let source_reader = BufReader::new(source_file);
+        let mut temp_file = tempfile::NamedTempFile::new()?;
+        let mut temp_writer = BufWriter::new(&mut temp_file);
+        let mut curr_line_num = 0;
+
+        // Use a buffered reader/writer to generate the unit test line by line
+        for line in source_reader.lines().flatten() {
+            if line.contains(&unit_test.name) {
+                if !self.args.quiet {
+                    println!(
+                        "Concrete playback unit test `{}/{}` already found in source code, so skipping modification.",
+                        source_path, unit_test.name,
+                    );
+                }
+                // temp file gets deleted automatically when function goes out of scope
+                return Ok(true);
+            }
+            curr_line_num += 1;
+            writeln!(temp_writer, "{}", line)?;
+            if curr_line_num == proof_harness_end_line {
+                for unit_test_line in unit_test.code.iter() {
+                    curr_line_num += 1;
+                    writeln!(temp_writer, "{}", unit_test_line)?;
+                }
+            }
+        }
+
+        // Flush before we remove/rename the file.
+        temp_writer.flush()?;
+
+        // Have to drop the bufreader to be able to reuse and rename the moved temp file
+        drop(temp_writer);
+
+        // Renames are usually automic, so we won't corrupt the user's source file during a crash.
+        fs::rename(temp_file.path(), source_path).with_context(|| {
+            format!("Couldn't rename tmp source file to actual src file `{source_path}`.")
+        })?;
+
+        // temp file gets deleted automatically by the NamedTempFile handler
+        Ok(false)
     }
 
     /// Run rustfmt on the given src file, and optionally on only the specific lines.
@@ -207,6 +200,11 @@ impl KaniSession {
     }
 }
 
+struct UnitTest {
+    code: Vec<String>,
+    name: String,
+}
+
 /// Generate a formatted unit test from a list of concrete values.
 fn format_unit_test(harness_name: &str, concrete_vals: &[ConcreteVal]) -> UnitTest {
     // Hash the concrete values along with the proof harness name.
@@ -235,8 +233,7 @@ fn format_unit_test(harness_name: &str, concrete_vals: &[ConcreteVal]) -> UnitTe
         .chain(func_after_concrete_vals)
         .collect();
 
-    let full_func_code: String = full_func.join("\n");
-    UnitTest { unit_test_str: full_func_code, unit_test_name: func_name }
+    UnitTest { code: full_func, name: func_name }
 }
 
 /// Format an initializer expression for a number of concrete values.
@@ -256,14 +253,18 @@ fn format_concrete_vals(concrete_vals: &[ConcreteVal]) -> impl Iterator<Item = S
     })
 }
 
+/// Suppose `src_path` was `/path/to/file.txt`. This function extracts this into `/path/to` and `file.txt`.
+fn extract_parent_dir_and_src_file(src_path: &Path) -> Result<(String, String)> {
+    let parent_dir_as_path = src_path.parent().unwrap();
+    let parent_dir = parent_dir_as_path.to_string_lossy().to_string();
+    let src_file_name_as_osstr = src_path.file_name();
+    let src_file = src_file_name_as_osstr.unwrap().to_string_lossy().to_string();
+    Ok((parent_dir, src_file))
+}
+
 struct FileLineRange {
     file: String,
     line_range: Option<(usize, usize)>,
-}
-
-struct UnitTest {
-    unit_test_str: String,
-    unit_test_name: String,
 }
 
 /// Extract concrete values from the CBMC output processed items.
@@ -379,6 +380,32 @@ mod tests {
         CheckStatus, Property, PropertyId, SourceLocation, TraceData, TraceItem, TraceValue,
     };
 
+    /// util function for unit tests taht generates the rustfmt args used for formatting specific lines inside specific files.
+    /// note - adding this within the test mod because it gives a lint warning without it.
+    fn rustfmt_args(file_line_ranges: &[FileLineRange]) -> Vec<OsString> {
+        let mut args: Vec<OsString> = Vec::new();
+        let mut line_range_dicts: Vec<String> = Vec::new();
+        for file_line_range in file_line_ranges {
+            if let Some((start_line, end_line)) = file_line_range.line_range {
+                let src_file = &file_line_range.file;
+                let line_range_dict =
+                    format!("{{\"file\":\"{src_file}\",\"range\":[{start_line},{end_line}]}}");
+                line_range_dicts.push(line_range_dict);
+            }
+        }
+        if !line_range_dicts.is_empty() {
+            // `--file-lines` arg is currently unstable.
+            args.push("--unstable-features".into());
+            args.push("--file-lines".into());
+            let line_range_dicts_combined = format!("[{}]", line_range_dicts.join(","));
+            args.push(line_range_dicts_combined.into());
+        }
+        for file_line_range in file_line_ranges {
+            args.push((&file_line_range.file).into());
+        }
+        args
+    }
+
     #[test]
     fn format_zero_concrete_vals() {
         let concrete_vals: [ConcreteVal; 0] = [];
@@ -426,8 +453,8 @@ mod tests {
         let harness_name = "test_proof_harness";
         let concrete_vals = [ConcreteVal { byte_arr: vec![0, 0], interp_val: "0".to_string() }];
         let unit_test = format_unit_test(harness_name, &concrete_vals);
-        let full_func: Vec<&str> = unit_test.unit_test_str.split('\n').collect();
-        let split_unit_test_name = split_unit_test_name(&unit_test.unit_test_name);
+        let full_func = unit_test.code;
+        let split_unit_test_name = split_unit_test_name(&unit_test.name);
         let expected_after_func_name = vec![
             format!("{:<4}let concrete_vals: Vec<Vec<u8>> = vec![", " "),
             format!("{:<8}// 0", " "),
@@ -442,14 +469,14 @@ mod tests {
             split_unit_test_name.before_hash,
             format!("kani_concrete_playback_{harness_name}")
         );
-        assert_eq!(full_func[1], format!("fn {}() {{", unit_test.unit_test_name));
+        assert_eq!(full_func[1], format!("fn {}() {{", unit_test.name));
         assert_eq!(full_func[2..], expected_after_func_name);
     }
 
     /// Generates a unit test and returns its hash.
     fn extract_hash_from_unit_test(harness_name: &str, concrete_vals: &[ConcreteVal]) -> String {
         let unit_test = format_unit_test(harness_name, concrete_vals);
-        split_unit_test_name(&unit_test.unit_test_name).hash
+        split_unit_test_name(&unit_test.name).hash
     }
 
     /// Two hashes should not be the same if either the harness_name or the concrete_vals changes.
@@ -469,6 +496,43 @@ mod tests {
         assert_ne!(hash_base, hash_diff_harness_name);
         assert_ne!(hash_base, hash_diff_concrete_byte);
         assert_ne!(hash_base, hash_diff_interp_val);
+    }
+
+    #[test]
+    fn check_rustfmt_args_no_line_ranges() {
+        let file_line_ranges = [FileLineRange { file: "file1".to_string(), line_range: None }];
+        let args = rustfmt_args(&file_line_ranges);
+        let expected: Vec<OsString> = vec!["file1".into()];
+        assert_eq!(args, expected);
+    }
+
+    #[test]
+    fn check_rustfmt_args_some_line_ranges() {
+        let file_line_ranges = [
+            FileLineRange { file: "file1".to_string(), line_range: None },
+            FileLineRange { file: "path/to/file2".to_string(), line_range: Some((1, 3)) },
+        ];
+        let args = rustfmt_args(&file_line_ranges);
+        let expected: Vec<OsString> = [
+            "--unstable-features",
+            "--file-lines",
+            "[{\"file\":\"path/to/file2\",\"range\":[1,3]}]",
+            "file1",
+            "path/to/file2",
+        ]
+        .into_iter()
+        .map(|arg| arg.into())
+        .collect();
+        assert_eq!(args, expected);
+    }
+
+    #[test]
+    fn check_extract_parent_dir_and_src_file() {
+        let src_path = "/path/to/file.txt";
+        let src_path = Path::new(src_path);
+        let (path, file_name) = extract_parent_dir_and_src_file(src_path).unwrap();
+        assert_eq!(path, "/path/to");
+        assert_eq!(file_name, "file.txt");
     }
 
     /// Test util functions which extract the counter example values from a property.
