@@ -20,9 +20,10 @@ use crate::kani_middle::stubbing;
 use crate::parser::{self, KaniCompilerParser};
 use crate::session::init_session;
 use clap::ArgMatches;
+use itertools::Itertools;
 use kani_queries::{QueryDb, ReachabilityType, UserInput};
 use rustc_codegen_ssa::traits::CodegenBackend;
-use rustc_data_structures::fx::FxHashMap;
+use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_driver::{Callbacks, Compilation, RunCompiler};
 use rustc_hir::definitions::DefPathHash;
 use rustc_interface::Config;
@@ -101,9 +102,18 @@ impl KaniCompiler {
         let all_stubs = stubbing::collect_stub_mappings(tcx);
         if all_stubs.is_empty() {
             FxHashMap::default()
-        } else if let Some(harness) = self.args.as_ref().unwrap().get_one::<String>(parser::HARNESS)
+        } else if let Some(harnesses) =
+            self.args.as_ref().unwrap().get_many::<String>(parser::HARNESS)
         {
-            find_harness_stub_mapping(harness, all_stubs).unwrap_or_default()
+            let mappings = filter_stub_mapping(harnesses.collect(), all_stubs);
+            if mappings.len() > 1 {
+                tcx.sess.err(format!(
+                    "Failed to apply stubs. Harnesses with stubs must be verified separately. Found: `{}`",
+                     mappings.into_keys().join("`, `")));
+                FxHashMap::default()
+            } else {
+                mappings.into_values().next().unwrap_or_default()
+            }
         } else {
             // No harness was provided. Nothing to do.
             FxHashMap::default()
@@ -167,20 +177,16 @@ impl Callbacks for KaniCompiler {
     }
 }
 
-/// Find the stub mapping for the given harness.
+/// Find the stub mapping for the given harnesses.
 ///
 /// This function is necessary because Kani currently allows a harness to be
-/// specified by a partially qualified name, whereas stub mappings use fully
-/// qualified names.
-fn find_harness_stub_mapping(
-    harness: &str,
-    stub_mappings: FxHashMap<String, FxHashMap<DefPathHash, DefPathHash>>,
-) -> Option<FxHashMap<DefPathHash, DefPathHash>> {
-    let suffix = String::from("::") + harness;
-    for (name, mapping) in stub_mappings {
-        if name == harness || name.ends_with(&suffix) {
-            return Some(mapping);
-        }
-    }
-    None
+/// specified as a filter, whereas stub mappings use fully qualified names.
+fn filter_stub_mapping(
+    harnesses: FxHashSet<&String>,
+    mut stub_mappings: FxHashMap<String, FxHashMap<DefPathHash, DefPathHash>>,
+) -> FxHashMap<String, FxHashMap<DefPathHash, DefPathHash>> {
+    stub_mappings.retain(|name, _| {
+        harnesses.contains(name) || harnesses.iter().any(|harness| name.contains(*harness))
+    });
+    stub_mappings
 }

@@ -128,9 +128,15 @@ pub struct KaniArgs {
     /// This is an unstable feature. Consider using --harness instead
     #[arg(long, hide = true, requires("enable_unstable"))]
     pub function: Option<String>,
-    /// Entry point for verification (proof harness)
-    #[arg(long, conflicts_with = "function")]
-    pub harness: Option<String>,
+    /// If specified, only run harnesses that match this filter. This option can be provided
+    /// multiple times, which will run all tests matching any of the filters.
+    #[arg(
+        long = "harness",
+        conflicts_with = "function",
+        num_args(1),
+        value_name = "HARNESS_FILTER"
+    )]
+    pub harnesses: Vec<String>,
 
     /// Link external C files referenced by Rust code.
     /// This is an experimental feature and requires `--enable-unstable` to be used
@@ -155,7 +161,7 @@ pub struct KaniArgs {
     #[arg(long)]
     pub default_unwind: Option<u32>,
     /// Specify the value used for loop unwinding for the specified harness in CBMC
-    #[arg(long, requires("harness"))]
+    #[arg(long, requires("harnesses"))]
     pub unwind: Option<u32>,
     /// Specify the CBMC solver to use. Overrides the harness `solver` attribute.
     #[arg(long, value_parser = CbmcSolverValueParser::new(CbmcSolver::VARIANTS))]
@@ -232,7 +238,7 @@ pub struct KaniArgs {
         long,
         hide_short_help = true,
         requires("enable_unstable"),
-        requires("harness"),
+        requires("harnesses"),
         conflicts_with("concrete_playback")
     )]
     pub enable_stubbing: bool,
@@ -650,6 +656,25 @@ mod tests {
         .unwrap();
         // no assertion: the above might fail if it fails to allow 0 args to cbmc-args
     }
+
+    /// Ensure users can pass multiple harnesses options and that the value is accumulated.
+    #[test]
+    fn check_multiple_harnesses() {
+        let args =
+            StandaloneArgs::try_parse_from("kani input.rs --harness a --harness b".split(" "))
+                .unwrap();
+        assert_eq!(args.common_opts.harnesses, vec!["a".to_owned(), "b".to_owned()]);
+    }
+
+    #[test]
+    fn check_multiple_harnesses_without_flag_fail() {
+        let result = StandaloneArgs::try_parse_from(
+            "kani input.rs --harness harness_1 harness_2".split(" "),
+        );
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+    }
+
     #[test]
     fn check_multiple_packages() {
         // accepts repeated:
