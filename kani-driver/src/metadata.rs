@@ -1,13 +1,14 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 use std::path::Path;
+use tracing::debug;
 
 use kani_metadata::{
     HarnessMetadata, InternedString, KaniMetadata, TraitDefinedMethod, VtableCtxResults,
 };
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
 
@@ -109,16 +110,22 @@ pub fn merge_kani_metadata(files: Vec<KaniMetadata>) -> KaniMetadata {
 
 impl KaniSession {
     /// Determine which function to use as entry point, based on command-line arguments and kani-metadata.
-    pub fn determine_targets(
+    pub fn determine_targets<'a>(
         &self,
-        all_harnesses: &[&HarnessMetadata],
-    ) -> Result<Vec<HarnessMetadata>> {
-        if let Some(name) = self.args.harness.clone().or(self.args.function.clone()) {
-            // Linear search, since this is only ever called once
-            let harness = find_proof_harness(&name, all_harnesses)?;
-            return Ok(vec![harness.clone()]);
+        all_harnesses: &[&'a HarnessMetadata],
+    ) -> Result<Vec<&'a HarnessMetadata>> {
+        let harnesses = if self.args.harnesses.is_empty() {
+            BTreeSet::from_iter(self.args.function.iter())
+        } else {
+            BTreeSet::from_iter(self.args.harnesses.iter())
+        };
+
+        if harnesses.is_empty() {
+            Ok(Vec::from(all_harnesses))
+        } else {
+            let harnesses = find_proof_harnesses(harnesses, all_harnesses);
+            Ok(harnesses)
         }
-        Ok(all_harnesses.iter().map(|md| (*md).clone()).collect())
     }
 }
 
@@ -126,8 +133,8 @@ impl KaniSession {
 /// appearing harnesses get processed earlier.
 /// This is necessary for the concrete playback feature (with in-place unit test modification)
 /// because it guarantees that injected unit tests will not change the location of to-be-processed harnesses.
-pub fn sort_harnesses_by_loc(harnesses: &[HarnessMetadata]) -> Vec<&HarnessMetadata> {
-    let mut harnesses_clone: Vec<_> = harnesses.iter().by_ref().collect();
+pub fn sort_harnesses_by_loc<'a>(harnesses: &[&'a HarnessMetadata]) -> Vec<&'a HarnessMetadata> {
+    let mut harnesses_clone = harnesses.to_vec();
     harnesses_clone.sort_unstable_by(|harness1, harness2| {
         harness1
             .original_file
@@ -158,40 +165,22 @@ pub fn mock_proof_harness(
 /// Search for a proof harness with a particular name.
 /// At the present time, we use `no_mangle` so collisions shouldn't happen,
 /// but this function is written to be robust against that changing in the future.
-fn find_proof_harness<'a>(
-    name: &str,
-    harnesses: &'a [&HarnessMetadata],
-) -> Result<&'a HarnessMetadata> {
-    let mut result: Option<&'a HarnessMetadata> = None;
-    for h in harnesses.iter() {
-        // Either an exact match, or...
-        let matches = h.pretty_name == *name || {
-            // pretty_name will be things like `module::submodule::name_of_function`
-            // and we want people to be able to specify `--harness name_of_function`
-            if let Some(prefix) = h.pretty_name.strip_suffix(name) {
-                prefix.ends_with("::")
-            } else {
-                false
-            }
-        };
-        if matches {
-            if let Some(other) = result {
-                bail!(
-                    "Conflicting proof harnesses named {}:\n {}\n {}",
-                    name,
-                    other.pretty_name,
-                    h.pretty_name
-                );
-            } else {
-                result = Some(h);
-            }
+fn find_proof_harnesses<'a>(
+    targets: BTreeSet<&String>,
+    all_harnesses: &[&'a HarnessMetadata],
+) -> Vec<&'a HarnessMetadata> {
+    debug!(?targets, "find_proof_harness");
+    let mut result = vec![];
+    for md in all_harnesses.iter() {
+        // Either an exact match, or a substring match. We check the exact first since it's cheaper.
+        if targets.contains(&md.pretty_name)
+            || targets.contains(&md.get_harness_name_unqualified().to_string())
+            || targets.iter().any(|target| md.pretty_name.contains(*target))
+        {
+            result.push(*md);
         }
     }
-    if let Some(x) = result {
-        Ok(x)
-    } else {
-        bail!("A proof harness named {} was not found", name);
-    }
+    result
 }
 
 #[cfg(test)]
@@ -206,13 +195,24 @@ mod tests {
             mock_proof_harness("module::not_check_three", None, None),
         ];
         let ref_harnesses = harnesses.iter().collect::<Vec<_>>();
-        assert!(find_proof_harness("check_three", &ref_harnesses).is_err());
+        assert_eq!(
+            find_proof_harnesses(BTreeSet::from([&"check_three".to_string()]), &ref_harnesses)
+                .len(),
+            1
+        );
         assert!(
-            find_proof_harness("check_two", &ref_harnesses).unwrap().mangled_name
+            find_proof_harnesses(BTreeSet::from([&"check_two".to_string()]), &ref_harnesses)
+                .first()
+                .unwrap()
+                .mangled_name
                 == "module::check_two"
         );
         assert!(
-            find_proof_harness("check_one", &ref_harnesses).unwrap().mangled_name == "check_one"
+            find_proof_harnesses(BTreeSet::from([&"check_one".to_string()]), &ref_harnesses)
+                .first()
+                .unwrap()
+                .mangled_name
+                == "check_one"
         );
     }
 }

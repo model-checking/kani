@@ -1,0 +1,11 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+[package]
+name = "harnesses"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+
+[package.metadata.kani.flags]
+harness = ["foo", "bar"]

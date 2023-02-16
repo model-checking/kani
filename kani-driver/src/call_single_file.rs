@@ -90,7 +90,7 @@ impl KaniSession {
         if self.args.enable_stubbing {
             flags.push("--enable-stubbing".into());
         }
-        if let Some(harness) = &self.args.harness {
+        for harness in &self.args.harnesses {
             flags.push(format!("--harness={harness}"));
         }
 

@@ -106,7 +106,8 @@ fn toml_to_args(tomldata: &str) -> Result<(Vec<OsString>, Vec<OsString>)> {
     for (flag, value) in map {
         if flag == "cbmc-args" {
             // --cbmc-args has to come last because it eats all remaining arguments
-            insert_arg_from_toml(&flag, &value, &mut cbmc_args)?;
+            cbmc_args.push("--cbmc-args".into());
+            cbmc_args.append(&mut cbmc_arg_from_toml(&value)?);
         } else {
             insert_arg_from_toml(&flag, &value, &mut args)?;
         }
@@ -129,9 +130,9 @@ fn insert_arg_from_toml(flag: &str, value: &Value, args: &mut Vec<OsString>) -> 
             }
         }
         Value::Array(a) => {
-            args.push(format!("--{flag}").into());
             for arg in a {
                 if let Some(arg) = arg.as_str() {
+                    args.push(format!("--{flag}").into());
                     args.push(arg.into());
                 } else {
                     bail!("flag {} contains non-string values", flag);
@@ -147,6 +148,33 @@ fn insert_arg_from_toml(flag: &str, value: &Value, args: &mut Vec<OsString>) -> 
         }
     }
     Ok(())
+}
+
+/// Translates one toml entry (flag, value) into arguments and inserts it into `args`
+fn cbmc_arg_from_toml(value: &Value) -> Result<Vec<OsString>> {
+    let mut args = vec![];
+    const CBMC_FLAG: &str = "--cbmc-args";
+    match value {
+        Value::Boolean(_) => {
+            bail!("cannot pass boolean value to `{CBMC_FLAG}`")
+        }
+        Value::Array(a) => {
+            for arg in a {
+                if let Some(arg) = arg.as_str() {
+                    args.push(arg.into());
+                } else {
+                    bail!("flag {CBMC_FLAG} contains non-string values");
+                }
+            }
+        }
+        Value::String(s) => {
+            args.push(s.into());
+        }
+        _ => {
+            bail!("Unknown key type {CBMC_FLAG}");
+        }
+    }
+    Ok(args)
 }
 
 /// Take 'a.b.c' and turn it into 'start['a']['b']['c']' reliably, and interpret the result as a table
