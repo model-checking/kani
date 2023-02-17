@@ -40,6 +40,84 @@ pub fn read_goto_binary_file(filename: &PathBuf) {
     deserializer.read_file().unwrap();
 }
 
+/// # Design overview
+///
+/// When saving a [SymbolTable] to a binary file, the [Irep] describing each
+/// symbol's type, value and source location are structurally hashed and
+/// uniquely numbered so that structurally identical [Irep] only get written
+/// in full to the file the first time they are encountered and that ulterior
+/// occurrences are referenced by their unique number instead.
+/// The key concept at play is that of a numbering, ie a function that assigns
+/// numbers to values of a given type.
+///
+/// The [IrepNumbering] struct offers high-level methods to number
+/// [InternedString], [IrepId] and [Irep] values:
+/// - [InternedString] objects get mapped to [NumberedString] objects based on
+///   the characters they contain.
+/// - [IrepId] objects get mapped to [NumberedString] objects based on the
+///   characters of their string representation, in the same number space
+///   as [InternedString].
+/// - [Irep] objects get mapped to [NumberedIrep] based on:
+///     + the unique numbers assigned to their [Irep::id] attribute,
+///     + the unique numbers of [Irep] found in their [IrepId::sub] attribute,
+///     + the pairs of unique numbers assigned to the ([IrepId],[Irep]) pairs
+///       found in their [IpreId::named_sub] attribute.
+///
+/// In order to assign the same number to structurally identical [Irep] objects,
+/// [IrepNumbering] essentially implements a cache where each [NumberedIrep] is
+/// keyed under an [IrepKey] that describes its internal structure.
+///
+/// An [IrepKey] is simply the vector of unique numbers describing the
+/// `id`, `sub` and `named_sub` attributes of a [Irep].
+///
+/// A [NumberedIrep] is conceptually a pair made of the [IrepKey] itself and the
+/// unique number assigned to that key.
+///
+/// The cache implemented by [IrepNumbering] is bidirectional. It lets you
+/// compute the [NumberedIrep] of an [Irep], and lets you fetch a numbered
+/// [NumberedIrep] from its unique number.
+///
+/// In practice:
+/// - the forward directon from [IrepKey] to unique numbers is
+/// implemented using a `HashMap<IrepKey,usize>`
+/// - the inverse direction from unique numbers to [NumberedIrep] is implemented
+/// using a `Vec<NumberedIrep>` called the `index` that stores [NumberedIrep]
+/// under their unique number.
+///
+/// Earlier we said that an [NumberedIrep] is conceptually a pair formed of
+/// an [IrepKey] and its unique number. In practice, is  represented using only
+/// a pair formed of a `usize` representing the unique number, and a `usize`
+/// representing the index at which the key can be found inside a single vector
+/// of type `Vec<usize>` called `keys` where all [IrepKey] are concatenated when
+/// they first get numbered. The inverse map of keys is represented this way
+/// because the Rust hash map that implements the forward cache owns
+/// its keys which would make it difficult to store keys references in inverse
+/// cache, which would introduce circular dependencies and require `Rc` and
+/// liftetimes annotations everywhere.
+///
+/// Numberig an [Irep] consists in recursively traversing it and numbering its
+/// contents in a bottom-up fashion, then assembling its [IrepKey] and querying
+/// the cache to either return an existing [NumberedIrep] or creating a new one
+/// (in case that key has never been seen before).
+///
+/// The [GotoBinarySerializer] internally uses a [IrepNumbering] and a cache
+/// of [NumberedIrep] and [NumberedString] it has already written to file.
+///
+/// When given an [InternedString], [IrepId] or [Irep] to serialize,
+/// the [GotoBinarySerializer] first numbers that object using its internal
+/// [IrepNumbering] instance. Then it looks up that unique number in its cache
+/// of already written objects. If the object was seen before, only the unique
+/// number of that object is written to file. If the object was never seen
+/// before, then the unique number of that object is written to file, followed
+/// by the objects describing its contents (themselves only being written fully
+/// if they have never been seen before, or only referenced if they have been
+/// seen before, etc.)
+///
+/// The [GotoBinaryDeserializer] also uses an [IrepNumbering] and a cache
+/// of [NumberedIrep] and [NumberedString] it has already read from file.
+/// Dually to the serializer, it will only attempt to decode the contents of an
+/// object from the byte stream on the first occurrence.
+
 /// A numbered [InternedString]. The number is guaranteed to be in [0,N].
 /// Had to introduce this indirection because [InternedString] does not let you access
 /// its unique id, so we have to build one ourselves.
@@ -58,8 +136,8 @@ struct IrepKey {
 impl IrepKey {
     /// Packs an [Irep]'s contents unique numbers into a new key object:
     /// - `id` must be the unique number assigned to an [Irep]'s [Irep::id] field.
-    /// - `sub` must be the vector if unique number assigned to an [Irep]'s [Irep::sub] field.
-    /// - `named_sub` must be the vector if unique number assigned to an [Irep]'s [Irep::named_sub] field.
+    /// - `sub` must be the vector of unique number assigned to an [Irep]'s [Irep::sub] field.
+    /// - `named_sub` must be the vector of unique number assigned to an [Irep]'s [Irep::named_sub] field.
     ///
     /// The `id`, `sub` and `named_sub` passed as arguments are packed as follows in the key's `number` field:
     /// ```
