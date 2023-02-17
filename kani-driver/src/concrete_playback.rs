@@ -11,13 +11,13 @@ use anyhow::{Context, Result};
 use concrete_vals_extractor::{extract_harness_values, ConcreteVal};
 use kani_metadata::HarnessMetadata;
 use std::collections::hash_map::DefaultHasher;
+use std::env;
 use std::ffi::OsString;
-use std::fs::{self, File};
+use std::fs::{self, remove_file, File};
 use std::hash::{Hash, Hasher};
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::Path;
 use std::process::Command;
-use tempfile::NamedTempFile;
 
 impl KaniSession {
     /// The main driver for generating concrete playback unit tests and adding them to source code.
@@ -113,7 +113,10 @@ impl KaniSession {
     ) -> Result<bool> {
         let source_file = File::open(source_path)?;
         let source_reader = BufReader::new(source_file);
-        let mut temp_file = NamedTempFile::new()?;
+        // let mut temp_file = NamedTempFile::new()?;
+        let mut temp_path = env::temp_dir();
+        temp_path.push("concrete_overwrite.tmp");
+        let mut temp_file = File::create(&temp_path)?;
         let mut temp_writer = BufWriter::new(&mut temp_file);
         let mut curr_line_num = 0;
 
@@ -146,11 +149,13 @@ impl KaniSession {
         drop(temp_writer);
 
         // Renames are usually automic, so we won't corrupt the user's source file during a crash.
-        fs::rename(temp_file.path(), source_path).with_context(|| {
+        fs::rename(&temp_path, source_path).with_context(|| {
             format!("Couldn't rename tmp source file to actual src file `{source_path}`.")
         })?;
 
-        // temp file gets deleted automatically by the NamedTempFile handler
+        drop(temp_file);
+        remove_file(temp_path)?;
+
         Ok(false)
     }
 
@@ -198,11 +203,6 @@ impl KaniSession {
         }
         Ok(())
     }
-}
-
-struct UnitTest {
-    code: Vec<String>,
-    name: String,
 }
 
 /// Generate a formatted unit test from a list of concrete values.
@@ -265,6 +265,11 @@ fn extract_parent_dir_and_src_file(src_path: &Path) -> Result<(String, String)> 
 struct FileLineRange {
     file: String,
     line_range: Option<(usize, usize)>,
+}
+
+struct UnitTest {
+    code: Vec<String>,
+    name: String,
 }
 
 /// Extract concrete values from the CBMC output processed items.
