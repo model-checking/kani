@@ -111,9 +111,11 @@ impl KaniSession {
         proof_harness_end_line: usize,
         unit_test: &UnitTest,
     ) -> Result<bool> {
+        // Read from source
         let source_file = File::open(source_path)?;
         let source_reader = BufReader::new(source_file);
-        // let mut temp_file = NamedTempFile::new()?;
+
+        // Create temp file
         let mut temp_path = env::temp_dir();
         temp_path.push("concrete_overwrite.tmp");
         let mut temp_file = File::create(&temp_path)?;
