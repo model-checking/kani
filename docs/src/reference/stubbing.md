@@ -22,8 +22,10 @@ Since it's an unstable feature, it requires passing the `--enable-unstable` opti
 At present, the stubbing feature is composed of the following:
  1. [The `#[kani::stub(<original>, <replacement>)]` attribute](#the-kanistub-attribute), which allows you to specify the pair of functions/methods that must be stubbed in a harness.
 
-[//]: # (the other components expected to be here in the future are: the `stub_set(...)!` macro, off-the-shelf verification-friendly implementations, and automated
+<!--
+the other components expected to be here in the future are: the `stub_set(...)!` macro, off-the-shelf verification-friendly implementations, and automated
 stubbing suggestions)
+-->
 
 ## The `#[kani::stub(...)]` attribute
 
