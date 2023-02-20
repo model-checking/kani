@@ -157,6 +157,10 @@ impl CodegenBackend for GotocCodegenBackend {
         // Print compilation report.
         print_report(&gcx, tcx);
 
+        // Map from name to prettyName for all symbols
+        let pretty_name_map: BTreeMap<InternedString, Option<InternedString>> =
+            BTreeMap::from_iter(gcx.symbol_table.iter().map(|(k, s)| (*k, s.pretty_name)));
+
         // Map MIR types to GotoC types
         let type_map: BTreeMap<InternedString, InternedString> =
             BTreeMap::from_iter(gcx.type_map.iter().map(|(k, v)| (*k, v.to_string().into())));
@@ -175,6 +179,7 @@ impl CodegenBackend for GotocCodegenBackend {
             let outputs = tcx.output_filenames(());
             let base_filename = outputs.output_path(OutputType::Object);
             let pretty = self.queries.lock().unwrap().get_output_pretty_json();
+            write_file(&base_filename, ArtifactType::PrettyNameMap, &pretty_name_map, pretty);
             write_file(&base_filename, ArtifactType::SymTab, &gcx.symbol_table, pretty);
             write_file(&base_filename, ArtifactType::TypeMap, &type_map, pretty);
             write_file(&base_filename, ArtifactType::Metadata, &metadata, pretty);
