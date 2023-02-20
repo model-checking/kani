@@ -131,7 +131,9 @@ impl KaniSession {
                         source_path, unit_test.name,
                     );
                 }
-                // temp file gets deleted automatically when function goes out of scope
+                drop(temp_writer);
+                drop(temp_file);
+                remove_file(temp_path)?;
                 return Ok(true);
             }
             curr_line_num += 1;
