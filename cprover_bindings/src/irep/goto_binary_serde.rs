@@ -119,8 +119,8 @@ pub fn read_goto_binary_file(filename: &PathBuf) {
 /// object from the byte stream on the first occurrence.
 
 /// A numbered [InternedString]. The number is guaranteed to be in [0,N].
-/// Had to introduce this indirection because [InternedString] does not let you access
-/// its unique id, so we have to build one ourselves.
+/// Had to introduce this indirection because [InternedString] does not let you
+/// access its unique id, so we have to build one ourselves.
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 struct NumberedString {
     number: usize,
@@ -135,11 +135,15 @@ struct IrepKey {
 
 impl IrepKey {
     /// Packs an [Irep]'s contents unique numbers into a new key object:
-    /// - `id` must be the unique number assigned to an [Irep]'s [Irep::id] field.
-    /// - `sub` must be the vector of unique number assigned to an [Irep]'s [Irep::sub] field.
-    /// - `named_sub` must be the vector of unique number assigned to an [Irep]'s [Irep::named_sub] field.
+    /// - `id` must be the unique number assigned to an [Irep]'s
+    ///   [Irep::id] field.
+    /// - `sub` must be the vector of unique number assigned to an [Irep]'s
+    ///   [Irep::sub] field.
+    /// - `named_sub` must be the vector of unique number assigned to an [Irep]'s
+    ///   [Irep::named_sub] field.
     ///
-    /// The `id`, `sub` and `named_sub` passed as arguments are packed as follows in the key's `number` field:
+    /// The `id`, `sub` and `named_sub` passed as arguments are packed as follows
+    /// in the key's `number` field:
     /// ```
     /// id
     /// sub.len()
@@ -173,7 +177,8 @@ struct IrepNumberingInv {
     /// Maps [Irep] numbers to [NumberedIrep]s;
     index: Vec<NumberedIrep>,
 
-    /// Stores the concactenation of all [IrepKey] seen by the [IrepNumbering] object owning this inverse numbering.
+    /// Stores the concactenation of all [IrepKey] seen by the [IrepNumbering]
+    /// object owning this inverse numbering.
     keys: Vec<usize>,
 }
 
@@ -317,12 +322,14 @@ impl IrepNumbering {
 }
 
 /// A uniquely numbered [Irep].
-/// A NumberedIrep can be viewed as a generational index into a [IrepNumbering] instance.
+/// A NumberedIrep can be viewed as a generational index into an
+/// [IrepNumbering] instance.
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 struct NumberedIrep {
     /// The unique number of this NumberedIrep.
     number: usize,
-    /// Start index of the [IrepKey] of this [NumberedIrep] in the inverse cache of the [IrepNumbering] that produced it.
+    /// Start index of the [IrepKey] of this [NumberedIrep] in the inverse cache
+    /// of the [IrepNumbering] that produced it.
     start_index: usize,
 }
 
@@ -401,9 +408,11 @@ where
         Ok(())
     }
 
-    /// Writes a usize to the temporary buffer using 7-bit variable length encoding.
-    /// A usize value gets serialized as a list of u8. The usize value get shifted right in place, 7 bits at a time, the shifted
-    /// bits are stored in the LSBs of a u8. The MSB of the u8 is used to indicate the continuation or the end of the encoding:
+    /// Writes a usize to the temporary buffer using 7-bit variable length
+    /// encoding. A usize value gets serialized as a list of u8. The usize value
+    /// gets shifted right in place, 7 bits at a time, the shifted bits are
+    /// stored in the LSBs of a u8. The MSB of the u8 is used to indicate the
+    /// continuation or the end of the encoding:
     /// - it is set to true if some true bits remain in the usize value,
     /// - it is set to zero all remaining bits of the usize value are zero.
     fn write_usize_varenc(&mut self, mut u: usize) -> io::Result<()> {
@@ -422,8 +431,8 @@ where
         Ok(())
     }
 
-    /// Writes a numbered string to the buffer. Writes the unique number of the string,
-    /// and writes the actual string only if was never written before.
+    /// Writes a numbered string to the buffer. Writes the unique number of
+    /// the string, and writes the actual string only if was never written before.
     fn write_numbered_string_ref(&mut self, numbered_string: &NumberedString) -> io::Result<()> {
         let num = numbered_string.number;
         self.write_usize_varenc(num)?;
@@ -455,8 +464,9 @@ where
         Ok(())
     }
 
-    /// Writes a numbered irep to the buffer. Writes the unique number of the irep,
-    /// and writes the actual irep contents only if was never written before.
+    /// Writes a numbered irep to the buffer. Writes the unique number of the
+    /// irep, and writes the actual irep contents only if was never written
+    /// before.
     fn write_numbered_irep_ref(&mut self, irep: &NumberedIrep) -> io::Result<()> {
         let num = irep.number;
         self.write_usize_varenc(num)?;
@@ -518,7 +528,8 @@ where
         flags = (flags << 1) | (symbol.is_state_var) as usize;
         flags = (flags << 1) | (symbol.is_parameter) as usize;
         flags = (flags << 1) | (symbol.is_auxiliary) as usize;
-        flags = (flags << 1) | (false) as usize; // sym.binding;
+        // deprecated sym.binding but remains present for compatibility
+        flags = (flags << 1) | (false) as usize;
         flags = (flags << 1) | (symbol.is_lvalue) as usize;
         flags = (flags << 1) | (symbol.is_static_lifetime) as usize;
         flags = (flags << 1) | (symbol.is_thread_local) as usize;
@@ -591,13 +602,15 @@ where
     /// Counts how many times a given irep was read.
     irep_count: Vec<usize>,
 
-    /// Maps the irep number used in the binary stream to the new one generated by our own numbering.
+    /// Maps the irep number used in the binary stream to the new one generated
+    /// by our own numbering.
     irep_map: Vec<Option<usize>>,
 
     /// Counts how many times a given string was read.
     string_count: Vec<usize>,
 
-    /// Maps the string number used in the binary stream to the new one generated by our own numbering.
+    /// Maps the string number used in the binary stream to the new one generated
+    /// by our own numbering.
     string_map: Vec<Option<usize>>,
 }
 
@@ -635,7 +648,8 @@ where
         Ok(found)
     }
 
-    /// Adds an InternedString unique number to the "read" cache, returns true iff was never read before.
+    /// Adds an InternedString unique number to the "read" cache, returns true
+    /// iff was never read before.
     fn is_first_read_string(&mut self, u: usize) -> bool {
         if u >= self.string_count.len() {
             self.string_count.resize(u + 1, 0);
@@ -645,7 +659,8 @@ where
         count == 0
     }
 
-    /// Maps a string number used in the byte stream to the number generated by our own numbering for that string.
+    /// Maps a string number used in the byte stream to the number generated by
+    /// our own numbering for that string.
     fn add_string_mapping(&mut self, num_binary: usize, num: usize) {
         if num_binary >= self.string_map.len() {
             self.string_map.resize(num_binary + 1, None);
@@ -657,7 +672,8 @@ where
         self.string_map[num_binary] = Some(num);
     }
 
-    /// Adds an Irep unique number to the "read" cache, returns true iff it was never read before.
+    /// Adds an Irep unique number to the "read" cache, returns true iff it was
+    /// never read before.
     fn is_first_read_irep(&mut self, u: usize) -> bool {
         if u >= self.irep_count.len() {
             self.irep_count.resize(u + 1, 0);
@@ -667,7 +683,8 @@ where
         count == 0
     }
 
-    /// Maps an Irep number used in the byte stream to the number generated by our own numbering for that Irep.
+    /// Maps an Irep number used in the byte stream to the number generated by
+    /// our own numbering for that Irep.
     fn add_irep_mapping(&mut self, num_binary: usize, num: usize) {
         if num_binary >= self.irep_map.len() {
             self.irep_map.resize(num_binary + 1, None);
@@ -688,7 +705,8 @@ where
         }
     }
 
-    /// Reads a usize from the byte stream assuming 7-bit variable length encoding.
+    /// Reads a usize from the byte stream assuming it is encoded using 7-bi
+    /// variable length encoding ([GotoBinarySerializer::write_usize_varenc]).
     fn read_usize_varenc(&mut self) -> io::Result<usize> {
         let mut result: usize = 0;
         let mut shift: usize = 0;
@@ -879,7 +897,8 @@ where
         let _is_state_var = (flags & (1 << 9)) != 0;
         let _is_parameter = (flags & (1 << 8)) != 0;
         let _is_auxiliary = (flags & (1 << 7)) != 0;
-        let _is_binding = (flags & (1 << 6)) != 0; // deprecated
+        // deprecated sym.binding but remains present for compatibility
+        let _is_binding = (flags & (1 << 6)) != 0;
         let _is_lvalue = (flags & (1 << 5)) != 0;
         let _is_static_lifetime = (flags & (1 << 4)) != 0;
         let _is_thread_local = (flags & (1 << 3)) != 0;
@@ -893,7 +912,7 @@ where
         if shifted_flags != 0 {
             return Err(Error::new(
                 ErrorKind::Other,
-                "incorrect binary format: set bits remain in decoded symbol flags",
+                "incorrect binary format: true bits remain in decoded symbol flags",
             ));
         }
         Ok(())
