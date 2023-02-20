@@ -182,6 +182,7 @@ impl CodegenBackend for GotocCodegenBackend {
             let outputs = tcx.output_filenames(());
             let base_filename = outputs.output_path(OutputType::Object);
             let pretty = self.queries.lock().unwrap().get_output_pretty_json();
+            write_file(&base_filename, ArtifactType::PrettyNameMap, &pretty_name_map, pretty);
 
             if gcx.queries.get_write_goto_binary() {
                 write_goto_binary_file(
