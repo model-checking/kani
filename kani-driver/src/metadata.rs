@@ -6,7 +6,8 @@ use std::path::Path;
 use tracing::debug;
 
 use kani_metadata::{
-    HarnessMetadata, InternedString, KaniMetadata, TraitDefinedMethod, VtableCtxResults,
+    HarnessAttributes, HarnessMetadata, InternedString, KaniMetadata, TraitDefinedMethod,
+    VtableCtxResults,
 };
 use std::collections::{BTreeSet, HashMap};
 use std::fs::File;
@@ -156,8 +157,7 @@ pub fn mock_proof_harness(
         original_file: "<unknown>".into(),
         original_start_line: 0,
         original_end_line: 0,
-        solver: None,
-        unwind_value,
+        attributes: HarnessAttributes { unwind_value, proof: true, ..Default::default() },
         goto_file: None,
     }
 }
