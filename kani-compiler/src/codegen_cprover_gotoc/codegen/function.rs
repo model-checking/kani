@@ -255,7 +255,7 @@ impl<'tcx> GotocCtx<'tcx> {
     fn record_test_harness_metadata(&mut self) {
         let def_id = self.current_fn().instance().def_id();
         if is_test_harness_closure(self.tcx, def_id) {
-            self.test_harnesses.push(self.default_kanitool_proof())
+            self.test_harnesses.push(self.generate_metadata(None))
         }
     }
 
@@ -266,15 +266,13 @@ impl<'tcx> GotocCtx<'tcx> {
     fn record_kani_attributes(&mut self) {
         let def_id = self.current_fn().instance().def_id();
         let attributes = extract_harness_attributes(self.tcx, def_id);
-        if let Some(attrs) = attributes {
-            let mut harness = self.default_kanitool_proof();
-            harness.attributes = attrs;
-            self.proof_harnesses.push(harness);
+        if attributes.is_some() {
+            self.proof_harnesses.push(self.generate_metadata(attributes));
         }
     }
 
     /// Create the default proof harness for the current function
-    fn default_kanitool_proof(&self) -> HarnessMetadata {
+    fn generate_metadata(&self, attributes: Option<HarnessAttributes>) -> HarnessMetadata {
         let current_fn = self.current_fn();
         let pretty_name = current_fn.readable_name().to_owned();
         let mangled_name = current_fn.name();
@@ -287,7 +285,7 @@ impl<'tcx> GotocCtx<'tcx> {
             original_file: loc.filename().unwrap(),
             original_start_line: loc.start_line().unwrap() as usize,
             original_end_line: loc.end_line().unwrap() as usize,
-            attributes: HarnessAttributes::default(),
+            attributes: attributes.unwrap_or_default(),
             // We record the actual path after codegen before we dump the metadata into a file.
             goto_file: None,
         }
