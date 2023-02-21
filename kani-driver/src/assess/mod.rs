@@ -91,8 +91,8 @@ fn assess_project(mut session: KaniSession) -> Result<AssessMetadata> {
     }
 
     // Done with the 'cargo-kani' part, now we're going to run *test* harnesses instead of proof:
-    let harnesses = metadata.test_harnesses;
-    let runner = crate::harness_runner::HarnessRunner { sess: &session, project };
+    let harnesses = Vec::from_iter(metadata.test_harnesses.iter());
+    let runner = crate::harness_runner::HarnessRunner { sess: &session, project: &project };
 
     let results = runner.check_all_harnesses(&harnesses)?;
 

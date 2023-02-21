@@ -129,7 +129,7 @@ pub fn parser() -> Command {
                 .long(HARNESS)
                 .help("Selects the harness to target.")
                 .value_name("HARNESS")
-                .action(ArgAction::Set),
+                .action(ArgAction::Append),
         )
         .arg(
             Arg::new(ENABLE_STUBBING)

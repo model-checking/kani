@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 #![feature(let_chains)]
 #![feature(array_methods)]
-
 use std::ffi::OsString;
 use std::process::ExitCode;
 
@@ -91,7 +90,7 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
     debug!(n = harnesses.len(), ?harnesses, "verify_project");
 
     // Verification
-    let runner = harness_runner::HarnessRunner { sess: &session, project };
+    let runner = harness_runner::HarnessRunner { sess: &session, project: &project };
     let results = runner.check_all_harnesses(&harnesses)?;
 
     session.print_final_summary(&results)
