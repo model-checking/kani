@@ -5,6 +5,9 @@
 
 use crate::codegen_cprover_gotoc::archive::ArchiveBuilder;
 use crate::codegen_cprover_gotoc::GotocCtx;
+use crate::kani_middle::attributes::is_proof_harness;
+use crate::kani_middle::attributes::is_test_harness_description;
+use crate::kani_middle::check_crate_items;
 use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{
     collect_reachable_items, filter_closures_in_const_crate_items, filter_crate_items,
@@ -20,7 +23,6 @@ use rustc_codegen_ssa::{CodegenResults, CrateInfo};
 use rustc_data_structures::fx::FxHashMap;
 use rustc_data_structures::temp_dir::MaybeTempDir;
 use rustc_errors::ErrorGuaranteed;
-use rustc_hir::def::DefKind;
 use rustc_hir::def_id::LOCAL_CRATE;
 use rustc_metadata::fs::{emit_wrapper_file, METADATA_FILENAME};
 use rustc_metadata::EncodedMetadata;
@@ -91,7 +93,7 @@ impl CodegenBackend for GotocCodegenBackend {
         let mut gcx = GotocCtx::new(tcx, (*self.queries.lock().unwrap()).clone());
         check_target(tcx.sess);
         check_options(tcx.sess);
-        check_crate_items(&gcx);
+        check_crate_items(gcx.tcx, gcx.queries.get_ignore_global_asm());
 
         let items = with_timer(|| collect_codegen_items(&gcx), "codegen reachability analysis");
         if items.is_empty() {
@@ -301,34 +303,6 @@ fn check_options(session: &Session) {
     session.abort_if_errors();
 }
 
-/// Check that all crate items are supported and there's no misconfiguration.
-/// This method will exhaustively print any error / warning and it will abort at the end if any
-/// error was found.
-fn check_crate_items(gcx: &GotocCtx) {
-    let tcx = gcx.tcx;
-    for item in tcx.hir_crate_items(()).items() {
-        let def_id = item.owner_id.def_id.to_def_id();
-        gcx.check_attributes(def_id);
-        if tcx.def_kind(def_id) == DefKind::GlobalAsm {
-            if !gcx.queries.get_ignore_global_asm() {
-                let error_msg = format!(
-                    "Crate {} contains global ASM, which is not supported by Kani. Rerun with \
-                    `--enable-unstable --ignore-global-asm` to suppress this error \
-                    (**Verification results may be impacted**).",
-                    gcx.short_crate_name()
-                );
-                tcx.sess.err(&error_msg);
-            } else {
-                tcx.sess.warn(format!(
-                    "Ignoring global ASM in crate {}. Verification results may be impacted.",
-                    gcx.short_crate_name()
-                ));
-            }
-        }
-    }
-    tcx.sess.abort_if_errors();
-}
-
 /// Prints a report at the end of the compilation.
 fn print_report(ctx: &GotocCtx, tcx: TyCtxt) {
     // Print all unsupported constructs.
@@ -404,14 +378,14 @@ fn collect_codegen_items<'tcx>(gcx: &GotocCtx<'tcx>) -> Vec<MonoItem<'tcx>> {
         }
         ReachabilityType::Harnesses => {
             // Cross-crate collecting of all items that are reachable from the crate harnesses.
-            let harnesses = filter_crate_items(tcx, |_, def_id| gcx.is_proof_harness(def_id));
+            let harnesses = filter_crate_items(tcx, |_, def_id| is_proof_harness(gcx.tcx, def_id));
             collect_reachable_items(tcx, &harnesses).into_iter().collect()
         }
         ReachabilityType::Tests => {
             // We're iterating over crate items here, so what we have to codegen is the "test description" containing the
             // test closure that we want to execute
             let harnesses = filter_closures_in_const_crate_items(tcx, |_, def_id| {
-                gcx.is_test_harness_description(def_id)
+                is_test_harness_description(gcx.tcx, def_id)
             });
             collect_reachable_items(tcx, &harnesses).into_iter().collect()
         }
