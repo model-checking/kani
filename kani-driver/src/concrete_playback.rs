@@ -15,9 +15,40 @@ use std::env;
 use std::ffi::OsString;
 use std::fs::{self, remove_file, File};
 use std::hash::{Hash, Hasher};
-use std::io::{BufRead, BufReader, BufWriter, Write};
-use std::path::Path;
+use std::io::{BufRead, BufReader, BufWriter, Error, Write};
+use std::path::{Path, PathBuf};
 use std::process::Command;
+
+struct TempFile {
+    file: File,
+    temp_path: PathBuf,
+}
+
+impl TempFile {
+    fn new() -> Result<Self, Error> {
+        // Create temp file
+        let mut temp_path = env::temp_dir();
+        temp_path.push("concrete_overwrite.tmp");
+        let temp_file = match File::create(&temp_path) {
+            Ok(f) => f,
+            Err(e) => return Err(e),
+        };
+        Ok(Self { file: temp_file, temp_path })
+    }
+}
+
+impl Drop for TempFile {
+    fn drop(&mut self) -> () {
+        if let Err(e) = self.file.sync_all() {
+            eprintln!("Error syncing tempfile: {}", e);
+        }
+
+        drop(&self.file);
+        if let Err(e) = remove_file(&self.temp_path) {
+            eprintln!("Error removing the tempfile: {}", e);
+        }
+    }
+}
 
 impl KaniSession {
     /// The main driver for generating concrete playback unit tests and adding them to source code.
@@ -116,10 +147,11 @@ impl KaniSession {
         let source_reader = BufReader::new(source_file);
 
         // Create temp file
-        let mut temp_path = env::temp_dir();
-        temp_path.push("concrete_overwrite.tmp");
-        let mut temp_file = File::create(&temp_path)?;
-        let mut temp_writer = BufWriter::new(&mut temp_file);
+        let mut temp_file = match TempFile::new() {
+            Ok(f) => f,
+            Err(_) => return Ok(false),
+        };
+        let mut temp_writer = BufWriter::new(&mut temp_file.file);
         let mut curr_line_num = 0;
 
         // Use a buffered reader/writer to generate the unit test line by line
@@ -133,7 +165,6 @@ impl KaniSession {
                 }
                 drop(temp_writer);
                 drop(temp_file);
-                remove_file(temp_path)?;
                 return Ok(true);
             }
             curr_line_num += 1;
@@ -146,19 +177,15 @@ impl KaniSession {
             }
         }
 
-        // Flush before we remove/rename the file.
-        temp_writer.flush()?;
-
         // Have to drop the bufreader to be able to reuse and rename the moved temp file
         drop(temp_writer);
 
         // Renames are usually automic, so we won't corrupt the user's source file during a crash.
-        fs::rename(&temp_path, source_path).with_context(|| {
+        fs::rename(&temp_file.temp_path, source_path).with_context(|| {
             format!("Couldn't rename tmp source file to actual src file `{source_path}`.")
         })?;
 
         drop(temp_file);
-        remove_file(temp_path)?;
 
         Ok(false)
     }
