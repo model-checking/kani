@@ -38,14 +38,14 @@ impl TempFile {
 }
 
 impl Drop for TempFile {
-    fn drop(&mut self) -> () {
+    fn drop(&mut self) {
         if let Err(e) = self.file.sync_all() {
-            eprintln!("Error syncing tempfile: {}", e);
+            eprintln!("Error syncing tempfile: {e}");
         }
 
-        drop(&self.file);
+        // drop(self.file);
         if let Err(e) = remove_file(&self.temp_path) {
-            eprintln!("Error removing the tempfile: {}", e);
+            eprintln!("Error removing the tempfile: {e}");
         }
     }
 }
@@ -143,7 +143,7 @@ impl KaniSession {
         unit_test: &UnitTest,
     ) -> Result<bool> {
         // Read from source
-        let source_file = File::open(source_path)?;
+        let source_file = File::open(source_path).unwrap();
         let source_reader = BufReader::new(source_file);
 
         // Create temp file
@@ -181,9 +181,9 @@ impl KaniSession {
         drop(temp_writer);
 
         // Renames are usually automic, so we won't corrupt the user's source file during a crash.
-        fs::rename(&temp_file.temp_path, source_path).with_context(|| {
-            format!("Couldn't rename tmp source file to actual src file `{source_path}`.")
-        })?;
+        if fs::rename(&temp_file.temp_path, source_path).is_err() {
+            eprintln!("Couldn't rename tmp source file to actual src file `{source_path}`.");
+        };
 
         drop(temp_file);
 
