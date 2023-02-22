@@ -3,7 +3,7 @@
 
 //! This module introduces the Arbitrary trait as well as implementation for primitive types and
 //! other std containers.
-use std::num::*;
+use std::{num::*, marker::{PhantomData, PhantomPinned}};
 
 /// This trait should be used to generate symbolic variables that represent any valid value of
 /// its type.
@@ -118,5 +118,17 @@ where
 {
     fn any() -> Self {
         if bool::any() { Ok(T::any()) } else { Err(E::any()) }
+    }
+}
+
+impl<T: ?Sized> Arbitrary for std::marker::PhantomData<T> {
+    fn any() -> Self {
+        PhantomData
+    }
+}
+
+impl Arbitrary for std::marker::PhantomPinned {
+    fn any() -> Self {
+        PhantomPinned
     }
 }
