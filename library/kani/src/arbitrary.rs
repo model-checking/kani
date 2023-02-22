@@ -3,7 +3,10 @@
 
 //! This module introduces the Arbitrary trait as well as implementation for primitive types and
 //! other std containers.
-use std::{num::*, marker::{PhantomData, PhantomPinned}};
+use std::{
+    marker::{PhantomData, PhantomPinned},
+    num::*,
+};
 
 /// This trait should be used to generate symbolic variables that represent any valid value of
 /// its type.
