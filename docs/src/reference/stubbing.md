@@ -19,8 +19,8 @@ Although definitions for *mocking* (normally used in testing) and *stubbing* may
 The stubbing feature can be enabled by using the `--enable-stubbing` option when calling Kani.
 Since it's an unstable feature, it requires passing the `--enable-unstable` option in addition to `--enable-stubbing`.
 
-At present, the stubbing feature is composed of the following:
- 1. [The `#[kani::stub(<original>, <replacement>)]` attribute](#the-kanistub-attribute), which allows you to specify the pair of functions/methods that must be stubbed in a harness.
+At present, the only component of the stubbing feature is [the `#[kani::stub(<original>, <replacement>)]` attribute](#the-kanistub-attribute),
+which allows you to specify the pair of functions/methods that must be stubbed in a harness.
 
 <!--
 the other components expected to be here in the future are: the `stub_set(...)!` macro, off-the-shelf verification-friendly implementations, and automated
@@ -39,14 +39,20 @@ This includes support for imports like `use foo::bar as baz`, as well as imports
 
 ### An example: stubbing `random`
 
-Let's see a simple example using the `random` function from the [`rand` crate](https://crates.io/crates/rand).
+Let's see a simple example where we use the [`rand::random`](https://docs.rs/rand/latest/rand/fn.random.html) function
+to generate an encryption key.
 
 ```rust
 #[cfg(kani)]
 #[kani::proof]
-fn random_cannot_be_zero() {
-    assert_ne!(rand::random::<u32>(), 0);
+fn encrypt_then_decrypt_is_identity() {
+    let data: u32 = kani::any();
+    let encryption_key: u32 = rand::random();
+    let encrypted_data = data ^ encryption_key;
+    let decrypted_data = encrypted_data ^ encryption_key;
+    assert_eq!(data, decrypted_data);
 }
+
 ```
 
 At present, Kani fails to verify this example due to [issue #1781](https://github.com/model-checking/kani/issues/1781).
@@ -62,13 +68,17 @@ fn mock_random<T: kani::Arbitrary>() -> T {
 #[cfg(kani)]
 #[kani::proof]
 #[kani::stub(rand::random, mock_random)]
-fn random_cannot_be_zero() {
-    assert_ne!(rand::random::<u32>(), 0);
+fn encrypt_then_decrypt_is_identity() {
+    let data: u32 = kani::any();
+    let encryption_key: u32 = rand::random();
+    let encrypted_data = data ^ encryption_key;
+    let decrypted_data = encrypted_data ^ encryption_key;
+    assert_eq!(data, decrypted_data);
 }
 ```
 
 Here, the `#[kani::stub(rand::random, mock_random)]` attribute indicates to Kani that it should replace `rand::random` with the stub `mock_random`.
-Note that this a fair assumption to do: `rand::random` is expected to return any `u32` value, just like `kani::any`.
+Note that this is a fair assumption to do: `rand::random` is expected to return any `u32` value, just like `kani::any`.
 
 Now, let's run it through Kani:
 
@@ -76,17 +86,23 @@ Now, let's run it through Kani:
 cargo kani --enable-unstable --enable-stubbing --harness random_cannot_be_zero
 ```
 
-The verification result is composed of a single check: the assertion associated to `assert_ne!(rand::random::<u32>(), 0);`.
+The verification result is composed of a single check: the assertion corresponding to `assert_eq!(data, decrypted_data)`.
 
 ```
 RESULTS:
-Check 1: random_cannot_be_zero.assertion.1
-         - Status: FAILURE
-         - Description: "assertion failed: rand::random::<u32>() != 0"
-         - Location: src/main.rs:20:5 in function random_cannot_be_zero
+Check 1: encrypt_then_decrypt_is_identity.assertion.1
+         - Status: SUCCESS
+         - Description: "assertion failed: data == decrypted_data"
+         - Location: src/main.rs:18:5 in function encrypt_then_decrypt_is_identity
+
+
+SUMMARY:
+ ** 0 of 1 failed
+
+VERIFICATION:- SUCCESSFUL
 ```
 
-In less than 1 second, Kani proves that the assertion can fail, avoiding any issues that would appear if we attempted to verify the code without stubbing.
+Kani shows that the assertion is successful, avoiding any issues that appear if we attempt to verify the code without stubbing.
 
 ## Limitations
 
@@ -97,11 +113,11 @@ In the following, we describe all the limitations of the stubbing feature.
 The usage of stubbing is limited to the verification of a single harness.
 Therefore, users are **required to pass the `--harness` option** when using the stubbing feature.
 
-In addition, this feature **isn't compatible with concrete playback**.
+In addition, this feature **isn't compatible with [concrete playback](../debugging-verification-failures.md#concrete-playback)**.
 
 ### Support
 
-Support for stubbing is currently **limited to functions and methods**. Any other items aren't supported.
+Support for stubbing is currently **limited to functions and methods**. All other items aren't supported.
 
 The following are examples of items that could be good candidates for stubbing, but aren't supported:
 - Types
@@ -128,7 +144,7 @@ One workaround is to use the unsafe function `std::mem::transmute`, as in this e
       pub x: u32,
   }
   
-  fn mock_m(foo: &Foo) {
+  fn mock_m(foo: &Foo) -> u32 {
       let mock: &MockFoo = unsafe { std::mem::transmute(foo) };
       return mock.x;
   }
