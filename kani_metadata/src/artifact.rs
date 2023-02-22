@@ -22,6 +22,9 @@ pub enum ArtifactType {
     /// A `json` file that has information about the function pointer restrictions derived from
     /// vtable generation.
     VTableRestriction,
+    /// A `json` file that stores the name to prettyName mapping for symbols
+    /// (used to demangle names from the C dump).
+    PrettyNameMap,
 }
 
 impl ArtifactType {
@@ -33,6 +36,7 @@ impl ArtifactType {
             ArtifactType::SymTabGoto => "symtab.out",
             ArtifactType::TypeMap => "type_map.json",
             ArtifactType::VTableRestriction => "restrictions.json",
+            ArtifactType::PrettyNameMap => "pretty_name_map.json",
         }
     }
 }
@@ -59,7 +63,8 @@ pub fn convert_type(path: &Path, from: ArtifactType, to: ArtifactType) -> PathBu
         | ArtifactType::SymTab
         | ArtifactType::SymTabGoto
         | ArtifactType::TypeMap
-        | ArtifactType::VTableRestriction => {
+        | ArtifactType::VTableRestriction
+        | ArtifactType::PrettyNameMap => {
             result.set_extension("");
             result.set_extension(&to);
         }

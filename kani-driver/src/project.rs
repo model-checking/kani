@@ -155,10 +155,8 @@ pub fn cargo_project(session: &KaniSession) -> Result<Project> {
         // Merge goto files.
         let joined_name = "cbmc-linked";
         let base_name = outdir.join(joined_name);
-        let symtab_gotos: Vec<_> =
-            outputs.symtabs.iter().map(|p| convert_type(p, SymTab, SymTabGoto)).collect();
         let goto = base_name.with_extension(Goto);
-        session.link_goto_binary(&symtab_gotos, &goto)?;
+        session.link_goto_binary(&outputs.symtab_gotos, &goto)?;
         artifacts.push(Artifact::try_new(&goto, Goto)?);
 
         // Merge metadata files.
@@ -227,8 +225,8 @@ struct StandaloneProjectBuilder<'a> {
 }
 
 /// All the type of artifacts that may be generated as part of the build.
-const BUILD_ARTIFACTS: [ArtifactType; 6] =
-    [Metadata, Goto, SymTab, SymTabGoto, TypeMap, VTableRestriction];
+const BUILD_ARTIFACTS: [ArtifactType; 7] =
+    [Metadata, Goto, SymTab, SymTabGoto, TypeMap, VTableRestriction, PrettyNameMap];
 
 impl<'a> StandaloneProjectBuilder<'a> {
     /// Create a `StandaloneProjectBuilder` from the given input and session.
