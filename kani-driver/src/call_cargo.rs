@@ -8,7 +8,6 @@ use anyhow::{bail, Context, Result};
 use cargo_metadata::diagnostic::{Diagnostic, DiagnosticLevel};
 use cargo_metadata::{Message, Metadata, MetadataCommand, Package};
 use std::ffi::{OsStr, OsString};
-use std::fs;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -52,12 +51,6 @@ impl KaniSession {
             .clone()
             .join("kani");
         let outdir = target_dir.join(build_target).join("debug/deps");
-
-        // Clean directory before building since we are unable to handle cache today.
-        // TODO: https://github.com/model-checking/kani/issues/1736
-        if target_dir.exists() {
-            fs::remove_dir_all(&target_dir)?;
-        }
 
         let mut rustc_args = self.kani_rustc_flags();
         rustc_args.push(to_rustc_arg(self.kani_compiler_flags()).into());
