@@ -28,14 +28,14 @@ rm -rf ${OUT_DIR}
 mkdir -p ${OUT_DIR}
 
 # Copy the project so we don't make changes to the source code
-cp -r ../target_lib ${OUT_DIR}
+cp -r target_lib ${OUT_DIR}
 
 echo "Initial compilation"
-cargo kani --manifest-path ${MANIFEST} --target-dir ${OUT_DIR} --no-assertion-reach-checks | tee ${OUT_DIR}/initial.log
+cargo kani --manifest-path ${MANIFEST} --target-dir ${OUT_DIR} --no-assertion-reach-checks 2>&1 | tee ${OUT_DIR}/initial.log
 check_result initial.log
 
 echo "Run with a new argument that affects compilation"
-cargo kani --manifest-path ${MANIFEST} --target-dir ${OUT_DIR} | tee ${OUT_DIR}/enable_checks.log
+cargo kani --manifest-path ${MANIFEST} --target-dir ${OUT_DIR} 2>&1 | tee ${OUT_DIR}/enable_checks.log
 check_result enable_checks.log
 
 echo "Run after change to the source code"
@@ -43,12 +43,12 @@ echo '
 #[kani::proof]
 fn noop_check() {}
 ' >> ${LIB_SRC}
-cargo kani --manifest-path ${MANIFEST} --target-dir ${OUT_DIR} | tee ${OUT_DIR}/changed_src.log
+cargo kani --manifest-path ${MANIFEST} --target-dir ${OUT_DIR} 2>&1 | tee ${OUT_DIR}/changed_src.log
 check_result changed_src.log
 
 echo "Run with new dependency"
-cargo add new_dep --manifest-path ${MANIFEST} --path ../new_dep
-cargo kani --manifest-path ${MANIFEST} --target-dir ${OUT_DIR} | tee ${OUT_DIR}/new_dep.log
+cargo add new_dep --manifest-path ${MANIFEST} --path new_dep
+cargo kani --manifest-path ${MANIFEST} --target-dir ${OUT_DIR} 2>&1 | tee ${OUT_DIR}/new_dep.log
 check_result new_dep.log
 
 # Try to leave a clean output folder at the end
