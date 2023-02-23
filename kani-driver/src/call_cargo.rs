@@ -29,8 +29,8 @@ pub struct CargoOutputs {
     /// The directory where compiler outputs should be directed.
     /// Usually 'target/BUILD_TRIPLE/debug/deps/'
     pub outdir: PathBuf,
-    /// The collection of *.symtab.json files written.
-    pub symtabs: Vec<PathBuf>,
+    /// The collection of *.symtab.out goto binary files written.
+    pub symtab_gotos: Vec<PathBuf>,
     /// The location of vtable restrictions files (a directory of *.restrictions.json)
     pub restrictions: Option<PathBuf>,
     /// The kani-metadata.json files written by kani-compiler.
@@ -129,7 +129,7 @@ impl KaniSession {
 
         Ok(CargoOutputs {
             outdir: outdir.clone(),
-            symtabs: glob(&outdir.join("*.symtab.json"))?,
+            symtab_gotos: glob(&outdir.join("*.symtab.out"))?,
             metadata: glob(&outdir.join("*.kani-metadata.json"))?,
             restrictions: self.args.restrict_vtable().then_some(outdir),
             cargo_metadata: metadata,

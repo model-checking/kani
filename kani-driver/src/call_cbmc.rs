@@ -123,7 +123,7 @@ impl KaniSession {
             args.push(unwind_value.to_string().into());
         }
 
-        self.handle_solver_args(&harness_metadata.solver, &mut args)?;
+        self.handle_solver_args(&harness_metadata.attributes.solver, &mut args)?;
 
         if self.args.run_sanity_checks {
             args.push("--validate-goto-model".into());
@@ -326,7 +326,7 @@ fn determine_status_from_properties(properties: &[Property]) -> VerificationStat
 pub fn resolve_unwind_value(args: &KaniArgs, harness_metadata: &HarnessMetadata) -> Option<u32> {
     // Check for which flag is being passed and prioritize extracting unwind from the
     // respective flag/annotation.
-    args.unwind.or(harness_metadata.unwind_value).or(args.default_unwind)
+    args.unwind.or(harness_metadata.attributes.unwind_value).or(args.default_unwind)
 }
 
 #[cfg(test)]
