@@ -96,7 +96,10 @@ impl KaniSession {
                                 harness.original_end_line,
                                 &generated_unit_test,
                             )
-                            .expect(&format!("Failed to modify source code for the file `{}`", &harness.original_file));
+                            .expect(&format!(
+                                "Failed to modify source code for the file `{}`",
+                                &harness.original_file
+                            ));
                         }
                     }
                     verification_result.generated_concrete_test = true;
