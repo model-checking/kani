@@ -43,7 +43,6 @@ impl Drop for TempFile {
             eprintln!("Error syncing tempfile: {e}");
         }
 
-        // drop(self.file);
         if let Err(e) = remove_file(&self.temp_path) {
             eprintln!("Error removing the tempfile: {e}");
         }
@@ -97,7 +96,7 @@ impl KaniSession {
                                 harness.original_end_line,
                                 &generated_unit_test,
                             )
-                            .expect("Failed to modify source code");
+                            .expect(&format!("Failed to modify source code for the file `{}`", &harness.original_file));
                         }
                     }
                     verification_result.generated_concrete_test = true;
