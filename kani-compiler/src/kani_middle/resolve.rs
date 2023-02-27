@@ -24,11 +24,11 @@ use tracing::debug;
 /// TODO: Extend this implementation to handle qualified paths and simple paths
 /// corresponding to trait methods.
 /// <https://github.com/model-checking/kani/issues/1997>
-pub fn resolve_fn(
-    tcx: TyCtxt,
+pub fn resolve_fn<'tcx>(
+    tcx: TyCtxt<'tcx>,
     current_module: LocalDefId,
     path_str: &str,
-) -> Result<DefId, ResolveError> {
+) -> Result<DefId, ResolveError<'tcx>> {
     let result = resolve_path(tcx, current_module, path_str);
     match result {
         Ok(def_id) => {
@@ -36,12 +36,11 @@ pub fn resolve_fn(
             if matches!(def_kind, DefKind::AssocFn | DefKind::Fn) {
                 Ok(def_id)
             } else {
-                let description = format!(
-                    "expected function / method, found {} `{}`",
-                    def_kind.descr(def_id),
-                    tcx.def_path_str(def_id)
-                );
-                Err(ResolveError { msg: description })
+                Err(ResolveError::UnexpectedType {
+                    tcx,
+                    item: def_id,
+                    expected: "function / method",
+                })
             }
         }
         err => err,
@@ -53,11 +52,11 @@ pub fn resolve_fn(
 /// paths.
 ///
 /// Note: This function was written to be generic, however, it has only been tested for functions.
-fn resolve_path(
-    tcx: TyCtxt,
+fn resolve_path<'tcx>(
+    tcx: TyCtxt<'tcx>,
     current_module: LocalDefId,
     path_str: &str,
-) -> Result<DefId, ResolveError> {
+) -> Result<DefId, ResolveError<'tcx>> {
     let _span = tracing::span!(tracing::Level::DEBUG, "path_resolution").entered();
 
     let path = resolve_prefix(tcx, current_module, path_str)?;
@@ -69,13 +68,7 @@ fn resolve_path(
             DefKind::Struct | DefKind::Enum | DefKind::Union => resolve_in_type(tcx, base, &name),
             kind => {
                 debug!(?base, ?kind, "resolve_path: unexpected item");
-                Err(ResolveError {
-                    msg: format!(
-                        "expected module, found {} `{}`",
-                        def_kind.descr(base),
-                        tcx.def_path_str(base)
-                    ),
-                })
+                Err(ResolveError::UnexpectedType { tcx, item: base, expected: "module" })
             }
         };
         next_item
@@ -84,21 +77,49 @@ fn resolve_path(
 
 /// Provide information about where the resolution failed.
 /// Todo: Add error message.
-pub struct ResolveError {
-    pub msg: String,
+pub enum ResolveError<'tcx> {
+    /// Ambiguous glob resolution.
+    AmbiguousGlob { tcx: TyCtxt<'tcx>, name: String, base: DefId, candidates: Vec<DefId> },
+    /// Use super past the root of a crate.
+    ExtraSuper,
+    /// Invalid path.
+    InvalidPath { msg: String },
+    /// Unable to find an item.
+    MissingItem { tcx: TyCtxt<'tcx>, base: DefId, unresolved: String },
+    /// Error triggered when the identifier points to an item with unexpected type.
+    UnexpectedType { tcx: TyCtxt<'tcx>, item: DefId, expected: &'static str },
 }
 
-impl fmt::Display for ResolveError {
+impl<'tcx> fmt::Display for ResolveError<'tcx> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.msg)
-    }
-}
-
-impl ResolveError {
-    /// Generates a generic unable to find error.
-    pub fn missing_item(tcx: TyCtxt, base: DefId, unresolved_name: &str) -> ResolveError {
-        let def_desc = description(tcx, base);
-        ResolveError { msg: format!("unable to find `{unresolved_name}` inside {def_desc}") }
+        match self {
+            ResolveError::ExtraSuper => {
+                write!(f, "there are too many leading `super` keywords")
+            }
+            ResolveError::AmbiguousGlob { tcx, base, name, candidates } => {
+                let location = description(*tcx, *base);
+                write!(
+                    f,
+                    "`{name}` is ambiguous because of multiple glob imports in {location}. Found:\n{}",
+                    candidates
+                        .iter()
+                        .map(|def_id| tcx.def_path_str(*def_id))
+                        .intersperse("\n".to_string())
+                        .collect::<String>()
+                )
+            }
+            ResolveError::InvalidPath { msg } => write!(f, "{msg}"),
+            ResolveError::UnexpectedType { tcx, item: def_id, expected } => write!(
+                f,
+                "expected {expected}, found {} `{}`",
+                tcx.def_kind(def_id).descr(*def_id),
+                tcx.def_path_str(*def_id)
+            ),
+            ResolveError::MissingItem { tcx, base, unresolved } => {
+                let def_desc = description(*tcx, *base);
+                write!(f, "unable to find `{unresolved}` inside {def_desc}")
+            }
+        }
     }
 }
 
@@ -125,11 +146,11 @@ const SUPER: &str = "super";
 
 /// Takes a string representation of a path and turns it into a `Path` data
 /// structure, resolving prefix qualifiers (like `crate`, `self`, etc.) along the way.
-fn resolve_prefix(
-    tcx: TyCtxt,
+fn resolve_prefix<'tcx>(
+    tcx: TyCtxt<'tcx>,
     current_module: LocalDefId,
     name: &str,
-) -> Result<Path, ResolveError> {
+) -> Result<Path, ResolveError<'tcx>> {
     debug!(?name, ?current_module, "resolve_prefix");
 
     // Split the string into segments separated by `::`.
@@ -148,10 +169,14 @@ fn resolve_prefix(
                 if let Some(def_id) = result {
                     Ok(Path { base: def_id, segments: segments.collect() })
                 } else {
-                    Err(ResolveError::missing_item(tcx, current_module.to_def_id(), &next_name))
+                    Err(ResolveError::MissingItem {
+                        tcx,
+                        base: current_module.to_def_id(),
+                        unresolved: next_name,
+                    })
                 }
             } else {
-                Err(ResolveError { msg: "expected identifier after `::`".to_string() })
+                Err(ResolveError::InvalidPath { msg: "expected identifier after `::`".to_string() })
             }
         }
         CRATE => {
@@ -183,11 +208,11 @@ fn resolve_prefix(
 
 /// Pop up the module stack until we account for all the `super` prefixes.
 /// This method will error out if it tries to backtrace from the root crate.
-fn resolve_super<I>(
+fn resolve_super<'tcx, I>(
     tcx: TyCtxt,
     current_module: LocalDefId,
     mut segments: Peekable<I>,
-) -> Result<Path, ResolveError>
+) -> Result<Path, ResolveError<'tcx>>
 where
     I: Iterator<Item = String>,
 {
@@ -199,9 +224,7 @@ where
             debug!("parent: {parent:?}");
             base_module = tcx.hir().local_def_id(parent);
         } else {
-            return Err(ResolveError {
-                msg: "there are too many leading `super` keywords".to_string(),
-            });
+            return Err(ResolveError::ExtraSuper);
         }
     }
     debug!("base: {base_module:?}");
@@ -241,12 +264,16 @@ fn description(tcx: TyCtxt, def_id: DefId) -> String {
     }
 }
 
+/// The possible result of trying to resolve the name relative to a local module.
+enum RelativeResolution {
+    /// Return the item that user requested.
+    Found(DefId),
+    /// Return all globs that may define the item requested.
+    Globs(Vec<Res>),
+}
+
 /// Resolves a path relative to a local module.
-fn resolve_relative(
-    tcx: TyCtxt,
-    current_module: LocalDefId,
-    name: &str,
-) -> Result<DefId, Vec<Res>> {
+fn resolve_relative(tcx: TyCtxt, current_module: LocalDefId, name: &str) -> RelativeResolution {
     debug!(?name, ?current_module, "resolve_relative");
 
     let mut glob_imports = vec![];
@@ -270,23 +297,29 @@ fn resolve_relative(
             None
         }
     });
-    result.ok_or(glob_imports)
+    result.map_or(RelativeResolution::Globs(glob_imports), RelativeResolution::Found)
 }
 
 /// Resolves a path relative to a local or foreign module.
 /// For local modules, if no module item matches the name we also have to traverse the list of glob
 /// imports. For foreign modules, that list should've been flatten already.
-fn resolve_in_module(
-    tcx: TyCtxt,
+fn resolve_in_module<'tcx>(
+    tcx: TyCtxt<'tcx>,
     current_module: DefId,
     name: &str,
-) -> Result<DefId, ResolveError> {
+) -> Result<DefId, ResolveError<'tcx>> {
     match current_module.as_local() {
-        None => resolve_in_foreign_module(tcx, current_module, name)
-            .ok_or_else(|| ResolveError::missing_item(tcx, current_module, name)),
+        None => resolve_in_foreign_module(tcx, current_module, name).ok_or_else(|| {
+            ResolveError::MissingItem { tcx, base: current_module, unresolved: name.to_string() }
+        }),
         Some(local_id) => {
             let result = resolve_relative(tcx, local_id, name);
-            result.or_else(|globs| resolve_in_glob_uses(tcx, local_id, globs, name))
+            match result {
+                RelativeResolution::Found(def_id) => Ok(def_id),
+                RelativeResolution::Globs(globs) => {
+                    resolve_in_glob_uses(tcx, local_id, globs, name)
+                }
+            }
         }
     }
 }
@@ -294,12 +327,12 @@ fn resolve_in_module(
 /// Resolves a path by exploring glob use statements.
 /// Note that there could be loops in glob use statements, so we need to track modules that have
 /// been visited.
-fn resolve_in_glob_uses(
-    tcx: TyCtxt,
+fn resolve_in_glob_uses<'tcx>(
+    tcx: TyCtxt<'tcx>,
     current_module: LocalDefId,
     mut glob_resolutions: Vec<Res>,
     name: &str,
-) -> Result<DefId, ResolveError> {
+) -> Result<DefId, ResolveError<'tcx>> {
     let mut visited = HashSet::<Res>::default();
     let mut matches = vec![];
     while let Some(res) = glob_resolutions.pop() {
@@ -307,52 +340,51 @@ fn resolve_in_glob_uses(
             visited.insert(res);
             let result = resolve_in_glob_use(tcx, &res, name);
             match result {
-                Ok(def_id) => matches.push(def_id),
-                Err(mut other_globs) => glob_resolutions.append(&mut other_globs),
+                RelativeResolution::Found(def_id) => matches.push(def_id),
+                RelativeResolution::Globs(mut other_globs) => {
+                    glob_resolutions.append(&mut other_globs)
+                }
             }
         }
     }
-    match matches.as_slice() {
-        [] => Err(ResolveError::missing_item(tcx, current_module.to_def_id(), name)),
-        [def_id] => Ok(*def_id),
-        ambiguous => {
-            // Raise an error if it's ambiguous which glob import a function comes
-            // from. rustc will also raise an error in this case if the ambiguous
-            // function is present in code (and not just as an attribute argument).
-            // TODO: We should make this consistent with error handling for other
-            // cases (see <https://github.com/model-checking/kani/issues/2013>).
-            let location = description(tcx, current_module.to_def_id());
-            Err(ResolveError {
-                msg: format!(
-                    "`{name}` is ambiguous because of multiple glob imports in {location}. Found:\n{}",
-                    ambiguous
-                        .iter()
-                        .map(|def_id| tcx.def_path_str(*def_id))
-                        .intersperse("\n".to_string())
-                        .collect::<String>()
-                ),
-            })
-        }
+    match matches.len() {
+        0 => Err(ResolveError::MissingItem {
+            tcx,
+            base: current_module.to_def_id(),
+            unresolved: name.to_string(),
+        }),
+        1 => Ok(matches.pop().unwrap()),
+        _ => Err(ResolveError::AmbiguousGlob {
+            tcx,
+            base: current_module.to_def_id(),
+            name: name.to_string(),
+            candidates: matches,
+        }),
     }
 }
 
 /// Resolves a path by exploring a glob use statement.
-fn resolve_in_glob_use(tcx: TyCtxt, res: &Res, name: &str) -> Result<DefId, Vec<Res>> {
+fn resolve_in_glob_use(tcx: TyCtxt, res: &Res, name: &str) -> RelativeResolution {
     if let Res::Def(DefKind::Mod, def_id) = res {
         if let Some(local_id) = def_id.as_local() {
             resolve_relative(tcx, local_id, name)
         } else {
-            resolve_in_foreign_module(tcx, *def_id, name).ok_or(vec![])
+            resolve_in_foreign_module(tcx, *def_id, name)
+                .map_or(RelativeResolution::Globs(vec![]), RelativeResolution::Found)
         }
     } else {
         // This shouldn't happen. Only module imports can use globs.
-        Err(vec![])
+        RelativeResolution::Globs(vec![])
     }
 }
 
 /// Resolves a method in a type. It currently does not resolve trait methods
 /// (see <https://github.com/model-checking/kani/issues/1997>).
-fn resolve_in_type(tcx: TyCtxt, type_id: DefId, name: &str) -> Result<DefId, ResolveError> {
+fn resolve_in_type<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    type_id: DefId,
+    name: &str,
+) -> Result<DefId, ResolveError<'tcx>> {
     debug!(?name, ?type_id, "resolve_in_type");
     // Try the inherent `impl` blocks (i.e., non-trait `impl`s).
     tcx.inherent_impls(type_id)
@@ -364,5 +396,9 @@ fn resolve_in_type(tcx: TyCtxt, type_id: DefId, name: &str) -> Result<DefId, Res
             let last = item_path.split("::").last().unwrap();
             last == name
         })
-        .ok_or_else(|| ResolveError::missing_item(tcx, type_id, name))
+        .ok_or_else(|| ResolveError::MissingItem {
+            tcx,
+            base: type_id,
+            unresolved: name.to_string(),
+        })
 }
