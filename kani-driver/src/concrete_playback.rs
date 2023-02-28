@@ -11,40 +11,84 @@ use anyhow::{Context, Result};
 use concrete_vals_extractor::{extract_harness_values, ConcreteVal};
 use kani_metadata::HarnessMetadata;
 use std::collections::hash_map::DefaultHasher;
-use std::env;
 use std::ffi::OsString;
-use std::fs::{self, remove_file, File};
+use std::fs::File;
 use std::hash::{Hash, Hasher};
-use std::io::{BufRead, BufReader, BufWriter, Error, Write};
-use std::path::{Path, PathBuf};
+use std::io::{BufRead, BufReader, Write};
+use std::path::Path;
 use std::process::Command;
 
-struct TempFile {
-    file: File,
-    temp_path: PathBuf,
-}
+use self::tempfile::TempFile;
 
-impl TempFile {
-    fn new() -> Result<Self, Error> {
-        // Create temp file
-        let mut temp_path = env::temp_dir();
-        temp_path.push("concrete_overwrite.tmp");
-        let temp_file = match File::create(&temp_path) {
-            Ok(f) => f,
-            Err(e) => return Err(e),
-        };
-        Ok(Self { file: temp_file, temp_path })
+/// Handle a tempfile functionality
+/// for example - used during concrete playback's inplace run to write to the source file
+mod tempfile {
+    use std::{
+        env,
+        fs::{self, rename, File},
+        io::{BufWriter, Error, Write},
+        path::PathBuf,
+    };
+
+    use crate::util;
+
+    pub struct TempFile {
+        pub file: File,
+        pub temp_path: PathBuf,
+        pub writer: Option<BufWriter<File>>,
+        renamed: bool,
     }
-}
 
-impl Drop for TempFile {
-    fn drop(&mut self) {
-        if let Err(e) = self.file.sync_all() {
-            eprintln!("Error syncing tempfile: {e}");
+    impl TempFile {
+        /// Create a temp file
+        pub fn try_new() -> Result<Self, Error> {
+            let mut temp_path = env::temp_dir();
+            temp_path.push("concrete_overwrite.tmp");
+            let temp_file = File::create(&temp_path)?;
+            let writer = BufWriter::new(temp_file.try_clone()?);
+
+            Ok(Self { file: temp_file, temp_path, writer: Some(writer), renamed: false })
         }
 
-        if let Err(e) = remove_file(&self.temp_path) {
-            eprintln!("Error removing the tempfile: {e}");
+        /// Replace a source file with the current tempfile
+        pub fn rename(&mut self, source_path: &str) -> Result<(), Error> {
+            // flush here
+            self.writer.as_mut().unwrap().flush()?;
+            self.writer = None;
+            // Renames are usually automic, so we won't corrupt the user's source file during a crash.
+            if let Err(_e) = rename(&self.temp_path, source_path) {
+                util::error(&format!("Error renaming file {}", self.temp_path.to_string_lossy()));
+            }
+            self.renamed = true;
+            Ok(())
+        }
+    }
+
+    /// Ensure that the bufwriter is flushed and temp variables are dropped
+    /// everytime the tempfile is out of scope
+    impl Drop for TempFile {
+        fn drop(&mut self) {
+            // if writer is not flushed, flush it
+            if self.writer.is_some() {
+                // couldn't use ? as drop does not handle returns
+                if let Err(_e) = self.writer.as_mut().unwrap().flush() {
+                    util::error("Couldn't flush inside drop");
+                }
+                drop(&self.writer);
+                drop(&self.file);
+                self.writer = None;
+            }
+
+            if !self.renamed {
+                if let Err(_e) = fs::remove_file(&self.temp_path) {
+                    util::error(&format!(
+                        "Error removing file {}",
+                        self.temp_path.to_string_lossy()
+                    ));
+                }
+                drop(&self.temp_path);
+                self.renamed = false;
+            }
         }
     }
 }
@@ -149,11 +193,7 @@ impl KaniSession {
         let source_reader = BufReader::new(source_file);
 
         // Create temp file
-        let mut temp_file = match TempFile::new() {
-            Ok(f) => f,
-            Err(_) => return Ok(false),
-        };
-        let mut temp_writer = BufWriter::new(&mut temp_file.file);
+        let mut temp_file = TempFile::try_new()?;
         let mut curr_line_num = 0;
 
         // Use a buffered reader/writer to generate the unit test line by line
@@ -165,30 +205,22 @@ impl KaniSession {
                         source_path, unit_test.name,
                     );
                 }
-                drop(temp_writer);
-                drop(temp_file);
+                // the drop impl will take care of flushing and resetting
                 return Ok(true);
             }
             curr_line_num += 1;
-            writeln!(temp_writer, "{line}")?;
-            if curr_line_num == proof_harness_end_line {
-                for unit_test_line in unit_test.code.iter() {
-                    curr_line_num += 1;
-                    writeln!(temp_writer, "{unit_test_line}")?;
+            if let Some(temp_writer) = temp_file.writer.as_mut() {
+                writeln!(temp_writer, "{line}")?;
+                if curr_line_num == proof_harness_end_line {
+                    for unit_test_line in unit_test.code.iter() {
+                        curr_line_num += 1;
+                        writeln!(temp_writer, "{unit_test_line}")?;
+                    }
                 }
             }
         }
 
-        // Have to drop the bufreader to be able to reuse and rename the moved temp file
-        drop(temp_writer);
-
-        // Renames are usually automic, so we won't corrupt the user's source file during a crash.
-        if fs::rename(&temp_file.temp_path, source_path).is_err() {
-            eprintln!("Couldn't rename tmp source file to actual src file `{source_path}`.");
-        };
-
-        drop(temp_file);
-
+        temp_file.rename(source_path)?;
         Ok(false)
     }
 
