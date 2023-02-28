@@ -1,1 +1,1 @@
-VERIFICATION:- SUCCESSFUL
+error: failed to resolve `rand::random`: unable to find `rand` inside module `stubbing_validate_random`
