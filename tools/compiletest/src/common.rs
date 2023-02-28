@@ -140,6 +140,11 @@ pub struct Config {
 
     /// Whether we will run the tests or not.
     pub dry_run: bool,
+
+    /// Whether we should update expected tests when there is a mismatch. This is helpful for
+    /// updating multiple tests. Users should still manually edit the files after to only keep
+    /// relevant expectations.
+    pub fix_expected: bool,
 }
 
 #[derive(Debug, Clone)]
