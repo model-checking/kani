@@ -37,3 +37,7 @@
   - [Overrides](./overrides.md)
 
 - [Crates Documentation](./crates/index.md)
+
+---
+
+- [FAQ](./faq.md)
