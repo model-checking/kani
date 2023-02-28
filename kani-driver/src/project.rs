@@ -98,7 +98,7 @@ impl Project {
 }
 
 /// Information about a build artifact.
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub struct Artifact {
     /// The path for this artifact in the canonical form.
     path: PathBuf,

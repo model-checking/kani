@@ -15,6 +15,7 @@ use crate::kani_middle::reachability::{
 use bitflags::_core::any::Any;
 use cbmc::goto_program::Location;
 use cbmc::{InternedString, MachineModel};
+use kani_metadata::CompilerArtifactStub;
 use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata};
 use kani_queries::{QueryDb, ReachabilityType, UserInput};
 use rustc_codegen_ssa::back::metadata::create_wrapper_file;
@@ -205,7 +206,7 @@ impl CodegenBackend for GotocCodegenBackend {
             .unwrap())
     }
 
-    /// Emit `rlib` files during the link stage if it was requested.
+    /// Emit output files during the link stage if it was requested.
     ///
     /// We need to emit `rlib` files normally if requested. Cargo expects these in some
     /// circumstances and sends them to subsequent builds with `-L`.
@@ -215,6 +216,10 @@ impl CodegenBackend for GotocCodegenBackend {
     /// Types such as `bin`, `cdylib`, `dylib` will trigger the native linker.
     ///
     /// Thus, we manually build the rlib file including only the `rmeta` file.
+    ///
+    /// For cases where no metadata file was requested, we stub the file requested by writing the
+    /// path of the `metadata.json` file so `kani-driver` can safely find the latest metadata.
+    /// See <https://github.com/model-checking/kani/issues/2234> for more details.
     fn link(
         &self,
         sess: &Session,
@@ -222,27 +227,37 @@ impl CodegenBackend for GotocCodegenBackend {
         outputs: &OutputFilenames,
     ) -> Result<(), ErrorGuaranteed> {
         let requested_crate_types = sess.crate_types();
-        if !requested_crate_types.contains(&CrateType::Rlib) {
-            // Quit successfully if we don't need an `rlib`:
-            return Ok(());
+        for crate_type in requested_crate_types {
+            let out_path = out_filename(
+                sess,
+                *crate_type,
+                outputs,
+                codegen_results.crate_info.local_crate_name,
+            );
+            debug!(?crate_type, ?out_path, "link");
+            if *crate_type == CrateType::Rlib {
+                // Emit the `rlib` that contains just one file: `<crate>.rmeta`
+                let mut builder = ArchiveBuilder::new(sess);
+                let tmp_dir = TempFileBuilder::new().prefix("kani").tempdir().unwrap();
+                let path = MaybeTempDir::new(tmp_dir, sess.opts.cg.save_temps);
+                let (metadata, _metadata_position) = create_wrapper_file(
+                    sess,
+                    b".rmeta".to_vec(),
+                    codegen_results.metadata.raw_data(),
+                );
+                let metadata = emit_wrapper_file(sess, &metadata, &path, METADATA_FILENAME);
+                builder.add_file(&metadata);
+                builder.build(&out_path);
+            } else {
+                // Write the location of the metadata file to the requested type.
+                let base_filename = outputs.output_path(OutputType::Object);
+                let content_stub = CompilerArtifactStub {
+                    metadata_path: base_filename.with_extension(ArtifactType::Metadata),
+                };
+                let out_file = File::create(out_path).unwrap();
+                serde_json::to_writer(out_file, &content_stub).unwrap();
+            }
         }
-
-        // Emit the `rlib` that contains just one file: `<crate>.rmeta`
-        let mut builder = ArchiveBuilder::new(sess);
-        let tmp_dir = TempFileBuilder::new().prefix("kani").tempdir().unwrap();
-        let path = MaybeTempDir::new(tmp_dir, sess.opts.cg.save_temps);
-        let (metadata, _metadata_position) =
-            create_wrapper_file(sess, b".rmeta".to_vec(), codegen_results.metadata.raw_data());
-        let metadata = emit_wrapper_file(sess, &metadata, &path, METADATA_FILENAME);
-        builder.add_file(&metadata);
-
-        let rlib = out_filename(
-            sess,
-            CrateType::Rlib,
-            outputs,
-            codegen_results.crate_info.local_crate_name,
-        );
-        builder.build(&rlib);
         Ok(())
     }
 }
