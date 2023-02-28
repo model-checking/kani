@@ -7,6 +7,7 @@
 use crate::args::ConcretePlaybackMode;
 use crate::call_cbmc::VerificationResult;
 use crate::session::KaniSession;
+use crate::util::tempfile::TempFile;
 use anyhow::{Context, Result};
 use concrete_vals_extractor::{extract_harness_values, ConcreteVal};
 use kani_metadata::HarnessMetadata;
@@ -17,78 +18,6 @@ use std::hash::{Hash, Hasher};
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::process::Command;
-
-use self::tempfile::TempFile;
-
-/// Handle a tempfile functionality
-/// for example - used during concrete playback's inplace run to write to the source file
-mod tempfile {
-    use std::{
-        env,
-        fs::{self, rename, File},
-        io::{BufWriter, Error, Write},
-        path::PathBuf,
-    };
-
-    use crate::util;
-
-    pub struct TempFile {
-        pub file: File,
-        pub temp_path: PathBuf,
-        pub writer: Option<BufWriter<File>>,
-        renamed: bool,
-    }
-
-    impl TempFile {
-        /// Create a temp file
-        pub fn try_new() -> Result<Self, Error> {
-            let mut temp_path = env::temp_dir();
-            temp_path.push("concrete_overwrite.tmp");
-            let temp_file = File::create(&temp_path)?;
-            let writer = BufWriter::new(temp_file.try_clone()?);
-
-            Ok(Self { file: temp_file, temp_path, writer: Some(writer), renamed: false })
-        }
-
-        /// Replace a source file with the current tempfile
-        pub fn rename(&mut self, source_path: &str) -> Result<(), Error> {
-            // flush here
-            self.writer.as_mut().unwrap().flush()?;
-            self.writer = None;
-            // Renames are usually automic, so we won't corrupt the user's source file during a crash.
-            if let Err(_e) = rename(&self.temp_path, source_path) {
-                util::error(&format!("Error renaming file {}", self.temp_path.to_string_lossy()));
-            }
-            self.renamed = true;
-            Ok(())
-        }
-    }
-
-    /// Ensure that the bufwriter is flushed and temp variables are dropped
-    /// everytime the tempfile is out of scope
-    /// note: the fields for the struct are dropped automatically by destructor
-    impl Drop for TempFile {
-        fn drop(&mut self) {
-            // if writer is not flushed, flush it
-            if self.writer.as_ref().is_some() {
-                // couldn't use ? as drop does not handle returns
-                if let Err(_e) = self.writer.as_mut().unwrap().flush() {
-                    util::error("Couldn't flush inside drop");
-                }
-                self.writer = None;
-            }
-
-            if !self.renamed {
-                if let Err(_e) = fs::remove_file(&self.temp_path.clone()) {
-                    util::error(&format!(
-                        "Error removing file {}",
-                        self.temp_path.to_string_lossy()
-                    ));
-                }
-            }
-        }
-    }
-}
 
 impl KaniSession {
     /// The main driver for generating concrete playback unit tests and adding them to source code.
@@ -178,7 +107,8 @@ impl KaniSession {
         Ok(())
     }
 
-    /// Writes the new source code to a temporary file. Returns whether the unit test was already in the old source code.
+    /// Writes the new source code to a user's source file using a tempfile as the means.
+    /// Returns whether the unit test was already in the old source code.
     fn add_test_inplace(
         &self,
         source_path: &str,
@@ -190,7 +120,7 @@ impl KaniSession {
         let source_reader = BufReader::new(source_file);
 
         // Create temp file
-        let mut temp_file = TempFile::try_new()?;
+        let mut temp_file = TempFile::try_new("concrete_playback.tmp")?;
         let mut curr_line_num = 0;
 
         // Use a buffered reader/writer to generate the unit test line by line
@@ -217,7 +147,7 @@ impl KaniSession {
             }
         }
 
-        temp_file.rename(source_path)?;
+        temp_file.rename(source_path).expect("Could not rename file");
         Ok(false)
     }
 
