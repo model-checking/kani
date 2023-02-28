@@ -66,28 +66,25 @@ mod tempfile {
 
     /// Ensure that the bufwriter is flushed and temp variables are dropped
     /// everytime the tempfile is out of scope
+    /// note: the fields for the struct are dropped automatically by destructor
     impl Drop for TempFile {
         fn drop(&mut self) {
             // if writer is not flushed, flush it
-            if self.writer.is_some() {
+            if self.writer.as_ref().is_some() {
                 // couldn't use ? as drop does not handle returns
                 if let Err(_e) = self.writer.as_mut().unwrap().flush() {
                     util::error("Couldn't flush inside drop");
                 }
-                drop(&self.writer);
-                drop(&self.file);
                 self.writer = None;
             }
 
             if !self.renamed {
-                if let Err(_e) = fs::remove_file(&self.temp_path) {
+                if let Err(_e) = fs::remove_file(&self.temp_path.clone()) {
                     util::error(&format!(
                         "Error removing file {}",
                         self.temp_path.to_string_lossy()
                     ));
                 }
-                drop(&self.temp_path);
-                self.renamed = false;
             }
         }
     }
