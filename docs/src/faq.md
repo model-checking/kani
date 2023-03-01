@@ -7,6 +7,7 @@ Please consider [opening an issue](https://github.com/model-checking/kani/issues
 
 <details>
 <summary>Kani doesn't fail after <code>kani::assume(false)</code>. Why?</summary>
+</br>
 
 `kani::assume(false)` (or `kani::assume(cond)` where `cond` is condition that results in `false` in the context of the program), won't cause errors in Kani.
 Instead, such an assumption has the effect of blocking all the symbolic execution paths from the assumption.
