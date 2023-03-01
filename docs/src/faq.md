@@ -9,7 +9,7 @@ Please consider [opening an issue](https://github.com/model-checking/kani/issues
 <summary>Kani doesn't fail after <code>kani::assume(false)</code>. Why?</summary>
 </br>
 
-`kani::assume(false)` (or `kani::assume(cond)` where `cond` is condition that results in `false` in the context of the program), won't cause errors in Kani.
+`kani::assume(false)` (or `kani::assume(cond)` where `cond` is a condition that results in `false` in the context of the program), won't cause errors in Kani.
 Instead, such an assumption has the effect of blocking all the symbolic execution paths from the assumption.
 Therefore, all checks after the assumption should appear as [`UNREACHABLE`](#../../verification-results.md).
 That's the expected behavior for `kani::assume(false)` in Kani.
@@ -24,7 +24,22 @@ What does this mean? What can I do?</summary>
 </br>
 
 This error is due to a violation of Rust's orphan rules for trait implementations, which are explained [here](https://doc.rust-lang.org/error_codes/E0117.html).
-In that case, you'll need to follow the third approach mentioned [here](https://model-checking.github.io/kani/tutorial-nondeterministic-variables.html#custom-nondeterministic-types) to implement `Arbitrary` for a foreign custom type.
+In that case, you'll need to write a function that builds an object from non-deterministic variables.
+Inside this function you would simply return an arbitrary value by generating arbitrary values for its components.
+
+For example, let's assume the type you're working with is this enum:
+
+```rust
+{{#include tutorial/arbitrary-variables/src/rating.rs:rating_enum}}
+```
+
+Then, you can match on a non-deterministic integer (supplied by `kani::any`) to return non-deterministic `Rating` variants:
+
+```rust
+{{#include tutorial/arbitrary-variables/src/rating.rs:rating_arbitrary}}
+```
+
+More details about this option, which also useful in other cases, can be found [here](https://model-checking.github.io/kani/tutorial-nondeterministic-variables.html#custom-nondeterministic-types)
 
 If the type comes from `std` (Rust's standard library), you can [open a request](https://github.com/model-checking/kani/issues/new?assignees=&labels=%5BC%5D+Feature+%2F+Enhancement&template=feature_request.md&title=) for adding `Arbitrary` implementations to the Kani library.
 Otherwise, there are more involved options to consider:
