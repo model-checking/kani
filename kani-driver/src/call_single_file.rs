@@ -130,6 +130,10 @@ impl KaniSession {
             "--cfg=kani",
             "-Z",
             "crate-attr=feature(register_tool)",
+            // needed for the usage of `const_format_args!` in Kani's std
+            // overrides of `assert` and `panic`
+            "-Z",
+            "crate-attr=feature(const_format_args)",
             "-Z",
             "crate-attr=register_tool(kanitool)",
             "--sysroot",

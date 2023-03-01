@@ -12,12 +12,6 @@
 // re-export all std symbols
 pub use std::*;
 
-// Bind `core::assert` to a different name to avoid possible name conflicts if a
-// crate uses `extern crate std as core`. See
-// https://github.com/model-checking/kani/issues/1949
-#[allow(unused_imports)]
-use core::assert as __kani__workaround_core_assert;
-
 // Override process calls with stubs.
 pub mod process;
 
@@ -61,14 +55,7 @@ macro_rules! assert {
         // strategy, which is tracked in
         // https://github.com/model-checking/kani/issues/692
         if false {
-            #[cfg(not(feature = "std"))]
-            __kani__workaround_core_assert!(true, $($arg)+);
-            // In a `no_std` setting where `std` is used as a feature, defining
-            // the alias for `core::assert` doesn't work, so we need to use
-            // `core::assert` directly (see
-            // https://github.com/model-checking/kani/issues/2187)
-            #[cfg(feature = "std")]
-            core::assert!(true, $($arg)+);
+            let _ = const_format_args!($($arg)+);
         }
     }};
 }
@@ -172,11 +159,7 @@ macro_rules! unreachable {
     // handle.
     ($fmt:expr, $($arg:tt)*) => {{
         if false {
-            #[cfg(not(feature = "std"))]
-            __kani__workaround_core_assert!(true, $fmt, $($arg)+);
-            // See comment in `assert` definition
-            #[cfg(feature = "std")]
-            core::assert!(true, $fmt, $($arg)+);
+            let _ = const_format_args!($fmt, $($arg)+);
         }
         kani::panic(concat!("internal error: entered unreachable code: ",
         stringify!($fmt, $($arg)*)))}};
@@ -208,11 +191,7 @@ macro_rules! panic {
     // `panic!("Error: {}", code);`
     ($($arg:tt)+) => {{
         if false {
-            #[cfg(not(feature = "std"))]
-            __kani__workaround_core_assert!(true, $($arg)+);
-            // See comment in `assert` definition
-            #[cfg(feature = "std")]
-            core::assert!(true, $($arg)+);
+            let _ = const_format_args!($($arg)+);
         }
         kani::panic(stringify!($($arg)+));
     }};
