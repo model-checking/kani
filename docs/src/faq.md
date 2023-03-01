@@ -29,15 +29,15 @@ Inside this function you would simply return an arbitrary value by generating ar
 
 For example, let's assume the type you're working with is this enum:
 
-```rust
-{{#include tutorial/arbitrary-variables/src/rating.rs:rating_enum}}
-```
+    ```rust
+    {{#include tutorial/arbitrary-variables/src/rating.rs:rating_enum}}
+    ```
 
 Then, you can match on a non-deterministic integer (supplied by `kani::any`) to return non-deterministic `Rating` variants:
 
-```rust
-{{#include tutorial/arbitrary-variables/src/rating.rs:rating_arbitrary}}
-```
+    ```rust
+    {{#include tutorial/arbitrary-variables/src/rating.rs:rating_arbitrary}}
+    ```
 
 More details about this option, which also useful in other cases, can be found [here](https://model-checking.github.io/kani/tutorial-nondeterministic-variables.html#custom-nondeterministic-types)
 
