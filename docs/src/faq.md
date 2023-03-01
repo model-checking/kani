@@ -21,6 +21,7 @@ If you didn't expect certain checks in a harness to be `UNREACHABLE`, we recomme
 <summary>I implemented the <code>kani::Arbitrary</code> trait for a type that's not from my crate, and got the error
 <code>only traits defined in the current crate can be implemented for types defined outside of the crate</code>.
 What does this mean? What can I do?</summary>
+</br>
 
 This error is due to a violation of Rust's orphan rules for trait implementations, which are explained [here](https://doc.rust-lang.org/error_codes/E0117.html).
 In that case, you'll need to follow the third approach mentioned [here](https://model-checking.github.io/kani/tutorial-nondeterministic-variables.html#custom-nondeterministic-types) to implement `Arbitrary` for a foreign custom type.
@@ -30,8 +31,3 @@ Otherwise, there are more involved options to consider:
  1. Importing a copy of the external crate that defines the type, then implement `Arbitrary` there.
  2. Contributing the `Arbitrary` implementation to the external crate that defines the type.
 </details>
-
-
-**Question:** I implemented the `kani::Arbitrary` trait for a type that's not from my crate, and got the error
-`only traits defined in the current crate can be implemented for types defined outside of the crate`.
-What does this mean? What can I do? [Answer](#arbitrary-implementations-for-foreign-types)
