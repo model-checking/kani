@@ -193,15 +193,20 @@ fn resolve_prefix<'tcx>(
             segments.next();
             resolve_super(tcx, current_module, segments)
         }
+        SUPER => resolve_super(tcx, current_module, segments),
         _ => {
-            let path = resolve_super(tcx, current_module, segments)?;
-            if !path.segments.is_empty() {
-                let next_name = path.segments.first().unwrap();
-                let def_id = resolve_in_module(tcx, path.base, &next_name)?;
-                Ok(Path { base: def_id, segments: Vec::from(&path.segments[1..]) })
-            } else {
-                Ok(path)
-            }
+            // No special key word was used. Try local first otherwise try external name.
+            let next_name = segments.next().unwrap();
+            let def_id =
+                resolve_in_module(tcx, current_module.to_def_id(), &next_name).or_else(|err| {
+                    if matches!(err, ResolveError::MissingItem { .. }) {
+                        // Only try external if we couldn't find anything.
+                        resolve_external(tcx, &next_name).ok_or(err)
+                    } else {
+                        Err(err)
+                    }
+                })?;
+            Ok(Path { base: def_id, segments: segments.collect() })
         }
     }
 }
