@@ -29,17 +29,28 @@ Inside this function you would simply return an arbitrary value by generating ar
 
 For example, let's assume the type you're working with is this enum:
 
-    ```rust
-    {{#include tutorial/arbitrary-variables/src/rating.rs:rating_enum}}
-    ```
+```rust
+#[derive(Copy, Clone)]
+pub enum Rating {
+    One,
+    Two,
+    Three,
+}
+```
 
 Then, you can match on a non-deterministic integer (supplied by `kani::any`) to return non-deterministic `Rating` variants:
 
-    ```rust
-    {{#include tutorial/arbitrary-variables/src/rating.rs:rating_arbitrary}}
-    ```
+```rust
+    pub fn any_rating() -> Rating {
+        match kani::any() {
+            0 => Rating::One,
+            1 => Rating::Two,
+            _ => Rating::Three,
+        }
+    }
+```
 
-More details about this option, which also useful in other cases, can be found [here](https://model-checking.github.io/kani/tutorial-nondeterministic-variables.html#custom-nondeterministic-types)
+More details about this option, which also useful in other cases, can be found [here](https://model-checking.github.io/kani/tutorial-nondeterministic-variables.html#custom-nondeterministic-types).
 
 If the type comes from `std` (Rust's standard library), you can [open a request](https://github.com/model-checking/kani/issues/new?assignees=&labels=%5BC%5D+Feature+%2F+Enhancement&template=feature_request.md&title=) for adding `Arbitrary` implementations to the Kani library.
 Otherwise, there are more involved options to consider:
