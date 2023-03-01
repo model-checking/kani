@@ -1,5 +1,3 @@
-error: glob imports in local module `main` make it impossible to unambiguously resolve path; the possibilities are:\
-           mod1::foo\
-           mod2::foo
-
-error: unable to resolve function/method: foo
+error: failed to resolve `foo`: `foo` is ambiguous because of multiple glob imports in module `main`. Found:\
+mod2::foo\
+mod1::foo\
