@@ -120,7 +120,7 @@ pub fn any<T: Arbitrary>() -> T {
 /// under all possible `NonZeroU8` input values between 0 and 12.
 ///
 /// ```rust
-/// let inputA = kani::any_where::<std::num::NonZeroU8>(|x| *x < 12, "explanation");
+/// let inputA = kani::any_where::<std::num::NonZeroU8>(|x| *x < 12);
 /// fn_under_verification(inputA);
 /// ```
 ///
@@ -128,7 +128,7 @@ pub fn any<T: Arbitrary>() -> T {
 /// trait. The Arbitrary trait is used to build a symbolic value that represents all possible
 /// valid values for type `T`.
 #[inline(always)]
-pub fn any_where<T: Arbitrary, F: FnOnce(&T) -> bool>(f: F, _msg: &'static str) -> T {
+pub fn any_where<T: Arbitrary, F: FnOnce(&T) -> bool>(f: F) -> T {
     let result = T::any();
     assume(f(&result));
     result
