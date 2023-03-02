@@ -44,8 +44,8 @@ pub trait UserInput {
     fn set_ignore_global_asm(&mut self, global_asm: bool);
     fn get_ignore_global_asm(&self) -> bool;
 
-    fn set_write_goto_binary(&mut self, write_goto_binary: bool);
-    fn get_write_goto_binary(&self) -> bool;
+    fn set_write_json_symtab(&mut self, write_json_symtab: bool);
+    fn get_write_json_symtab(&self) -> bool;
 
     fn set_reachability_analysis(&mut self, reachability: ReachabilityType);
     fn get_reachability_analysis(&self) -> ReachabilityType;
@@ -66,8 +66,7 @@ pub struct QueryDb {
     emit_vtable_restrictions: bool,
     json_pretty_print: bool,
     ignore_global_asm: bool,
-    /// When set, instructs the compiler to produce the symbol table for CBMC in goto binary format instead of JSON format.
-    write_goto_binary: bool,
+    write_json_symtab: bool,
     reachability_analysis: ReachabilityType,
     stubbing_enabled: bool,
     #[cfg(feature = "unsound_experiments")]
@@ -81,7 +80,7 @@ impl QueryDb {
             emit_vtable_restrictions: false,
             json_pretty_print: false,
             ignore_global_asm: false,
-            write_goto_binary: false,
+            write_json_symtab: false,
             reachability_analysis: ReachabilityType::None,
             stubbing_enabled: false,
             #[cfg(feature = "unsound_experiments")]
@@ -139,12 +138,12 @@ impl UserInput for QueryDb {
         self.stubbing_enabled
     }
 
-    fn set_write_goto_binary(&mut self, write_goto_binary: bool) {
-        self.write_goto_binary = write_goto_binary;
+    fn set_write_json_symtab(&mut self, write_json_symtab: bool) {
+        self.write_json_symtab = write_json_symtab;
     }
 
-    fn get_write_goto_binary(&self) -> bool {
-        self.write_goto_binary
+    fn get_write_json_symtab(&self) -> bool {
+        self.write_json_symtab
     }
 
     #[cfg(feature = "unsound_experiments")]

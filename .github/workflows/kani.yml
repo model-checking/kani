@@ -33,7 +33,7 @@ jobs:
       - name: Execute Kani regression
         run: ./scripts/kani-regression.sh
 
-  write-goto-binary-regression:
+  write-json-symtab-regression:
     runs-on: ubuntu-20.04
     steps:
       - name: Checkout Kani
@@ -49,7 +49,7 @@ jobs:
 
       - name: Execute Kani regression
         env:
-          KANI_ENABLE_WRITE_GOTO_BINARY: 1
+          KANI_ENABLE_WRITE_JSON_SYMTAB: 1
         run: ./scripts/kani-regression.sh
 
   experimental-features-regression:

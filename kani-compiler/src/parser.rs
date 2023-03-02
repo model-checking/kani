@@ -34,8 +34,8 @@ pub const PRETTY_OUTPUT_FILES: &str = "pretty-json-files";
 /// Option used for suppressing global ASM error.
 pub const IGNORE_GLOBAL_ASM: &str = "ignore-global-asm";
 
-/// Option used to write GOTO binaries instead of JSON symtabs.
-pub const WRITE_GOTO_BINARY: &str = "write-goto-binary";
+/// Option used to write JSON symbol tables instead of GOTO binaries.
+pub const WRITE_JSON_SYMTAB: &str = "write-json-symtab";
 
 /// Option name used to select which reachability analysis to perform.
 pub const REACHABILITY: &str = "reachability";
@@ -126,9 +126,9 @@ pub fn parser() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(WRITE_GOTO_BINARY)
-                .long(WRITE_GOTO_BINARY)
-                .help("Instruct the compiler to produce GOTO binaries instead of JSON symtabs.")
+            Arg::new(WRITE_JSON_SYMTAB)
+                .long(WRITE_JSON_SYMTAB)
+                .help("Instruct the compiler to produce GotoC symbol tables in JSON format instead of GOTO binary format.")
                 .action(ArgAction::SetTrue),
         )
         .arg(

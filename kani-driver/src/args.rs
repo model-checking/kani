@@ -216,9 +216,9 @@ pub struct KaniArgs {
     #[arg(long, hide_short_help = true, requires("enable_unstable"))]
     pub ignore_global_asm: bool,
 
-    /// Write the GotoC symbol table to file in goto binary format instead of JSON.
-    #[arg(long, hide_short_help = true, requires("enable_unstable"))]
-    pub write_goto_binary: bool,
+    /// Write the GotoC symbol table to a file in JSON format instead of goto binary format.
+    #[arg(long, hide_short_help = true)]
+    pub write_json_symtab: bool,
 
     /// Execute CBMC's sanity checks to ensure the goto-program we generate is correct.
     #[arg(long, hide_short_help = true, requires("enable_unstable"))]

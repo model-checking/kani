@@ -183,15 +183,14 @@ impl CodegenBackend for GotocCodegenBackend {
             let base_filename = outputs.output_path(OutputType::Object);
             let pretty = self.queries.lock().unwrap().get_output_pretty_json();
             write_file(&base_filename, ArtifactType::PrettyNameMap, &pretty_name_map, pretty);
-
-            if gcx.queries.get_write_goto_binary() {
+            if gcx.queries.get_write_json_symtab() {
+                write_file(&base_filename, ArtifactType::SymTab, &gcx.symbol_table, pretty);
+                symbol_table_to_gotoc(&tcx, &base_filename);
+            } else {
                 write_goto_binary_file(
                     &base_filename.with_extension(ArtifactType::SymTabGoto),
                     &gcx.symbol_table,
                 );
-            } else {
-                write_file(&base_filename, ArtifactType::SymTab, &gcx.symbol_table, pretty);
-                symbol_table_to_gotoc(&tcx, &base_filename);
             }
             write_file(&base_filename, ArtifactType::TypeMap, &type_map, pretty);
             write_file(&base_filename, ArtifactType::Metadata, &metadata, pretty);

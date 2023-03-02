@@ -87,16 +87,9 @@ impl KaniSession {
             flags.push("--ignore-global-asm".into());
         }
 
-        // When running regression runs, the write_goto_binary option is enabled
-        // by defining an environment variable.
-        // The value must be non-empty and different from zero.
-        let enable_write_goto_binary = match std::env::var_os("KANI_ENABLE_WRITE_GOTO_BINARY") {
-            Some(str) => !str.is_empty() && str != "0",
-            None => false,
-        };
         // Users activate it via the command line switch
-        if self.args.write_goto_binary || enable_write_goto_binary {
-            flags.push("--write-goto-binary".into());
+        if self.args.write_json_symtab {
+            flags.push("--write-json-symtab".into());
         }
 
         if self.args.enable_stubbing {
