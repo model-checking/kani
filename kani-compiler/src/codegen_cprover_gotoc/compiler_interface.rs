@@ -218,7 +218,7 @@ impl CodegenBackend for GotocCodegenBackend {
     /// Thus, we manually build the rlib file including only the `rmeta` file.
     ///
     /// For cases where no metadata file was requested, we stub the file requested by writing the
-    /// path of the `metadata.json` file so `kani-driver` can safely find the latest metadata.
+    /// path of the `kani-metadata.json` file so `kani-driver` can safely find the latest metadata.
     /// See <https://github.com/model-checking/kani/issues/2234> for more details.
     fn link(
         &self,
@@ -249,7 +249,7 @@ impl CodegenBackend for GotocCodegenBackend {
                 builder.add_file(&metadata);
                 builder.build(&out_path);
             } else {
-                // Write the location of the metadata file to the requested type.
+                // Write the location of the kani metadata file in the requested compiler output file.
                 let base_filename = outputs.output_path(OutputType::Object);
                 let content_stub = CompilerArtifactStub {
                     metadata_path: base_filename.with_extension(ArtifactType::Metadata),

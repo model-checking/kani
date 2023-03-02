@@ -217,6 +217,10 @@ impl KaniSession {
                 );
             }
         }
+        // We generate kani specific artifacts only for the build target. The build target is
+        // always the last artifact generated in a build, and all the other artifacts are related
+        // to dependencies or build scripts. Hence, we need to invoke `map_kani_artifact` only
+        // for the last compiler artifact.
         Ok(artifact.and_then(map_kani_artifact))
     }
 }
