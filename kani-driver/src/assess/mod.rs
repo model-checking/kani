@@ -54,7 +54,7 @@ fn assess_project(mut session: KaniSession) -> Result<AssessMetadata> {
         session.args.jobs = Some(None); // -j, num_cpu
     }
 
-    let project = project::cargo_project(&session)?;
+    let project = project::cargo_project(&session, true)?;
     let cargo_metadata = project.cargo_metadata.as_ref().expect("built with cargo");
 
     let packages_metadata = if project.merged_artifacts {
@@ -72,7 +72,16 @@ fn assess_project(mut session: KaniSession) -> Result<AssessMetadata> {
     // It would also be interesting to classify them by whether they build without warnings or not.
     // Tracking for the latter: https://github.com/model-checking/kani/issues/1758
 
-    println!("Found {} packages", packages_metadata.len());
+    let build_fail = project.failed_targets.as_ref().unwrap();
+    if build_fail.is_empty() {
+        println!("Found {} packages", packages_metadata.len());
+    } else {
+        println!(
+            "Analyzed {} packages. Build failed for {} targets",
+            packages_metadata.len(),
+            build_fail.len()
+        );
+    }
 
     let metadata = merge_kani_metadata(packages_metadata.clone());
     let unsupported_features = table_unsupported_features::build(&packages_metadata);

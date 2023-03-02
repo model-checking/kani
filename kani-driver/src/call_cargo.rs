@@ -5,6 +5,7 @@ use crate::args::KaniArgs;
 use crate::call_single_file::to_rustc_arg;
 use crate::project::Artifact;
 use crate::session::KaniSession;
+use crate::util;
 use anyhow::{bail, Context, Result};
 use cargo_metadata::diagnostic::{Diagnostic, DiagnosticLevel};
 use cargo_metadata::{Message, Metadata, MetadataCommand, Package, Target};
@@ -35,11 +36,13 @@ pub struct CargoOutputs {
     pub metadata: Vec<Artifact>,
     /// Recording the cargo metadata from the build
     pub cargo_metadata: Metadata,
+    /// For build `keep_building` mode, we collect the targets that we failed to compile.
+    pub failed_targets: Option<Vec<String>>,
 }
 
 impl KaniSession {
     /// Calls `cargo_build` to generate `*.symtab.json` files in `target_dir`
-    pub fn cargo_build(&self) -> Result<CargoOutputs> {
+    pub fn cargo_build(&self, keep_going: bool) -> Result<CargoOutputs> {
         let build_target = env!("TARGET"); // see build.rs
         let metadata = self.cargo_metadata(build_target)?;
         let target_dir = self
@@ -102,6 +105,7 @@ impl KaniSession {
         let mut found_target = false;
         let packages = packages_to_verify(&self.args, &metadata);
         let mut artifacts = vec![];
+        let mut failed_targets = vec![];
         for package in packages {
             for verification_target in package_targets(&self.args, package) {
                 let mut cmd = Command::new("cargo");
@@ -115,7 +119,19 @@ impl KaniSession {
                     .env("CARGO_ENCODED_RUSTFLAGS", rustc_args.join(OsStr::new("\x1f")))
                     .env("CARGO_TERM_PROGRESS_WHEN", "never");
 
-                artifacts.extend(self.run_cargo(cmd, verification_target.target())?.into_iter());
+                match self.run_cargo(cmd, verification_target.target()) {
+                    Err(err) => {
+                        if keep_going {
+                            let target_str = format!("{} {verification_target:?}", package.name);
+                            util::error(&format!("Failed to compile {target_str}"));
+                            failed_targets.push(target_str);
+                        } else {
+                            return Err(err);
+                        }
+                    }
+                    Ok(Some(artifact)) => artifacts.push(artifact),
+                    Ok(None) => {}
+                }
                 found_target = true;
             }
         }
@@ -124,7 +140,12 @@ impl KaniSession {
             bail!("No supported targets were found.");
         }
 
-        Ok(CargoOutputs { outdir, metadata: artifacts, cargo_metadata: metadata })
+        Ok(CargoOutputs {
+            outdir,
+            metadata: artifacts,
+            cargo_metadata: metadata,
+            failed_targets: keep_going.then_some(failed_targets),
+        })
     }
 
     fn cargo_metadata(&self, build_target: &str) -> Result<Metadata> {
@@ -312,6 +333,7 @@ fn map_kani_artifact(rustc_artifact: cargo_metadata::Artifact) -> Option<Artifac
 }
 
 /// Possible verification targets.
+#[derive(Debug)]
 enum VerificationTarget {
     Bin(Target),
     Lib(Target),
