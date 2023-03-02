@@ -285,16 +285,21 @@ fn map_kani_artifact(rustc_artifact: cargo_metadata::Artifact) -> Option<Artifac
                 path.parent().map(|p| p.as_std_path().to_path_buf()).unwrap_or(PathBuf::new());
             let mut meta_path = parent.join(file_stem);
             meta_path.set_extension(ArtifactType::Metadata);
+            trace!(rmeta=?path, kani_meta=?meta_path.display(), "map_kani_artifact");
 
             // This will check if the file exists and we just skip if it doesn't.
             Artifact::try_new(&meta_path, ArtifactType::Metadata).ok()
         } else if path.extension() == Some("rlib") {
             // We skip `rlib` files since we should also generate a `rmeta`.
+            trace!(rlib=?path, "map_kani_artifact");
             None
         } else {
             // For all the other cases we write the path of the metadata into the output file.
+            // The compiler should always write a valid stub into the artifact file, however the
+            // kani-metadata file only exists if there were valid targets.
+            trace!(artifact=?path, "map_kani_artifact");
             let input_file = File::open(path).ok()?;
-            let stub: CompilerArtifactStub = serde_json::from_reader(input_file).ok()?;
+            let stub: CompilerArtifactStub = serde_json::from_reader(input_file).unwrap();
             Artifact::try_new(&stub.metadata_path, ArtifactType::Metadata).ok()
         }
     });
