@@ -44,7 +44,7 @@ fn assess_project(mut session: KaniSession) -> Result<AssessMetadata> {
     // This is a temporary hack to make things work, until we get around to refactoring how arguments
     // work generally in kani-driver. These arguments, for instance, are all prepended to the subcommand,
     // which is not a nice way of taking arguments.
-    session.args.unwind = Some(1);
+    session.args.unwind = Some(session.args.default_unwind.unwrap_or(1));
     session.args.tests = true;
     session.args.output_format = crate::args::OutputFormat::Terse;
     session.codegen_tests = true;
