@@ -11,6 +11,7 @@ use cargo_metadata::diagnostic::{Diagnostic, DiagnosticLevel};
 use cargo_metadata::{Message, Metadata, MetadataCommand, Package, Target};
 use kani_metadata::{ArtifactType, CompilerArtifactStub};
 use std::ffi::{OsStr, OsString};
+use std::fmt::{self, Display};
 use std::fs::{self, File};
 use std::io::BufReader;
 use std::path::PathBuf;
@@ -122,7 +123,7 @@ impl KaniSession {
                 match self.run_cargo(cmd, verification_target.target()) {
                     Err(err) => {
                         if keep_going {
-                            let target_str = format!("{} {verification_target:?}", package.name);
+                            let target_str = format!("{verification_target}");
                             util::error(&format!("Failed to compile {target_str}"));
                             failed_targets.push(target_str);
                         } else {
@@ -355,6 +356,16 @@ impl VerificationTarget {
             VerificationTarget::Test(target)
             | VerificationTarget::Bin(target)
             | VerificationTarget::Lib(target) => target,
+        }
+    }
+}
+
+impl Display for VerificationTarget {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            VerificationTarget::Test(target) => write!(f, "test `{}`", target.name),
+            VerificationTarget::Bin(target) => write!(f, "binary `{}`", target.name),
+            VerificationTarget::Lib(target) => write!(f, "lib `{}`", target.name),
         }
     }
 }

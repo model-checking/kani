@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use self::metadata::{write_metadata, AssessMetadata};
-use anyhow::Result;
+use anyhow::{bail, Result};
 use kani_metadata::KaniMetadata;
 
 use crate::assess::table_builder::TableBuilder;
@@ -73,14 +73,13 @@ fn assess_project(mut session: KaniSession) -> Result<AssessMetadata> {
     // Tracking for the latter: https://github.com/model-checking/kani/issues/1758
 
     let build_fail = project.failed_targets.as_ref().unwrap();
-    if build_fail.is_empty() {
-        println!("Found {} packages", packages_metadata.len());
-    } else {
-        println!(
-            "Analyzed {} packages. Build failed for {} targets",
-            packages_metadata.len(),
-            build_fail.len()
-        );
+    match (build_fail.len(), packages_metadata.len()) {
+        (0, 0) => println!("No relevant data was found."),
+        (0, succeeded) => println!("Analyzed {succeeded} packages"),
+        (_failed, 0) => bail!("Failed to build all targets"),
+        (failed, succeeded) => {
+            println!("Analyzed {succeeded} packages. Failed to build {failed} targets",)
+        }
     }
 
     let metadata = merge_kani_metadata(packages_metadata.clone());
@@ -170,9 +169,11 @@ fn reconstruct_metadata_structure(
                 )
             }
         }
-        let mut merged = crate::metadata::merge_kani_metadata(package_artifacts);
-        merged.crate_name = package.name.clone();
-        package_metas.push(merged);
+        if !package_artifacts.is_empty() {
+            let mut merged = crate::metadata::merge_kani_metadata(package_artifacts);
+            merged.crate_name = package.name.clone();
+            package_metas.push(merged);
+        }
     }
     if !remaining_metas.is_empty() {
         let remaining_names: Vec<_> = remaining_metas.into_iter().map(|x| x.crate_name).collect();
