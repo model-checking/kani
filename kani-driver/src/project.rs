@@ -98,7 +98,7 @@ impl Project {
 }
 
 /// Information about a build artifact.
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub struct Artifact {
     /// The path for this artifact in the canonical form.
     path: PathBuf,
@@ -121,12 +121,12 @@ impl Deref for Artifact {
 
 impl Artifact {
     /// Create a new artifact if the given path exists.
-    fn try_new(path: &Path, typ: ArtifactType) -> Result<Self> {
+    pub fn try_new(path: &Path, typ: ArtifactType) -> Result<Self> {
         Ok(Artifact { path: path.canonicalize()?, typ })
     }
 
     /// Check if this artifact has the given type.
-    fn has_type(&self, typ: ArtifactType) -> bool {
+    pub fn has_type(&self, typ: ArtifactType) -> bool {
         self.typ == typ
     }
 }
@@ -156,7 +156,14 @@ pub fn cargo_project(session: &KaniSession) -> Result<Project> {
         let joined_name = "cbmc-linked";
         let base_name = outdir.join(joined_name);
         let goto = base_name.with_extension(Goto);
-        session.link_goto_binary(&outputs.symtab_gotos, &goto)?;
+        let all_gotos = outputs
+            .metadata
+            .iter()
+            .map(|artifact| {
+                convert_type(&artifact, ArtifactType::Metadata, ArtifactType::SymTabGoto)
+            })
+            .collect::<Vec<_>>();
+        session.link_goto_binary(&all_gotos, &goto)?;
         artifacts.push(Artifact::try_new(&goto, Goto)?);
 
         // Merge metadata files.
