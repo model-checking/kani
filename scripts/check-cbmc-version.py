@@ -49,7 +49,7 @@ def main():
     if desired_version > current_version:
         version_string = '.'.join([str(num) for num in current_version])
         desired_version_string = '.'.join([str(num) for num in desired_version])
-        print(f'WARNING: CBMC version is {version_string}, expected at least {desired_version_string}')
+        print(f'ERROR: CBMC version is {version_string}, expected at least {desired_version_string}')
         sys.exit(EXIT_CODE_MISMATCH)
 
 

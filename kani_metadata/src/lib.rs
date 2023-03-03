@@ -1,6 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+use std::{collections::HashSet, path::PathBuf};
+
 use serde::{Deserialize, Serialize};
 
 pub use artifact::ArtifactType;
@@ -33,5 +35,18 @@ pub struct UnsupportedFeature {
     /// A string identifying the feature.
     pub feature: String,
     /// A list of locations (file, line) where this unsupported feature can be found.
-    pub locations: Vec<(String, String)>,
+    pub locations: HashSet<Location>,
+}
+
+/// The location in a file
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+pub struct Location {
+    pub filename: String,
+    pub start_line: u64,
+}
+
+/// We stub artifacts with the path to a KaniMetadata file.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompilerArtifactStub {
+    pub metadata_path: PathBuf,
 }

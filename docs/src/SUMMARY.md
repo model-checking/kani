@@ -14,6 +14,9 @@
   - [Nondeterministic variables](./tutorial-nondeterministic-variables.md)
   - [Debugging verification failures](./debugging-verification-failures.md)
 
+- [Reference](./reference.md)
+  - [Stubbing](./reference/stubbing.md)
+
 - [Application](./application.md)
   - [Comparison with other tools](./tool-comparison.md)
   - [Where to start on real code](./tutorial-real-code.md)
@@ -37,3 +40,7 @@
   - [Overrides](./overrides.md)
 
 - [Crates Documentation](./crates/index.md)
+
+---
+
+- [FAQ](./faq.md)
