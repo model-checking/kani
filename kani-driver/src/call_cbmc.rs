@@ -205,6 +205,10 @@ impl KaniSession {
         };
 
         match solver {
+            CbmcSolver::Cadical => {
+                args.push("--sat-solver".into());
+                args.push("cadical".into());
+            }
             CbmcSolver::Kissat => {
                 args.push("--external-sat-solver".into());
                 args.push("kissat".into());
