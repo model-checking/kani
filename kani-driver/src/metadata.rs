@@ -3,7 +3,7 @@
 
 use anyhow::Result;
 use std::path::Path;
-use tracing::debug;
+use tracing::{debug, trace};
 
 use kani_metadata::{
     HarnessAttributes, HarnessMetadata, InternedString, KaniMetadata, TraitDefinedMethod,
@@ -178,6 +178,8 @@ fn find_proof_harnesses<'a>(
             || targets.iter().any(|target| md.pretty_name.contains(*target))
         {
             result.push(*md);
+        } else {
+            trace!(skip = md.pretty_name, "find_proof_harnesses");
         }
     }
     result
