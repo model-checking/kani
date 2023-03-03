@@ -107,9 +107,6 @@ fn bundle_kani(dir: &Path) -> Result<()> {
     // 6. Include a licensing note
     cp(Path::new("tools/build-kani/license-notes.txt"), dir)?;
 
-    // 7. CHANGELOG
-    cp(Path::new("./CHANGELOG"), dir)?;
-
     Ok(())
 }
 
