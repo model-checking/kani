@@ -7,7 +7,7 @@ use crate::project::Artifact;
 use crate::session::KaniSession;
 use anyhow::{bail, Context, Result};
 use cargo_metadata::diagnostic::{Diagnostic, DiagnosticLevel};
-use cargo_metadata::{Message, Metadata, MetadataCommand, Package};
+use cargo_metadata::{Message, Metadata, MetadataCommand, Package, Target};
 use kani_metadata::{ArtifactType, CompilerArtifactStub};
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, File};
@@ -105,11 +105,11 @@ impl KaniSession {
         let packages = packages_to_verify(&self.args, &metadata);
         let mut artifacts = vec![];
         for package in packages {
-            for target in package_targets(&self.args, package) {
+            for verification_target in package_targets(&self.args, package) {
                 let mut cmd = Command::new("cargo");
                 cmd.args(&cargo_args)
                     .args(vec!["-p", &package.name])
-                    .args(&target.to_args())
+                    .args(&verification_target.to_args())
                     .args(&pkg_args)
                     .env("RUSTC", &self.kani_compiler)
                     // Use CARGO_ENCODED_RUSTFLAGS instead of RUSTFLAGS is preferred. See
@@ -117,7 +117,7 @@ impl KaniSession {
                     .env("CARGO_ENCODED_RUSTFLAGS", rustc_args.join(OsStr::new("\x1f")))
                     .env("CARGO_TERM_PROGRESS_WHEN", "never");
 
-                artifacts.extend(self.run_cargo(cmd)?.into_iter());
+                artifacts.extend(self.run_cargo(cmd, verification_target.target())?.into_iter());
                 found_target = true;
             }
         }
@@ -159,7 +159,7 @@ impl KaniSession {
 
     /// Run cargo and collect any error found.
     /// We also collect the metadata file generated during compilation if any.
-    fn run_cargo(&self, cargo_cmd: Command) -> Result<Option<Artifact>> {
+    fn run_cargo(&self, cargo_cmd: Command, target: &Target) -> Result<Option<Artifact>> {
         let support_color = atty::is(atty::Stream::Stdout);
         let mut artifact = None;
         if let Some(mut cargo_process) = self.run_piped(cargo_cmd)? {
@@ -191,7 +191,13 @@ impl KaniSession {
                         }
                     },
                     Message::CompilerArtifact(rustc_artifact) => {
-                        artifact = Some(rustc_artifact);
+                        if rustc_artifact.target == *target {
+                            debug_assert!(
+                                artifact.is_none(),
+                                "expected only one artifact for `{target:?}`",
+                            );
+                            artifact = Some(rustc_artifact);
+                        }
                     }
                     Message::BuildScriptExecuted(_) | Message::BuildFinished(_) => {
                         // do nothing
@@ -309,18 +315,26 @@ fn map_kani_artifact(rustc_artifact: cargo_metadata::Artifact) -> Option<Artifac
 
 /// Possible verification targets.
 enum VerificationTarget {
-    Bin(String),
-    Lib,
-    Test(String),
+    Bin(Target),
+    Lib(Target),
+    Test(Target),
 }
 
 impl VerificationTarget {
     /// Convert to cargo argument that select the specific target.
     fn to_args(&self) -> Vec<String> {
         match self {
-            VerificationTarget::Test(name) => vec![String::from("--test"), name.clone()],
-            VerificationTarget::Bin(name) => vec![String::from("--bin"), name.clone()],
-            VerificationTarget::Lib => vec![String::from("--lib")],
+            VerificationTarget::Test(target) => vec![String::from("--test"), target.name.clone()],
+            VerificationTarget::Bin(target) => vec![String::from("--bin"), target.name.clone()],
+            VerificationTarget::Lib(_) => vec![String::from("--lib")],
+        }
+    }
+
+    fn target(&self) -> &Target {
+        match self {
+            VerificationTarget::Test(target)
+            | VerificationTarget::Bin(target)
+            | VerificationTarget::Lib(target) => target,
         }
     }
 }
@@ -349,7 +363,7 @@ fn package_targets(args: &KaniArgs, package: &Package) -> Vec<VerificationTarget
             match kind.as_str() {
                 CRATE_TYPE_BIN => {
                     // Binary targets.
-                    verification_targets.push(VerificationTarget::Bin(target.name.clone()));
+                    verification_targets.push(VerificationTarget::Bin(target.clone()));
                 }
                 CRATE_TYPE_LIB | CRATE_TYPE_RLIB | CRATE_TYPE_CDYLIB | CRATE_TYPE_DYLIB
                 | CRATE_TYPE_STATICLIB => {
@@ -362,7 +376,7 @@ fn package_targets(args: &KaniArgs, package: &Package) -> Vec<VerificationTarget
                 CRATE_TYPE_TEST => {
                     // Test target.
                     if args.tests {
-                        verification_targets.push(VerificationTarget::Test(target.name.clone()));
+                        verification_targets.push(VerificationTarget::Test(target.clone()));
                     } else {
                         ignored_tests.push(target.name.as_str());
                     }
@@ -378,7 +392,7 @@ fn package_targets(args: &KaniArgs, package: &Package) -> Vec<VerificationTarget
                         `proc-macro`.",
                 target.name,
             ),
-            (true, false) => verification_targets.push(VerificationTarget::Lib),
+            (true, false) => verification_targets.push(VerificationTarget::Lib(target.clone())),
             (_, _) => {}
         }
     }
