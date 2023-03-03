@@ -16,7 +16,7 @@ use crate::{fatal_error, json};
 
 use std::env;
 use std::fs::{self, create_dir_all};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Output, Stdio};
 use std::str;
 
@@ -279,8 +279,7 @@ impl<'test> TestCx<'test> {
         }
 
         let proc_res = self.compose_and_run(cargo);
-        let expected = fs::read_to_string(self.testpaths.file.clone()).unwrap();
-        self.verify_output(&proc_res, &expected);
+        self.verify_output(&proc_res, &self.testpaths.file);
 
         // TODO: We should probably be checking the exit status somehow
         // See https://github.com/model-checking/kani/issues/1895
@@ -334,7 +333,7 @@ impl<'test> TestCx<'test> {
         }
 
         // Check if the `expected` file exists, and load its contents into `expected_output`
-        let expected_output = if let Some(expected_path) = exec_config.expected {
+        let expected_path = if let Some(expected_path) = exec_config.expected {
             let expected_rel_path = PathBuf::from(expected_path);
             let expected_path = self.testpaths.file.join(expected_rel_path);
             if !expected_path.exists() {
@@ -344,7 +343,7 @@ impl<'test> TestCx<'test> {
                 );
                 fatal_error(&err_msg);
             }
-            Some(fs::read_to_string(expected_path).unwrap())
+            Some(expected_path)
         } else {
             None
         };
@@ -355,8 +354,8 @@ impl<'test> TestCx<'test> {
         let proc_res = self.compose_and_run(script_path_cmd);
 
         // Compare with expected output if it was provided
-        if let Some(output) = expected_output {
-            self.verify_output(&proc_res, &output);
+        if let Some(path) = expected_path {
+            self.verify_output(&proc_res, &path);
         }
 
         // Compare with exit code (0 if it wasn't provided)
@@ -376,9 +375,8 @@ impl<'test> TestCx<'test> {
     /// the expected output in `expected` file.
     fn run_expected_test(&self) {
         let proc_res = self.run_kani();
-        let expected =
-            fs::read_to_string(self.testpaths.file.parent().unwrap().join("expected")).unwrap();
-        self.verify_output(&proc_res, &expected);
+        let expected_path = self.testpaths.file.parent().unwrap().join("expected");
+        self.verify_output(&proc_res, &expected_path);
     }
 
     /// Runs Kani with stub implementations of various data structures.
@@ -397,20 +395,35 @@ impl<'test> TestCx<'test> {
 
     /// Print an error if the verification output does not contain the expected
     /// lines.
-    fn verify_output(&self, proc_res: &ProcRes, expected: &str) {
+    fn verify_output(&self, proc_res: &ProcRes, expected_path: &Path) {
         // Include the output from stderr here for cases where there are exceptions
+        let expected = fs::read_to_string(expected_path).unwrap();
         let output = proc_res.stdout.to_string() + &proc_res.stderr;
-        if let Some(lines) = TestCx::contains_lines(
+        let diff = TestCx::contains_lines(
             &output.split('\n').collect::<Vec<_>>(),
             expected.split('\n').collect(),
-        ) {
-            self.fatal_proc_rec(
-                &format!(
-                    "test failed: expected output to contain the line(s):\n{}",
-                    lines.join("\n")
-                ),
-                proc_res,
-            );
+        );
+        match (diff, self.config.fix_expected) {
+            (None, _) => { /* Test passed. Do nothing*/ }
+            (Some(_), true) => {
+                // Fix output but still fail the test so users know which ones were updated
+                fs::write(expected_path, output)
+                    .expect(&format!("Failed to update file {}", expected_path.display()));
+                self.fatal_proc_rec(
+                    &format!("updated `{}` file, please review", expected_path.display()),
+                    proc_res,
+                )
+            }
+            (Some(lines), false) => {
+                // Throw an error
+                self.fatal_proc_rec(
+                    &format!(
+                        "test failed: expected output to contain the line(s):\n{}",
+                        lines.join("\n")
+                    ),
+                    proc_res,
+                );
+            }
         }
     }
 

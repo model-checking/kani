@@ -17,6 +17,8 @@ use tracing::{debug, trace};
 
 use crate::kani_middle::CompilerHelpers;
 
+use super::resolve;
+
 #[derive(Debug, Clone, Copy, AsRefStr, EnumString, PartialEq, Eq, PartialOrd, Ord)]
 #[strum(serialize_all = "snake_case")]
 enum KaniAttributeKind {
@@ -83,7 +85,10 @@ pub fn is_test_harness_closure(tcx: TyCtxt, def_id: DefId) -> bool {
 }
 
 /// Extract all Kani attributes for a given `def_id` if any exists.
+/// We only extract attributes for harnesses that are local to the current crate.
 pub fn extract_harness_attributes(tcx: TyCtxt, def_id: DefId) -> Option<HarnessAttributes> {
+    // Abort if not local.
+    def_id.as_local()?;
     let attributes = extract_kani_attributes(tcx, def_id);
     trace!(?def_id, ?attributes, "extract_harness_attributes");
     if attributes.contains_key(&KaniAttributeKind::Proof) {
@@ -96,7 +101,7 @@ pub fn extract_harness_attributes(tcx: TyCtxt, def_id: DefId) -> Option<HarnessA
                         harness.solver = parse_solver(tcx, expect_single(tcx, kind, &attributes));
                     }
                     KaniAttributeKind::Stub => {
-                        harness.stubs = parse_stubs(tcx, attributes);
+                        harness.stubs = parse_stubs(tcx, def_id, attributes);
                     }
                     KaniAttributeKind::Unwind => {
                         harness.unwind_value =
@@ -189,12 +194,21 @@ fn parse_unwind(tcx: TyCtxt, attr: &Attribute) -> Option<u32> {
     }
 }
 
-fn parse_stubs(tcx: TyCtxt, attributes: Vec<&Attribute>) -> Vec<Stub> {
+fn parse_stubs(tcx: TyCtxt, harness: DefId, attributes: Vec<&Attribute>) -> Vec<Stub> {
+    let current_module = tcx.parent_module_from_def_id(harness.expect_local());
+    let check_resolve = |attr: &Attribute, name: &str| {
+        let result = resolve::resolve_fn(tcx, current_module, name);
+        if let Err(err) = result {
+            tcx.sess.span_err(attr.span, format!("failed to resolve `{name}`: {err}"));
+        }
+    };
     attributes
         .iter()
         .filter_map(|attr| match parse_paths(attr) {
             Ok(paths) => match paths.as_slice() {
                 [orig, replace] => {
+                    check_resolve(attr, orig);
+                    check_resolve(attr, replace);
                     Some(Stub { original: orig.clone(), replacement: replace.clone() })
                 }
                 _ => {
