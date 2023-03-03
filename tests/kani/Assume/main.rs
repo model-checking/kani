@@ -10,6 +10,7 @@ fn main() {
 
 #[kani::proof]
 fn verify_any_where() {
-    let i: i32 = kani::any_where(|x| *x < 10, "Only single digit values are legal");
+    // Only single digit values are legal
+    let i: i32 = kani::any_where(|x| *x < 10);
     assert!(i < 20);
 }
