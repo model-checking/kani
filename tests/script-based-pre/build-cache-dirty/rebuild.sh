@@ -13,10 +13,22 @@ OUT_DIR=target
 MANIFEST=${OUT_DIR}/target_lib/Cargo.toml
 LIB_SRC=${OUT_DIR}/target_lib/src/lib.rs
 
-function check_result {
-    local log_file="${OUT_DIR}/$1"
+# Expects two arguments: "kani arguments" "output_file"
+function check_kani {
+    local args=$1
+    local log_file="${OUT_DIR}/$2"
+    # Run kani with the given arguments
+    if [ -z "${args}" ]
+    then
+        cargo kani --manifest-path "${MANIFEST}" --target-dir "${OUT_DIR}" \
+            2>&1 | tee "${log_file}"
+    else
+        cargo kani --manifest-path "${MANIFEST}" --target-dir "${OUT_DIR}" \
+            "${args}" 2>&1 | tee "${log_file}"
+    fi
+
     # Check for occurrances of "Compiling" messages in the log files
-    grep "Compiling" -H -c ${log_file}
+    grep "Compiling" -H -c ${log_file} || echo "${log_file}: All fresh"
     # Check which harnesses ran
     grep "Checking harness" -H ${log_file} || echo "${log_file}: No harness"
     # Check the verification summary
@@ -31,25 +43,22 @@ mkdir -p ${OUT_DIR}
 cp -r target_lib ${OUT_DIR}
 
 echo "Initial compilation"
-cargo kani --manifest-path ${MANIFEST} --target-dir ${OUT_DIR} --no-assertion-reach-checks 2>&1 | tee ${OUT_DIR}/initial.log
-check_result initial.log
+check_kani --no-assertion-reach-checks initial.log
 
 echo "Run with a new argument that affects compilation"
-cargo kani --manifest-path ${MANIFEST} --target-dir ${OUT_DIR} 2>&1 | tee ${OUT_DIR}/enable_checks.log
-check_result enable_checks.log
+check_kani "" enable_checks.log
 
 echo "Run after change to the source code"
 echo '
 #[kani::proof]
 fn noop_check() {}
 ' >> ${LIB_SRC}
-cargo kani --manifest-path ${MANIFEST} --target-dir ${OUT_DIR} 2>&1 | tee ${OUT_DIR}/changed_src.log
-check_result changed_src.log
+check_kani "" changed_src.log
 
 echo "Run with new dependency"
-cargo add new_dep --manifest-path ${MANIFEST} --path new_dep
-cargo kani --manifest-path ${MANIFEST} --target-dir ${OUT_DIR} 2>&1 | tee ${OUT_DIR}/new_dep.log
-check_result new_dep.log
+cargo new --lib ${OUT_DIR}/new_dep
+cargo add new_dep --manifest-path ${MANIFEST} --path ${OUT_DIR}/new_dep
+check_kani "" new_dep.log
 
 # Try to leave a clean output folder at the end
-# rm -rf ${OUT_DIR}
+rm -rf ${OUT_DIR}
