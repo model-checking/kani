@@ -1,9 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-//! We don't use any of our dependency to keep the test fast
+//! We don't use any of our dependencies to keep the test fast
 
 #[kani::proof]
-#[kani::unwind(2)]
 fn check_u8_u32() {
     let before: u8 = kani::any();
     let temp = before as u32;
@@ -12,7 +11,6 @@ fn check_u8_u32() {
 }
 
 #[kani::proof]
-#[kani::unwind(2)]
 fn check_u8_i16() {
     let before: u8 = kani::any();
     let temp = before as i16;

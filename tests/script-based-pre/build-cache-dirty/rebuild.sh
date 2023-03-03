@@ -27,12 +27,16 @@ function check_kani {
             "${args}" 2>&1 | tee "${log_file}"
     fi
 
-    # Check for occurrances of "Compiling" messages in the log files
-    grep "Compiling" -H -c ${log_file} || echo "${log_file}: All fresh"
-    # Check which harnesses ran
-    grep "Checking harness" -H ${log_file} || echo "${log_file}: No harness"
+    # Print information about the generated log file.
+    # Check for occurrences of "Compiling" messages in the log files
+    local compiled=$(grep -c "Compiling" ${log_file})
+    echo "${log_file}:Compiled ${compiled} crates"
+
+    # Check which harnesses were verified
+    grep "Checking harness" -H ${log_file} || echo "${log_file}:No harness verified"
+
     # Check the verification summary
-    grep "successfully verified harnesses" -H ${log_file} || echo "${log_file}: ok"
+    grep "successfully verified harnesses" -H ${log_file} || true
 }
 
 # Ensure output folder is clean

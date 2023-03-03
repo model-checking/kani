@@ -5,8 +5,8 @@
 # Checks situations where running kani multiple times will not trigger a recompilation
 # The cases we cover here are:
 # - Exact same input being invoked 2x.
-# - Different options that do not influence the compilation only the Kani flow.
-# - Different options that do not influence the compilation only the CBMC execution.
+# - Different options that do not affect the compilation, only the Kani workflow.
+# - Different options that do not affect the compilation, only the CBMC execution.
 
 MANIFEST=lib/Cargo.toml
 OUT_DIR=target
@@ -25,12 +25,16 @@ function check_kani {
             "${args}" 2>&1 | tee "${log_file}"
     fi
 
-    # Check for occurrances of "Compiling" messages in the log files
-    grep "Compiling" -H -c ${log_file} || echo "${log_file}: All fresh"
-    # Check which harnesses ran
-    grep "Checking harness" -H ${log_file} || echo "${log_file}: No harness"
+    # Print information about the generated log file.
+    # Check for occurrences of "Compiling" messages in the log files
+    local compiled=$(grep -c "Compiling" ${log_file})
+    echo "${log_file}:Compiled ${compiled} crates"
+
+    # Check which harnesses were verified
+    grep "Checking harness" -H ${log_file} || echo "${log_file}:No harness verified"
+
     # Check the verification summary
-    grep "successfully verified harnesses" -H ${log_file} || echo "${log_file}: ok"
+    grep "successfully verified harnesses" -H ${log_file} || true
 }
 
 # Ensure output folder is clean

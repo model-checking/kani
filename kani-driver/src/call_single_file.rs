@@ -188,9 +188,9 @@ pub fn to_rustc_arg(kani_args: Vec<String>) -> String {
     format!(r#"-Cllvm-args={}"#, kani_args.join(" "))
 }
 
-/// Function that returns a --check-version argument to the compiler flags.
+/// Function that returns a `--check-version` argument to the compiler flags.
 /// This is really just used to force the compiler to recompile everything from scratch when a user
-/// upgrades Kani. Cargo currently ignores the backend version.
+/// upgrades Kani. Cargo currently ignores the codegen backend version.
 /// See <https://github.com/model-checking/kani/issues/2140> for more context.
 fn check_version() -> String {
     format!("--check-version={}", env!("CARGO_PKG_VERSION"))
