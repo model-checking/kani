@@ -113,6 +113,10 @@ pub struct KaniArgs {
     #[arg(long)]
     pub target_dir: Option<PathBuf>,
 
+    /// Force Kani to rebuild all packages before the verification.
+    #[arg(long)]
+    pub force_build: bool,
+
     /// Toggle between different styles of output
     #[arg(long, default_value = "regular", ignore_case = true, value_enum)]
     pub output_format: OutputFormat,

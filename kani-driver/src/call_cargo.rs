@@ -10,7 +10,7 @@ use cargo_metadata::diagnostic::{Diagnostic, DiagnosticLevel};
 use cargo_metadata::{Message, Metadata, MetadataCommand, Package, Target};
 use kani_metadata::{ArtifactType, CompilerArtifactStub};
 use std::ffi::{OsStr, OsString};
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::BufReader;
 use std::path::PathBuf;
 use std::process::Command;
@@ -50,6 +50,10 @@ impl KaniSession {
             .clone()
             .join("kani");
         let outdir = target_dir.join(build_target).join("debug/deps");
+
+        if self.args.force_build && target_dir.exists() {
+            fs::remove_dir_all(&target_dir)?;
+        }
 
         let mut rustc_args = self.kani_rustc_flags();
         rustc_args.push(to_rustc_arg(self.kani_compiler_flags()).into());
