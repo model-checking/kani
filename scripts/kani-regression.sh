@@ -22,8 +22,8 @@ KANI_DIR=$SCRIPT_DIR/..
 export KANI_FAIL_ON_UNEXPECTED_DESCRIPTION="true"
 
 # Required dependencies
-check-cbmc-version.py --major 5 --minor 77
-check-cbmc-viewer-version.py --major 3 --minor 5
+check-cbmc-version.py --major 5 --minor 78
+check-cbmc-viewer-version.py --major 3 --minor 8
 check_kissat_version.sh
 
 # Formatting check

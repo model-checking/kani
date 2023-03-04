@@ -12,7 +12,6 @@ use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{
     collect_reachable_items, filter_closures_in_const_crate_items, filter_crate_items,
 };
-use bitflags::_core::any::Any;
 use cbmc::goto_program::Location;
 use cbmc::{InternedString, MachineModel};
 use kani_metadata::CompilerArtifactStub;
@@ -39,6 +38,7 @@ use rustc_session::Session;
 use rustc_span::def_id::DefId;
 use rustc_target::abi::Endian;
 use rustc_target::spec::PanicStrategy;
+use std::any::Any;
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fmt::Write;

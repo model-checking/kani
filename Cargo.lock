@@ -497,7 +497,6 @@ version = "0.22.0"
 dependencies = [
  "ar",
  "atty",
- "bitflags",
  "clap",
  "cprover_bindings",
  "home",
