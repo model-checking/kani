@@ -51,9 +51,7 @@ impl KaniSession {
             .join("kani");
         let outdir = target_dir.join(build_target).join("debug/deps");
 
-        // Clean directory before building since we are unable to handle cache today.
-        // TODO: https://github.com/model-checking/kani/issues/1736
-        if target_dir.exists() {
+        if self.args.force_build && target_dir.exists() {
             fs::remove_dir_all(&target_dir)?;
         }
 

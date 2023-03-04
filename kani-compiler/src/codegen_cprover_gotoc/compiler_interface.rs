@@ -81,6 +81,10 @@ impl CodegenBackend for GotocCodegenBackend {
         provide::provide_extern(providers);
     }
 
+    fn print_version(&self) {
+        println!("Kani-goto version: {}", env!("CARGO_PKG_VERSION"));
+    }
+
     fn codegen_crate(
         &self,
         tcx: TyCtxt,

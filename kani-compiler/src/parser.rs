@@ -47,12 +47,6 @@ pub const ENABLE_STUBBING: &str = "enable-stubbing";
 pub fn parser() -> Command {
     let app = command!()
         .arg(
-            Arg::new("kani-compiler-version")
-                .short('?')
-                .action(ArgAction::Version)
-                .help("Gets `kani-compiler` version."),
-        )
-        .arg(
             Arg::new(KANI_LIB)
                 .long(KANI_LIB)
                 .value_name("FOLDER_PATH")
@@ -137,6 +131,12 @@ pub fn parser() -> Command {
                 .help("Instruct the compiler to perform stubbing.")
                 .requires(HARNESS)
                 .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new("check-version")
+                .long("check-version")
+                .action(ArgAction::Set)
+                .help("Pass the kani version to the compiler to ensure cache coherence."),
         );
     #[cfg(feature = "unsound_experiments")]
     let app = crate::unsound_experiments::arg_parser::add_unsound_experiments_to_parser(app);

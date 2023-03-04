@@ -1,0 +1,21 @@
+Initial compilation
+target/initial.log:Compiled 1 crates
+target/initial.log:No harness verified
+Re-execute the same command
+target/same.log:Compiled 0 crates
+target/same.log:No harness verified
+Run with new arg that affects kani-driver workflow only
+target/driver_opt.log:Compiled 0 crates
+target/driver_opt.log:Checking harness cover_option...
+target/driver_opt.log:Checking harness cover_bool...
+target/driver_opt.log:Complete - 2 successfully verified harnesses, 0 failures, 2 total.
+Run with a new argument that affects compilation
+target/disable_checks.log:Compiled 1 crates
+target/disable_checks.log:Checking harness cover_option...
+target/disable_checks.log:Checking harness cover_bool...
+target/disable_checks.log:Complete - 2 successfully verified harnesses, 0 failures, 2 total.
+Run with new dependency
+target/new_dep.log:Compiled 2 crates
+target/new_dep.log:Checking harness cover_option...
+target/new_dep.log:Checking harness cover_bool...
+target/new_dep.log:Complete - 2 successfully verified harnesses, 0 failures, 2 total.
