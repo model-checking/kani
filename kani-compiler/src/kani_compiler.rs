@@ -15,6 +15,7 @@
 //! in order to apply the stubs. For the subsequent runs, we add the stub configuration to
 //! `-C llvm-args`.
 
+#[cfg(feature = "cprover")]
 use crate::codegen_cprover_gotoc::GotocCodegenBackend;
 use crate::kani_middle::stubbing;
 use crate::parser::{self, KaniCompilerParser};
