@@ -23,4 +23,4 @@ should be replaced by:
 
 ### Major Changes
 
-- Enable the build cache by default and introduce `--force-build` to build from scratch by @celinval in #2232. 
+- Enable the build cache to avoid recompiling crates that haven't changed, and introduce `--force-build` option to compile all crates from scratch by @celinval in #2232. 
