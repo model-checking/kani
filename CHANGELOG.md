@@ -6,9 +6,10 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 
 ## [0.23.0]
 
-### **Breaking Changes**
+### Breaking Changes
 
-- The second parameter in the `kani::any_where` function (`_msg: &'static str`) was removed to make the function more ergonomic to use.
+- Remove the second parameter in the `kani::any_where` function by @zhassan-aws in #2257  
+We removed the second parameter in the `kani::any_where` function (`_msg: &'static str`) to make the function more ergonomic to use.
 We suggest moving the explanation for why the assumption is introduced into a comment.
 For example, the following code:
 ```rust
@@ -19,3 +20,7 @@ should be replaced by:
     // Restrict the length to a value less than 5
     let len: usize = kani::any_where(|x| *x < 5);
 ```
+
+### Major Changes
+
+- Enable the build cache by default and introduce `--force-build` to build from scratch by @celinval in #2232. 
