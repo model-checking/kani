@@ -32,6 +32,8 @@ ${SCRIPT_DIR}/kani-fmt.sh --check
 # Build all packages in the workspace
 if [[ "" != "${KANI_ENABLE_UNSOUND_EXPERIMENTS-}" ]]; then
   cargo build-dev -- --features unsound_experiments
+elif [[ "" != "${KANI_ENABLE_WRITE_JSON_SYMTAB-}" ]]; then
+  cargo build-dev -- --features write_json_symtab
 else
   cargo build-dev
 fi
