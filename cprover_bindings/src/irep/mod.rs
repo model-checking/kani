@@ -14,6 +14,7 @@
 //! TODO: Parser for json symbol tables into the internal irep format
 //! TODO: Investigate memory usage, and consider using sharing to reduce memory usage
 
+pub mod goto_binary_serde;
 #[allow(clippy::module_inception)]
 mod irep;
 mod irep_id;

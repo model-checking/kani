@@ -14,7 +14,7 @@ repository = "https://github.com/model-checking/kani"
 documentation = "https://model-checking.github.io/kani/"
 homepage = "https://github.com/model-checking/kani"
 # N.B. Cargo.* is included automatically:
-include = ["/src", "/build.rs", "/rust-toolchain.toml", "/LICENSE-*", "/README.md", "/CHANGELOG"]
+include = ["/src", "/build.rs", "/rust-toolchain.toml", "/LICENSE-*", "/README.md", "/CHANGELOG.md"]
 
 [dependencies]
 anyhow = "1"
