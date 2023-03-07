@@ -37,7 +37,7 @@ pub struct CargoOutputs {
     pub metadata: Vec<Artifact>,
     /// Recording the cargo metadata from the build
     pub cargo_metadata: Metadata,
-    /// For build `keep_building` mode, we collect the targets that we failed to compile.
+    /// For build `keep_going` mode, we collect the targets that we failed to compile.
     pub failed_targets: Option<Vec<String>>,
 }
 
