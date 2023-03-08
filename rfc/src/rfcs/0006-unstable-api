@@ -1,0 +1,98 @@
+- **Feature Name:** Unstable APIs
+- **RFC Tracking Issue**: <https://github.com/model-checking/kani/issues/2279>
+- **RFC PR:** <>
+- **Status:** Under Review
+- **Version:** 0
+
+-------------------
+
+## Summary
+
+Provide a standard option for users to enable experimental APIs and features in Kani,
+and ensure that those APIs are off by default.
+
+## User Impact
+
+The impact should be minimal, and it is very similar to the current experience when they are trying an experimental feature in Kani.
+ The unstable API will be given a unique identifier, which the user will enable either via command line or via command argument.
+
+## User Experience
+
+Users will have to invoke Kani with:
+```
+--enable-unstable --unstable-feature <feature_identifier>
+```
+in order to enable an API in the Kani library that is marked as unstable.
+
+In order to mark an API as unstable, we will add the following attribute to the APIs marked as unstable:
+
+```rust
+#[kani::unstable(feature="<IDENTIFIER>", issue="<TRACKING_ISSUE_NUMBER>", reason="<OPTIONAL_DESCRIPTION>")]
+pub fn unstable_api() {}
+```
+
+This is similar to the interface used by [the standard library](https://rustc-dev-guide.rust-lang.org/stability.html#unstable).
+
+If the user tries to run Kani without enabling an unstable feature that is reachable,
+the verification may fail if the unstable feature is reachable.
+I.e., the behavior will be similar to unsupported features.
+The error will be delayed and only fail during the verification of harnesses that actually trigger the feature.
+
+## Detailed Design
+
+We will add the `--unstable-feature` option to both, `kani-driver` and `kani-compiler`.
+Kani driver will just pass the information to the compiler. The compiler in its turn will stub
+out any unsupported feature API.
+
+Let's say we introduce the following API:
+```rust
+#[kani::unstable(feature="foo_bar", issue="2279", reason="Just an example")]
+pub fn unstable_foo<T>() -> T {
+  bar()
+}
+```
+
+The compiler will replace the body of the API with a reachability check if the feature `foo_bar` was
+not enabled. I.e., this will generate the function body similar to running:
+
+```rust
+pub fn unstable_foo<T>() -> T {
+  kani::unstable("unstable_foo", reason, issue")
+}
+```
+
+Where `kani::unstable` is a Kani intrinsic that generate the a new `UnstableFeature` check.
+
+Finally, we will modify the driver to treat `UnstableFeature` failures the same way it handles
+unsupported features.
+
+### API Stabilization
+
+Once an API has been stabilize, we will remove the `unstable` attributes from the given API.
+If the user tries to enable a feature that was already stabilized,
+Kani will print a warning stating that the feature has been stabilized.
+
+### API Removal
+
+If we decide to remove an API that is marked as unstable, we should follow a regular deprecation
+path (using `#[deprecated]` attribute), and keep the `unstable` flag + attributes, until we are
+ready to remove the feature completely.
+
+## Rational and Alternatives
+
+For this RFC, my suggestion is to only enable experimental features globally for simplicity of use and implementation.
+
+We could allow users to specify experimental features on a per-harness basis,
+but it could be tricky to make it clear to the user which harness may be affected by which feature.
+The extra granularity would also be painful when we decide a feature is no longer experimental,
+whether it is stabilized or removed.
+In those cases, users would have to edit each harness that enables the affected feature.
+
+
+## Open questions
+
+- Should we fail the verification if we decide to deprecate an unstable API?
+
+## Future possibilities
+
+- Allow users to enable unstable features on a per-harness base.
