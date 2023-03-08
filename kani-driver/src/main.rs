@@ -70,8 +70,7 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
         return assess::run_assess(session, assess::AssessArgs::default());
     }
 
-    let project = project::cargo_project(&session)?;
-    debug!(?project, "cargokani_main");
+    let project = project::cargo_project(&session, false)?;
     if session.args.only_codegen { Ok(()) } else { verify_project(project, session) }
 }
 
@@ -82,7 +81,6 @@ fn standalone_main() -> Result<()> {
     let session = session::KaniSession::new(args.common_opts)?;
 
     let project = project::standalone_project(&args.input, &session)?;
-    debug!(?project, "standalone_main");
     if session.args.only_codegen { Ok(()) } else { verify_project(project, session) }
 }
 

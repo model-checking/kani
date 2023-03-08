@@ -31,7 +31,7 @@ impl KaniSession {
             None => return Ok(()),
         };
 
-        if let Some(result_items) = &verification_result.results {
+        if let Ok(result_items) = &verification_result.results {
             match extract_harness_values(result_items) {
                 None => println!(
                     "WARNING: Kani could not produce a concrete playback for `{}` because there \
