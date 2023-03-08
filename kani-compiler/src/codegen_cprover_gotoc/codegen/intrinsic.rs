@@ -365,7 +365,9 @@ impl<'tcx> GotocCtx<'tcx> {
             "add_with_overflow" => codegen_op_with_overflow!(add_overflow_result),
             "arith_offset" => self.codegen_offset(intrinsic, instance, fargs, p, loc),
             "assert_inhabited" => self.codegen_assert_intrinsic(instance, intrinsic, span),
-            "assert_uninit_valid" => self.codegen_assert_intrinsic(instance, intrinsic, span),
+            "assert_mem_uninitialized_valid" => {
+                self.codegen_assert_intrinsic(instance, intrinsic, span)
+            }
             "assert_zero_valid" => self.codegen_assert_intrinsic(instance, intrinsic, span),
             // https://doc.rust-lang.org/core/intrinsics/fn.assume.html
             // Informs the optimizer that a condition is always true.
