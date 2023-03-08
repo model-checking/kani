@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use anyhow::{bail, Result};
-use kani_metadata::HarnessMetadata;
+use kani_metadata::{CbmcSolver, HarnessMetadata};
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::path::Path;
@@ -30,12 +30,11 @@ pub struct VerificationResult {
     /// The parsed output, message by message, of CBMC. However, the `Result` message has been
     /// removed and is available in `results` instead.
     pub messages: Option<Vec<ParserItem>>,
-    /// The `Result` properties in detail.
-    pub results: Option<Vec<Property>>,
-    /// CBMC process exit status. NOTE: Only potentially useful if `status` is `Failure`.
+    /// The `Result` properties in detail or the exit_status of CBMC.
+    /// Note: CBMC process exit status is only potentially useful if `status` is `Failure`.
     /// Kani will see CBMC report "failure" that's actually success (interpreting "failed"
     /// checks like coverage as expected and desirable.)
-    pub exit_status: i32,
+    pub results: Result<Vec<Property>, i32>,
     /// The runtime duration of this CBMC invocation.
     pub runtime: Duration,
     /// Whether concrete playback generated a test
@@ -67,20 +66,17 @@ impl KaniSession {
 
             // Spawn the CBMC process and process its output below
             let cbmc_process_opt = self.run_piped(cmd)?;
-            if let Some(cbmc_process) = cbmc_process_opt {
-                let output = process_cbmc_output(cbmc_process, |i| {
-                    kani_cbmc_output_filter(
-                        i,
-                        self.args.extra_pointer_checks,
-                        &self.args.output_format,
-                    )
-                })?;
+            let cbmc_process = cbmc_process_opt.ok_or(anyhow::Error::msg("Failed to run cbmc"))?;
+            let output = process_cbmc_output(cbmc_process, |i| {
+                kani_cbmc_output_filter(
+                    i,
+                    self.args.extra_pointer_checks,
+                    self.args.quiet,
+                    &self.args.output_format,
+                )
+            })?;
 
-                VerificationResult::from(output, start_time)
-            } else {
-                // None is only ever returned when it's a dry run
-                VerificationResult::mock_success()
-            }
+            VerificationResult::from(output, start_time)
         };
 
         self.gen_and_add_concrete_playback(harness, &mut verification_results)?;
@@ -121,6 +117,8 @@ impl KaniSession {
             args.push("--unwind".into());
             args.push(unwind_value.to_string().into());
         }
+
+        self.handle_solver_args(&harness_metadata.attributes.solver, &mut args)?;
 
         if self.args.run_sanity_checks {
             args.push("--validate-goto-model".into());
@@ -185,6 +183,46 @@ impl KaniSession {
 
         args
     }
+
+    fn handle_solver_args(
+        &self,
+        harness_solver: &Option<CbmcSolver>,
+        args: &mut Vec<OsString>,
+    ) -> Result<()> {
+        let solver = if let Some(solver) = &self.args.solver {
+            // `--solver` option takes precedence over attributes
+            solver
+        } else if let Some(solver) = harness_solver {
+            solver
+        } else {
+            // Nothing to do
+            return Ok(());
+        };
+
+        match solver {
+            CbmcSolver::Cadical => {
+                args.push("--sat-solver".into());
+                args.push("cadical".into());
+            }
+            CbmcSolver::Kissat => {
+                args.push("--external-sat-solver".into());
+                args.push("kissat".into());
+            }
+            CbmcSolver::Minisat => {
+                // Minisat is currently CBMC's default solver, so no need to
+                // pass any arguments
+            }
+            CbmcSolver::Binary(solver_binary) => {
+                // Check if the specified binary exists in path
+                if which::which(solver_binary).is_err() {
+                    bail!("the specified solver \"{solver_binary}\" was not found in path")
+                }
+                args.push("--external-sat-solver".into());
+                args.push(solver_binary.into());
+            }
+        }
+        Ok(())
+    }
 }
 
 impl VerificationResult {
@@ -204,8 +242,7 @@ impl VerificationResult {
             VerificationResult {
                 status: determine_status_from_properties(&results),
                 messages: Some(items),
-                results: Some(results),
-                exit_status: output.process_status,
+                results: Ok(results),
                 runtime,
                 generated_concrete_test: false,
             }
@@ -214,8 +251,7 @@ impl VerificationResult {
             VerificationResult {
                 status: VerificationStatus::Failure,
                 messages: Some(items),
-                results: None,
-                exit_status: output.process_status,
+                results: Err(output.process_status),
                 runtime,
                 generated_concrete_test: false,
             }
@@ -226,8 +262,7 @@ impl VerificationResult {
         VerificationResult {
             status: VerificationStatus::Success,
             messages: None,
-            results: None,
-            exit_status: 42, // on success, exit code is ignored, so put something weird here
+            results: Ok(vec![]),
             runtime: Duration::from_secs(0),
             generated_concrete_test: false,
         }
@@ -237,36 +272,38 @@ impl VerificationResult {
         VerificationResult {
             status: VerificationStatus::Failure,
             messages: None,
-            results: None,
             // on failure, exit codes in theory might be used,
             // but `mock_failure` should never be used in a context where they will,
             // so again use something weird:
-            exit_status: 42,
+            results: Err(42),
             runtime: Duration::from_secs(0),
             generated_concrete_test: false,
         }
     }
 
     pub fn render(&self, output_format: &OutputFormat) -> String {
-        if let Some(results) = &self.results {
-            let show_checks = matches!(output_format, OutputFormat::Regular);
-            let mut result = format_result(results, show_checks);
-            writeln!(result, "Verification Time: {}s", self.runtime.as_secs_f32()).unwrap();
-            result
-        } else {
-            let verification_result = console::style("FAILED").red();
-            format!(
-                "\nCBMC failed with status {}\nVERIFICATION:- {verification_result}\n",
-                self.exit_status
-            )
+        match &self.results {
+            Ok(results) => {
+                let show_checks = matches!(output_format, OutputFormat::Regular);
+                let mut result = format_result(results, show_checks);
+                writeln!(result, "Verification Time: {}s", self.runtime.as_secs_f32()).unwrap();
+                result
+            }
+            Err(exit_status) => {
+                let verification_result = console::style("FAILED").red();
+                format!(
+                    "\nCBMC failed with status {exit_status}\nVERIFICATION:- {verification_result}\n",
+                )
+            }
         }
     }
 
     /// Find the failed properties from this verification run
     pub fn failed_properties(&self) -> Vec<&Property> {
-        if let Some(properties) = &self.results {
+        if let Ok(properties) = &self.results {
             properties.iter().filter(|prop| prop.status == CheckStatus::Failure).collect()
         } else {
+            debug_assert!(false, "expected error to be handled before invoking this function");
             vec![]
         }
     }
@@ -287,7 +324,7 @@ fn determine_status_from_properties(properties: &[Property]) -> VerificationStat
 pub fn resolve_unwind_value(args: &KaniArgs, harness_metadata: &HarnessMetadata) -> Option<u32> {
     // Check for which flag is being passed and prioritize extracting unwind from the
     // respective flag/annotation.
-    args.unwind.or(harness_metadata.unwind_value).or(args.default_unwind)
+    args.unwind.or(harness_metadata.attributes.unwind_value).or(args.default_unwind)
 }
 
 #[cfg(test)]

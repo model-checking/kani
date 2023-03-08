@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 #![feature(let_chains)]
 #![feature(array_methods)]
-
 use std::ffi::OsString;
+use std::process::ExitCode;
 
 use anyhow::Result;
 
@@ -23,6 +23,7 @@ mod call_cbmc;
 mod call_cbmc_viewer;
 mod call_goto_cc;
 mod call_goto_instrument;
+mod call_goto_synthesizer;
 mod call_single_file;
 mod cbmc_output_parser;
 mod cbmc_property_renderer;
@@ -39,10 +40,20 @@ mod unsound_experiments;
 /// The main function for the `kani-driver`.
 /// The driver can be invoked via `cargo kani` and `kani` commands, which determines what kind of
 /// project should be verified.
-fn main() -> Result<()> {
-    match determine_invocation_type(Vec::from_iter(std::env::args_os())) {
+fn main() -> ExitCode {
+    let result = match determine_invocation_type(Vec::from_iter(std::env::args_os())) {
         InvocationType::CargoKani(args) => cargokani_main(args),
         InvocationType::Standalone => standalone_main(),
+    };
+
+    if let Err(error) = result {
+        // We are using the debug format for now to print the all the context.
+        // We should consider creating a standard for error reporting.
+        debug!(?error, "main_failure");
+        util::error(&format!("{error:#}"));
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
     }
 }
 
@@ -54,12 +65,12 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     let session = session::KaniSession::new(args.common_opts)?;
 
     if let Some(CargoKaniSubcommand::Assess(args)) = args.command {
-        return assess::cargokani_assess_main(session, args);
+        return assess::run_assess(session, args);
     } else if session.args.assess {
-        return assess::cargokani_assess_main(session, assess::AssessArgs::default());
+        return assess::run_assess(session, assess::AssessArgs::default());
     }
 
-    let project = project::cargo_project(&session)?;
+    let project = project::cargo_project(&session, false)?;
     if session.args.only_codegen { Ok(()) } else { verify_project(project, session) }
 }
 
@@ -80,7 +91,7 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
     debug!(n = harnesses.len(), ?harnesses, "verify_project");
 
     // Verification
-    let runner = harness_runner::HarnessRunner { sess: &session, project };
+    let runner = harness_runner::HarnessRunner { sess: &session, project: &project };
     let results = runner.check_all_harnesses(&harnesses)?;
 
     session.print_final_summary(&results)

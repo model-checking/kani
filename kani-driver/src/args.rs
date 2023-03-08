@@ -4,10 +4,17 @@
 #[cfg(feature = "unsound_experiments")]
 use crate::unsound_experiments::UnsoundExperimentArgs;
 use crate::util::warning;
+use kani_metadata::CbmcSolver;
 
-use clap::{error::Error, error::ErrorKind, CommandFactory, ValueEnum};
+use clap::builder::{PossibleValue, TypedValueParser};
+use clap::{
+    error::ContextKind, error::ContextValue, error::Error, error::ErrorKind, CommandFactory,
+    ValueEnum,
+};
 use std::ffi::OsString;
 use std::path::PathBuf;
+use std::str::FromStr;
+use strum::VariantNames;
 
 // By default we configure CBMC to use 16 bits to represent the object bits in pointers.
 const DEFAULT_OBJECT_BITS: u32 = 16;
@@ -106,6 +113,10 @@ pub struct KaniArgs {
     #[arg(long)]
     pub target_dir: Option<PathBuf>,
 
+    /// Force Kani to rebuild all packages before the verification.
+    #[arg(long)]
+    pub force_build: bool,
+
     /// Toggle between different styles of output
     #[arg(long, default_value = "regular", ignore_case = true, value_enum)]
     pub output_format: OutputFormat,
@@ -121,9 +132,15 @@ pub struct KaniArgs {
     /// This is an unstable feature. Consider using --harness instead
     #[arg(long, hide = true, requires("enable_unstable"))]
     pub function: Option<String>,
-    /// Entry point for verification (proof harness)
-    #[arg(long, conflicts_with = "function")]
-    pub harness: Option<String>,
+    /// If specified, only run harnesses that match this filter. This option can be provided
+    /// multiple times, which will run all tests matching any of the filters.
+    #[arg(
+        long = "harness",
+        conflicts_with = "function",
+        num_args(1),
+        value_name = "HARNESS_FILTER"
+    )]
+    pub harnesses: Vec<String>,
 
     /// Link external C files referenced by Rust code.
     /// This is an experimental feature and requires `--enable-unstable` to be used
@@ -148,8 +165,11 @@ pub struct KaniArgs {
     #[arg(long)]
     pub default_unwind: Option<u32>,
     /// Specify the value used for loop unwinding for the specified harness in CBMC
-    #[arg(long, requires("harness"))]
+    #[arg(long, requires("harnesses"))]
     pub unwind: Option<u32>,
+    /// Specify the CBMC solver to use. Overrides the harness `solver` attribute.
+    #[arg(long, value_parser = CbmcSolverValueParser::new(CbmcSolver::VARIANTS))]
+    pub solver: Option<CbmcSolver>,
     /// Pass through directly to CBMC; must be the last flag.
     /// This feature is unstable and it requires `--enable_unstable` to be used
     #[arg(
@@ -200,6 +220,10 @@ pub struct KaniArgs {
     #[arg(long, hide_short_help = true, requires("enable_unstable"))]
     pub ignore_global_asm: bool,
 
+    /// Write the GotoC symbol table to a file in JSON format instead of goto binary format.
+    #[arg(long, hide_short_help = true)]
+    pub write_json_symtab: bool,
+
     /// Execute CBMC's sanity checks to ensure the goto-program we generate is correct.
     #[arg(long, hide_short_help = true, requires("enable_unstable"))]
     pub run_sanity_checks: bool,
@@ -207,6 +231,16 @@ pub struct KaniArgs {
     /// Disable CBMC's slice formula which prevents values from being assigned to redundant variables in traces.
     #[arg(long, hide_short_help = true, requires("enable_unstable"))]
     pub no_slice_formula: bool,
+
+    /// Synthesize loop contracts for all loops.
+    #[arg(
+        long,
+        hide_short_help = true,
+        requires("enable_unstable"),
+        conflicts_with("unwind"),
+        conflicts_with("default_unwind")
+    )]
+    pub synthesize_loop_contracts: bool,
 
     /// Randomize the layout of structures. This option can help catching code that relies on
     /// a specific layout chosen by the compiler that is not guaranteed to be stable in the future.
@@ -222,7 +256,7 @@ pub struct KaniArgs {
         long,
         hide_short_help = true,
         requires("enable_unstable"),
-        requires("harness"),
+        requires("harnesses"),
         conflicts_with("concrete_playback")
     )]
     pub enable_stubbing: bool,
@@ -468,6 +502,14 @@ impl KaniArgs {
             );
         }
 
+        if self.visualize && !self.enable_unstable {
+            return Err(Error::raw(
+                ErrorKind::MissingRequiredArgument,
+                "Missing argument: --visualize now requires --enable-unstable
+                    due to open issues involving incorrect results.",
+            ));
+        }
+
         if self.mir_linker {
             self.print_deprecated("--mir-linker");
         }
@@ -549,6 +591,61 @@ impl KaniArgs {
     }
 }
 
+/// clap parser for `CbmcSolver`
+#[derive(Clone, Debug)]
+pub struct CbmcSolverValueParser(Vec<PossibleValue>);
+
+impl CbmcSolverValueParser {
+    pub fn new(values: impl Into<CbmcSolverValueParser>) -> Self {
+        values.into()
+    }
+}
+
+impl TypedValueParser for CbmcSolverValueParser {
+    type Value = CbmcSolver;
+
+    fn parse_ref(
+        &self,
+        cmd: &clap::builder::Command,
+        arg: Option<&clap::builder::Arg>,
+        value: &std::ffi::OsStr,
+    ) -> Result<Self::Value, clap::error::Error> {
+        let value = value.to_str().unwrap();
+        // `value` is one of the possible `CbmcSolver` values or `bin=<binary>`
+        let segments: Vec<&str> = value.split('=').collect();
+
+        let mut err = clap::Error::new(ErrorKind::InvalidValue).with_cmd(cmd);
+        err.insert(ContextKind::InvalidArg, ContextValue::String(arg.unwrap().to_string()));
+        err.insert(ContextKind::InvalidValue, ContextValue::String(value.to_string()));
+
+        if segments.len() == 2 {
+            if segments[0] != "bin" {
+                return Err(err);
+            }
+            return Ok(CbmcSolver::Binary(segments[1].into()));
+        } else if segments.len() == 1 {
+            let solver = CbmcSolver::from_str(value);
+            return solver.map_err(|_| err);
+        }
+        Err(err)
+    }
+
+    /// Used for the help message
+    fn possible_values(&self) -> Option<Box<dyn Iterator<Item = PossibleValue> + '_>> {
+        Some(Box::new(self.0.iter().cloned()))
+    }
+}
+
+impl<I, T> From<I> for CbmcSolverValueParser
+where
+    I: IntoIterator<Item = T>,
+    T: Into<PossibleValue>,
+{
+    fn from(values: I) -> Self {
+        Self(values.into_iter().map(|t| t.into()).collect())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use clap::Parser;
@@ -577,6 +674,25 @@ mod tests {
         .unwrap();
         // no assertion: the above might fail if it fails to allow 0 args to cbmc-args
     }
+
+    /// Ensure users can pass multiple harnesses options and that the value is accumulated.
+    #[test]
+    fn check_multiple_harnesses() {
+        let args =
+            StandaloneArgs::try_parse_from("kani input.rs --harness a --harness b".split(" "))
+                .unwrap();
+        assert_eq!(args.common_opts.harnesses, vec!["a".to_owned(), "b".to_owned()]);
+    }
+
+    #[test]
+    fn check_multiple_harnesses_without_flag_fail() {
+        let result = StandaloneArgs::try_parse_from(
+            "kani input.rs --harness harness_1 harness_2".split(" "),
+        );
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+    }
+
     #[test]
     fn check_multiple_packages() {
         // accepts repeated:
@@ -590,8 +706,8 @@ mod tests {
         ]);
         // BUG: should not accept sequential:
         // Related: https://github.com/model-checking/kani/issues/2025
-        // Currently asserting this backwards from how it should be!
-        assert!(!b.is_err());
+        // This assert should ideally return an error, and the assertion should instead be assert!(b.is_err())
+        assert!(b.is_ok());
     }
 
     fn check(args: &str, require_unstable: bool, pred: fn(StandaloneArgs) -> bool) {

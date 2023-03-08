@@ -27,6 +27,11 @@ use super::AssessArgs;
 /// This is not a stable interface.
 #[derive(Serialize, Deserialize)]
 pub struct AssessMetadata {
+    /// Kani version that was used to generate the metadata.
+    #[serde(rename = "kani_version")]
+    pub version: String,
+    /// Contains an error message in cases where it failed the execution.
+    pub error: Option<SessionError>,
     /// Report on the presence of `codegen_unimplemented` in the analyzed packages
     pub unsupported_features: TableBuilder<UnsupportedFeaturesTableRow>,
     /// Report of the reasons why tests could not be analyzed by Kani
@@ -35,30 +40,60 @@ pub struct AssessMetadata {
     pub promising_tests: TableBuilder<PromisingTestsTableRow>,
 }
 
+impl AssessMetadata {
+    pub fn new(
+        unsupported_features: TableBuilder<UnsupportedFeaturesTableRow>,
+        failure_reasons: TableBuilder<FailureReasonsTableRow>,
+        promising_tests: TableBuilder<PromisingTestsTableRow>,
+    ) -> AssessMetadata {
+        AssessMetadata {
+            version: env!("CARGO_PKG_VERSION").to_string(),
+            error: None,
+            unsupported_features,
+            failure_reasons,
+            promising_tests,
+        }
+    }
+
+    pub fn from_error(err: &dyn std::error::Error) -> AssessMetadata {
+        let error = Some(SessionError {
+            root_cause: err.source().map(|e| format!("{e:#}")),
+            msg: err.to_string(),
+        });
+        AssessMetadata {
+            version: env!("CARGO_PKG_VERSION").to_string(),
+            error,
+            unsupported_features: TableBuilder::new(),
+            failure_reasons: TableBuilder::new(),
+            promising_tests: TableBuilder::new(),
+        }
+    }
+    pub fn empty() -> AssessMetadata {
+        AssessMetadata {
+            version: env!("CARGO_PKG_VERSION").to_string(),
+            error: None,
+            unsupported_features: TableBuilder::new(),
+            failure_reasons: TableBuilder::new(),
+            promising_tests: TableBuilder::new(),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SessionError {
+    pub root_cause: Option<String>,
+    pub msg: String,
+}
+
 /// If given the argument to so do, write the assess metadata to the target file.
-pub(crate) fn write_metadata(args: &AssessArgs, build: AssessMetadata) -> Result<()> {
+pub(crate) fn write_metadata(args: &AssessArgs, metadata: AssessMetadata) -> Result<()> {
     if let Some(path) = &args.emit_metadata {
         let out_file = File::create(&path)?;
         let writer = BufWriter::new(out_file);
         // use pretty for now to keep things readable and debuggable, but this should change eventually
-        serde_json::to_writer_pretty(writer, &build)?;
+        serde_json::to_writer_pretty(writer, &metadata)?;
     }
     Ok(())
-}
-
-/// Write metadata with unsupported features only, supporting the `--only-codegen` option.
-pub(crate) fn write_partial_metadata(
-    args: &AssessArgs,
-    unsupported_features: TableBuilder<UnsupportedFeaturesTableRow>,
-) -> Result<()> {
-    write_metadata(
-        args,
-        AssessMetadata {
-            unsupported_features,
-            failure_reasons: TableBuilder::new(),
-            promising_tests: TableBuilder::new(),
-        },
-    )
 }
 
 /// Read assess metadata from a file.
@@ -72,11 +107,7 @@ pub(crate) fn read_metadata(path: &Path) -> Result<AssessMetadata> {
 /// This is not a complicated operation, because the assess metadata structure is meant
 /// to accomodate multiple packages already, so we're just "putting it together".
 pub(crate) fn aggregate_metadata(metas: Vec<AssessMetadata>) -> AssessMetadata {
-    let mut result = AssessMetadata {
-        unsupported_features: TableBuilder::new(),
-        failure_reasons: TableBuilder::new(),
-        promising_tests: TableBuilder::new(),
-    };
+    let mut result = AssessMetadata::empty();
     for meta in metas {
         for item in meta.unsupported_features.build() {
             result.unsupported_features.add(item.clone());

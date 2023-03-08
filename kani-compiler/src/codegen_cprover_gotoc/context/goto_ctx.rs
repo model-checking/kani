@@ -42,13 +42,13 @@ use rustc_target::abi::Endian;
 use rustc_target::abi::{HasDataLayout, TargetDataLayout};
 use rustc_target::spec::Target;
 use std::path::Path;
-use std::rc::Rc;
 
 pub struct GotocCtx<'tcx> {
     /// the typing context
     pub tcx: TyCtxt<'tcx>,
-    /// the query system for kani
-    pub queries: Rc<QueryDb>,
+    /// a snapshot of the query values. The queries shouldn't change at this point,
+    /// so we just keep a copy.
+    pub queries: QueryDb,
     /// the generated symbol table for gotoc
     pub symbol_table: SymbolTable,
     pub hooks: GotocHooks<'tcx>,
@@ -79,7 +79,7 @@ pub struct GotocCtx<'tcx> {
 
 /// Constructor
 impl<'tcx> GotocCtx<'tcx> {
-    pub fn new(tcx: TyCtxt<'tcx>, queries: Rc<QueryDb>) -> GotocCtx<'tcx> {
+    pub fn new(tcx: TyCtxt<'tcx>, queries: QueryDb) -> GotocCtx<'tcx> {
         let fhks = fn_hooks();
         let mm = machine_model_from_session(tcx.sess);
         let symbol_table = SymbolTable::new(mm);
@@ -131,10 +131,10 @@ impl<'tcx> GotocCtx<'tcx> {
                         // We likely (and should) have no instances of
                         // calling `codegen_unimplemented` without file/line.
                         // So while we map out of `Option` here, we expect them to always be `Some`
-                        (
-                            l.filename().unwrap_or_default(),
-                            l.start_line().map(|x| x.to_string()).unwrap_or_default(),
-                        )
+                        kani_metadata::Location {
+                            filename: l.filename().unwrap_or_default(),
+                            start_line: l.start_line().unwrap_or_default(),
+                        }
                     })
                     .collect(),
             })

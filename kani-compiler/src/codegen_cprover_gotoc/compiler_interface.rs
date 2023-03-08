@@ -5,13 +5,17 @@
 
 use crate::codegen_cprover_gotoc::archive::ArchiveBuilder;
 use crate::codegen_cprover_gotoc::GotocCtx;
+use crate::kani_middle::attributes::is_proof_harness;
+use crate::kani_middle::attributes::is_test_harness_description;
+use crate::kani_middle::check_crate_items;
 use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{
     collect_reachable_items, filter_closures_in_const_crate_items, filter_crate_items,
 };
-use bitflags::_core::any::Any;
 use cbmc::goto_program::Location;
+use cbmc::irep::goto_binary_serde::write_goto_binary_file;
 use cbmc::{InternedString, MachineModel};
+use kani_metadata::CompilerArtifactStub;
 use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata};
 use kani_queries::{QueryDb, ReachabilityType, UserInput};
 use rustc_codegen_ssa::back::metadata::create_wrapper_file;
@@ -20,7 +24,6 @@ use rustc_codegen_ssa::{CodegenResults, CrateInfo};
 use rustc_data_structures::fx::FxHashMap;
 use rustc_data_structures::temp_dir::MaybeTempDir;
 use rustc_errors::ErrorGuaranteed;
-use rustc_hir::def::DefKind;
 use rustc_hir::def_id::LOCAL_CRATE;
 use rustc_metadata::fs::{emit_wrapper_file, METADATA_FILENAME};
 use rustc_metadata::EncodedMetadata;
@@ -36,6 +39,7 @@ use rustc_session::Session;
 use rustc_span::def_id::DefId;
 use rustc_target::abi::Endian;
 use rustc_target::spec::PanicStrategy;
+use std::any::Any;
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fmt::Write;
@@ -45,19 +49,23 @@ use std::io::Write as IoWrite;
 use std::iter::FromIterator;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tempfile::Builder as TempFileBuilder;
 use tracing::{debug, error, info};
 
 #[derive(Clone)]
 pub struct GotocCodegenBackend {
-    queries: Rc<QueryDb>,
+    /// The query is shared with `KaniCompiler` and it is initialized as part of `rustc`
+    /// initialization, which may happen after this object is created.
+    /// Since we don't have any guarantees on when the compiler creates the Backend object, neither
+    /// in which thread it will be used, we prefer to explicitly synchronize any query access.
+    queries: Arc<Mutex<QueryDb>>,
 }
 
 impl GotocCodegenBackend {
-    pub fn new(queries: &Rc<QueryDb>) -> Self {
-        GotocCodegenBackend { queries: Rc::clone(queries) }
+    pub fn new(queries: Arc<Mutex<QueryDb>>) -> Self {
+        GotocCodegenBackend { queries }
     }
 }
 
@@ -67,11 +75,15 @@ impl CodegenBackend for GotocCodegenBackend {
     }
 
     fn provide(&self, providers: &mut Providers) {
-        provide::provide(providers, &self.queries);
+        provide::provide(providers, &self.queries.lock().unwrap());
     }
 
     fn provide_extern(&self, providers: &mut ty::query::ExternProviders) {
         provide::provide_extern(providers);
+    }
+
+    fn print_version(&self) {
+        println!("Kani-goto version: {}", env!("CARGO_PKG_VERSION"));
     }
 
     fn codegen_crate(
@@ -84,10 +96,10 @@ impl CodegenBackend for GotocCodegenBackend {
 
         // Follow rustc naming convention (cx is abbrev for context).
         // https://rustc-dev-guide.rust-lang.org/conventions.html#naming-conventions
-        let mut gcx = GotocCtx::new(tcx, self.queries.clone());
+        let mut gcx = GotocCtx::new(tcx, (*self.queries.lock().unwrap()).clone());
         check_target(tcx.sess);
         check_options(tcx.sess);
-        check_crate_items(&gcx);
+        check_crate_items(gcx.tcx, gcx.queries.get_ignore_global_asm());
 
         let items = with_timer(|| collect_codegen_items(&gcx), "codegen reachability analysis");
         if items.is_empty() {
@@ -153,6 +165,10 @@ impl CodegenBackend for GotocCodegenBackend {
         // Print compilation report.
         print_report(&gcx, tcx);
 
+        // Map from name to prettyName for all symbols
+        let pretty_name_map: BTreeMap<InternedString, Option<InternedString>> =
+            BTreeMap::from_iter(gcx.symbol_table.iter().map(|(k, s)| (*k, s.pretty_name)));
+
         // Map MIR types to GotoC types
         let type_map: BTreeMap<InternedString, InternedString> =
             BTreeMap::from_iter(gcx.type_map.iter().map(|(k, v)| (*k, v.to_string().into())));
@@ -170,15 +186,23 @@ impl CodegenBackend for GotocCodegenBackend {
         if !tcx.sess.opts.unstable_opts.no_codegen && tcx.sess.opts.output_types.should_codegen() {
             let outputs = tcx.output_filenames(());
             let base_filename = outputs.output_path(OutputType::Object);
-            let pretty = self.queries.get_output_pretty_json();
-            write_file(&base_filename, ArtifactType::SymTab, &gcx.symbol_table, pretty);
+            let pretty = self.queries.lock().unwrap().get_output_pretty_json();
+            write_file(&base_filename, ArtifactType::PrettyNameMap, &pretty_name_map, pretty);
+            if gcx.queries.get_write_json_symtab() {
+                write_file(&base_filename, ArtifactType::SymTab, &gcx.symbol_table, pretty);
+                symbol_table_to_gotoc(&tcx, &base_filename);
+            } else {
+                write_goto_binary_file(
+                    &base_filename.with_extension(ArtifactType::SymTabGoto),
+                    &gcx.symbol_table,
+                );
+            }
             write_file(&base_filename, ArtifactType::TypeMap, &type_map, pretty);
             write_file(&base_filename, ArtifactType::Metadata, &metadata, pretty);
             // If they exist, write out vtable virtual call function pointer restrictions
             if let Some(restrictions) = vtable_restrictions {
                 write_file(&base_filename, ArtifactType::VTableRestriction, &restrictions, pretty);
             }
-            symbol_table_to_gotoc(&tcx, &base_filename);
         }
         codegen_results(tcx, rustc_metadata, gcx.symbol_table.machine_model())
     }
@@ -194,7 +218,7 @@ impl CodegenBackend for GotocCodegenBackend {
             .unwrap())
     }
 
-    /// Emit `rlib` files during the link stage if it was requested.
+    /// Emit output files during the link stage if it was requested.
     ///
     /// We need to emit `rlib` files normally if requested. Cargo expects these in some
     /// circumstances and sends them to subsequent builds with `-L`.
@@ -204,6 +228,10 @@ impl CodegenBackend for GotocCodegenBackend {
     /// Types such as `bin`, `cdylib`, `dylib` will trigger the native linker.
     ///
     /// Thus, we manually build the rlib file including only the `rmeta` file.
+    ///
+    /// For cases where no metadata file was requested, we stub the file requested by writing the
+    /// path of the `kani-metadata.json` file so `kani-driver` can safely find the latest metadata.
+    /// See <https://github.com/model-checking/kani/issues/2234> for more details.
     fn link(
         &self,
         sess: &Session,
@@ -211,27 +239,37 @@ impl CodegenBackend for GotocCodegenBackend {
         outputs: &OutputFilenames,
     ) -> Result<(), ErrorGuaranteed> {
         let requested_crate_types = sess.crate_types();
-        if !requested_crate_types.contains(&CrateType::Rlib) {
-            // Quit successfully if we don't need an `rlib`:
-            return Ok(());
+        for crate_type in requested_crate_types {
+            let out_path = out_filename(
+                sess,
+                *crate_type,
+                outputs,
+                codegen_results.crate_info.local_crate_name,
+            );
+            debug!(?crate_type, ?out_path, "link");
+            if *crate_type == CrateType::Rlib {
+                // Emit the `rlib` that contains just one file: `<crate>.rmeta`
+                let mut builder = ArchiveBuilder::new(sess);
+                let tmp_dir = TempFileBuilder::new().prefix("kani").tempdir().unwrap();
+                let path = MaybeTempDir::new(tmp_dir, sess.opts.cg.save_temps);
+                let (metadata, _metadata_position) = create_wrapper_file(
+                    sess,
+                    b".rmeta".to_vec(),
+                    codegen_results.metadata.raw_data(),
+                );
+                let metadata = emit_wrapper_file(sess, &metadata, &path, METADATA_FILENAME);
+                builder.add_file(&metadata);
+                builder.build(&out_path);
+            } else {
+                // Write the location of the kani metadata file in the requested compiler output file.
+                let base_filename = outputs.output_path(OutputType::Object);
+                let content_stub = CompilerArtifactStub {
+                    metadata_path: base_filename.with_extension(ArtifactType::Metadata),
+                };
+                let out_file = File::create(out_path).unwrap();
+                serde_json::to_writer(out_file, &content_stub).unwrap();
+            }
         }
-
-        // Emit the `rlib` that contains just one file: `<crate>.rmeta`
-        let mut builder = ArchiveBuilder::new(sess);
-        let tmp_dir = TempFileBuilder::new().prefix("kani").tempdir().unwrap();
-        let path = MaybeTempDir::new(tmp_dir, sess.opts.cg.save_temps);
-        let (metadata, _metadata_position) =
-            create_wrapper_file(sess, b".rmeta".to_vec(), codegen_results.metadata.raw_data());
-        let metadata = emit_wrapper_file(sess, &metadata, &path, METADATA_FILENAME);
-        builder.add_file(&metadata);
-
-        let rlib = out_filename(
-            sess,
-            CrateType::Rlib,
-            outputs,
-            codegen_results.crate_info.local_crate_name,
-        );
-        builder.build(&rlib);
         Ok(())
     }
 }
@@ -290,34 +328,6 @@ fn check_options(session: &Session) {
     }
 
     session.abort_if_errors();
-}
-
-/// Check that all crate items are supported and there's no misconfiguration.
-/// This method will exhaustively print any error / warning and it will abort at the end if any
-/// error was found.
-fn check_crate_items(gcx: &GotocCtx) {
-    let tcx = gcx.tcx;
-    for item in tcx.hir_crate_items(()).items() {
-        let def_id = item.owner_id.def_id.to_def_id();
-        gcx.check_attributes(def_id);
-        if tcx.def_kind(def_id) == DefKind::GlobalAsm {
-            if !gcx.queries.get_ignore_global_asm() {
-                let error_msg = format!(
-                    "Crate {} contains global ASM, which is not supported by Kani. Rerun with \
-                    `--enable-unstable --ignore-global-asm` to suppress this error \
-                    (**Verification results may be impacted**).",
-                    gcx.short_crate_name()
-                );
-                tcx.sess.err(&error_msg);
-            } else {
-                tcx.sess.warn(format!(
-                    "Ignoring global ASM in crate {}. Verification results may be impacted.",
-                    gcx.short_crate_name()
-                ));
-            }
-        }
-    }
-    tcx.sess.abort_if_errors();
 }
 
 /// Prints a report at the end of the compilation.
@@ -395,14 +405,14 @@ fn collect_codegen_items<'tcx>(gcx: &GotocCtx<'tcx>) -> Vec<MonoItem<'tcx>> {
         }
         ReachabilityType::Harnesses => {
             // Cross-crate collecting of all items that are reachable from the crate harnesses.
-            let harnesses = filter_crate_items(tcx, |_, def_id| gcx.is_proof_harness(def_id));
+            let harnesses = filter_crate_items(tcx, |_, def_id| is_proof_harness(gcx.tcx, def_id));
             collect_reachable_items(tcx, &harnesses).into_iter().collect()
         }
         ReachabilityType::Tests => {
             // We're iterating over crate items here, so what we have to codegen is the "test description" containing the
             // test closure that we want to execute
             let harnesses = filter_closures_in_const_crate_items(tcx, |_, def_id| {
-                gcx.is_test_harness_description(def_id)
+                is_test_harness_description(gcx.tcx, def_id)
             });
             collect_reachable_items(tcx, &harnesses).into_iter().collect()
         }

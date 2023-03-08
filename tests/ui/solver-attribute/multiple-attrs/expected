@@ -1,0 +1,6 @@
+error: only one '#[kani::solver]' attribute is allowed per harness\
+test.rs:\
+|\
+| #[kani::solver(kissat)]\
+| ^^^^^^^^^^^^^^^^^^^^^^^
+error: aborting due to previous error

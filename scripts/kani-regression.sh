@@ -22,8 +22,8 @@ KANI_DIR=$SCRIPT_DIR/..
 export KANI_FAIL_ON_UNEXPECTED_DESCRIPTION="true"
 
 # Required dependencies
-check-cbmc-version.py --major 5 --minor 75
-check-cbmc-viewer-version.py --major 3 --minor 5
+check-cbmc-version.py --major 5 --minor 78
+check-cbmc-viewer-version.py --major 3 --minor 8
 check_kissat_version.sh
 
 # Formatting check
@@ -32,6 +32,8 @@ ${SCRIPT_DIR}/kani-fmt.sh --check
 # Build all packages in the workspace
 if [[ "" != "${KANI_ENABLE_UNSOUND_EXPERIMENTS-}" ]]; then
   cargo build-dev -- --features unsound_experiments
+elif [[ "" != "${KANI_ENABLE_WRITE_JSON_SYMTAB-}" ]]; then
+  cargo build-dev -- --features write_json_symtab
 else
   cargo build-dev
 fi
@@ -74,7 +76,8 @@ for testp in "${TESTS[@]}"; do
   suite=${testl[0]}
   mode=${testl[1]}
   echo "Check compiletest suite=$suite mode=$mode"
-  cargo run -p compiletest --quiet -- --suite $suite --mode $mode --quiet
+  cargo run -p compiletest --quiet -- --suite $suite --mode $mode \
+      --quiet --no-fail-fast
 done
 
 # Check codegen for the standard library
