@@ -1,0 +1,7 @@
+Checking harness verify::check...
+
+verify::check.assertion\
+Status: SUCCESS\
+Description: "assertion failed: env!("RUNNING_KANI") == "Yes""
+
+VERIFICATION:- SUCCESSFUL
