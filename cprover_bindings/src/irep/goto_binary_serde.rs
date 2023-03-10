@@ -538,7 +538,8 @@ where
     fn write_header(&mut self) {
         // Write header
         let header = [0x7f, b'G', b'B', b'F'];
-        assert!(self.buf.write(&header[..]).unwrap() == 4);
+        let written = self.buf.write(&header[..]).unwrap();
+        assert!(written == 4);
 
         // Write goto binary version
         self.write_usize_varenc(5);
@@ -595,18 +596,14 @@ where
         }
     }
 
-    // #[cfg(test)]
-    // /// Returns memory consumption and sharing statistics about the deserializer.
-    // fn get_stats(&self) -> GotoBinarySharingStats {
-    //     GotoBinarySharingStats::from_deserializer(self)
-    // }
-
     /// Returns Err if the found value is not the expected value.
     fn expect<T: Eq + std::fmt::Display>(found: T, expected: T) -> io::Result<T> {
         if found != expected {
             return Err(Error::new(
                 ErrorKind::Other,
-                format!("expected {expected} in byte stream, found {found} instead)"),
+                format!(
+                    "Invalid goto binary input: expected {expected} in byte stream, found {found} instead)"
+                ),
             ));
         }
         Ok(found)
@@ -631,7 +628,7 @@ where
         }
         let old = self.string_map[num_binary];
         if old.is_some() {
-            panic!("string number already mapped");
+            panic!("Invalid goto binary input: string number {num_binary} already mapped");
         }
         self.string_map[num_binary] = Some(num);
     }
@@ -655,7 +652,7 @@ where
         }
         let old = self.irep_map[num_binary];
         if old.is_some() {
-            panic!("irep number already mapped");
+            panic!("Invalid goto binary input: irep number {num_binary} already mapped");
         }
         self.irep_map[num_binary] = Some(num);
     }
@@ -665,7 +662,10 @@ where
         match self.bytes.next() {
             Some(Ok(u)) => Ok(u),
             Some(Err(error)) => Err(error),
-            None => Err(Error::new(ErrorKind::Other, "unexpected end of input")),
+            None => Err(Error::new(
+                ErrorKind::Other,
+                "Invalid goto binary input: unexpected end of input",
+            )),
         }
     }
 
@@ -681,7 +681,7 @@ where
                     if shift >= max_shift {
                         return Err(Error::new(
                             ErrorKind::Other,
-                            "serialized value is too large to fit in usize",
+                            "Invalid goto binary input: serialized value is too large to fit in usize",
                         ));
                     };
                     result |= ((u & 0x7f) as usize) << shift;
@@ -694,7 +694,10 @@ where
                     return Err(error);
                 }
                 None => {
-                    return Err(Error::new(ErrorKind::Other, "unexpected end of input"));
+                    return Err(Error::new(
+                        ErrorKind::Other,
+                        "Invalid goto binary input: unexpected end of input",
+                    ));
                 }
             }
         }
@@ -742,7 +745,7 @@ where
                                     None => {
                                         return Err(Error::new(
                                             ErrorKind::Other,
-                                            "unexpected end of input",
+                                            "Invalid goto binary input: unexpected end of input",
                                         ));
                                     }
                                 }
@@ -759,7 +762,10 @@ where
                     }
                     None => {
                         // No more bytes left
-                        return Err(Error::new(ErrorKind::Other, "unexpected end of input"));
+                        return Err(Error::new(
+                            ErrorKind::Other,
+                            "Invalid goto binary input: unexpected end of input",
+                        ));
                     }
                 }
             }
@@ -791,7 +797,10 @@ where
                 match c {
                     b'S' => {
                         if sub_done {
-                            return Err(Error::new(ErrorKind::Other, "incorrect binary structure"));
+                            return Err(Error::new(
+                                ErrorKind::Other,
+                                "Invalid goto binary input: incorrect binary structure",
+                            ));
                         }
                         let decoded_sub = self.read_numbered_irep_ref()?;
                         sub.push(decoded_sub.number);
@@ -817,7 +826,10 @@ where
                     other => {
                         return Err(Error::new(
                             ErrorKind::Other,
-                            format!("unexpected character in input stream {}", other as char),
+                            format!(
+                                "Invalid goto binary input: unexpected character in input stream {}",
+                                other as char
+                            ),
                         ));
                     }
                 }
@@ -915,7 +927,7 @@ where
             return Err(Error::new(
                 ErrorKind::Other,
                 format!(
-                    "unsupported GOTO binary version: {}. Supported version: {}",
+                    "Unsupported GOTO binary version: {}. Supported version: {}",
                     goto_binary_version, 5
                 ),
             ));
