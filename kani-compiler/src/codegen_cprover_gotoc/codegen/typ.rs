@@ -272,7 +272,7 @@ impl<'tcx> GotocCtx<'tcx> {
             let env = prev_args[0];
 
             // Recombine arguments: environment first, then the flattened tuple elements
-            let recombined_args = iter::once(env).chain(args);
+            let recombined_args: Vec<_> = iter::once(env).chain(args).collect();
 
             return ty::Binder::bind_with_vars(
                 self.tcx.mk_fn_sig(
@@ -297,7 +297,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         // In addition to `def_id` and `substs`, we need to provide the kind of region `env_region`
         // in `closure_env_ty`, which we can build from the bound variables as follows
-        let bound_vars = self.tcx.mk_bound_variable_kinds(
+        let bound_vars = self.tcx.mk_bound_variable_kinds_from_iter(
             sig.bound_vars().iter().chain(iter::once(ty::BoundVariableKind::Region(ty::BrEnv))),
         );
         let br = ty::BoundRegion {
@@ -314,7 +314,7 @@ impl<'tcx> GotocCtx<'tcx> {
         //  * the rest of attributes are obtained from `sig`
         let sig = ty::Binder::bind_with_vars(
             self.tcx.mk_fn_sig(
-                iter::once(env_ty).chain(iter::once(sig.inputs()[0])),
+                [env_ty, sig.inputs()[0]],
                 sig.output(),
                 sig.c_variadic,
                 sig.unsafety,
@@ -338,7 +338,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> ty::PolyFnSig<'tcx> {
         let sig = substs.as_generator().poly_sig();
 
-        let bound_vars = self.tcx.mk_bound_variable_kinds(
+        let bound_vars = self.tcx.mk_bound_variable_kinds_from_iter(
             sig.bound_vars().iter().chain(iter::once(ty::BoundVariableKind::Region(ty::BrEnv))),
         );
         let br = ty::BoundRegion {
@@ -346,11 +346,11 @@ impl<'tcx> GotocCtx<'tcx> {
             kind: ty::BoundRegionKind::BrEnv,
         };
         let env_region = ty::ReLateBound(ty::INNERMOST, br);
-        let env_ty = self.tcx.mk_mut_ref(self.tcx.mk_region(env_region), ty);
+        let env_ty = self.tcx.mk_mut_ref(self.tcx.mk_region_from_kind(env_region), ty);
 
         let pin_did = self.tcx.require_lang_item(LangItem::Pin, None);
         let pin_adt_ref = self.tcx.adt_def(pin_did);
-        let pin_substs = self.tcx.intern_substs(&[env_ty.into()]);
+        let pin_substs = self.tcx.mk_substs(&[env_ty.into()]);
         let env_ty = self.tcx.mk_adt(pin_adt_ref, pin_substs);
 
         let sig = sig.skip_binder();
@@ -363,7 +363,7 @@ impl<'tcx> GotocCtx<'tcx> {
             // The signature should be `Future::poll(_, &mut Context<'_>) -> Poll<Output>`
             let poll_did = tcx.require_lang_item(LangItem::Poll, None);
             let poll_adt_ref = tcx.adt_def(poll_did);
-            let poll_substs = tcx.intern_substs(&[sig.return_ty.into()]);
+            let poll_substs = tcx.mk_substs(&[sig.return_ty.into()]);
             let ret_ty = tcx.mk_adt(poll_adt_ref, poll_substs);
 
             // We have to replace the `ResumeTy` that is used for type and borrow checking
@@ -384,7 +384,7 @@ impl<'tcx> GotocCtx<'tcx> {
             // The signature should be `Generator::resume(_, Resume) -> GeneratorState<Yield, Return>`
             let state_did = tcx.require_lang_item(LangItem::GeneratorState, None);
             let state_adt_ref = tcx.adt_def(state_did);
-            let state_substs = tcx.intern_substs(&[sig.yield_ty.into(), sig.return_ty.into()]);
+            let state_substs = tcx.mk_substs(&[sig.yield_ty.into(), sig.return_ty.into()]);
             let ret_ty = tcx.mk_adt(state_adt_ref, state_substs);
 
             (sig.resume_ty, ret_ty)
@@ -392,8 +392,8 @@ impl<'tcx> GotocCtx<'tcx> {
 
         ty::Binder::bind_with_vars(
             tcx.mk_fn_sig(
-                [env_ty, resume_ty].iter(),
-                &ret_ty,
+                [env_ty, resume_ty],
+                ret_ty,
                 false,
                 Unsafety::Normal,
                 rustc_target::spec::abi::Abi::Rust,
@@ -423,7 +423,7 @@ impl<'tcx> GotocCtx<'tcx> {
 impl<'tcx> GotocCtx<'tcx> {
     pub fn monomorphize<T>(&self, value: T) -> T
     where
-        T: TypeFoldable<'tcx>,
+        T: TypeFoldable<TyCtxt<'tcx>>,
     {
         // Instance is Some(..) only when current codegen unit is a function.
         if let Some(current_fn) = &self.current_fn {

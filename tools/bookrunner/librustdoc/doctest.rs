@@ -78,8 +78,10 @@ pub fn make_test(
             // send all the errors that librustc_ast emits directly into a `Sink` instead of stderr.
             let sm = Lrc::new(SourceMap::new(FilePathMapping::empty()));
 
-            let fallback_bundle =
-                rustc_errors::fallback_fluent_bundle(rustc_errors::DEFAULT_LOCALE_RESOURCES, false);
+            let fallback_bundle = rustc_errors::fallback_fluent_bundle(
+                vec![rustc_errors::DEFAULT_LOCALE_RESOURCE],
+                false,
+            );
             supports_color = EmitterWriter::stderr(
                 ColorConfig::Auto,
                 None,

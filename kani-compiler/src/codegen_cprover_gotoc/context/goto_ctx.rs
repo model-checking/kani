@@ -422,6 +422,7 @@ impl<'tcx> FnAbiOfHelpers<'tcx> for GotocCtx<'tcx> {
     }
 }
 
+#[derive(Debug)]
 pub struct GotocMetadataLoader();
 impl MetadataLoader for GotocMetadataLoader {
     fn get_rlib_metadata(&self, _: &Target, _filename: &Path) -> Result<MetadataRef, String> {

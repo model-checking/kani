@@ -215,7 +215,7 @@ struct MonoItemsFnCollector<'a, 'tcx> {
 impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {
     fn monomorphize<T>(&self, value: T) -> T
     where
-        T: TypeFoldable<'tcx>,
+        T: TypeFoldable<TyCtxt<'tcx>>,
     {
         trace!(instance=?self.instance, ?value, "monomorphize");
         self.instance.subst_mir_and_normalize_erasing_regions(

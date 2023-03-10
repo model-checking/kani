@@ -7,7 +7,7 @@ use crate::parser;
 use clap::ArgMatches;
 use rustc_errors::{
     emitter::Emitter, emitter::HumanReadableErrorType, fallback_fluent_bundle, json::JsonEmitter,
-    ColorConfig, Diagnostic, TerminalUrl,
+    ColorConfig, Diagnostic, TerminalUrl, DEFAULT_LOCALE_RESOURCE,
 };
 use std::panic;
 use std::str::FromStr;
@@ -47,8 +47,7 @@ static JSON_PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send
         panic::set_hook(Box::new(|info| {
             // Print stack trace.
             let msg = format!("Kani unexpectedly panicked at {info}.",);
-            let fallback_bundle =
-                fallback_fluent_bundle(rustc_errors::DEFAULT_LOCALE_RESOURCES, false);
+            let fallback_bundle = fallback_fluent_bundle(vec![DEFAULT_LOCALE_RESOURCE], false);
             let mut emitter = JsonEmitter::basic(
                 false,
                 HumanReadableErrorType::Default(ColorConfig::Never),
