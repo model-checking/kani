@@ -20,6 +20,9 @@ use strum_macros::{AsRefStr, EnumString, EnumVariantNames};
 )]
 #[strum(serialize_all = "snake_case")]
 pub enum CbmcSolver {
+    /// CaDiCaL which is available in CBMC as of version 5.77.0
+    Cadical,
+
     /// The kissat solver that is included in the Kani bundle
     Kissat,
 

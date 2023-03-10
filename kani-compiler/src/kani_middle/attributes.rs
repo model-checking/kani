@@ -276,7 +276,7 @@ fn parse_solver(tcx: TyCtxt, attr: &Attribute) -> Option<CbmcSolver> {
             }
         }
         MetaItemKind::NameValue(lit) if ident_str == "bin" && lit.kind.is_str() => {
-            Some(CbmcSolver::Binary(lit.token_lit.symbol.to_string()))
+            Some(CbmcSolver::Binary(lit.symbol.to_string()))
         }
         _ => {
             invalid_arg_err(attr);

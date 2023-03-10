@@ -4,7 +4,8 @@
 
 The Kani Rust Verifier is a bit-precise model checker for Rust.
 
-Kani is particularly useful for verifying unsafe code in Rust, where many of the language's usual guarantees are no longer checked by the compiler.
+Kani is particularly useful for verifying unsafe code blocks in Rust, where the "[unsafe superpowers](https://doc.rust-lang.org/stable/book/ch19-01-unsafe-rust.html#unsafe-superpowers)" are unchecked by the compiler.
+___
 Kani verifies:
  * Memory safety (e.g., null pointer dereferences)
  * User-specified assertions (i.e., `assert!(...)`)

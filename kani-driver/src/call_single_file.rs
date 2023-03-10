@@ -66,7 +66,7 @@ impl KaniSession {
 
     /// These arguments are arguments passed to kani-compiler that are `kani` compiler specific.
     pub fn kani_compiler_flags(&self) -> Vec<String> {
-        let mut flags = vec![];
+        let mut flags = vec![check_version()];
 
         if self.args.debug {
             flags.push("--log-level=debug".into());
@@ -85,6 +85,11 @@ impl KaniSession {
         }
         if self.args.ignore_global_asm {
             flags.push("--ignore-global-asm".into());
+        }
+
+        // Users activate it via the command line switch
+        if self.args.write_json_symtab {
+            flags.push("--write-json-symtab".into());
         }
 
         if self.args.enable_stubbing {
@@ -186,4 +191,12 @@ impl KaniSession {
 /// [fingerprint documentation](https://github.com/rust-lang/cargo/blob/82c3bb79e3a19a5164e33819ef81bfc2c984bc56/src/cargo/core/compiler/fingerprint/mod.rs)
 pub fn to_rustc_arg(kani_args: Vec<String>) -> String {
     format!(r#"-Cllvm-args={}"#, kani_args.join(" "))
+}
+
+/// Function that returns a `--check-version` argument to be added to the compiler flags.
+/// This is really just used to force the compiler to recompile everything from scratch when a user
+/// upgrades Kani. Cargo currently ignores the codegen backend version.
+/// See <https://github.com/model-checking/kani/issues/2140> for more context.
+fn check_version() -> String {
+    format!("--check-version={}", env!("CARGO_PKG_VERSION"))
 }

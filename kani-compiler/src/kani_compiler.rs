@@ -15,6 +15,7 @@
 //! in order to apply the stubs. For the subsequent runs, we add the stub configuration to
 //! `-C llvm-args`.
 
+#[cfg(feature = "cprover")]
 use crate::codegen_cprover_gotoc::GotocCodegenBackend;
 use crate::kani_middle::stubbing;
 use crate::parser::{self, KaniCompilerParser};
@@ -140,6 +141,9 @@ impl Callbacks for KaniCompiler {
                 .set_check_assertion_reachability(matches.get_flag(parser::ASSERTION_REACH_CHECKS));
             queries.set_output_pretty_json(matches.get_flag(parser::PRETTY_OUTPUT_FILES));
             queries.set_ignore_global_asm(matches.get_flag(parser::IGNORE_GLOBAL_ASM));
+            queries.set_write_json_symtab(
+                cfg!(feature = "write_json_symtab") || matches.get_flag(parser::WRITE_JSON_SYMTAB),
+            );
             queries.set_reachability_analysis(matches.reachability_type());
 
             #[cfg(feature = "unsound_experiments")]
@@ -165,7 +169,7 @@ impl Callbacks for KaniCompiler {
         rustc_queries: &'tcx rustc_interface::Queries<'tcx>,
     ) -> Compilation {
         if self.stubs.is_none() && self.queries.lock().unwrap().get_stubbing_enabled() {
-            rustc_queries.global_ctxt().unwrap().peek_mut().enter(|tcx| {
+            rustc_queries.global_ctxt().unwrap().enter(|tcx| {
                 let stubs = self.stubs.insert(self.collect_stubs(tcx));
                 debug!(?stubs, "after_analysis");
                 if stubs.is_empty() { Compilation::Continue } else { Compilation::Stop }

@@ -59,6 +59,8 @@ pub struct Project {
     pub merged_artifacts: bool,
     /// Records the cargo metadata from the build, if there was any
     pub cargo_metadata: Option<cargo_metadata::Metadata>,
+    /// For build `keep_going` mode, we collect the targets that we failed to compile.
+    pub failed_targets: Option<Vec<String>>,
 }
 
 impl Project {
@@ -98,7 +100,7 @@ impl Project {
 }
 
 /// Information about a build artifact.
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub struct Artifact {
     /// The path for this artifact in the canonical form.
     path: PathBuf,
@@ -121,12 +123,12 @@ impl Deref for Artifact {
 
 impl Artifact {
     /// Create a new artifact if the given path exists.
-    fn try_new(path: &Path, typ: ArtifactType) -> Result<Self> {
+    pub fn try_new(path: &Path, typ: ArtifactType) -> Result<Self> {
         Ok(Artifact { path: path.canonicalize()?, typ })
     }
 
     /// Check if this artifact has the given type.
-    fn has_type(&self, typ: ArtifactType) -> bool {
+    pub fn has_type(&self, typ: ArtifactType) -> bool {
         self.typ == typ
     }
 }
@@ -145,8 +147,10 @@ fn dump_metadata(metadata: &KaniMetadata, path: &Path) {
 }
 
 /// Generate a project using `cargo`.
-pub fn cargo_project(session: &KaniSession) -> Result<Project> {
-    let outputs = session.cargo_build()?;
+/// Accept a boolean to build as many targets as possible. The number of failures in that case can
+/// be collected from the project.
+pub fn cargo_project(session: &KaniSession, keep_going: bool) -> Result<Project> {
+    let outputs = session.cargo_build(keep_going)?;
     let mut artifacts = vec![];
     let outdir = outputs.outdir.canonicalize()?;
     if session.args.function.is_some() {
@@ -156,7 +160,14 @@ pub fn cargo_project(session: &KaniSession) -> Result<Project> {
         let joined_name = "cbmc-linked";
         let base_name = outdir.join(joined_name);
         let goto = base_name.with_extension(Goto);
-        session.link_goto_binary(&outputs.symtab_gotos, &goto)?;
+        let all_gotos = outputs
+            .metadata
+            .iter()
+            .map(|artifact| {
+                convert_type(&artifact, ArtifactType::Metadata, ArtifactType::SymTabGoto)
+            })
+            .collect::<Vec<_>>();
+        session.link_goto_binary(&all_gotos, &goto)?;
         artifacts.push(Artifact::try_new(&goto, Goto)?);
 
         // Merge metadata files.
@@ -174,6 +185,7 @@ pub fn cargo_project(session: &KaniSession) -> Result<Project> {
             metadata: vec![metadata],
             merged_artifacts: true,
             cargo_metadata: Some(outputs.cargo_metadata),
+            failed_targets: outputs.failed_targets,
         })
     } else {
         // For the MIR Linker we know there is only one artifact per verification target. Use
@@ -201,6 +213,7 @@ pub fn cargo_project(session: &KaniSession) -> Result<Project> {
             metadata,
             merged_artifacts: false,
             cargo_metadata: Some(outputs.cargo_metadata),
+            failed_targets: outputs.failed_targets,
         })
     }
 }
@@ -293,6 +306,7 @@ impl<'a> StandaloneProjectBuilder<'a> {
                 .collect(),
             merged_artifacts: false,
             cargo_metadata: None,
+            failed_targets: None,
         })
     }
 

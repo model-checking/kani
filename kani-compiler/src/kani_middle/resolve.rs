@@ -185,7 +185,7 @@ fn resolve_prefix<'tcx>(
             let current_module_hir_id = tcx.hir().local_def_id_to_hir_id(current_module);
             let crate_root = match tcx.hir().parent_iter(current_module_hir_id).last() {
                 None => current_module,
-                Some((hir_id, _)) => tcx.hir().local_def_id(hir_id),
+                Some((hir_id, _)) => hir_id.owner.def_id,
             };
             Ok(Path { base: crate_root.to_def_id(), segments: segments.collect() })
         }
@@ -227,7 +227,7 @@ where
     while segments.next_if(|segment| segment == SUPER).is_some() {
         if let Some((parent, _)) = parents.next() {
             debug!("parent: {parent:?}");
-            base_module = tcx.hir().local_def_id(parent);
+            base_module = parent.owner.def_id;
         } else {
             return Err(ResolveError::ExtraSuper);
         }

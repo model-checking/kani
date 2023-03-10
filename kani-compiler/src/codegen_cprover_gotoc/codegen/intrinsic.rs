@@ -365,7 +365,9 @@ impl<'tcx> GotocCtx<'tcx> {
             "add_with_overflow" => codegen_op_with_overflow!(add_overflow_result),
             "arith_offset" => self.codegen_offset(intrinsic, instance, fargs, p, loc),
             "assert_inhabited" => self.codegen_assert_intrinsic(instance, intrinsic, span),
-            "assert_uninit_valid" => self.codegen_assert_intrinsic(instance, intrinsic, span),
+            "assert_mem_uninitialized_valid" => {
+                self.codegen_assert_intrinsic(instance, intrinsic, span)
+            }
             "assert_zero_valid" => self.codegen_assert_intrinsic(instance, intrinsic, span),
             // https://doc.rust-lang.org/core/intrinsics/fn.assume.html
             // Informs the optimizer that a condition is always true.
@@ -781,9 +783,11 @@ impl<'tcx> GotocCtx<'tcx> {
             );
         }
 
+        let param_env_and_layout = ty::ParamEnv::reveal_all().and(layout);
+
         // Then we check if the type allows "raw" initialization for the cases
         // where memory is zero-initialized or entirely uninitialized
-        if intrinsic == "assert_zero_valid" && !self.tcx.permits_zero_init(layout) {
+        if intrinsic == "assert_zero_valid" && !self.tcx.permits_zero_init(param_env_and_layout) {
             return self.codegen_fatal_error(
                 PropertyClass::SafetyCheck,
                 &format!("attempted to zero-initialize type `{ty}`, which is invalid"),
@@ -791,7 +795,8 @@ impl<'tcx> GotocCtx<'tcx> {
             );
         }
 
-        if intrinsic == "assert_uninit_valid" && !self.tcx.permits_uninit_init(layout) {
+        if intrinsic == "assert_uninit_valid" && !self.tcx.permits_uninit_init(param_env_and_layout)
+        {
             return self.codegen_fatal_error(
                 PropertyClass::SafetyCheck,
                 &format!("attempted to leave type `{ty}` uninitialized, which is invalid"),

@@ -4,7 +4,7 @@
 # Command aliases
 [alias]
 # Build kani with development configuration.
-build-dev = "run -p build-kani -- build-dev"
+build-dev = "run --target-dir target/tools -p build-kani -- build-dev"
 # Build kani release bundle.
 bundle = "run -p build-kani -- bundle"
 
