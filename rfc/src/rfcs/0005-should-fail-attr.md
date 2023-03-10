@@ -3,7 +3,7 @@
 - **RFC PR:** <https://github.com/model-checking/kani/pull/2272>
 - **Status:** Under Review
 - **Version:** 0
-- **Proof-of-concept:** *Optional field. If you have implemented a proof of concept, add a link here*
+- **Proof-of-concept:** N/A
 
 ## Summary
 
@@ -32,7 +32,7 @@ This is further discussed in the [rationale and alternatives](#rationale-and-alt
 
 ## User Experience
 
-The scope of this functionality is limited to the overall verification result.
+The scope of this functionality is **limited to the overall verification result**.
 The [rationale section](#rationale-and-alternatives) discusses the granularity of failures, and how this attribute could be extended.
 
 ### Single Harness
@@ -69,7 +69,7 @@ The user wants to verify that calling `device.init()` more than once should resu
 > **NOTE**: We could convert this into a Rust unit test and add the `#[should_panic]` attribute to it.
 > However, there are two good reasons to have a verification-specific attribute that does the same:
 >  1. To ensure that other unexpected behaviors don't occur (e.g., overflows).
->  2. Because `#[should_panic]` cannot be used if the harness contains calls to Kani's API.
+>  2. Because `#[should_panic]` cannot be used if the test harness contains calls to Kani's API.
 
 Currently, this example produces a `VERIFICATION:- FAILED` result.
 In addition, it will return a non-successful code.
@@ -130,7 +130,7 @@ Complete - 3 successfully verified harnesses, 0 failures, 3 total.
 
 ### Availability
 
-This feature will only be available as an attribute.
+This feature **will only be available as an attribute**.
 That means this feature won't be available as a CLI option (i.e., `--should-panic`).
 There are good reasons to avoid the CLI option:
  - It'd make the design and implementation unnecessarily complex.
@@ -142,7 +142,7 @@ There are good reasons to avoid the CLI option:
 The `#[kani::should_panic]` attribute will become one of the most basic attributes in Kani.
 As such, it'll be mentioned in the tutorial and added to the dedicated section planned in [#2208](https://github.com/model-checking/kani/issues/2208).
 
-In general, we'll also advise against negative verification when a harness can be written both as a regular (positive) harness and a negative one.
+In general, **we'll also advise against negative verification** when a harness can be written both as a regular (positive) harness and a negative one.
 The feature, as it's presented in this proposal, won't allow checking that the panic failure is due to the panic we expected. 
 So there could be cases where the panic changes, but it goes unnoticed while running Kani.
 Because of that, it'll preferred that users write positive harnesses instead.
@@ -156,7 +156,7 @@ At a high level, we expect modifications in the following components:
 We don't expect these changes to require new dependencies.
 Besides, we don't expect these changes to be updated unless we decide to extend the attribute with further fields (see [Future possibilities](#future-possibilities) for more details).
 
-There is one design aspect that needs discussion: What should happen if multiple panics are triggered?
+There is one design aspect that needs discussion: **What should happen if multiple panics are triggered?**
 It seems that this scenario is less likely, but it's certainly possible and we may want to prevent it.
 The initial proposal is for `#[kani::should_panic]` to check that only one panic occurs in the harness
 This would also simplify [adding an `expected` argument](#alternative-3-the-expected-argument) later.
