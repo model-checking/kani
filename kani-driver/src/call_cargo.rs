@@ -99,6 +99,11 @@ impl KaniSession {
             cargo_args.push("-v".into());
         }
 
+        // Propagate `--cfg=kani` to build scripts.
+        cargo_args.push("-Zhost-config".into());
+        cargo_args.push("-Ztarget-applies-to-host".into());
+        cargo_args.push("--config=host.rustflags=[\"--cfg=kani\"]".into());
+
         // Arguments that will only be passed to the target package.
         let mut pkg_args: Vec<String> = vec![];
         pkg_args.extend(["--".to_string(), self.reachability_arg()]);
