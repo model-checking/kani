@@ -156,6 +156,11 @@ At a high level, we expect modifications in the following components:
 We don't expect these changes to require new dependencies.
 Besides, we don't expect these changes to be updated unless we decide to extend the attribute with further fields (see [Future possibilities](#future-possibilities) for more details).
 
+There is one design aspect that needs discussion: What should happen if multiple panics are triggered?
+It seems that this scenario is less likely, but it's certainly possible and we may want to prevent it.
+The initial proposal is for `#[kani::should_panic]` to check that only one panic occurs in the harness
+This would also simplify [adding an `expected` argument](#alternative-3-the-expected-argument) later.
+
 ## Rationale and alternatives
 
 This proposal would enable users to exercise negative verification with a relatively simple mechanism.
@@ -213,6 +218,7 @@ This proposal can also contribute to collect this data: once users can expect pa
 The main questions I'd like to get resolved are:
  - What is the best representation to use for this feature?
  - Do we want to extend `#[kani::should_panic]` with an `expected` field?
+ - Do we want to allow multiple panics with `#[kani::should_panic]`.
 
 Once the feature is available, it'd be good to gather user feedback to answer these questions:
  - Do we need a mechanism to express more granular expectations?
