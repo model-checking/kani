@@ -82,12 +82,12 @@ will refer to the name as `$CONTAINER_NAME` from now on.
 
 ## Running the List of Repositories
 In this step we will download the list of repositories using a script
-[kani-run-on-repos.sh](../../scripts/exps/kani-run-on-repos.sh)
+[assess-scan-on-repos.sh](../../scripts/exps/assess-scan-on-repos.sh)
 
 Make sure to have Kani ready to run. For that, see the [build instructions](cheat-sheets.md#build).
 
 From the repository root, you can run the script with
-`./scripts/exps/kani-run-on-repos.sh $URL_LIST_FILE` where
+`./scripts/exps/assess-scan-on-repos.sh $URL_LIST_FILE` where
 `$URL_LIST_FILE` points to a line-delimited list of URLs you want to
 run Kani on. Repositories that give warnings or errors can be grepping
 for with "STDERR Warnings" and "Error exit in" respectively.
