@@ -1,0 +1,2 @@
+error: only one '#[kani::should_panic]' attribute is allowed per harness
+error: aborting due to previous error

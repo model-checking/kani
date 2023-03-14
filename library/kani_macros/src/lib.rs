@@ -100,6 +100,25 @@ pub fn proof(attr: TokenStream, item: TokenStream) -> TokenStream {
 
 #[cfg(not(kani))]
 #[proc_macro_attribute]
+pub fn should_panic(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    // No-op in non-kani mode
+    item
+}
+
+#[cfg(kani)]
+#[proc_macro_attribute]
+pub fn should_panic(attr: TokenStream, item: TokenStream) -> TokenStream {
+    assert!(attr.is_empty(), "`#[kani::should_panic]` does not take any arguments for now");
+    let mut result = TokenStream::new();
+    let insert_string = "#[kanitool::should_panic]";
+    result.extend(insert_string.parse::<TokenStream>().unwrap());
+
+    result.extend(item);
+    result
+}
+
+#[cfg(not(kani))]
+#[proc_macro_attribute]
 pub fn unwind(_attr: TokenStream, item: TokenStream) -> TokenStream {
     // When the config is not kani, we should leave the function alone
     item

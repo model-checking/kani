@@ -16,10 +16,22 @@ use crate::cbmc_output_parser::{
 use crate::cbmc_property_renderer::{format_result, kani_cbmc_output_filter};
 use crate::session::KaniSession;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VerificationStatus {
     Success,
     Failure,
+}
+
+/// Classifies all possible outcomes when `#[kani::should_panic]` is being
+/// applied to the harness
+#[derive(Clone, Copy, Debug)]
+pub enum PanicOutcome {
+    // No failures were found
+    Zero,
+    // Found one or more panic-related failures
+    OneOrMore,
+    // Found other failures that weren't panic-related
+    OtherFailures,
 }
 
 /// Our (kani-driver) notions of CBMC results.
@@ -27,6 +39,12 @@ pub enum VerificationStatus {
 pub struct VerificationResult {
     /// Whether verification should be considered to have succeeded, or have failed.
     pub status: VerificationStatus,
+    /// Indicates if verification results are expected to contain panic-related failures and,
+    /// if they are, whether all failures in the results were panic-related or not.
+    ///  * `None` means panic-related failures aren't expected.
+    ///  * `Some(outcome)` means panic-related failures are expected, and `outcome`
+    ///     represents information about panic-related failures in the results.
+    pub should_panic: Option<PanicOutcome>,
     /// The parsed output, message by message, of CBMC. However, the `Result` message has been
     /// removed and is available in `results` instead.
     pub messages: Option<Vec<ParserItem>>,
@@ -76,7 +94,7 @@ impl KaniSession {
                 )
             })?;
 
-            VerificationResult::from(output, start_time)
+            VerificationResult::from(output, harness.attributes.should_panic, start_time)
         };
 
         self.gen_and_add_concrete_playback(harness, &mut verification_results)?;
@@ -234,13 +252,20 @@ impl VerificationResult {
     ///       (CBMC will regularly report "failure" but that's just our cover checks.)
     ///   2. Positively checking for the presence of results.
     ///       (Do not mistake lack of results for success: report it as failure.)
-    fn from(output: VerificationOutput, start_time: Instant) -> VerificationResult {
+    fn from(
+        output: VerificationOutput,
+        should_panic: bool,
+        start_time: Instant,
+    ) -> VerificationResult {
         let runtime = start_time.elapsed();
         let (items, results) = extract_results(output.processed_items);
 
         if let Some(results) = results {
+            let (status, should_panic) =
+                verification_outcome_from_properties(&results, should_panic);
             VerificationResult {
-                status: determine_status_from_properties(&results),
+                status,
+                should_panic,
                 messages: Some(items),
                 results: Ok(results),
                 runtime,
@@ -250,6 +275,7 @@ impl VerificationResult {
             // We never got results from CBMC - something went wrong (e.g. crash) so it's failure
             VerificationResult {
                 status: VerificationStatus::Failure,
+                should_panic: None,
                 messages: Some(items),
                 results: Err(output.process_status),
                 runtime,
@@ -261,6 +287,7 @@ impl VerificationResult {
     pub fn mock_success() -> VerificationResult {
         VerificationResult {
             status: VerificationStatus::Success,
+            should_panic: None,
             messages: None,
             results: Ok(vec![]),
             runtime: Duration::from_secs(0),
@@ -271,6 +298,7 @@ impl VerificationResult {
     fn mock_failure() -> VerificationResult {
         VerificationResult {
             status: VerificationStatus::Failure,
+            should_panic: None,
             messages: None,
             // on failure, exit codes in theory might be used,
             // but `mock_failure` should never be used in a context where they will,
@@ -284,8 +312,10 @@ impl VerificationResult {
     pub fn render(&self, output_format: &OutputFormat) -> String {
         match &self.results {
             Ok(results) => {
+                let status = self.status;
+                let should_panic = self.should_panic;
                 let show_checks = matches!(output_format, OutputFormat::Regular);
-                let mut result = format_result(results, show_checks);
+                let mut result = format_result(results, status, should_panic, show_checks);
                 writeln!(result, "Verification Time: {}s", self.runtime.as_secs_f32()).unwrap();
                 result
             }
@@ -310,13 +340,30 @@ impl VerificationResult {
 }
 
 /// We decide if verification succeeded based on properties, not (typically) on exit code
-fn determine_status_from_properties(properties: &[Property]) -> VerificationStatus {
-    let number_failed_properties =
-        properties.iter().filter(|prop| prop.status == CheckStatus::Failure).count();
-    if number_failed_properties == 0 {
-        VerificationStatus::Success
+fn verification_outcome_from_properties(
+    properties: &[Property],
+    should_panic: bool,
+) -> (VerificationStatus, Option<PanicOutcome>) {
+    let failed_properties: Vec<&Property> =
+        properties.iter().filter(|prop| prop.status == CheckStatus::Failure).collect();
+    if should_panic {
+        // Return `FAILURE` if there isn't at least one failed property
+        if failed_properties.is_empty() {
+            return (VerificationStatus::Failure, Some(PanicOutcome::Zero));
+        }
+        // Check if all failed properties correspond to the `assertion` class.
+        // Note: Panics caused by `panic!` and `assert!` fall into this class.
+        let all_failed_checks_are_panics =
+            failed_properties.iter().all(|prop| prop.property_class() == "assertion");
+        if all_failed_checks_are_panics {
+            (VerificationStatus::Success, Some(PanicOutcome::OneOrMore))
+        } else {
+            (VerificationStatus::Failure, Some(PanicOutcome::OtherFailures))
+        }
+    } else if failed_properties.is_empty() {
+        (VerificationStatus::Success, None)
     } else {
-        VerificationStatus::Failure
+        (VerificationStatus::Failure, None)
     }
 }
 
