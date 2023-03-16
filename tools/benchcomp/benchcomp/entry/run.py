@@ -5,7 +5,7 @@
 # benchmark suites x variants that are defined in a config file. After each
 # combination, this command uses a 'parser' to write the list of benchmarks and
 # their associated metrics to a file using a unified schema called
-# `suite.yaml`.Parsers are python submodules of benchcomp.parsers; the
+# `suite.yaml`. Parsers are python submodules of benchcomp.parsers; the
 # configuration file describes which parser to use for each benchmark suite.
 
 
@@ -39,7 +39,7 @@ class _SingleInvocation:
 
     env: dict = dataclasses.field(default_factory=dict)
     timeout: int = None
-    memount: int = None
+    memout: int = None
     patches: list = dataclasses.field(default_factory=list)
 
     def __post_init__(self):
@@ -108,11 +108,10 @@ class _Run:
 
         # Atomically symlink the symlink dir to the output dir, even if
         # there is already an existing symlink with that name
-        out_symlink = self.out_prefix / self.out_symlink
-        tmp_symlink = out_symlink.with_suffix(f".{uuid.uuid4()}")
+        tmp_symlink = self.out_symlink.with_suffix(f".{uuid.uuid4()}")
         tmp_symlink.parent.mkdir(exist_ok=True)
         tmp_symlink.symlink_to(out_path)
-        tmp_symlink.rename(out_symlink)
+        tmp_symlink.rename(self.out_symlink)
 
 
 def get_default_out_symlink():
@@ -124,7 +123,7 @@ def get_default_out_dir():
 
 
 def get_default_out_prefix():
-    return pathlib.Path("tmp") / "benchcomp" / "suites"
+    return pathlib.Path("/tmp") / "benchcomp" / "suites"
 
 
 def main(args):

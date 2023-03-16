@@ -5,4 +5,4 @@
 
 
 def main(_):
-    pass
+    raise NotImplementedError  # TODO

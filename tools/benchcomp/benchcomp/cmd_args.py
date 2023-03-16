@@ -7,26 +7,76 @@
 import argparse
 import importlib
 import pathlib
+import re
+import textwrap
 
 import benchcomp
 import benchcomp.entry.benchcomp
 import benchcomp.entry.run
 
 
-_EPILOG = """
-benchcomp can help you to understand the difference between two or more
-toolchains, by running benchmarks that use those toolchains and comparing the
-results.
+def _get_epilogs():
+    epilogs = {
+        "top_level": """\
+            benchcomp can help you to understand the difference between two or
+            more toolchains, by running benchmarks that use those toolchains and
+            comparing the results.
 
-benchcomp runs two or more 'variants' of a set of benchmark suites, and compares
-and visualizes the results of these variants. This allows you to understand the
-differences between the two variants, for example how they affect the
-benchmarks' performance or output or even whether they pass at all.
+            benchcomp runs two or more 'variants' of a set of benchmark suites,
+            and compares and visualizes the results of these variants. This
+            allows you to understand the differences between the two variants,
+            for example how they affect the benchmarks' performance or output or
+            even whether they pass at all.
 
-benchmark is structured as a pipeline of several commands. Running `benchcomp`
-runs each of them sequentially. You can run the subcommands manually to dump the
-intermediate files if required.
-"""
+            benchmark is structured as a pipeline of several commands. Running
+            `benchcomp` runs each of them sequentially. You can run the
+            subcommands manually to dump the intermediate files if required.""",
+        "run": """\
+            The run command writes one YAML file for each (suite, variant) pair.
+            These YAML files are in "suite.yaml" format.  Typically, users
+            should read the combined YAML file emitted by `benchcomp collate`
+            rather than the multiple YAML files written by `benchcomp run`.
+
+            The `run` command writes its output files into a directory, which
+            `collate` then reads from. By default, `run` writes the files into a
+            new directory with a common prefix on each invocation, meaning that
+            all previous runs are preserved without the user needing to specify
+            a different directory each time. Benchcomp also creates a symbolic
+            link to the latest run. Thus, the directories after several runs
+            will look something like this:
+
+            /tmp/benchcomp/suites/2F0D3DC4-0D02-4E95-B887-4759F08FA90D
+            /tmp/benchcomp/suites/119F11EB-9BC0-42D8-9EC1-47DFD661AC88
+            /tmp/benchcomp/suites/A3E83FE8-CD42-4118-BED3-ED89EC88BFB0
+            /tmp/benchcomp/suites/latest -> /tmp/benchcomp/suites/119F11EB...
+
+            '/tmp/benchcomp/suites' is the "out-prefix"; the UUID is the
+            "out-dir"; and '/tmp/benchcomp/latest' is the "out-symlink". Users
+            can set each of these manually by passing the corresponding flag, if
+            needed.
+
+            Passing `--out-symlink ./latest` will place the symbolic link in the
+            current directory, while keeping all runs under /tmp to avoid
+            clutter. If you wish to keep all previous runs in a local directory,
+            you can do so with
+
+                `--out-prefix ./output --out-symlink ./output/latest`""",
+        "filter": "",  # TODO
+        "visualize": "",  # TODO
+        "collate": "",
+    }
+
+    wrapper = textwrap.TextWrapper()
+    ret = {}
+    for subcommand, epilog in epilogs.items():
+        paragraphs = re.split(r"\n\s*\n", epilog)
+        buf = []
+        for p in paragraphs:
+            p = textwrap.dedent(p)
+            buf.extend(wrapper.wrap(p))
+            buf.append("")
+        ret[subcommand] = "\n".join(buf)
+    return ret
 
 
 def _existing_directory(arg):
@@ -36,19 +86,14 @@ def _existing_directory(arg):
     return path
 
 
-def _non_existing_directory(arg):
-    path = pathlib.Path(arg)
-    if path.exists():
-        raise ValueError(f"directory '{arg}' must not already exist")
-    return path
-
-
 def _get_args_dict():
-    return {
+    epilogs = _get_epilogs()
+    ret = {
         "top_level": {
             "description":
                 "Run and compare variants of a set of benchmark suites",
-            "epilog": _EPILOG,
+            "epilog": epilogs["top_level"],
+            "formatter_class": argparse.RawDescriptionHelpFormatter,
         },
         "args": [],
         "subparsers": {
@@ -80,7 +125,9 @@ def _get_args_dict():
                         "flags": ["--out-symlink"],
                         "metavar": "D",
                         "type": pathlib.Path,
-                        "default": benchcomp.entry.run.get_default_out_symlink(),
+                        "default":
+                            benchcomp.entry.run.get_default_out_prefix() /
+                        benchcomp.entry.run.get_default_out_symlink(),
                         "help":
                             "symbolically link D to the output directory "
                             "(default: %(default)s)",
@@ -125,6 +172,10 @@ def _get_args_dict():
             }
         }
     }
+    for subcommand, info in ret["subparsers"]["parsers"].items():
+        info["epilog"] = epilogs[subcommand]
+        info["formatter_class"] = argparse.RawDescriptionHelpFormatter
+    return ret
 
 
 def _get_global_args():
@@ -138,10 +189,6 @@ def _get_global_args():
         "flags": ["-v", "--verbose"],
         "action": "store_true",
         "help": "enable verbose output",
-    }, {
-        "flags": ["--fail-fast"],
-        "action": "store_true",
-        "help": "terminate with 1 at the first sign of trouble",
     }]
 
 
@@ -160,7 +207,6 @@ def get():
 
     subparsers = ad["subparsers"].pop("parsers")
     subs = parser.add_subparsers(**ad["subparsers"])
-    seen_flags = set()
     for subcommand, info in subparsers.items():
         args = info.pop("args")
         subparser = subs.add_parser(name=subcommand, **info)
@@ -172,7 +218,6 @@ def get():
 
         for arg in args:
             flags = arg.pop("flags")
-            seen_flags = seen_flags.union(flags)
             subparser.add_argument(*flags, **arg)
             if arg not in global_args:
                 parser.add_argument(*flags, **arg)
