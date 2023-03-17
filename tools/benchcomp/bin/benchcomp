@@ -1,0 +1,31 @@
+#!/usr/bin/env python3
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+#
+# Run and compare variants of a set of benchmark suites
+
+
+import logging
+import pathlib
+import sys
+
+# autopep8: off
+sys.path.append(str(pathlib.Path(__file__).parent.parent))
+import benchcomp.cmd_args
+# autopep8: on
+
+
+def main():
+    fmt = "benchcomp: %(levelname)s: %(message)s"
+    logging.basicConfig(format=fmt)
+
+    args = benchcomp.cmd_args.get()
+
+    level = logging.INFO if args.verbose else logging.WARNING
+    logging.basicConfig(level=level)
+
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()

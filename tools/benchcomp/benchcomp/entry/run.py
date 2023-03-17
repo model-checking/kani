@@ -1,0 +1,132 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+#
+# Entrypoint for `benchcomp run`. This command runs all combinations of
+# benchmark suites x variants that are defined in a config file. After each
+# combination, this command uses a 'parser' to write the list of benchmarks and
+# their associated metrics to a file using a unified schema called
+# `suite.yaml`. Parsers are python submodules of benchcomp.parsers; the
+# configuration file describes which parser to use for each benchmark suite.
+
+
+import dataclasses
+import importlib
+import logging
+import os
+import pathlib
+import shutil
+import subprocess
+import uuid
+
+import yaml
+
+import benchcomp
+
+
+@dataclasses.dataclass
+class _SingleInvocation:
+    """Run and parse the result of a single suite x variant"""
+
+    suite_id: str
+    variant_id: str
+
+    parser: str
+
+    suite_yaml_out_dir: pathlib.Path
+
+    command_line: str
+    directory: pathlib.Path
+
+    env: dict = dataclasses.field(default_factory=dict)
+    timeout: int = None
+    memout: int = None
+    patches: list = dataclasses.field(default_factory=list)
+
+    def __post_init__(self):
+        self.working_copy: pathlib.Path = pathlib.Path(
+            f"/tmp/benchcomp/suites/{uuid.uuid4()}")
+
+    def __call__(self):
+        env = dict(os.environ)
+        env.update(self.env)
+
+        shutil.copytree(self.directory, self.working_copy)
+
+        try:
+            subprocess.run(
+                self.command_line, shell=True, env=env, cwd=self.working_copy,
+                check=True)
+        except subprocess.CalledProcessError as exc:
+            logging.warning(
+                "Invocation of suite %s with variant %s exited with code %d",
+                self.suite_id, self.variant_id, exc.returncode)
+            return
+        except (OSError, subprocess.SubprocessError):
+            logging.error(
+                "Invocation of suite %s with variant %s failed", self.suite_id,
+                self.variant_id)
+            return
+
+        parser_mod_name = f"benchcomp.parsers.{self.parser}"
+        parser = importlib.import_module(parser_mod_name)
+        suite = parser.main(self.working_copy)
+
+        suite["suite_id"] = self.suite_id
+        suite["variant_id"] = self.variant_id
+
+        out_file = f"{self.suite_id}@{self.variant_id}_suite.yaml"
+        with open(
+                self.suite_yaml_out_dir / out_file, "w",
+                encoding="utf-8") as handle:
+            yaml.dump(suite, handle, default_flow_style=False)
+
+
+@dataclasses.dataclass
+class _Run:
+    """Run all suite x variant combinations, write results to a directory"""
+
+    config: benchcomp.ConfigFile
+    out_prefix: pathlib.Path
+    out_dir: str
+    out_symlink: str
+    result: dict = None
+
+    def __call__(self):
+        out_path = (self.out_prefix / self.out_dir)
+        out_path.mkdir(parents=True)
+
+        for suite_id, suite in self.config["run"]["suites"].items():
+            for variant_id in suite["variants"]:
+                variant = self.config["variants"][variant_id]
+                config = dict(variant).pop("config")
+                invoke = _SingleInvocation(
+                    suite_id, variant_id,
+                    suite["parser"]["module"],
+                    suite_yaml_out_dir=out_path,
+                    **config)
+                invoke()
+
+        # Atomically symlink the symlink dir to the output dir, even if
+        # there is already an existing symlink with that name
+        tmp_symlink = self.out_symlink.with_suffix(f".{uuid.uuid4()}")
+        tmp_symlink.parent.mkdir(exist_ok=True)
+        tmp_symlink.symlink_to(out_path)
+        tmp_symlink.rename(self.out_symlink)
+
+
+def get_default_out_symlink():
+    return "latest"
+
+
+def get_default_out_dir():
+    return str(uuid.uuid4())
+
+
+def get_default_out_prefix():
+    return pathlib.Path("/tmp") / "benchcomp" / "suites"
+
+
+def main(args):
+    run = _Run(args.config, args.out_prefix, args.out_dir, args.out_symlink)
+    run()
+    return run
