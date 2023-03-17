@@ -284,7 +284,8 @@ impl<'tcx> GotocCtx<'tcx> {
                 unreachable!("ZST is no longer represented as a scalar")
             }
             (Scalar::Int(_), ty::RawPtr(tm)) => {
-                Expr::pointer_constant(s.to_u64().unwrap(), self.codegen_ty(tm.ty).to_pointer())
+                Expr::int_constant(s.to_u64().unwrap(), Type::unsigned_int(64))
+                    .cast_to(self.codegen_ty(tm.ty).to_pointer())
             }
             // TODO: Removing this doesn't cause any regressions to fail.
             // We need a regression for this case.
