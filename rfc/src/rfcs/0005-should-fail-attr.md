@@ -157,9 +157,25 @@ We don't expect these changes to require new dependencies.
 Besides, we don't expect these changes to be updated unless we decide to extend the attribute with further fields (see [Future possibilities](#future-possibilities) for more details).
 
 There is one design aspect that needs discussion: **What should happen if multiple panics are triggered?**
-It seems that this scenario is less likely, but it's certainly possible and we may want to prevent it.
-The initial proposal is for `#[kani::should_panic]` to check that only one panic occurs in the harness
-This would also simplify [adding an `expected` argument](#alternative-3-the-expected-argument) later.
+In other words, in the example
+```rust
+#[kani::proof]
+#[kani::should_panic]
+fn branch_panics() {
+    let b: bool = kani::any();
+    
+    do_something();
+
+    if b {
+        call_panic_1(); // leads to a panic-related failure
+    } else {
+        call_panic_2(); // leads to a different panic-related failure
+    }
+}
+```
+should `#[kani::should_panic]` return a succesful verification code?
+
+While this scenario is less likely, we may want to return a failed verification in this case.
 
 ## Rationale and alternatives
 
