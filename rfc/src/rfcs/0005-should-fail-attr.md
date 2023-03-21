@@ -88,24 +88,24 @@ Since we added `#[kani::should_panic]`, running this example would produce a suc
 
 Now, we've considered two ways to represent this result in the verification output.
 Note that it's important that we provide the user with this feedback:
- 1. **(Expectation)** Was Kani expecting the harness to pass or fail?
+ 1. **(Expectation)** Was Kani expecting the harness to panic?
  2. **(Outcome)**: What's the actual result that Kani produced after the analysis?
 This will avoid a potential scenario where the user doesn't know for sure if the attribute has had an effect when verifying the harness.
 
 As mentioned, we've considered two ways to represent this result.
 
-#### Representation #1 (Recommended): No changes to overall result
+#### Representation #1: No changes to overall result
 
 ```rust
-VERIFICATION:- FAILED (expected FAILED)
+VERIFICATION:- FAILED (expected one panic at least)
 ```
 
 We recommend this representation so the user receives clear information about both the outcome and the expectation.[^footnote-representation]
 
-#### Representation #2: Changes to overall result
+#### Representation #2 (Recommended): Changes to overall result
 
 ```rust
-VERIFICATION:- SUCCESSFUL (expected FAILED and it FAILED)
+VERIFICATION:- SUCCESSFUL (expected and verified one panic at least)
 ```
 
 ### Multiple Harnesses
