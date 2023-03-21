@@ -98,16 +98,21 @@ As mentioned, we've considered two ways to represent this result.
 #### Representation #1: No changes to overall result
 
 ```rust
-VERIFICATION:- FAILED (expected one panic at least)
+VERIFICATION:- FAILED (expected and verified one panic at least)
 ```
 
-We recommend this representation so the user receives clear information about both the outcome and the expectation.[^footnote-representation]
+In this representation, both expectation and the outcome are clear[^footnote-representation], but the result doesn't change.
+This could be confusing.
+
 
 #### Representation #2 (Recommended): Changes to overall result
 
 ```rust
 VERIFICATION:- SUCCESSFUL (expected and verified one panic at least)
 ```
+
+In this representation, both expectation and the outcome are clear, and the verification result changes.
+We recommend this representation.
 
 ### Multiple Harnesses
 
