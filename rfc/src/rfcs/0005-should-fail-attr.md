@@ -128,6 +128,32 @@ Therefore, if we added `#[kani::should_panic]` to all harnesses in the previous 
 Complete - 3 successfully verified harnesses, 0 failures, 3 total.
 ```
 
+### Multiple panics
+
+In a verification context, an execution can branch into multiple executions that depend on a condition.
+This may result in a situation where different panics are reachable, as in this example:
+
+```rust
+#[kani::proof]
+#[kani::should_panic]
+fn branch_panics() {
+    let b: bool = kani::any();
+
+    do_something();
+
+    if b {
+        call_panic_1(); // leads to a panic-related failure
+    } else {
+        call_panic_2(); // leads to a different panic-related failure
+    }
+}
+```
+
+Note that we could safeguard against these situations by checking that only one panic-related failure is reachable.
+However, users have expressed that a *coarse* version (i.e., checking that at least one panic can be reached) is preferred.
+Users also anticipate that `#[kani::should_panic]` will be used to exercise [smoke testing](https://en.wikipedia.org/wiki/Smoke_testing_(software)) in many cases.
+Additionally, restricting `#[kani::should_panic]` to the verification of single panic-related failures could be confusing for users and reduce its overall usefulness.
+
 ### Availability
 
 This feature **will only be available as an attribute**.
@@ -155,27 +181,6 @@ At a high level, we expect modifications in the following components:
 
 We don't expect these changes to require new dependencies.
 Besides, we don't expect these changes to be updated unless we decide to extend the attribute with further fields (see [Future possibilities](#future-possibilities) for more details).
-
-There is one design aspect that needs discussion: **What should happen if multiple panics are triggered?**
-In other words, in the example
-```rust
-#[kani::proof]
-#[kani::should_panic]
-fn branch_panics() {
-    let b: bool = kani::any();
-    
-    do_something();
-
-    if b {
-        call_panic_1(); // leads to a panic-related failure
-    } else {
-        call_panic_2(); // leads to a different panic-related failure
-    }
-}
-```
-should `#[kani::should_panic]` return a succesful verification code?
-
-While this scenario is less likely, we may want to return a failed verification in this case.
 
 ## Rationale and alternatives
 
@@ -229,16 +234,24 @@ There could be problems with this proposal if we attempt to do both:
 We don't have sufficient data about the use-case considered in this alternative.
 This proposal can also contribute to collect this data: once users can expect panics, they may want to expect other things.
 
-## Open questions
+### Alternative #5: Kani API
 
-The main questions I'd like to get resolved are:
- - What is the best representation to use for this feature?
- - Do we want to extend `#[kani::should_panic]` with an `expected` field?
- - Do we want to allow multiple panics with `#[kani::should_panic]`.
+This functionality could be part of the Kani API instead of being an attribute.
+For example, some contributors proposed a function that takes a predicate closure to filter executions and check that they result in a panic.
+
+However, such a function couldn't be used in external code, limiting its usability to the user's code.
+
+## Open questions
 
 Once the feature is available, it'd be good to gather user feedback to answer these questions:
  - Do we need a mechanism to express more granular expectations?
  - If we need the mechanism in (2), do we really want to collapse them into one feature?
+
+### Resolved questions
+
+ - *What is the best representation to use for this feature?* Representation #2 seems to be preferred, according to feedback we received during a discussion.
+ - *Do we want to extend `#[kani::should_panic]` with an `expected` field?* Yes, but not in this version.
+ - *Do we want to allow multiple panic-related failures with `#[kani::should_panic]`?* Yes (this is now discussed in [User Experience](#user-experience)).
 
 ## Future possibilities
 
