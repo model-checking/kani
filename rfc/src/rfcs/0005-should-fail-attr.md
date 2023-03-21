@@ -67,9 +67,10 @@ This is what a negative harness may look like.
 The user wants to verify that calling `device.init()` more than once should result in a panic.
 
 > **NOTE**: We could convert this into a Rust unit test and add the `#[should_panic]` attribute to it.
-> However, there are two good reasons to have a verification-specific attribute that does the same:
+> However, there are a few good reasons to have a verification-specific attribute that does the same:
 >  1. To ensure that other unexpected behaviors don't occur (e.g., overflows).
 >  2. Because `#[should_panic]` cannot be used if the test harness contains calls to Kani's API.
+>  3. To ensure that a panic still occurs after stubbing out code which is expected to panic.
 
 Currently, this example produces a `VERIFICATION:- FAILED` result.
 In addition, it will return a non-successful code.
