@@ -89,7 +89,10 @@ impl Project {
         let expected_path = if self.merged_artifacts {
             None
         } else {
-            harness.goto_file.as_ref().map(|goto_file| convert_type(goto_file, SymTabGoto, typ))
+            harness
+                .goto_file
+                .as_ref()
+                .and_then(|goto_file| convert_type(goto_file, SymTabGoto, typ).canonicalize().ok())
         };
         trace!(?harness.goto_file, ?expected_path, ?typ, "get_harness_artifact");
         self.artifacts.iter().find(|artifact| {
