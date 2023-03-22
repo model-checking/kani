@@ -22,5 +22,7 @@ runs:
 
       - name: Update submodules
         run: |
-          cd ${{ inputs.kani_dir }} && git submodule update --init --depth 1
+          cd ${{ inputs.kani_dir }}
+          git config --global --add safe.directory $(pwd)
+          git submodule update --init --depth 1
         shell: bash
