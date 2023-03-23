@@ -6,7 +6,13 @@ import subprocess
 def run_cargo_command(command, working_directory):
 
     try:
-        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, text=True, cwd=working_directory)
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            shell=True,
+            text=True,
+            cwd=working_directory)
         stdout, stderr = process.communicate()
 
         if process.returncode != 0:
@@ -24,6 +30,7 @@ def main():
     target_directory = "kani"
     run_cargo_command("cargo install cargo-outdated", working_directory)
     run_cargo_command("cargo outdated --workspace", working_directory)
+
 
 if __name__ == "__main__":
     main()

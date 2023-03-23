@@ -25,13 +25,13 @@ class VersionUpdater:
 
         for line in contents:
             if "CBMC_VERSION" in line:
-                version_number = line.split("=")[1].replace("\n","")
+                version_number = line.split("=")[1].replace("\n", "")
                 self.dependencies["CBMC_VERSION"] = version_number
             elif "CBMC_VIEWER_VERSION" in line:
-                version_number = line.split("=")[1].replace("\n","")
+                version_number = line.split("=")[1].replace("\n", "")
                 self.dependencies["CBMC_VIEWER_VERSION"] = version_number
             elif "KISSAT_VERSION" in line:
-                version_number = line.split("=")[1].replace("\n","")
+                version_number = line.split("=")[1].replace("\n", "")
                 self.dependencies["KISSAT_VERSION"] = version_number
             else:
                 pass
@@ -47,10 +47,10 @@ class VersionUpdater:
             for line in lines:
                 match = re.search(r'(\w+)="\d+(\.\d+)+"', line.strip())
                 if match and match.group(1).strip() == self.dependency["dependency_string"]:
-                    f.write(f'{self.dependency["dependency_string"]}="{self.dependencies[self.dependency["dependency_string"]]}"\n')
+                    f.write(
+                        f'{self.dependency["dependency_string"]}="{self.dependencies[self.dependency["dependency_string"]]}"\n')
                 else:
                     f.write(line)
-
 
     def run_process(self):
         self.read_dependencies()
