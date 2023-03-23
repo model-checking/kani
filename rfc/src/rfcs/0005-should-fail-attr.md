@@ -3,7 +3,7 @@
 - **RFC PR:** <https://github.com/model-checking/kani/pull/2272>
 - **Status:** Under Review
 - **Version:** 0
-- **Proof-of-concept:** N/A
+- **Proof-of-concept:** <https://github.com/model-checking/kani/pull/2315>
 
 ## Summary
 
@@ -93,26 +93,20 @@ Note that it's important that we provide the user with this feedback:
  2. **(Outcome)**: What's the actual result that Kani produced after the analysis?
 This will avoid a potential scenario where the user doesn't know for sure if the attribute has had an effect when verifying the harness.
 
-As mentioned, we've considered two ways to represent this result.
+Below, we show how we'll represent this result.
 
-#### Representation #1: No changes to overall result
+#### Recommended Representation: Changes to overall result
 
-```rust
-VERIFICATION:- FAILED (expected and verified one panic at least)
-```
+The representation must make clear both the expectation and the outcome.
+Moreover, the overall result must change according to the verification results (i.e., the failures that were found).
 
-In this representation, both expectation and the outcome are clear[^footnote-representation], but the result doesn't change.
-This could be confusing.
+Using the `#[kani::should_panic]` attribute will return one of the following results:
+ 1. `VERIFICATION:- FAILED (encountered no panics, but at least one was expected)` if there were no failures.
+ 2. `VERIFICATION:- FAILED (encountered failures other than panics, which were unexpected)` if there were failures but not all them had `prop.property_class() == "assertion"`.
+ 3. `VERIFICATION:- SUCCESSFUL (encountered one or more panics as expected)` otherwise.
 
-
-#### Representation #2 (Recommended): Changes to overall result
-
-```rust
-VERIFICATION:- SUCCESSFUL (expected and verified one panic at least)
-```
-
-In this representation, both expectation and the outcome are clear, and the verification result changes.
-We recommend this representation.
+Note that the criteria to achieve a `SUCCESSFUL` result depends on all failures having the property class `"assertion"`.
+If they don't, then the failed properties may contain UB, so we return a `FAILED` result instead.
 
 ### Multiple Harnesses
 
@@ -255,7 +249,7 @@ Once the feature is available, it'd be good to gather user feedback to answer th
 
 ### Resolved questions
 
- - *What is the best representation to use for this feature?* Representation #2 seems to be preferred, according to feedback we received during a discussion.
+ - *What is the best representation to use for this feature?* A representation that changes the overall result seems to be preferred, according to feedback we received during a discussion.
  - *Do we want to extend `#[kani::should_panic]` with an `expected` field?* Yes, but not in this version.
  - *Do we want to allow multiple panic-related failures with `#[kani::should_panic]`?* Yes (this is now discussed in [User Experience](#user-experience)).
 
