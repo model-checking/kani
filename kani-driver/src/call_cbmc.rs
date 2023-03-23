@@ -44,7 +44,7 @@ pub struct VerificationResult {
     ///  * `None` means panic-related failures aren't expected.
     ///  * `Some(outcome)` means panic-related failures are expected, and `outcome`
     ///     represents information about panic-related failures in the results.
-    pub should_panic: Option<PanicOutcome>,
+    pub panic_outcome: Option<PanicOutcome>,
     /// The parsed output, message by message, of CBMC. However, the `Result` message has been
     /// removed and is available in `results` instead.
     pub messages: Option<Vec<ParserItem>>,
@@ -261,11 +261,11 @@ impl VerificationResult {
         let (items, results) = extract_results(output.processed_items);
 
         if let Some(results) = results {
-            let (status, should_panic) =
+            let (status, panic_outcome) =
                 verification_outcome_from_properties(&results, should_panic);
             VerificationResult {
                 status,
-                should_panic,
+                panic_outcome,
                 messages: Some(items),
                 results: Ok(results),
                 runtime,
@@ -275,7 +275,7 @@ impl VerificationResult {
             // We never got results from CBMC - something went wrong (e.g. crash) so it's failure
             VerificationResult {
                 status: VerificationStatus::Failure,
-                should_panic: None,
+                panic_outcome: None,
                 messages: Some(items),
                 results: Err(output.process_status),
                 runtime,
@@ -287,7 +287,7 @@ impl VerificationResult {
     pub fn mock_success() -> VerificationResult {
         VerificationResult {
             status: VerificationStatus::Success,
-            should_panic: None,
+            panic_outcome: None,
             messages: None,
             results: Ok(vec![]),
             runtime: Duration::from_secs(0),
@@ -298,7 +298,7 @@ impl VerificationResult {
     fn mock_failure() -> VerificationResult {
         VerificationResult {
             status: VerificationStatus::Failure,
-            should_panic: None,
+            panic_outcome: None,
             messages: None,
             // on failure, exit codes in theory might be used,
             // but `mock_failure` should never be used in a context where they will,
@@ -313,9 +313,9 @@ impl VerificationResult {
         match &self.results {
             Ok(results) => {
                 let status = self.status;
-                let should_panic = self.should_panic;
+                let panic_outcome = self.panic_outcome;
                 let show_checks = matches!(output_format, OutputFormat::Regular);
-                let mut result = format_result(results, status, should_panic, show_checks);
+                let mut result = format_result(results, status, panic_outcome, show_checks);
                 writeln!(result, "Verification Time: {}s", self.runtime.as_secs_f32()).unwrap();
                 result
             }

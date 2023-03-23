@@ -245,7 +245,7 @@ fn format_item_terse(_item: &ParserItem) -> Option<String> {
 pub fn format_result(
     properties: &Vec<Property>,
     status: VerificationStatus,
-    should_panic: Option<PanicOutcome>,
+    panic_outcome_opt: Option<PanicOutcome>,
     show_checks: bool,
 ) -> String {
     let mut result_str = String::new();
@@ -387,7 +387,7 @@ pub fn format_result(
     } else {
         style("FAILED").red()
     };
-    let panic_info = if let Some(panic_outcome) = should_panic {
+    let panic_info = if let Some(panic_outcome) = panic_outcome_opt {
         match panic_outcome {
             PanicOutcome::Zero => " (encountered no panics, but at least one was expected)",
             PanicOutcome::OneOrMore => " (encountered one or more panics as expected)",
