@@ -1,6 +1,6 @@
 overflow.undefined-shift.1\
-         - Status: FAILURE\
-         - Description: "shift distance too large"
+- Status: FAILURE\
+- Description: "shift distance too large"
 Failed Checks: attempt to shift left with overflow
 Failed Checks: panicked on the `1` arm!
 Failed Checks: panicked on the `0` arm!
