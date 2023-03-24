@@ -6,4 +6,6 @@
 
 #[kani::proof]
 #[kani::should_panic]
-fn check() {}
+fn check() {
+    assert!(1 + 1 == 2);
+}
