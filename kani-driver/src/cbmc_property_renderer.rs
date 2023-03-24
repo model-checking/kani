@@ -245,7 +245,8 @@ fn format_item_terse(_item: &ParserItem) -> Option<String> {
 pub fn format_result(
     properties: &Vec<Property>,
     status: VerificationStatus,
-    failed_properties_opt: Option<FailedProperties>,
+    should_panic: bool,
+    failed_properties: FailedProperties,
     show_checks: bool,
 ) -> String {
     let mut result_str = String::new();
@@ -387,7 +388,7 @@ pub fn format_result(
     } else {
         style("FAILED").red()
     };
-    let panic_info = if let Some(failed_properties) = failed_properties_opt {
+    let should_panic_info = if should_panic {
         match failed_properties {
             FailedProperties::None => " (encountered no panics, but at least one was expected)",
             FailedProperties::PanicsOnly => " (encountered one or more panics as expected)",
@@ -398,7 +399,7 @@ pub fn format_result(
     } else {
         ""
     };
-    let overall_result = format!("\nVERIFICATION:- {verification_result}{panic_info}\n");
+    let overall_result = format!("\nVERIFICATION:- {verification_result}{should_panic_info}\n");
     result_str.push_str(&overall_result);
 
     // Ideally, we should generate two `ParserItem::Message` and push them
