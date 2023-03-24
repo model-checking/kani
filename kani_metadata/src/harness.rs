@@ -31,6 +31,8 @@ pub struct HarnessMetadata {
 pub struct HarnessAttributes {
     /// Whether the harness has been annotated with proof.
     pub proof: bool,
+    /// Whether the harness is expected to panic or not.
+    pub should_panic: bool,
     /// Optional data to store solver.
     pub solver: Option<CbmcSolver>,
     /// Optional data to store unwind value.

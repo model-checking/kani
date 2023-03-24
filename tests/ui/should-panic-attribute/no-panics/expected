@@ -1,0 +1,4 @@
+- Status: SUCCESS\
+- Description: "assertion failed: 1 + 1 == 2"
+ ** 0 of 1 failed
+VERIFICATION:- FAILED (encountered no panics, but at least one was expected)
