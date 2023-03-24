@@ -52,7 +52,7 @@ pub fn proof(attr: TokenStream, item: TokenStream) -> TokenStream {
         #[kanitool::proof]
     );
 
-    assert!(attr.is_empty(), "#[kani::proof] does not take any arguments for now");
+    assert!(attr.is_empty(), "#[kani::proof] does not take any arguments currently");
 
     if sig.asyncness.is_none() {
         // Adds `#[kanitool::proof]` and other attributes
