@@ -30,7 +30,7 @@ jobs:
         id: versioning
         run: |
           # Output for upload scripts to see
-          echo ::set-output name=version::${{ env.TAG_VERSION }}
+          echo "version=${{ env.TAG_VERSION }}" >> $GITHUB_OUTPUT
           # Validate git tag & Cargo.toml are in sync on version number
           if [[ ${{ env.CRATE_VERSION }} != ${{ env.TAG_VERSION }} ]]; then
             echo "Git tag ${{env.TAG_VERSION}} did not match crate version ${{env.CRATE_VERSION}}"
