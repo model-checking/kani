@@ -22,15 +22,15 @@ pub enum VerificationStatus {
     Failure,
 }
 
-/// Classifies all possible outcomes when `#[kani::should_panic]` is being
-/// applied to the harness
+/// Represents failed properties in three different categories.
+/// This simplifies the process to determine and format verification results.
 #[derive(Clone, Copy, Debug)]
 pub enum FailedProperties {
-    // No failures were found
+    // No failures
     None,
-    // Found one or more panic-related failures
+    // One or more panic-related failures
     PanicsOnly,
-    // Found other failures that weren't panic-related
+    // One or more failures that aren't panic-related
     Other,
 }
 
@@ -39,11 +39,7 @@ pub enum FailedProperties {
 pub struct VerificationResult {
     /// Whether verification should be considered to have succeeded, or have failed.
     pub status: VerificationStatus,
-    /// Indicates if verification results are expected to contain panic-related failures and,
-    /// if they are, whether all failures in the results were panic-related or not.
-    ///  * `None` means panic-related failures aren't expected.
-    ///  * `Some(outcome)` means panic-related failures are expected, and `outcome`
-    ///     represents information about panic-related failures in the results.
+    /// The compact representation for failed properties
     pub failed_properties: FailedProperties,
     /// The parsed output, message by message, of CBMC. However, the `Result` message has been
     /// removed and is available in `results` instead.
