@@ -108,7 +108,7 @@ pub fn should_panic(_attr: TokenStream, item: TokenStream) -> TokenStream {
 #[cfg(kani)]
 #[proc_macro_attribute]
 pub fn should_panic(attr: TokenStream, item: TokenStream) -> TokenStream {
-    assert!(attr.is_empty(), "`#[kani::should_panic]` does not take any arguments for now");
+    assert!(attr.is_empty(), "`#[kani::should_panic]` does not take any arguments currently");
     let mut result = TokenStream::new();
     let insert_string = "#[kanitool::should_panic]";
     result.extend(insert_string.parse::<TokenStream>().unwrap());
