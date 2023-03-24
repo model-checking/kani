@@ -25,13 +25,13 @@ pub enum VerificationStatus {
 /// Classifies all possible outcomes when `#[kani::should_panic]` is being
 /// applied to the harness
 #[derive(Clone, Copy, Debug)]
-pub enum PanicOutcome {
+pub enum FailedProperties {
     // No failures were found
-    Zero,
+    None,
     // Found one or more panic-related failures
-    OneOrMore,
+    PanicsOnly,
     // Found other failures that weren't panic-related
-    OtherFailures,
+    Other,
 }
 
 /// Our (kani-driver) notions of CBMC results.
@@ -44,7 +44,7 @@ pub struct VerificationResult {
     ///  * `None` means panic-related failures aren't expected.
     ///  * `Some(outcome)` means panic-related failures are expected, and `outcome`
     ///     represents information about panic-related failures in the results.
-    pub panic_outcome: Option<PanicOutcome>,
+    pub failed_properties: Option<FailedProperties>,
     /// The parsed output, message by message, of CBMC. However, the `Result` message has been
     /// removed and is available in `results` instead.
     pub messages: Option<Vec<ParserItem>>,
@@ -261,11 +261,11 @@ impl VerificationResult {
         let (items, results) = extract_results(output.processed_items);
 
         if let Some(results) = results {
-            let (status, panic_outcome) =
+            let (status, failed_properties) =
                 verification_outcome_from_properties(&results, should_panic);
             VerificationResult {
                 status,
-                panic_outcome,
+                failed_properties,
                 messages: Some(items),
                 results: Ok(results),
                 runtime,
@@ -275,7 +275,7 @@ impl VerificationResult {
             // We never got results from CBMC - something went wrong (e.g. crash) so it's failure
             VerificationResult {
                 status: VerificationStatus::Failure,
-                panic_outcome: None,
+                failed_properties: None,
                 messages: Some(items),
                 results: Err(output.process_status),
                 runtime,
@@ -287,7 +287,7 @@ impl VerificationResult {
     pub fn mock_success() -> VerificationResult {
         VerificationResult {
             status: VerificationStatus::Success,
-            panic_outcome: None,
+            failed_properties: None,
             messages: None,
             results: Ok(vec![]),
             runtime: Duration::from_secs(0),
@@ -298,7 +298,7 @@ impl VerificationResult {
     fn mock_failure() -> VerificationResult {
         VerificationResult {
             status: VerificationStatus::Failure,
-            panic_outcome: None,
+            failed_properties: None,
             messages: None,
             // on failure, exit codes in theory might be used,
             // but `mock_failure` should never be used in a context where they will,
@@ -313,9 +313,9 @@ impl VerificationResult {
         match &self.results {
             Ok(results) => {
                 let status = self.status;
-                let panic_outcome = self.panic_outcome;
+                let failed_properties = self.failed_properties;
                 let show_checks = matches!(output_format, OutputFormat::Regular);
-                let mut result = format_result(results, status, panic_outcome, show_checks);
+                let mut result = format_result(results, status, failed_properties, show_checks);
                 writeln!(result, "Verification Time: {}s", self.runtime.as_secs_f32()).unwrap();
                 result
             }
@@ -343,22 +343,22 @@ impl VerificationResult {
 fn verification_outcome_from_properties(
     properties: &[Property],
     should_panic: bool,
-) -> (VerificationStatus, Option<PanicOutcome>) {
+) -> (VerificationStatus, Option<FailedProperties>) {
     let failed_properties: Vec<&Property> =
         properties.iter().filter(|prop| prop.status == CheckStatus::Failure).collect();
     if should_panic {
         // Return `FAILURE` if there isn't at least one failed property
         if failed_properties.is_empty() {
-            return (VerificationStatus::Failure, Some(PanicOutcome::Zero));
+            return (VerificationStatus::Failure, Some(FailedProperties::None));
         }
         // Check if all failed properties correspond to the `assertion` class.
         // Note: Panics caused by `panic!` and `assert!` fall into this class.
         let all_failed_checks_are_panics =
             failed_properties.iter().all(|prop| prop.property_class() == "assertion");
         if all_failed_checks_are_panics {
-            (VerificationStatus::Success, Some(PanicOutcome::OneOrMore))
+            (VerificationStatus::Success, Some(FailedProperties::PanicsOnly))
         } else {
-            (VerificationStatus::Failure, Some(PanicOutcome::OtherFailures))
+            (VerificationStatus::Failure, Some(FailedProperties::Other))
         }
     } else if failed_properties.is_empty() {
         (VerificationStatus::Success, None)

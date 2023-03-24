@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use crate::args::OutputFormat;
-use crate::call_cbmc::{PanicOutcome, VerificationStatus};
+use crate::call_cbmc::{FailedProperties, VerificationStatus};
 use crate::cbmc_output_parser::{CheckStatus, ParserItem, Property, TraceItem};
 use console::style;
 use once_cell::sync::Lazy;
@@ -245,7 +245,7 @@ fn format_item_terse(_item: &ParserItem) -> Option<String> {
 pub fn format_result(
     properties: &Vec<Property>,
     status: VerificationStatus,
-    panic_outcome_opt: Option<PanicOutcome>,
+    failed_properties_opt: Option<FailedProperties>,
     show_checks: bool,
 ) -> String {
     let mut result_str = String::new();
@@ -387,11 +387,11 @@ pub fn format_result(
     } else {
         style("FAILED").red()
     };
-    let panic_info = if let Some(panic_outcome) = panic_outcome_opt {
-        match panic_outcome {
-            PanicOutcome::Zero => " (encountered no panics, but at least one was expected)",
-            PanicOutcome::OneOrMore => " (encountered one or more panics as expected)",
-            PanicOutcome::OtherFailures => {
+    let panic_info = if let Some(failed_properties) = failed_properties_opt {
+        match failed_properties {
+            FailedProperties::None => " (encountered no panics, but at least one was expected)",
+            FailedProperties::PanicsOnly => " (encountered one or more panics as expected)",
+            FailedProperties::Other => {
                 " (encountered failures other than panics, which were unexpected)"
             }
         }
