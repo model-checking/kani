@@ -33,7 +33,7 @@ jobs:
           title: 'Automatic toolchain upgrade to nightly-${{ env.next_toolchain_date }}'
           body: |
             Update Rust toolchain from nightly-${{ env.current_toolchain_date }} to
-            nightly-${{ envv.next_toolchain_date }} without any other source changes.
+            nightly-${{ env.next_toolchain_date }} without any other source changes.
 
             Thiis is an automatically generated pull request. If any of the CI checks fail,
             manual intervention is required. In such a case, review the changes at
