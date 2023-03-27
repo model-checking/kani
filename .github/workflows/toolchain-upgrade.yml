@@ -1,0 +1,34 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+# We use block scalar notation to allow us to add ":" to the workflow name.
+name: >-
+  Every 4 hours: Attempt toolchain update
+
+on:
+  schedule:
+    - cron: "*/4 42 * * *" # Run this every four hours at minute 42
+  workflow_dispatch:     # Allow manual dispatching for a custom branch / tag.
+
+jobs:
+  create-toolchain-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Kani
+        uses: actions/checkout@v3
+
+			- name: Update toolchain config
+				run: |
+          current_toolchain_date=$(grep ^channel rust-toolchain.toml | sed 's/.*nightly-\(.*\)"/\1/')
+          current_toolchain_epoch=$(date --date $current_toolchain_date +%s)
+          next_toolchain_date=$(date --date "@$(($current_toolchain_epoch + 86400))" +%Y-%m-%d)
+          echo "next_toolchain_date=$next_toolchain_date" >> $GITHUB_ENV
+          sed -i "/^channel/ s/$current_toolchain_date/$next_toolchain_date/" rust-toolchain.toml
+          git diff
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v4
+        with:
+          commit-message: Upgrade Rust toolchain to nightly-${{ env.next_toolchain_date }}
+          branch: toolchain-${{ env.next_toolchain_date }}
+          delete-branch: true
+          title: 'Automatic toolchain upgrade to nightly-${{ env.next_toolchain_date }}'
