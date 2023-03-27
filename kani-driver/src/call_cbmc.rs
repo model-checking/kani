@@ -198,7 +198,7 @@ impl KaniSession {
         args
     }
 
-    fn handle_solver_args(
+    pub fn handle_solver_args(
         &self,
         harness_solver: &Option<CbmcSolver>,
         args: &mut Vec<OsString>,

@@ -7,6 +7,7 @@
 // loop invariants.
 
 #[kani::proof]
+#[kani::solver(kissat)]
 fn main() {
     let mut x: u64 = kani::any_where(|i| *i > 1);
 

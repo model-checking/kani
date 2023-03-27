@@ -66,7 +66,11 @@ impl<'sess, 'pr> HarnessRunner<'sess, 'pr> {
                     )?;
 
                     if self.sess.args.synthesize_loop_contracts {
-                        self.sess.synthesize_loop_contracts(&specialized_obj, &specialized_obj)?;
+                        self.sess.synthesize_loop_contracts(
+                            &specialized_obj,
+                            &specialized_obj,
+                            &harness,
+                        )?;
                     }
 
                     let result = self.sess.check_harness(&specialized_obj, &report_dir, harness)?;
