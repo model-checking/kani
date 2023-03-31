@@ -243,7 +243,8 @@ impl<'tcx> GotocCtx<'tcx> {
         match t {
             TypeOrVariant::Type(t) => {
                 match t.kind() {
-                    ty::Bool
+                    ty::Alias(..)
+                    | ty::Bool
                     | ty::Char
                     | ty::Int(_)
                     | ty::Uint(_)
@@ -254,10 +255,8 @@ impl<'tcx> GotocCtx<'tcx> {
                     | ty::GeneratorWitness(..)
                     | ty::Foreign(..)
                     | ty::Dynamic(..)
-                    | ty::Projection(_)
                     | ty::Bound(..)
                     | ty::Placeholder(..)
-                    | ty::Opaque(..)
                     | ty::Param(_)
                     | ty::Infer(_)
                     | ty::Error(_) => unreachable!("type {:?} does not have a field", t),

@@ -7,14 +7,15 @@
 use crate::args::ConcretePlaybackMode;
 use crate::call_cbmc::VerificationResult;
 use crate::session::KaniSession;
+use crate::util::tempfile::TempFile;
 use anyhow::{Context, Result};
 use concrete_vals_extractor::{extract_harness_values, ConcreteVal};
 use kani_metadata::HarnessMetadata;
 use std::collections::hash_map::DefaultHasher;
 use std::ffi::OsString;
-use std::fs::{self, File};
+use std::fs::File;
 use std::hash::{Hash, Hasher};
-use std::io::{BufRead, BufReader, BufWriter, Write};
+use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::process::Command;
 use tempfile::NamedTempFile;
@@ -31,7 +32,7 @@ impl KaniSession {
             None => return Ok(()),
         };
 
-        if let Some(result_items) = &verification_result.results {
+        if let Ok(result_items) = &verification_result.results {
             match extract_harness_values(result_items) {
                 None => println!(
                     "WARNING: Kani could not produce a concrete playback for `{}` because there \
@@ -66,7 +67,10 @@ impl KaniSession {
                                 harness.original_end_line,
                                 &generated_unit_test,
                             )
-                            .expect("Failed to modify source code");
+                            .expect(&format!(
+                                "Failed to modify source code for the file `{}`",
+                                &harness.original_file
+                            ));
                         }
                     }
                     verification_result.generated_concrete_test = true;
@@ -104,17 +108,20 @@ impl KaniSession {
         Ok(())
     }
 
-    /// Writes the new source code to a temporary file. Returns whether the unit test was already in the old source code.
+    /// Writes the new source code to a user's source file using a tempfile as the means.
+    /// Returns whether the unit test was already in the old source code.
     fn add_test_inplace(
         &self,
         source_path: &str,
         proof_harness_end_line: usize,
         unit_test: &UnitTest,
     ) -> Result<bool> {
-        let source_file = File::open(source_path)?;
+        // Read from source
+        let source_file = File::open(source_path).unwrap();
         let source_reader = BufReader::new(source_file);
-        let mut temp_file = NamedTempFile::new()?;
-        let mut temp_writer = BufWriter::new(&mut temp_file);
+
+        // Create temp file
+        let mut temp_file = TempFile::try_new("concrete_playback.tmp")?;
         let mut curr_line_num = 0;
 
         // Use a buffered reader/writer to generate the unit test line by line
@@ -126,31 +133,22 @@ impl KaniSession {
                         source_path, unit_test.name,
                     );
                 }
-                // temp file gets deleted automatically when function goes out of scope
+                // the drop impl will take care of flushing and resetting
                 return Ok(true);
             }
             curr_line_num += 1;
-            writeln!(temp_writer, "{line}")?;
-            if curr_line_num == proof_harness_end_line {
-                for unit_test_line in unit_test.code.iter() {
-                    curr_line_num += 1;
-                    writeln!(temp_writer, "{unit_test_line}")?;
+            if let Some(temp_writer) = temp_file.writer.as_mut() {
+                writeln!(temp_writer, "{line}")?;
+                if curr_line_num == proof_harness_end_line {
+                    for unit_test_line in unit_test.code.iter() {
+                        curr_line_num += 1;
+                        writeln!(temp_writer, "{unit_test_line}")?;
+                    }
                 }
             }
         }
 
-        // Flush before we remove/rename the file.
-        temp_writer.flush()?;
-
-        // Have to drop the bufreader to be able to reuse and rename the moved temp file
-        drop(temp_writer);
-
-        // Renames are usually automic, so we won't corrupt the user's source file during a crash.
-        fs::rename(temp_file.path(), source_path).with_context(|| {
-            format!("Couldn't rename tmp source file to actual src file `{source_path}`.")
-        })?;
-
-        // temp file gets deleted automatically by the NamedTempFile handler
+        temp_file.rename(source_path).expect("Could not rename file");
         Ok(false)
     }
 
@@ -265,6 +263,11 @@ fn extract_parent_dir_and_src_file(src_path: &Path) -> Result<(String, String)> 
 struct FileLineRange {
     file: String,
     line_range: Option<(usize, usize)>,
+}
+
+struct UnitTest {
+    code: Vec<String>,
+    name: String,
 }
 
 /// Extract concrete values from the CBMC output processed items.

@@ -45,8 +45,8 @@ jobs:
       - name: Build CBMC
         working-directory: ./cbmc
         run: |
-          cmake -S . -Bbuild -DWITH_JBMC=OFF
-          cmake --build build -- -j 4
+          make -C src minisat2-download cadical-download
+          make -C src -j4 MINISAT2=../../minisat-2.2.1 CADICAL=../../cadical
           # Prepend the bin directory to $PATH
           echo "${GITHUB_WORKSPACE}/cbmc/build/bin" >> $GITHUB_PATH
 
@@ -89,3 +89,8 @@ jobs:
       - name: Execute Kani performance tests
         working-directory: ./kani
         run: ./scripts/kani-perf.sh
+
+      - name: Execute Kani performance ignored tests
+        working-directory: ./kani
+        continue-on-error: true
+        run: cargo run -p compiletest -- --suite perf --mode cargo-kani-test ignore --ignored --no-fail-fast

@@ -113,6 +113,10 @@ pub struct KaniArgs {
     #[arg(long)]
     pub target_dir: Option<PathBuf>,
 
+    /// Force Kani to rebuild all packages before the verification.
+    #[arg(long)]
+    pub force_build: bool,
+
     /// Toggle between different styles of output
     #[arg(long, default_value = "regular", ignore_case = true, value_enum)]
     pub output_format: OutputFormat,
@@ -216,6 +220,10 @@ pub struct KaniArgs {
     #[arg(long, hide_short_help = true, requires("enable_unstable"))]
     pub ignore_global_asm: bool,
 
+    /// Write the GotoC symbol table to a file in JSON format instead of goto binary format.
+    #[arg(long, hide_short_help = true)]
+    pub write_json_symtab: bool,
+
     /// Execute CBMC's sanity checks to ensure the goto-program we generate is correct.
     #[arg(long, hide_short_help = true, requires("enable_unstable"))]
     pub run_sanity_checks: bool,
@@ -223,6 +231,16 @@ pub struct KaniArgs {
     /// Disable CBMC's slice formula which prevents values from being assigned to redundant variables in traces.
     #[arg(long, hide_short_help = true, requires("enable_unstable"))]
     pub no_slice_formula: bool,
+
+    /// Synthesize loop contracts for all loops.
+    #[arg(
+        long,
+        hide_short_help = true,
+        requires("enable_unstable"),
+        conflicts_with("unwind"),
+        conflicts_with("default_unwind")
+    )]
+    pub synthesize_loop_contracts: bool,
 
     /// Randomize the layout of structures. This option can help catching code that relies on
     /// a specific layout chosen by the compiler that is not guaranteed to be stable in the future.

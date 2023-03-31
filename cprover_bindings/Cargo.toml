@@ -3,7 +3,7 @@
 
 [package]
 name = "cprover_bindings"
-version = "0.22.0"
+version = "0.24.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 publish = false
@@ -23,3 +23,4 @@ linear-map = {version = "1.2", features = ["serde_impl"]}
 
 [dev-dependencies]
 serde_test = "1"
+memuse = "0.2.1"

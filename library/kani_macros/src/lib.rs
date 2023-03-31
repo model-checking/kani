@@ -52,7 +52,7 @@ pub fn proof(attr: TokenStream, item: TokenStream) -> TokenStream {
         #[kanitool::proof]
     );
 
-    assert!(attr.is_empty(), "#[kani::proof] does not take any arguments for now");
+    assert!(attr.is_empty(), "#[kani::proof] does not take any arguments currently");
 
     if sig.asyncness.is_none() {
         // Adds `#[kanitool::proof]` and other attributes
@@ -96,6 +96,25 @@ pub fn proof(attr: TokenStream, item: TokenStream) -> TokenStream {
         )
         .into()
     }
+}
+
+#[cfg(not(kani))]
+#[proc_macro_attribute]
+pub fn should_panic(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    // No-op in non-kani mode
+    item
+}
+
+#[cfg(kani)]
+#[proc_macro_attribute]
+pub fn should_panic(attr: TokenStream, item: TokenStream) -> TokenStream {
+    assert!(attr.is_empty(), "`#[kani::should_panic]` does not take any arguments currently");
+    let mut result = TokenStream::new();
+    let insert_string = "#[kanitool::should_panic]";
+    result.extend(insert_string.parse::<TokenStream>().unwrap());
+
+    result.extend(item);
+    result
 }
 
 #[cfg(not(kani))]

@@ -10,3 +10,16 @@ description = "Test that Kani correctly handle supported crate types"
 name = "lib"
 crate-type = ["lib", "rlib"]
 path = "../src/lib.rs"
+
+[package.metadata.kani.flags]
+# This test doesn't work with the cache due to naming conflict caused by
+# declaring ["lib", "rlib"] which is in fact redundant.
+# See https://github.com/rust-lang/cargo/issues/6313 for more details.
+#
+# This still works for a fresh build and it only prints a warning. Thus, we
+# force rebuild for now.
+#
+# Note that support for this case is deprecated. AFAIK, there is no plan to fix
+# cargo build cache for cases like this. Until then, we might as well check that
+# our support level matches cargo's.
+force-build = true

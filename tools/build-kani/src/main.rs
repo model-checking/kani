@@ -104,7 +104,7 @@ fn bundle_kani(dir: &Path) -> Result<()> {
     // 5. Record the exact toolchain we use
     std::fs::write(dir.join("rust-toolchain-version"), env!("RUSTUP_TOOLCHAIN"))?;
 
-    // 5. Include a licensing note
+    // 6. Include a licensing note
     cp(Path::new("tools/build-kani/license-notes.txt"), dir)?;
 
     Ok(())

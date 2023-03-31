@@ -65,6 +65,10 @@ impl<'sess, 'pr> HarnessRunner<'sess, 'pr> {
                         &harness,
                     )?;
 
+                    if self.sess.args.synthesize_loop_contracts {
+                        self.sess.synthesize_loop_contracts(&specialized_obj, &specialized_obj)?;
+                    }
+
                     let result = self.sess.check_harness(&specialized_obj, &report_dir, harness)?;
                     Ok(HarnessResult { harness, result })
                 })
@@ -97,7 +101,10 @@ impl KaniSession {
             // When quiet, we don't want to print anything at all.
             // When output is old, we also don't have real results to print.
             if !self.args.quiet && self.args.output_format != OutputFormat::Old {
-                println!("{}", result.render(&self.args.output_format));
+                println!(
+                    "{}",
+                    result.render(&self.args.output_format, harness.attributes.should_panic)
+                );
             }
 
             Ok(result)

@@ -33,6 +33,25 @@ jobs:
       - name: Execute Kani regression
         run: ./scripts/kani-regression.sh
 
+  write-json-symtab-regression:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout Kani
+        uses: actions/checkout@v3
+
+      - name: Setup Kani Dependencies
+        uses: ./.github/actions/setup
+        with:
+          os: ubuntu-20.04
+
+      - name: Build Kani
+        run: cargo build-dev
+
+      - name: Execute Kani regression
+        env:
+          KANI_ENABLE_WRITE_JSON_SYMTAB: 1
+        run: ./scripts/kani-regression.sh
+
   experimental-features-regression:
     runs-on: ubuntu-20.04
     env:

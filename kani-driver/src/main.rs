@@ -23,6 +23,7 @@ mod call_cbmc;
 mod call_cbmc_viewer;
 mod call_goto_cc;
 mod call_goto_instrument;
+mod call_goto_synthesizer;
 mod call_single_file;
 mod cbmc_output_parser;
 mod cbmc_property_renderer;
@@ -69,7 +70,7 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
         return assess::run_assess(session, assess::AssessArgs::default());
     }
 
-    let project = project::cargo_project(&session)?;
+    let project = project::cargo_project(&session, false)?;
     if session.args.only_codegen { Ok(()) } else { verify_project(project, session) }
 }
 

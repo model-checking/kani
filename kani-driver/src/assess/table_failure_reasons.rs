@@ -35,14 +35,19 @@ pub(crate) fn build(results: &[HarnessResult]) -> TableBuilder<FailureReasonsTab
     let mut builder = TableBuilder::new();
 
     for r in results {
-        let failures = r.result.failed_properties();
-        let classification = if failures.is_empty() {
-            "none (success)".to_string()
+        let classification = if let Err(exit_code) = r.result.results {
+            format!("CBMC failed with status {exit_code}")
         } else {
-            let mut classes: Vec<_> = failures.into_iter().map(|p| p.property_class()).collect();
-            classes.sort();
-            classes.dedup();
-            classes.join(" + ")
+            let failures = r.result.failed_properties();
+            if failures.is_empty() {
+                "none (success)".to_string()
+            } else {
+                let mut classes: Vec<_> =
+                    failures.into_iter().map(|p| p.property_class()).collect();
+                classes.sort();
+                classes.dedup();
+                classes.join(" + ")
+            }
         };
 
         let name = r.harness.pretty_name.trim_end_matches("::{closure#0}").to_string();

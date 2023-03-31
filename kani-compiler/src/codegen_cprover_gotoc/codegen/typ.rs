@@ -358,20 +358,41 @@ impl<'tcx> GotocCtx<'tcx> {
         // `Generator::resume(...) -> GeneratorState` function in case we
         // have an ordinary generator, or the `Future::poll(...) -> Poll`
         // function in case this is a special generator backing an async construct.
-        let ret_ty = if self.tcx.generator_is_async(*did) {
-            let state_did = self.tcx.require_lang_item(LangItem::Poll, None);
-            let state_adt_ref = self.tcx.adt_def(state_did);
-            let state_substs = self.tcx.intern_substs(&[sig.return_ty.into()]);
-            self.tcx.mk_adt(state_adt_ref, state_substs)
+        let tcx = self.tcx;
+        let (resume_ty, ret_ty) = if tcx.generator_is_async(*did) {
+            // The signature should be `Future::poll(_, &mut Context<'_>) -> Poll<Output>`
+            let poll_did = tcx.require_lang_item(LangItem::Poll, None);
+            let poll_adt_ref = tcx.adt_def(poll_did);
+            let poll_substs = tcx.intern_substs(&[sig.return_ty.into()]);
+            let ret_ty = tcx.mk_adt(poll_adt_ref, poll_substs);
+
+            // We have to replace the `ResumeTy` that is used for type and borrow checking
+            // with `&mut Context<'_>` which is used in codegen.
+            #[cfg(debug_assertions)]
+            {
+                if let ty::Adt(resume_ty_adt, _) = sig.resume_ty.kind() {
+                    let expected_adt = tcx.adt_def(tcx.require_lang_item(LangItem::ResumeTy, None));
+                    assert_eq!(*resume_ty_adt, expected_adt);
+                } else {
+                    panic!("expected `ResumeTy`, found `{:?}`", sig.resume_ty);
+                };
+            }
+            let context_mut_ref = tcx.mk_task_context();
+
+            (context_mut_ref, ret_ty)
         } else {
-            let state_did = self.tcx.require_lang_item(LangItem::GeneratorState, None);
-            let state_adt_ref = self.tcx.adt_def(state_did);
-            let state_substs = self.tcx.intern_substs(&[sig.yield_ty.into(), sig.return_ty.into()]);
-            self.tcx.mk_adt(state_adt_ref, state_substs)
+            // The signature should be `Generator::resume(_, Resume) -> GeneratorState<Yield, Return>`
+            let state_did = tcx.require_lang_item(LangItem::GeneratorState, None);
+            let state_adt_ref = tcx.adt_def(state_did);
+            let state_substs = tcx.intern_substs(&[sig.yield_ty.into(), sig.return_ty.into()]);
+            let ret_ty = tcx.mk_adt(state_adt_ref, state_substs);
+
+            (sig.resume_ty, ret_ty)
         };
+
         ty::Binder::bind_with_vars(
-            self.tcx.mk_fn_sig(
-                [env_ty, sig.resume_ty].iter(),
+            tcx.mk_fn_sig(
+                [env_ty, resume_ty].iter(),
                 &ret_ty,
                 false,
                 Unsafety::Normal,
@@ -813,7 +834,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     )
                 }
             }
-            ty::Projection(_) | ty::Opaque(_, _) => {
+            ty::Alias(..) => {
                 unreachable!("Type should've been normalized already")
             }
 
@@ -821,7 +842,11 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Bound(_, _) | ty::Param(_) => unreachable!("monomorphization bug"),
 
             // type checking remnants which shouldn't be reachable
-            ty::GeneratorWitness(_) | ty::Infer(_) | ty::Placeholder(_) | ty::Error(_) => {
+            ty::GeneratorWitness(_)
+            | ty::GeneratorWitnessMIR(_, _)
+            | ty::Infer(_)
+            | ty::Placeholder(_)
+            | ty::Error(_) => {
                 unreachable!("remnants of type checking")
             }
         }
@@ -1226,7 +1251,7 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Dynamic(..) | ty::Slice(_) | ty::Str => {
                 unreachable!("Should have generated a fat pointer")
             }
-            ty::Projection(_) | ty::Opaque(..) => {
+            ty::Alias(..) => {
                 unreachable!("Should have been removed by normalization")
             }
 
@@ -1259,6 +1284,7 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Bound(_, _) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Error(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::GeneratorWitness(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
+            ty::GeneratorWitnessMIR(_, _) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Infer(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Param(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Placeholder(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
@@ -1609,7 +1635,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
             Primitive::F32 => self.tcx.types.f32,
             Primitive::F64 => self.tcx.types.f64,
-            Primitive::Pointer => {
+            Primitive::Pointer(_) => {
                 self.tcx.mk_ptr(ty::TypeAndMut { ty: self.tcx.types.u8, mutbl: Mutability::Not })
             }
         }

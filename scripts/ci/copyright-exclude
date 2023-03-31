@@ -6,6 +6,7 @@
 .props
 .public.key
 Cargo.lock
+CHANGELOG
 LICENSE-APACHE
 LICENSE-MIT
 editorconfig

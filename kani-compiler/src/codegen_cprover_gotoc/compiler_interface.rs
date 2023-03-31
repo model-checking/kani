@@ -12,9 +12,10 @@ use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{
     collect_reachable_items, filter_closures_in_const_crate_items, filter_crate_items,
 };
-use bitflags::_core::any::Any;
 use cbmc::goto_program::Location;
+use cbmc::irep::goto_binary_serde::write_goto_binary_file;
 use cbmc::{InternedString, MachineModel};
+use kani_metadata::CompilerArtifactStub;
 use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata};
 use kani_queries::{QueryDb, ReachabilityType, UserInput};
 use rustc_codegen_ssa::back::metadata::create_wrapper_file;
@@ -38,6 +39,7 @@ use rustc_session::Session;
 use rustc_span::def_id::DefId;
 use rustc_target::abi::Endian;
 use rustc_target::spec::PanicStrategy;
+use std::any::Any;
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fmt::Write;
@@ -78,6 +80,10 @@ impl CodegenBackend for GotocCodegenBackend {
 
     fn provide_extern(&self, providers: &mut ty::query::ExternProviders) {
         provide::provide_extern(providers);
+    }
+
+    fn print_version(&self) {
+        println!("Kani-goto version: {}", env!("CARGO_PKG_VERSION"));
     }
 
     fn codegen_crate(
@@ -182,14 +188,21 @@ impl CodegenBackend for GotocCodegenBackend {
             let base_filename = outputs.output_path(OutputType::Object);
             let pretty = self.queries.lock().unwrap().get_output_pretty_json();
             write_file(&base_filename, ArtifactType::PrettyNameMap, &pretty_name_map, pretty);
-            write_file(&base_filename, ArtifactType::SymTab, &gcx.symbol_table, pretty);
+            if gcx.queries.get_write_json_symtab() {
+                write_file(&base_filename, ArtifactType::SymTab, &gcx.symbol_table, pretty);
+                symbol_table_to_gotoc(&tcx, &base_filename);
+            } else {
+                write_goto_binary_file(
+                    &base_filename.with_extension(ArtifactType::SymTabGoto),
+                    &gcx.symbol_table,
+                );
+            }
             write_file(&base_filename, ArtifactType::TypeMap, &type_map, pretty);
             write_file(&base_filename, ArtifactType::Metadata, &metadata, pretty);
             // If they exist, write out vtable virtual call function pointer restrictions
             if let Some(restrictions) = vtable_restrictions {
                 write_file(&base_filename, ArtifactType::VTableRestriction, &restrictions, pretty);
             }
-            symbol_table_to_gotoc(&tcx, &base_filename);
         }
         codegen_results(tcx, rustc_metadata, gcx.symbol_table.machine_model())
     }
@@ -205,7 +218,7 @@ impl CodegenBackend for GotocCodegenBackend {
             .unwrap())
     }
 
-    /// Emit `rlib` files during the link stage if it was requested.
+    /// Emit output files during the link stage if it was requested.
     ///
     /// We need to emit `rlib` files normally if requested. Cargo expects these in some
     /// circumstances and sends them to subsequent builds with `-L`.
@@ -215,6 +228,10 @@ impl CodegenBackend for GotocCodegenBackend {
     /// Types such as `bin`, `cdylib`, `dylib` will trigger the native linker.
     ///
     /// Thus, we manually build the rlib file including only the `rmeta` file.
+    ///
+    /// For cases where no metadata file was requested, we stub the file requested by writing the
+    /// path of the `kani-metadata.json` file so `kani-driver` can safely find the latest metadata.
+    /// See <https://github.com/model-checking/kani/issues/2234> for more details.
     fn link(
         &self,
         sess: &Session,
@@ -222,27 +239,37 @@ impl CodegenBackend for GotocCodegenBackend {
         outputs: &OutputFilenames,
     ) -> Result<(), ErrorGuaranteed> {
         let requested_crate_types = sess.crate_types();
-        if !requested_crate_types.contains(&CrateType::Rlib) {
-            // Quit successfully if we don't need an `rlib`:
-            return Ok(());
+        for crate_type in requested_crate_types {
+            let out_path = out_filename(
+                sess,
+                *crate_type,
+                outputs,
+                codegen_results.crate_info.local_crate_name,
+            );
+            debug!(?crate_type, ?out_path, "link");
+            if *crate_type == CrateType::Rlib {
+                // Emit the `rlib` that contains just one file: `<crate>.rmeta`
+                let mut builder = ArchiveBuilder::new(sess);
+                let tmp_dir = TempFileBuilder::new().prefix("kani").tempdir().unwrap();
+                let path = MaybeTempDir::new(tmp_dir, sess.opts.cg.save_temps);
+                let (metadata, _metadata_position) = create_wrapper_file(
+                    sess,
+                    b".rmeta".to_vec(),
+                    codegen_results.metadata.raw_data(),
+                );
+                let metadata = emit_wrapper_file(sess, &metadata, &path, METADATA_FILENAME);
+                builder.add_file(&metadata);
+                builder.build(&out_path);
+            } else {
+                // Write the location of the kani metadata file in the requested compiler output file.
+                let base_filename = outputs.output_path(OutputType::Object);
+                let content_stub = CompilerArtifactStub {
+                    metadata_path: base_filename.with_extension(ArtifactType::Metadata),
+                };
+                let out_file = File::create(out_path).unwrap();
+                serde_json::to_writer(out_file, &content_stub).unwrap();
+            }
         }
-
-        // Emit the `rlib` that contains just one file: `<crate>.rmeta`
-        let mut builder = ArchiveBuilder::new(sess);
-        let tmp_dir = TempFileBuilder::new().prefix("kani").tempdir().unwrap();
-        let path = MaybeTempDir::new(tmp_dir, sess.opts.cg.save_temps);
-        let (metadata, _metadata_position) =
-            create_wrapper_file(sess, b".rmeta".to_vec(), codegen_results.metadata.raw_data());
-        let metadata = emit_wrapper_file(sess, &metadata, &path, METADATA_FILENAME);
-        builder.add_file(&metadata);
-
-        let rlib = out_filename(
-            sess,
-            CrateType::Rlib,
-            outputs,
-            codegen_results.crate_info.local_crate_name,
-        );
-        builder.build(&rlib);
         Ok(())
     }
 }

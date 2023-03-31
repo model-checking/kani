@@ -34,6 +34,9 @@ pub const PRETTY_OUTPUT_FILES: &str = "pretty-json-files";
 /// Option used for suppressing global ASM error.
 pub const IGNORE_GLOBAL_ASM: &str = "ignore-global-asm";
 
+/// Option used to write JSON symbol tables instead of GOTO binaries.
+pub const WRITE_JSON_SYMTAB: &str = "write-json-symtab";
+
 /// Option name used to select which reachability analysis to perform.
 pub const REACHABILITY: &str = "reachability";
 
@@ -46,12 +49,6 @@ pub const ENABLE_STUBBING: &str = "enable-stubbing";
 /// Configure command options for the Kani compiler.
 pub fn parser() -> Command {
     let app = command!()
-        .arg(
-            Arg::new("kani-compiler-version")
-                .short('?')
-                .action(ArgAction::Version)
-                .help("Gets `kani-compiler` version."),
-        )
         .arg(
             Arg::new(KANI_LIB)
                 .long(KANI_LIB)
@@ -123,6 +120,12 @@ pub fn parser() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
+            Arg::new(WRITE_JSON_SYMTAB)
+                .long(WRITE_JSON_SYMTAB)
+                .help("Instruct the compiler to produce GotoC symbol tables in JSON format instead of GOTO binary format.")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
             // TODO: Remove this argument once stubbing works for multiple harnesses at a time.
             // <https://github.com/model-checking/kani/issues/1841>
             Arg::new(HARNESS)
@@ -137,6 +140,12 @@ pub fn parser() -> Command {
                 .help("Instruct the compiler to perform stubbing.")
                 .requires(HARNESS)
                 .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new("check-version")
+                .long("check-version")
+                .action(ArgAction::Set)
+                .help("Pass the kani version to the compiler to ensure cache coherence."),
         );
     #[cfg(feature = "unsound_experiments")]
     let app = crate::unsound_experiments::arg_parser::add_unsound_experiments_to_parser(app);

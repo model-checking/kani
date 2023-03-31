@@ -1,0 +1,8 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+#
+# Run benchcomp unit and regression tests. To use this script, run
+# ./test/run from the tools/benchcomp directory.
+
+python3 -m unittest discover
+exit $?
