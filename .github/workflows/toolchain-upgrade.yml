@@ -24,6 +24,18 @@ jobs:
           echo "next_toolchain_date=$next_toolchain_date" >> $GITHUB_ENV
           sed -i "/^channel/ s/$current_toolchain_date/$next_toolchain_date/" rust-toolchain.toml
           git diff
+          git clone https://github.com/rust-lang/rust rust.git
+          cd rust.git
+          current_toolchain_hash=$(curl https://static.rust-lang.org/dist/$current_toolchain_date/channel-rust-nightly-git-commit-hash.txt)
+          echo "current_toolchain_hash=$current_toolchain_hash" >> $GITHUB_ENV
+          next_toolchain_hash=$(curl https://static.rust-lang.org/dist/$next_toolchain_date/channel-rust-nightly-git-commit-hash.txt)
+          echo "next_toolchain_hash=$next_toolchain_hash" >> $GITHUB_ENV
+          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+          echo "git_log << $EOF" >> $GITHUB_ENV
+          git log --oneline $current_toolchain_hash..$next_toolchain_hash | \
+            sed 's#^#https://github.com/rust-lang/rust/commit/#' | \
+            sed 's/^/\n/' >> $GITHUB_ENV
+          echo "$EOF" >> $GITHUB_ENV
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v4
         with:
@@ -31,10 +43,14 @@ jobs:
           branch: toolchain-${{ env.next_toolchain_date }}
           delete-branch: true
           title: 'Automatic toolchain upgrade to nightly-${{ env.next_toolchain_date }}'
-          body: |
+          body: >
             Update Rust toolchain from nightly-${{ env.current_toolchain_date }} to
             nightly-${{ env.next_toolchain_date }} without any other source changes.
 
-            Thiis is an automatically generated pull request. If any of the CI checks fail,
+            This is an automatically generated pull request. If any of the CI checks fail,
             manual intervention is required. In such a case, review the changes at
-            https://github.com/rust-lang/rust.
+            https://github.com/rust-lang/rust from
+            https://github.com/rust-lang/rust/commit/${{ env.current_toolchain_hash }} up to
+            https://github.com/rust-lang/rust/commit/${{ env.next_toolchain_hash }}. The log
+            for this commit range is:
+            ${{ env.git_log }}
