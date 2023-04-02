@@ -8,6 +8,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     DEBCONF_NONINTERACTIVE_SEEN=true \
     PATH="/root/.cargo/bin:${PATH}"
 WORKDIR /tmp/kani
+COPY ./tests ./tests
+COPY  ./Cargo.toml ./Cargo.toml
 COPY ./kani-*-x86_64-unknown-linux-gnu.tar.gz ./kani-latest-x86_64-unknown-linux-gnu.tar.gz
 # Very awkward glob (not regex!) to get `kani-verifier-*` and not `kani-verifier-*.crate`
 COPY ./target/package/kani-verifier-*[^e] ./kani-verifier
@@ -23,5 +25,5 @@ RUN apt-get update && \
     rustup default $(rustup toolchain list | awk '{ print $1 }') && \
     cargo install --path ./kani-verifier && \
     cargo-kani setup --use-local-bundle ./kani-latest-x86_64-unknown-linux-gnu.tar.gz && \
-    apt-get clean && \
+    apt-get clean
     rm -rf /tmp/kani/* /root/.rustup/toolchains/*/share
