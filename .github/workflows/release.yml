@@ -9,7 +9,7 @@ on:
 jobs:
   Release:
     name: Release
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     permissions:
       contents: write
     outputs:
@@ -49,20 +49,12 @@ jobs:
             Kani Rust verifier release bundle version ${{ env.TAG_VERSION }}.
           draft: true
 
-  Upload:
+  Upload-macos:
     name: Upload
     needs: Release
-    runs-on: ${{ matrix.os }}
+    runs-on: macos-11
     permissions:
       contents: write
-    strategy:
-      matrix:
-        os: [macos-11, ubuntu-18.04]
-        include:
-          - os: macos-11
-            target: x86_64-apple-darwin
-          - os: ubuntu-18.04
-            target: x86_64-unknown-linux-gnu
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -70,7 +62,7 @@ jobs:
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
         with:
-          os: ${{ matrix.os }}
+          os: macos-11
 
       - name: Build release bundle
         run: |
@@ -82,8 +74,55 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.Release.outputs.upload_url }}
-          asset_path: kani-${{ needs.Release.outputs.version }}-${{ matrix.target }}.tar.gz
-          asset_name: kani-${{ needs.Release.outputs.version }}-${{ matrix.target }}.tar.gz
+          asset_path: kani-${{ needs.Release.outputs.version }}-x86_64-apple-darwin.tar.gz
+          asset_name: kani-${{ needs.Release.outputs.version }}-x86_64-apple-darwin.tar.gz
+          asset_content_type: application/gzip
+
+  Upload-linux:
+    name: Upload
+    needs: Release
+    runs-on: ubuntu-20.04
+    container:
+      image: ubuntu:18.04
+    permissions:
+      contents: write
+    steps:
+      # This is required before checkout because the container does not
+      # have Git installed, so cannot run checkout action. The checkout
+      # action requires Git >=2.18, so use the Git maintainers' PPA.
+      - name: Install system dependencies
+        run: |
+          apt-get update
+          apt-get install -y software-properties-common apt-utils
+          add-apt-repository ppa:git-core/ppa
+          apt-get update
+          apt-get install -y \
+            build-essential bash-completion curl lsb-release sudo g++ gcc flex \
+            bison make patch git
+          curl --proto '=https' --tlsv1.2 --retry 10 --retry-connrefused -fsSL \
+            https://get.docker.com -o /tmp/install-docker.sh
+          bash /tmp/install-docker.sh
+
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Kani Dependencies
+        uses: ./.github/actions/setup
+        with:
+          os: ubuntu-18.04
+
+      - name: Build release bundle
+        run: |
+          PATH=/github/home/.cargo/bin:$PATH cargo bundle
+
+      - name: Upload artifact
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.Release.outputs.upload_url }}
+          asset_path: kani-${{ needs.Release.outputs.version }}-x86_64-unknown-linux-gnu.tar.gz
+          asset_name: kani-${{ needs.Release.outputs.version }}-x86_64-unknown-linux-gnu.tar.gz
           asset_content_type: application/gzip
 
   Package-Docker:
