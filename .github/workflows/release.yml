@@ -49,8 +49,8 @@ jobs:
             Kani Rust verifier release bundle version ${{ env.TAG_VERSION }}.
           draft: true
 
-  Upload-macos:
-    name: Upload
+  MacOs-Bundle:
+    name: MacOs-Bundle
     needs: Release
     runs-on: macos-11
     permissions:
@@ -78,8 +78,8 @@ jobs:
           asset_name: kani-${{ needs.Release.outputs.version }}-x86_64-apple-darwin.tar.gz
           asset_content_type: application/gzip
 
-  Upload-linux:
-    name: Upload
+  Linux-Bundle:
+    name: Linux-Bundle
     needs: Release
     runs-on: ubuntu-20.04
     container:
