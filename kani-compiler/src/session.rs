@@ -70,7 +70,10 @@ pub fn init_session(args: &ArgMatches, json_hook: bool) {
     // Initialize the rustc logger using value from RUSTC_LOG. We keep the log control separate
     // because we cannot control the RUSTC log format unless if we match the exact tracing
     // version used by RUSTC.
-    rustc_driver::init_rustc_env_logger();
+    // TODO: Enable rustc log when we upgrade the toolchain.
+    // <https://github.com/model-checking/kani/issues/2283>
+    //
+    // rustc_driver::init_rustc_env_logger();
 
     // Install Kani panic hook.
     if json_hook {

@@ -29,7 +29,7 @@ use super::table_builder::{ColumnType, RenderableTableRow, TableBuilder, TableRo
 pub(crate) fn build(results: &[HarnessResult]) -> TableBuilder<PromisingTestsTableRow> {
     let mut builder = TableBuilder::new();
 
-    for r in results {
+    for r in results.iter().filter(|res| res.result.results.is_ok()) {
         // For now we're just reporting "successful" harnesses as candidates.
         // In the future this heuristic should be expanded. More data is required to do this, however.
         if r.result.failed_properties().is_empty() {

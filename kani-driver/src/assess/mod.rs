@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use self::metadata::{write_metadata, AssessMetadata};
-use anyhow::Result;
+use anyhow::{bail, Result};
 use kani_metadata::KaniMetadata;
 
 use crate::assess::table_builder::TableBuilder;
@@ -44,7 +44,7 @@ fn assess_project(mut session: KaniSession) -> Result<AssessMetadata> {
     // This is a temporary hack to make things work, until we get around to refactoring how arguments
     // work generally in kani-driver. These arguments, for instance, are all prepended to the subcommand,
     // which is not a nice way of taking arguments.
-    session.args.unwind = Some(1);
+    session.args.unwind = Some(session.args.default_unwind.unwrap_or(1));
     session.args.tests = true;
     session.args.output_format = crate::args::OutputFormat::Terse;
     session.codegen_tests = true;
@@ -54,7 +54,7 @@ fn assess_project(mut session: KaniSession) -> Result<AssessMetadata> {
         session.args.jobs = Some(None); // -j, num_cpu
     }
 
-    let project = project::cargo_project(&session)?;
+    let project = project::cargo_project(&session, true)?;
     let cargo_metadata = project.cargo_metadata.as_ref().expect("built with cargo");
 
     let packages_metadata = if project.merged_artifacts {
@@ -72,7 +72,15 @@ fn assess_project(mut session: KaniSession) -> Result<AssessMetadata> {
     // It would also be interesting to classify them by whether they build without warnings or not.
     // Tracking for the latter: https://github.com/model-checking/kani/issues/1758
 
-    println!("Found {} packages", packages_metadata.len());
+    let build_fail = project.failed_targets.as_ref().unwrap();
+    match (build_fail.len(), packages_metadata.len()) {
+        (0, 0) => println!("No relevant data was found."),
+        (0, succeeded) => println!("Analyzed {succeeded} packages"),
+        (_failed, 0) => bail!("Failed to build all targets"),
+        (failed, succeeded) => {
+            println!("Analyzed {succeeded} packages. Failed to build {failed} targets",)
+        }
+    }
 
     let metadata = merge_kani_metadata(packages_metadata.clone());
     let unsupported_features = table_unsupported_features::build(&packages_metadata);
@@ -161,9 +169,11 @@ fn reconstruct_metadata_structure(
                 )
             }
         }
-        let mut merged = crate::metadata::merge_kani_metadata(package_artifacts);
-        merged.crate_name = package.name.clone();
-        package_metas.push(merged);
+        if !package_artifacts.is_empty() {
+            let mut merged = crate::metadata::merge_kani_metadata(package_artifacts);
+            merged.crate_name = package.name.clone();
+            package_metas.push(merged);
+        }
     }
     if !remaining_metas.is_empty() {
         let remaining_names: Vec<_> = remaining_metas.into_iter().map(|x| x.crate_name).collect();

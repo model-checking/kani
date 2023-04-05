@@ -7,6 +7,9 @@
 
 #[kani::proof]
 fn main() {
-    let arr: [i32; 100] = kani::any();
-    assert_eq!(arr[0], arr[99]);
+    let mut arr: [i32; 100] = kani::Arbitrary::any_array();
+    for i in 0..30 {
+        arr[i] = kani::any();
+    }
+    assert!(arr[0] > arr[0] - arr[99]);
 }

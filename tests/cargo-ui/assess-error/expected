@@ -1,1 +1,2 @@
-error: Failed to assess project: Failed to execute cargo (exit status: 101). Found 3 compilation errors.
+error: Failed to compile lib `compilation-error`
+error: Failed to assess project: Failed to build all targets

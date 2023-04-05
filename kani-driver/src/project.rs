@@ -59,6 +59,8 @@ pub struct Project {
     pub merged_artifacts: bool,
     /// Records the cargo metadata from the build, if there was any
     pub cargo_metadata: Option<cargo_metadata::Metadata>,
+    /// For build `keep_going` mode, we collect the targets that we failed to compile.
+    pub failed_targets: Option<Vec<String>>,
 }
 
 impl Project {
@@ -87,7 +89,10 @@ impl Project {
         let expected_path = if self.merged_artifacts {
             None
         } else {
-            harness.goto_file.as_ref().map(|goto_file| convert_type(goto_file, SymTabGoto, typ))
+            harness
+                .goto_file
+                .as_ref()
+                .and_then(|goto_file| convert_type(goto_file, SymTabGoto, typ).canonicalize().ok())
         };
         trace!(?harness.goto_file, ?expected_path, ?typ, "get_harness_artifact");
         self.artifacts.iter().find(|artifact| {
@@ -145,8 +150,10 @@ fn dump_metadata(metadata: &KaniMetadata, path: &Path) {
 }
 
 /// Generate a project using `cargo`.
-pub fn cargo_project(session: &KaniSession) -> Result<Project> {
-    let outputs = session.cargo_build()?;
+/// Accept a boolean to build as many targets as possible. The number of failures in that case can
+/// be collected from the project.
+pub fn cargo_project(session: &KaniSession, keep_going: bool) -> Result<Project> {
+    let outputs = session.cargo_build(keep_going)?;
     let mut artifacts = vec![];
     let outdir = outputs.outdir.canonicalize()?;
     if session.args.function.is_some() {
@@ -181,6 +188,7 @@ pub fn cargo_project(session: &KaniSession) -> Result<Project> {
             metadata: vec![metadata],
             merged_artifacts: true,
             cargo_metadata: Some(outputs.cargo_metadata),
+            failed_targets: outputs.failed_targets,
         })
     } else {
         // For the MIR Linker we know there is only one artifact per verification target. Use
@@ -208,6 +216,7 @@ pub fn cargo_project(session: &KaniSession) -> Result<Project> {
             metadata,
             merged_artifacts: false,
             cargo_metadata: Some(outputs.cargo_metadata),
+            failed_targets: outputs.failed_targets,
         })
     }
 }
@@ -300,6 +309,7 @@ impl<'a> StandaloneProjectBuilder<'a> {
                 .collect(),
             merged_artifacts: false,
             cargo_metadata: None,
+            failed_targets: None,
         })
     }
 

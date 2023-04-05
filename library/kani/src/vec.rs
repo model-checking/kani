@@ -6,6 +6,7 @@ use crate::{any, assume, Arbitrary};
 pub fn any_vec<T, const MAX_LENGTH: usize>() -> Vec<T>
 where
     T: Arbitrary,
+    [(); std::mem::size_of::<[T; MAX_LENGTH]>()]:,
 {
     let mut v = exact_vec::<T, MAX_LENGTH>();
     let real_length: usize = any();
@@ -19,6 +20,7 @@ where
 pub fn exact_vec<T, const EXACT_LENGTH: usize>() -> Vec<T>
 where
     T: Arbitrary,
+    [(); std::mem::size_of::<[T; EXACT_LENGTH]>()]:,
 {
     let boxed_array: Box<[T; EXACT_LENGTH]> = Box::new(any());
     <[T]>::into_vec(boxed_array)

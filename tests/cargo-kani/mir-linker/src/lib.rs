@@ -4,12 +4,7 @@
 //! Dummy test to check --mir-linker runs on a cargo project.
 use semver::{BuildMetadata, Prerelease, Version};
 
-// Pre-CBMC 5.72.0, this test did not require an unwinding.
-// TODO: figure out why it needs one now:
-// https://github.com/model-checking/kani/issues/1978
-
 #[kani::proof]
-#[kani::unwind(2)]
 fn check_version() {
     let next_major: u64 = kani::any();
     let next_minor: u64 = kani::any();

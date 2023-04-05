@@ -3,6 +3,9 @@
 
 // Used for rustc_diagnostic_item.
 #![feature(rustc_attrs)]
+// This is required for the optimized version of `any_array()`
+#![feature(generic_const_exprs)]
+#![allow(incomplete_features)]
 
 pub mod arbitrary;
 #[cfg(feature = "concrete_playback")]
@@ -116,10 +119,10 @@ pub fn any<T: Arbitrary>() -> T {
 /// # Example:
 ///
 /// In the snippet below, we are verifying the behavior of the function `fn_under_verification`
-/// under all possible `NonZeroU8` input values between 0 and 12.
+/// under all possible `u8` input values between 0 and 12.
 ///
 /// ```rust
-/// let inputA = kani::any_where::<std::num::NonZeroU8>(|x| *x < 12);
+/// let inputA: u8 = kani::any_where(|x| *x < 12);
 /// fn_under_verification(inputA);
 /// ```
 ///

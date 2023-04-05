@@ -10,7 +10,7 @@ mod unsound_experiments;
 #[cfg(feature = "unsound_experiments")]
 use crate::unsound_experiments::UnsoundExperiments;
 
-#[derive(Debug, Clone, Copy, AsRefStr, EnumString, EnumVariantNames, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, AsRefStr, EnumString, EnumVariantNames, PartialEq, Eq)]
 #[strum(serialize_all = "snake_case")]
 pub enum ReachabilityType {
     /// Start the cross-crate reachability analysis from all harnesses in the local crate.
@@ -18,17 +18,12 @@ pub enum ReachabilityType {
     /// Use standard rustc monomorphizer algorithm.
     Legacy,
     /// Don't perform any reachability analysis. This will skip codegen for this crate.
+    #[default]
     None,
     /// Start the cross-crate reachability analysis from all public functions in the local crate.
     PubFns,
     /// Start the cross-crate reachability analysis from all *test* (i.e. `#[test]`) harnesses in the local crate.
     Tests,
-}
-
-impl Default for ReachabilityType {
-    fn default() -> Self {
-        ReachabilityType::None
-    }
 }
 
 pub trait UserInput {

@@ -97,12 +97,13 @@ impl<'tcx> GotocCtx<'tcx> {
                                 let niche_value =
                                     variant_index.as_u32() - niche_variants.start().as_u32();
                                 let niche_value = (niche_value as u128).wrapping_add(*niche_start);
-                                let value =
-                                    if niche_value == 0 && tag.primitive() == Primitive::Pointer {
-                                        discr_ty.null()
-                                    } else {
-                                        Expr::int_constant(niche_value, discr_ty.clone())
-                                    };
+                                let value = if niche_value == 0
+                                    && matches!(tag.primitive(), Primitive::Pointer(_))
+                                {
+                                    discr_ty.null()
+                                } else {
+                                    Expr::int_constant(niche_value, discr_ty.clone())
+                                };
                                 let place = unwrap_or_return_codegen_unimplemented_stmt!(
                                     self,
                                     self.codegen_place(place)
@@ -145,7 +146,8 @@ impl<'tcx> GotocCtx<'tcx> {
             | StatementKind::Retag(_, _)
             | StatementKind::AscribeUserType(_, _)
             | StatementKind::Nop
-            | StatementKind::Coverage { .. } => Stmt::skip(location),
+            | StatementKind::Coverage { .. }
+            | StatementKind::ConstEvalCounter => Stmt::skip(location),
         }
         .with_location(location)
     }

@@ -275,8 +275,8 @@ impl AbstractRawVec {
 
 fn handle_reserve(result: Result<(), TryReserveError>) {
     match result.map_err(|e| e.kind()) {
-        Err(CapacityOverflow) => capacity_overflow(),
-        Err(AllocError) => handle_alloc_error(),
+        Err(TryReserveErrorKind::CapacityOverflow) => capacity_overflow(),
+        Err(TryReserveErrorKind::AllocError) => handle_alloc_error(),
         Ok(()) => { /* yay */ }
     }
 }

@@ -14,8 +14,8 @@ EXIT_CODE_MISMATCH = 1
 EXIT_CODE_FAIL = 2
 
 
-def cbmc_version():
-    cmd = ["cbmc", "--version"]
+def get_version(tool_str):
+    cmd = [tool_str, "--version"]
     try:
         version = subprocess.run(cmd, stdout=PIPE, stderr=PIPE, check=True,
                                  universal_newlines=True)
@@ -26,7 +26,7 @@ def cbmc_version():
 
     match = re.match("([0-9]+).([0-9]+).([0-9]+)", version.stdout)
     if not match:
-        print(f"Can't parse cbmc version string: '{version.stdout.strip()}'")
+        print(f"Can't parse " + tool_str + " version string: '{version.stdout.strip()}'")
         sys.exit(EXIT_CODE_FAIL)
 
     return match.groups()
@@ -43,13 +43,21 @@ def main():
     parser.add_argument('--patch')
     args = parser.parse_args()
 
-    current_version = complete_version(*cbmc_version())
+    current_cbmc_version = complete_version(*get_version("cbmc"))
+    current_synthesizer_version = complete_version(*get_version("goto-synthesizer"))
     desired_version = complete_version(args.major, args.minor, args.patch)
 
-    if desired_version > current_version:
-        version_string = '.'.join([str(num) for num in current_version])
+    if desired_version > current_cbmc_version:
+        version_string = '.'.join([str(num) for num in current_cbmc_version])
         desired_version_string = '.'.join([str(num) for num in desired_version])
         print(f'ERROR: CBMC version is {version_string}, expected at least {desired_version_string}')
+        sys.exit(EXIT_CODE_MISMATCH)
+
+    if current_cbmc_version != current_synthesizer_version:
+        version_string = '.'.join([str(num) for num in current_synthesizer_version])
+        cbmc_version_string = '.'.join([str(num) for num in current_cbmc_version])
+        print(
+            f'ERROR: goto-synthesizer version is {version_string}, non consistent with CBMC version {cbmc_version_string}')
         sys.exit(EXIT_CODE_MISMATCH)
 
 

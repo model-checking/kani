@@ -1,7 +1,7 @@
 # Getting started
 
 Kani is an open-source verification tool that uses [model checking](./tool-comparison.md) to analyze Rust programs.
-Kani is particularly useful for verifying unsafe code in Rust, where many of the Rust’s usual guarantees are no longer checked by the compiler.
+Kani is particularly useful for verifying unsafe code blocks in Rust, where the "[unsafe superpowers](https://doc.rust-lang.org/stable/book/ch19-01-unsafe-rust.html#unsafe-superpowers)" are unchecked by the compiler.
 Some example properties you can prove with Kani include memory safety properties (e.g., null pointer dereferences, use-after-free, etc.), the absence of certain runtime errors (i.e., index out of bounds, panics), and the absence of some types of unexpected behavior (e.g., arithmetic overflows).
 Kani can also prove custom properties provided in the form of user-specified assertions.
 As Kani uses model checking, Kani will either prove the property, disprove the

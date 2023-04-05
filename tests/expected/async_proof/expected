@@ -1,5 +1,5 @@
 error: custom attribute panicked
-#[kani::proof] does not take any arguments for now
+#[kani::proof] does not take any arguments currently
 
 error: custom attribute panicked
 #[kani::proof] cannot be applied to async functions that take inputs for now

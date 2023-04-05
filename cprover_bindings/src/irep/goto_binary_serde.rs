@@ -23,7 +23,7 @@ pub fn write_goto_binary_file(filename: &PathBuf, source: &crate::goto_program::
     let mut writer = BufWriter::new(out_file);
     let mut serializer = GotoBinarySerializer::new(&mut writer);
     let irep_symbol_table = &source.to_irep();
-    serializer.write_file(irep_symbol_table).unwrap();
+    serializer.write_file(irep_symbol_table);
 }
 
 /// Reads a symbol table from a file expected to be in goto binary format in version 5.
@@ -33,11 +33,11 @@ pub fn write_goto_binary_file(filename: &PathBuf, source: &crate::goto_program::
 /// - src/util/irep_serialization.h
 /// - src/util/irep_hash_container.h
 /// - src/util/irep_hash.h
-pub fn read_goto_binary_file(filename: &PathBuf) {
-    let file = File::open(filename).unwrap();
+pub fn read_goto_binary_file(filename: &PathBuf) -> io::Result<()> {
+    let file = File::open(filename)?;
     let reader = BufReader::new(file);
     let mut deserializer = GotoBinaryDeserializer::new(reader);
-    deserializer.read_file().unwrap();
+    deserializer.read_file()
 }
 
 /// # Design overview
@@ -338,10 +338,7 @@ struct GotoBinarySerializer<'a, W>
 where
     W: Write,
 {
-    writer: &'a mut W,
-
-    /// In-memory temporary buffer, contents get flushed after each object
-    buf: Vec<u8>,
+    buf: &'a mut BufWriter<W>,
 
     /// Numbering used for structural sharing.
     numbering: IrepNumbering,
@@ -358,10 +355,9 @@ where
     W: Write,
 {
     /// Constructor.
-    fn new(writer: &'a mut W) -> Self {
+    fn new(buf: &'a mut BufWriter<W>) -> Self {
         GotoBinarySerializer {
-            writer,
-            buf: Vec::new(),
+            buf,
             numbering: IrepNumbering::new(),
             irep_count: Vec::new(),
             string_count: Vec::new(),
@@ -388,18 +384,9 @@ where
         count == 0
     }
 
-    /// Flushes the temporary buffer to the external writer,
-    /// flushes the writer and clears the temporary buffer.
-    fn flush(&mut self) -> io::Result<()> {
-        self.writer.write_all(&self.buf)?;
-        self.buf.clear();
-        Ok(())
-    }
-
     /// Writes a single byte to the temporary buffer.
-    fn write_u8(&mut self, u: u8) -> io::Result<()> {
-        self.buf.push(u);
-        Ok(())
+    fn write_u8(&mut self, u: u8) {
+        assert!(self.buf.write(&[u]).unwrap() == 1);
     }
 
     /// Writes a usize to the temporary buffer using 7-bit variable length
@@ -409,27 +396,26 @@ where
     /// continuation or the end of the encoding:
     /// - it is set to true if some true bits remain in the usize value,
     /// - it is set to zero all remaining bits of the usize value are zero.
-    fn write_usize_varenc(&mut self, mut u: usize) -> io::Result<()> {
+    fn write_usize_varenc(&mut self, mut u: usize) {
         loop {
             let mut v: u8 = (u & 0x7f) as u8;
             u >>= 7;
             if u == 0 {
                 // all remaining bits of u are zero
-                self.buf.push(v);
+                self.write_u8(v);
                 break;
             }
             // there are more bits in u, set the 8th bit to indicate continuation
             v |= 0x80;
-            self.buf.push(v);
+            self.write_u8(v);
         }
-        Ok(())
     }
 
     /// Writes a numbered string to the buffer. Writes the unique number of
     /// the string, and writes the actual string only if was never written before.
-    fn write_numbered_string_ref(&mut self, numbered_string: &NumberedString) -> io::Result<()> {
+    fn write_numbered_string_ref(&mut self, numbered_string: &NumberedString) {
         let num = numbered_string.number;
-        self.write_usize_varenc(num)?;
+        self.write_usize_varenc(num);
         if self.is_first_write_string(num) {
             // first occurrence
             numbered_string.string.map(|raw_str| {
@@ -437,9 +423,9 @@ where
                     if c.is_ascii() {
                         // add escape character for backslashes and 0
                         if c == '0' || c == '\\' {
-                            self.buf.push(b'\\');
+                            self.write_u8(b'\\');
                         }
-                        self.buf.push(c as u8);
+                        self.write_u8(c as u8);
                     } else {
                         let mut buf = [0; 4];
                         c.encode_utf8(&mut buf);
@@ -447,70 +433,66 @@ where
                             if u == 0 {
                                 break;
                             }
-                            self.buf.push(u);
+                            self.write_u8(u);
                         }
                     }
                 }
                 // write terminator
-                self.buf.push(0u8);
+                self.write_u8(0u8);
             });
         }
-        self.flush()?;
-        Ok(())
     }
 
     /// Writes a numbered irep to the buffer. Writes the unique number of the
     /// irep, and writes the actual irep contents only if was never written
     /// before.
-    fn write_numbered_irep_ref(&mut self, irep: &NumberedIrep) -> io::Result<()> {
+    fn write_numbered_irep_ref(&mut self, irep: &NumberedIrep) {
         let num = irep.number;
-        self.write_usize_varenc(num)?;
+        self.write_usize_varenc(num);
 
         if self.is_first_write_irep(num) {
             let id = &self.numbering.id(&irep);
-            self.write_numbered_string_ref(id)?;
+            self.write_numbered_string_ref(id);
 
             for sub_idx in 0..(self.numbering.nof_sub(&irep)) {
-                self.write_u8(b'S')?;
-                self.write_numbered_irep_ref(&self.numbering.sub(&irep, sub_idx))?;
+                self.write_u8(b'S');
+                self.write_numbered_irep_ref(&self.numbering.sub(&irep, sub_idx));
             }
 
             for named_sub_idx in 0..(self.numbering.nof_named_sub(&irep)) {
-                self.write_u8(b'N')?;
+                self.write_u8(b'N');
                 let (k, v) = self.numbering.named_sub(&irep, named_sub_idx);
-                self.write_numbered_string_ref(&k)?;
-                self.write_numbered_irep_ref(&v)?;
+                self.write_numbered_string_ref(&k);
+                self.write_numbered_irep_ref(&v);
             }
 
-            self.write_u8(0)?; // terminator
+            self.write_u8(0); // terminator
         }
-        self.flush()?;
-        Ok(())
     }
 
     /// Translates the string to its numbered version and serializes it.
-    fn write_string_ref(&mut self, str: &InternedString) -> io::Result<()> {
+    fn write_string_ref(&mut self, str: &InternedString) {
         let numbered_string = &self.numbering.number_string(str);
-        self.write_numbered_string_ref(numbered_string)
+        self.write_numbered_string_ref(numbered_string);
     }
 
     /// Translates the irep to its numbered version and serializes it.
-    fn write_irep_ref(&mut self, irep: &Irep) -> io::Result<()> {
+    fn write_irep_ref(&mut self, irep: &Irep) {
         let numbered_irep = self.numbering.number_irep(irep);
-        self.write_numbered_irep_ref(&numbered_irep)
+        self.write_numbered_irep_ref(&numbered_irep);
     }
 
     /// Writes a symbol to the byte stream.
-    fn write_symbol(&mut self, symbol: &Symbol) -> io::Result<()> {
-        self.write_irep_ref(&symbol.typ)?;
-        self.write_irep_ref(&symbol.value)?;
-        self.write_irep_ref(&symbol.location)?;
-        self.write_string_ref(&symbol.name)?;
-        self.write_string_ref(&symbol.module)?;
-        self.write_string_ref(&symbol.base_name)?;
-        self.write_string_ref(&symbol.mode)?;
-        self.write_string_ref(&symbol.pretty_name)?;
-        self.write_u8(0)?;
+    fn write_symbol(&mut self, symbol: &Symbol) {
+        self.write_irep_ref(&symbol.typ);
+        self.write_irep_ref(&symbol.value);
+        self.write_irep_ref(&symbol.location);
+        self.write_string_ref(&symbol.name);
+        self.write_string_ref(&symbol.module);
+        self.write_string_ref(&symbol.base_name);
+        self.write_string_ref(&symbol.mode);
+        self.write_string_ref(&symbol.pretty_name);
+        self.write_u8(0);
 
         let mut flags: usize = 0;
         flags = (flags << 1) | (symbol.is_weak) as usize;
@@ -532,54 +514,42 @@ where
         flags = (flags << 1) | (symbol.is_extern) as usize;
         flags = (flags << 1) | (symbol.is_volatile) as usize;
 
-        self.write_usize_varenc(flags)?;
-        self.flush()?;
-        Ok(())
+        self.write_usize_varenc(flags);
     }
 
     /// Writes a symbol table to the byte stream.
-    fn write_symbol_table(&mut self, symbol_table: &SymbolTable) -> io::Result<()> {
+    fn write_symbol_table(&mut self, symbol_table: &SymbolTable) {
         // Write symbol table size
-        self.write_usize_varenc(symbol_table.symbol_table.len())?;
+        self.write_usize_varenc(symbol_table.symbol_table.len());
 
         // Write symbols
         for symbol in symbol_table.symbol_table.values() {
-            self.write_symbol(symbol)?;
+            self.write_symbol(symbol);
         }
-
-        self.flush()?;
-        Ok(())
     }
 
     /// Writes an empty function map to the byte stream.
-    fn write_function_map(&mut self) -> io::Result<()> {
+    fn write_function_map(&mut self) {
         // Write empty GOTO functions map
-        self.write_usize_varenc(0)?;
-        self.flush()?;
-        Ok(())
+        self.write_usize_varenc(0);
     }
 
     /// Writes a GOTO binary file header to the byte stream.
-    fn write_header(&mut self) -> io::Result<()> {
+    fn write_header(&mut self) {
         // Write header
-        self.write_u8(0x7f)?;
-        self.write_u8(b'G')?;
-        self.write_u8(b'B')?;
-        self.write_u8(b'F')?;
+        let header = [0x7f, b'G', b'B', b'F'];
+        let written = self.buf.write(&header[..]).unwrap();
+        assert!(written == 4);
 
         // Write goto binary version
-        self.write_usize_varenc(5)?;
-        self.flush()?;
-        Ok(())
+        self.write_usize_varenc(5);
     }
 
     /// Writes the symbol table using the GOTO binary file format to the byte stream.
-    fn write_file(&mut self, symbol_table: &SymbolTable) -> io::Result<()> {
-        self.write_header()?;
-        self.write_symbol_table(symbol_table)?;
-        self.write_function_map()?;
-        self.flush()?;
-        Ok(())
+    fn write_file(&mut self, symbol_table: &SymbolTable) {
+        self.write_header();
+        self.write_symbol_table(symbol_table);
+        self.write_function_map();
     }
 }
 
@@ -626,18 +596,14 @@ where
         }
     }
 
-    // #[cfg(test)]
-    // /// Returns memory consumption and sharing statistics about the deserializer.
-    // fn get_stats(&self) -> GotoBinarySharingStats {
-    //     GotoBinarySharingStats::from_deserializer(self)
-    // }
-
     /// Returns Err if the found value is not the expected value.
     fn expect<T: Eq + std::fmt::Display>(found: T, expected: T) -> io::Result<T> {
         if found != expected {
             return Err(Error::new(
                 ErrorKind::Other,
-                format!("expected {expected} in byte stream, found {found} instead)"),
+                format!(
+                    "Invalid goto binary input: expected {expected} in byte stream, found {found} instead)"
+                ),
             ));
         }
         Ok(found)
@@ -662,7 +628,7 @@ where
         }
         let old = self.string_map[num_binary];
         if old.is_some() {
-            panic!("string number already mapped");
+            panic!("Invalid goto binary input: string number {num_binary} already mapped");
         }
         self.string_map[num_binary] = Some(num);
     }
@@ -686,7 +652,7 @@ where
         }
         let old = self.irep_map[num_binary];
         if old.is_some() {
-            panic!("irep number already mapped");
+            panic!("Invalid goto binary input: irep number {num_binary} already mapped");
         }
         self.irep_map[num_binary] = Some(num);
     }
@@ -696,7 +662,10 @@ where
         match self.bytes.next() {
             Some(Ok(u)) => Ok(u),
             Some(Err(error)) => Err(error),
-            None => Err(Error::new(ErrorKind::Other, "unexpected end of input")),
+            None => Err(Error::new(
+                ErrorKind::Other,
+                "Invalid goto binary input: unexpected end of input",
+            )),
         }
     }
 
@@ -712,7 +681,7 @@ where
                     if shift >= max_shift {
                         return Err(Error::new(
                             ErrorKind::Other,
-                            "serialized value is too large to fit in usize",
+                            "Invalid goto binary input: serialized value is too large to fit in usize",
                         ));
                     };
                     result |= ((u & 0x7f) as usize) << shift;
@@ -725,7 +694,10 @@ where
                     return Err(error);
                 }
                 None => {
-                    return Err(Error::new(ErrorKind::Other, "unexpected end of input"));
+                    return Err(Error::new(
+                        ErrorKind::Other,
+                        "Invalid goto binary input: unexpected end of input",
+                    ));
                 }
             }
         }
@@ -773,7 +745,7 @@ where
                                     None => {
                                         return Err(Error::new(
                                             ErrorKind::Other,
-                                            "unexpected end of input",
+                                            "Invalid goto binary input: unexpected end of input",
                                         ));
                                     }
                                 }
@@ -790,7 +762,10 @@ where
                     }
                     None => {
                         // No more bytes left
-                        return Err(Error::new(ErrorKind::Other, "unexpected end of input"));
+                        return Err(Error::new(
+                            ErrorKind::Other,
+                            "Invalid goto binary input: unexpected end of input",
+                        ));
                     }
                 }
             }
@@ -822,7 +797,10 @@ where
                 match c {
                     b'S' => {
                         if sub_done {
-                            return Err(Error::new(ErrorKind::Other, "incorrect binary structure"));
+                            return Err(Error::new(
+                                ErrorKind::Other,
+                                "Invalid goto binary input: incorrect binary structure",
+                            ));
                         }
                         let decoded_sub = self.read_numbered_irep_ref()?;
                         sub.push(decoded_sub.number);
@@ -848,7 +826,10 @@ where
                     other => {
                         return Err(Error::new(
                             ErrorKind::Other,
-                            format!("unexpected character in input stream {}", other as char),
+                            format!(
+                                "Invalid goto binary input: unexpected character in input stream {}",
+                                other as char
+                            ),
                         ));
                     }
                 }
@@ -946,7 +927,7 @@ where
             return Err(Error::new(
                 ErrorKind::Other,
                 format!(
-                    "unsupported GOTO binary version: {}. Supported version: {}",
+                    "Unsupported GOTO binary version: {}. Supported version: {}",
                     goto_binary_version, 5
                 ),
             ));
@@ -1065,7 +1046,6 @@ mod sharing_stats {
     {
         fn dynamic_usage(&self) -> usize {
             std::mem::size_of::<Self>()
-                + self.buf.dynamic_usage()
                 + self.numbering.dynamic_usage()
                 + self.irep_count.dynamic_usage()
                 + self.string_count.dynamic_usage()
@@ -1073,14 +1053,11 @@ mod sharing_stats {
 
         fn dynamic_usage_bounds(&self) -> (usize, Option<usize>) {
             let s = std::mem::size_of::<Self>();
-            let (l1, u1) = self.buf.dynamic_usage_bounds();
-            let (l2, u2) = self.numbering.dynamic_usage_bounds();
-            let (l3, u3) = self.irep_count.dynamic_usage_bounds();
-            let (l4, u4) = self.string_count.dynamic_usage_bounds();
-            let l = l1 + l2 + l3 + l4 + s;
-            let u = u1.and_then(|u1| {
-                u2.and_then(|u2| u3.and_then(|u3| u4.map(|u4| u1 + u2 + u3 + u4 + s)))
-            });
+            let (l1, u1) = self.numbering.dynamic_usage_bounds();
+            let (l2, u2) = self.irep_count.dynamic_usage_bounds();
+            let (l3, u3) = self.string_count.dynamic_usage_bounds();
+            let l = l1 + l2 + l3 + s;
+            let u = u1.and_then(|u1| u2.and_then(|u2| u3.map(|u3| u1 + u2 + u3 + s)));
             (l, u)
         }
     }
@@ -1237,7 +1214,7 @@ mod tests {
     use crate::linear_map;
     use crate::InternedString;
     use linear_map::LinearMap;
-
+    use std::io::BufWriter;
     /// Utility function : creates a Irep representing a single symbol.
     fn make_symbol_expr(identifier: &str) -> Irep {
         Irep {
@@ -1303,13 +1280,15 @@ mod tests {
     /// Write and read back all possible u8 values.
     fn test_write_u8() {
         let mut vec: Vec<u8> = Vec::new();
-        let mut serializer = GotoBinarySerializer::new(&mut vec);
+        {
+            // write all possible u8 values
+            let mut writer = BufWriter::new(&mut vec);
+            let mut serializer = GotoBinarySerializer::new(&mut writer);
 
-        // write all possible u8 values
-        for u in std::u8::MIN..std::u8::MAX {
-            serializer.write_u8(u).unwrap();
+            for u in std::u8::MIN..std::u8::MAX {
+                serializer.write_u8(u);
+            }
         }
-        serializer.flush().unwrap();
 
         // read back from byte stream
         for u in std::u8::MIN..std::u8::MAX {
@@ -1329,13 +1308,15 @@ mod tests {
         }
         powers_of_two.push(usize::MAX);
 
-        // Serialize using variable length encoding
         let mut vec: Vec<u8> = Vec::new();
-        let mut serializer = GotoBinarySerializer::new(&mut vec);
-        for number in powers_of_two.iter() {
-            serializer.write_usize_varenc(*number).unwrap();
+        {
+            // Serialize using variable length encoding
+            let mut writer = BufWriter::new(&mut vec);
+            let mut serializer = GotoBinarySerializer::new(&mut writer);
+            for number in powers_of_two.iter() {
+                serializer.write_usize_varenc(*number);
+            }
         }
-        serializer.flush().unwrap();
 
         // Deserialize byte stream and check equality
         let mut deserializer = GotoBinaryDeserializer::new(std::io::Cursor::new(vec));
@@ -1356,14 +1337,15 @@ mod tests {
             "some string containing \\ and # and $ and % and \n \t and 1231231".intern(),
         ];
 
-        // Serialize unique strings
         let mut vec: Vec<u8> = Vec::new();
-        let mut serializer = GotoBinarySerializer::new(&mut vec);
-        for string in strings.iter() {
-            serializer.write_string_ref(string).unwrap();
+        {
+            // Serialize unique strings
+            let mut writer = BufWriter::new(&mut vec);
+            let mut serializer = GotoBinarySerializer::new(&mut writer);
+            for string in strings.iter() {
+                serializer.write_string_ref(string);
+            }
         }
-        serializer.flush().unwrap();
-
         // Deserialize contents one by one and check equality
         let mut deserializer = GotoBinaryDeserializer::new(std::io::Cursor::new(vec));
         for string in strings.iter() {
@@ -1375,18 +1357,22 @@ mod tests {
     #[test]
     /// Write and read back repeated strings.
     fn test_write_read_multiple_string_ref() {
-        let mut vec: Vec<u8> = Vec::new();
         let foo = String::from("foo").intern();
         let bar = String::from("bar").intern();
         let baz = String::from("baz").intern();
         let strings = vec![foo, bar, foo, bar, foo, baz, baz, bar, foo];
 
-        // Serialize the same strings several times in arbitrary order
-        let mut serializer = GotoBinarySerializer::new(&mut vec);
-        for string in strings.iter() {
-            serializer.write_string_ref(&string).unwrap();
+        let mut vec: Vec<u8> = Vec::new();
+
+        {
+            // Serialize the same strings several times in arbitrary order
+            let mut writer = BufWriter::new(&mut vec);
+            let mut serializer = GotoBinarySerializer::new(&mut writer);
+            for string in strings.iter() {
+                serializer.write_string_ref(&string);
+            }
+            println!("Serializer stats {:?}", serializer.get_stats());
         }
-        println!("Serializer stats {:?}", serializer.get_stats());
 
         // Deserialize the byte stream and check equality
         let mut deserializer = GotoBinaryDeserializer::new(std::io::Cursor::new(vec));
@@ -1404,27 +1390,31 @@ mod tests {
         let irep1 = &fold_with_op(&identifiers1, IrepId::And);
 
         let mut vec: Vec<u8> = Vec::new();
-        let mut serializer = GotoBinarySerializer::new(&mut vec);
+        {
+            let mut writer = BufWriter::new(&mut vec);
+            let mut serializer = GotoBinarySerializer::new(&mut writer);
 
-        // Number an irep
-        let num1 = serializer.numbering.number_irep(&irep1);
+            // Number an irep
+            let num1 = serializer.numbering.number_irep(&irep1);
 
-        // Number an structurally different irep
-        let identifiers2 = vec!["foo", "bar", "baz", "different", "zab", "rab", "oof"];
-        let irep2 = &fold_with_op(&identifiers2, IrepId::And);
-        let num2 = serializer.numbering.number_irep(&irep2);
+            // Number an structurally different irep
+            let identifiers2 = vec!["foo", "bar", "baz", "different", "zab", "rab", "oof"];
+            let irep2 = &fold_with_op(&identifiers2, IrepId::And);
+            let num2 = serializer.numbering.number_irep(&irep2);
 
-        // Check that they have the different numbers.
-        assert_ne!(num1, num2);
+            // Check that they have the different numbers.
+            assert_ne!(num1, num2);
 
-        // write both numbered ireps
-        serializer.write_numbered_irep_ref(&num1).unwrap();
-        serializer.write_numbered_irep_ref(&num2).unwrap();
+            // write both numbered ireps
+            serializer.write_numbered_irep_ref(&num1);
+            serializer.write_numbered_irep_ref(&num2);
 
-        // check that the serializer knows it wrote the same irep twice
-        assert!(serializer.irep_count[num1.number] == 1);
-        assert!(serializer.irep_count[num2.number] == 1);
-        println!("Serializer stats {:?}", serializer.get_stats());
+            // check that the serializer knows it wrote the same irep twice
+            assert!(serializer.irep_count[num1.number] == 1);
+            assert!(serializer.irep_count[num2.number] == 1);
+            println!("Serializer stats {:?}", serializer.get_stats());
+            // writer gets dropped here
+        }
 
         // Deserialize two ireps from the byte stream
         let mut deserializer = GotoBinaryDeserializer::new(std::io::Cursor::new(vec));
@@ -1446,15 +1436,16 @@ mod tests {
         let mut vec: Vec<u8> = Vec::new();
         {
             // Write two structurally identical ireps
-            let mut serializer = GotoBinarySerializer::new(&mut vec);
+            let mut writer = BufWriter::new(&mut vec);
+            let mut serializer = GotoBinarySerializer::new(&mut writer);
             let irep1 = &fold_with_op(&identifiers, IrepId::And);
             let irep2 = &fold_with_op(&identifiers, IrepId::And);
-            serializer.write_irep_ref(irep1).unwrap();
-            serializer.write_irep_ref(irep2).unwrap();
-            serializer.write_irep_ref(irep1).unwrap();
-            serializer.write_irep_ref(irep2).unwrap();
-            serializer.write_irep_ref(irep1).unwrap();
-            serializer.write_irep_ref(irep1).unwrap();
+            serializer.write_irep_ref(irep1);
+            serializer.write_irep_ref(irep2);
+            serializer.write_irep_ref(irep1);
+            serializer.write_irep_ref(irep2);
+            serializer.write_irep_ref(irep1);
+            serializer.write_irep_ref(irep1);
             println!("Serializer stats {:?}", serializer.get_stats());
         }
 

@@ -169,7 +169,7 @@ impl Callbacks for KaniCompiler {
         rustc_queries: &'tcx rustc_interface::Queries<'tcx>,
     ) -> Compilation {
         if self.stubs.is_none() && self.queries.lock().unwrap().get_stubbing_enabled() {
-            rustc_queries.global_ctxt().unwrap().peek_mut().enter(|tcx| {
+            rustc_queries.global_ctxt().unwrap().enter(|tcx| {
                 let stubs = self.stubs.insert(self.collect_stubs(tcx));
                 debug!(?stubs, "after_analysis");
                 if stubs.is_empty() { Compilation::Continue } else { Compilation::Stop }

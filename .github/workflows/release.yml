@@ -30,7 +30,7 @@ jobs:
         id: versioning
         run: |
           # Output for upload scripts to see
-          echo ::set-output name=version::${{ env.TAG_VERSION }}
+          echo "version=${{ env.TAG_VERSION }}" >> $GITHUB_OUTPUT
           # Validate git tag & Cargo.toml are in sync on version number
           if [[ ${{ env.CRATE_VERSION }} != ${{ env.TAG_VERSION }} ]]; then
             echo "Git tag ${{env.TAG_VERSION}} did not match crate version ${{env.CRATE_VERSION}}"
@@ -39,16 +39,15 @@ jobs:
 
       - name: Create release
         id: create_release
-        uses: actions/create-release@v1
+        uses: ncipollo/release-action@v1.12.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: kani-${{ env.TAG_VERSION }}
-          release_name: kani-${{ env.TAG_VERSION }}
+          name: kani-${{ env.TAG_VERSION }}
+          tag: kani-${{ env.TAG_VERSION }}
           body: |
             Kani Rust verifier release bundle version ${{ env.TAG_VERSION }}.
           draft: true
-          prerelease: false
 
   Upload:
     name: Upload

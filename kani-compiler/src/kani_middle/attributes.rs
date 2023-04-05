@@ -23,6 +23,7 @@ use super::resolve;
 #[strum(serialize_all = "snake_case")]
 enum KaniAttributeKind {
     Proof,
+    ShouldPanic,
     Solver,
     Stub,
     Unwind,
@@ -96,6 +97,10 @@ pub fn extract_harness_attributes(tcx: TyCtxt, def_id: DefId) -> Option<HarnessA
             HarnessAttributes::default(),
             |mut harness, (kind, attributes)| {
                 match kind {
+                    KaniAttributeKind::ShouldPanic => {
+                        expect_single(tcx, kind, &attributes);
+                        harness.should_panic = true
+                    }
                     KaniAttributeKind::Solver => {
                         // Make sure the solver is not already set
                         harness.solver = parse_solver(tcx, expect_single(tcx, kind, &attributes));
@@ -276,7 +281,7 @@ fn parse_solver(tcx: TyCtxt, attr: &Attribute) -> Option<CbmcSolver> {
             }
         }
         MetaItemKind::NameValue(lit) if ident_str == "bin" && lit.kind.is_str() => {
-            Some(CbmcSolver::Binary(lit.token_lit.symbol.to_string()))
+            Some(CbmcSolver::Binary(lit.symbol.to_string()))
         }
         _ => {
             invalid_arg_err(attr);
