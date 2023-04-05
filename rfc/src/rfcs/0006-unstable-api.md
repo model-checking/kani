@@ -1,4 +1,4 @@
-- **Feature Name:** Unstable APIs (unstable-api)
+- **Feature Name:** Unstable APIs (`unstable-api`)
 - **RFC Tracking Issue**: <https://github.com/model-checking/kani/issues/2279>
 - **RFC PR:** <https://github.com/model-checking/kani/pull/2281>
 - **Status:** Under Review
@@ -17,8 +17,16 @@ Add an opt-in model for users to try experimental APIs.
 The goal is to enable users to try features that aren't stable yet,
 which allow us to get valuable feedback during the development of new features and APIs.
 
-The opt-in model empower the users to control when some instability is acceptable,
+The opt-in model empowers the users to control when some instability is acceptable,
 which makes Kani UX more consistent and safe.
+
+Currently, each new unstable feature will introduce a new switch, some of them will look like `--enable-<feature>`,
+while others will be a plain switch which allows further feature configuration `--<feature-config>=[value]`.
+For example, we today have the following unstable switches `--enable-stubbing`, `--concrete-playback`, `--gen-c`.
+In all cases, users are still required to provide the additional `--enable-unstable` option.
+Some unstable features are included in the `--help` section, and only a few mention the requirement
+to include `--enable-unstable`. There is no way to list all unstable features.
+The the transition to stable switches is also ad-hoc.
 
 In order to reduce friction, we will also standardize how users opt-in to any Kani unstable feature.
 We will use similar syntax to the one used by the Rust compiler and Cargo.
@@ -62,7 +70,7 @@ pub fn unstable_api() {}
 This is similar to the interface used by [the standard library](https://rustc-dev-guide.rust-lang.org/stability.html#unstable).
 
 If the user tries to use an unstable feature in Kani without explicitly enabling it,
-Kani will trigger an error. For unstable APIs, the error will be trigger during the crate
+Kani will trigger an error. For unstable APIs, the error will be triggered during the crate
 compilation.
 
 ## Detailed Design
@@ -70,7 +78,7 @@ compilation.
 We will add the `-Z` option to both `kani-driver` and `kani-compiler`.
 Kani driver will pass the information to the compiler.
 
-For unstable APIs, the compiler will check if any reachable function uses a unstable feature that was not enabled.
+For unstable APIs, the compiler will check if any reachable function uses an unstable feature that was not enabled.
 If that is the case, the compiler will trigger a compilation error.
 
 We will also change the compiler to only generate code for harnesses that match the harness filter.
@@ -93,7 +101,7 @@ ready to remove the feature completely.
 For this RFC, the suggestion is to only enable experimental features globally for simplicity of use and implementation.
 
 For now, we will trigger a compilation error if an unstable API is reachable from a user crate
-unless if the user opt in for the unstable feature.
+unless if the user opts in for the unstable feature.
 
 We could allow users to specify experimental features on a per-harness basis,
 but it could be tricky to make it clear to the user which harness may be affected by which feature.
@@ -103,8 +111,9 @@ In those cases, users would have to edit each harness that enables the affected 
 
 ## Open questions
 
+- Should we also add a `stable` attribute that documents when an API was stabilized?
 
 ## Future possibilities
 
 - Delay the error due to the usage of a unstable API, and only fail at runtime if the API is reachable.
-- Allow users to enable unstable features on a per-harness base.
+- Allow users to enable unstable features on a per-harness basis.
