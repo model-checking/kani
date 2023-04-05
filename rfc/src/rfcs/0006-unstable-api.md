@@ -26,7 +26,7 @@ For example, we today have the following unstable switches `--enable-stubbing`, 
 In all cases, users are still required to provide the additional `--enable-unstable` option.
 Some unstable features are included in the `--help` section, and only a few mention the requirement
 to include `--enable-unstable`. There is no way to list all unstable features.
-The the transition to stable switches is also ad-hoc.
+The transition to stable switches is also ad-hoc.
 
 In order to reduce friction, we will also standardize how users opt-in to any Kani unstable feature.
 We will use similar syntax to the one used by the Rust compiler and Cargo.
