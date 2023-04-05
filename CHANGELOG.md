@@ -4,6 +4,16 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
+## [0.25.0]
+
+## What's Changed
+
+* Add implementation for the `#[kani::should_panic]` attribute by @adpaco-aws in https://github.com/model-checking/kani/pull/2315
+* Upgrade Rust toolchain to nightly-2023-02-04 by @tautschnig in https://github.com/model-checking/kani/pull/2324
+* Bump CBMC version to 5.80.0 by @zhassan-aws in https://github.com/model-checking/kani/pull/2336
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.24.0...kani-0.25.0
+
 ## [0.23.0]
 
 ### Breaking Changes
