@@ -1,3 +1,3 @@
 error: unexpected argument '--unsound-experiment-zero-init-vars' found
 
-note: to pass '--unsound-experiment-zero-init-vars' as a value, use '-- --unsound-experiment-zero-init-vars'
+tip: to pass '--unsound-experiment-zero-init-vars' as a value, use '-- --unsound-experiment-zero-init-vars'
