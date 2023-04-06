@@ -1,5 +1,5 @@
-// Copyright Kani Contributors
-// SPDX-License-Identifier: Apache-2.0 OR MIT
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
 [package]
 name = "bin"
 version = "0.1.0"
