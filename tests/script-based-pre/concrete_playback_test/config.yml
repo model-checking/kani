@@ -1,0 +1,4 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+script: concrete_playback_test.sh
+expected: concrete_playback_test.expected
