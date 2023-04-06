@@ -19,7 +19,7 @@ use {
     syn::{parse_macro_input, ItemFn},
 };
 
-#[cfg(not(kani))]
+#[cfg(any(not(kani), feature = "concrete_playback"))]
 #[proc_macro_attribute]
 pub fn proof(_attr: TokenStream, item: TokenStream) -> TokenStream {
     // Leave the code intact, so it can be easily be edited in an IDE,
@@ -38,7 +38,7 @@ pub fn proof(_attr: TokenStream, item: TokenStream) -> TokenStream {
 /// Marks a Kani proof harness
 ///
 /// For async harnesses, this will call [`kani::block_on`] (see its documentation for more information).
-#[cfg(kani)]
+#[cfg(all(kani, not(feature = "concrete_playback")))]
 #[proc_macro_attribute]
 pub fn proof(attr: TokenStream, item: TokenStream) -> TokenStream {
     let fn_item = parse_macro_input!(item as ItemFn);
@@ -98,14 +98,14 @@ pub fn proof(attr: TokenStream, item: TokenStream) -> TokenStream {
     }
 }
 
-#[cfg(not(kani))]
+#[cfg(any(not(kani), feature = "concrete_playback"))]
 #[proc_macro_attribute]
 pub fn should_panic(_attr: TokenStream, item: TokenStream) -> TokenStream {
     // No-op in non-kani mode
     item
 }
 
-#[cfg(kani)]
+#[cfg(all(kani, not(feature = "concrete_playback")))]
 #[proc_macro_attribute]
 pub fn should_panic(attr: TokenStream, item: TokenStream) -> TokenStream {
     assert!(attr.is_empty(), "`#[kani::should_panic]` does not take any arguments currently");
@@ -117,7 +117,7 @@ pub fn should_panic(attr: TokenStream, item: TokenStream) -> TokenStream {
     result
 }
 
-#[cfg(not(kani))]
+#[cfg(any(not(kani), feature = "concrete_playback"))]
 #[proc_macro_attribute]
 pub fn unwind(_attr: TokenStream, item: TokenStream) -> TokenStream {
     // When the config is not kani, we should leave the function alone
@@ -127,7 +127,7 @@ pub fn unwind(_attr: TokenStream, item: TokenStream) -> TokenStream {
 /// Set Loop unwind limit for proof harnesses
 /// The attribute '#[kani::unwind(arg)]' can only be called alongside '#[kani::proof]'.
 /// arg - Takes in a integer value (u32) that represents the unwind value for the harness.
-#[cfg(kani)]
+#[cfg(all(kani, not(feature = "concrete_playback")))]
 #[proc_macro_attribute]
 pub fn unwind(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut result = TokenStream::new();
@@ -140,7 +140,7 @@ pub fn unwind(attr: TokenStream, item: TokenStream) -> TokenStream {
     result
 }
 
-#[cfg(not(kani))]
+#[cfg(any(not(kani), feature = "concrete_playback"))]
 #[proc_macro_attribute]
 pub fn stub(_attr: TokenStream, item: TokenStream) -> TokenStream {
     // When the config is not kani, we should leave the function alone
@@ -154,7 +154,7 @@ pub fn stub(_attr: TokenStream, item: TokenStream) -> TokenStream {
 /// # Arguments
 /// * `original` - The function or method to replace, specified as a path.
 /// * `replacement` - The function or method to use as a replacement, specified as a path.
-#[cfg(kani)]
+#[cfg(all(kani, not(feature = "concrete_playback")))]
 #[proc_macro_attribute]
 pub fn stub(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut result = TokenStream::new();
@@ -167,7 +167,7 @@ pub fn stub(attr: TokenStream, item: TokenStream) -> TokenStream {
     result
 }
 
-#[cfg(not(kani))]
+#[cfg(any(not(kani), feature = "concrete_playback"))]
 #[proc_macro_attribute]
 pub fn solver(_attr: TokenStream, item: TokenStream) -> TokenStream {
     // No-op in non-kani mode
@@ -178,7 +178,7 @@ pub fn solver(_attr: TokenStream, item: TokenStream) -> TokenStream {
 /// The attribute `#[kani::solver(arg)]` can only be used alongside `#[kani::proof]``
 ///
 /// arg - name of solver, e.g. kissat
-#[cfg(kani)]
+#[cfg(all(kani, not(feature = "concrete_playback")))]
 #[proc_macro_attribute]
 pub fn solver(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut result = TokenStream::new();
