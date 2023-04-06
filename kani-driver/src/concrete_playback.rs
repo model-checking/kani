@@ -18,7 +18,6 @@ use std::hash::{Hash, Hasher};
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::process::Command;
-use tempfile::NamedTempFile;
 
 impl KaniSession {
     /// The main driver for generating concrete playback unit tests and adding them to source code.
@@ -196,11 +195,6 @@ impl KaniSession {
         }
         Ok(())
     }
-}
-
-struct UnitTest {
-    code: Vec<String>,
-    name: String,
 }
 
 /// Generate a formatted unit test from a list of concrete values.

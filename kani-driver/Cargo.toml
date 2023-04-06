@@ -39,7 +39,6 @@ tracing-subscriber = {version = "0.3.8", features = ["env-filter", "json", "fmt"
 tracing-tree = "0.2.2"
 rand = "0.8"
 which = "4.4.0"
-tempfile = "3.3.0"
 
 # A good set of suggested dependencies can be found in rustup:
 # https://github.com/rust-lang/rustup/blob/master/Cargo.toml
