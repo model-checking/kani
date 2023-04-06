@@ -27,28 +27,14 @@ fi
 echo "Running cargo test on the unit test ..."
 echo
 
-rm -f test_output.log
-
 cd bin/
 
 # Run cargo test on the unit test
-RUSTFLAGS="--cfg=kani" cargo +nightly test 2>/dev/null > test_output.log
-
-echo "Checking content"
-echo
-
-# Check if the test failed
-if grep -q "test result: FAILED" test_output.log; then
-    echo "Tests failed as expected"
-else
-    echo "Tests passed"
-fi
-
-rm -f test_output.log
+RUSTFLAGS="--cfg=kani" cargo +nightly test
 
 cd ..
 
 # Try to leave a clean output folder at the end
 rm -rf ${OUT_DIR}
 
-set -eu
+set -e
