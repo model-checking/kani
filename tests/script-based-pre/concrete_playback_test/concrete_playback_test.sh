@@ -33,7 +33,8 @@ output=$(grep 'channel = ' ../../../../rust-toolchain.toml | cut -d '"' -f 2)
 echo "$output"
 
 # Run cargo test on the unit test
-RUSTFLAGS="--cfg=kani" cargo +${output} test
+cargo_output=$(RUSTFLAGS="--cfg=kani" cargo +${output} test)
+echo "$cargo_output"
 
 cd ..
 

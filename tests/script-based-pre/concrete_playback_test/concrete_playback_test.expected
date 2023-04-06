@@ -1,14 +1,3 @@
-
-running 1 test
-test harnesses::kani_concrete_playback_harness_15598097466099501582 ... FAILED
-
-failures:
-
----- harnesses::kani_concrete_playback_harness_15598097466099501582 stdout ----
-thread 'harnesses::kani_concrete_playback_harness_15598097466099501582' panicked at 'assertion failed: !(result_1 == Ok(101) && result_2 == Err(102))', src/main.rs:12:9
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-
-
 failures:
     harnesses::kani_concrete_playback_harness_15598097466099501582
 
