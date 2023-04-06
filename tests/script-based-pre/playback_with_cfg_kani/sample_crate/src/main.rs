@@ -1,6 +1,11 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+// This module contains a harness and it's associated unit test that is generated
+// by running concrete-playback on it. There is an existing UI test to generate the unit test
+// itself (in kani/tests/ui/concrete-playback/result). The current module runs `cargo test` on the unit test
+// on the unit test and checks the output to test the rest of the concrete-playback flow.
+
 fn main() {}
 
 #[cfg(kani)]

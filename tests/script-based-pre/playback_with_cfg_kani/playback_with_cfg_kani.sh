@@ -4,7 +4,7 @@
 
 set +e
 
-OUT_DIR=bin/target
+OUT_DIR=sample_crate/target
 
 echo
 echo "Starting output file check..."
@@ -17,28 +17,18 @@ if ! command -v cargo &> /dev/null; then
     exit 1
 fi
 
-# Check if the directory containing cargo is in the PATH environment variable
-if ! echo "$PATH" | grep -q "$(dirname "$(command -v cargo)")"; then
-    echo "Directory containing cargo is not in PATH. Adding directory to PATH..."
-    echo "export PATH=$PATH:$(dirname "$(command -v cargo)")" >> ~/.bashrc
-    source ~/.bashrc
-fi
-
 echo "Running cargo test on the unit test ..."
 echo
 
-cd bin/
+cd sample_crate/
 
 output=$(grep 'channel = ' ../../../../rust-toolchain.toml | cut -d '"' -f 2)
 echo "$output"
 
 # Run cargo test on the unit test
-cargo_output=$(RUSTFLAGS="--cfg=kani" cargo +${output} test 2>/dev/null)
-echo "$cargo_output"
+RUSTFLAGS="--cfg=kani" cargo +${output} test 2>/dev/null
 
 cd ..
 
 # Try to leave a clean output folder at the end
 rm -rf ${OUT_DIR}
-
-set -e
