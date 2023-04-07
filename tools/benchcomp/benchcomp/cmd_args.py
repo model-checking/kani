@@ -131,6 +131,13 @@ def _get_args_dict():
                         "help":
                             "symbolically link D to the output directory "
                             "(default: %(default)s)",
+                    }, {
+                        "flags": ["--no-copy"],
+                        "action": "store_false",
+                        "dest": "copy_benchmarks_dir",
+                        "help":
+                            "do not make a fresh copy of the benchmark "
+                            "directories before running each variant",
                     }],
                 },
                 "collate": {
