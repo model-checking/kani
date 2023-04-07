@@ -44,6 +44,269 @@ class Benchcomp:
 
 
 class RegressionTests(unittest.TestCase):
+    def test_error_on_regression_two_benchmarks_previously_failed(self):
+        """Ensure that benchcomp terminates with exit of 0 when the "error_on_regression" visualization is configured and one of the benchmarks continues to fail (no regression)."""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            run_bc = Benchcomp({
+                "variants": {
+                    "passed": {
+                        "config": {
+                            "directory": str(tmp),
+                            "command_line":
+                                "mkdir bench_1 bench_2 && "
+                                "echo true > bench_1/success &&"
+                                "echo false > bench_2/success"
+                        },
+                    },
+                    "failed": {
+                        "config": {
+                            "directory": str(tmp),
+                            "command_line":
+                                "mkdir bench_1 bench_2 && "
+                                "echo true > bench_1/success &&"
+                                "echo false > bench_2/success"
+                        }
+                    }
+                },
+                "run": {
+                    "suites": {
+                        "suite_1": {
+                            "parser": { "module": "test_file_to_metric" },
+                            "variants": ["passed", "failed"]
+                        }
+                    }
+                },
+                "visualize": [{
+                    "type": "error_on_regression",
+                    "variant_pairs": [["passed", "failed"]],
+                    "checks": [{
+                        "metric": "success",
+                        "test":
+                            "lambda old, new: False if not old else not new"
+                    }]
+                }]
+            })
+            run_bc()
+            self.assertEqual(
+                run_bc.proc.returncode, 0, msg=run_bc.stderr)
+
+
+    def test_error_on_regression_two_benchmarks_one_failed(self):
+        """Ensure that benchcomp terminates with exit of 1 when the "error_on_regression" visualization is configured and one of the benchmarks' success metric has regressed"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            run_bc = Benchcomp({
+                "variants": {
+                    "passed": {
+                        "config": {
+                            "directory": str(tmp),
+                            "command_line":
+                                "mkdir bench_1 bench_2 && "
+                                "echo true > bench_1/success &&"
+                                "echo true > bench_2/success"
+                        },
+                    },
+                    "failed": {
+                        "config": {
+                            "directory": str(tmp),
+                            "command_line":
+                                "mkdir bench_1 bench_2 && "
+                                "echo true > bench_1/success &&"
+                                "echo false > bench_2/success"
+                        }
+                    }
+                },
+                "run": {
+                    "suites": {
+                        "suite_1": {
+                            "parser": { "module": "test_file_to_metric" },
+                            "variants": ["passed", "failed"]
+                        }
+                    }
+                },
+                "visualize": [{
+                    "type": "error_on_regression",
+                    "variant_pairs": [["passed", "failed"]],
+                    "checks": [{
+                        "metric": "success",
+                        "test":
+                            "lambda old, new: False if not old else not new"
+                    }]
+                }]
+            })
+            run_bc()
+            self.assertEqual(
+                run_bc.proc.returncode, 1, msg=run_bc.stderr)
+
+
+    def test_error_on_regression_visualization_success_regressed(self):
+        """Ensure that benchcomp terminates with exit of 1 when the "error_on_regression" visualization is configured and one of the benchmarks' success metric has regressed"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            run_bc = Benchcomp({
+                "variants": {
+                    "passed": {
+                        "config": {
+                            "directory": str(tmp),
+                            "command_line": "mkdir bench_1 && echo true > bench_1/success"
+                        },
+                    },
+                    "failed": {
+                        "config": {
+                            "directory": str(tmp),
+                            "command_line": "mkdir bench_1 && echo false > bench_1/success"
+                        }
+                    }
+                },
+                "run": {
+                    "suites": {
+                        "suite_1": {
+                            "parser": { "module": "test_file_to_metric" },
+                            "variants": ["passed", "failed"]
+                        }
+                    }
+                },
+                "visualize": [{
+                    "type": "error_on_regression",
+                    "variant_pairs": [["passed", "failed"]],
+                    "checks": [{
+                        "metric": "success",
+                        "test":
+                            "lambda old, new: False if not old else not new"
+                    }]
+                }]
+            })
+            run_bc()
+            self.assertEqual(
+                run_bc.proc.returncode, 1, msg=run_bc.stderr)
+
+
+    def test_error_on_regression_visualization_success_no_regressed(self):
+        """Ensure that benchcomp terminates with exit of 0 when the "error_on_regression" visualization is configured and none of the benchmarks' success metric has regressed"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            run_bc = Benchcomp({
+                "variants": {
+                    "passed": {
+                        "config": {
+                            "directory": str(tmp),
+                            "command_line": "mkdir bench_1 && echo true > bench_1/success"
+                        },
+                    },
+                    "failed": {
+                        "config": {
+                            "directory": str(tmp),
+                            "command_line": "mkdir bench_1 && echo true > bench_1/success"
+                        }
+                    }
+                },
+                "run": {
+                    "suites": {
+                        "suite_1": {
+                            "parser": { "module": "test_file_to_metric" },
+                            "variants": ["passed", "failed"]
+                        }
+                    }
+                },
+                "visualize": [{
+                    "type": "error_on_regression",
+                    "variant_pairs": [["passed", "failed"]],
+                    "checks": [{
+                        "metric": "success",
+                        "test":
+                            "lambda old, new: False if not old else not new"
+                    }]
+                }]
+            })
+            run_bc()
+            self.assertEqual(
+                run_bc.proc.returncode, 0, msg=run_bc.stderr)
+
+
+    def test_error_on_regression_visualization_ratio_no_regressed(self):
+        """Ensure that benchcomp terminates with exit of 0 when the "error_on_regression" visualization is configured and none of the metrics regressed"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            run_bc = Benchcomp({
+                "variants": {
+                    "more": {
+                        "config": {
+                            "directory": str(tmp),
+                            "command_line": "mkdir bench_1 && echo 10 > bench_1/n_bugs"
+                        },
+                    },
+                    "less": {
+                        "config": {
+                            "directory": str(tmp),
+                            "command_line": "mkdir bench_1 && echo 5 > bench_1/n_bugs"
+                        }
+                    }
+                },
+                "run": {
+                    "suites": {
+                        "suite_1": {
+                            "parser": { "module": "test_file_to_metric" },
+                            "variants": ["less", "more"]
+                        }
+                    }
+                },
+                "visualize": [{
+                    "type": "error_on_regression",
+                    "variant_pairs": [["more", "less"]],
+                    "checks": [{
+                        "metric": "n_bugs",
+                        "test": "lambda old, new: new / old > 1.75",
+                    }]
+                }]
+            })
+            run_bc()
+            self.assertEqual(
+                run_bc.proc.returncode, 0, msg=run_bc.stderr)
+
+
+    def test_error_on_regression_visualization_ratio_regressed(self):
+        """Ensure that benchcomp terminates with exit of 1 when the "error_on_regression" visualization is configured and one of the metrics regressed"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            run_bc = Benchcomp({
+                "variants": {
+                    "more": {
+                        "config": {
+                            "directory": str(tmp),
+                            "command_line": "mkdir bench_1 && echo 10 > bench_1/n_bugs"
+                        },
+                    },
+                    "less": {
+                        "config": {
+                            "directory": str(tmp),
+                            "command_line": "mkdir bench_1 && echo 5 > bench_1/n_bugs"
+                        }
+                    }
+                },
+                "run": {
+                    "suites": {
+                        "suite_1": {
+                            "parser": { "module": "test_file_to_metric" },
+                            "variants": ["less", "more"]
+                        }
+                    }
+                },
+                "visualize": [{
+                    "type": "error_on_regression",
+                    "variant_pairs": [["less", "more"]],
+                    "checks": [{
+                        "metric": "n_bugs",
+                        "test": "lambda old, new: new / old > 1.75",
+                    }]
+                }]
+            })
+            run_bc()
+            self.assertEqual(
+                run_bc.proc.returncode, 1, msg=run_bc.stderr)
+
+
+
     def test_return_0(self):
         """Ensure that benchcomp terminates with return code 0"""
 

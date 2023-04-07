@@ -15,23 +15,36 @@ fi
 UBUNTU_VERSION=$(lsb_release -rs)
 MAJOR=${UBUNTU_VERSION%.*}
 
-# CBMC currently only release a 18.04 and a 20.04 versions.
-if [[ "${MAJOR}" -le "18" ]]
+if [[ "${MAJOR}" -gt "18" ]]
 then
-    MIRROR_VERSION="18.04"
-else
-    MIRROR_VERSION="20.04"
+  FILE="ubuntu-${UBUNTU_VERSION}-cbmc-${CBMC_VERSION}-Linux.deb"
+  URL="https://github.com/diffblue/cbmc/releases/download/cbmc-${CBMC_VERSION}/$FILE"
+
+  set -x
+
+  wget -O "$FILE" "$URL"
+  sudo dpkg -i "$FILE"
+  cbmc --version
+  rm $FILE
+  exit 0
 fi
 
-FILE="ubuntu-${MIRROR_VERSION}-cbmc-${CBMC_VERSION}-Linux.deb"
-URL="https://github.com/diffblue/cbmc/releases/download/cbmc-${CBMC_VERSION}/$FILE"
+# Binaries are no longer released for 18.04, so build from source
 
-set -x
+WORK_DIR=$(mktemp -d)
+git clone \
+  --branch cbmc-${CBMC_VERSION} --depth 1 \
+  https://github.com/diffblue/cbmc \
+  "${WORK_DIR}"
 
-wget -O "$FILE" "$URL"
-sudo dpkg -i "$FILE"
+pushd "${WORK_DIR}"
 
-cbmc --version
+mkdir build
+git submodule update --init
 
-# Clean up on success
-rm $FILE
+cmake -S . -Bbuild -DWITH_JBMC=OFF -Dsat_impl="minisat2;cadical"
+make -C build -j$(nproc)
+sudo make -C build install
+
+popd
+rm -rf "${WORK_DIR}"
