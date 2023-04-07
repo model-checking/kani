@@ -5,7 +5,7 @@ name: Attempt toolchain update
 
 on:
   schedule:
-    - cron: "42 */4 * * *" # Run this every four hours at minute 42 (random choice)
+    - cron: "30 2 * * *" # Run this every day at 02:30 UTC
   workflow_dispatch:     # Allow manual dispatching for a custom branch / tag.
 
 jobs:
