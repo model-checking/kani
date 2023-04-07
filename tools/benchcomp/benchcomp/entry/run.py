@@ -33,6 +33,7 @@ class _SingleInvocation:
     parser: str
 
     suite_yaml_out_dir: pathlib.Path
+    copy_benchmarks_dir: bool
 
     command_line: str
     directory: pathlib.Path
@@ -43,14 +44,18 @@ class _SingleInvocation:
     patches: list = dataclasses.field(default_factory=list)
 
     def __post_init__(self):
-        self.working_copy: pathlib.Path = pathlib.Path(
-            f"/tmp/benchcomp/suites/{uuid.uuid4()}")
+        if self.copy_benchmarks_dir:
+            self.working_copy = pathlib.Path(
+                f"/tmp/benchcomp/suites/{uuid.uuid4()}")
+        else:
+            self.working_copy = pathlib.Path(self.directory)
 
     def __call__(self):
         env = dict(os.environ)
         env.update(self.env)
 
-        shutil.copytree(self.directory, self.working_copy)
+        if self.copy_benchmarks_dir:
+            shutil.copytree(self.directory, self.working_copy)
 
         try:
             subprocess.run(
@@ -89,6 +94,7 @@ class _Run:
     out_prefix: pathlib.Path
     out_dir: str
     out_symlink: str
+    copy_benchmarks_dir: bool
     result: dict = None
 
     def __call__(self):
@@ -103,6 +109,7 @@ class _Run:
                     suite_id, variant_id,
                     suite["parser"]["module"],
                     suite_yaml_out_dir=out_path,
+                    copy_benchmarks_dir=self.copy_benchmarks_dir,
                     **config)
                 invoke()
 
@@ -127,6 +134,8 @@ def get_default_out_prefix():
 
 
 def main(args):
-    run = _Run(args.config, args.out_prefix, args.out_dir, args.out_symlink)
+    run = _Run(
+        args.config, args.out_prefix, args.out_dir, args.out_symlink,
+        args.copy_benchmarks_dir)
     run()
     return run
