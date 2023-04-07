@@ -3,6 +3,7 @@
 
 use crate::util::warning;
 use anyhow::Result;
+use kani_metadata::HarnessMetadata;
 use std::ffi::OsString;
 use std::path::Path;
 use std::process::Command;
@@ -14,7 +15,12 @@ impl KaniSession {
     /// The synthesizer we use is `goto-synthesizer` built in CBMC codebase, which is an enumerative
     /// loop-contracts synthesizer. `goto-synthesizer` enumerates and checks if a candidate can be
     /// used to prove some assertions, and applies found invariants when all checks pass.
-    pub fn synthesize_loop_contracts(&self, input: &Path, output: &Path) -> Result<()> {
+    pub fn synthesize_loop_contracts(
+        &self,
+        input: &Path,
+        output: &Path,
+        harness_metadata: &HarnessMetadata,
+    ) -> Result<()> {
         if !self.args.quiet {
             println!("Running loop contract synthesizer.");
             warning("This process may not terminate.");
@@ -23,11 +29,13 @@ impl KaniSession {
             );
         }
 
-        let args: Vec<OsString> = vec![
+        let mut args: Vec<OsString> = vec![
             "--loop-contracts-no-unwind".into(),
             input.to_owned().into_os_string(),  // input
             output.to_owned().into_os_string(), // output
         ];
+
+        self.handle_solver_args(&harness_metadata.attributes.solver, &mut args)?;
 
         let mut cmd = Command::new("goto-synthesizer");
         cmd.args(args);
