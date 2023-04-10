@@ -29,7 +29,7 @@ test tests::doesnt_crash ... ok
 
 There's only 1 in 4 billion inputs that fail, so it's vanishingly unlikely the property test will find it, even with a million samples.
 
-Let's write a Kani _proof harness_ for `estimate_size`.
+Let's write a Kani [_proof harness_](reference/attributes.md#kaniproof) for `estimate_size`.
 This is a lot like a test harness, but now we can use `kani::any()` to represent all possible `u32` values:
 
 ```rust

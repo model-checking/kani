@@ -15,6 +15,7 @@
   - [Debugging verification failures](./debugging-verification-failures.md)
 
 - [Reference](./reference.md)
+  - [Attributes](./reference/attributes.md)
   - [Stubbing](./reference/stubbing.md)
 
 - [Application](./application.md)
