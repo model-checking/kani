@@ -39,7 +39,7 @@ Using any other Kani attribute without `#[kani::proof]` will result in compilati
 
 ### Limitations
 
-The `#[kani::proof]` attribute can only be added to functions without parameters which are not `const`, `async` nor generic functions.
+The `#[kani::proof]` attribute can only be added to functions without parameters.
 
 ## `#[kani::should_panic]`
 
@@ -96,6 +96,7 @@ We can do so with the following harness:
 
 ```rust
 #[kani::proof]
+#[kani::should_panic]
 fn cannot_init_device_twice() {
     let mut device = Device::new();
     device.init();
@@ -127,11 +128,11 @@ Let's assume we've written this code which contains a loop:
 
 ```rust
 fn my_sum(vec: &Vec<u32>) -> u32 {
-    let mut counter = 0;
+    let mut sum = 0;
     for elem in vec {
-        counter += elem;
+        sum += elem;
     }
-    counter
+    sum
 }
 
 #[kani::proof]
@@ -202,9 +203,9 @@ VERIFICATION:- SUCCESSFUL
 This may change the verification time required to verify a harness.
 
 At present, `<solver>` can be one of:
- - `minisat` (default): [MiniSat](http://minisat.se/), a minimalistic open-source SAT solver.
- - `cadical`: [CaDiCaL](https://github.com/arminbiere/cadical), an extensible open-source SAT solver.
- - `kissat`: [kissat](https://github.com/arminbiere/kissat), an optimized variant of CaDiCaL.
+ - `minisat` (default): [MiniSat](http://minisat.se/).
+ - `cadical`: [CaDiCaL](https://github.com/arminbiere/cadical).
+ - `kissat`: [kissat](https://github.com/arminbiere/kissat).
  - `bin="<SAT_SOLVER_BINARY>"`: A custom solver binary, `"<SAT_SOLVER_BINARY>"`, that must be in path.
 
 ### Example
