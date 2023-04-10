@@ -32,10 +32,10 @@ fn my_harness() {
 }
 ```
 
-We should see the sentence `Checking harness my_harness...` (assuming `my_harness` is the only harness in our code).
+We should see a line in the output that says `Checking harness my_harness...` (assuming `my_harness` is the only harness in our code).
 This will be followed by multiple messages that come from CBMC (the verification engine used by Kani) and the [verification results](../verification-results.md).
 
-Using any other Kani attributes without `#[kani::proof]` will result in compilation errors.
+Using any other Kani attribute without `#[kani::proof]` will result in compilation errors.
 
 ### Limitations
 
@@ -66,7 +66,7 @@ For example, the class in `Check 1: my_harness.assertion.1` is `assertion`, so t
 
 ### Limitations
 
-The `#[kani::should_panic]` attribute verifies that are one or more failed checks related to panics.
+The `#[kani::should_panic]` attribute verifies that there are one or more failed checks related to panics.
 At the moment, it's not possible to pin it down to specific panics.
 Therefore, **it's possible that the panics detected with `#[kani::should_panic]` aren't the ones that were originally expected** after a change in the code under verification.
 
@@ -119,7 +119,7 @@ After the unwinding stage, Kani will attempt to verify the harness.
 If the `#[kani::unwind(<number>)]` attribute was specified, there's a chance that one or more loops weren't unwound enough times.
 In that case, there will be at least one failed unwinding assertion (there's one unwinding assertion for each loop), causing verification to fail.
 
-Check the [*Loops, unwinding and bounds* section](../tutorial-loop-unwinding.md) for more information about stubbing.
+Check the [*Loops, unwinding and bounds* section](../tutorial-loop-unwinding.md) for more information about unwinding.
 
 ### Example
 
@@ -173,7 +173,7 @@ VERIFICATION:- FAILED
 [Kani] tip: Consider increasing the unwinding value or disabling `--unwinding-assertions`.
 ```
 
-Kani cannot verify the harness because there is at least an unwinding failure.
+Kani cannot verify the harness because there is at least one unwinding assertion failure.
 But, if we use `#[kani::unwind(4)]`, which is the right unwinding value we computed earlier:
 
 ```rust
@@ -197,7 +197,7 @@ VERIFICATION:- SUCCESSFUL
 
 ## `#[kani::solver(<solver>)]`
 
-**Changes the solver to be used by Kani.**
+**Changes the solver to be used by Kani's verification engine (CBMC).**
 
 This may change the verification time required to verify a harness.
 
@@ -205,7 +205,7 @@ At present, `<solver>` can be one of:
  - `minisat` (default): [MiniSat](http://minisat.se/), a minimalistic open-source SAT solver.
  - `cadical`: [CaDiCaL](https://github.com/arminbiere/cadical), an extensible open-source SAT solver.
  - `kissat`: [kissat](https://github.com/arminbiere/kissat), an optimized variant of CaDiCaL.
- - `bin="<SAT_SOLVER_BINARY>"`: A custom solver, whose binary is to be found in the path `"<SAT_SOLVER_BINARY>"`.
+ - `bin="<SAT_SOLVER_BINARY>"`: A custom solver binary, `"<SAT_SOLVER_BINARY>"`, that must be in path.
 
 ### Example
 
