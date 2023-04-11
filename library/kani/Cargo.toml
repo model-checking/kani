@@ -12,4 +12,4 @@ publish = false
 kani_macros = { path = "../kani_macros" }
 
 [features]
-concrete_playback = ["kani_macros/concrete_playback"]
+concrete_playback = []
