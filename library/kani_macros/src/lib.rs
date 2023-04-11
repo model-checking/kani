@@ -200,10 +200,6 @@ mod regular {
 
     /// Add #[allow(dead_code)] to a proof harness to avoid dead code warnings.
     pub fn proof(_attr: TokenStream, item: TokenStream) -> TokenStream {
-        // quote!(
-        //     #[allow(dead_code)]
-        //     $item
-        // )
         let mut result = TokenStream::new();
         result.extend("#[allow(dead_code)]".parse::<TokenStream>().unwrap());
         result.extend(item);
