@@ -44,6 +44,7 @@ class _SingleInvocation:
     patches: list = dataclasses.field(default_factory=list)
 
     def __post_init__(self):
+        self.directory = pathlib.Path(self.directory).expanduser()
         if self.copy_benchmarks_dir:
             self.working_copy = pathlib.Path(
                 f"/tmp/benchcomp/suites/{uuid.uuid4()}")
@@ -55,7 +56,8 @@ class _SingleInvocation:
         env.update(self.env)
 
         if self.copy_benchmarks_dir:
-            shutil.copytree(self.directory, self.working_copy)
+            shutil.copytree(
+                self.directory, self.working_copy, ignore_dangling_symlinks=True)
 
         try:
             subprocess.run(
@@ -65,12 +67,10 @@ class _SingleInvocation:
             logging.warning(
                 "Invocation of suite %s with variant %s exited with code %d",
                 self.suite_id, self.variant_id, exc.returncode)
-            return
         except (OSError, subprocess.SubprocessError):
             logging.error(
                 "Invocation of suite %s with variant %s failed", self.suite_id,
                 self.variant_id)
-            return
 
         parser_mod_name = f"benchcomp.parsers.{self.parser}"
         parser = importlib.import_module(parser_mod_name)
@@ -115,7 +115,8 @@ class _Run:
 
         # Atomically symlink the symlink dir to the output dir, even if
         # there is already an existing symlink with that name
-        tmp_symlink = self.out_symlink.with_suffix(f".{uuid.uuid4()}")
+        tmp_symlink = pathlib.Path(
+            self.out_symlink).with_suffix(f".{uuid.uuid4()}")
         tmp_symlink.parent.mkdir(exist_ok=True)
         tmp_symlink.symlink_to(out_path)
         tmp_symlink.rename(self.out_symlink)

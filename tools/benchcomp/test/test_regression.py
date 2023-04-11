@@ -44,6 +44,84 @@ class Benchcomp:
 
 
 class RegressionTests(unittest.TestCase):
+    def setUp(self):
+        self.kani_dir = pathlib.Path(__file__).parent.parent.parent.parent
+
+    def test_kani_perf_fail(self):
+        cmd = (
+            "rm -rf build target &&"
+            "mkdir -p build/tests/perf/Unwind-Attribute/expected &&"
+            "kani tests/kani/Unwind-Attribute/fixme_lib.rs > "
+            "build/tests/perf/Unwind-Attribute/expected/expected.out"
+        )
+        self._run_kani_perf_test(cmd, False)
+
+    def test_kani_perf_success(self):
+        cmd = (
+            "rm -rf build target &&"
+            "mkdir -p build/tests/perf/Arbitrary/expected &&"
+            "kani tests/kani/Arbitrary/arbitrary_impls.rs > "
+            "build/tests/perf/Arbitrary/expected/expected.out"
+        )
+        self._run_kani_perf_test(cmd, True)
+
+    def _run_kani_perf_test(self, command, expected_pass):
+        """Ensure that the kani_perf parser can parse the output of a perf test"""
+
+        # The two variants are identical; we're not actually checking the
+        # returned metrics in this test, only checking that the parser works
+        run_bc = Benchcomp({
+            "variants": {
+                "run_1": {
+                    "config": {
+                        "directory": str(self.kani_dir),
+                        "command_line": command,
+                    },
+                },
+                "run_2": {
+                    "config": {
+                        "directory": str(self.kani_dir),
+                        "command_line": command,
+                    },
+                },
+            },
+            "run": {
+                "suites": {
+                    "suite_1": {
+                        "parser": { "module": "kani_perf" },
+                        "variants": ["run_1", "run_2"]
+                    }
+                }
+            },
+            "visualize": [{"type": "dump_yaml"}],
+        })
+        run_bc()
+        self.assertEqual(run_bc.proc.returncode, 0, msg=run_bc.stderr)
+
+        results = yaml.safe_load(run_bc.stdout)
+
+        expected_types = {
+            "solver_runtime": float,
+            "symex_runtime": float,
+            "verification_time": float,
+            "success": bool,
+        }
+
+        all_succeeded = True
+
+        for _, bench in results["benchmarks"].items():
+            for _, variant in bench["variants"].items():
+
+                all_succeeded &= variant["metrics"]["success"]
+
+                for metric, ttype in expected_types.items():
+                    self.assertIn(metric, variant["metrics"], msg=run_bc.stdout)
+                    self.assertTrue(
+                        isinstance(variant["metrics"][metric], ttype),
+                        msg=run_bc.stdout)
+
+        self.assertEqual(expected_pass, all_succeeded, msg=run_bc.stdout)
+
     def test_error_on_regression_two_benchmarks_previously_failed(self):
         """Ensure that benchcomp terminates with exit of 0 when the "error_on_regression" visualization is configured and one of the benchmarks continues to fail (no regression)."""
 
