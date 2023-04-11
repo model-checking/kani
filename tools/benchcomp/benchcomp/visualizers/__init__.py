@@ -4,6 +4,8 @@
 
 import dataclasses
 
+import yaml
+
 import benchcomp.visualizers.utils as viz_utils
 
 
@@ -49,3 +51,18 @@ class error_on_regression:
 
         if any_benchmark_regressed(results):
             viz_utils.EXIT_CODE = 1
+
+
+
+@dataclasses.dataclass
+class dump_yaml:
+    """Print the YAML-formatted results to stdout
+
+    Sample configuration:
+
+    visualize:
+    - type: dump_yaml
+    """
+
+    def __call__(self, results):
+        print(yaml.dump(results, default_flow_style=False))
