@@ -56,8 +56,11 @@ class _SingleInvocation:
         env.update(self.env)
 
         if self.copy_benchmarks_dir:
-            shutil.copytree(
-                self.directory, self.working_copy, ignore_dangling_symlinks=True)
+            try:
+                shutil.copytree(
+                    self.directory, self.working_copy, ignore_dangling_symlinks=True)
+            except shutil.Error:
+                pass
 
         try:
             subprocess.run(

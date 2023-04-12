@@ -245,3 +245,65 @@ jobs:
           if-no-files-found: error
           # Aggressively short retention: we don't really need these
           retention-days: 3
+
+  perf-benchcomp:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout Kani (pull request HEAD)
+        uses: actions/checkout@v3
+        with:
+          path: ./pr
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Checkout Kani (pull request base)
+        uses: actions/checkout@v3
+        with:
+          path: ./base
+          ref: ${{ github.event.pull_request.base.sha }}
+
+      - name: Setup Kani Dependencies
+        uses: ./pr/.github/actions/setup
+        with:
+          os: ubuntu-20.04
+          kani_dir: pr
+
+      - name: Build Kani (pull request HEAD)
+        run: pushd pr && cargo build-dev
+
+      - name: Build Kani (pull request base)
+        run: pushd base && cargo build-dev
+
+      - name: Write benchcomp config file
+        run: |
+          pushd pr && cat >benchcomp.yaml <<EOM
+          variants:
+            kani_pr:
+              config:
+                directory: .
+                command_line: PATH=target/kani/bin:$PATH scripts/kani-perf.sh
+            kani_base:
+              config:
+                directory: .    # Run new benchmarks with old Kani
+                command_line: PATH=../base/target/kani/bin:$PATH scripts/kani-perf.sh
+          run:
+            suites:
+              kani_perf:
+                parser:
+                  module: kani_perf
+                variants: [kani_pr, kani_base]
+          visualize:
+            - type: error_on_regression
+              variant_pairs: [[kani_base, kani_pr]]
+              checks:
+                - metric: success
+                  test: "lambda old, new: False if not old else not new"
+                - metric: solver_runtime
+                  test: "lambda old, new: new / old > 1.1"
+                - metric: symex_runtime
+                  test: "lambda old, new: new / old > 1.1"
+                - metric: verification_time
+                  test: "lambda old, new: new / old > 1.1"
+          EOM
+
+      - name: Run benchcomp
+        run: pushd pr && ./tools/benchcomp/bin/benchcomp
