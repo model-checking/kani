@@ -624,6 +624,17 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
+    /// Given a projection, generate an lvalue that represents the given variant index.
+    pub fn codegen_variant_lvalue(
+        &mut self,
+        initial_projection: ProjectedPlace<'tcx>,
+        variant_idx: VariantIdx,
+    ) -> ProjectedPlace<'tcx> {
+        debug!(?initial_projection, ?variant_idx, "codegen_variant_lvalue");
+        let downcast = ProjectionElem::Downcast(None, variant_idx);
+        self.codegen_projection(Ok(initial_projection), downcast).unwrap()
+    }
+
     // https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/enum.ProjectionElem.html
     // ConstantIndex
     // [−]
