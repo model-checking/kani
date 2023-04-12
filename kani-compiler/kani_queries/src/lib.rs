@@ -41,6 +41,9 @@ pub trait UserInput {
 
     fn set_stubbing_enabled(&mut self, stubbing_enabled: bool);
     fn get_stubbing_enabled(&self) -> bool;
+
+    fn set_unstable_features(&mut self, features: &[String]);
+    fn get_unstable_features(&self) -> &[String];
 }
 
 /// This structure should only be used behind a synchronized reference or a snapshot.
@@ -54,6 +57,7 @@ pub struct QueryDb {
     write_json_symtab: bool,
     reachability_analysis: ReachabilityType,
     stubbing_enabled: bool,
+    unstable_features: Vec<String>,
 }
 
 impl QueryDb {
@@ -66,6 +70,7 @@ impl QueryDb {
             write_json_symtab: false,
             reachability_analysis: ReachabilityType::None,
             stubbing_enabled: false,
+            unstable_features: vec![],
         }))
     }
 }
@@ -125,5 +130,13 @@ impl UserInput for QueryDb {
 
     fn get_write_json_symtab(&self) -> bool {
         self.write_json_symtab
+    }
+
+    fn set_unstable_features(&mut self, features: &[String]) {
+        self.unstable_features = Vec::from_iter(features.iter().cloned());
+    }
+
+    fn get_unstable_features(&self) -> &[String] {
+        &self.unstable_features
     }
 }

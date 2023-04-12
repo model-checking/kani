@@ -258,6 +258,10 @@ pub struct KaniArgs {
     /// Arguments to pass down to Cargo
     #[command(flatten)]
     pub cargo: CargoArgs,
+
+    /// Enable an unstable feature.
+    #[arg(short = 'Z', num_args(1), value_name = "UNSTABLE_FEATURE")]
+    pub unstable_features: Vec<UnstableFeatures>,
 }
 
 impl KaniArgs {
@@ -303,7 +307,7 @@ pub struct CargoArgs {
     #[arg(long)]
     pub no_default_features: bool,
     // This tolerates spaces too, but we say "comma" only because this is the least error-prone approach...
-    /// Comma separated list of features to activate
+    /// Comma separated list of package features to activate
     #[arg(short = 'F', long)]
     features: Vec<String>,
 
@@ -341,6 +345,15 @@ pub enum ConcretePlaybackMode {
     // Otherwise clap will default to `in-place`
     #[value(name = "inplace")]
     InPlace,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum UnstableFeatures {
+    /// Allow replace certain items with stubs (mocks).
+    /// See (RFC-0002)[https://model-checking.github.io/kani/rfc/rfcs/0002-function-stubbing.html]
+    Stubbing,
+    /// Generate a C-like file equivalent to inputted program used for debugging purpose.
+    GenC,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, ValueEnum)]

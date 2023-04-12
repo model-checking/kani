@@ -36,6 +36,7 @@ enum KaniAttributeKind {
 /// the session and emit all errors found.
 pub(super) fn check_attributes(tcx: TyCtxt, def_id: DefId) {
     let attributes = extract_kani_attributes(tcx, def_id);
+    tracing::info!(?def_id, ?attributes, "check_attributes");
     if let Some(proof_attributes) = attributes.get(&KaniAttributeKind::Proof) {
         check_proof_attribute(tcx, def_id, proof_attributes);
     } else if let Some((kind, attrs)) = attributes.first_key_value() {
