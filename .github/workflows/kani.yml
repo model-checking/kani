@@ -226,3 +226,61 @@ jobs:
           if-no-files-found: error
           # Aggressively short retention: we don't really need these
           retention-days: 3
+
+  perf-benchcomp:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Save push event HEAD and HEAD~ to environment variables
+        if: ${{ github.event_name == 'push' }}
+        run: |
+          echo "NEW_REF=${{ github.event.after}}" | tee -a "$GITHUB_ENV"
+          # We want to compare with $NEW_REF~. But we can't know what
+          # that ref actually is until we clone the repository, so for
+          # now make it equal to $NEW_REF
+          echo "OLD_REF=${{ github.event.after }}" | tee -a "$GITHUB_ENV"
+
+      - name: Save pull request HEAD and target to environment variables
+        if: ${{ github.event_name == 'pull_request' }}
+        run: |
+          echo "OLD_REF=${{ github.event.pull_request.base.sha }}" | tee -a "$GITHUB_ENV"
+          echo "NEW_REF=${{ github.event.pull_request.head.sha }}" | tee -a "$GITHUB_ENV"
+
+      - name: Check out Kani (old variant)
+        uses: actions/checkout@v3
+        with:
+          path: ./old
+          ref: ${{ env.OLD_REF }}
+          fetch-depth: 2
+
+      - name: Check out HEAD~ of push event as 'old' variant
+        if: ${{ github.event_name == 'push' }}
+        run: pushd old && git checkout "${NEW_REF}^"
+
+      - name: Check out Kani (new variant)
+        uses: actions/checkout@v3
+        with:
+          path: ./new
+          ref: ${{ env.NEW_REF }}
+
+      - name: Set up Kani Dependencies (old variant)
+        uses: ./old/.github/actions/setup
+        with:
+          os: ubuntu-20.04
+          kani_dir: old
+
+      - name: Set up Kani Dependencies (new variant)
+        uses: ./new/.github/actions/setup
+        with:
+          os: ubuntu-20.04
+          kani_dir: new
+
+      - name: Build Kani (new variant)
+        run: pushd new && cargo build-dev
+
+      - name: Build Kani (old variant)
+        run: pushd old && cargo build-dev
+
+      - name: Run benchcomp
+        run: |
+          new/tools/benchcomp/bin/benchcomp \
+            --config new/tools/benchcomp/configs/perf-regression.yaml
