@@ -57,7 +57,8 @@ class _SingleInvocation:
 
         if self.copy_benchmarks_dir:
             shutil.copytree(
-                self.directory, self.working_copy, ignore_dangling_symlinks=True)
+                self.directory, self.working_copy,
+                ignore_dangling_symlinks=True, symlinks=True)
 
         try:
             subprocess.run(

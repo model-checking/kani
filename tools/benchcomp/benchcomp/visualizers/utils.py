@@ -3,6 +3,7 @@
 
 
 import dataclasses
+import logging
 import typing
 
 import benchcomp.visualizers
@@ -82,7 +83,7 @@ class AnyBenchmarkRegressedChecker:
                 new = bench["variants"][new_variant]["metrics"][self.metric]
 
                 if has_regressed(old, new):
-                    logging.warining(
+                    logging.warning(
                         "Benchmark '%s' regressed on metric '%s' (%s -> %s)",
                         bench_name, self.metric, old, new)
                     ret = True
