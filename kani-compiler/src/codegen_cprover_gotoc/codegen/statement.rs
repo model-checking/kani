@@ -263,7 +263,6 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Our model of GotoC has a similar statement, which is later lowered
     /// to assigning a Nondet in CBMC, with a comment specifying that it
     /// corresponds to a Deinit.
-    #[cfg(not(feature = "unsound_experiments"))]
     fn codegen_deinit(&mut self, place: &Place<'tcx>, loc: Location) -> Stmt {
         let dst_mir_ty = self.place_ty(place);
         let dst_type = self.codegen_ty(dst_mir_ty);

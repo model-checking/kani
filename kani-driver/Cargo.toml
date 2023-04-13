@@ -11,10 +11,6 @@ homepage = "https://github.com/model-checking/kani"
 repository = "https://github.com/model-checking/kani"
 publish = false
 
-[features]
-unsound_experiments = []
-
-
 [dependencies]
 kani_metadata = { path = "../kani_metadata" }
 cargo_metadata = "0.15.0"

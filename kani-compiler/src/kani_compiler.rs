@@ -146,11 +146,6 @@ impl Callbacks for KaniCompiler {
             );
             queries.set_reachability_analysis(matches.reachability_type());
 
-            #[cfg(feature = "unsound_experiments")]
-            crate::unsound_experiments::arg_parser::add_unsound_experiment_args_to_queries(
-                queries, &matches,
-            );
-
             // If appropriate, collect and set the stub mapping.
             if matches.get_flag(parser::ENABLE_STUBBING)
                 && queries.get_reachability_analysis() == ReachabilityType::Harnesses
