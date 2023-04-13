@@ -9,8 +9,8 @@ use cbmc::goto_program::{Expr, Location, Stmt, Type};
 use rustc_hir::def_id::DefId;
 use rustc_middle::mir;
 use rustc_middle::mir::{
-    AssertKind, BasicBlock, NonDivergingIntrinsic, Operand, Place, Statement, StatementKind,
-    SwitchTargets, Terminator, TerminatorKind,
+    AggregateKind, AssertKind, BasicBlock, NonDivergingIntrinsic, Operand, Place, Rvalue,
+    Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind,
 };
 use rustc_middle::ty;
 use rustc_middle::ty::layout::LayoutOf;
@@ -48,9 +48,32 @@ impl<'tcx> GotocCtx<'tcx> {
                         .goto_expr
                         .assign(self.codegen_rvalue(r, location).cast_to(Type::c_bool()), location)
                 } else {
-                    unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place(l))
+                    match r {
+                        Rvalue::Aggregate(ref k, operands) if rty.is_enum() => {
+                            if let AggregateKind::Adt(_, variant_index, _, _, _) = **k {
+                                let lvalue_expr = unwrap_or_return_codegen_unimplemented_stmt!(
+                                    self,
+                                    self.codegen_place(l)
+                                )
+                                .goto_expr;
+                                self.codegen_enum_assignment(
+                                    lvalue_expr,
+                                    &variant_index,
+                                    &operands,
+                                    rty,
+                                    location,
+                                )
+                            } else {
+                                unreachable!()
+                            }
+                        }
+                        _ => unwrap_or_return_codegen_unimplemented_stmt!(
+                            self,
+                            self.codegen_place(l)
+                        )
                         .goto_expr
-                        .assign(self.codegen_rvalue(r, location), location)
+                        .assign(self.codegen_rvalue(r, location), location),
+                    }
                 }
             }
             StatementKind::Deinit(place) => self.codegen_deinit(place, location),
