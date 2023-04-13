@@ -18,7 +18,7 @@ pub fn harness() {
         !(f32_1 == f32::NEG_INFINITY
             && f32_2 == f32::MIN
             && f32_3 == -101f32
-            && f32_4 == 0f32
+            && (f32_4 == 0f32 && f32_4.signum() < 0.0)
             && f32_5 == f32::MIN_POSITIVE
             && f32_6 == 101f32
             && f32_7 == f32::MAX

@@ -88,14 +88,17 @@ pub fn build_lib() {
         "--config",
         "profile.dev.debug-assertions=false",
         "--config",
-        "host.rustflags=[\"--cfg=kani\"]",
+        "host.rustflags=[\"--cfg=kani\", \"--cfg=kani_sysroot\"]",
         "--target",
         target,
         "--message-format",
         "json-diagnostic-rendered-ansi",
     ];
     let mut cmd = Command::new("cargo")
-        .env("CARGO_ENCODED_RUSTFLAGS", ["--cfg=kani", "-Z", "always-encode-mir"].join("\x1f"))
+        .env(
+            "CARGO_ENCODED_RUSTFLAGS",
+            ["--cfg=kani", "--cfg=kani_sysroot", "-Z", "always-encode-mir"].join("\x1f"),
+        )
         .args(args)
         .stdout(Stdio::piped())
         .spawn()
