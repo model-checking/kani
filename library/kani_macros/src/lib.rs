@@ -73,6 +73,15 @@ pub fn stub(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn solver(attr: TokenStream, item: TokenStream) -> TokenStream {
     attr_impl::solver(attr, item)
 }
+
+/// Mark an API as unstable. This should only be used inside the Kani sysroot.
+/// See https://model-checking.github.io/kani/rfc/rfcs/0006-unstable-api.html for more details.
+#[doc(hidden)]
+#[proc_macro_attribute]
+pub fn unstable(attr: TokenStream, item: TokenStream) -> TokenStream {
+    attr_impl::unstable(attr, item)
+}
+
 /// Allow users to auto generate Arbitrary implementations by using `#[derive(Arbitrary)]` macro.
 #[proc_macro_error]
 #[proc_macro_derive(Arbitrary)]
@@ -176,9 +185,10 @@ mod sysroot {
     }
 
     kani_attribute!(should_panic, no_args);
-    kani_attribute!(unwind);
-    kani_attribute!(stub);
     kani_attribute!(solver);
+    kani_attribute!(stub);
+    kani_attribute!(unstable);
+    kani_attribute!(unwind);
 }
 
 /// This module provides dummy implementations of Kani attributes which cannot be interpreted by
@@ -207,7 +217,8 @@ mod regular {
     }
 
     no_op!(should_panic);
-    no_op!(unwind);
-    no_op!(stub);
     no_op!(solver);
+    no_op!(stub);
+    no_op!(unstable);
+    no_op!(unwind);
 }
