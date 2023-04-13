@@ -16,7 +16,7 @@ use rustc_middle::ty;
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{Instance, InstanceDef, Ty};
 use rustc_span::Span;
-use rustc_target::abi::{FieldsShape, Primitive, TagEncoding, Variants};
+use rustc_target::abi::{FieldsShape, TagEncoding, Variants};
 use tracing::{debug, debug_span, trace};
 
 impl<'tcx> GotocCtx<'tcx> {
@@ -88,28 +88,23 @@ impl<'tcx> GotocCtx<'tcx> {
                         }
                         TagEncoding::Niche { untagged_variant, niche_variants, niche_start } => {
                             if untagged_variant != variant_index {
-                                let offset = match &layout.fields {
-                                    FieldsShape::Arbitrary { offsets, .. } => offsets[0],
-                                    _ => unreachable!("niche encoding must have arbitrary fields"),
-                                };
-                                let discr_ty = self.codegen_enum_discr_typ(pt);
-                                let discr_ty = self.codegen_ty(discr_ty);
-                                let niche_value =
-                                    variant_index.as_u32() - niche_variants.start().as_u32();
-                                let niche_value = (niche_value as u128).wrapping_add(*niche_start);
-                                let value = if niche_value == 0
-                                    && matches!(tag.primitive(), Primitive::Pointer(_))
-                                {
-                                    discr_ty.null()
-                                } else {
-                                    Expr::int_constant(niche_value, discr_ty.clone())
-                                };
+                                let value = self.compute_enum_niche_value(
+                                    pt,
+                                    variant_index,
+                                    tag,
+                                    niche_variants,
+                                    niche_start,
+                                );
                                 let place = unwrap_or_return_codegen_unimplemented_stmt!(
                                     self,
                                     self.codegen_place(place)
                                 )
                                 .goto_expr;
-                                self.codegen_get_niche(place, offset, discr_ty)
+                                let offset = match &layout.fields {
+                                    FieldsShape::Arbitrary { offsets, .. } => offsets[0],
+                                    _ => unreachable!("niche encoding must have arbitrary fields"),
+                                };
+                                self.codegen_get_niche(place, offset, value.typ().clone())
                                     .assign(value, location)
                             } else {
                                 Stmt::skip(location)

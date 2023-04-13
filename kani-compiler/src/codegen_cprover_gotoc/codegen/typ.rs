@@ -20,11 +20,12 @@ use rustc_middle::ty::{
 use rustc_middle::ty::{List, TypeFoldable};
 use rustc_span::def_id::DefId;
 use rustc_target::abi::{
-    Abi::Vector, FieldsShape, Integer, LayoutS, Primitive, Size, TagEncoding, TyAndLayout,
+    Abi::Vector, FieldsShape, Integer, LayoutS, Primitive, Scalar, Size, TagEncoding, TyAndLayout,
     VariantIdx, Variants,
 };
 use rustc_target::spec::abi::Abi;
 use std::iter;
+use std::ops::RangeInclusive;
 use tracing::{debug, trace, warn};
 use ty::layout::HasParamEnv;
 
@@ -1568,6 +1569,30 @@ impl<'tcx> GotocCtx<'tcx> {
             self.ensure_struct(mangled_name, pretty_name, |gcx, name| {
                 gcx.codegen_enum_cases(name, pretty_name, adtdef, subst, variants, Size::ZERO)
             })
+        }
+    }
+
+    /// Compute the discriminant expression for an enum that uses niche optimization.
+    ///
+    /// We follow the logic of the SSA and Cranelift back-ends in doing the computation:
+    /// <https://github.com/rust-lang/rust/blob/fab99073b01539ce2664366011c7f3e378e52b7e/compiler/rustc_codegen_ssa/src/mir/place.rs#L455>
+    /// <https://github.com/rust-lang/rust/blob/d37e2f74afd131cda7b08520d37426bfbb622b5c/compiler/rustc_codegen_cranelift/src/discriminant.rs#L52>
+    pub fn compute_enum_niche_value(
+        &mut self,
+        enum_ty: Ty<'tcx>,
+        variant_index: &VariantIdx,
+        tag: &Scalar,
+        niche_variants: &RangeInclusive<VariantIdx>,
+        niche_start: &u128,
+    ) -> Expr {
+        let discr_ty = self.codegen_enum_discr_typ(enum_ty);
+        let discr_ty = self.codegen_ty(discr_ty);
+        let niche_value = variant_index.as_u32() - niche_variants.start().as_u32();
+        let niche_value = (niche_value as u128).wrapping_add(*niche_start);
+        if niche_value == 0 && matches!(tag.primitive(), Primitive::Pointer(_)) {
+            discr_ty.null()
+        } else {
+            Expr::int_constant(niche_value, discr_ty)
         }
     }
 
