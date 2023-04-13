@@ -304,17 +304,19 @@ impl<'tcx> GotocCtx<'tcx> {
                     )
                 }
             }
-            AggregateKind::Tuple => Expr::struct_expr_from_values(
-                self.codegen_ty(res_ty),
-                operands
-                    .iter()
-                    .filter_map(|o| {
-                        let oty = self.operand_ty(o);
-                        if oty.is_unit() { None } else { Some(self.codegen_operand(o)) }
-                    })
-                    .collect(),
-                &self.symbol_table,
-            ),
+            AggregateKind::Tuple => {
+                let typ = self.codegen_ty(res_ty);
+                let layout = self.layout_of(res_ty);
+                Expr::struct_expr_from_values(
+                    typ,
+                    layout
+                        .fields
+                        .index_by_increasing_offset()
+                        .map(|idx| self.codegen_operand(&operands[idx]))
+                        .collect(),
+                    &self.symbol_table,
+                )
+            }
             AggregateKind::Adt(_, _, _, _, _) => unimplemented!(),
             AggregateKind::Closure(_, _) => unimplemented!(),
             AggregateKind::Generator(_, _, _) => unimplemented!(),
