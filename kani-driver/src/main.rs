@@ -34,9 +34,6 @@ mod project;
 mod session;
 mod util;
 
-#[cfg(feature = "unsound_experiments")]
-mod unsound_experiments;
-
 /// The main function for the `kani-driver`.
 /// The driver can be invoked via `cargo kani` and `kani` commands, which determines what kind of
 /// project should be verified.

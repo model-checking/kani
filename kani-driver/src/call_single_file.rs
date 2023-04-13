@@ -103,9 +103,6 @@ impl KaniSession {
         // rustc driver is invoked.
         flags.push("--goto-c".into());
 
-        #[cfg(feature = "unsound_experiments")]
-        flags.extend(self.args.unsound_experiments.process_args());
-
         flags
     }
 
