@@ -147,9 +147,6 @@ pub fn parser() -> Command {
                 .action(ArgAction::Set)
                 .help("Pass the kani version to the compiler to ensure cache coherence."),
         );
-    #[cfg(feature = "unsound_experiments")]
-    let app = crate::unsound_experiments::arg_parser::add_unsound_experiments_to_parser(app);
-
     app
 }
 

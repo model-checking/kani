@@ -708,7 +708,6 @@ impl<'tcx> GotocCtx<'tcx> {
     /// By default, returns `None` which leaves the variable uninitilized.
     /// In CBMC, this translates to a NONDET value.
     /// In the future, we might want to replace this with `Poison`.
-    #[cfg(not(feature = "unsound_experiments"))]
     pub fn codegen_default_initializer(&self, _e: &Expr) -> Option<Expr> {
         None
     }

@@ -4,12 +4,6 @@
 use std::sync::{Arc, Mutex};
 use strum_macros::{AsRefStr, EnumString, EnumVariantNames};
 
-#[cfg(feature = "unsound_experiments")]
-mod unsound_experiments;
-
-#[cfg(feature = "unsound_experiments")]
-use crate::unsound_experiments::UnsoundExperiments;
-
 #[derive(Debug, Default, Clone, Copy, AsRefStr, EnumString, EnumVariantNames, PartialEq, Eq)]
 #[strum(serialize_all = "snake_case")]
 pub enum ReachabilityType {
@@ -47,11 +41,6 @@ pub trait UserInput {
 
     fn set_stubbing_enabled(&mut self, stubbing_enabled: bool);
     fn get_stubbing_enabled(&self) -> bool;
-
-    #[cfg(feature = "unsound_experiments")]
-    fn get_unsound_experiments(&self) -> UnsoundExperiments;
-    #[cfg(feature = "unsound_experiments")]
-    fn set_unsound_experiments(&mut self, experiments: UnsoundExperiments);
 }
 
 /// This structure should only be used behind a synchronized reference or a snapshot.
@@ -65,8 +54,6 @@ pub struct QueryDb {
     write_json_symtab: bool,
     reachability_analysis: ReachabilityType,
     stubbing_enabled: bool,
-    #[cfg(feature = "unsound_experiments")]
-    unsound_experiments: UnsoundExperiments,
 }
 
 impl QueryDb {
@@ -79,8 +66,6 @@ impl QueryDb {
             write_json_symtab: false,
             reachability_analysis: ReachabilityType::None,
             stubbing_enabled: false,
-            #[cfg(feature = "unsound_experiments")]
-            unsound_experiments: unsound_experiments::UnsoundExperiments { zero_init_vars: false },
         }))
     }
 }
@@ -140,15 +125,5 @@ impl UserInput for QueryDb {
 
     fn get_write_json_symtab(&self) -> bool {
         self.write_json_symtab
-    }
-
-    #[cfg(feature = "unsound_experiments")]
-    fn get_unsound_experiments(&self) -> UnsoundExperiments {
-        self.unsound_experiments
-    }
-
-    #[cfg(feature = "unsound_experiments")]
-    fn set_unsound_experiments(&mut self, experiments: UnsoundExperiments) {
-        self.unsound_experiments = experiments
     }
 }

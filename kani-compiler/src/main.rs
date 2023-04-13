@@ -36,7 +36,6 @@ mod kani_compiler;
 mod kani_middle;
 mod parser;
 mod session;
-mod unsound_experiments;
 
 use rustc_driver::{RunCompiler, TimePassesCallbacks};
 use std::env;
