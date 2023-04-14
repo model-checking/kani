@@ -1,6 +1,9 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+// Required so we can use kani_macros attributes.
+#![feature(register_tool)]
+#![register_tool(kanitool)]
 // Used for rustc_diagnostic_item.
 #![feature(rustc_attrs)]
 // This is required for the optimized version of `any_array()`

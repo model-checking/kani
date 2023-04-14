@@ -26,6 +26,8 @@ enum KaniAttributeKind {
     ShouldPanic,
     Solver,
     Stub,
+    /// Attribute used to mark unstable APIs.
+    Unstable,
     Unwind,
 }
 
@@ -113,6 +115,10 @@ pub fn extract_harness_attributes(tcx: TyCtxt, def_id: DefId) -> Option<HarnessA
                             parse_unwind(tcx, expect_single(tcx, kind, &attributes))
                     }
                     KaniAttributeKind::Proof => harness.proof = true,
+                    KaniAttributeKind::Unstable => {
+                        // Internal attribute which shouldn't exist here.
+                        unreachable!()
+                    }
                 };
                 harness
             },
