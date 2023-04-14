@@ -241,7 +241,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// 1. integers
     /// 2. ZST, or transparent structs of one (scalar) value
     /// 3. enums that don't carry data
-    /// 4. unit, 1-ary tuples, or size-0 arrays
+    /// 4. unit, tuples (may be multi-ary!), or size-0 arrays
     /// 5. pointers to an allocation
     fn codegen_scalar(&mut self, s: Scalar, ty: Ty<'tcx>, span: Option<&Span>) -> Expr {
         debug!(scalar=?s, ?ty, kind=?ty.kind(), ?span, "codegen_scalar");
@@ -394,15 +394,17 @@ impl<'tcx> GotocCtx<'tcx> {
                     }
                 }
             }
-            (s, ty::Tuple(substs)) => {
-                // here we have tuples of at most one length
-                if substs.len() == 1 {
-                    let overall_t = self.codegen_ty(ty);
-                    let t = substs[0];
-                    self.codegen_single_variant_single_field(s, span, overall_t, t)
-                } else {
-                    unreachable!()
-                }
+            (Scalar::Int(int), ty::Tuple(_)) => {
+                // A ScalarInt has a u128-typed data field, so the result can never be larger than
+                // that and the conversion to a uint (of an actual size that may be smaller than
+                // 128 bits) will succeed.
+                let int_u128 = int.try_to_uint(int.size()).ok().unwrap();
+                let overall_t = self.codegen_ty(ty);
+                let expr_int = Expr::int_constant(
+                    int_u128,
+                    Type::unsigned_int(overall_t.sizeof_in_bits(&self.symbol_table)),
+                );
+                expr_int.transmute_to(overall_t, &self.symbol_table)
             }
             (_, ty::Array(_, _)) => {
                 // we must have zero size array here
