@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use super::typ::pointee_type;
+use crate::codegen_cprover_gotoc::codegen::place::{ProjectedPlace, TypeOrVariant};
 use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::codegen_cprover_gotoc::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
@@ -17,9 +18,9 @@ use rustc_middle::mir::{AggregateKind, BinOp, CastKind, NullOp, Operand, Place, 
 use rustc_middle::ty::adjustment::PointerCast;
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{self, Instance, IntTy, Ty, TyCtxt, UintTy, VtblEntry};
-use rustc_target::abi::{FieldsShape, Size, TagEncoding, Variants};
+use rustc_target::abi::{FieldsShape, Size, TagEncoding, VariantIdx, Variants};
 use std::collections::BTreeMap;
-use tracing::{debug, warn};
+use tracing::{debug, trace, warn};
 
 impl<'tcx> GotocCtx<'tcx> {
     fn codegen_comparison(&mut self, op: &BinOp, e1: &Operand<'tcx>, e2: &Operand<'tcx>) -> Expr {
@@ -279,13 +280,112 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    fn codegen_rvalue_aggregate(
+    /// Create an initializer for a generator struct.
+    fn codegen_rvalue_generator(&mut self, operands: &[Operand<'tcx>], ty: Ty<'tcx>) -> Expr {
+        let layout = self.layout_of(ty);
+        let discriminant_field = match &layout.variants {
+            Variants::Multiple { tag_encoding: TagEncoding::Direct, tag_field, .. } => tag_field,
+            _ => unreachable!(
+                "Expected generators to have multiple variants and direct encoding, but found: {layout:?}"
+            ),
+        };
+        let overall_t = self.codegen_ty(ty);
+        let direct_fields = overall_t.lookup_field("direct_fields", &self.symbol_table).unwrap();
+        let mut operands_iter = operands.iter();
+        let direct_fields_expr = Expr::struct_expr_from_values(
+            direct_fields.typ(),
+            layout
+                .fields
+                .index_by_increasing_offset()
+                .map(|idx| {
+                    let field_ty = layout.field(self, idx).ty;
+                    if idx == *discriminant_field {
+                        Expr::int_constant(0, self.codegen_ty(field_ty))
+                    } else {
+                        self.codegen_operand(operands_iter.next().unwrap())
+                    }
+                })
+                .collect(),
+            &self.symbol_table,
+        );
+        assert!(operands_iter.next().is_none());
+        Expr::union_expr(overall_t, "direct_fields", direct_fields_expr, &self.symbol_table)
+    }
+
+    /// This code will generate an expression that initializes an enumeration.
+    ///
+    /// It will first create a temporary variant with the same enum type.
+    /// Initialize the case structure and set its discriminant.
+    /// Finally, it will return the temporary value.
+    fn codegen_rvalue_enum_aggregate(
         &mut self,
-        k: &AggregateKind<'tcx>,
+        variant_index: VariantIdx,
         operands: &[Operand<'tcx>],
         res_ty: Ty<'tcx>,
+        loc: Location,
     ) -> Expr {
-        match *k {
+        let mut stmts = vec![];
+        let typ = self.codegen_ty(res_ty);
+        // 1- Create a temporary value of the enum type.
+        tracing::debug!(?typ, ?res_ty, "aggregate_enum");
+        let (temp_var, decl) = self.decl_temp_variable(typ.clone(), None, loc);
+        stmts.push(decl);
+        if !operands.is_empty() {
+            // 2- Initialize the members of the temporary variant.
+            let initial_projection = ProjectedPlace::try_new(
+                temp_var.clone(),
+                TypeOrVariant::Type(res_ty),
+                None,
+                None,
+                self,
+            )
+            .unwrap();
+            let variant_proj = self.codegen_variant_lvalue(initial_projection, variant_index);
+            let variant_expr = variant_proj.goto_expr.clone();
+            let layout = self.layout_of(res_ty);
+            let fields = match &layout.variants {
+                Variants::Single { index } => {
+                    if *index != variant_index {
+                        // This may occur if all variants except for the one pointed by
+                        // index can never be constructed. Generic code might still try
+                        // to initialize the non-existing invariant.
+                        trace!(?res_ty, ?variant_index, "Unreachable invariant");
+                        return Expr::nondet(typ);
+                    }
+                    &layout.fields
+                }
+                Variants::Multiple { variants, .. } => &variants[variant_index].fields,
+            };
+
+            trace!(?variant_expr, ?fields, ?operands, "codegen_aggregate enum");
+            let init_struct = Expr::struct_expr_from_values(
+                variant_expr.typ().clone(),
+                fields
+                    .index_by_increasing_offset()
+                    .map(|idx| self.codegen_operand(&operands[idx]))
+                    .collect(),
+                &self.symbol_table,
+            );
+            let assign_case = variant_proj.goto_expr.assign(init_struct, loc);
+            stmts.push(assign_case);
+        }
+        // 3- Set discriminant.
+        let set_discriminant =
+            self.codegen_set_discriminant(res_ty, temp_var.clone(), variant_index, loc);
+        stmts.push(set_discriminant);
+        // 4- Return temporary variable.
+        stmts.push(temp_var.as_stmt(loc));
+        Expr::statement_expression(stmts, typ)
+    }
+
+    fn codegen_rvalue_aggregate(
+        &mut self,
+        aggregate: &AggregateKind<'tcx>,
+        operands: &[Operand<'tcx>],
+        res_ty: Ty<'tcx>,
+        loc: Location,
+    ) -> Expr {
+        match *aggregate {
             AggregateKind::Array(et) => {
                 if et.is_unit() {
                     Expr::struct_expr_from_values(
@@ -304,7 +404,44 @@ impl<'tcx> GotocCtx<'tcx> {
                     )
                 }
             }
-            AggregateKind::Tuple => {
+            AggregateKind::Adt(_, _, _, _, Some(active_field_index)) => {
+                assert!(res_ty.is_union());
+                assert_eq!(operands.len(), 1);
+                let typ = self.codegen_ty(res_ty);
+                let components = typ.lookup_components(&self.symbol_table).unwrap();
+                Expr::union_expr(
+                    typ,
+                    components[active_field_index].name(),
+                    self.codegen_operand(&operands[0]),
+                    &self.symbol_table,
+                )
+            }
+            AggregateKind::Adt(_, _, _, _, _) if res_ty.is_simd() => {
+                let typ = self.codegen_ty(res_ty);
+                let layout = self.layout_of(res_ty);
+                let vector_element_type = typ.base_type().unwrap().clone();
+                Expr::vector_expr(
+                    typ,
+                    layout
+                        .fields
+                        .index_by_increasing_offset()
+                        .map(|idx| {
+                            let cgo = self.codegen_operand(&operands[idx]);
+                            // The input operand might actually be a one-element array, as seen
+                            // when running assess on firecracker.
+                            if *cgo.typ() == vector_element_type {
+                                cgo
+                            } else {
+                                cgo.transmute_to(vector_element_type.clone(), &self.symbol_table)
+                            }
+                        })
+                        .collect(),
+                )
+            }
+            AggregateKind::Adt(_, variant_index, ..) if res_ty.is_enum() => {
+                self.codegen_rvalue_enum_aggregate(variant_index, operands, res_ty, loc)
+            }
+            AggregateKind::Adt(..) | AggregateKind::Closure(..) | AggregateKind::Tuple => {
                 let typ = self.codegen_ty(res_ty);
                 let layout = self.layout_of(res_ty);
                 Expr::struct_expr_from_values(
@@ -317,9 +454,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     &self.symbol_table,
                 )
             }
-            AggregateKind::Adt(_, _, _, _, _) => unimplemented!(),
-            AggregateKind::Closure(_, _) => unimplemented!(),
-            AggregateKind::Generator(_, _, _) => unimplemented!(),
+            AggregateKind::Generator(_, _, _) => self.codegen_rvalue_generator(&operands, res_ty),
         }
     }
 
@@ -406,7 +541,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 self.codegen_get_discriminant(place, pt, res_ty)
             }
             Rvalue::Aggregate(ref k, operands) => {
-                self.codegen_rvalue_aggregate(k, operands, res_ty)
+                self.codegen_rvalue_aggregate(k, operands, res_ty, loc)
             }
             Rvalue::ThreadLocalRef(def_id) => {
                 // Since Kani is single-threaded, we treat a thread local like a static variable:
