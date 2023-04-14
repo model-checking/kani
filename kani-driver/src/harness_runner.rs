@@ -204,9 +204,6 @@ impl KaniSession {
 
         self.stubbing_statuses(results);
 
-        #[cfg(feature = "unsound_experiments")]
-        self.args.unsound_experiments.print_warnings();
-
         if failing > 0 {
             // Failure exit code without additional error message
             drop(self);

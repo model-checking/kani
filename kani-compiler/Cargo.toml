@@ -37,7 +37,6 @@ tracing-tree = "0.2.2"
 default = ['cprover']
 cprover = ['ar', 'cbmc', 'libc', 'num', 'object', 'rustc-demangle', 'serde',
     'serde_json', "strum", "strum_macros"]
-unsound_experiments = ["kani_queries/unsound_experiments"]
 write_json_symtab = []
 
 [package.metadata.rust-analyzer]
