@@ -22,22 +22,28 @@ jobs:
           current_toolchain_epoch=$(date --date $current_toolchain_date +%s)
           next_toolchain_date=$(date --date "@$(($current_toolchain_epoch + 86400))" +%Y-%m-%d)
           echo "next_toolchain_date=$next_toolchain_date" >> $GITHUB_ENV
-          sed -i "/^channel/ s/$current_toolchain_date/$next_toolchain_date/" rust-toolchain.toml
-          git diff
-          git clone --filter=tree:0 https://github.com/rust-lang/rust rust.git
-          cd rust.git
-          current_toolchain_hash=$(curl https://static.rust-lang.org/dist/$current_toolchain_date/channel-rust-nightly-git-commit-hash.txt)
-          echo "current_toolchain_hash=$current_toolchain_hash" >> $GITHUB_ENV
-          next_toolchain_hash=$(curl https://static.rust-lang.org/dist/$next_toolchain_date/channel-rust-nightly-git-commit-hash.txt)
-          echo "next_toolchain_hash=$next_toolchain_hash" >> $GITHUB_ENV
-          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
-          echo "git_log<<$EOF" >> $GITHUB_ENV
-          git log --oneline $current_toolchain_hash..$next_toolchain_hash | \
-            sed 's#^#https://github.com/rust-lang/rust/commit/#' >> $GITHUB_ENV
-          echo "$EOF" >> $GITHUB_ENV
-          cd ..
-          rm -rf rust.git
+          if ! git ls-remote --exit-code origin toolchain-$next_toolchain_date ; then
+            echo "branch_exists=false" >> $GITHUB_ENV
+            sed -i "/^channel/ s/$current_toolchain_date/$next_toolchain_date/" rust-toolchain.toml
+            git diff
+            git clone --filter=tree:0 https://github.com/rust-lang/rust rust.git
+            cd rust.git
+            current_toolchain_hash=$(curl https://static.rust-lang.org/dist/$current_toolchain_date/channel-rust-nightly-git-commit-hash.txt)
+            echo "current_toolchain_hash=$current_toolchain_hash" >> $GITHUB_ENV
+            next_toolchain_hash=$(curl https://static.rust-lang.org/dist/$next_toolchain_date/channel-rust-nightly-git-commit-hash.txt)
+            echo "next_toolchain_hash=$next_toolchain_hash" >> $GITHUB_ENV
+            EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+            echo "git_log<<$EOF" >> $GITHUB_ENV
+            git log --oneline $current_toolchain_hash..$next_toolchain_hash | \
+              sed 's#^#https://github.com/rust-lang/rust/commit/#' >> $GITHUB_ENV
+            echo "$EOF" >> $GITHUB_ENV
+            cd ..
+            rm -rf rust.git
+          else
+            echo "branch_exists=true" >> $GITHUB_ENV
+          fi
       - name: Create Pull Request
+        if: ${{ ! env.branch_exists }}
         uses: peter-evans/create-pull-request@v4
         with:
           commit-message: Upgrade Rust toolchain to nightly-${{ env.next_toolchain_date }}
