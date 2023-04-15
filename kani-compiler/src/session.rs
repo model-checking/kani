@@ -7,7 +7,7 @@ use crate::parser;
 use clap::ArgMatches;
 use rustc_errors::{
     emitter::Emitter, emitter::HumanReadableErrorType, fallback_fluent_bundle, json::JsonEmitter,
-    ColorConfig, Diagnostic,
+    ColorConfig, Diagnostic, TerminalUrl,
 };
 use std::panic;
 use std::str::FromStr;
@@ -57,6 +57,7 @@ static JSON_PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send
                 None,
                 false,
                 false,
+                TerminalUrl::No,
             );
             let diagnostic = Diagnostic::new(rustc_errors::Level::Bug, msg);
             emitter.emit_diagnostic(&diagnostic);

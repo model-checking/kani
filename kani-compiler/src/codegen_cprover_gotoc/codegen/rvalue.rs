@@ -144,7 +144,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> Expr {
         let res_t = self.codegen_ty(res_ty);
         let op_expr = self.codegen_operand(op);
-        let width = sz.try_eval_usize(self.tcx, ty::ParamEnv::reveal_all()).unwrap();
+        let width = sz.try_eval_target_usize(self.tcx, ty::ParamEnv::reveal_all()).unwrap();
         Expr::struct_expr(
             res_t,
             btree_string_map![("0", op_expr.array_constant(width))],
