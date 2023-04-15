@@ -43,8 +43,8 @@ jobs:
             echo "branch_exists=true" >> $GITHUB_ENV
           fi
       - name: Create Pull Request
-        if: ${{ ! env.branch_exists }}
-        uses: peter-evans/create-pull-request@v4
+        if: ${{ env.branch_exists == 'false' }}
+        uses: peter-evans/create-pull-request@v5
         with:
           commit-message: Upgrade Rust toolchain to nightly-${{ env.next_toolchain_date }}
           branch: toolchain-${{ env.next_toolchain_date }}
