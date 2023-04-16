@@ -777,7 +777,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             ty::Foreign(defid) => self.codegen_foreign(ty, *defid),
             ty::Array(et, len) => {
-                let evaluated_len = len.try_eval_usize(self.tcx, self.param_env()).unwrap();
+                let evaluated_len = len.try_eval_target_usize(self.tcx, self.param_env()).unwrap();
                 let array_name = format!("[{}; {evaluated_len}]", self.ty_mangled_name(*et));
                 let array_pretty_name = format!("[{}; {evaluated_len}]", self.ty_pretty_name(*et));
                 // wrap arrays into struct so that one can take advantage of struct copy in C
@@ -902,7 +902,7 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_alignment_padding(
         &self,
         size: Size,
-        layout: &LayoutS<VariantIdx>,
+        layout: &LayoutS,
         idx: usize,
     ) -> Option<DatatypeComponent> {
         let align = Size::from_bits(layout.align.abi.bits());
@@ -927,7 +927,7 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_struct_fields(
         &mut self,
         flds: Vec<(String, Ty<'tcx>)>,
-        layout: &LayoutS<VariantIdx>,
+        layout: &LayoutS,
         initial_offset: Size,
     ) -> Vec<DatatypeComponent> {
         match &layout.fields {
@@ -1385,7 +1385,7 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         variant: &VariantDef,
         subst: &'tcx InternalSubsts<'tcx>,
-        layout: &LayoutS<VariantIdx>,
+        layout: &LayoutS,
         initial_offset: Size,
     ) -> Vec<DatatypeComponent> {
         let flds: Vec<_> =
@@ -1554,7 +1554,7 @@ impl<'tcx> GotocCtx<'tcx> {
         ty: Ty<'tcx>,
         adtdef: &'tcx AdtDef,
         subst: &'tcx InternalSubsts<'tcx>,
-        variants: &IndexVec<VariantIdx, LayoutS<VariantIdx>>,
+        variants: &IndexVec<VariantIdx, LayoutS>,
     ) -> Type {
         let non_zst_count = variants.iter().filter(|layout| layout.size.bytes() > 0).count();
         let mangled_name = self.ty_mangled_name(ty);
@@ -1573,7 +1573,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     pub(crate) fn variant_min_offset(
         &self,
-        variants: &IndexVec<VariantIdx, LayoutS<VariantIdx>>,
+        variants: &IndexVec<VariantIdx, LayoutS>,
     ) -> Option<Size> {
         variants
             .iter()
@@ -1657,7 +1657,7 @@ impl<'tcx> GotocCtx<'tcx> {
         pretty_name: InternedString,
         def: &'tcx AdtDef,
         subst: &'tcx InternalSubsts<'tcx>,
-        layouts: &IndexVec<VariantIdx, LayoutS<VariantIdx>>,
+        layouts: &IndexVec<VariantIdx, LayoutS>,
         initial_offset: Size,
     ) -> Vec<DatatypeComponent> {
         def.variants()
@@ -1689,7 +1689,7 @@ impl<'tcx> GotocCtx<'tcx> {
         pretty_name: InternedString,
         case: &VariantDef,
         subst: &'tcx InternalSubsts<'tcx>,
-        variant: &LayoutS<VariantIdx>,
+        variant: &LayoutS,
         initial_offset: Size,
     ) -> Type {
         let case_name = format!("{name}::{}", case.name);

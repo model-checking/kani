@@ -4,7 +4,7 @@
 // See GitHub history for details.
 use rustc_ast as ast;
 use rustc_data_structures::sync::Lrc;
-use rustc_errors::ColorConfig;
+use rustc_errors::{ColorConfig, TerminalUrl};
 use rustc_span::edition::Edition;
 use rustc_span::source_map::SourceMap;
 use rustc_span::symbol::sym;
@@ -90,6 +90,7 @@ pub fn make_test(
                 Some(80),
                 false,
                 false,
+                TerminalUrl::No,
             )
             .supports_color();
 
@@ -104,6 +105,7 @@ pub fn make_test(
                 None,
                 false,
                 false,
+                TerminalUrl::No,
             );
 
             // FIXME(misdreavus): pass `-Z treat-err-as-bug` to the doctest parser

@@ -1226,14 +1226,16 @@ impl<'tcx> GotocCtx<'tcx> {
             // `simd_shuffle4`) is type-checked
             match farg_types[2].kind() {
                 ty::Array(ty, len) if matches!(ty.kind(), ty::Uint(ty::UintTy::U32)) => {
-                    len.try_eval_usize(self.tcx, ty::ParamEnv::reveal_all()).unwrap_or_else(|| {
-                        self.tcx.sess.span_err(
-                            span.unwrap(),
-                            "could not evaluate shuffle index array length",
-                        );
-                        // Return a dummy value
-                        u64::MIN
-                    })
+                    len.try_eval_target_usize(self.tcx, ty::ParamEnv::reveal_all()).unwrap_or_else(
+                        || {
+                            self.tcx.sess.span_err(
+                                span.unwrap(),
+                                "could not evaluate shuffle index array length",
+                            );
+                            // Return a dummy value
+                            u64::MIN
+                        },
+                    )
                 }
                 _ => {
                     let err_msg = format!(
