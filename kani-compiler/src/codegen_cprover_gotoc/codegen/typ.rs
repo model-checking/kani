@@ -304,7 +304,7 @@ impl<'tcx> GotocCtx<'tcx> {
             var: ty::BoundVar::from_usize(bound_vars.len() - 1),
             kind: ty::BoundRegionKind::BrEnv,
         };
-        let env_region = ty::ReLateBound(ty::INNERMOST, br);
+        let env_region = self.tcx.mk_re_late_bound(ty::INNERMOST, br);
         let env_ty = self.tcx.closure_env_ty(def_id, substs, env_region).unwrap();
 
         let sig = sig.skip_binder();

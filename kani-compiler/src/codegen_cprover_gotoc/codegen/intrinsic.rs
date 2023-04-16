@@ -162,7 +162,7 @@ impl<'tcx> GotocCtx<'tcx> {
             ($f:ident) => {{
                 let mm = self.symbol_table.machine_model();
                 let casted_fargs =
-                    Expr::cast_arguments_to_machine_equivalent_function_parameter_types(
+                    Expr::cast_arguments_to_target_equivalent_function_parameter_types(
                         &BuiltinFn::$f.as_expr(),
                         fargs,
                         mm,
@@ -783,11 +783,13 @@ impl<'tcx> GotocCtx<'tcx> {
             );
         }
 
-        let param_env_and_layout = ty::ParamEnv::reveal_all().and(layout);
+        let param_env_and_type = ty::ParamEnv::reveal_all().and(ty);
 
         // Then we check if the type allows "raw" initialization for the cases
         // where memory is zero-initialized or entirely uninitialized
-        if intrinsic == "assert_zero_valid" && !self.tcx.permits_zero_init(param_env_and_layout) {
+        if intrinsic == "assert_zero_valid"
+            && !self.tcx.permits_zero_init(param_env_and_type).ok().unwrap()
+        {
             return self.codegen_fatal_error(
                 PropertyClass::SafetyCheck,
                 &format!("attempted to zero-initialize type `{ty}`, which is invalid"),
@@ -795,7 +797,8 @@ impl<'tcx> GotocCtx<'tcx> {
             );
         }
 
-        if intrinsic == "assert_uninit_valid" && !self.tcx.permits_uninit_init(param_env_and_layout)
+        if intrinsic == "assert_uninit_valid"
+            && !self.tcx.permits_uninit_init(param_env_and_type).ok().unwrap()
         {
             return self.codegen_fatal_error(
                 PropertyClass::SafetyCheck,
