@@ -28,7 +28,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let pretty_name = Instance::new(def_id, InternalSubsts::empty()).to_string();
         debug!(?symbol_name, ?pretty_name, "declare_static {}", item);
 
-        let typ = self.codegen_ty(self.tcx.type_of(def_id));
+        let typ = self.codegen_ty(self.tcx.type_of(def_id).subst_identity());
         let span = self.tcx.def_span(def_id);
         let location = self.codegen_span(&span);
         let symbol = Symbol::static_variable(symbol_name.clone(), symbol_name, typ, location)
