@@ -498,8 +498,8 @@ impl Expr {
     }
 
     /// Casts value to new_typ, only when the current type of value
-    /// is equivalent to new_typ on the given machine (e.g. i32 -> c_int)
-    pub fn cast_to_machine_equivalent_type(self, new_typ: &Type, mm: &MachineModel) -> Expr {
+    /// is equivalent to new_typ on the given target (e.g. i32 -> c_int)
+    pub fn cast_to_target_equivalent_type(self, new_typ: &Type, mm: &MachineModel) -> Expr {
         if self.typ() == new_typ {
             self
         } else {
@@ -509,8 +509,8 @@ impl Expr {
     }
 
     /// Casts arguments to type of function parameters when the corresponding types
-    /// are equivalent on the given machine (e.g. i32 -> c_int)
-    pub fn cast_arguments_to_machine_equivalent_function_parameter_types(
+    /// are equivalent on the given target (e.g. i32 -> c_int)
+    pub fn cast_arguments_to_target_equivalent_function_parameter_types(
         function: &Expr,
         mut arguments: Vec<Expr>,
         mm: &MachineModel,
@@ -520,7 +520,7 @@ impl Expr {
         let mut rval: Vec<_> = parameters
             .iter()
             .map(|parameter| {
-                arguments.remove(0).cast_to_machine_equivalent_type(parameter.typ(), mm)
+                arguments.remove(0).cast_to_target_equivalent_type(parameter.typ(), mm)
             })
             .collect();
 
