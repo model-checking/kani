@@ -52,6 +52,29 @@ jobs:
           KANI_ENABLE_WRITE_JSON_SYMTAB: 1
         run: ./scripts/kani-regression.sh
 
+  benchcomp-tests:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout Kani
+        uses: actions/checkout@v3
+
+      - name: Install benchcomp dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-pip
+          pushd tools/benchcomp && pip3 install -r requirements.txt
+
+      - name: Setup Kani Dependencies
+        uses: ./.github/actions/setup
+        with:
+          os: ubuntu-20.04
+
+      - name: Build Kani using release mode
+        run: cargo build-dev -- --release
+
+      - name: Run benchcomp unit and regression tests
+        run: pushd tools/benchcomp && PATH=$(realpath ../../scripts):$PATH test/run
+
   perf:
     runs-on: ubuntu-20.04
     steps:
