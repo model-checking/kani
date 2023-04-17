@@ -1,0 +1,41 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+#
+# Run the Kani perf suite twice, erroring out on regression. This config
+# file is primarily intended to be used in CI, because it assumes that
+# there are two Kani checkouts in the 'old' and 'new' directories;
+# benchcomp compares the performance of these two checkouts.
+
+variants:
+  kani_new:
+    config:
+      directory: new
+      command_line: PATH=$(realpath new/scripts):$PATH scripts/kani-perf.sh
+      env:
+        RUST_TEST_THREADS: "1"
+  kani_old:
+    config:
+      directory: old
+      command_line: PATH=$(realpath old/scripts):$PATH scripts/kani-perf.sh
+      env:
+        RUST_TEST_THREADS: "1"
+
+run:
+  suites:
+    kani_perf:
+      parser:
+        module: kani_perf
+      variants: [kani_old, kani_new]
+
+visualize:
+  - type: error_on_regression
+    variant_pairs: [[kani_old, kani_new]]
+    checks:
+      - metric: success
+        # Compare the old and new variants of each benchmark. The
+        # benchmark has regressed if the lambda returns true.
+        test: "lambda old, new: False if not old else not new"
+      - metric: solver_runtime
+        test: "lambda old, new: False if new < 2 else new/old > 1.1"
+      - metric: symex_runtime
+        test: "lambda old, new: False if new < 2 else new/old > 1.1"
