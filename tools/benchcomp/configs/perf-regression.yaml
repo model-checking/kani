@@ -10,13 +10,13 @@ variants:
   kani_new:
     config:
       directory: new
-      command_line: PATH=$(realpath new/scripts):$PATH scripts/kani-perf.sh
+      command_line: scripts/kani-perf.sh
       env:
         RUST_TEST_THREADS: "1"
   kani_old:
     config:
       directory: old
-      command_line: PATH=$(realpath old/scripts):$PATH scripts/kani-perf.sh
+      command_line: scripts/kani-perf.sh
       env:
         RUST_TEST_THREADS: "1"
 
