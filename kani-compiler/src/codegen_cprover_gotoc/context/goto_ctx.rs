@@ -24,9 +24,6 @@ use cbmc::{MachineModel, RoundingMode};
 use kani_metadata::{HarnessMetadata, UnsupportedFeature};
 use kani_queries::{QueryDb, UserInput};
 use rustc_data_structures::fx::FxHashMap;
-use rustc_data_structures::owning_ref::OwningRef;
-use rustc_data_structures::rustc_erase_owner;
-use rustc_data_structures::sync::MetadataRef;
 use rustc_middle::mir::interpret::Allocation;
 use rustc_middle::span_bug;
 use rustc_middle::ty::layout::{
@@ -34,14 +31,11 @@ use rustc_middle::ty::layout::{
     TyAndLayout,
 };
 use rustc_middle::ty::{self, Instance, Ty, TyCtxt};
-use rustc_session::cstore::MetadataLoader;
 use rustc_session::Session;
 use rustc_span::source_map::{respan, Span};
 use rustc_target::abi::call::FnAbi;
 use rustc_target::abi::Endian;
 use rustc_target::abi::{HasDataLayout, TargetDataLayout};
-use rustc_target::spec::Target;
-use std::path::Path;
 
 pub struct GotocCtx<'tcx> {
     /// the typing context
@@ -419,19 +413,6 @@ impl<'tcx> FnAbiOfHelpers<'tcx> for GotocCtx<'tcx> {
                 }
             }
         }
-    }
-}
-
-pub struct GotocMetadataLoader();
-impl MetadataLoader for GotocMetadataLoader {
-    fn get_rlib_metadata(&self, _: &Target, _filename: &Path) -> Result<MetadataRef, String> {
-        let buf = vec![];
-        let buf: OwningRef<Vec<u8>, [u8]> = OwningRef::new(buf);
-        Ok(rustc_erase_owner!(buf.map_owner_box()))
-    }
-
-    fn get_dylib_metadata(&self, target: &Target, filename: &Path) -> Result<MetadataRef, String> {
-        self.get_rlib_metadata(target, filename)
     }
 }
 

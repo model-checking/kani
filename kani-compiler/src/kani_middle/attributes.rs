@@ -5,7 +5,7 @@
 use std::collections::BTreeMap;
 
 use kani_metadata::{CbmcSolver, HarnessAttributes, Stub};
-use rustc_ast::{AttrKind, Attribute, LitKind, MetaItem, MetaItemKind, NestedMetaItem};
+use rustc_ast::{attr, AttrKind, Attribute, LitKind, MetaItem, MetaItemKind, NestedMetaItem};
 use rustc_hir::{def::DefKind, def_id::DefId};
 use rustc_middle::ty::{self, Instance, TyCtxt};
 use rustc_span::Span;
@@ -58,7 +58,7 @@ pub fn is_proof_harness(tcx: TyCtxt, def_id: DefId) -> bool {
 /// Does this `def_id` have `#[rustc_test_marker]`?
 pub fn is_test_harness_description(tcx: TyCtxt, def_id: DefId) -> bool {
     let attrs = tcx.get_attrs_unchecked(def_id);
-    tcx.sess.contains_name(attrs, rustc_span::symbol::sym::rustc_test_marker)
+    attr::contains_name(attrs, rustc_span::symbol::sym::rustc_test_marker)
 }
 
 /// Is this the closure inside of a test description const (i.e. macro expanded from a `#[test]`)?

@@ -23,7 +23,7 @@ use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_codegen_ssa::{CodegenResults, CrateInfo};
 use rustc_data_structures::fx::FxHashMap;
 use rustc_data_structures::temp_dir::MaybeTempDir;
-use rustc_errors::ErrorGuaranteed;
+use rustc_errors::{ErrorGuaranteed, DEFAULT_LOCALE_RESOURCE};
 use rustc_hir::def_id::LOCAL_CRATE;
 use rustc_metadata::fs::{emit_wrapper_file, METADATA_FILENAME};
 use rustc_metadata::EncodedMetadata;
@@ -84,6 +84,11 @@ impl CodegenBackend for GotocCodegenBackend {
 
     fn print_version(&self) {
         println!("Kani-goto version: {}", env!("CARGO_PKG_VERSION"));
+    }
+
+    fn locale_resource(&self) -> &'static str {
+        // We don't currently support multiple languages.
+        DEFAULT_LOCALE_RESOURCE
     }
 
     fn codegen_crate(

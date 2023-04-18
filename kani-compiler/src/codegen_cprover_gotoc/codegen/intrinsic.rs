@@ -9,7 +9,7 @@ use cbmc::goto_program::{
     Type, ARITH_OVERFLOW_OVERFLOWED_FIELD, ARITH_OVERFLOW_RESULT_FIELD,
 };
 use rustc_middle::mir::{BasicBlock, Operand, Place};
-use rustc_middle::ty::layout::LayoutOf;
+use rustc_middle::ty::layout::{LayoutOf, ValidityRequirement};
 use rustc_middle::ty::{self, Ty};
 use rustc_middle::ty::{Instance, InstanceDef};
 use rustc_span::Span;
@@ -760,7 +760,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// layout is invalid so we get a message that mentions the offending type.
     ///
     /// <https://doc.rust-lang.org/std/intrinsics/fn.assert_inhabited.html>
-    /// <https://doc.rust-lang.org/std/intrinsics/fn.assert_uninit_valid.html>
+    /// <https://doc.rust-lang.org/std/intrinsics/fn.assert_mem_uninitialized_valid.html>
     /// <https://doc.rust-lang.org/std/intrinsics/fn.assert_zero_valid.html>
     fn codegen_assert_intrinsic(
         &mut self,
@@ -788,7 +788,10 @@ impl<'tcx> GotocCtx<'tcx> {
         // Then we check if the type allows "raw" initialization for the cases
         // where memory is zero-initialized or entirely uninitialized
         if intrinsic == "assert_zero_valid"
-            && !self.tcx.permits_zero_init(param_env_and_type).ok().unwrap()
+            && !self
+                .tcx
+                .check_validity_requirement((ValidityRequirement::Zero, param_env_and_type))
+                .unwrap()
         {
             return self.codegen_fatal_error(
                 PropertyClass::SafetyCheck,
@@ -797,8 +800,14 @@ impl<'tcx> GotocCtx<'tcx> {
             );
         }
 
-        if intrinsic == "assert_uninit_valid"
-            && !self.tcx.permits_uninit_init(param_env_and_type).ok().unwrap()
+        if intrinsic == "assert_mem_uninitialized_valid"
+            && !self
+                .tcx
+                .check_validity_requirement((
+                    ValidityRequirement::UninitMitigated0x01Fill,
+                    param_env_and_type,
+                ))
+                .unwrap()
         {
             return self.codegen_fatal_error(
                 PropertyClass::SafetyCheck,

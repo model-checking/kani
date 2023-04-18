@@ -86,6 +86,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     location,
                 )
             }
+            StatementKind::PlaceMention(_) => todo!(),
             StatementKind::FakeRead(_)
             | StatementKind::Retag(_, _)
             | StatementKind::AscribeUserType(_, _)
@@ -122,8 +123,8 @@ impl<'tcx> GotocCtx<'tcx> {
                 loc,
                 "https://github.com/model-checking/kani/issues/692",
             ),
-            TerminatorKind::Abort => self.codegen_mimic_unimplemented(
-                "TerminatorKind::Abort",
+            TerminatorKind::Terminate => self.codegen_mimic_unimplemented(
+                "TerminatorKind::Terminate",
                 loc,
                 "https://github.com/model-checking/kani/issues/692",
             ),
@@ -187,9 +188,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     loc,
                 )
             }
-            TerminatorKind::DropAndReplace { .. }
-            | TerminatorKind::FalseEdge { .. }
-            | TerminatorKind::FalseUnwind { .. } => {
+            TerminatorKind::FalseEdge { .. } | TerminatorKind::FalseUnwind { .. } => {
                 unreachable!("drop elaboration removes these TerminatorKind")
             }
             TerminatorKind::Yield { .. } | TerminatorKind::GeneratorDrop => {
@@ -238,7 +237,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 TagEncoding::Niche { untagged_variant, niche_variants, niche_start } => {
                     if *untagged_variant != variant_index {
                         let offset = match &layout.fields {
-                            FieldsShape::Arbitrary { offsets, .. } => offsets[0],
+                            FieldsShape::Arbitrary { offsets, .. } => offsets[0usize.into()],
                             _ => unreachable!("niche encoding must have arbitrary fields"),
                         };
                         let discr_ty = self.codegen_enum_discr_typ(dest_ty);
@@ -562,6 +561,7 @@ impl<'tcx> GotocCtx<'tcx> {
                                 .with_location(loc),
                         ]
                     }
+                    InstanceDef::ThreadLocalShim(_) | InstanceDef::FnPtrAddrShim(_, _) => todo!(),
                 };
                 stmts.push(self.codegen_end_call(target.as_ref(), loc));
                 Stmt::block(stmts, loc)

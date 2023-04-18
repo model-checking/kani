@@ -215,7 +215,7 @@ struct MonoItemsFnCollector<'a, 'tcx> {
 impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {
     fn monomorphize<T>(&self, value: T) -> T
     where
-        T: TypeFoldable<'tcx>,
+        T: TypeFoldable<TyCtxt<'tcx>>,
     {
         trace!(instance=?self.instance, ?value, "monomorphize");
         self.instance.subst_mir_and_normalize_erasing_regions(
@@ -283,6 +283,7 @@ impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {
             | InstanceDef::Item(..)
             | InstanceDef::ReifyShim(..)
             | InstanceDef::VTableShim(..) => true,
+            InstanceDef::ThreadLocalShim(_) | InstanceDef::FnPtrAddrShim(_, _) => todo!(),
         };
         if should_collect && should_codegen_locally(self.tcx, &instance) {
             trace!(?instance, "collect_instance");
@@ -487,8 +488,7 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
                     );
                 }
             }
-            TerminatorKind::Drop { ref place, .. }
-            | TerminatorKind::DropAndReplace { ref place, .. } => {
+            TerminatorKind::Drop { ref place, .. } => {
                 let place_ty = place.ty(self.body, self.tcx).ty;
                 let place_mono_ty = self.monomorphize(place_ty);
                 let instance = Instance::resolve_drop_in_place(self.tcx, place_mono_ty);
@@ -498,7 +498,7 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
                 // We don't support inline assembly. This shall be replaced by an unsupported
                 // construct during codegen.
             }
-            TerminatorKind::Abort { .. } | TerminatorKind::Assert { .. } => {
+            TerminatorKind::Terminate { .. } | TerminatorKind::Assert { .. } => {
                 // We generate code for this without invoking any lang item.
             }
             TerminatorKind::Goto { .. }

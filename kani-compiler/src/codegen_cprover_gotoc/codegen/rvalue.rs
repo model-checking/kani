@@ -14,6 +14,8 @@ use cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
 use cbmc::MachineModel;
 use cbmc::{btree_string_map, InternString, InternedString};
 use num::bigint::BigInt;
+use rustc_abi::FieldIdx;
+use rustc_index::vec::IndexVec;
 use rustc_middle::mir::{AggregateKind, BinOp, CastKind, NullOp, Operand, Place, Rvalue, UnOp};
 use rustc_middle::ty::adjustment::PointerCast;
 use rustc_middle::ty::layout::LayoutOf;
@@ -281,7 +283,11 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Create an initializer for a generator struct.
-    fn codegen_rvalue_generator(&mut self, operands: &[Operand<'tcx>], ty: Ty<'tcx>) -> Expr {
+    fn codegen_rvalue_generator(
+        &mut self,
+        operands: &IndexVec<FieldIdx, Operand<'tcx>>,
+        ty: Ty<'tcx>,
+    ) -> Expr {
         let layout = self.layout_of(ty);
         let discriminant_field = match &layout.variants {
             Variants::Multiple { tag_encoding: TagEncoding::Direct, tag_field, .. } => tag_field,
@@ -320,7 +326,7 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_rvalue_enum_aggregate(
         &mut self,
         variant_index: VariantIdx,
-        operands: &[Operand<'tcx>],
+        operands: &IndexVec<FieldIdx, Operand<'tcx>>,
         res_ty: Ty<'tcx>,
         loc: Location,
     ) -> Expr {
@@ -362,7 +368,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 variant_expr.typ().clone(),
                 fields
                     .index_by_increasing_offset()
-                    .map(|idx| self.codegen_operand(&operands[idx]))
+                    .map(|idx| self.codegen_operand(&operands[idx.into()]))
                     .collect(),
                 &self.symbol_table,
             );
@@ -381,7 +387,7 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_rvalue_aggregate(
         &mut self,
         aggregate: &AggregateKind<'tcx>,
-        operands: &[Operand<'tcx>],
+        operands: &IndexVec<FieldIdx, Operand<'tcx>>,
         res_ty: Ty<'tcx>,
         loc: Location,
     ) -> Expr {
@@ -411,8 +417,8 @@ impl<'tcx> GotocCtx<'tcx> {
                 let components = typ.lookup_components(&self.symbol_table).unwrap();
                 Expr::union_expr(
                     typ,
-                    components[active_field_index].name(),
-                    self.codegen_operand(&operands[0]),
+                    components[active_field_index.as_usize()].name(),
+                    self.codegen_operand(&operands[0usize.into()]),
                     &self.symbol_table,
                 )
             }
@@ -426,7 +432,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         .fields
                         .index_by_increasing_offset()
                         .map(|idx| {
-                            let cgo = self.codegen_operand(&operands[idx]);
+                            let cgo = self.codegen_operand(&operands[idx.into()]);
                             // The input operand might actually be a one-element array, as seen
                             // when running assess on firecracker.
                             if *cgo.typ() == vector_element_type {
@@ -449,7 +455,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     layout
                         .fields
                         .index_by_increasing_offset()
-                        .map(|idx| self.codegen_operand(&operands[idx]))
+                        .map(|idx| self.codegen_operand(&operands[idx.into()]))
                         .collect(),
                     &self.symbol_table,
                 )
@@ -499,6 +505,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let t = self.monomorphize(*t);
                 self.codegen_pointer_cast(k, e, t, loc)
             }
+            Rvalue::Cast(rustc_middle::mir::CastKind::Transmute, _, _) => todo!(),
             Rvalue::BinaryOp(op, box (ref e1, ref e2)) => {
                 self.codegen_rvalue_binary_op(op, e1, e2, loc)
             }
@@ -597,7 +604,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     // See also the cranelift backend:
                     // https://github.com/rust-lang/rust/blob/05d22212e89588e7c443cc6b9bc0e4e02fdfbc8d/compiler/rustc_codegen_cranelift/src/discriminant.rs#L116
                     let offset = match &layout.fields {
-                        FieldsShape::Arbitrary { offsets, .. } => offsets[0],
+                        FieldsShape::Arbitrary { offsets, .. } => offsets[0usize.into()],
                         _ => unreachable!("niche encoding must have arbitrary fields"),
                     };
 

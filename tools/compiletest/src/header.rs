@@ -233,5 +233,11 @@ pub fn make_test_description<R: Read>(
         compile_fail: false,
         no_run: false,
         test_type: test::TestType::Unknown,
+        // Enter dummy values since the test doesn't have a line per-se.
+        source_file: "unknown_file",
+        start_line: 0,
+        start_col: 0,
+        end_line: 0,
+        end_col: 0,
     }
 }
