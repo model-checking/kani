@@ -99,6 +99,10 @@ impl KaniSession {
             flags.push(format!("--harness={harness}"));
         }
 
+        flags.extend(
+            self.args.unstable_features.iter().map(|feature| format!("--unstable={feature}")),
+        );
+
         // This argument will select the Kani flavour of the compiler. It will be removed before
         // rustc driver is invoked.
         flags.push("--goto-c".into());

@@ -8,6 +8,7 @@ use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::attributes::is_proof_harness;
 use crate::kani_middle::attributes::is_test_harness_description;
 use crate::kani_middle::check_crate_items;
+use crate::kani_middle::check_reachable_items;
 use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{
     collect_reachable_items, filter_closures_in_const_crate_items, filter_crate_items,
@@ -107,6 +108,7 @@ impl CodegenBackend for GotocCodegenBackend {
             return codegen_results(tcx, rustc_metadata, gcx.symbol_table.machine_model());
         }
         dump_mir_items(tcx, &items);
+        check_reachable_items(gcx.tcx, &gcx.queries, &items);
 
         with_timer(
             || {

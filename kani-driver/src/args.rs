@@ -347,7 +347,8 @@ pub enum ConcretePlaybackMode {
     InPlace,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum, strum_macros::Display)]
+#[strum(serialize_all = "kebab-case")]
 pub enum UnstableFeatures {
     /// Allow replace certain items with stubs (mocks).
     /// See (RFC-0002)[https://model-checking.github.io/kani/rfc/rfcs/0002-function-stubbing.html]

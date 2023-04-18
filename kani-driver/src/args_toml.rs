@@ -87,20 +87,40 @@ fn cargo_locate_project(input_args: &[OsString]) -> Result<PathBuf> {
 
 /// Parse a config toml string and extract the cargo-kani arguments we should try injecting.
 /// This returns two different vectors since all cbmc-args have to be at the end.
+/// We currently support the following entries:
+/// - flags: Flags that get directly passed to Kani.
+/// - unstable: Unstable features (it will be passed using `-Z` flag).
+/// The tables supported are:
+/// "workspace.metadata.kani", "package.metadata.kani", "kani"
 fn toml_to_args(tomldata: &str) -> Result<(Vec<OsString>, Vec<OsString>)> {
     let config = tomldata.parse::<Value>()?;
     // To make testing easier, our function contract is to produce a stable ordering of flags for a given input.
     // Consequently, we use BTreeMap instead of HashMap here.
     let mut map: BTreeMap<String, Value> = BTreeMap::new();
-    let tables = ["workspace.metadata.kani.flags", "package.metadata.kani.flags", "kani.flags"];
+    let tables = ["workspace.metadata.kani", "package.metadata.kani", "kani"];
+    let mut args = Vec::new();
 
     for table in tables {
-        if let Some(val) = get_table(&config, table) {
-            map.extend(val.iter().map(|(x, y)| (x.to_owned(), y.to_owned())));
+        if let Some(table) = get_table(&config, table) {
+            if let Some(entry) = table.get("flags") {
+                if let Some(val) = entry.as_table() {
+                    map.extend(val.iter().map(|(x, y)| (x.to_owned(), y.to_owned())));
+                }
+            }
+
+            if let Some(entry) = table.get("unstable") {
+                if let Some(val) = entry.as_table() {
+                    args.append(
+                        &mut val
+                            .iter()
+                            .filter_map(|(k, v)| unstable_entry(k, v).transpose())
+                            .collect::<Result<Vec<_>>>()?,
+                    );
+                }
+            }
         }
     }
 
-    let mut args = Vec::new();
     let mut cbmc_args = Vec::new();
 
     for (flag, value) in map {
@@ -114,6 +134,14 @@ fn toml_to_args(tomldata: &str) -> Result<(Vec<OsString>, Vec<OsString>)> {
     }
 
     Ok((args, cbmc_args))
+}
+
+fn unstable_entry(name: &String, value: &Value) -> Result<Option<OsString>> {
+    match value {
+        Value::Boolean(b) if *b => Ok(Some(OsString::from(format!("-Z{name}")))),
+        Value::Boolean(b) if !b => Ok(None),
+        _ => bail!("Expected no arguments for unstable feature `{name}` but found {value}"),
+    }
 }
 
 /// Translates one toml entry (flag, value) into arguments and inserts it into `args`

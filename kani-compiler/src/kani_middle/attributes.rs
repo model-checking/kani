@@ -31,23 +31,41 @@ enum KaniAttributeKind {
     Unwind,
 }
 
+impl KaniAttributeKind {
+    /// Returns whether an item is only relevant for harnesses.
+    pub fn is_harness_only(self) -> bool {
+        match self {
+            KaniAttributeKind::Proof
+            | KaniAttributeKind::ShouldPanic
+            | KaniAttributeKind::Solver
+            | KaniAttributeKind::Stub
+            | KaniAttributeKind::Unwind => true,
+            KaniAttributeKind::Unstable => false,
+        }
+    }
+}
+
 /// Check that all attributes assigned to an item is valid.
 /// Errors will be added to the session. Invoke self.tcx.sess.abort_if_errors() to terminate
 /// the session and emit all errors found.
 pub(super) fn check_attributes(tcx: TyCtxt, def_id: DefId) {
     let attributes = extract_kani_attributes(tcx, def_id);
-    tracing::info!(?def_id, ?attributes, "check_attributes");
+
+    // Check proof attribute correctness.
     if let Some(proof_attributes) = attributes.get(&KaniAttributeKind::Proof) {
         check_proof_attribute(tcx, def_id, proof_attributes);
-    } else if let Some((kind, attrs)) = attributes.first_key_value() {
-        tcx.sess.span_err(
-            attrs[0].span,
-            format!(
-                "the `{}` attribute also requires the '#[kani::proof]' attribute",
-                kind.as_ref()
-            )
-            .as_str(),
-        );
+    } else {
+        // Emit an error if a harness only attribute is used outside of a harness.
+        for (attr, attrs) in attributes.iter().filter(|(attr, _)| attr.is_harness_only()) {
+            tcx.sess.span_err(
+                attrs[0].span,
+                format!(
+                    "the `{}` attribute also requires the '#[kani::proof]' attribute",
+                    attr.as_ref()
+                )
+                .as_str(),
+            );
+        }
     }
 }
 
@@ -129,6 +147,55 @@ pub fn extract_harness_attributes(tcx: TyCtxt, def_id: DefId) -> Option<HarnessA
     }
 }
 
+/// Check that any unstable API has been enabled. Otherwise, emit an error.
+/// TODO: Improve error message by printing the span of the callee instead of the definition.
+pub fn check_unstable_features(tcx: TyCtxt, enabled_features: &[String], def_id: DefId) {
+    let attributes = extract_kani_attributes(tcx, def_id);
+    if let Some(unstable_attrs) = attributes.get(&KaniAttributeKind::Unstable) {
+        for attr in unstable_attrs {
+            match UnstableAttribute::try_from(*attr) {
+                Ok(unstable_attr) => {
+                    if !enabled_features.contains(&unstable_attr.feature) {
+                        let fn_name = tcx.def_path_str(def_id);
+                        let reason =
+                            unstable_attr.reason.map_or(String::default(), |r| format!(": {r}"));
+                        let mut err = tcx.sess.struct_err(format!(
+                            "Use of unstable feature `{}`{reason}",
+                            unstable_attr.feature
+                        ));
+                        err.span_note(
+                            tcx.def_span(def_id),
+                            format!("the function `{fn_name}` is unstable:"),
+                        );
+                        if let Some(link) = unstable_attr.issue {
+                            err.note(format!("see issue {link} for more information"));
+                        }
+                        err.help(format!(
+                            "use `-Z {}` to enable use this API.",
+                            unstable_attr.feature
+                        ));
+                        err.emit();
+                    }
+                }
+                Err(msg) => {
+                    tcx.sess
+                        .struct_span_err(
+                            attr.span,
+                            format!("failed to parse `#[kani::unstable]`: {msg}"),
+                        )
+                        .note(format!(
+                            "expected format: `#[kani::unstable({}, {}, {})]`",
+                            r#"feature="<IDENTIFIER>""#,
+                            r#"issue="<OPTIONAL_ISSUE>""#,
+                            r#"reason="<OPTIONAL_DESCRIPTION>""#
+                        ))
+                        .emit();
+                }
+            }
+        }
+    }
+}
+
 fn expect_single<'a>(
     tcx: TyCtxt,
     kind: KaniAttributeKind,
@@ -181,6 +248,45 @@ fn extract_kani_attributes(
         }
         result
     })
+}
+
+/// Attribute used to mark a Kani lib API unstable.
+#[derive(Debug)]
+struct UnstableAttribute {
+    /// The feature identifier.
+    feature: String,
+    /// A link to the stabilization tracking issue.
+    issue: Option<String>,
+    /// A user friendly message that describes the reason why this feature is marked as unstable.
+    reason: Option<String>,
+}
+
+/// Parse an unstable attribute into an UnstableAttribute structure.
+/// Errors will be reported to the user but aborting the execution is delayed.
+impl TryFrom<&Attribute> for UnstableAttribute {
+    type Error = String;
+    fn try_from(attr: &Attribute) -> Result<Self, Self::Error> {
+        let args = parse_key_values(attr)?;
+        let invalid_keys = args
+            .iter()
+            .filter_map(|(key, _)| {
+                (!matches!(key.as_str(), "feature" | "issue" | "reason")).then_some(key)
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        if !invalid_keys.is_empty() {
+            Err(format!("unexpected argument `{}`", invalid_keys.join("`, `")))
+        } else {
+            Ok(UnstableAttribute {
+                feature: args
+                    .get("feature")
+                    .ok_or("missing feature identifier".to_string())?
+                    .clone(),
+                issue: args.get("issue").cloned(),
+                reason: args.get("reason").cloned(),
+            })
+        }
+    }
 }
 
 /// Return the unwind value from the given attribute.
@@ -346,6 +452,23 @@ fn parse_path(meta_item: &MetaItem) -> Option<String> {
     } else {
         None
     }
+}
+
+/// Parse the arguments of the attribute into a (key, value) map.
+fn parse_key_values(attr: &Attribute) -> Result<BTreeMap<String, String>, String> {
+    trace!(list=?attr.meta_item_list(), ?attr, "parse_key_values");
+    let args = attr.meta_item_list().ok_or("malformed attribute input")?;
+    args.iter()
+        .map(|arg| match arg.meta_item() {
+            Some(MetaItem { path: key, kind: MetaItemKind::NameValue(val), .. }) => {
+                Ok((key.segments.first().unwrap().ident.to_string(), val.symbol.to_string()))
+            }
+            _ => Err(format!(
+                r#"expected "key = value" pair, but found `{}`"#,
+                rustc_ast_pretty::pprust::meta_list_item_to_string(arg)
+            )),
+        })
+        .collect()
 }
 
 /// If the attribute is named `kanitool::name`, this extracts `name`

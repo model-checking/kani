@@ -146,6 +146,10 @@ impl Callbacks for KaniCompiler {
             );
             queries.set_reachability_analysis(matches.reachability_type());
 
+            if let Some(features) = matches.get_many::<String>(parser::UNSTABLE_FEATURE) {
+                queries.set_unstable_features(&features.cloned().collect::<Vec<_>>());
+            }
+
             // If appropriate, collect and set the stub mapping.
             if matches.get_flag(parser::ENABLE_STUBBING)
                 && queries.get_reachability_analysis() == ReachabilityType::Harnesses

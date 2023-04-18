@@ -1,0 +1,9 @@
+error: Use of unstable feature `always_fails`: do not enable\
+|\
+note: the function `defs::always_fails` is unstable:\
+lib.rs:5:1\
+|\
+| pub fn always_fails() {\
+| ^^^^^^^^^^^^^^^^^^^^^\
+= note: see issue <link> for more information\
+= help: use `-Z always_fails` to enable use this API.
