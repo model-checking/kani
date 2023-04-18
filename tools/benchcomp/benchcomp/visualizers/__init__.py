@@ -49,8 +49,8 @@ class error_on_regression:
             any_benchmark_regressed = viz_utils.AnyBenchmarkRegressedChecker(
                     self.variant_pairs, **check)
 
-        if any_benchmark_regressed(results):
-            viz_utils.EXIT_CODE = 1
+            if any_benchmark_regressed(results):
+                viz_utils.EXIT_CODE = 1
 
 
 

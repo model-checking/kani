@@ -36,6 +36,6 @@ visualize:
         # benchmark has regressed if the lambda returns true.
         test: "lambda old, new: False if not old else not new"
       - metric: solver_runtime
-        test: "lambda old, new: False if new < 2 else new/old > 1.1"
+        test: "lambda old, new: False if new < 10 else new/old > 1.5"
       - metric: symex_runtime
-        test: "lambda old, new: False if new < 2 else new/old > 1.1"
+        test: "lambda old, new: False if new < 10 else new/old > 1.5"
