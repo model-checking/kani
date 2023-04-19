@@ -34,6 +34,10 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
+    pub fn is_user_variable(&self, var: &Local) -> bool {
+        self.find_debug_info(var).is_some()
+    }
+
     // Special naming conventions for parameters that are spread from a tuple
     // into its individual components at the LLVM level, see comment at
     // compiler/rustc_codegen_llvm/src/gotoc/mod.rs:codegen_function_prelude

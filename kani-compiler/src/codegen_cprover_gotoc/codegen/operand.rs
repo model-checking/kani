@@ -141,7 +141,7 @@ impl<'tcx> GotocCtx<'tcx> {
             ConstValue::ZeroSized => match lit_ty.kind() {
                 // Rust "function items" (not closures, not function pointers, see `codegen_fndef`)
                 ty::FnDef(d, substs) => self.codegen_fndef(*d, substs, span),
-                _ => unimplemented!(),
+                _ => Expr::init_unit(self.codegen_ty(lit_ty), &self.symbol_table),
             },
         }
     }

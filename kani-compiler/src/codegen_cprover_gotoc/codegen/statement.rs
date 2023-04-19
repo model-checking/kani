@@ -166,6 +166,10 @@ impl<'tcx> GotocCtx<'tcx> {
                     // "index out of bounds: the length is {len} but the index is {index}",
                     // but CBMC only accepts static messages so we don't add values to the message.
                     "index out of bounds: the length is less than or equal to the given index"
+                } else if let AssertKind::MisalignedPointerDereference { .. } = msg {
+                    // Misaligned pointer dereference check messages is also a runtime messages.
+                    // Generate a generic one here.
+                    "misaligned pointer dereference: address must be a multiple of its type's alignment"
                 } else {
                     // For all other assert kind we can get the static message.
                     msg.description()
@@ -231,8 +235,11 @@ impl<'tcx> GotocCtx<'tcx> {
                     // DISCRIMINANT - val:255 ty:i8
                     // DISCRIMINANT - val:0 ty:i8
                     // DISCRIMINANT - val:1 ty:i8
-                    let discr = Expr::int_constant(discr.val, self.codegen_ty(discr_t));
-                    self.codegen_discriminant_field(dest_expr, dest_ty).assign(discr, location)
+                    trace!(?discr, ?discr_t, ?dest_ty, "codegen_set_discriminant direct");
+                    // The discr.ty doesn't always match the tag type. Explicitly cast if needed.
+                    let discr_expr = Expr::int_constant(discr.val, self.codegen_ty(discr.ty))
+                        .cast_to(self.codegen_ty(discr_t));
+                    self.codegen_discriminant_field(dest_expr, dest_ty).assign(discr_expr, location)
                 }
                 TagEncoding::Niche { untagged_variant, niche_variants, niche_start } => {
                     if *untagged_variant != variant_index {
@@ -244,6 +251,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         let discr_ty = self.codegen_ty(discr_ty);
                         let niche_value = variant_index.as_u32() - niche_variants.start().as_u32();
                         let niche_value = (niche_value as u128).wrapping_add(*niche_start);
+                        trace!(val=?niche_value, typ=?discr_ty, "codegen_set_discriminant niche");
                         let value = if niche_value == 0
                             && matches!(tag.primitive(), Primitive::Pointer(_))
                         {

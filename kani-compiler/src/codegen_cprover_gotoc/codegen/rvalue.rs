@@ -505,7 +505,10 @@ impl<'tcx> GotocCtx<'tcx> {
                 let t = self.monomorphize(*t);
                 self.codegen_pointer_cast(k, e, t, loc)
             }
-            Rvalue::Cast(rustc_middle::mir::CastKind::Transmute, _, _) => todo!(),
+            Rvalue::Cast(CastKind::Transmute, operand, ty) => {
+                let goto_typ = self.codegen_ty(self.monomorphize(*ty));
+                self.codegen_operand(operand).transmute_to(goto_typ, &self.symbol_table)
+            }
             Rvalue::BinaryOp(op, box (ref e1, ref e2)) => {
                 self.codegen_rvalue_binary_op(op, e1, e2, loc)
             }

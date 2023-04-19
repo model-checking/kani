@@ -53,7 +53,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 var_type,
                 self.codegen_span(&ldata.source_info.span),
             )
-            .with_is_hidden(!ldata.is_user_variable())
+            .with_is_hidden(!self.is_user_variable(&lc))
             .with_is_parameter((idx > 0 && idx <= num_args) && !self.is_zst(var_ty));
             let sym_e = sym.to_expr();
             self.symbol_table.insert(sym);
