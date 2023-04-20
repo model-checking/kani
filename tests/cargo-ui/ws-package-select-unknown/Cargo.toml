@@ -1,0 +1,10 @@
+[package]
+name = "ws-package-select"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+members = ["lib_package", "bin_package"]
+
+[workspace.metadata.kani.flags]
+package = ["unknown_package"]
