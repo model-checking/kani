@@ -302,6 +302,7 @@ pub struct CargoArgs {
     /// Do not activate the `default` feature
     #[arg(long)]
     pub no_default_features: bool,
+
     // This tolerates spaces too, but we say "comma" only because this is the least error-prone approach...
     /// Comma separated list of features to activate
     #[arg(short = 'F', long)]
@@ -314,9 +315,14 @@ pub struct CargoArgs {
     /// Build all packages in the workspace
     #[arg(long)]
     pub workspace: bool,
+
     /// Run Kani on the specified packages.
     #[arg(long, short, conflicts_with("workspace"), num_args(1..))]
     pub package: Vec<String>,
+
+    /// Run Kani on the specified packages.
+    #[arg(long, short, conflicts_with("package"), num_args(1..))]
+    pub exclude: Vec<String>,
 }
 
 impl CargoArgs {
