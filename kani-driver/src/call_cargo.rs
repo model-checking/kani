@@ -273,7 +273,7 @@ fn validate_package_names(package_names: Vec<String>, packages: Vec<Package>) ->
         package_names.iter().filter(|pkg_name| !package_list.contains(pkg_name)).collect();
 
     // Some packages aren't in the workspace. Return an error which includes their names.
-    if unknown_packages.len() > 0 {
+    if !unknown_packages.is_empty() {
         let fmt_packages: Vec<String> =
             unknown_packages.iter().map(|pkg| format!("`{pkg}`")).collect();
         let error_msg = if unknown_packages.len() == 1 {
