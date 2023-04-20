@@ -103,13 +103,8 @@ impl KaniSession {
         let mut pkg_args: Vec<String> = vec![];
         pkg_args.extend(["--".to_string(), self.reachability_arg()]);
 
-        let packages_to_verify = packages_to_verify(&self.args, &metadata);
-        if let Err(package_error) = packages_to_verify {
-            bail!(package_error)
-        };
-
         let mut found_target = false;
-        let packages = packages_to_verify.unwrap();
+        let packages = packages_to_verify(&self.args, &metadata)?;
         let mut artifacts = vec![];
         let mut failed_targets = vec![];
         for package in packages {
