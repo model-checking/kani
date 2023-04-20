@@ -1,6 +1,9 @@
 # Copyright Kani Contributors
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
+# This workspace test checks that the `--package` option only includes the
+# `lib_package` and `bin_package` packages as the packages to verify.
+
 [package]
 name = "ws-package-select"
 version = "0.1.0"

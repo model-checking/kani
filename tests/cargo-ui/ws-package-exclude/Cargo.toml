@@ -1,6 +1,9 @@
 # Copyright Kani Contributors
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
+# This workspace test checks that the `--exclude` option removes the
+# `ws-package-exclude` package from the packages to verify.
+
 [package]
 name = "ws-package-exclude"
 version = "0.1.0"
