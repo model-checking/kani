@@ -262,7 +262,7 @@ fn print_msg(diagnostic: &Diagnostic, use_rendered: bool) -> Result<()> {
 }
 
 /// Check that all package names are present in the workspace, otherwise return which aren't.
-fn validate_package_names(package_names: Vec<String>, packages: Vec<Package>) -> Result<()> {
+fn validate_package_names(package_names: &Vec<String>, packages: &Vec<Package>) -> Result<()> {
     let package_list: Vec<String> = packages.iter().map(|pkg| pkg.name.clone()).collect();
     let unknown_packages: Vec<&String> =
         package_names.iter().filter(|pkg_name| !package_list.contains(pkg_name)).collect();
@@ -295,14 +295,14 @@ fn validate_package_names(package_names: Vec<String>, packages: Vec<Package>) ->
 fn packages_to_verify<'b>(args: &KaniArgs, metadata: &'b Metadata) -> Result<Vec<&'b Package>> {
     debug!(package_selection=?args.cargo.package, package_exclusion=?args.cargo.exclude, workspace=args.cargo.workspace, "packages_to_verify args");
     let packages = if !args.cargo.package.is_empty() {
-        validate_package_names(args.cargo.package.clone(), metadata.packages.clone())?;
+        validate_package_names(&args.cargo.package, &metadata.packages)?;
         args.cargo
             .package
             .iter()
             .map(|pkg_name| metadata.packages.iter().find(|pkg| pkg.name == *pkg_name).unwrap())
             .collect()
     } else if !args.cargo.exclude.is_empty() {
-        validate_package_names(args.cargo.exclude.clone(), metadata.packages.clone())?;
+        validate_package_names(&args.cargo.exclude, &metadata.packages)?;
         metadata.packages.iter().filter(|pkg| !args.cargo.exclude.contains(&pkg.name)).collect()
     } else {
         match (args.cargo.workspace, metadata.root_package()) {
