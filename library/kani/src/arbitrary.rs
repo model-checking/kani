@@ -76,8 +76,7 @@ trivial_arbitrary!(());
 impl Arbitrary for bool {
     #[inline(always)]
     fn any() -> Self {
-        let byte = u8::any();
-        crate::assume(byte < 2);
+        let byte = u8::any() & 0x1;
         byte == 1
     }
 }
@@ -88,9 +87,13 @@ impl Arbitrary for char {
     #[inline(always)]
     fn any() -> Self {
         // Generate an arbitrary u32 and constrain it to make it a valid representation of char.
-        let val = u32::any();
-        crate::assume(val <= 0xD7FF || (0xE000..=0x10FFFF).contains(&val));
-        unsafe { char::from_u32_unchecked(val) }
+        let val = u32::any() & 0x0FFFFF;
+        if val & 0xD800 != 0 {
+            // val > 0xD7FF && val < 0xE000
+            unsafe { char::from_u32_unchecked(0x10FFFF) }
+        } else {
+            unsafe { char::from_u32_unchecked(val) }
+        }
     }
 }
 
@@ -100,8 +103,11 @@ macro_rules! nonzero_arbitrary {
             #[inline(always)]
             fn any() -> Self {
                 let val = <$base>::any();
-                crate::assume(val != 0);
-                unsafe { <$type>::new_unchecked(val) }
+                if val == 0 {
+                    unsafe { <$type>::new_unchecked(1) }
+                } else {
+                    unsafe { <$type>::new_unchecked(val) }
+                }
             }
         }
     };

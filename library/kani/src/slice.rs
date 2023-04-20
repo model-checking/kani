@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-use crate::{any, assume, Arbitrary};
+use crate::{any, Arbitrary};
 use std::alloc::{alloc, dealloc, Layout};
 use std::ops::{Deref, DerefMut};
 
@@ -30,9 +30,7 @@ pub fn any_slice_of_array_mut<T, const LENGTH: usize>(arr: &mut [T; LENGTH]) -> 
 fn any_range<const LENGTH: usize>() -> (usize, usize) {
     let from: usize = any();
     let to: usize = any();
-    assume(to <= LENGTH);
-    assume(from <= to);
-    (from, to)
+    if to > LENGTH || to < from { (0, 0) } else { (from, to) }
 }
 
 /// A struct that stores a slice of type `T` with a non-deterministic length
@@ -80,10 +78,15 @@ impl<T, const MAX_SLICE_LENGTH: usize> AnySlice<T, MAX_SLICE_LENGTH> {
 
     fn alloc_slice() -> Self {
         let slice_len = any();
-        assume(slice_len <= MAX_SLICE_LENGTH);
-        let layout = Layout::array::<T>(slice_len).unwrap();
-        let ptr = if slice_len == 0 { std::ptr::null() } else { unsafe { alloc(layout) } };
-        Self { layout, ptr: ptr as *mut T, slice_len }
+        if slice_len <= MAX_SLICE_LENGTH {
+            let layout = Layout::array::<T>(slice_len).unwrap();
+            let ptr = if slice_len == 0 { std::ptr::null() } else { unsafe { alloc(layout) } };
+            Self { layout, ptr: ptr as *mut T, slice_len }
+        } else {
+            let layout = Layout::array::<T>(0).unwrap();
+            let ptr: *const T = std::ptr::null();
+            Self { layout, ptr: ptr as *mut T, slice_len }
+        }
     }
 
     pub fn get_slice(&self) -> &[T] {
