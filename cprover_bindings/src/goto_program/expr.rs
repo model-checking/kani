@@ -19,7 +19,17 @@ use std::fmt::Debug;
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 /// An `Expr` represents an expression type: i.e. a computation that returns a value.
-/// Every expression has a type, a value, and a location (which may be `None`).
+/// Every expression has a type, a value, and a location (which may be `None`). An expression may
+/// also include a type annotation (`size_of_annotation`), which states that the expression is the
+/// result of computing `size_of(type)`.
+///
+/// The `size_of_annotation` is eventually picked up by CBMC's symbolic execution when simulating
+/// heap allocations: for a requested allocation of N bytes, CBMC can either create a byte array of
+/// size N, or, when a type T is annotated and N is a multiple of the size of T, an array of
+/// N/size_of(T) elements. The latter will facilitate updates using member operations (when T is an
+/// aggregate type), and pointer-typed members can be tracked more precisely. Note that this is
+/// merely a hint: failing to provide such an annotation may hamper performance, but will never
+/// affect correctness.
 ///
 /// The fields of `Expr` are kept private, and there are no getters that return mutable references.
 /// This means that the only way to create and update `Expr`s is using the constructors and setters.
@@ -41,6 +51,7 @@ pub struct Expr {
     value: Box<ExprValue>,
     typ: Type,
     location: Location,
+    size_of_annotation: Option<Type>,
 }
 
 /// The different kinds of values an expression can have.
@@ -293,6 +304,10 @@ impl Expr {
         &self.value
     }
 
+    pub fn size_of_annotation(&self) -> Option<&Type> {
+        self.size_of_annotation.as_ref()
+    }
+
     /// If the expression is an Int constant type, return its value
     pub fn int_constant_value(&self) -> Option<BigInt> {
         match &*self.value {
@@ -404,12 +419,19 @@ impl Expr {
     }
 }
 
+impl Expr {
+    pub fn with_size_of_annotation(mut self, ty: Type) -> Self {
+        self.size_of_annotation = Some(ty);
+        self
+    }
+}
+
 /// Private constructor. Making this a macro allows multiple reference to self in the same call.
 macro_rules! expr {
     ( $value:expr,  $typ:expr) => {{
         let typ = $typ;
         let value = Box::new($value);
-        Expr { value, typ, location: Location::none() }
+        Expr { value, typ, location: Location::none(), size_of_annotation: None }
     }};
 }
 
