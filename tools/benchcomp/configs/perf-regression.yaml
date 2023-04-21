@@ -28,6 +28,8 @@ run:
       variants: [kani_old, kani_new]
 
 visualize:
+  - type: dump_yaml
+
   - type: error_on_regression
     variant_pairs: [[kani_old, kani_new]]
     checks:
