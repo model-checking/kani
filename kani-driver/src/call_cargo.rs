@@ -262,7 +262,7 @@ fn print_msg(diagnostic: &Diagnostic, use_rendered: bool) -> Result<()> {
 }
 
 /// Check that all package names are present in the workspace, otherwise return which aren't.
-fn validate_package_names(package_names: &Vec<String>, packages: &Vec<Package>) -> Result<()> {
+fn validate_package_names(package_names: &[String], packages: &[Package]) -> Result<()> {
     let package_list: Vec<String> = packages.iter().map(|pkg| pkg.name.clone()).collect();
     let unknown_packages: Vec<&String> =
         package_names.iter().filter(|pkg_name| !package_list.contains(pkg_name)).collect();
