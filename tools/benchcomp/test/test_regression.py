@@ -95,7 +95,10 @@ class RegressionTests(unittest.TestCase):
                     }
                 }
             },
-            "visualize": [{"type": "dump_yaml"}],
+            "visualize": [{
+                "type": "dump_yaml",
+                "out_file": "-"
+            }],
         })
         run_bc()
         self.assertEqual(run_bc.proc.returncode, 0, msg=run_bc.stderr)
@@ -423,6 +426,7 @@ class RegressionTests(unittest.TestCase):
                 },
                 "visualize": [{
                     "type": "dump_yaml",
+                    "out_file": "-",
                 }, {
                     "type": "error_on_regression",
                     "variant_pairs": [["passed", "failed"]],
@@ -471,6 +475,7 @@ class RegressionTests(unittest.TestCase):
                 },
                 "visualize": [{
                     "type": "dump_yaml",
+                    "out_file": "-",
                 }],
             })
             run_bc(flags=["--except", "dump_yaml"])
