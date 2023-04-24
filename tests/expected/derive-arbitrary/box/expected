@@ -1,0 +1,7 @@
+Status: SATISFIED\
+Description: "cover condition: *foo.boxed >= i32::MIN && *foo.boxed <= i32::MAX"
+Status: UNSATISFIABLE\
+Description: "cover condition: *foo.boxed < i32::MIN"
+Status: UNSATISFIABLE\
+Description: "cover condition: *foo.boxed > i32::MAX"
+VERIFICATION:- SUCCESSFUL
