@@ -162,6 +162,10 @@ impl ToIrep for Expr {
         } else {
             self.value().to_irep(mm).with_location(self.location(), mm).with_type(self.typ(), mm)
         }
+        .with_named_sub_option(
+            IrepId::CCSizeofType,
+            self.size_of_annotation().map(|ty| ty.to_irep(mm)),
+        )
     }
 }
 
