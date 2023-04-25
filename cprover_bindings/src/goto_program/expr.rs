@@ -1403,9 +1403,9 @@ impl Expr {
         ArithmeticOverflowResult { result, overflowed }
     }
 
-    /// Uses CBMC's add-with-overflow operation that performs a single addition
+    /// Uses CBMC's [binop]-with-overflow operation that performs a single addition
     /// operation
-    /// `struct (T, bool) overflow(+, self, e)` where `T` is the type of `self`
+    /// `struct (T, bool) overflow(binop, self, e)` where `T` is the type of `self`
     /// Pseudocode:
     /// ```
     /// struct overflow_result_t {
@@ -1417,6 +1417,14 @@ impl Expr {
     /// overflow_result.overflowed = raw_result > maximum value of T;
     /// return overflow_result;
     /// ```
+    pub fn overflow_op(self, op: BinaryOperator, e: Expr) -> Expr {
+        assert!(
+            matches!(op, OverflowResultMinus | OverflowResultMult | OverflowResultPlus),
+            "Expected an overflow operation, but found: `{op:?}`"
+        );
+        self.binop(op, e)
+    }
+
     pub fn add_overflow_result(self, e: Expr) -> Expr {
         self.binop(OverflowResultPlus, e)
     }
@@ -1448,6 +1456,7 @@ impl Expr {
 
     /// `ArithmeticOverflowResult r; >>>r.overflowed = builtin_sub_overflow(self, e, &r.result)<<<`
     pub fn mul_overflow(self, e: Expr) -> ArithmeticOverflowResult {
+        // TODO: Should we always use the one below?
         let result = self.clone().mul(e.clone());
         let overflowed = self.mul_overflow_p(e);
         ArithmeticOverflowResult { result, overflowed }

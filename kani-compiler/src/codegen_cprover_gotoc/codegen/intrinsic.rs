@@ -5,8 +5,8 @@ use super::typ::{self, pointee_type};
 use super::PropertyClass;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{
-    arithmetic_overflow_result_type, ArithmeticOverflowResult, BuiltinFn, Expr, Location, Stmt,
-    Type, ARITH_OVERFLOW_OVERFLOWED_FIELD, ARITH_OVERFLOW_RESULT_FIELD,
+    arithmetic_overflow_result_type, ArithmeticOverflowResult, BinaryOperator, BuiltinFn, Expr,
+    Location, Stmt, Type, ARITH_OVERFLOW_OVERFLOWED_FIELD, ARITH_OVERFLOW_RESULT_FIELD,
 };
 use rustc_middle::mir::{BasicBlock, Operand, Place};
 use rustc_middle::ty::layout::LayoutOf;
@@ -172,38 +172,6 @@ impl<'tcx> GotocCtx<'tcx> {
             }};
         }
 
-        // Intrinsics of the form *_with_overflow
-        macro_rules! codegen_op_with_overflow {
-            ($f:ident) => {{
-                let pt = self.place_ty(p);
-                let t = self.codegen_ty(pt);
-                let a = fargs.remove(0);
-                let b = fargs.remove(0);
-                let op_type = a.typ().clone();
-                let res = a.$f(b);
-                // add to symbol table
-                let struct_tag = self.codegen_arithmetic_overflow_result_type(op_type.clone());
-                assert_eq!(*res.typ(), struct_tag);
-
-                // store the result in a temporary variable
-                let (var, decl) = self.decl_temp_variable(struct_tag, Some(res), loc);
-                // cast into result type
-                let e = Expr::struct_expr_from_values(
-                    t.clone(),
-                    vec![
-                        var.clone().member(ARITH_OVERFLOW_RESULT_FIELD, &self.symbol_table),
-                        var.member(ARITH_OVERFLOW_OVERFLOWED_FIELD, &self.symbol_table)
-                            .cast_to(Type::c_bool()),
-                    ],
-                    &self.symbol_table,
-                );
-                self.codegen_expr_to_place(
-                    p,
-                    Expr::statement_expression(vec![decl, e.as_stmt(loc)], t),
-                )
-            }};
-        }
-
         // Intrinsics which encode a simple arithmetic operation with overflow check
         macro_rules! codegen_op_with_overflow_check {
             ($f:ident) => {{
@@ -362,7 +330,9 @@ impl<'tcx> GotocCtx<'tcx> {
         }
 
         match intrinsic {
-            "add_with_overflow" => codegen_op_with_overflow!(add_overflow_result),
+            "add_with_overflow" => {
+                self.codegen_op_with_overflow(BinaryOperator::OverflowResultPlus, fargs, p, loc)
+            }
             "arith_offset" => self.codegen_offset(intrinsic, instance, fargs, p, loc),
             "assert_inhabited" => self.codegen_assert_intrinsic(instance, intrinsic, span),
             "assert_mem_uninitialized_valid" => {
@@ -528,7 +498,9 @@ impl<'tcx> GotocCtx<'tcx> {
             "min_align_of_val" => codegen_size_align!(align),
             "minnumf32" => codegen_simple_intrinsic!(Fminf),
             "minnumf64" => codegen_simple_intrinsic!(Fmin),
-            "mul_with_overflow" => codegen_op_with_overflow!(mul_overflow_result),
+            "mul_with_overflow" => {
+                self.codegen_op_with_overflow(BinaryOperator::OverflowResultMult, fargs, p, loc)
+            }
             "nearbyintf32" => codegen_simple_intrinsic!(Nearbyintf),
             "nearbyintf64" => codegen_simple_intrinsic!(Nearbyint),
             "needs_drop" => codegen_intrinsic_const!(),
@@ -615,7 +587,9 @@ impl<'tcx> GotocCtx<'tcx> {
             "size_of_val" => codegen_size_align!(size),
             "sqrtf32" => unstable_codegen!(codegen_simple_intrinsic!(Sqrtf)),
             "sqrtf64" => unstable_codegen!(codegen_simple_intrinsic!(Sqrt)),
-            "sub_with_overflow" => codegen_op_with_overflow!(sub_overflow_result),
+            "sub_with_overflow" => {
+                self.codegen_op_with_overflow(BinaryOperator::OverflowResultMinus, fargs, p, loc)
+            }
             "transmute" => self.codegen_intrinsic_transmute(fargs, ret_ty, p),
             "truncf32" => codegen_simple_intrinsic!(Truncf),
             "truncf64" => codegen_simple_intrinsic!(Trunc),
@@ -717,6 +691,25 @@ impl<'tcx> GotocCtx<'tcx> {
         let divisor_is_minus_one =
             if btyp.is_signed(mm) { b.clone().eq(btyp.one().neg()) } else { Expr::bool_false() };
         dividend_is_int_min.and(divisor_is_minus_one).not()
+    }
+
+    /// Intrinsics of the form *_with_overflow
+    fn codegen_op_with_overflow(
+        &mut self,
+        binop: BinaryOperator,
+        mut fargs: Vec<Expr>,
+        place: &Place<'tcx>,
+        loc: Location,
+    ) -> Stmt {
+        let place_ty = self.place_ty(place);
+        let result_type = self.codegen_ty(place_ty);
+        let left = fargs.remove(0);
+        let right = fargs.remove(0);
+        let res = self.codegen_binop_with_overflow(binop, left, right, result_type.clone(), loc);
+        self.codegen_expr_to_place(
+            place,
+            Expr::statement_expression(vec![res.as_stmt(loc)], result_type),
+        )
     }
 
     fn codegen_exact_div(&mut self, mut fargs: Vec<Expr>, p: &Place<'tcx>, loc: Location) -> Stmt {

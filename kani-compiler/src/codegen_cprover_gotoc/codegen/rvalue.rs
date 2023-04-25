@@ -10,7 +10,10 @@ use crate::kani_middle::coercion::{
     extract_unsize_casting, CoerceUnsizedInfo, CoerceUnsizedIterator, CoercionBase,
 };
 use crate::unwrap_or_return_codegen_unimplemented;
-use cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
+use cbmc::goto_program::{
+    arithmetic_overflow_result_type, BinaryOperator, Expr, Location, Stmt, Symbol, Type,
+    ARITH_OVERFLOW_OVERFLOWED_FIELD, ARITH_OVERFLOW_RESULT_FIELD,
+};
 use cbmc::MachineModel;
 use cbmc::{btree_string_map, InternString, InternedString};
 use num::bigint::BigInt;
@@ -165,6 +168,37 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
+    /// Generate code for a binary operation with an overflow and returns a tuple (res, overflow).
+    pub fn codegen_binop_with_overflow(
+        &mut self,
+        bin_op: BinaryOperator,
+        left: Expr,
+        right: Expr,
+        expected_typ: Type,
+        loc: Location,
+    ) -> Expr {
+        // Create CBMC result type and add to the symbol table.
+        let res_type = arithmetic_overflow_result_type(left.typ().clone());
+        let tag = res_type.tag().unwrap();
+        let struct_tag =
+            self.ensure_struct(tag, tag, |_, _| res_type.components().unwrap().clone());
+        let res = left.overflow_op(bin_op, right);
+        // store the result in a temporary variable
+        let (var, decl) = self.decl_temp_variable(struct_tag, Some(res), loc);
+        // cast into result type
+        let cast = Expr::struct_expr_from_values(
+            expected_typ.clone(),
+            vec![
+                var.clone().member(ARITH_OVERFLOW_RESULT_FIELD, &self.symbol_table),
+                var.member(ARITH_OVERFLOW_OVERFLOWED_FIELD, &self.symbol_table)
+                    .cast_to(Type::c_bool()),
+            ],
+            &self.symbol_table,
+        );
+        Expr::statement_expression(vec![decl, cast.as_stmt(loc)], expected_typ)
+    }
+
+    /// Generate code for a binary arithmetic operation with UB / overflow checks in place.
     fn codegen_rvalue_checked_binary_op(
         &mut self,
         op: &BinOp,
@@ -199,27 +233,33 @@ impl<'tcx> GotocCtx<'tcx> {
 
         match op {
             BinOp::Add => {
-                let res = ce1.add_overflow(ce2);
-                Expr::struct_expr_from_values(
-                    self.codegen_ty(res_ty),
-                    vec![res.result, res.overflowed.cast_to(Type::c_bool())],
-                    &self.symbol_table,
+                let res_type = self.codegen_ty(res_ty);
+                self.codegen_binop_with_overflow(
+                    BinaryOperator::OverflowResultPlus,
+                    ce1,
+                    ce2,
+                    res_type,
+                    Location::None,
                 )
             }
             BinOp::Sub => {
-                let res = ce1.sub_overflow(ce2);
-                Expr::struct_expr_from_values(
-                    self.codegen_ty(res_ty),
-                    vec![res.result, res.overflowed.cast_to(Type::c_bool())],
-                    &self.symbol_table,
+                let res_type = self.codegen_ty(res_ty);
+                self.codegen_binop_with_overflow(
+                    BinaryOperator::OverflowResultMinus,
+                    ce1,
+                    ce2,
+                    res_type,
+                    Location::None,
                 )
             }
             BinOp::Mul => {
-                let res = ce1.mul_overflow(ce2);
-                Expr::struct_expr_from_values(
-                    self.codegen_ty(res_ty),
-                    vec![res.result, res.overflowed.cast_to(Type::c_bool())],
-                    &self.symbol_table,
+                let res_type = self.codegen_ty(res_ty);
+                self.codegen_binop_with_overflow(
+                    BinaryOperator::OverflowResultMult,
+                    ce1,
+                    ce2,
+                    res_type,
+                    Location::None,
                 )
             }
             BinOp::Shl => {
