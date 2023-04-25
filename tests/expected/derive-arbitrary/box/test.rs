@@ -12,7 +12,9 @@ struct Foo<T> {
 #[kani::proof]
 fn main() {
     let foo: Foo<i32> = kani::any();
-    kani::cover!(*foo.boxed >= i32::MIN && *foo.boxed <= i32::MAX);
+    kani::cover!(*foo.boxed == i32::MIN);
+    kani::cover!(*foo.boxed == 0);
+    kani::cover!(*foo.boxed == i32::MAX);
     kani::cover!(*foo.boxed < i32::MIN); // <-- this condition should be `UNSATISFIABLE`
     kani::cover!(*foo.boxed > i32::MAX); // <-- this condition should be `UNSATISFIABLE`
 }
