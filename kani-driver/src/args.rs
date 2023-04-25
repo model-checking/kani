@@ -350,10 +350,10 @@ pub enum ConcretePlaybackMode {
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum, strum_macros::Display)]
 #[strum(serialize_all = "kebab-case")]
 pub enum UnstableFeatures {
-    /// Allow replace certain items with stubs (mocks).
-    /// See (RFC-0002)[https://model-checking.github.io/kani/rfc/rfcs/0002-function-stubbing.html]
+    /// Allow replacing certain items with stubs (mocks).
+    /// See [RFC-0002](https://model-checking.github.io/kani/rfc/rfcs/0002-function-stubbing.html)
     Stubbing,
-    /// Generate a C-like file equivalent to inputted program used for debugging purpose.
+    /// Generate a C-like file equivalent to input program used for debugging purpose.
     GenC,
 }
 

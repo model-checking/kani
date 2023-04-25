@@ -171,7 +171,7 @@ pub fn check_unstable_features(tcx: TyCtxt, enabled_features: &[String], def_id:
                             err.note(format!("see issue {link} for more information"));
                         }
                         err.help(format!(
-                            "use `-Z {}` to enable use this API.",
+                            "use `-Z {}` to enable using this API.",
                             unstable_attr.feature
                         ));
                         err.emit();
