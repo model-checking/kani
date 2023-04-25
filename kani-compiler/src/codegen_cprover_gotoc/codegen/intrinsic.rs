@@ -288,7 +288,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }};
         }
 
-        // Intrinsics which encode a value known during compilation (e.g., `size_of`)
+        // Intrinsics which encode a value known during compilation
         macro_rules! codegen_intrinsic_const {
             () => {{
                 let value = self
@@ -611,7 +611,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 loc,
             ),
             "simd_xor" => codegen_intrinsic_binop!(bitxor),
-            "size_of" => codegen_intrinsic_const!(),
+            "size_of" => unreachable!(),
             "size_of_val" => codegen_size_align!(size),
             "sqrtf32" => unstable_codegen!(codegen_simple_intrinsic!(Sqrtf)),
             "sqrtf64" => unstable_codegen!(codegen_simple_intrinsic!(Sqrt)),
@@ -1183,7 +1183,8 @@ impl<'tcx> GotocCtx<'tcx> {
         let dst = fargs.remove(0).cast_to(Type::void_pointer());
         let val = fargs.remove(0).cast_to(Type::void_pointer());
         let layout = self.layout_of(ty);
-        let sz = Expr::int_constant(layout.size.bytes(), Type::size_t());
+        let sz = Expr::int_constant(layout.size.bytes(), Type::size_t())
+            .with_size_of_annotation(self.codegen_ty(ty));
         let e = BuiltinFn::Memcmp
             .call(vec![dst, val, sz], loc)
             .eq(Type::c_int().zero())
@@ -1267,11 +1268,12 @@ impl<'tcx> GotocCtx<'tcx> {
     /// This function computes the size and alignment of a dynamically-sized type.
     /// The implementations follows closely the SSA implementation found in
     /// `rustc_codegen_ssa::glue::size_and_align_of_dst`.
-    fn size_and_align_of_dst(&self, t: Ty<'tcx>, arg: Expr) -> SizeAlign {
+    fn size_and_align_of_dst(&mut self, t: Ty<'tcx>, arg: Expr) -> SizeAlign {
         let layout = self.layout_of(t);
         let usizet = Type::size_t();
         if !layout.is_unsized() {
-            let size = Expr::int_constant(layout.size.bytes_usize(), Type::size_t());
+            let size = Expr::int_constant(layout.size.bytes_usize(), Type::size_t())
+                .with_size_of_annotation(self.codegen_ty(t));
             let align = Expr::int_constant(layout.align.abi.bytes(), usizet);
             return SizeAlign { size, align };
         }
@@ -1294,6 +1296,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // The info in this case is the length of the str, so the size is that
                 // times the unit size.
                 let size = Expr::int_constant(unit.size.bytes_usize(), Type::size_t())
+                    .with_size_of_annotation(self.codegen_ty(*unit_t))
                     .mul(arg.member("len", &self.symbol_table));
                 let align = Expr::int_constant(layout.align.abi.bytes(), usizet);
                 SizeAlign { size, align }
@@ -1316,7 +1319,8 @@ impl<'tcx> GotocCtx<'tcx> {
                 // FIXME: We assume they are aligned according to the machine-preferred alignment given by layout abi.
                 let n = layout.fields.count() - 1;
                 let sized_size =
-                    Expr::int_constant(layout.fields.offset(n).bytes(), Type::size_t());
+                    Expr::int_constant(layout.fields.offset(n).bytes(), Type::size_t())
+                        .with_size_of_annotation(self.codegen_ty(t));
                 let sized_align = Expr::int_constant(layout.align.abi.bytes(), Type::size_t());
 
                 // Call this function recursively to compute the size and align for the last field.
@@ -1724,7 +1728,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ///  * The result expression of the computation.
     ///  * An assertion statement to ensure the operation has not overflowed.
     fn count_in_bytes(
-        &self,
+        &mut self,
         count: Expr,
         ty: Ty<'tcx>,
         res_ty: Type,
@@ -1733,7 +1737,8 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> (Expr, Stmt) {
         assert!(res_ty.is_integer());
         let layout = self.layout_of(ty);
-        let size_of_elem = Expr::int_constant(layout.size.bytes(), res_ty);
+        let size_of_elem = Expr::int_constant(layout.size.bytes(), res_ty)
+            .with_size_of_annotation(self.codegen_ty(ty));
         let size_of_count_elems = count.mul_overflow(size_of_elem);
         let message =
             format!("{intrinsic}: attempt to compute number in bytes which would overflow");
