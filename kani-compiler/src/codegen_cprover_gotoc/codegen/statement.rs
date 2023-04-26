@@ -555,6 +555,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     // Normal, non-virtual function calls
                     InstanceDef::Item(..)
                     | InstanceDef::DropGlue(_, Some(_))
+                    | InstanceDef::FnPtrAddrShim(_, _)
                     | InstanceDef::Intrinsic(..)
                     | InstanceDef::FnPtrShim(..)
                     | InstanceDef::VTableShim(..)
@@ -569,7 +570,7 @@ impl<'tcx> GotocCtx<'tcx> {
                                 .with_location(loc),
                         ]
                     }
-                    InstanceDef::ThreadLocalShim(_) | InstanceDef::FnPtrAddrShim(_, _) => todo!(),
+                    InstanceDef::ThreadLocalShim(_) => todo!(),
                 };
                 stmts.push(self.codegen_end_call(target.as_ref(), loc));
                 Stmt::block(stmts, loc)
