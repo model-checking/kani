@@ -57,7 +57,7 @@ pub fn assume(cond: bool) {
 #[rustc_diagnostic_item = "KaniAssume"]
 #[cfg(feature = "concrete_playback")]
 pub fn assume(cond: bool) {
-    assert!(cond, "kani::assume should always hold");
+    assert!(cond, "`kani::assume` should always hold");
 }
 
 /// Creates an assertion of the specified condition and message.
@@ -174,7 +174,7 @@ pub(crate) unsafe fn any_raw_internal<T, const SIZE_T: usize>() -> T {
 #[inline(never)]
 #[cfg(feature = "concrete_playback")]
 pub(crate) unsafe fn any_raw_internal<T, const SIZE_T: usize>() -> T {
-    return concrete_playback::any_raw_internal::<T, SIZE_T>();
+    concrete_playback::any_raw_internal::<T, SIZE_T>()
 }
 
 /// This low-level function returns nondet bytes of size T.
