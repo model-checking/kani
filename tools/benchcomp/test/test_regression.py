@@ -107,6 +107,8 @@ class RegressionTests(unittest.TestCase):
             "symex_runtime": float,
             "verification_time": float,
             "success": bool,
+            "number_program_steps": int,
+            "number_vccs": int,
         }
 
         all_succeeded = True

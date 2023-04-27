@@ -25,6 +25,19 @@ def _get_metrics():
             "pat": re.compile(r"Runtime Solver: (?P<value>[-e\d\.]+)s"),
             "parse": float,
         },
+        "removed_program_steps": {
+            "pat": re.compile(r"slicing removed (?P<value>\d+) assignments"),
+            "parse": int,
+        },
+        "number_program_steps": {
+            "pat": re.compile(r"size of program expression: (?P<value>\d+) steps"),
+            "parse": int,
+        },
+        "number_vccs": {
+            "pat": re.compile(
+                r"Generated \d+ VCC\(s\), (?P<value>\d+) remaining after simplification"),
+            "parse": int,
+        },
         "symex_runtime": {
             "pat": re.compile(r"Runtime Symex: (?P<value>[-e\d\.]+)s"),
             "parse": float,
@@ -41,6 +54,11 @@ def get_metrics():
     for metric, info in metrics.items():
         for field in ("pat", "parse"):
             info.pop(field)
+
+    # This is not a metric we return; it is used to find the correct value for
+    # the number_program_steps metric
+    metrics.pop("removed_program_steps", None)
+
     return metrics
 
 
@@ -75,6 +93,12 @@ def main(root_dir):
                     except (KeyError, TypeError):
                         benchmarks[bench_name]["metrics"][metric] = parse(m["value"])
                     break
+
+    for bench_name, bench_info in benchmarks.items():
+        n_steps = bench_info["metrics"]["number_program_steps"]
+        rm_steps = bench_info["metrics"]["removed_program_steps"]
+        bench_info["metrics"]["number_program_steps"] = n_steps - rm_steps
+        bench_info["metrics"].pop("removed_program_steps", None)
 
     return {
         "metrics": get_metrics(),
