@@ -61,7 +61,7 @@ pub(super) fn check_attributes(tcx: TyCtxt, def_id: DefId) {
             tcx.sess.span_err(
                 attrs[0].span,
                 format!(
-                    "the `{}` attribute also requires the '#[kani::proof]' attribute",
+                    "the `{}` attribute also requires the `#[kani::proof]` attribute",
                     attr.as_ref()
                 )
                 .as_str(),
@@ -170,7 +170,7 @@ pub fn check_unstable_features(tcx: TyCtxt, enabled_features: &[String], def_id:
                     error.report(tcx);
                     debug_assert!(
                         false,
-                        "Expected well formed unstable attribute, but found: {error:?}"
+                        "expected well formed unstable attribute, but found: {error:?}"
                     );
                 }
             }
@@ -285,7 +285,7 @@ impl<'a> UnstableAttrParseError<'a> {
     }
 }
 
-/// Try to parse an unstable attribute into an UnstableAttribute structure.
+/// Try to parse an unstable attribute into an `UnstableAttribute`.
 impl<'a> TryFrom<&'a Attribute> for UnstableAttribute {
     type Error = UnstableAttrParseError<'a>;
     fn try_from(attr: &'a Attribute) -> Result<Self, Self::Error> {
