@@ -12,6 +12,7 @@
 //! Note: We don't cross-compile. Target is the same as the host.
 
 use crate::{cp, AutoRun};
+use anyhow::{bail, format_err, Result};
 use cargo_metadata::{Artifact, Message};
 use std::ffi::OsStr;
 use std::fs;
@@ -57,7 +58,7 @@ pub fn kani_sysroot_bin() -> PathBuf {
 /// Build the `lib/` folder for the new sysroot.
 /// This will include Kani's libraries as well as the standard libraries compiled with --emit-mir.
 /// TODO: Don't copy Kani's libstd.
-pub fn build_lib() {
+pub fn build_lib() -> Result<()> {
     // Run cargo build with -Z build-std
     let target = env!("TARGET");
     let target_dir = env!("KANI_BUILD_LIBS");
@@ -106,7 +107,12 @@ pub fn build_lib() {
 
     // Collect the build artifacts.
     let artifacts = build_artifacts(&mut cmd);
-    let _ = cmd.wait().expect("Couldn't get cargo's exit status");
+    let exit_status = cmd.wait().expect("Couldn't get cargo's exit status");
+    // `exit_ok` is an experimental API where we could do `.exit_ok().expect("...")` instead of the
+    // below use of `panic`.
+    if !exit_status.success() {
+        bail!("Build failed: `cargo build-dev` didn't complete successfully");
+    }
 
     // Create sysroot folder hierarchy.
     let sysroot_lib = kani_sysroot_lib();
@@ -118,6 +124,8 @@ pub fn build_lib() {
     copy_libs(&artifacts, &sysroot_lib, &is_kani_lib);
     //  Copy standard libraries into rustlib/<target>/lib/ folder.
     copy_libs(&artifacts, &std_path, &is_std_lib);
+
+    Ok(())
 }
 
 /// Check if an artifact is a rust library that can be used by rustc on further crates compilations.
@@ -195,7 +203,7 @@ fn build_artifacts(cargo_cmd: &mut Child) -> Vec<Artifact> {
 /// ```bash
 /// cargo build --bins -Z unstable-options --out-dir $KANI_SYSROOT/bin/
 /// ```
-pub fn build_bin<T: AsRef<OsStr>>(extra_args: &[T]) {
+pub fn build_bin<T: AsRef<OsStr>>(extra_args: &[T]) -> Result<()> {
     let out_dir = kani_sysroot_bin();
     let args = ["--bins", "-Z", "unstable-options", "--out-dir", out_dir.to_str().unwrap()];
     Command::new("cargo")
@@ -203,5 +211,5 @@ pub fn build_bin<T: AsRef<OsStr>>(extra_args: &[T]) {
         .args(args)
         .args(extra_args)
         .run()
-        .expect("Failed to build binaries.");
+        .or(Err(format_err!("Failed to build binaries.")))
 }

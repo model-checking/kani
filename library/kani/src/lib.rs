@@ -48,10 +48,16 @@ pub use futures::block_on;
 /// ```
 #[inline(never)]
 #[rustc_diagnostic_item = "KaniAssume"]
-pub fn assume(_cond: bool) {
-    if cfg!(feature = "concrete_playback") {
-        assert!(_cond, "kani::assume should always hold");
-    }
+#[cfg(not(feature = "concrete_playback"))]
+pub fn assume(cond: bool) {
+    let _ = cond;
+}
+
+#[inline(never)]
+#[rustc_diagnostic_item = "KaniAssume"]
+#[cfg(feature = "concrete_playback")]
+pub fn assume(cond: bool) {
+    assert!(cond, "`kani::assume` should always hold");
 }
 
 /// Creates an assertion of the specified condition and message.
@@ -63,12 +69,19 @@ pub fn assume(_cond: bool) {
 /// let y = !x;
 /// kani::assert(x || y, "ORing a boolean variable with its negation must be true")
 /// ```
+#[cfg(not(feature = "concrete_playback"))]
 #[inline(never)]
 #[rustc_diagnostic_item = "KaniAssert"]
-pub const fn assert(_cond: bool, _msg: &'static str) {
-    if cfg!(feature = "concrete_playback") {
-        assert!(_cond, "{}", _msg);
-    }
+pub const fn assert(cond: bool, msg: &'static str) {
+    let _ = cond;
+    let _ = msg;
+}
+
+#[cfg(feature = "concrete_playback")]
+#[inline(never)]
+#[rustc_diagnostic_item = "KaniAssert"]
+pub const fn assert(cond: bool, msg: &'static str) {
+    assert!(cond, "{}", msg);
 }
 
 /// Creates a cover property with the specified condition and message.
@@ -153,13 +166,15 @@ pub fn any_where<T: Arbitrary, F: FnOnce(&T) -> bool>(f: F) -> T {
 ///
 /// Note that SIZE_T must be equal the size of type T in bytes.
 #[inline(never)]
+#[cfg(not(feature = "concrete_playback"))]
 pub(crate) unsafe fn any_raw_internal<T, const SIZE_T: usize>() -> T {
-    #[cfg(feature = "concrete_playback")]
-    return concrete_playback::any_raw_internal::<T, SIZE_T>();
-
-    #[cfg(not(feature = "concrete_playback"))]
-    #[allow(unreachable_code)]
     any_raw_inner::<T>()
+}
+
+#[inline(never)]
+#[cfg(feature = "concrete_playback")]
+pub(crate) unsafe fn any_raw_internal<T, const SIZE_T: usize>() -> T {
+    concrete_playback::any_raw_internal::<T, SIZE_T>()
 }
 
 /// This low-level function returns nondet bytes of size T.

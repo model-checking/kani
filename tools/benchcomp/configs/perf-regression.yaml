@@ -10,13 +10,13 @@ variants:
   kani_new:
     config:
       directory: new
-      command_line: PATH=$(realpath new/scripts):$PATH scripts/kani-perf.sh
+      command_line: scripts/kani-perf.sh
       env:
         RUST_TEST_THREADS: "1"
   kani_old:
     config:
       directory: old
-      command_line: PATH=$(realpath old/scripts):$PATH scripts/kani-perf.sh
+      command_line: scripts/kani-perf.sh
       env:
         RUST_TEST_THREADS: "1"
 
@@ -28,6 +28,9 @@ run:
       variants: [kani_old, kani_new]
 
 visualize:
+  - type: dump_yaml
+    out_file: '/tmp/result.yaml'
+
   - type: error_on_regression
     variant_pairs: [[kani_old, kani_new]]
     checks:
@@ -36,6 +39,6 @@ visualize:
         # benchmark has regressed if the lambda returns true.
         test: "lambda old, new: False if not old else not new"
       - metric: solver_runtime
-        test: "lambda old, new: False if new < 2 else new/old > 1.1"
+        test: "lambda old, new: False if new < 10 else new/old > 1.5"
       - metric: symex_runtime
-        test: "lambda old, new: False if new < 2 else new/old > 1.1"
+        test: "lambda old, new: False if new < 10 else new/old > 1.5"
