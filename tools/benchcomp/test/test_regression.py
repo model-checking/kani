@@ -30,11 +30,13 @@ class Benchcomp:
         wd = tempfile.mkdtemp()
         self.working_directory = pathlib.Path(wd)
 
-    def __call__(self, subcommand=None, default_flags=None, *flags):
+    def __call__(self, subcommand=None, default_flags=None, flags=None):
         subcommand = subcommand or []
         default_flags = default_flags or [
             "--out-prefix", "/tmp/benchcomp/test"]
         config_flags = ["--config", str(self.config_file)]
+
+        flags = flags or []
 
         cmd = [self.bc, *config_flags, *subcommand, *default_flags, *flags]
         self.proc = subprocess.Popen(
@@ -386,6 +388,99 @@ class RegressionTests(unittest.TestCase):
                 run_bc.proc.returncode, 1, msg=run_bc.stderr)
 
 
+    def test_only_dump_yaml(self):
+        """Ensure that benchcomp terminates with return code 0 when `--only dump_yaml` is passed, even if the error_on_regression visualization would have resulted in a return code of 1"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            run_bc = Benchcomp({
+                "variants": {
+                    "passed": {
+                        "config": {
+                            "directory": str(tmp),
+                            "command_line":
+                                "mkdir bench_1 bench_2 && "
+                                "echo true > bench_1/success &&"
+                                "echo true > bench_2/success"
+                        },
+                    },
+                    "failed": {
+                        "config": {
+                            "directory": str(tmp),
+                            "command_line":
+                                "mkdir bench_1 bench_2 && "
+                                "echo true > bench_1/success &&"
+                                "echo false > bench_2/success"
+                        }
+                    }
+                },
+                "run": {
+                    "suites": {
+                        "suite_1": {
+                            "parser": { "module": "test_file_to_metric" },
+                            "variants": ["passed", "failed"]
+                        }
+                    }
+                },
+                "visualize": [{
+                    "type": "dump_yaml",
+                }, {
+                    "type": "error_on_regression",
+                    "variant_pairs": [["passed", "failed"]],
+                    "checks": [{
+                        "metric": "success",
+                        "test":
+                            "lambda old, new: True"
+                    }]
+                }]
+            })
+            run_bc(flags=["--only", "dump_yaml"])
+
+            self.assertEqual(
+                run_bc.proc.returncode, 0, msg=run_bc.stderr)
+
+            with open(run_bc.working_directory / "result.yaml") as handle:
+                result = yaml.safe_load(handle)
+
+
+    def test_ignore_dump_yaml(self):
+        """Ensure that benchcomp does not print any YAML output even with the dump_yaml visualization when the `--except dump_yaml` flag is passed"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            run_bc = Benchcomp({
+                "variants": {
+                    "variant_1": {
+                        "config": {
+                            "directory": tmp,
+                            "command_line": "true",
+                        }
+                    },
+                    "variant_2": {
+                        "config": {
+                            "directory": tmp,
+                            "command_line": "true",
+                        }
+                    }
+                },
+                "run": {
+                    "suites": {
+                        "suite_1": {
+                            "parser": {"module": "test"},
+                            "variants": ["variant_1", "variant_2"]
+                        }
+                    }
+                },
+                "visualize": [{
+                    "type": "dump_yaml",
+                }],
+            })
+            run_bc(flags=["--except", "dump_yaml"])
+
+            self.assertEqual(
+                run_bc.stdout, "", msg=run_bc.stdout)
+
+            with open(run_bc.working_directory / "result.yaml") as handle:
+                result = yaml.safe_load(handle)
+
 
     def test_return_0(self):
         """Ensure that benchcomp terminates with return code 0"""
@@ -423,6 +518,7 @@ class RegressionTests(unittest.TestCase):
             with open(run_bc.working_directory / "result.yaml") as handle:
                 result = yaml.safe_load(handle)
 
+
     def test_return_0_on_fail(self):
         """Ensure that benchcomp terminates with 0 even if a suite fails"""
 
@@ -458,6 +554,7 @@ class RegressionTests(unittest.TestCase):
 
             with open(run_bc.working_directory / "result.yaml") as handle:
                 result = yaml.safe_load(handle)
+
 
     def test_env(self):
         """Ensure that benchcomp reads the 'env' key of variant config"""

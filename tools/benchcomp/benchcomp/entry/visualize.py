@@ -14,6 +14,7 @@ def main(args):
     with open(args.result_file, encoding="utf-8") as handle:
         results = yaml.safe_load(handle)
 
-    generate_visualizations = benchcomp.visualizers.utils.Generator(args.config)
+    generate_visualizations = benchcomp.visualizers.utils.Generator(
+        args.config, args.except_for, args.only)
     generate_visualizations(results)
     sys.exit(benchcomp.visualizers.utils.EXIT_CODE)

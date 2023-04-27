@@ -174,6 +174,19 @@ def _get_args_dict():
                         "type": pathlib.Path,
                         "help":
                             "read result from F instead of %(default)s. "
+                    }, {
+                        "flags": ["--only"],
+                        "nargs": "+",
+                        "metavar": "V",
+                        "help":
+                            "Only run visualization V; ignore others in "
+                            "config file"
+                    }, {
+                        "flags": ["--except"],
+                        "dest": "except_for",
+                        "nargs": "+",
+                        "metavar": "V",
+                        "help": "Run all visualizations except V",
                     }],
                 },
             }
