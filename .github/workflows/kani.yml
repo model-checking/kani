@@ -306,4 +306,20 @@ jobs:
       - name: Run benchcomp
         run: |
           new/tools/benchcomp/bin/benchcomp \
-            --config new/tools/benchcomp/configs/perf-regression.yaml
+            --config new/tools/benchcomp/configs/perf-regression.yaml \
+            run
+          new/tools/benchcomp/bin/benchcomp \
+            --config new/tools/benchcomp/configs/perf-regression.yaml \
+            collate
+
+      - name: Perf Regression Results Table
+        run: |
+          new/tools/benchcomp/bin/benchcomp \
+            --config new/tools/benchcomp/configs/perf-regression.yaml \
+            visualize --only dump_markdown_results_table >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run other visualizations
+        run: |
+          new/tools/benchcomp/bin/benchcomp \
+            --config new/tools/benchcomp/configs/perf-regression.yaml \
+            visualize --except dump_markdown_results_table

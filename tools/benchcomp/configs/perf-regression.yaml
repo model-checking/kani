@@ -29,7 +29,10 @@ run:
 
 visualize:
   - type: dump_yaml
-    out_file: '/tmp/result.yaml'
+    out_file: '-'
+
+  - type: dump_markdown_results_table
+    out_file: '-'
 
   - type: error_on_regression
     variant_pairs: [[kani_old, kani_new]]

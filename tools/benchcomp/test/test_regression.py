@@ -8,6 +8,7 @@
 import pathlib
 import subprocess
 import tempfile
+import textwrap
 import unittest
 
 import yaml
@@ -389,6 +390,69 @@ class RegressionTests(unittest.TestCase):
             run_bc()
             self.assertEqual(
                 run_bc.proc.returncode, 1, msg=run_bc.stderr)
+
+
+    def test_markdown_results_table(self):
+        """Run the markdown results table visualization"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            run_bc = Benchcomp({
+                "variants": {
+                    "variant_1": {
+                        "config": {
+                            "directory": str(tmp),
+                            "command_line":
+                                "mkdir bench_1 bench_2"
+                                "&& echo true > bench_1/success"
+                                "&& echo true > bench_2/success"
+                                "&& echo 5 > bench_1/runtime"
+                                "&& echo 10 > bench_2/runtime"
+                        },
+                    },
+                    "variant_2": {
+                        "config": {
+                            "directory": str(tmp),
+                            "command_line":
+                                "mkdir bench_1 bench_2"
+                                "&& echo true > bench_1/success"
+                                "&& echo false > bench_2/success"
+                                "&& echo 10 > bench_1/runtime"
+                                "&& echo 5 > bench_2/runtime"
+                        }
+                    }
+                },
+                "run": {
+                    "suites": {
+                        "suite_1": {
+                            "parser": { "module": "test_file_to_metric" },
+                            "variants": ["variant_1", "variant_2"]
+                        }
+                    }
+                },
+                "visualize": [{
+                    "type": "dump_markdown_results_table",
+                    "out_file": "-",
+                }]
+            })
+            run_bc()
+
+            self.assertEqual(run_bc.proc.returncode, 0, msg=run_bc.stderr)
+            self.assertEqual(
+                run_bc.stdout, textwrap.dedent("""
+                    ## runtime
+
+                    | Benchmark |  variant_1 | variant_2 |
+                    | --- | --- |--- |
+                    | bench_1 | 5 | 10 |
+                    | bench_2 | 10 | 5 |
+
+                    ## success
+
+                    | Benchmark |  variant_1 | variant_2 |
+                    | --- | --- |--- |
+                    | bench_1 | True | True |
+                    | bench_2 | True | False |
+                    """))
 
 
     def test_only_dump_yaml(self):
