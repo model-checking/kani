@@ -6,6 +6,7 @@ import dataclasses
 
 import yaml
 
+import benchcomp
 import benchcomp.visualizers.utils as viz_utils
 
 
@@ -54,15 +55,24 @@ class error_on_regression:
 
 
 
-@dataclasses.dataclass
 class dump_yaml:
-    """Print the YAML-formatted results to stdout
+    """Print the YAML-formatted results to a file.
+
+    The 'out_file' key is mandatory; specify '-' to print to stdout.
 
     Sample configuration:
 
     visualize:
     - type: dump_yaml
+      out_file: '-'
     """
 
+
+    def __init__(self, out_file):
+        self.get_out_file = benchcomp.Outfile(out_file)
+
+
     def __call__(self, results):
-        print(yaml.dump(results, default_flow_style=False))
+        with self.get_out_file() as handle:
+            print(
+                yaml.dump(results, default_flow_style=False), file=handle)

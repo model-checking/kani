@@ -132,7 +132,7 @@ jobs:
       # When we're pushed to main branch, only then actually publish the docs.
       - name: Publish Documentation
         if: ${{ github.event_name == 'push' && startsWith('refs/heads/main', github.ref) }}
-        uses: JamesIves/github-pages-deploy-action@v4.3.3
+        uses: JamesIves/github-pages-deploy-action@v4
         with:
           branch: gh-pages
           folder: docs/book/
