@@ -85,7 +85,7 @@ impl<T, const MAX_SLICE_LENGTH: usize> AnySlice<T, MAX_SLICE_LENGTH> {
         } else {
             let layout = Layout::array::<T>(0).unwrap();
             let ptr: *const T = std::ptr::null();
-            Self { layout, ptr: ptr as *mut T, slice_len }
+            Self { layout, ptr: ptr as *mut T, slice_len: 0 }
         }
     }
 
