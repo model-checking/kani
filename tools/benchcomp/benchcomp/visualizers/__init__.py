@@ -3,7 +3,9 @@
 
 
 import dataclasses
+import textwrap
 
+import jinja2
 import yaml
 
 import benchcomp
@@ -76,3 +78,73 @@ class dump_yaml:
         with self.get_out_file() as handle:
             print(
                 yaml.dump(results, default_flow_style=False), file=handle)
+
+
+
+class dump_markdown_results_table:
+    """Print a Markdown-formatted table displaying benchmark results
+
+    The 'out_file' key is mandatory; specify '-' to print to stdout.
+
+    Sample configuration:
+
+    visualize:
+    - type: dump_markdown_results_table
+      out_file: '-'
+    """
+
+
+    def __init__(self, out_file):
+        self.get_out_file = benchcomp.Outfile(out_file)
+
+
+    @staticmethod
+    def _get_template():
+        return textwrap.dedent("""\
+            {% for metric, benchmarks in d["metrics"].items() %}
+            ## {{ metric }}
+
+            | Benchmark | {% for variant in d["variants"] %} {{ variant }} |{% endfor %}
+            | --- | {% for variant in d["variants"] %}--- |{% endfor -%}
+            {% for bench_name, bench_variants in benchmarks.items () %}
+            | {{ bench_name }} {% for variant in d["variants"] -%}
+             | {{ bench_variants[variant] }} {% endfor %}|
+            {%- endfor %}
+            {% endfor -%}
+            """)
+
+
+    @staticmethod
+    def _get_variant_names(results):
+        return results.values()[0]["variants"]
+
+
+    @staticmethod
+    def _organize_results_into_metrics(results):
+        ret = {metric: {} for metric in results["metrics"]}
+        for bench, bench_result in results["benchmarks"].items():
+            for variant, variant_result in bench_result["variants"].items():
+                for metric, value in variant_result["metrics"].items():
+                    try:
+                        ret[metric][bench][variant] = variant_result["metrics"][metric]
+                    except KeyError:
+                        ret[metric][bench] = {
+                            variant: variant_result["metrics"][metric]
+                    }
+        return ret
+
+
+    def __call__(self, results):
+        data = {
+            "metrics": self._organize_results_into_metrics(results),
+            "variants": list(results["benchmarks"].values())[0]["variants"],
+        }
+
+        env = jinja2.Environment(
+            loader=jinja2.BaseLoader, autoescape=jinja2.select_autoescape(
+                enabled_extensions=("html"),
+                default_for_string=True))
+        template = env.from_string(self._get_template())
+        output = template.render(d=data)[:-1]
+        with self.get_out_file() as handle:
+            print(output, file=handle)
