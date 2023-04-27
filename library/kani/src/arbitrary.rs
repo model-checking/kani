@@ -167,3 +167,12 @@ impl Arbitrary for std::marker::PhantomPinned {
         PhantomPinned
     }
 }
+
+impl<T> Arbitrary for std::boxed::Box<T>
+where
+    T: Arbitrary,
+{
+    fn any() -> Self {
+        Box::new(T::any())
+    }
+}

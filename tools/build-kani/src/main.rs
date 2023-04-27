@@ -19,10 +19,7 @@ fn main() -> Result<()> {
     let args = parser::ArgParser::parse();
 
     match args.subcommand {
-        parser::Commands::BuildDev(build_parser) => {
-            build_lib();
-            build_bin(&build_parser.args);
-        }
+        parser::Commands::BuildDev(build_parser) => build_lib().and(build_bin(&build_parser.args)),
         parser::Commands::Bundle(bundle_parser) => {
             let version_string = bundle_parser.version;
             let kani_string = format!("kani-{version_string}");
@@ -45,10 +42,10 @@ fn main() -> Result<()> {
             std::fs::remove_dir_all(dir)?;
 
             println!("\nSuccessfully built release bundle: {bundle_name}");
+
+            Ok(())
         }
     }
-
-    Ok(())
 }
 
 /// Ensures everything is good to go before we begin to build the release bundle.
@@ -70,10 +67,9 @@ fn prebundle(dir: &Path) -> Result<()> {
     }
 
     // Before we begin, ensure Kani is built successfully in release mode.
-    build_bin(&["--release"]);
-    // And that libraries have been built too.
-    build_lib();
-    Ok(())
+    build_bin(&["--release"])
+        // And that libraries have been built too.
+        .and(build_lib())
 }
 
 /// Copy Kani files into `dir`

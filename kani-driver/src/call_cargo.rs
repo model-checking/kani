@@ -104,7 +104,7 @@ impl KaniSession {
         pkg_args.extend(["--".to_string(), self.reachability_arg()]);
 
         let mut found_target = false;
-        let packages = packages_to_verify(&self.args, &metadata);
+        let packages = packages_to_verify(&self.args, &metadata)?;
         let mut artifacts = vec![];
         let mut failed_targets = vec![];
         for package in packages {
@@ -261,27 +261,49 @@ fn print_msg(diagnostic: &Diagnostic, use_rendered: bool) -> Result<()> {
     Ok(())
 }
 
+/// Check that all package names are present in the workspace, otherwise return which aren't.
+fn validate_package_names(package_names: &[String], packages: &[Package]) -> Result<()> {
+    let package_list: Vec<String> = packages.iter().map(|pkg| pkg.name.clone()).collect();
+    let unknown_packages: Vec<&String> =
+        package_names.iter().filter(|pkg_name| !package_list.contains(pkg_name)).collect();
+
+    // Some packages aren't in the workspace. Return an error which includes their names.
+    if !unknown_packages.is_empty() {
+        let fmt_packages: Vec<String> =
+            unknown_packages.iter().map(|pkg| format!("`{pkg}`")).collect();
+        let error_msg = if unknown_packages.len() == 1 {
+            format!("couldn't find package {}", fmt_packages[0])
+        } else {
+            format!("couldn't find packages {}", fmt_packages.join(", "))
+        };
+        bail!(error_msg);
+    };
+    Ok(())
+}
+
 /// Extract the packages that should be verified.
 /// If `--package <pkg>` is given, return the list of packages selected.
+/// If `--exclude <pkg>` is given, return the list of packages not excluded.
 /// If `--workspace` is given, return the list of workspace members.
 /// If no argument provided, return the root package if there's one or all members.
 ///   - I.e.: Do whatever cargo does when there's no `default_members`.
 ///   - This is because `default_members` is not available in cargo metadata.
 ///     See <https://github.com/rust-lang/cargo/issues/8033>.
-fn packages_to_verify<'b>(args: &KaniArgs, metadata: &'b Metadata) -> Vec<&'b Package> {
-    debug!(package_selection=?args.cargo.package, workspace=args.cargo.workspace, "packages_to_verify args");
+/// In addition, if either `--package <pkg>` or `--exclude <pkg>` is given,
+/// validate that `<pkg>` is a package name in the workspace, or return an error
+/// otherwise.
+fn packages_to_verify<'b>(args: &KaniArgs, metadata: &'b Metadata) -> Result<Vec<&'b Package>> {
+    debug!(package_selection=?args.cargo.package, package_exclusion=?args.cargo.exclude, workspace=args.cargo.workspace, "packages_to_verify args");
     let packages = if !args.cargo.package.is_empty() {
+        validate_package_names(&args.cargo.package, &metadata.packages)?;
         args.cargo
             .package
             .iter()
-            .map(|pkg_name| {
-                metadata
-                    .packages
-                    .iter()
-                    .find(|pkg| pkg.name == *pkg_name)
-                    .expect(&format!("Cannot find package '{pkg_name}'"))
-            })
+            .map(|pkg_name| metadata.packages.iter().find(|pkg| pkg.name == *pkg_name).unwrap())
             .collect()
+    } else if !args.cargo.exclude.is_empty() {
+        validate_package_names(&args.cargo.exclude, &metadata.packages)?;
+        metadata.packages.iter().filter(|pkg| !args.cargo.exclude.contains(&pkg.name)).collect()
     } else {
         match (args.cargo.workspace, metadata.root_package()) {
             (true, _) | (_, None) => metadata.workspace_packages(),
@@ -289,7 +311,7 @@ fn packages_to_verify<'b>(args: &KaniArgs, metadata: &'b Metadata) -> Vec<&'b Pa
         }
     };
     trace!(?packages, "packages_to_verify result");
-    packages
+    Ok(packages)
 }
 
 /// Extract Kani artifact that might've been generated from a given rustc artifact.
