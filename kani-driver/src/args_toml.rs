@@ -136,11 +136,12 @@ fn toml_to_args(tomldata: &str) -> Result<(Vec<OsString>, Vec<OsString>)> {
     Ok((args, cbmc_args))
 }
 
+/// Parse an entry from the unstable table and convert it into a `-Z <unstable_feature>` argument
 fn unstable_entry(name: &String, value: &Value) -> Result<Option<OsString>> {
     match value {
         Value::Boolean(b) if *b => Ok(Some(OsString::from(format!("-Z{name}")))),
         Value::Boolean(b) if !b => Ok(None),
-        _ => bail!("Expected no arguments for unstable feature `{name}` but found {value}"),
+        _ => bail!("Expected no arguments for unstable feature `{name}` but found `{value}`"),
     }
 }
 
@@ -216,6 +217,8 @@ fn get_table<'a>(start: &'a Value, table: &str) -> Option<&'a Table> {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use super::*;
 
     #[test]
@@ -264,5 +267,51 @@ mod tests {
         assert_eq!(merged[3], OsString::from("--cbmc-args"));
         assert_eq!(merged[4], OsString::from("--trace"));
         assert_eq!(merged[5], OsString::from("--fake"));
+    }
+
+    #[test]
+    fn check_multiple_table_works() {
+        let data = "[workspace.metadata.kani.unstable]
+                         disabled-feature=false
+                         enabled-feature=true
+                         [workspace.metadata.kani.flags]
+                         kani-arg=\"value\"
+                         cbmc-args=[\"--dummy\"]";
+        let (kani_args, cbmc_args) = toml_to_args(data).unwrap();
+        assert_eq!(kani_args, vec!["-Zenabled-feature", "--kani-arg", "value"]);
+        assert_eq!(cbmc_args, vec!["--cbmc-args", "--dummy"]);
+    }
+
+    #[test]
+    fn check_unstable_table_works() {
+        let data = "[workspace.metadata.kani.unstable]
+                         disabled-feature=false
+                         enabled-feature=true";
+        let (kani_args, cbmc_args) = toml_to_args(data).unwrap();
+        assert_eq!(kani_args, vec!["-Zenabled-feature"]);
+        assert!(cbmc_args.is_empty());
+    }
+
+    #[test]
+    fn check_unstable_entry_enabled() -> Result<()> {
+        let name = String::from("feature");
+        assert_eq!(
+            unstable_entry(&name, &Value::Boolean(true))?,
+            Some(OsString::from_str("-Zfeature")?)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn check_unstable_entry_disabled() -> Result<()> {
+        let name = String::from("feature");
+        assert_eq!(unstable_entry(&name, &Value::Boolean(false))?, None);
+        Ok(())
+    }
+
+    #[test]
+    fn check_unstable_entry_invalid() {
+        let name = String::from("feature");
+        assert!(matches!(unstable_entry(&name, &Value::String("".to_string())), Err(_)));
     }
 }

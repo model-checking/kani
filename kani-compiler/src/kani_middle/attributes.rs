@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 
 use kani_metadata::{CbmcSolver, HarnessAttributes, Stub};
 use rustc_ast::{AttrKind, Attribute, LitKind, MetaItem, MetaItemKind, NestedMetaItem};
+use rustc_errors::ErrorGuaranteed;
 use rustc_hir::{def::DefKind, def_id::DefId};
 use rustc_middle::ty::{self, Instance, TyCtxt};
 use rustc_span::Span;
@@ -148,52 +149,51 @@ pub fn extract_harness_attributes(tcx: TyCtxt, def_id: DefId) -> Option<HarnessA
 }
 
 /// Check that any unstable API has been enabled. Otherwise, emit an error.
+///
+/// For now, this function will also validate whether the attribute usage is valid, and emit an
+/// error if not.
+///
 /// TODO: Improve error message by printing the span of the callee instead of the definition.
 pub fn check_unstable_features(tcx: TyCtxt, enabled_features: &[String], def_id: DefId) {
     let attributes = extract_kani_attributes(tcx, def_id);
     if let Some(unstable_attrs) = attributes.get(&KaniAttributeKind::Unstable) {
         for attr in unstable_attrs {
             match UnstableAttribute::try_from(*attr) {
-                Ok(unstable_attr) => {
-                    if !enabled_features.contains(&unstable_attr.feature) {
-                        let fn_name = tcx.def_path_str(def_id);
-                        let reason =
-                            unstable_attr.reason.map_or(String::default(), |r| format!(": {r}"));
-                        let mut err = tcx.sess.struct_err(format!(
-                            "Use of unstable feature `{}`{reason}",
-                            unstable_attr.feature
-                        ));
-                        err.span_note(
-                            tcx.def_span(def_id),
-                            format!("the function `{fn_name}` is unstable:"),
-                        );
-                        if let Some(link) = unstable_attr.issue {
-                            err.note(format!("see issue {link} for more information"));
-                        }
-                        err.help(format!(
-                            "use `-Z {}` to enable using this API.",
-                            unstable_attr.feature
-                        ));
-                        err.emit();
-                    }
+                Ok(unstable_attr) if !enabled_features.contains(&unstable_attr.feature) => {
+                    // Reached an unstable attribute that was not enabled.
+                    report_unstable_forbidden(tcx, def_id, &unstable_attr);
                 }
-                Err(msg) => {
-                    tcx.sess
-                        .struct_span_err(
-                            attr.span,
-                            format!("failed to parse `#[kani::unstable]`: {msg}"),
-                        )
-                        .note(format!(
-                            "expected format: `#[kani::unstable({}, {}, {})]`",
-                            r#"feature="<IDENTIFIER>""#,
-                            r#"issue="<OPTIONAL_ISSUE>""#,
-                            r#"reason="<OPTIONAL_DESCRIPTION>""#
-                        ))
-                        .emit();
+                Ok(attr) => debug!(enabled=?attr, ?def_id, "check_unstable_features"),
+                Err(error) => {
+                    // Ideally this check should happen when compiling the crate with the attribute,
+                    // not the crate under verification.
+                    error.report(tcx);
+                    debug_assert!(
+                        false,
+                        "Expected well formed unstable attribute, but found: {error:?}"
+                    );
                 }
             }
         }
     }
+}
+
+/// Report misusage of an unstable feature that was not enabled.
+fn report_unstable_forbidden(
+    tcx: TyCtxt,
+    def_id: DefId,
+    unstable_attr: &UnstableAttribute,
+) -> ErrorGuaranteed {
+    let fn_name = tcx.def_path_str(def_id);
+    tcx.sess
+        .struct_err(format!(
+            "Use of unstable feature `{}`: {}",
+            unstable_attr.feature, unstable_attr.reason
+        ))
+        .span_note(tcx.def_span(def_id), format!("the function `{fn_name}` is unstable:"))
+        .note(format!("see issue {} for more information", unstable_attr.issue))
+        .help(format!("use `-Z {}` to enable using this function.", unstable_attr.feature))
+        .emit()
 }
 
 fn expect_single<'a>(
@@ -256,17 +256,41 @@ struct UnstableAttribute {
     /// The feature identifier.
     feature: String,
     /// A link to the stabilization tracking issue.
-    issue: Option<String>,
+    issue: String,
     /// A user friendly message that describes the reason why this feature is marked as unstable.
-    reason: Option<String>,
+    reason: String,
 }
 
-/// Parse an unstable attribute into an UnstableAttribute structure.
-/// Errors will be reported to the user but aborting the execution is delayed.
-impl TryFrom<&Attribute> for UnstableAttribute {
-    type Error = String;
-    fn try_from(attr: &Attribute) -> Result<Self, Self::Error> {
-        let args = parse_key_values(attr)?;
+#[derive(Debug)]
+struct UnstableAttrParseError<'a> {
+    /// The reason why the parsing failed.
+    reason: String,
+    /// The attribute being parsed.
+    attr: &'a Attribute,
+}
+
+impl<'a> UnstableAttrParseError<'a> {
+    /// Report the error in a friendly format.
+    fn report(&self, tcx: TyCtxt) -> ErrorGuaranteed {
+        tcx.sess
+            .struct_span_err(
+                self.attr.span,
+                format!("failed to parse `#[kani::unstable]`: {}", self.reason),
+            )
+            .note(format!(
+                "expected format: #[kani::unstable({}, {}, {})]",
+                r#"feature="<IDENTIFIER>""#, r#"issue="<ISSUE>""#, r#"reason="<DESCRIPTION>""#
+            ))
+            .emit()
+    }
+}
+
+/// Try to parse an unstable attribute into an UnstableAttribute structure.
+impl<'a> TryFrom<&'a Attribute> for UnstableAttribute {
+    type Error = UnstableAttrParseError<'a>;
+    fn try_from(attr: &'a Attribute) -> Result<Self, Self::Error> {
+        let build_error = |reason: String| Self::Error { reason, attr };
+        let args = parse_key_values(attr).map_err(build_error)?;
         let invalid_keys = args
             .iter()
             .filter_map(|(key, _)| {
@@ -274,16 +298,17 @@ impl TryFrom<&Attribute> for UnstableAttribute {
             })
             .cloned()
             .collect::<Vec<_>>();
+
         if !invalid_keys.is_empty() {
-            Err(format!("unexpected argument `{}`", invalid_keys.join("`, `")))
+            Err(build_error(format!("unexpected argument `{}`", invalid_keys.join("`, `"))))
         } else {
+            let get_val = |name: &str| {
+                args.get(name).cloned().ok_or(build_error(format!("missing `{name}` field")))
+            };
             Ok(UnstableAttribute {
-                feature: args
-                    .get("feature")
-                    .ok_or("missing feature identifier".to_string())?
-                    .clone(),
-                issue: args.get("issue").cloned(),
-                reason: args.get("reason").cloned(),
+                feature: get_val("feature")?,
+                issue: get_val("issue")?,
+                reason: get_val("reason")?,
             })
         }
     }
