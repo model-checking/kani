@@ -402,9 +402,10 @@ class RegressionTests(unittest.TestCase):
                         "config": {
                             "directory": str(tmp),
                             "command_line":
-                                "mkdir bench_1 bench_2"
+                                "mkdir bench_1 bench_2 bench_3"
                                 "&& echo true > bench_1/success"
                                 "&& echo true > bench_2/success"
+                                "&& echo false > bench_3/success"
                                 "&& echo 5 > bench_1/runtime"
                                 "&& echo 10 > bench_2/runtime"
                         },
@@ -413,9 +414,10 @@ class RegressionTests(unittest.TestCase):
                         "config": {
                             "directory": str(tmp),
                             "command_line":
-                                "mkdir bench_1 bench_2"
+                                "mkdir bench_1 bench_2 bench_3"
                                 "&& echo true > bench_1/success"
                                 "&& echo false > bench_2/success"
+                                "&& echo true > bench_3/success"
                                 "&& echo 10 > bench_1/runtime"
                                 "&& echo 5 > bench_2/runtime"
                         }
@@ -432,6 +434,22 @@ class RegressionTests(unittest.TestCase):
                 "visualize": [{
                     "type": "dump_markdown_results_table",
                     "out_file": "-",
+                    "extra_columns": {
+                        "runtime": [{
+                            "column_name": "ratio",
+                            "text":
+                                "lambda b: str(b['variant_2']/b['variant_1'])"
+                                "if b['variant_2'] < 1.5 * b['variant_1'] "
+                                "else '**' + str(b['variant_2']/b['variant_1']) + '**'"
+                        }],
+                        "success": [{
+                            "column_name": "notes",
+                            "text":
+                                "lambda b: '' if b['variant_2'] == b['variant_1']"
+                                "else 'newly passing' if b['variant_2'] "
+                                "else 'regressed'"
+                        }]
+                    }
                 }]
             })
             run_bc()
@@ -441,17 +459,18 @@ class RegressionTests(unittest.TestCase):
                 run_bc.stdout, textwrap.dedent("""
                     ## runtime
 
-                    | Benchmark |  variant_1 | variant_2 |
-                    | --- | --- |--- |
-                    | bench_1 | 5 | 10 |
-                    | bench_2 | 10 | 5 |
+                    | Benchmark |  variant_1 | variant_2 | ratio |
+                    | --- | --- | --- | --- |
+                    | bench_1 | 5 | 10 | **2.0** |
+                    | bench_2 | 10 | 5 | 0.5 |
 
                     ## success
 
-                    | Benchmark |  variant_1 | variant_2 |
-                    | --- | --- |--- |
-                    | bench_1 | True | True |
-                    | bench_2 | True | False |
+                    | Benchmark |  variant_1 | variant_2 | notes |
+                    | --- | --- | --- | --- |
+                    | bench_1 | True | True |  |
+                    | bench_2 | True | False | regressed |
+                    | bench_3 | False | True | newly passing |
                     """))
 
 
