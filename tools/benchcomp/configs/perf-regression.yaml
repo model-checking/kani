@@ -10,13 +10,13 @@ variants:
   kani_new:
     config:
       directory: new
-      command_line: PATH=$(realpath new/scripts):$PATH scripts/kani-perf.sh
+      command_line: scripts/kani-perf.sh
       env:
         RUST_TEST_THREADS: "1"
   kani_old:
     config:
       directory: old
-      command_line: PATH=$(realpath old/scripts):$PATH scripts/kani-perf.sh
+      command_line: scripts/kani-perf.sh
       env:
         RUST_TEST_THREADS: "1"
 
@@ -28,6 +28,67 @@ run:
       variants: [kani_old, kani_new]
 
 visualize:
+  - type: dump_yaml
+    out_file: '-'
+
+  - type: dump_markdown_results_table
+    out_file: '-'
+    extra_columns:
+
+      # For these two metrics, display the difference between old and new and
+      # embolden if the absolute difference is more than 10% of the old value
+      number_vccs:
+      - column_name: diff old → new
+        text: >
+          lambda b: "" if b["kani_new"] == b["kani_old"]
+          else ("**" if abs((b["kani_new"]-b["kani_old"])/b["kani_old"]) > 0.1 else "")
+          + ("+" if b["kani_new"] > b["kani_old"] else "")
+          + str(b["kani_new"] - b["kani_old"])
+          + ("**" if abs((b["kani_new"]-b["kani_old"])/b["kani_old"]) > 0.1 else "")
+      number_program_steps:
+      - column_name: diff old → new
+        text: >
+          lambda b: "" if b["kani_new"] == b["kani_old"]
+          else ("**" if abs((b["kani_new"]-b["kani_old"])/b["kani_old"]) > 0.1 else "")
+          + ("+" if b["kani_new"] > b["kani_old"] else "")
+          + str(b["kani_new"] - b["kani_old"])
+          + ("**" if abs((b["kani_new"]-b["kani_old"])/b["kani_old"]) > 0.1 else "")
+
+      # For 'runtime' metrics, display the % change from old to new, emboldening
+      # cells whose absolute change is >50%
+      solver_runtime:
+      - column_name: "% change old → new"
+        text: >
+          lambda b: "" if b["kani_new"] == b["kani_old"]
+          else ("**" if abs((b["kani_new"]-b["kani_old"])/b["kani_old"]) > 0.5 else "")
+          + ("+" if b["kani_new"] > b["kani_old"] else "")
+          + "%.3f%%" % ((b["kani_new"] - b["kani_old"]) * 100 / b["kani_old"])
+          + ("**" if abs((b["kani_new"]-b["kani_old"])/b["kani_old"]) > 0.5 else "")
+      verification_time:
+      - column_name: "% change old → new"
+        text: >
+          lambda b: "" if b["kani_new"] == b["kani_old"]
+          else ("**" if abs((b["kani_new"]-b["kani_old"])/b["kani_old"]) > 0.5 else "")
+          + ("+" if b["kani_new"] > b["kani_old"] else "")
+          + "%.3f%%" % ((b["kani_new"] - b["kani_old"]) * 100 / b["kani_old"])
+          + ("**" if abs((b["kani_new"]-b["kani_old"])/b["kani_old"]) > 0.5 else "")
+      symex_runtime:
+      - column_name: "% change old → new"
+        text: >
+          lambda b: "" if b["kani_new"] == b["kani_old"]
+          else ("**" if abs((b["kani_new"]-b["kani_old"])/b["kani_old"]) > 0.5 else "")
+          + ("+" if b["kani_new"] > b["kani_old"] else "")
+          + "%.3f%%" % ((b["kani_new"] - b["kani_old"]) * 100 / b["kani_old"])
+          + ("**" if abs((b["kani_new"]-b["kani_old"])/b["kani_old"]) > 0.5 else "")
+
+      # For success metric, display some text if success has changed
+      success:
+      - column_name: change
+        text: >
+          lambda b: "" if b["kani_new"] == b["kani_old"]
+          else "❌ newly failing" if b["kani_old"]
+          else "✅ newly passing"
+
   - type: error_on_regression
     variant_pairs: [[kani_old, kani_new]]
     checks:
@@ -36,6 +97,6 @@ visualize:
         # benchmark has regressed if the lambda returns true.
         test: "lambda old, new: False if not old else not new"
       - metric: solver_runtime
-        test: "lambda old, new: False if new < 2 else new/old > 1.1"
+        test: "lambda old, new: False if new < 10 else new/old > 1.5"
       - metric: symex_runtime
-        test: "lambda old, new: False if new < 2 else new/old > 1.1"
+        test: "lambda old, new: False if new < 10 else new/old > 1.5"

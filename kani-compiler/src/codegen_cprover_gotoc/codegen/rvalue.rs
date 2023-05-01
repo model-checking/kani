@@ -171,7 +171,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Generate code for a binary operation with an overflow and returns a tuple (res, overflow).
-    pub fn binop_with_overflow(
+    pub fn codegen_binop_with_overflow(
         &mut self,
         bin_op: BinaryOperator,
         left: Expr,
@@ -236,7 +236,7 @@ impl<'tcx> GotocCtx<'tcx> {
         match op {
             BinOp::Add => {
                 let res_type = self.codegen_ty(res_ty);
-                self.binop_with_overflow(
+                self.codegen_binop_with_overflow(
                     BinaryOperator::OverflowResultPlus,
                     ce1,
                     ce2,
@@ -246,7 +246,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             BinOp::Sub => {
                 let res_type = self.codegen_ty(res_ty);
-                self.binop_with_overflow(
+                self.codegen_binop_with_overflow(
                     BinaryOperator::OverflowResultMinus,
                     ce1,
                     ce2,
@@ -256,7 +256,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             BinOp::Mul => {
                 let res_type = self.codegen_ty(res_ty);
-                self.binop_with_overflow(
+                self.codegen_binop_with_overflow(
                     BinaryOperator::OverflowResultMult,
                     ce1,
                     ce2,
@@ -559,7 +559,8 @@ impl<'tcx> GotocCtx<'tcx> {
                 let t = self.monomorphize(*t);
                 let layout = self.layout_of(t);
                 match k {
-                    NullOp::SizeOf => Expr::int_constant(layout.size.bytes_usize(), Type::size_t()),
+                    NullOp::SizeOf => Expr::int_constant(layout.size.bytes_usize(), Type::size_t())
+                        .with_size_of_annotation(self.codegen_ty(t)),
                     NullOp::AlignOf => Expr::int_constant(layout.align.abi.bytes(), Type::size_t()),
                 }
             }
@@ -1103,11 +1104,12 @@ impl<'tcx> GotocCtx<'tcx> {
     /// When we get the size and align of a ty::Ref, the TyCtxt::layout_of
     /// returns the correct size to match rustc vtable values. Checked via
     /// Kani-compile-time and CBMC assertions in check_vtable_size.
-    fn codegen_vtable_size_and_align(&self, operand_type: Ty<'tcx>) -> (Expr, Expr) {
+    fn codegen_vtable_size_and_align(&mut self, operand_type: Ty<'tcx>) -> (Expr, Expr) {
         debug!("vtable_size_and_align {:?}", operand_type.kind());
         let vtable_layout = self.layout_of(operand_type);
         assert!(!vtable_layout.is_unsized(), "Can't create a vtable for an unsized type");
-        let vt_size = Expr::int_constant(vtable_layout.size.bytes(), Type::size_t());
+        let vt_size = Expr::int_constant(vtable_layout.size.bytes(), Type::size_t())
+            .with_size_of_annotation(self.codegen_ty(operand_type));
         let vt_align = Expr::int_constant(vtable_layout.align.abi.bytes(), Type::size_t());
 
         (vt_size, vt_align)
