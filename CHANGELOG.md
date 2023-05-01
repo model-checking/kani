@@ -9,7 +9,9 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 ## What's Changed
 
 * Allow excluding packages from verification with `--exclude` by @adpaco-aws in https://github.com/model-checking/kani/pull/2399
+* Add size_of annotation to help CBMC's allocator by @tautschnig in https://github.com/model-checking/kani/pull/2395
 * Implement `kani::Arbitrary` for `Box<T>` by @adpaco-aws in https://github.com/model-checking/kani/pull/2404
+* Use optimized overflow operation everywhere by @celinval in https://github.com/model-checking/kani/pull/2405
 * Bump CBMC version to 5.82.0 by @adpaco-aws in https://github.com/model-checking/kani/pull/2417
 
 **Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.26.0...kani-0.27.0
