@@ -35,14 +35,14 @@ pub fn print_stats<'tcx>(tcx: TyCtxt<'tcx>, items: &[MonoItem<'tcx>]) {
             visitor.visit_body(body);
             visitor
         });
-    println!("====== Reachability Analysis Result =======");
-    println!("Total # items: {}", item_types.total());
-    println!("Total # statements: {}", visitor.stmts.total());
-    println!("Total # expressions: {}", visitor.exprs.total());
-    println!("\nReachable Items:\n{item_types}");
-    println!("Statements:\n{}", visitor.stmts);
-    println!("Expressions:\n{}", visitor.exprs);
-    println!("-------------------------------------------")
+    eprintln!("====== Reachability Analysis Result =======");
+    eprintln!("Total # items: {}", item_types.total());
+    eprintln!("Total # statements: {}", visitor.stmts.total());
+    eprintln!("Total # expressions: {}", visitor.exprs.total());
+    eprintln!("\nReachable Items:\n{item_types}");
+    eprintln!("Statements:\n{}", visitor.stmts);
+    eprintln!("Expressions:\n{}", visitor.exprs);
+    eprintln!("-------------------------------------------")
 }
 
 #[derive(Default)]
