@@ -7,7 +7,9 @@ fn foo(x: [i32; 5]) -> [i32; 2] {
 }
 
 /// Generate an out-of-bound index with the given length.
-/// We use a function so the constant propagation
+///
+/// We use a function to prevent constant progragation, so the out-of-bounds
+/// error is not detected at compilation time.
 fn oob_index(len: usize) -> usize {
     len
 }
