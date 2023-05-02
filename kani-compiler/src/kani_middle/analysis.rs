@@ -4,8 +4,8 @@
 //!
 //! # Performance Impact
 //!
-//! This module will perform all the analysis requested. Callers are responsible for selecting
-//! when the cost of these analysis are worth it.
+//! This module will perform all the analyses requested. Callers are responsible for selecting
+//! when the cost of these analyses are worth it.
 
 use rustc_middle::mir::mono::MonoItem;
 use rustc_middle::mir::visit::Visitor as MirVisitor;
