@@ -5,6 +5,7 @@
 
 use crate::codegen_cprover_gotoc::archive::ArchiveBuilder;
 use crate::codegen_cprover_gotoc::GotocCtx;
+use crate::kani_middle::analysis;
 use crate::kani_middle::attributes::is_proof_harness;
 use crate::kani_middle::attributes::is_test_harness_description;
 use crate::kani_middle::check_crate_items;
@@ -137,8 +138,8 @@ impl CodegenBackend for GotocCodegenBackend {
                 }
 
                 // then we move on to codegen
-                for item in items {
-                    match item {
+                for item in &items {
+                    match *item {
                         MonoItem::Fn(instance) => {
                             gcx.call_with_panic_debug_info(
                                 |ctx| ctx.codegen_function(instance),
@@ -152,7 +153,7 @@ impl CodegenBackend for GotocCodegenBackend {
                         }
                         MonoItem::Static(def_id) => {
                             gcx.call_with_panic_debug_info(
-                                |ctx| ctx.codegen_static(def_id, item),
+                                |ctx| ctx.codegen_static(def_id, *item),
                                 format!("codegen_static: {def_id:?}"),
                                 def_id,
                             );
@@ -166,6 +167,9 @@ impl CodegenBackend for GotocCodegenBackend {
 
         // Print compilation report.
         print_report(&gcx, tcx);
+
+        // Print some compilation stats.
+        print_stats(&gcx, tcx, &items);
 
         // Map from name to prettyName for all symbols
         let pretty_name_map: BTreeMap<InternedString, Option<InternedString>> =
@@ -492,6 +496,14 @@ fn dump_mir_items(tcx: TyCtxt, items: &[MonoItem]) {
             writeln!(writer, "// Item: {item:?}").unwrap();
             write_mir_pretty(tcx, Some(def_id), &mut writer).unwrap();
         }
+    }
+}
+
+/// Print statistics about the MIR used as input to code generation as well as the emitted goto.
+/// TODO: Print stats for the goto.
+fn print_stats<'tcx>(_ctx: &GotocCtx, tcx: TyCtxt<'tcx>, items: &[MonoItem<'tcx>]) {
+    if tracing::enabled!(tracing::Level::INFO) {
+        analysis::print_stats(tcx, items);
     }
 }
 
