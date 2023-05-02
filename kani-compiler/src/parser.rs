@@ -46,6 +46,9 @@ pub const HARNESS: &str = "harness";
 /// Option name used to enable stubbing.
 pub const ENABLE_STUBBING: &str = "enable-stubbing";
 
+/// Option name used to define unstable features.
+pub const UNSTABLE_FEATURE: &str = "unstable";
+
 /// Configure command options for the Kani compiler.
 pub fn parser() -> Command {
     let app = command!()
@@ -146,6 +149,13 @@ pub fn parser() -> Command {
                 .long("check-version")
                 .action(ArgAction::Set)
                 .help("Pass the kani version to the compiler to ensure cache coherence."),
+        )
+        .arg(
+            Arg::new(UNSTABLE_FEATURE)
+                .long(UNSTABLE_FEATURE)
+                .help("Enable an unstable feature")
+                .value_name("UNSTABLE_FEATURE")
+                .action(ArgAction::Append),
         );
     app
 }
