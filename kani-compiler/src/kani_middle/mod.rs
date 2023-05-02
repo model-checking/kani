@@ -17,6 +17,7 @@ use rustc_target::abi::{HasDataLayout, TargetDataLayout};
 
 use self::attributes::check_attributes;
 
+pub mod analysis;
 pub mod attributes;
 pub mod coercion;
 pub mod provide;
