@@ -119,8 +119,8 @@ impl<'tcx> From<&MonoItem<'tcx>> for Key {
     fn from(value: &MonoItem) -> Self {
         match value {
             MonoItem::Fn(_) => Key("function"),
-            MonoItem::Static(_) => Key("static item"),
             MonoItem::GlobalAsm(_) => Key("global assembly"),
+            MonoItem::Static(_) => Key("static item"),
         }
     }
 }
@@ -133,15 +133,14 @@ impl<'tcx> From<&Statement<'tcx>> for Key {
             StatementKind::Intrinsic(_) => Key("Intrinsic"),
             StatementKind::SetDiscriminant { .. } => Key("SetDiscriminant"),
             // For now, we don't care about the ones below.
-            StatementKind::FakeRead(_)
-            | StatementKind::PlaceMention(_)
-            | StatementKind::StorageLive(_)
-            | StatementKind::StorageDead(_)
-            | StatementKind::Retag(_, _)
-            | StatementKind::AscribeUserType(_, _)
+            StatementKind::AscribeUserType(_, _)
             | StatementKind::Coverage(_)
             | StatementKind::ConstEvalCounter
-            | StatementKind::Nop => Key("Ignored"),
+            | StatementKind::FakeRead(_)
+            | StatementKind::Nop
+            | StatementKind::Retag(_, _)
+            | StatementKind::StorageLive(_)
+            | StatementKind::StorageDead(_) => Key("Ignored"),
         }
     }
 }
@@ -149,20 +148,21 @@ impl<'tcx> From<&Statement<'tcx>> for Key {
 impl<'tcx> From<&Terminator<'tcx>> for Key {
     fn from(value: &Terminator<'tcx>) -> Self {
         match value.kind {
-            TerminatorKind::Goto { .. } => Key("Goto"),
-            TerminatorKind::SwitchInt { .. } => Key("SwitchInt"),
-            TerminatorKind::Resume => Key("Resume"),
-            TerminatorKind::Terminate => Key("Terminate"),
-            TerminatorKind::Return => Key("Return"),
-            TerminatorKind::Unreachable => Key("Unreachable"),
-            TerminatorKind::Drop { .. } => Key("Drop"),
-            TerminatorKind::Call { .. } => Key("Call"),
+            TerminatorKind::Abort => Key("Abort"),
             TerminatorKind::Assert { .. } => Key("Assert"),
-            TerminatorKind::Yield { .. } => Key("Yield"),
+            TerminatorKind::Call { .. } => Key("Call"),
+            TerminatorKind::Drop { .. } => Key("Drop"),
+            TerminatorKind::DropAndReplace { .. } => Key("DropAndReplace"),
             TerminatorKind::GeneratorDrop => Key("GeneratorDrop"),
+            TerminatorKind::Goto { .. } => Key("Goto"),
             TerminatorKind::FalseEdge { .. } => Key("FalseEdge"),
             TerminatorKind::FalseUnwind { .. } => Key("FalseUnwind"),
             TerminatorKind::InlineAsm { .. } => Key("InlineAsm"),
+            TerminatorKind::Resume => Key("Resume"),
+            TerminatorKind::Return => Key("Return"),
+            TerminatorKind::SwitchInt { .. } => Key("SwitchInt"),
+            TerminatorKind::Unreachable => Key("Unreachable"),
+            TerminatorKind::Yield { .. } => Key("Yield"),
         }
     }
 }
