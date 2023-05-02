@@ -743,19 +743,15 @@ impl<'tcx> GotocCtx<'tcx> {
     /// sometimes subtly differs from the type that codegen_function_sig returns.
     /// This is tracked in <https://github.com/model-checking/kani/issues/1350>.
     fn codegen_func_symbol(&mut self, instance: Instance<'tcx>) -> (&Symbol, Type) {
-        let func = self.symbol_name(instance);
         let funct = self.codegen_function_sig(self.fn_sig_of_instance(instance));
-        // make sure the functions imported from other modules (or externs) are in the symbol table
-        let sym = self.ensure(&func, |ctx, _| {
-            Symbol::function(
-                &func,
-                funct.clone(),
-                None,
-                ctx.readable_instance_name(instance),
-                Location::none(),
-            )
-            .with_is_extern(true)
-        });
+        let sym = if self.tcx.is_foreign_item(instance.def_id()) {
+            // Get the symbol that represents a foreign instance.
+            self.codegen_foreign_fn(instance)
+        } else {
+            // All non-foreign functions should've been declared beforehand.
+            let func = self.symbol_name(instance);
+            self.symbol_table.lookup(func).unwrap()
+        };
         (sym, funct)
     }
 
