@@ -137,8 +137,8 @@ pub struct KaniArgs {
     pub harnesses: Vec<String>,
 
     /// Link external C files referenced by Rust code.
-    /// This is an experimental feature and requires `--enable-unstable` to be used
-    #[arg(long, hide = true, requires("enable_unstable"), num_args(1..))]
+    /// This is an experimental feature and requires `-Z c-ffi` to be used
+    #[arg(long, hide = true, num_args(1..))]
     pub c_lib: Vec<PathBuf>,
     /// Enable test function verification. Only use this option when the entry point is a test function
     #[arg(long)]
@@ -361,6 +361,8 @@ pub enum UnstableFeatures {
     Stubbing,
     /// Generate a C-like file equivalent to input program used for debugging purpose.
     GenC,
+    /// Allow Kani to link against C code.
+    CFfi,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, ValueEnum)]
@@ -591,6 +593,17 @@ impl KaniArgs {
                     ),
                 ));
             }
+        }
+
+        if !self.c_lib.is_empty() && !self.unstable_features.contains(&UnstableFeatures::CFfi) {
+            if self.enable_unstable {
+                self.print_deprecated("`--enable-unstable`");
+            }
+            return Err(Error::raw(
+                ErrorKind::MissingRequiredArgument,
+                "The `--c-lib` argument is unstable and requires `-Z c-ffi` to enable \
+                unstable C-FFI support.",
+            ));
         }
 
         Ok(())
