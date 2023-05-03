@@ -6,12 +6,12 @@
 //! See <https://github.com/model-checking/kani/issues/2152> for more details.
 
 extern "C" {
-    // In rust, you say nullable pointer by using option of reference.
-    // Rust guarantees that this has the bitwise represntation
-    // Some(&x) => &x;
-    // None => NULL;
+    // In Rust, you say nullable pointer by using option of reference.
+    // Rust guarantees that this has the bitwise representation:
+    //  - Some(&x) => &x;
+    //  - None => NULL;
     // FIXME: we need to notice when this happens and do a bitcast, or C is unhappy
-    // https://github.com/model-checking/kani/issues/3
+    // <https://github.com/model-checking/kani/issues/3>
     fn takes_ptr_option(p: Option<&u32>) -> u32;
 }
 
