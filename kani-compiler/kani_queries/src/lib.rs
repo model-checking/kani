@@ -9,8 +9,6 @@ use strum_macros::{AsRefStr, EnumString, EnumVariantNames};
 pub enum ReachabilityType {
     /// Start the cross-crate reachability analysis from all harnesses in the local crate.
     Harnesses,
-    /// Use standard rustc monomorphizer algorithm.
-    Legacy,
     /// Don't perform any reachability analysis. This will skip codegen for this crate.
     #[default]
     None,
