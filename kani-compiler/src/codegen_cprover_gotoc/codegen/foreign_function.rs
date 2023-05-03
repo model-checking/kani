@@ -3,8 +3,10 @@
 //! This module implements foreign function handling.
 //!
 //! Kani currently only support CBMC built-in functions that are declared in the `cprover_bindings`
-//! crate. All other functions will be replaced by a unimplemented check, due to current issues
-//! with linking and usability.
+//! crate, and allocation functions defined in `kani_lib.c`.
+//!
+//! All other functions will be replaced by a unimplemented check, due to current issues with
+//! linking and usability unless unstable C-FFI support is enabled.
 use std::collections::HashSet;
 
 use crate::codegen_cprover_gotoc::codegen::PropertyClass;
@@ -46,7 +48,11 @@ impl<'tcx> GotocCtx<'tcx> {
         } else if RUST_ALLOC_FNS.contains(&fn_name)
             || (self.is_cffi_enabled() && kani_middle::fn_abi(self.tcx, instance).conv == Conv::C)
         {
-            // Add a Rust alloc function lib function as is.
+            // Add a Rust alloc function lib function as is declared by core.
+            // When C-FFI feature is enabled, we just trust the rust declaration.
+            // TODO: Add proper casting and clashing definitions check.
+            // https://github.com/model-checking/kani/issues/1350
+            // https://github.com/model-checking/kani/issues/2426
             self.ensure(fn_name, |gcx, _| {
                 let typ = gcx.codegen_ffi_type(instance);
                 Symbol::function(
@@ -105,7 +111,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     let base_name = format!("param_{idx}");
                     let arg_type = self.codegen_ty(arg.layout.ty);
                     let sym = Symbol::variable(&arg_name, &base_name, arg_type.clone(), loc)
-                        .with_is_parameter(!arg.is_ignore());
+                        .with_is_parameter(true);
                     self.symbol_table.insert(sym);
                     arg_type.as_parameter(Some(arg_name.into()), Some(base_name.into()))
                 })
@@ -133,7 +139,7 @@ impl<'tcx> GotocCtx<'tcx> {
         entry.push(loc);
 
         let call_conv = kani_middle::fn_abi(self.tcx, instance).conv;
-        let msg = format!("call to foreign \"{call_conv:?} \" function `{fn_name}`");
+        let msg = format!("call to foreign \"{call_conv:?}\" function `{fn_name}`");
         let url = if call_conv == Conv::C {
             "https://github.com/model-checking/kani/issues/2423"
         } else {

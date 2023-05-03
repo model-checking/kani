@@ -13,12 +13,6 @@
 //! compiler setup will be codegen as unsupported.
 //!
 //! This test ensures that a harness only fails during verification if the call is reachable.
-//!
-//! TODO: Add the following tests:
-//!    - Calling via fn pointer.
-//!    - Calling rust extern "C" functions directly + via pointer.
-//!    - Calling variadic C function.
-//!
 use libc;
 
 #[kani::proof]

@@ -1331,10 +1331,7 @@ impl<'tcx> GotocCtx<'tcx> {
         Type::code_with_unnamed_parameters(params, self.codegen_ty(sig.output()))
     }
 
-    /// Generate type for the given function signature.
     /// one can only apply this function to a monomorphized signature
-    /// If starting from an instance, prefer to use `codegen_instance_type` instead.
-    /// See <https://github.com/model-checking/kani/issues/1365> for more details.
     pub fn codegen_function_sig(&mut self, sig: PolyFnSig<'tcx>) -> Type {
         let sig = self.monomorphize(sig);
         let sig = self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig);
