@@ -3,7 +3,11 @@
 //! This module contains code that are backend agnostic. For example, MIR analysis
 //! and transformations.
 
+use std::collections::HashSet;
+
+use kani_queries::{QueryDb, UserInput};
 use rustc_hir::{def::DefKind, def_id::LOCAL_CRATE};
+use rustc_middle::mir::mono::MonoItem;
 use rustc_middle::span_bug;
 use rustc_middle::ty::layout::{
     FnAbiError, FnAbiOfHelpers, FnAbiRequest, HasParamEnv, HasTyCtxt, LayoutError, LayoutOfHelpers,
@@ -15,8 +19,9 @@ use rustc_span::Span;
 use rustc_target::abi::call::FnAbi;
 use rustc_target::abi::{HasDataLayout, TargetDataLayout};
 
-use self::attributes::check_attributes;
+use self::attributes::{check_attributes, check_unstable_features};
 
+pub mod analysis;
 pub mod attributes;
 pub mod coercion;
 pub mod provide;
@@ -45,6 +50,23 @@ pub fn check_crate_items(tcx: TyCtxt, ignore_asm: bool) {
                     "Ignoring global ASM in crate {krate}. Verification results may be impacted.",
                 ));
             }
+        }
+    }
+    tcx.sess.abort_if_errors();
+}
+
+/// Check that all given items are supported and there's no misconfiguration.
+/// This method will exhaustively print any error / warning and it will abort at the end if any
+/// error was found.
+pub fn check_reachable_items(tcx: TyCtxt, queries: &QueryDb, items: &[MonoItem]) {
+    // Avoid printing the same error multiple times for different instantiations of the same item.
+    let mut def_ids = HashSet::new();
+    for item in items {
+        let def_id = item.def_id();
+        if !def_ids.contains(&def_id) {
+            // Check if any unstable attribute was reached.
+            check_unstable_features(tcx, queries.get_unstable_features(), def_id);
+            def_ids.insert(def_id);
         }
     }
     tcx.sess.abort_if_errors();

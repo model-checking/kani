@@ -16,6 +16,7 @@
 #![feature(iter_intersperse)]
 extern crate rustc_abi;
 extern crate rustc_ast;
+extern crate rustc_ast_pretty;
 extern crate rustc_codegen_ssa;
 extern crate rustc_data_structures;
 extern crate rustc_driver;

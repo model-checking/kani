@@ -1,16 +1,12 @@
 # Copyright Kani Contributors
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 [package]
-name = "simple-lib"
+name = "enabled"
 version = "0.1.0"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
+defs = {path = "../defs"}
 
-[workspace]
-
-[kani.flags]
-c-lib = ["src/helper.c"]
-
-[kani.unstable]
-c-ffi = true
+[package.metadata.kani.unstable]
+gen-c = true

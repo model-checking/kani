@@ -1,0 +1,10 @@
+error: failed to parse `#[kani::unstable]`: expected "key = value" pair, but found `feature("invalid_args")`\
+src/lib.rs\
+|\
+| #[kani::unstable(feature("invalid_args"))]\
+| ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\
+|\
+= note: expected format: #[kani::unstable(feature="<IDENTIFIER>", issue="<ISSUE>", reason="<DESCRIPTION>")]\
+= note: this error originates in the attribute macro `kani::unstable` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error: internal compiler error
