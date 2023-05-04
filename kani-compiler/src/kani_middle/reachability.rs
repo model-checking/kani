@@ -283,7 +283,7 @@ impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {
             | InstanceDef::Item(..)
             | InstanceDef::ReifyShim(..)
             | InstanceDef::VTableShim(..) => true,
-            InstanceDef::ThreadLocalShim(_) | InstanceDef::FnPtrAddrShim(_, _) => todo!(),
+            InstanceDef::ThreadLocalShim(_) | InstanceDef::FnPtrAddrShim(_, _) => true,
         };
         if should_collect && should_codegen_locally(self.tcx, &instance) {
             trace!(?instance, "collect_instance");

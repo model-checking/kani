@@ -8,7 +8,7 @@ use kani_metadata::{CbmcSolver, HarnessAttributes, Stub};
 use rustc_ast::{attr, AttrKind, Attribute, LitKind, MetaItem, MetaItemKind, NestedMetaItem};
 use rustc_errors::ErrorGuaranteed;
 use rustc_hir::{def::DefKind, def_id::DefId};
-use rustc_middle::ty::{self, Instance, TyCtxt};
+use rustc_middle::ty::{self, Instance, TyCtxt, TyKind};
 use rustc_span::Span;
 use std::str::FromStr;
 use strum_macros::{AsRefStr, EnumString};
@@ -155,6 +155,11 @@ pub fn extract_harness_attributes(tcx: TyCtxt, def_id: DefId) -> Option<HarnessA
 ///
 /// TODO: Improve error message by printing the span of the callee instead of the definition.
 pub fn check_unstable_features(tcx: TyCtxt, enabled_features: &[String], def_id: DefId) {
+    if !matches!(tcx.type_of(def_id).0.kind(), TyKind::FnDef(..)) {
+        // skip closures due to an issue with rustc.
+        // https://github.com/model-checking/kani/pull/2406#issuecomment-1534333862
+        return;
+    }
     let attributes = extract_kani_attributes(tcx, def_id);
     if let Some(unstable_attrs) = attributes.get(&KaniAttributeKind::Unstable) {
         for attr in unstable_attrs {

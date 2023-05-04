@@ -1,6 +1,11 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+//! All the unstable definitions below should fail.
+//! The expected file only contains a generic check since we trigger an ICE for debug builds and
+//! we don't guarantee the order that these will be evaluated.
+//! TODO: We should break down this test to ensure all of these fail.
+
 #[kani::unstable(reason = "just checking", issue = "<link>")]
 pub fn missing_feature() {
     todo!()

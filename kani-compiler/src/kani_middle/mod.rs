@@ -61,7 +61,7 @@ pub fn check_crate_items(tcx: TyCtxt, ignore_asm: bool) {
 pub fn check_reachable_items(tcx: TyCtxt, queries: &QueryDb, items: &[MonoItem]) {
     // Avoid printing the same error multiple times for different instantiations of the same item.
     let mut def_ids = HashSet::new();
-    for item in items {
+    for item in items.iter().filter(|i| matches!(i, MonoItem::Fn(..) | MonoItem::Static(..))) {
         let def_id = item.def_id();
         if !def_ids.contains(&def_id) {
             // Check if any unstable attribute was reached.
