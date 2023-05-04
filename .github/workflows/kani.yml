@@ -303,7 +303,7 @@ jobs:
       - name: Build Kani (old variant)
         run: pushd old && cargo build-dev
 
-      - name: Copy benchmarks form new to old
+      - name: Copy benchmarks from new to old
         run: rm -rf ./old/tests/perf ; cp -r ./new/tests/perf ./old/tests/
 
       - name: Run benchcomp
