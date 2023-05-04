@@ -69,8 +69,11 @@ for testp in "${TESTS[@]}"; do
       --quiet --no-fail-fast
 done
 
-# Check codegen for the standard library
-time "$SCRIPT_DIR"/std-lib-regression.sh
+# Don't run std regression if using JSON symtab to avoid OOM issues.
+if [[ -z "${KANI_ENABLE_WRITE_JSON_SYMTAB-}" ]]; then
+    # Check codegen for the standard library
+    time "$SCRIPT_DIR"/std-lib-regression.sh
+fi
 
 # We rarely benefit from re-using build artifacts in the firecracker test,
 # and we often end up with incompatible leftover artifacts:
