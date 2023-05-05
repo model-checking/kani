@@ -18,7 +18,6 @@ impl Drop for DropSetCELLToOne {
     }
 }
 
-#[kani::unwind(1)]
 #[kani::proof]
 fn main() {
     {

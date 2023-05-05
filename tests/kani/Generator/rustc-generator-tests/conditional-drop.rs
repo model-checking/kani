@@ -35,7 +35,6 @@ fn test2() -> bool {
 }
 
 #[kani::proof]
-#[kani::unwind(4)]
 fn main() {
     t1();
     t2();

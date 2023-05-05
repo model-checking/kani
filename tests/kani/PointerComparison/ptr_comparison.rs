@@ -102,7 +102,6 @@ fn check_slice_len() {
 
 // Check comparison of box.
 #[cfg_attr(kani, kani::proof)]
-#[cfg_attr(kani, kani::unwind(4))]
 fn check_box_comparison() {
     let obj = Box::new([0u16, 10]);
     let first: *const [u16] = &obj[1..2];

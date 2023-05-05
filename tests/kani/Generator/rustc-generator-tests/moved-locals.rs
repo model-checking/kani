@@ -79,7 +79,6 @@ fn overlap_x_and_y() -> impl Generator<Yield = (), Return = ()> {
 }
 
 #[kani::proof]
-#[kani::unwind(129)]
 fn main() {
     let mut generator = move_before_yield();
     assert_eq!(
