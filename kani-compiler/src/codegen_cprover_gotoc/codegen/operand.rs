@@ -749,8 +749,11 @@ impl<'tcx> GotocCtx<'tcx> {
             self.codegen_foreign_fn(instance)
         } else {
             // All non-foreign functions should've been declared beforehand.
+            trace!(func=?instance, "codegen_func_symbol");
             let func = self.symbol_name(instance);
-            self.symbol_table.lookup(func).unwrap()
+            self.symbol_table
+                .lookup(func)
+                .expect("Function `{func}` should've been declared before usage")
         };
         (sym, funct)
     }

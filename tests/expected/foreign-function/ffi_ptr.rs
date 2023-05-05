@@ -24,5 +24,6 @@ fn check_fn_ptr_called() {
 #[kani::proof]
 fn check_fn_ptr_not_called() {
     let input: u32 = kani::any();
-    assert_eq!(may_not_call(false, input, foreign), None);
+    let should_call = kani::any_where(|v| !v);
+    assert_eq!(may_not_call(should_call, input, foreign), None);
 }

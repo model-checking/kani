@@ -21,6 +21,12 @@ use rustc_target::abi::call::Conv;
 use tracing::{debug, trace};
 
 lazy_static! {
+    /// The list of Rust allocation functions that are declared in the `core::alloc` module
+    /// but defined by each backend.
+    /// For out `goto-program` backend, these functions are defined inside `kani_lib.c`.
+    /// For now, we blindly trust that the definitions in `kani_lib.c` are kept in sync with the
+    /// declarations from the standard library, provided here:
+    /// <https://stdrs.dev/nightly/x86_64-unknown-linux-gnu/alloc/alloc/index.html>
     static ref RUST_ALLOC_FNS: HashSet<InternedString> = {
         HashSet::from([
             "__rust_alloc".into(),

@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Z c-ffi --c-lib tests/kani/ForeignItems/lib.c
 
-//! Check that Kani correctly handle function pointers to C functions.
+//! Check that Kani correctly handles function pointers to C functions.
+//! Note that Kani today trusts that the extern declaration is compatible with the C definition.
+//! Failures to do so will result in a CBMC type mismatch.
 
 extern "C" {
     /// Returns i + 2
