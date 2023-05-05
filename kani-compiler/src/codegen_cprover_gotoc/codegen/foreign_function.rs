@@ -5,7 +5,7 @@
 //! Kani currently only support CBMC built-in functions that are declared in the `cprover_bindings`
 //! crate, and allocation functions defined in `kani_lib.c`.
 //!
-//! All other functions will be replaced by a unimplemented check, due to current issues with
+//! All other functions will be replaced by an unimplemented check, due to current issues with
 //! linking and usability unless unstable C-FFI support is enabled.
 use std::collections::HashSet;
 
@@ -48,7 +48,7 @@ impl<'tcx> GotocCtx<'tcx> {
         } else if RUST_ALLOC_FNS.contains(&fn_name)
             || (self.is_cffi_enabled() && kani_middle::fn_abi(self.tcx, instance).conv == Conv::C)
         {
-            // Add a Rust alloc function lib function as is declared by core.
+            // Add a Rust alloc lib function as is declared by core.
             // When C-FFI feature is enabled, we just trust the rust declaration.
             // TODO: Add proper casting and clashing definitions check.
             // https://github.com/model-checking/kani/issues/1350
