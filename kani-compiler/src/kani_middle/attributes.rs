@@ -8,15 +8,12 @@ use kani_metadata::{CbmcSolver, HarnessAttributes, Stub};
 use rustc_ast::{AttrKind, Attribute, LitKind, MetaItem, MetaItemKind, NestedMetaItem};
 use rustc_errors::ErrorGuaranteed;
 use rustc_hir::{def::DefKind, def_id::DefId};
-use rustc_middle::ty::{self, Instance, TyCtxt};
+use rustc_middle::ty::{Instance, TyCtxt};
 use rustc_span::Span;
 use std::str::FromStr;
 use strum_macros::{AsRefStr, EnumString};
 
-use rustc_middle::ty::layout::FnAbiOf;
 use tracing::{debug, trace};
-
-use crate::kani_middle::CompilerHelpers;
 
 use super::resolve;
 
@@ -227,8 +224,7 @@ fn check_proof_attribute(tcx: TyCtxt, def_id: DefId, proof_attributes: &Vec<&Att
         tcx.sess.span_err(span, "the `proof` attribute cannot be applied to generic functions");
     } else {
         let instance = Instance::mono(tcx, def_id);
-        let helper = CompilerHelpers { tcx };
-        if !helper.fn_abi_of_instance(instance, ty::List::empty()).args.is_empty() {
+        if !super::fn_abi(tcx, instance).args.is_empty() {
             tcx.sess.span_err(span, "functions used as harnesses cannot have any arguments");
         }
     }
