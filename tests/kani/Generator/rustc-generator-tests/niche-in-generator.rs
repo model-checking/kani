@@ -20,7 +20,6 @@ use std::mem::size_of_val;
 fn take<T>(_: T) {}
 
 #[kani::proof]
-#[kani::unwind(2)]
 fn main() {
     let x = false;
     let mut gen1 = || {
