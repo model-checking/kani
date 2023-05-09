@@ -700,6 +700,7 @@ mod debug {
         /// See <https://graphviz.org/doc/info/lang.html> for more information.
         pub fn dump_dot(&self, tcx: TyCtxt) -> std::io::Result<()> {
             if let Ok(target) = std::env::var("KANI_REACH_DEBUG") {
+                debug!(?target, "dump_dot");
                 let outputs = tcx.output_filenames(());
                 let path = outputs.output_path(OutputType::Metadata).with_extension("dot");
                 let out_file = File::create(&path)?;
@@ -719,6 +720,7 @@ mod debug {
 
         /// Write all notes to the given writer.
         fn dump_all<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
+            tracing::info!(nodes=?self.nodes.len(), edges=?self.edges.len(), "dump_all");
             for node in &self.nodes {
                 writeln!(writer, r#""{node}""#)?;
                 for succ in self.edges.get(node).unwrap() {
@@ -736,6 +738,7 @@ mod debug {
                 .filter(|item| item.to_string().contains(target))
                 .collect::<Vec<_>>();
             let mut visited: HashSet<&MonoItem> = HashSet::default();
+            tracing::info!(target=?queue, nodes=?self.nodes.len(), edges=?self.edges.len(), "dump_reason");
             while let Some(to_visit) = queue.pop() {
                 if !visited.contains(to_visit) {
                     visited.insert(to_visit);
