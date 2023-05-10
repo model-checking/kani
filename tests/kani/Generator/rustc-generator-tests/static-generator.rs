@@ -14,7 +14,6 @@ use std::ops::{Generator, GeneratorState};
 use std::pin::Pin;
 
 #[kani::proof]
-#[kani::unwind(2)]
 fn main() {
     let mut generator = static || {
         let a = true;

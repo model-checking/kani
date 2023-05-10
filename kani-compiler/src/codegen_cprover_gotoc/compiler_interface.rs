@@ -30,7 +30,7 @@ use rustc_hir::def_id::LOCAL_CRATE;
 use rustc_metadata::fs::{emit_wrapper_file, METADATA_FILENAME};
 use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
-use rustc_middle::mir::mono::{CodegenUnit, MonoItem};
+use rustc_middle::mir::mono::MonoItem;
 use rustc_middle::mir::write_mir_pretty;
 use rustc_middle::ty::query::Providers;
 use rustc_middle::ty::{self, InstanceDef, TyCtxt};
@@ -400,15 +400,6 @@ fn collect_codegen_items<'tcx>(gcx: &GotocCtx<'tcx>) -> Vec<MonoItem<'tcx>> {
     let reach = gcx.queries.get_reachability_analysis();
     debug!(?reach, "collect_codegen_items");
     match reach {
-        ReachabilityType::Legacy => {
-            // Use rustc monomorphizer to retrieve items to codegen.
-            let codegen_units: &'tcx [CodegenUnit<'_>] = tcx.collect_and_partition_mono_items(()).1;
-            codegen_units
-                .iter()
-                .flat_map(|cgu| cgu.items_in_deterministic_order(tcx))
-                .map(|(item, _)| item)
-                .collect()
-        }
         ReachabilityType::Harnesses => {
             // Cross-crate collecting of all items that are reachable from the crate harnesses.
             let harnesses = filter_crate_items(tcx, |_, def_id| is_proof_harness(gcx.tcx, def_id));
