@@ -331,7 +331,6 @@ impl<'tcx> GotocCtx<'tcx> {
         };
         let overall_t = self.codegen_ty(ty);
         let direct_fields = overall_t.lookup_field("direct_fields", &self.symbol_table).unwrap();
-        let mut operands_iter = operands.iter();
         let direct_fields_expr = Expr::struct_expr_from_values(
             direct_fields.typ(),
             layout
@@ -342,13 +341,12 @@ impl<'tcx> GotocCtx<'tcx> {
                     if idx == *discriminant_field {
                         Expr::int_constant(0, self.codegen_ty(field_ty))
                     } else {
-                        self.codegen_operand(operands_iter.next().unwrap())
+                        self.codegen_operand(&operands[idx])
                     }
                 })
                 .collect(),
             &self.symbol_table,
         );
-        assert!(operands_iter.next().is_none());
         Expr::union_expr(overall_t, "direct_fields", direct_fields_expr, &self.symbol_table)
     }
 
