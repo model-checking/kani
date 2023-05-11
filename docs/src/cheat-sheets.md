@@ -82,7 +82,7 @@ RUSTFLAGS="--emit mir" kani ${INPUT}.rs
 ```
 
 The `KANI_REACH_DEBUG` environment variable can be used to debug Kani's reachability analysis.
-If defined, Kani will print generate a DOT graph `${INPUT}.dot` with the graph traversed during reachability analysis.
+If defined, Kani will generate a DOT graph `${INPUT}.dot` with the graph traversed during reachability analysis.
 If defined and not empty, the graph will be filtered to end at functions that contains the substring
 from `KANI_REACH_DEBUG`.
 
