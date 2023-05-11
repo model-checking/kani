@@ -12,7 +12,7 @@ use crate::kani_middle::check_crate_items;
 use crate::kani_middle::check_reachable_items;
 use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{
-    collect_reachable_items, filter_closures_in_const_crate_items, filter_crate_items,
+    collect_reachable_items, filter_const_crate_items, filter_crate_items,
 };
 use cbmc::goto_program::Location;
 use cbmc::irep::goto_binary_serde::write_goto_binary_file;
@@ -408,7 +408,7 @@ fn collect_codegen_items<'tcx>(gcx: &GotocCtx<'tcx>) -> Vec<MonoItem<'tcx>> {
         ReachabilityType::Tests => {
             // We're iterating over crate items here, so what we have to codegen is the "test description" containing the
             // test closure that we want to execute
-            let harnesses = filter_closures_in_const_crate_items(tcx, |_, def_id| {
+            let harnesses = filter_const_crate_items(tcx, |_, def_id| {
                 is_test_harness_description(gcx.tcx, def_id)
             });
             collect_reachable_items(tcx, &harnesses).into_iter().collect()
