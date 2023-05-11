@@ -81,6 +81,22 @@ kani --gen-c file.rs
 RUSTFLAGS="--emit mir" kani ${INPUT}.rs
 ```
 
+The `KANI_REACH_DEBUG` environment variable can be used to debug Kani's reachability analysis.
+If defined, Kani will generate a DOT graph `${INPUT}.dot` with the graph traversed during reachability analysis.
+If defined and not empty, the graph will be filtered to end at functions that contains the substring
+from `KANI_REACH_DEBUG`.
+
+Note that this will only work on debug builds.
+
+```bash
+# Generate a DOT graph ${INPUT}.dot with the graph traversed during reachability analysis
+KANI_REACH_DEBUG= kani ${INPUT}.rs
+
+# Generate a DOT graph ${INPUT}.dot with the sub-graph traversed during the reachability analysis
+# that connect to the given target.
+KANI_REACH_DEBUG="${TARGET_ITEM}" kani ${INPUT}.rs
+```
+
 ## CBMC
 
 ```bash
