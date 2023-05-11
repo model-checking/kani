@@ -4,10 +4,8 @@
 //! This file contains functions related to codegenning MIR functions into gotoc
 
 use crate::codegen_cprover_gotoc::GotocCtx;
-use crate::kani_middle::attributes::{extract_harness_attributes, is_test_harness_closure};
 use cbmc::goto_program::{Expr, Stmt, Symbol};
 use cbmc::InternString;
-use kani_metadata::{HarnessAttributes, HarnessMetadata};
 use rustc_middle::mir::traversal::reverse_postorder;
 use rustc_middle::mir::{Body, HasLocalDecls, Local};
 use rustc_middle::ty::{self, Instance};
@@ -89,9 +87,6 @@ impl<'tcx> GotocCtx<'tcx> {
             let stmts = self.current_fn_mut().extract_block();
             let body = Stmt::block(stmts, loc);
             self.symbol_table.update_fn_declaration_with_definition(&name, body);
-
-            self.record_kani_attributes();
-            self.record_test_harness_metadata();
         }
         self.reset_current_fn();
     }
@@ -243,51 +238,5 @@ impl<'tcx> GotocCtx<'tcx> {
             )
         });
         self.reset_current_fn();
-    }
-
-    /// We record test harness information in kani-metadata, just like we record
-    /// proof harness information. This is used to support e.g. cargo-kani assess.
-    ///
-    /// Note that we do not actually spot the function that was annotated by `#[test]`
-    /// but instead the closure that gets put into the "test description" that macro
-    /// expands into. (See comment below) This ends up being preferrable, actually,
-    /// as it add asserts for tests that return `Result` types.
-    fn record_test_harness_metadata(&mut self) {
-        let def_id = self.current_fn().instance().def_id();
-        if is_test_harness_closure(self.tcx, def_id) {
-            self.test_harnesses.push(self.generate_metadata(None))
-        }
-    }
-
-    /// This updates the goto context with any information that should be accumulated from a function's
-    /// attributes.
-    ///
-    /// Handle all attributes i.e. `#[kani::x]` (which kani_macros translates to `#[kanitool::x]` for us to handle here)
-    fn record_kani_attributes(&mut self) {
-        let def_id = self.current_fn().instance().def_id();
-        let attributes = extract_harness_attributes(self.tcx, def_id);
-        if attributes.is_some() {
-            self.proof_harnesses.push(self.generate_metadata(attributes));
-        }
-    }
-
-    /// Create the default proof harness for the current function
-    fn generate_metadata(&self, attributes: Option<HarnessAttributes>) -> HarnessMetadata {
-        let current_fn = self.current_fn();
-        let pretty_name = current_fn.readable_name().to_owned();
-        let mangled_name = current_fn.name();
-        let loc = self.codegen_span(&current_fn.mir().span);
-
-        HarnessMetadata {
-            pretty_name,
-            mangled_name,
-            crate_name: current_fn.krate(),
-            original_file: loc.filename().unwrap(),
-            original_start_line: loc.start_line().unwrap() as usize,
-            original_end_line: loc.end_line().unwrap() as usize,
-            attributes: attributes.unwrap_or_default(),
-            // We record the actual path after codegen before we dump the metadata into a file.
-            goto_file: None,
-        }
     }
 }

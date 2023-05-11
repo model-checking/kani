@@ -65,6 +65,17 @@ impl KaniSession {
         })
     }
 
+    /// Record a temporary file so we can cleanup after ourselves at the end.
+    /// Note that there will be no failure if the file does not exist.
+    pub fn record_temporary_file<T: AsRef<Path>>(&self, temp: &T) {
+        // unwrap safety: will panic this thread if another thread panicked *while holding the lock.*
+        // This is vanishingly unlikely, and even then probably the right thing to do
+        let mut t = self.temporaries.lock().unwrap();
+        t.push(temp.as_ref().to_path_buf());
+    }
+
+    /// Record temporary files so we can cleanup after ourselves at the end.
+    /// Note that there will be no failure if the file does not exist.
     pub fn record_temporary_files<T: AsRef<Path>>(&self, temps: &[&T]) {
         // unwrap safety: will panic this thread if another thread panicked *while holding the lock.*
         // This is vanishingly unlikely, and even then probably the right thing to do

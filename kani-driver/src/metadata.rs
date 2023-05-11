@@ -13,6 +13,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
 
+use crate::project::Artifact;
 use crate::session::KaniSession;
 use serde::Deserialize;
 
@@ -149,6 +150,7 @@ pub fn mock_proof_harness(
     name: &str,
     unwind_value: Option<u32>,
     krate: Option<&str>,
+    model_file: Option<&Artifact>,
 ) -> HarnessMetadata {
     HarnessMetadata {
         pretty_name: name.into(),
@@ -158,7 +160,7 @@ pub fn mock_proof_harness(
         original_start_line: 0,
         original_end_line: 0,
         attributes: HarnessAttributes { unwind_value, proof: true, ..Default::default() },
-        goto_file: None,
+        goto_file: model_file.map(|artifact| artifact.to_path_buf()),
     }
 }
 
