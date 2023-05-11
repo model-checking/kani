@@ -71,7 +71,7 @@ impl KaniSession {
     /// Apply --restrict-vtable to a goto binary.
     pub fn apply_vtable_restrictions(&self, goto_file: &Path, restrictions: &Path) -> Result<()> {
         let linked_restrictions = alter_extension(goto_file, "linked-restrictions.json");
-        self.record_temporary_files(&[&linked_restrictions]);
+        self.record_temporary_file(&linked_restrictions);
         collect_and_link_function_pointer_restrictions(restrictions, &linked_restrictions)?;
 
         let args: Vec<OsString> = vec![

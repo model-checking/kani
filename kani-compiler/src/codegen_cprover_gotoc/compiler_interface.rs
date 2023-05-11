@@ -273,15 +273,21 @@ impl CodegenBackend for GotocCodegenBackend {
             }
         }
 
-        // Print compilation report.
-        results.print_report(tcx);
+        if reachability != ReachabilityType::None {
+            // Print compilation report.
+            results.print_report(tcx);
 
-        write_file(
-            &base_filename,
-            ArtifactType::Metadata,
-            &results.generate_metadata(),
-            queries.get_output_pretty_json(),
-        );
+            // In a workspace, cargo seems to be using the same file prefix to build a crate that is
+            // a package lib and also a dependency of another package.
+            // To avoid overriding the metadata for its verification, we skip this step when
+            // reachability is None, even because there is nothing to record.
+            write_file(
+                &base_filename,
+                ArtifactType::Metadata,
+                &results.generate_metadata(),
+                queries.get_output_pretty_json(),
+            );
+        }
         codegen_results(tcx, rustc_metadata, &results.machine_model)
     }
 
@@ -573,8 +579,8 @@ impl<'tcx> GotoCodegenResults<'tcx> {
     ) {
         let mut items = items;
         self.harnesses.extend(metadata.into_iter());
-        self.concurrent_constructs = gcx.concurrent_constructs;
-        self.unsupported_constructs = gcx.unsupported_constructs;
+        self.concurrent_constructs.extend(gcx.concurrent_constructs.into_iter());
+        self.unsupported_constructs.extend(gcx.unsupported_constructs.into_iter());
         self.items.append(&mut items);
     }
 
