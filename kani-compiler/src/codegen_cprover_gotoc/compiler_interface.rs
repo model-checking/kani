@@ -10,7 +10,7 @@ use crate::kani_middle::attributes::is_proof_harness;
 use crate::kani_middle::attributes::is_test_harness_description;
 use crate::kani_middle::check_crate_items;
 use crate::kani_middle::check_reachable_items;
-use crate::kani_middle::metadata::gen_proof_metadata;
+use crate::kani_middle::metadata::{gen_proof_metadata, gen_test_metadata};
 use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{
     collect_reachable_items, filter_closures_in_const_crate_items, filter_crate_items,
@@ -239,18 +239,37 @@ impl CodegenBackend for GotocCodegenBackend {
             ReachabilityType::Tests => {
                 // We're iterating over crate items here, so what we have to codegen is the "test description" containing the
                 // test closure that we want to execute
-                let _harnesses = filter_closures_in_const_crate_items(tcx, |_, def_id| {
-                    // TODO: Can we use is_test_harness_closure??
-                    is_test_harness_description(tcx, def_id)
+                // TODO: Refactor this code so we can guarantee that the pair (test_fn, test_desc) actually match.
+                let mut descriptions = vec![];
+                let harnesses = filter_closures_in_const_crate_items(tcx, |_, def_id| {
+                    if is_test_harness_description(tcx, def_id) {
+                        descriptions.push(def_id);
+                        true
+                    } else {
+                        false
+                    }
                 });
+                for (test_fn, test_desc) in harnesses.iter().zip(descriptions.iter()) {
+                    let instance =
+                        if let MonoItem::Fn(instance) = test_fn { instance } else { continue };
+                    let metadata = gen_test_metadata(tcx, *test_desc, *instance, &base_filename);
+                    let model_path = &metadata.goto_file.as_ref().unwrap();
+                    let (gcx, items) =
+                        self.codegen_items(tcx, &[*test_fn], model_path, &results.machine_model);
+                    results.extend(gcx, items, Some(metadata));
+                }
             }
             ReachabilityType::None => {}
             ReachabilityType::PubFns => {
                 let entry_fn = tcx.entry_fn(()).map(|(id, _)| id);
-                let _local_reachable = filter_crate_items(tcx, |_, def_id| {
+                let local_reachable = filter_crate_items(tcx, |_, def_id| {
                     (tcx.is_reachable_non_generic(def_id) && tcx.def_kind(def_id).is_fn_like())
                         || entry_fn == Some(def_id)
                 });
+                let model_path = base_filename.with_extension(ArtifactType::SymTabGoto);
+                let (gcx, items) =
+                    self.codegen_items(tcx, &local_reachable, &model_path, &results.machine_model);
+                results.extend(gcx, items, None);
             }
         }
 

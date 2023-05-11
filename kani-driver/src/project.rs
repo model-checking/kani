@@ -169,6 +169,7 @@ pub fn cargo_project(session: &KaniSession, keep_going: bool) -> Result<Project>
         // For the `--function` support, we still use a glob to link everything.
         // Yes, this is broken, but it has been broken for quite some time. :(
         // Merge goto files.
+        // https://github.com/model-checking/kani/issues/2129
         let joined_name = "cbmc-linked";
         let base_name = outdir.join(joined_name);
         let goto = base_name.with_extension(Goto);

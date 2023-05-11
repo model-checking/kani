@@ -5,7 +5,8 @@
 
 use std::path::Path;
 
-use kani_metadata::{ArtifactType, HarnessMetadata};
+use crate::kani_middle::attributes::test_harness_name;
+use kani_metadata::{ArtifactType, HarnessAttributes, HarnessMetadata};
 use rustc_hir::def_id::DefId;
 use rustc_middle::ty::{Instance, TyCtxt};
 
@@ -28,6 +29,33 @@ pub fn gen_proof_metadata(tcx: TyCtxt, def_id: DefId, base_name: &Path) -> Harne
         original_start_line: loc.start_line,
         original_end_line: loc.end_line,
         attributes: attributes.unwrap_or_default(),
+        // TODO: This no longer needs to be an Option.
+        goto_file: Some(model_file),
+    }
+}
+
+/// Create the harness metadata for a test description.
+#[allow(dead_code)]
+pub fn gen_test_metadata<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    test_desc: DefId,
+    test_fn: Instance<'tcx>,
+    base_name: &Path,
+) -> HarnessMetadata {
+    let pretty_name = test_harness_name(tcx, test_desc);
+    let mangled_name = tcx.symbol_name(test_fn).to_string();
+    let loc = SourceLocation::def_id_loc(tcx, test_desc);
+    let file_stem = format!("{}_{mangled_name}", base_name.file_stem().unwrap().to_str().unwrap());
+    let model_file = base_name.with_file_name(file_stem).with_extension(ArtifactType::SymTabGoto);
+
+    HarnessMetadata {
+        pretty_name,
+        mangled_name,
+        crate_name: tcx.crate_name(test_desc.krate).to_string(),
+        original_file: loc.filename,
+        original_start_line: loc.start_line,
+        original_end_line: loc.end_line,
+        attributes: HarnessAttributes::default(),
         // TODO: This no longer needs to be an Option.
         goto_file: Some(model_file),
     }
