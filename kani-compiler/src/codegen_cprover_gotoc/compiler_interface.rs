@@ -13,7 +13,7 @@ use crate::kani_middle::check_reachable_items;
 use crate::kani_middle::metadata::{gen_proof_metadata, gen_test_metadata};
 use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{
-    collect_reachable_items, filter_closures_in_const_crate_items, filter_crate_items,
+    collect_reachable_items, filter_const_crate_items, filter_crate_items,
 };
 use cbmc::goto_program::Location;
 use cbmc::irep::goto_binary_serde::write_goto_binary_file;
@@ -241,7 +241,7 @@ impl CodegenBackend for GotocCodegenBackend {
                 // test closure that we want to execute
                 // TODO: Refactor this code so we can guarantee that the pair (test_fn, test_desc) actually match.
                 let mut descriptions = vec![];
-                let harnesses = filter_closures_in_const_crate_items(tcx, |_, def_id| {
+                let harnesses = filter_const_crate_items(tcx, |_, def_id| {
                     if is_test_harness_description(tcx, def_id) {
                         descriptions.push(def_id);
                         true
