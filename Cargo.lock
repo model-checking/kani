@@ -571,7 +571,6 @@ dependencies = [
  "num",
  "object",
  "regex",
- "rustc-demangle",
  "serde",
  "serde_json",
  "shell-words",
