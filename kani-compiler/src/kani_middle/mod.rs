@@ -10,10 +10,10 @@ use rustc_hir::{def::DefKind, def_id::LOCAL_CRATE};
 use rustc_middle::mir::mono::MonoItem;
 use rustc_middle::span_bug;
 use rustc_middle::ty::layout::{
-    FnAbiError, FnAbiOfHelpers, FnAbiRequest, HasParamEnv, HasTyCtxt, LayoutError, LayoutOfHelpers,
-    TyAndLayout,
+    FnAbiError, FnAbiOf, FnAbiOfHelpers, FnAbiRequest, HasParamEnv, HasTyCtxt, LayoutError,
+    LayoutOfHelpers, TyAndLayout,
 };
-use rustc_middle::ty::{self, Ty, TyCtxt};
+use rustc_middle::ty::{self, Instance, Ty, TyCtxt};
 use rustc_span::source_map::respan;
 use rustc_span::Span;
 use rustc_target::abi::call::FnAbi;
@@ -70,6 +70,12 @@ pub fn check_reachable_items(tcx: TyCtxt, queries: &QueryDb, items: &[MonoItem])
         }
     }
     tcx.sess.abort_if_errors();
+}
+
+/// Get the FnAbi of a given instance with no extra variadic arguments.
+pub fn fn_abi<'tcx>(tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> &'tcx FnAbi<'tcx, Ty<'tcx>> {
+    let helper = CompilerHelpers { tcx };
+    helper.fn_abi_of_instance(instance, ty::List::empty())
 }
 
 struct CompilerHelpers<'tcx> {

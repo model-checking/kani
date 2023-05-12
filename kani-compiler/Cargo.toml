@@ -22,7 +22,6 @@ libc = { version = "0.2", optional = true }
 num = { version = "0.4.0", optional = true }
 object = { version = "0.30.0", default-features = false, features = ["std", "read_core", "write", "archive", "coff", "elf", "macho", "pe"], optional = true }
 regex = "1.7.0"
-rustc-demangle = { version = "0.1.21", optional = true }
 serde = { version = "1", optional = true }
 serde_json = { version = "1", optional = true }
 strum = {version = "0.24.0", optional = true}
@@ -35,7 +34,7 @@ tracing-tree = "0.2.2"
 # Future proofing: enable backend dependencies using feature.
 [features]
 default = ['cprover']
-cprover = ['ar', 'cbmc', 'libc', 'num', 'object', 'rustc-demangle', 'serde',
+cprover = ['ar', 'cbmc', 'libc', 'num', 'object', 'serde',
     'serde_json', "strum", "strum_macros"]
 write_json_symtab = []
 

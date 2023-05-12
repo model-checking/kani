@@ -410,7 +410,7 @@ pub fn format_result(
         result_str.push_str(
             "** WARNING: A Rust construct that is not currently supported \
         by Kani was found to be reachable. Check the results for \
-        more details.",
+        more details.\n",
         );
     }
     if has_unwinding_assertion_failures(properties) {

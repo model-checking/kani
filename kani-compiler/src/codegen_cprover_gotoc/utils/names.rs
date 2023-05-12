@@ -63,34 +63,18 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn symbol_name(&self, instance: Instance<'tcx>) -> String {
         let llvm_mangled = self.tcx.symbol_name(instance).name.to_string();
         debug!(
-            "finding function name for instance: {}, debug: {:?}, name: {}, symbol: {}, demangle: {}",
+            "finding function name for instance: {}, debug: {:?}, name: {}, symbol: {}",
             instance,
             instance,
             self.readable_instance_name(instance),
             llvm_mangled,
-            rustc_demangle::demangle(&llvm_mangled).to_string()
         );
 
         let pretty = self.readable_instance_name(instance);
 
-        // Make main function a special case for easy CBMC entry
-        // TODO: probably need to edit for https://github.com/model-checking/kani/issues/169
-        if pretty == "main" {
-            "main".to_string()
-        } else {
-            // TODO: llvm mangled string is not very readable. one way to tackle this is to
-            // demangle it. but the demangled string has no generic info.
-            // the best scenario is to use v0 mangler, but this is not default at this moment.
-            // this is the kind of tiny but annoying issue.
-            // c.f. https://github.com/rust-lang/rust/issues/60705
-            //
-            // the following solution won't work pretty:
-            // match self.tcx.sess.opts.debugging_opts.symbol_mangling_version {
-            //     SymbolManglingVersion::Legacy => llvm_mangled,
-            //     SymbolManglingVersion::V0 => rustc_demangle::demangle(llvm_mangled.as_str()).to_string(),
-            // }
-            llvm_mangled
-        }
+        // Make main function a special case in order to support `--function main`
+        // TODO: Get rid of this: https://github.com/model-checking/kani/issues/2129
+        if pretty == "main" { pretty } else { llvm_mangled }
     }
 
     /// The name for a tuple field

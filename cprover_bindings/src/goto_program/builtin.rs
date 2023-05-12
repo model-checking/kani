@@ -17,6 +17,8 @@ pub enum BuiltinFn {
     Copysignf,
     Cos,
     Cosf,
+    Error,
+    ErrorNoLocation,
     Exp,
     Exp2,
     Exp2f,
@@ -60,6 +62,7 @@ pub enum BuiltinFn {
     Sqrtf,
     Trunc,
     Truncf,
+    Unlink,
 }
 
 impl ToString for BuiltinFn {
@@ -76,6 +79,8 @@ impl ToString for BuiltinFn {
             Copysignf => "copysignf",
             Cos => "cos",
             Cosf => "cosf",
+            Error => "__error",
+            ErrorNoLocation => "__errno_location",
             Exp => "exp",
             Exp2 => "exp2",
             Exp2f => "exp2f",
@@ -119,6 +124,7 @@ impl ToString for BuiltinFn {
             Sqrtf => "sqrtf",
             Trunc => "trunc",
             Truncf => "truncf",
+            Unlink => "unlink",
         }
         .to_string()
     }
@@ -139,6 +145,8 @@ impl BuiltinFn {
             Copysignf => vec![Type::float(), Type::float()],
             Cos => vec![Type::double()],
             Cosf => vec![Type::float()],
+            Error => vec![],
+            ErrorNoLocation => vec![],
             Exp => vec![Type::double()],
             Exp2 => vec![Type::double()],
             Exp2f => vec![Type::float()],
@@ -179,6 +187,7 @@ impl BuiltinFn {
             Sqrtf => vec![Type::float()],
             Trunc => vec![Type::double()],
             Truncf => vec![Type::float()],
+            Unlink => vec![Type::c_char().to_pointer()],
         }
     }
 
@@ -195,6 +204,8 @@ impl BuiltinFn {
             Copysignf => Type::float(),
             Cos => Type::double(),
             Cosf => Type::float(),
+            Error => Type::c_int().to_pointer(),
+            ErrorNoLocation => Type::c_int().to_pointer(),
             Exp => Type::double(),
             Exp2 => Type::double(),
             Exp2f => Type::float(),
@@ -238,6 +249,7 @@ impl BuiltinFn {
             Sqrtf => Type::float(),
             Trunc => Type::double(),
             Truncf => Type::float(),
+            Unlink => Type::c_int(),
         }
     }
 
@@ -254,6 +266,8 @@ impl BuiltinFn {
             Copysignf,
             Cos,
             Cosf,
+            Error,
+            ErrorNoLocation,
             Exp,
             Exp2,
             Exp2f,
@@ -297,6 +311,7 @@ impl BuiltinFn {
             Sqrtf,
             Trunc,
             Truncf,
+            Unlink,
         ]
     }
 }

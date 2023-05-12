@@ -15,7 +15,6 @@ use std::ops::GeneratorState;
 use std::pin::Pin;
 
 #[kani::proof]
-#[kani::unwind(2)]
 fn main() {
     let x = 0i32;
     || {
