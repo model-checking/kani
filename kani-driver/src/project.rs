@@ -119,7 +119,7 @@ impl Project {
                 crate_metadata.test_harnesses.iter().chain(crate_metadata.proof_harnesses.iter())
             {
                 let symtab_out = Artifact::try_new(
-                    harness_metadata.goto_file.as_ref().expect("Expected a mode file"),
+                    harness_metadata.goto_file.as_ref().expect("Expected a model file"),
                     SymTabGoto,
                 )?;
                 let goto_path = convert_type(&symtab_out.path, symtab_out.typ, Goto);

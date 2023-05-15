@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: --harness check_drop_bar
+// kani-flags: --harness check_drop_foo
 
 //! Test that Kani reachability analysis remove other unrelated drop implementations when using
 //! fat pointers.
@@ -24,6 +24,8 @@ impl Drop for Foo {
 
 impl Drop for Bar {
     fn drop(&mut self) {
+        // This cover should be excluded from the result since there is no CFG path that connects
+        // the harness `check_drop_foo` with this function call.
         kani::cover!(true, "DropBar");
     }
 }
