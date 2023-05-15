@@ -4,9 +4,24 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
+## [0.28.0]
+
+### Breaking Changes
+* The unstable `--c-lib` option now requires `-Z c-ffi` to enable C-FFI support by @celinval in https://github.com/model-checking/kani/pull/2425
+
+### What's Changed
+* Enforce unstable APIs can only be used if the related feature is enabled by @celinval in https://github.com/model-checking/kani/pull/2386
+* Get rid of the legacy mode by @celinval in https://github.com/model-checking/kani/pull/2427
+* Limit FFI calls by default to explicitly supported ones by @celinval in https://github.com/model-checking/kani/pull/2428
+* Fix the order of operands for generator structs by @zhassan-aws in https://github.com/model-checking/kani/pull/2436
+* Add a few options to dump the reachability graph (debug only) by @celinval in https://github.com/model-checking/kani/pull/2433
+* Bump CBMC version to 5.83.0 by @zhassan-aws in https://github.com/model-checking/kani/pull/2441
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.27.0...test
+
 ## [0.27.0]
 
-## What's Changed
+### What's Changed
 
 * Allow excluding packages from verification with `--exclude` by @adpaco-aws in https://github.com/model-checking/kani/pull/2399
 * Add size_of annotation to help CBMC's allocator by @tautschnig in https://github.com/model-checking/kani/pull/2395
