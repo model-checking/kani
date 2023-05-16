@@ -48,7 +48,7 @@ static JSON_PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send
             // Print stack trace.
             let msg = format!("Kani unexpectedly panicked at {info}.",);
             let fallback_bundle =
-                fallback_fluent_bundle(rustc_errors::DEFAULT_LOCALE_RESOURCES, false);
+                fallback_fluent_bundle(rustc_driver::DEFAULT_LOCALE_RESOURCES.to_vec(), false);
             let mut emitter = JsonEmitter::basic(
                 false,
                 HumanReadableErrorType::Default(ColorConfig::Never),
@@ -71,10 +71,7 @@ pub fn init_session(args: &ArgMatches, json_hook: bool) {
     // Initialize the rustc logger using value from RUSTC_LOG. We keep the log control separate
     // because we cannot control the RUSTC log format unless if we match the exact tracing
     // version used by RUSTC.
-    // TODO: Enable rustc log when we upgrade the toolchain.
-    // <https://github.com/model-checking/kani/issues/2283>
-    //
-    // rustc_driver::init_rustc_env_logger();
+    rustc_driver::init_rustc_env_logger();
 
     // Install Kani panic hook.
     if json_hook {

@@ -11,10 +11,11 @@ use crate::codegen_cprover_gotoc::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::unwrap_or_return_codegen_unimplemented;
 use cbmc::goto_program::{Expr, Location, Type};
+use rustc_abi::FieldIdx;
 use rustc_hir::Mutability;
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::{
-    mir::{Field, Local, Place, ProjectionElem},
+    mir::{Local, Place, ProjectionElem},
     ty::{self, Ty, TypeAndMut, VariantDef},
 };
 use rustc_target::abi::{TagEncoding, VariantIdx, Variants};
@@ -238,7 +239,7 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         res: Expr,
         t: TypeOrVariant<'tcx>,
-        f: &Field,
+        f: &FieldIdx,
     ) -> Result<Expr, UnimplementedData> {
         match t {
             TypeOrVariant::Type(t) => {
@@ -278,12 +279,12 @@ impl<'tcx> GotocCtx<'tcx> {
                     }
                     // if we fall here, then we are handling either a struct or a union
                     ty::Adt(def, _) => {
-                        let field = &def.variants().raw[0].fields[f.index()];
+                        let field = &def.variants().raw[0].fields[*f];
                         Ok(res.member(&field.name.to_string(), &self.symbol_table))
                     }
                     ty::Closure(..) => Ok(res.member(&f.index().to_string(), &self.symbol_table)),
                     ty::Generator(..) => {
-                        let field_name = self.generator_field_name(f.index());
+                        let field_name = self.generator_field_name(f.as_usize());
                         Ok(res
                             .member("direct_fields", &self.symbol_table)
                             .member(field_name, &self.symbol_table))
@@ -293,7 +294,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             // if we fall here, then we are handling an enum
             TypeOrVariant::Variant(v) => {
-                let field = &v.fields[f.index()];
+                let field = &v.fields[*f];
                 Ok(res.member(&field.name.to_string(), &self.symbol_table))
             }
             TypeOrVariant::GeneratorVariant(_var_idx) => {

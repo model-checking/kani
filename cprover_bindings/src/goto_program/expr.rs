@@ -851,6 +851,17 @@ impl Expr {
         Expr::struct_expr_with_explicit_padding(typ, fields, values)
     }
 
+    /// Initializer for a zero sized type (ZST).
+    /// Since this is a ZST, we call nondet to simplify everything.
+    pub fn init_unit(typ: Type, symbol_table: &SymbolTable) -> Self {
+        assert!(
+            typ.is_struct_tag(),
+            "Zero sized types should be represented as struct: but found: {typ:?}"
+        );
+        assert_eq!(typ.sizeof_in_bits(symbol_table), 0);
+        Expr::nondet(typ)
+    }
+
     /// `identifier`
     pub fn symbol_expression<T: Into<InternedString>>(identifier: T, typ: Type) -> Self {
         let identifier = identifier.into();

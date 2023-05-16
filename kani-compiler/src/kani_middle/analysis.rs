@@ -138,6 +138,7 @@ impl<'tcx> From<&Statement<'tcx>> for Key {
             | StatementKind::ConstEvalCounter
             | StatementKind::FakeRead(_)
             | StatementKind::Nop
+            | StatementKind::PlaceMention(_)
             | StatementKind::Retag(_, _)
             | StatementKind::StorageLive(_)
             | StatementKind::StorageDead(_) => Key("Ignored"),
@@ -148,11 +149,9 @@ impl<'tcx> From<&Statement<'tcx>> for Key {
 impl<'tcx> From<&Terminator<'tcx>> for Key {
     fn from(value: &Terminator<'tcx>) -> Self {
         match value.kind {
-            TerminatorKind::Abort => Key("Abort"),
             TerminatorKind::Assert { .. } => Key("Assert"),
             TerminatorKind::Call { .. } => Key("Call"),
             TerminatorKind::Drop { .. } => Key("Drop"),
-            TerminatorKind::DropAndReplace { .. } => Key("DropAndReplace"),
             TerminatorKind::GeneratorDrop => Key("GeneratorDrop"),
             TerminatorKind::Goto { .. } => Key("Goto"),
             TerminatorKind::FalseEdge { .. } => Key("FalseEdge"),
@@ -161,6 +160,7 @@ impl<'tcx> From<&Terminator<'tcx>> for Key {
             TerminatorKind::Resume => Key("Resume"),
             TerminatorKind::Return => Key("Return"),
             TerminatorKind::SwitchInt { .. } => Key("SwitchInt"),
+            TerminatorKind::Terminate => Key("Terminate"),
             TerminatorKind::Unreachable => Key("Unreachable"),
             TerminatorKind::Yield { .. } => Key("Yield"),
         }
