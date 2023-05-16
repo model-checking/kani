@@ -141,7 +141,7 @@ impl<'tcx> GotocCtx<'tcx> {
             ConstValue::ZeroSized => match lit_ty.kind() {
                 // Rust "function items" (not closures, not function pointers, see `codegen_fndef`)
                 ty::FnDef(d, substs) => self.codegen_fndef(*d, substs, span),
-                _ => unimplemented!(),
+                _ => Expr::init_unit(self.codegen_ty(lit_ty), &self.symbol_table),
             },
         }
     }
@@ -310,7 +310,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         }
                     } else {
                         // otherwise, there is just one field, which is stored as the scalar data
-                        let field = &variant.fields[0];
+                        let field = &variant.fields[0usize.into()];
                         let fty = field.ty(self.tcx, subst);
 
                         let overall_t = self.codegen_ty(ty);
@@ -336,7 +336,7 @@ impl<'tcx> GotocCtx<'tcx> {
                                     &self.symbol_table,
                                 ),
                                 1 => {
-                                    let fty = variant.fields[0].ty(self.tcx, subst);
+                                    let fty = variant.fields[0usize.into()].ty(self.tcx, subst);
                                     self.codegen_single_variant_single_field(
                                         s, span, overall_t, fty,
                                     )

@@ -3,10 +3,11 @@
 
 //! Checks that verfication fails when `#[kani::should_panic]` is used but not
 //! all failures encountered are panics.
+#![feature(unchecked_math)]
 
 fn trigger_overflow() {
     let x: u32 = kani::any();
-    let _ = 42 << x;
+    let _ = unsafe { 42u32.unchecked_shl(x) };
 }
 
 #[kani::proof]

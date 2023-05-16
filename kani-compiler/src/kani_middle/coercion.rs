@@ -184,7 +184,7 @@ impl<'tcx> Iterator for CoerceUnsizedIterator<'tcx> {
 
                 let CustomCoerceUnsized::Struct(coerce_index) =
                     custom_coerce_unsize_info(self.tcx, src_ty, dst_ty);
-                assert!(coerce_index < src_fields.len());
+                assert!(coerce_index.as_usize() < src_fields.len());
 
                 self.src_ty = Some(src_fields[coerce_index].ty(self.tcx, src_substs));
                 self.dst_ty = Some(dst_fields[coerce_index].ty(self.tcx, dst_substs));

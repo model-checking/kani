@@ -5,10 +5,10 @@
 use std::collections::BTreeMap;
 
 use kani_metadata::{CbmcSolver, HarnessAttributes, Stub};
-use rustc_ast::{AttrKind, Attribute, LitKind, MetaItem, MetaItemKind, NestedMetaItem};
+use rustc_ast::{attr, AttrKind, Attribute, LitKind, MetaItem, MetaItemKind, NestedMetaItem};
 use rustc_errors::ErrorGuaranteed;
 use rustc_hir::{def::DefKind, def_id::DefId};
-use rustc_middle::ty::{Instance, TyCtxt};
+use rustc_middle::ty::{Instance, TyCtxt, TyKind};
 use rustc_span::Span;
 use std::str::FromStr;
 use strum_macros::{AsRefStr, EnumString};
@@ -75,33 +75,14 @@ pub fn is_proof_harness(tcx: TyCtxt, def_id: DefId) -> bool {
 /// Does this `def_id` have `#[rustc_test_marker]`?
 pub fn is_test_harness_description(tcx: TyCtxt, def_id: DefId) -> bool {
     let attrs = tcx.get_attrs_unchecked(def_id);
-    tcx.sess.contains_name(attrs, rustc_span::symbol::sym::rustc_test_marker)
+    attr::contains_name(attrs, rustc_span::symbol::sym::rustc_test_marker)
 }
 
-/// Is this the closure inside of a test description const (i.e. macro expanded from a `#[test]`)?
-///
-/// We're trying to detect the closure (`||`) inside code like:
-///
-/// ```ignore
-/// #[rustc_test_marker]
-/// pub const check_2: test::TestDescAndFn = test::TestDescAndFn {
-///     desc: ...,
-///     testfn: test::StaticTestFn(|| test::assert_test_result(check_2())),
-/// };
-/// ```
-pub fn is_test_harness_closure(tcx: TyCtxt, def_id: DefId) -> bool {
-    if !def_id.is_local() {
-        return false;
-    }
-
-    let local_def_id = def_id.expect_local();
-    let hir_id = tcx.hir().local_def_id_to_hir_id(local_def_id);
-
-    // The parent item of the closure appears to reliably be the `const` declaration item.
-    let parent_id = tcx.hir().get_parent_item(hir_id);
-    let parent_def_id = parent_id.to_def_id();
-
-    is_test_harness_description(tcx, parent_def_id)
+/// Extract the test harness name from the `#[rustc_test_maker]`
+pub fn test_harness_name(tcx: TyCtxt, def_id: DefId) -> String {
+    let attrs = tcx.get_attrs_unchecked(def_id);
+    let marker = attr::find_by_name(attrs, rustc_span::symbol::sym::rustc_test_marker).unwrap();
+    parse_str_value(&marker).unwrap()
 }
 
 /// Extract all Kani attributes for a given `def_id` if any exists.
@@ -152,6 +133,11 @@ pub fn extract_harness_attributes(tcx: TyCtxt, def_id: DefId) -> Option<HarnessA
 ///
 /// TODO: Improve error message by printing the span of the callee instead of the definition.
 pub fn check_unstable_features(tcx: TyCtxt, enabled_features: &[String], def_id: DefId) {
+    if !matches!(tcx.type_of(def_id).0.kind(), TyKind::FnDef(..)) {
+        // skip closures due to an issue with rustc.
+        // https://github.com/model-checking/kani/pull/2406#issuecomment-1534333862
+        return;
+    }
     let attributes = extract_kani_attributes(tcx, def_id);
     if let Some(unstable_attrs) = attributes.get(&KaniAttributeKind::Unstable) {
         for attr in unstable_attrs {
@@ -490,6 +476,16 @@ fn parse_key_values(attr: &Attribute) -> Result<BTreeMap<String, String>, String
             )),
         })
         .collect()
+}
+
+/// Extracts the string value argument from the attribute provided.
+///
+/// For attributes with the following format, this will return a string that represents "VALUE".
+/// - `#[attribute = "VALUE"]`
+fn parse_str_value(attr: &Attribute) -> Option<String> {
+    // Vector of meta items , that contain the arguments given the attribute
+    let value = attr.value_str();
+    value.map(|sym| sym.to_string())
 }
 
 /// If the attribute is named `kanitool::name`, this extracts `name`

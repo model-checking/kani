@@ -57,7 +57,7 @@ impl<'sess, 'pr> HarnessRunner<'sess, 'pr> {
                     let goto_file =
                         self.project.get_harness_artifact(&harness, ArtifactType::Goto).unwrap();
                     let specialized_obj = specialized_harness_name(goto_file, &harness_filename);
-                    self.sess.record_temporary_files(&[&specialized_obj]);
+                    self.sess.record_temporary_file(&specialized_obj);
                     self.sess.instrument_model(
                         goto_file,
                         &specialized_obj,

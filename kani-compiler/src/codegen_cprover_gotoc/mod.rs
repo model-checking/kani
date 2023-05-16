@@ -7,6 +7,6 @@ mod context;
 mod overrides;
 mod utils;
 
-pub use compiler_interface::GotocCodegenBackend;
+pub use compiler_interface::{GotocCodegenBackend, UnsupportedConstructs};
 pub use context::GotocCtx;
 pub use context::VtableCtx;
