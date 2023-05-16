@@ -90,6 +90,8 @@ pub struct CargoKaniArgs {
 pub enum CargoKaniSubcommand {
     #[command(hide = true)]
     Assess(Box<crate::assess::AssessArgs>),
+
+    Playback(crate::concrete_playback::CargoPlayback),
 }
 
 // Common arguments for invoking Kani for verification purpose. This gets put into KaniContext,
