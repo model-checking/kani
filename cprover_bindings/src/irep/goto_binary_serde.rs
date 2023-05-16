@@ -9,7 +9,7 @@ use std::fs::File;
 use std::hash::Hash;
 use std::io::{self, BufReader};
 use std::io::{BufWriter, Bytes, Error, ErrorKind, Read, Write};
-use std::path::PathBuf;
+use std::path::Path;
 
 /// Writes a symbol table to a file in goto binary format in version 5.
 ///
@@ -18,7 +18,7 @@ use std::path::PathBuf;
 /// - src/util/irep_serialization.h
 /// - src/util/irep_hash_container.h
 /// - src/util/irep_hash.h
-pub fn write_goto_binary_file(filename: &PathBuf, source: &crate::goto_program::SymbolTable) {
+pub fn write_goto_binary_file(filename: &Path, source: &crate::goto_program::SymbolTable) {
     let out_file = File::create(filename).unwrap();
     let mut writer = BufWriter::new(out_file);
     let mut serializer = GotoBinarySerializer::new(&mut writer);
@@ -33,7 +33,7 @@ pub fn write_goto_binary_file(filename: &PathBuf, source: &crate::goto_program::
 /// - src/util/irep_serialization.h
 /// - src/util/irep_hash_container.h
 /// - src/util/irep_hash.h
-pub fn read_goto_binary_file(filename: &PathBuf) -> io::Result<()> {
+pub fn read_goto_binary_file(filename: &Path) -> io::Result<()> {
     let file = File::open(filename)?;
     let reader = BufReader::new(file);
     let mut deserializer = GotoBinaryDeserializer::new(reader);

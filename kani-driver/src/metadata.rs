@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use anyhow::Result;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tracing::{debug, trace};
 
 use kani_metadata::{
@@ -149,6 +149,7 @@ pub fn mock_proof_harness(
     name: &str,
     unwind_value: Option<u32>,
     krate: Option<&str>,
+    model_file: Option<PathBuf>,
 ) -> HarnessMetadata {
     HarnessMetadata {
         pretty_name: name.into(),
@@ -158,7 +159,7 @@ pub fn mock_proof_harness(
         original_start_line: 0,
         original_end_line: 0,
         attributes: HarnessAttributes { unwind_value, proof: true, ..Default::default() },
-        goto_file: None,
+        goto_file: model_file,
     }
 }
 
@@ -192,9 +193,9 @@ mod tests {
     #[test]
     fn check_find_proof_harness() {
         let harnesses = vec![
-            mock_proof_harness("check_one", None, None),
-            mock_proof_harness("module::check_two", None, None),
-            mock_proof_harness("module::not_check_three", None, None),
+            mock_proof_harness("check_one", None, None, None),
+            mock_proof_harness("module::check_two", None, None, None),
+            mock_proof_harness("module::not_check_three", None, None, None),
         ];
         let ref_harnesses = harnesses.iter().collect::<Vec<_>>();
         assert_eq!(
