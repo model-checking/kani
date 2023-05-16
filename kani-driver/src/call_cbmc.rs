@@ -400,8 +400,8 @@ mod tests {
         let args_both =
             ["kani", "x.rs", "--default-unwind", "2", "--unwind", "1", "--harness", "check_one"];
 
-        let harness_none = mock_proof_harness("check_one", None, None);
-        let harness_some = mock_proof_harness("check_one", Some(3), None);
+        let harness_none = mock_proof_harness("check_one", None, None, None);
+        let harness_some = mock_proof_harness("check_one", Some(3), None, None);
 
         fn resolve(args: &[&str], harness: &HarnessMetadata) -> Option<u32> {
             resolve_unwind_value(

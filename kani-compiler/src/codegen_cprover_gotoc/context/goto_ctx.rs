@@ -17,11 +17,11 @@ use super::current_fn::CurrentFnCtx;
 use super::vtable_ctx::VtableCtx;
 use crate::codegen_cprover_gotoc::overrides::{fn_hooks, GotocHooks};
 use crate::codegen_cprover_gotoc::utils::full_crate_name;
+use crate::codegen_cprover_gotoc::UnsupportedConstructs;
 use cbmc::goto_program::{DatatypeComponent, Expr, Location, Stmt, Symbol, SymbolTable, Type};
 use cbmc::utils::aggr_tag;
-use cbmc::InternedString;
-use cbmc::{MachineModel, RoundingMode};
-use kani_metadata::{HarnessMetadata, UnsupportedFeature};
+use cbmc::{InternedString, MachineModel};
+use kani_metadata::HarnessMetadata;
 use kani_queries::{QueryDb, UserInput};
 use rustc_data_structures::fx::FxHashMap;
 use rustc_middle::mir::interpret::Allocation;
@@ -31,10 +31,8 @@ use rustc_middle::ty::layout::{
     TyAndLayout,
 };
 use rustc_middle::ty::{self, Instance, Ty, TyCtxt};
-use rustc_session::Session;
 use rustc_span::source_map::{respan, Span};
 use rustc_target::abi::call::FnAbi;
-use rustc_target::abi::Endian;
 use rustc_target::abi::{HasDataLayout, TargetDataLayout};
 
 pub struct GotocCtx<'tcx> {
@@ -64,19 +62,22 @@ pub struct GotocCtx<'tcx> {
     /// a global counter for generating unique IDs for checks
     pub global_checks_count: u64,
     /// A map of unsupported constructs that were found while codegen
-    pub unsupported_constructs: FxHashMap<InternedString, Vec<Location>>,
+    pub unsupported_constructs: UnsupportedConstructs,
     /// A map of concurrency constructs that are treated sequentially.
     /// We collect them and print one warning at the end if not empty instead of printing one
     /// warning at each occurrence.
-    pub concurrent_constructs: FxHashMap<InternedString, Vec<Location>>,
+    pub concurrent_constructs: UnsupportedConstructs,
 }
 
 /// Constructor
 impl<'tcx> GotocCtx<'tcx> {
-    pub fn new(tcx: TyCtxt<'tcx>, queries: QueryDb) -> GotocCtx<'tcx> {
+    pub fn new(
+        tcx: TyCtxt<'tcx>,
+        queries: QueryDb,
+        machine_model: &MachineModel,
+    ) -> GotocCtx<'tcx> {
         let fhks = fn_hooks();
-        let mm = machine_model_from_session(tcx.sess);
-        let symbol_table = SymbolTable::new(mm);
+        let symbol_table = SymbolTable::new(machine_model.clone());
         let emit_vtable_restrictions = queries.get_emit_vtable_restrictions();
         GotocCtx {
             tcx,
@@ -107,32 +108,6 @@ impl<'tcx> GotocCtx<'tcx> {
 
     pub fn current_fn_mut(&mut self) -> &mut CurrentFnCtx<'tcx> {
         self.current_fn.as_mut().unwrap()
-    }
-
-    /// Maps the goto-context "unsupported features" data into the
-    /// KaniMetadata "unsupported features" format.
-    ///
-    /// These are different because the KaniMetadata is a flat serializable list,
-    /// while we need a more richly structured HashMap in the goto context.
-    pub(crate) fn unsupported_metadata(&self) -> Vec<UnsupportedFeature> {
-        self.unsupported_constructs
-            .iter()
-            .map(|(construct, location)| UnsupportedFeature {
-                feature: construct.to_string(),
-                locations: location
-                    .iter()
-                    .map(|l| {
-                        // We likely (and should) have no instances of
-                        // calling `codegen_unimplemented` without file/line.
-                        // So while we map out of `Option` here, we expect them to always be `Some`
-                        kani_metadata::Location {
-                            filename: l.filename().unwrap_or_default(),
-                            start_line: l.start_line().unwrap_or_default(),
-                        }
-                    })
-                    .collect(),
-            })
-            .collect()
     }
 }
 
@@ -412,119 +387,6 @@ impl<'tcx> FnAbiOfHelpers<'tcx> for GotocCtx<'tcx> {
                     );
                 }
             }
-        }
-    }
-}
-
-/// Builds a machine model which is required by CBMC
-fn machine_model_from_session(sess: &Session) -> MachineModel {
-    // The model assumes a `x86_64-unknown-linux-gnu`, `x86_64-apple-darwin`
-    // or `aarch64-apple-darwin` platform. We check the target platform in function
-    // `check_target` from src/kani-compiler/src/codegen_cprover_gotoc/compiler_interface.rs
-    // and error if it is not any of the ones we expect.
-    let architecture = &sess.target.arch;
-    let pointer_width = sess.target.pointer_width.into();
-
-    // The model assumes the following values for session options:
-    //   * `min_global_align`: 1
-    //   * `endian`: `Endian::Little`
-    //
-    // We check these options in function `check_options` from
-    // src/kani-compiler/src/codegen_cprover_gotoc/compiler_interface.rs
-    // and error if their values are not the ones we expect.
-    let alignment = sess.target.options.min_global_align.unwrap_or(1);
-    let is_big_endian = match sess.target.options.endian {
-        Endian::Little => false,
-        Endian::Big => true,
-    };
-
-    // The values below cannot be obtained from the session so they are
-    // hardcoded using standard ones for the supported platforms
-    // see /tools/sizeofs/main.cpp.
-    // For reference, the definition in CBMC:
-    //https://github.com/diffblue/cbmc/blob/develop/src/util/config.cpp
-    match architecture.as_ref() {
-        "x86_64" => {
-            let bool_width = 8;
-            let char_is_unsigned = false;
-            let char_width = 8;
-            let double_width = 64;
-            let float_width = 32;
-            let int_width = 32;
-            let long_double_width = 128;
-            let long_int_width = 64;
-            let long_long_int_width = 64;
-            let short_int_width = 16;
-            let single_width = 32;
-            let wchar_t_is_unsigned = false;
-            let wchar_t_width = 32;
-
-            MachineModel {
-                architecture: architecture.to_string(),
-                alignment,
-                bool_width,
-                char_is_unsigned,
-                char_width,
-                double_width,
-                float_width,
-                int_width,
-                is_big_endian,
-                long_double_width,
-                long_int_width,
-                long_long_int_width,
-                memory_operand_size: int_width / 8,
-                null_is_zero: true,
-                pointer_width,
-                rounding_mode: RoundingMode::ToNearest,
-                short_int_width,
-                single_width,
-                wchar_t_is_unsigned,
-                wchar_t_width,
-                word_size: int_width,
-            }
-        }
-        "aarch64" => {
-            let bool_width = 8;
-            let char_is_unsigned = true;
-            let char_width = 8;
-            let double_width = 64;
-            let float_width = 32;
-            let int_width = 32;
-            let long_double_width = 64;
-            let long_int_width = 64;
-            let long_long_int_width = 64;
-            let short_int_width = 16;
-            let single_width = 32;
-            let wchar_t_is_unsigned = false;
-            let wchar_t_width = 32;
-
-            MachineModel {
-                // CBMC calls it arm64, not aarch64
-                architecture: "arm64".to_string(),
-                alignment,
-                bool_width,
-                char_is_unsigned,
-                char_width,
-                double_width,
-                float_width,
-                int_width,
-                is_big_endian,
-                long_double_width,
-                long_int_width,
-                long_long_int_width,
-                memory_operand_size: int_width / 8,
-                null_is_zero: true,
-                pointer_width,
-                rounding_mode: RoundingMode::ToNearest,
-                short_int_width,
-                single_width,
-                wchar_t_is_unsigned,
-                wchar_t_width,
-                word_size: int_width,
-            }
-        }
-        _ => {
-            panic!("Unsupported architecture: {architecture}");
         }
     }
 }

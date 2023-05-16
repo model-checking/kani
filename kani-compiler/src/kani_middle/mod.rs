@@ -6,7 +6,10 @@
 use std::collections::HashSet;
 
 use kani_queries::{QueryDb, UserInput};
-use rustc_hir::{def::DefKind, def_id::LOCAL_CRATE};
+use rustc_hir::{
+    def::DefKind,
+    def_id::{DefId, LOCAL_CRATE},
+};
 use rustc_middle::mir::mono::MonoItem;
 use rustc_middle::span_bug;
 use rustc_middle::ty::layout::{
@@ -24,6 +27,7 @@ use self::attributes::{check_attributes, check_unstable_features};
 pub mod analysis;
 pub mod attributes;
 pub mod coercion;
+pub mod metadata;
 pub mod provide;
 pub mod reachability;
 pub mod resolve;
@@ -70,6 +74,40 @@ pub fn check_reachable_items(tcx: TyCtxt, queries: &QueryDb, items: &[MonoItem])
         }
     }
     tcx.sess.abort_if_errors();
+}
+
+/// Structure that represents the source location of a definition.
+/// TODO: Use `InternedString` once we move it out of the cprover_bindings.
+/// <https://github.com/model-checking/kani/issues/2435>
+pub struct SourceLocation {
+    pub filename: String,
+    pub start_line: usize,
+    pub start_col: usize,
+    pub end_line: usize,
+    pub end_col: usize,
+}
+
+impl SourceLocation {
+    pub fn new(tcx: TyCtxt, span: &Span) -> Self {
+        let smap = tcx.sess.source_map();
+        let lo = smap.lookup_char_pos(span.lo());
+        let start_line = lo.line;
+        let start_col = 1 + lo.col_display;
+        let hi = smap.lookup_char_pos(span.hi());
+        let end_line = hi.line;
+        let end_col = 1 + hi.col_display;
+        let local_filename = lo.file.name.prefer_local().to_string_lossy().to_string();
+        let filename = match std::fs::canonicalize(local_filename.clone()) {
+            Ok(pathbuf) => pathbuf.to_str().unwrap().to_string(),
+            Err(_) => local_filename,
+        };
+        SourceLocation { filename, start_line, start_col, end_line, end_col }
+    }
+
+    pub fn def_id_loc(tcx: TyCtxt, def_id: DefId) -> Self {
+        let span = tcx.def_span(def_id);
+        Self::new(tcx, &span)
+    }
 }
 
 /// Get the FnAbi of a given instance with no extra variadic arguments.
