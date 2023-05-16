@@ -19,7 +19,7 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 * Bump CBMC version to 5.83.0 by @zhassan-aws in https://github.com/model-checking/kani/pull/2441
 * Upgrade the toolchain to nightly-2023-04-16  by @celinval in https://github.com/model-checking/kani/pull/2406
 
-**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.27.0...test
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.27.0...kani-0.28.0
 
 ## [0.27.0]
 
