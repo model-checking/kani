@@ -10,6 +10,8 @@ use anyhow::Result;
 use args::{check_is_valid, CargoKaniSubcommand};
 use args_toml::join_args;
 
+use crate::args::StandaloneSubcommand;
+use crate::concrete_playback::playback::{playback_cargo, playback_standalone};
 use crate::project::Project;
 use crate::session::KaniSession;
 use clap::Parser;
@@ -61,9 +63,17 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     check_is_valid(&args);
     let session = session::KaniSession::new(args.verify_opts)?;
 
-    if let Some(CargoKaniSubcommand::Assess(args)) = args.command {
-        return assess::run_assess(session, *args);
-    } else if session.args.assess {
+    match args.command {
+        Some(CargoKaniSubcommand::Assess(args)) => {
+            return assess::run_assess(session, *args);
+        }
+        Some(CargoKaniSubcommand::Playback(args)) => {
+            return playback_cargo(*args);
+        }
+        None => {}
+    }
+
+    if session.args.assess {
         return assess::run_assess(session, assess::AssessArgs::default());
     }
 
@@ -75,9 +85,13 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
 fn standalone_main() -> Result<()> {
     let args = args::StandaloneArgs::parse();
     check_is_valid(&args);
-    let session = session::KaniSession::new(args.verify_opts)?;
 
-    let project = project::standalone_project(&args.input, &session)?;
+    if let Some(StandaloneSubcommand::Playback(args)) = args.command {
+        return playback_standalone(*args);
+    }
+
+    let session = session::KaniSession::new(args.verify_opts)?;
+    let project = project::standalone_project(&args.input.unwrap(), &session)?;
     if session.args.only_codegen { Ok(()) } else { verify_project(project, session) }
 }
 

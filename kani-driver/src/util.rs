@@ -176,6 +176,13 @@ pub fn error(msg: &str) {
     println!("{error} {msg_fmt}")
 }
 
+/// Print an info message. This will print the stage in bold green and the rest in regular style.
+pub fn info_operation(op: &str, msg: &str) {
+    let op_fmt = console::style(op).bold().green();
+    let msg_fmt = console::style(msg);
+    println!("{op_fmt} {msg_fmt}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

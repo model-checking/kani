@@ -3,7 +3,4 @@
 //! Implements the logic related to concrete playback
 
 pub mod playback;
-pub mod playback_args;
 pub mod test_generator;
-
-pub use playback_args::*;

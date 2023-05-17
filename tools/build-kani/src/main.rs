@@ -10,7 +10,7 @@
 mod parser;
 mod sysroot;
 
-use crate::sysroot::{build_bin, build_lib, kani_sysroot_lib};
+use crate::sysroot::{build_bin, build_lib, kani_playback_lib, kani_sysroot_lib};
 use anyhow::{bail, Result};
 use clap::Parser;
 use std::{ffi::OsString, path::Path, process::Command};
@@ -96,6 +96,7 @@ fn bundle_kani(dir: &Path) -> Result<()> {
 
     // 4. Pre-compiled library files
     cp_dir(&kani_sysroot_lib(), dir)?;
+    cp_dir(&kani_playback_lib(), dir)?;
 
     // 5. Record the exact toolchain we use
     std::fs::write(dir.join("rust-toolchain-version"), env!("RUSTUP_TOOLCHAIN"))?;
