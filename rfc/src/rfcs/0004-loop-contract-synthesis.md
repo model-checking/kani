@@ -7,7 +7,7 @@
 
 ## Summary
 
-An new option that allows users to verify programs without unwinding loops by synthesizing loop contracts for those loops.
+A new option that allows users to verify programs without unwinding loops by synthesizing loop contracts for those loops.
 
 
 ## User Impact
@@ -15,7 +15,7 @@ Currently Kani does not support proving correctness (i.e. assertions never fail)
 
 A new Kani flag `--synthesize-loop-contracts` will be created that can be used to enable the goto-level loop-contract synthesizer `goto-synthesizer`.
 The idea of [loop contracts](https://arxiv.org/pdf/2010.05812.pdf) is, instead of unwinding loops, we abstracts those loops as non-loop structures that can cover arbitrary iterations of the loops.
-The loop contract synthesizer, when is enable, will synthesize loop contracts for all loops.
+The loop contract synthesizer, when enabled, will attempt to synthesize loop contracts for all loops.
 CBMC can then apply the synthesized loop contracts and verify the program without unwinding any loop.
 So, the synthesizer will help to verify the programs that require Kani to unwind loops for a very large number of times to cover all iterations.
 
@@ -60,7 +60,7 @@ It enumerates candidate invariants from a pre-designed search space described by
 Therefore it has the following limitations:
 1. the search space is not complete, so it may fail to find a working candidate. The current search space consists of only conjunction of linear inequalities built from the variables in the loop, which is not expressive enough to capture all loop invariants.
 For example, the loop invariant `a[i] == 0` contains array access and cannot be captured by the current search space.
-However, we can easily extend the search space to include more complex expressions with the cost of exponential increase of the running time of the synthesizer.
+However, we can easily extend the search space to include more complex expressions with the cost of an exponential increase of the running time of the synthesizer.
 2. the synthesizer suffers from the same limitation as the loop contract verification in CBMC. For example, it dose not support unbounded quantifiers, or dynamic allocations in the loop body. 
 
 ## User Experience
@@ -69,20 +69,22 @@ Once this RFC has been stabilized, users will be able to synthesize loop contrac
 
 
 #### Limit Resource Used by Synthesizer for Termination
-Without resource limit, an enumerative synthesizer may run forever to exhaust search space consist of infinite number of candidates, especially when there is no solution in the search space.
+Without a resource limit, an enumerative synthesizer may run forever to exhaust a search space consisting of an infinite number of candidates, especially when there is no solution in the search space.
 So, for the guarantee of termination, we provide users options: `--limit-synthesis-time T` to limit the running time of the synthesizer.
 
 
-#### Output of Kani when Synthesizer Enable
+#### Output of Kani when the Synthesizer is Enabled
 When the flag `--synthesize-loop-contracts` is provided, Kani will report different result for different cases
 1. When there exists some loop invariant in the candidate space with which all assertions can be proved, Kani will synthesize the loop contracts, verify the program with the synthesized loop contracts, and report verification SUCCESS;
 2. When no working candidate has been found in the search space within the specified limits, Kani will report the verification result with the best-effort-synthesized loop contracts.
+Note that as loop contracts are over-approximations of the loop, the violated assertions in this case may be spurious.
+So we will report the violated assertions as `UNDETERMIN` instead of `FAILED`.
 
 A question about how do we print the synthesized loop contracts when users request is discussed in **Open question**.
 
 ## Detailed Design
 The synthesizer ```goto-synthesizer``` is implemented in the repository of `CBMC`, takes as input a goto binary, and outputs a new goto binary with the synthesized loop contracts applied.
-Currently, Kani invoke `goto-instrument` to instrument the goto binary `main.goto` into a new goto binary `main_instrumented.goto`, and then invoke ```cbmc``` on `main_instrumented.goto` to get the verification result.
+Currently, Kani invokes `goto-instrument` to instrument the goto binary `main.goto` into a new goto binary `main_instrumented.goto`, and then invokes ```cbmc``` on `main_instrumented.goto` to get the verification result.
 The synthesis will happen between calling `goto-instrument` and calling ```cbmc```.
 That is, we invoke ```goto-synthesizer``` on ```main_instrumented.goto``` to produce a new goto binary ```main_synthesized.goto```, and then call ```cbmc``` on `main_synthesized.goto` instead. 
 
@@ -90,7 +92,7 @@ When invoking ```goto-synthesizer```, we pass the following parameters to it wit
 - the resource limit of the synthesis;
 - the solver options to specify what SAT solver we use to verify invariant candidates.
 
-The enumerator used in the synthesizer enumerate candidates from the language of the following grammar template
+The enumerator used in the synthesizer enumerates candidates from the language of the following grammar template
 ```
 NT_Bool -> NT_Bool && NT_Bool | NT_int == NT_int 
             | NT_int <= NT_int | NT_int < NT_int 
