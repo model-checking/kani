@@ -129,12 +129,12 @@ impl Project {
                 let goto = Artifact::try_new(&goto_path, Goto)?;
 
                 // All other harness artifacts that may have been generated as part of the build.
-                artifacts.extend([TypeMap, VTableRestriction, PrettyNameMap].iter().filter_map(
-                    |typ| {
+                artifacts.extend(
+                    [SymTab, TypeMap, VTableRestriction, PrettyNameMap].iter().filter_map(|typ| {
                         let artifact = Artifact::try_from(&symtab_out, *typ).ok()?;
                         Some(artifact)
-                    },
-                ));
+                    }),
+                );
                 artifacts.push(symtab_out);
                 artifacts.push(goto);
             }

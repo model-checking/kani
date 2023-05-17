@@ -45,12 +45,14 @@ jobs:
           os: ubuntu-20.04
 
       - name: Build Kani
-        run: cargo build-dev
+        run: cargo build-dev -- --features write_json_symtab
 
-      - name: Execute Kani regression
-        env:
-          KANI_ENABLE_WRITE_JSON_SYMTAB: 1
-        run: ./scripts/kani-regression.sh
+      - name: Run tests
+        run: |
+          cargo run -p compiletest --quiet -- --suite kani --mode kani --quiet --no-fail-fast
+          cargo run -p compiletest --quiet -- --suite expected --mode expected --quiet --no-fail-fast
+          cargo run -p compiletest --quiet -- --suite cargo-kani --mode cargo-kani --quiet --no-fail-fast
+
 
   benchcomp-tests:
     runs-on: ubuntu-20.04
