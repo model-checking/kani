@@ -55,7 +55,7 @@ impl KaniSession {
                             );
                         }
                         ConcretePlaybackMode::InPlace => {
-                            if !self.args.quiet {
+                            if !self.args.common_args.quiet {
                                 println!(
                                     "INFO: Now modifying the source code to include the concrete playback unit test `{}`.",
                                     &generated_unit_test.name
@@ -126,7 +126,7 @@ impl KaniSession {
         // Use a buffered reader/writer to generate the unit test line by line
         for line in source_reader.lines().flatten() {
             if line.contains(&unit_test.name) {
-                if !self.args.quiet {
+                if !self.args.common_args.quiet {
                     println!(
                         "Concrete playback unit test `{}/{}` already found in source code, so skipping modification.",
                         source_path, unit_test.name,
@@ -188,7 +188,7 @@ impl KaniSession {
             cmd.current_dir(current_dir);
         }
 
-        if self.args.quiet {
+        if self.args.common_args.quiet {
             self.run_suppress(cmd).context("Failed to rustfmt modified source code.")?;
         } else {
             self.run_terminal(cmd).context("Failed to rustfmt modified source code")?;

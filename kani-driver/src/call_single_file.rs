@@ -51,7 +51,7 @@ impl KaniSession {
         let kani_compiler_args = to_rustc_arg(kani_args);
         cmd.arg(kani_compiler_args).args(rustc_args);
 
-        if self.args.quiet {
+        if self.args.common_args.quiet {
             self.run_suppress(cmd)?;
         } else {
             self.run_terminal(cmd)?;
@@ -68,9 +68,9 @@ impl KaniSession {
     pub fn kani_compiler_flags(&self) -> Vec<String> {
         let mut flags = vec![check_version()];
 
-        if self.args.debug {
+        if self.args.common_args.debug {
             flags.push("--log-level=debug".into());
-        } else if self.args.verbose {
+        } else if self.args.common_args.verbose {
             // Print the symtab command being invoked.
             flags.push("--log-level=info".into());
         } else {
@@ -100,7 +100,11 @@ impl KaniSession {
         }
 
         flags.extend(
-            self.args.unstable_features.iter().map(|feature| format!("--unstable={feature}")),
+            self.args
+                .common_args
+                .unstable_features
+                .iter()
+                .map(|feature| format!("--unstable={feature}")),
         );
 
         // This argument will select the Kani flavour of the compiler. It will be removed before

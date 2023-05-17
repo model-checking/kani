@@ -91,7 +91,7 @@ impl KaniSession {
         report_dir: &Path,
         harness: &HarnessMetadata,
     ) -> Result<VerificationResult> {
-        if !self.args.quiet {
+        if !self.args.common_args.quiet {
             println!("Checking harness {}...", harness.pretty_name);
         }
 
@@ -104,7 +104,7 @@ impl KaniSession {
 
             // When quiet, we don't want to print anything at all.
             // When output is old, we also don't have real results to print.
-            if !self.args.quiet && self.args.output_format != OutputFormat::Old {
+            if !self.args.common_args.quiet && self.args.output_format != OutputFormat::Old {
                 println!(
                     "{}",
                     result.render(&self.args.output_format, harness.attributes.should_panic)
@@ -156,7 +156,7 @@ impl KaniSession {
         let total = succeeding + failing;
 
         if self.args.concrete_playback.is_some()
-            && !self.args.quiet
+            && !self.args.common_args.quiet
             && results.iter().all(|r| !r.result.generated_concrete_test)
         {
             println!(
@@ -165,7 +165,7 @@ impl KaniSession {
         }
 
         // We currently omit a summary if there was just 1 harness
-        if !self.args.quiet && !self.args.visualize && total != 1 {
+        if !self.args.common_args.quiet && !self.args.visualize && total != 1 {
             if failing > 0 {
                 println!("Summary:");
             }

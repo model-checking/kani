@@ -9,7 +9,7 @@ use std::path::Path;
 use std::process::Command;
 use std::time::{Duration, Instant};
 
-use crate::args::{KaniArgs, OutputFormat};
+use crate::args::{OutputFormat, VerifyArgs};
 use crate::cbmc_output_parser::{
     extract_results, process_cbmc_output, CheckStatus, ParserItem, Property, VerificationOutput,
 };
@@ -85,7 +85,7 @@ impl KaniSession {
                 kani_cbmc_output_filter(
                     i,
                     self.args.extra_pointer_checks,
-                    self.args.quiet,
+                    self.args.common_args.quiet,
                     &self.args.output_format,
                 )
             })?;
@@ -377,7 +377,7 @@ fn determine_failed_properties(properties: &[Property]) -> FailedProperties {
 }
 
 /// Solve Unwind Value from conflicting inputs of unwind values. (--default-unwind, annotation-unwind, --unwind)
-pub fn resolve_unwind_value(args: &KaniArgs, harness_metadata: &HarnessMetadata) -> Option<u32> {
+pub fn resolve_unwind_value(args: &VerifyArgs, harness_metadata: &HarnessMetadata) -> Option<u32> {
     // Check for which flag is being passed and prioritize extracting unwind from the
     // respective flag/annotation.
     args.unwind.or(harness_metadata.attributes.unwind_value).or(args.default_unwind)
@@ -405,7 +405,7 @@ mod tests {
 
         fn resolve(args: &[&str], harness: &HarnessMetadata) -> Option<u32> {
             resolve_unwind_value(
-                &args::StandaloneArgs::try_parse_from(args).unwrap().common_opts,
+                &args::StandaloneArgs::try_parse_from(args).unwrap().verify_opts,
                 harness,
             )
         }
