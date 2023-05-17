@@ -7,7 +7,7 @@ use std::process::ExitCode;
 
 use anyhow::Result;
 
-use args::CargoKaniSubcommand;
+use args::{check_is_valid, CargoKaniSubcommand};
 use args_toml::join_args;
 
 use crate::project::Project;
@@ -58,7 +58,7 @@ fn main() -> ExitCode {
 fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     let input_args = join_args(input_args)?;
     let args = args::CargoKaniArgs::parse_from(input_args);
-    args.validate();
+    check_is_valid(&args);
     let session = session::KaniSession::new(args.verify_opts)?;
 
     if let Some(CargoKaniSubcommand::Assess(args)) = args.command {
@@ -74,7 +74,7 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
 /// The main function for the `kani` command.
 fn standalone_main() -> Result<()> {
     let args = args::StandaloneArgs::parse();
-    args.validate();
+    check_is_valid(&args);
     let session = session::KaniSession::new(args.verify_opts)?;
 
     let project = project::standalone_project(&args.input, &session)?;
