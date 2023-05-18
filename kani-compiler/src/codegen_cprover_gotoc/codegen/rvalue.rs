@@ -18,7 +18,7 @@ use cbmc::MachineModel;
 use cbmc::{btree_string_map, InternString, InternedString};
 use num::bigint::BigInt;
 use rustc_abi::FieldIdx;
-use rustc_index::vec::IndexVec;
+use rustc_index::IndexVec;
 use rustc_middle::mir::{AggregateKind, BinOp, CastKind, NullOp, Operand, Place, Rvalue, UnOp};
 use rustc_middle::ty::adjustment::PointerCast;
 use rustc_middle::ty::layout::LayoutOf;
@@ -560,6 +560,10 @@ impl<'tcx> GotocCtx<'tcx> {
                     NullOp::SizeOf => Expr::int_constant(layout.size.bytes_usize(), Type::size_t())
                         .with_size_of_annotation(self.codegen_ty(t)),
                     NullOp::AlignOf => Expr::int_constant(layout.align.abi.bytes(), Type::size_t()),
+                    NullOp::OffsetOf(fields) => Expr::int_constant(
+                        layout.offset_of_subfield(self, fields.iter().map(|f| f.index())).bytes(),
+                        Type::size_t(),
+                    ),
                 }
             }
             Rvalue::ShallowInitBox(ref operand, content_ty) => {

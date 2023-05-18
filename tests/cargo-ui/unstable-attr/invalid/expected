@@ -1,4 +1,4 @@
-error: failed to parse `#[kani::unstable]`: expected "key = value" pair, but found\
+error: failed to parse `#[kani::unstable]`: missing `feature` field\
 src/lib.rs\
 |\
 | #[kani::unstable(\
