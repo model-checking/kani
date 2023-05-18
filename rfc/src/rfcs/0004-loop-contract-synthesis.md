@@ -78,7 +78,7 @@ When the flag `--synthesize-loop-contracts` is provided, Kani will report differ
 1. When there exists some loop invariant in the candidate space with which all assertions can be proved, Kani will synthesize the loop contracts, verify the program with the synthesized loop contracts, and report verification SUCCESS;
 2. When no working candidate has been found in the search space within the specified limits, Kani will report the verification result with the best-effort-synthesized loop contracts.
 Note that as loop contracts are over-approximations of the loop, the violated assertions in this case may be spurious.
-So we will report the violated assertions as `UNDETERMIN` instead of `FAILED`.
+So we will report the violated assertions as `UNDETERMINED` instead of `FAILED`.
 
 A question about how do we print the synthesized loop contracts when users request is discussed in **Open question**.
 
