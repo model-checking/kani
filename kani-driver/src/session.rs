@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use crate::args::VerifyArgs;
+use crate::args::VerificationArgs;
 use crate::util::render_command;
 use anyhow::{bail, Context, Result};
 use std::io::Write;
@@ -22,7 +22,7 @@ const LOG_ENV_VAR: &str = "KANI_LOG";
 /// Contains information about the execution environment and arguments that affect operations
 pub struct KaniSession {
     /// The common command-line arguments
-    pub args: VerifyArgs,
+    pub args: VerificationArgs,
 
     /// Include all publicly-visible symbols in the generated goto binary, not just those reachable from
     /// a proof harness. Useful when attempting to verify things that were not annotated with kani
@@ -51,7 +51,7 @@ enum InstallType {
 }
 
 impl KaniSession {
-    pub fn new(args: VerifyArgs) -> Result<Self> {
+    pub fn new(args: VerificationArgs) -> Result<Self> {
         init_logger(&args);
         let install = InstallType::new()?;
 
@@ -319,7 +319,7 @@ fn expect_path(path: PathBuf) -> Result<PathBuf> {
 }
 
 /// Initialize the logger using the KANI_LOG environment variable and `--debug` argument.
-fn init_logger(args: &VerifyArgs) {
+fn init_logger(args: &VerificationArgs) {
     let filter = EnvFilter::from_env(LOG_ENV_VAR);
     let filter = if args.common_args.debug {
         filter.add_directive(LevelFilter::DEBUG.into())

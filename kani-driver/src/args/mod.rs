@@ -35,10 +35,19 @@ where
         .unwrap()
 }
 
-pub fn print_deprecated(verbosity: &CommonArgs, option: &str) {
+pub fn print_obsolete(verbosity: &CommonArgs, option: &str) {
     if !verbosity.quiet {
         warning(&format!(
-            "The `{option}` option is deprecated. This option no longer has any effect and should be removed"
+            "The `{option}` option is obsolete. This option no longer has any effect and should be removed"
+        ))
+    }
+}
+
+pub fn print_deprecated(verbosity: &CommonArgs, option: &str, alternative: &str) {
+    if !verbosity.quiet {
+        warning(&format!(
+            "The `{option}` option is deprecated. This option will be removed soon. \
+            Consider using `{alternative}` instead"
         ))
     }
 }
@@ -58,7 +67,7 @@ pub struct StandaloneArgs {
     pub input: PathBuf,
 
     #[command(flatten)]
-    pub verify_opts: VerifyArgs,
+    pub verify_opts: VerificationArgs,
 }
 
 #[derive(Debug, clap::Parser)]
@@ -73,7 +82,7 @@ pub struct CargoKaniArgs {
     pub command: Option<CargoKaniSubcommand>,
 
     #[command(flatten)]
-    pub verify_opts: VerifyArgs,
+    pub verify_opts: VerificationArgs,
 }
 
 // cargo-kani takes optional subcommands to request specialized behavior
@@ -86,7 +95,7 @@ pub enum CargoKaniSubcommand {
 // Common arguments for invoking Kani for verification purpose. This gets put into KaniContext,
 // whereas anything above is "local" to "main"'s control flow.
 #[derive(Debug, clap::Args)]
-pub struct VerifyArgs {
+pub struct VerificationArgs {
     /// Temporary option to trigger assess mode for out test suite
     /// where we are able to add options but not subcommands
     #[arg(long, hide = true, requires("enable_unstable"))]
@@ -101,7 +110,6 @@ pub struct VerifyArgs {
     /// This option does not work with `--output-format old`.
     #[arg(
         long,
-        requires("enable_unstable"),
         conflicts_with_all(&["visualize"]),
         ignore_case = true,
         value_enum
@@ -274,7 +282,7 @@ pub struct VerifyArgs {
     pub common_args: CommonArgs,
 }
 
-impl VerifyArgs {
+impl VerificationArgs {
     pub fn restrict_vtable(&self) -> bool {
         self.restrict_vtable
         // if we flip the default, this will become: !self.no_restrict_vtable
@@ -485,7 +493,7 @@ impl ValidateArgs for CargoKaniArgs {
     }
 }
 
-impl ValidateArgs for VerifyArgs {
+impl ValidateArgs for VerificationArgs {
     fn validate(&self) -> Result<(), Error> {
         self.common_args.validate()?;
         let extra_unwind =
@@ -515,11 +523,11 @@ impl ValidateArgs for VerifyArgs {
         }
 
         if self.mir_linker {
-            print_deprecated(&self.common_args, "--mir-linker");
+            print_obsolete(&self.common_args, "--mir-linker");
         }
 
         if self.legacy_linker {
-            print_deprecated(&self.common_args, "--legacy-linker");
+            print_obsolete(&self.common_args, "--legacy-linker");
         }
 
         // TODO: these conflicting flags reflect what's necessary to pass current tests unmodified.
@@ -576,17 +584,32 @@ impl ValidateArgs for VerifyArgs {
             }
         }
 
+        if self.concrete_playback.is_some()
+            && !self.common_args.unstable_features.contains(&UnstableFeatures::ConcretePlayback)
+        {
+            if self.common_args.enable_unstable {
+                print_deprecated(&self.common_args, "--enable-unstable", "-Z concrete-playback");
+            } else {
+                return Err(Error::raw(
+                    ErrorKind::MissingRequiredArgument,
+                    "The `--concrete-playback` argument is unstable and requires `-Z \
+                concrete-playback` to be used.",
+                ));
+            }
+        }
+
         if !self.c_lib.is_empty()
             && !self.common_args.unstable_features.contains(&UnstableFeatures::CFfi)
         {
             if self.common_args.enable_unstable {
-                print_deprecated(&self.common_args, "`--enable-unstable`");
-            }
-            return Err(Error::raw(
-                ErrorKind::MissingRequiredArgument,
-                "The `--c-lib` argument is unstable and requires `-Z c-ffi` to enable \
+                print_deprecated(&self.common_args, "`--enable-unstable`", "-Z c-ffi");
+            } else {
+                return Err(Error::raw(
+                    ErrorKind::MissingRequiredArgument,
+                    "The `--c-lib` argument is unstable and requires `-Z c-ffi` to enable \
                 unstable C-FFI support.",
-            ));
+                ));
+            }
         }
 
         Ok(())
@@ -805,18 +828,17 @@ mod tests {
 
     #[test]
     fn check_concrete_playback_unstable() {
-        check_opt!(
-            "--concrete-playback inplace",
-            true,
-            concrete_playback,
-            Some(ConcretePlaybackMode::InPlace)
-        );
-        check_opt!(
-            "--concrete-playback print",
-            true,
-            concrete_playback,
-            Some(ConcretePlaybackMode::Print)
-        );
+        let check = |input: &str| {
+            let args = input.split_whitespace();
+            let result = StandaloneArgs::try_parse_from(args).unwrap().validate();
+            assert!(result.is_err());
+
+            let kind = result.unwrap_err().kind();
+            assert!(matches!(kind, ErrorKind::MissingRequiredArgument), "Found {kind:?}");
+        };
+
+        check("kani file.rs --concrete-playback=inplace");
+        check("kani file.rs --concrete-playback=print");
     }
 
     /// Check if parsing the given argument string results in the given error.

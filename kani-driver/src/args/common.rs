@@ -11,7 +11,7 @@ pub struct CommonArgs {
     #[arg(long)]
     pub debug: bool,
     /// Produces no output, just an exit code and requested artifacts; overrides --verbose
-    #[arg(long, short)]
+    #[arg(long, short, conflicts_with_all(["debug", "verbose"]))]
     pub quiet: bool,
     /// Output processing stages and commands, along with minor debug information
     #[arg(long, short, default_value_if("debug", "true", Some("true")))]
@@ -40,6 +40,8 @@ pub enum UnstableFeatures {
     GenC,
     /// Allow Kani to link against C code.
     CFfi,
+    /// Enable concrete playback flow.
+    ConcretePlayback,
 }
 
 impl ValidateArgs for CommonArgs {
