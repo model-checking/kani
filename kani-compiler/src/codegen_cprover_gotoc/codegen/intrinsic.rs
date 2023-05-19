@@ -504,7 +504,10 @@ impl<'tcx> GotocCtx<'tcx> {
             "nearbyintf32" => codegen_simple_intrinsic!(Nearbyintf),
             "nearbyintf64" => codegen_simple_intrinsic!(Nearbyint),
             "needs_drop" => codegen_intrinsic_const!(),
-            "offset" => self.codegen_offset(intrinsic, instance, fargs, p, loc),
+            // As of https://github.com/rust-lang/rust/pull/110822 the `offset` intrinsic is lowered to `mir::BinOp::Offset`
+            "offset" => unreachable!(
+                "Expected `core::intrinsics::unreachable` to be handled by `BinOp::OffSet`"
+            ),
             "powf32" => unstable_codegen!(codegen_simple_intrinsic!(Powf)),
             "powf64" => unstable_codegen!(codegen_simple_intrinsic!(Pow)),
             "powif32" => unstable_codegen!(codegen_simple_intrinsic!(Powif)),
@@ -1729,7 +1732,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Returns a tuple with:
     ///  * The result expression of the computation.
     ///  * An assertion statement to ensure the operation has not overflowed.
-    fn count_in_bytes(
+    pub fn count_in_bytes(
         &mut self,
         count: Expr,
         ty: Ty<'tcx>,

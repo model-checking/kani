@@ -31,7 +31,7 @@ use rustc_middle::span_bug;
 use rustc_middle::ty::adjustment::PointerCast;
 use rustc_middle::ty::{
     Closure, ClosureKind, ConstKind, Instance, InstanceDef, ParamEnv, Ty, TyCtxt, TyKind,
-    TypeFoldable, VtblEntry, WithOptConstParam,
+    TypeFoldable, VtblEntry,
 };
 
 use crate::kani_middle::coercion;
@@ -111,7 +111,7 @@ where
         let def_kind = tcx.def_kind(def_id);
         if matches!(def_kind, DefKind::Const) && predicate(tcx, def_id) {
             let instance = Instance::mono(tcx, def_id);
-            let body = tcx.instance_mir(InstanceDef::Item(WithOptConstParam::unknown(def_id)));
+            let body = tcx.instance_mir(InstanceDef::Item(def_id));
             let mut collector =
                 MonoItemsFnCollector { tcx, body, instance, collected: FxHashSet::default() };
             collector.visit_body(body);

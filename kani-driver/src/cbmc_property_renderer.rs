@@ -535,7 +535,7 @@ fn has_unwinding_assertion_failures(properties: &Vec<Property>) -> bool {
 /// definition.
 fn modify_undefined_function_checks(mut properties: Vec<Property>) -> (Vec<Property>, bool) {
     let mut has_unknown_location_checks = false;
-    for mut prop in &mut properties {
+    for prop in &mut properties {
         if let Some(function) = &prop.source_location.function
             && prop.description == DEFAULT_ASSERTION
             && prop.source_location.file.is_none()

@@ -11,21 +11,21 @@ fn test_offset() {
     let ptr: *const u8 = s.as_ptr();
 
     unsafe {
-        assert_eq!(*offset(ptr, 0) as char, '1');
-        assert_eq!(*offset(ptr, 1) as char, '2');
-        assert_eq!(*offset(ptr, 2) as char, '3');
-        assert_eq!(*offset(ptr, 2).sub(1) as char, '2');
+        assert_eq!(*offset(ptr, 0isize) as char, '1');
+        assert_eq!(*offset(ptr, 1isize) as char, '2');
+        assert_eq!(*offset(ptr, 2isize) as char, '3');
+        assert_eq!(*offset(ptr, 2isize).sub(1) as char, '2');
 
         // This is okay because it's one byte past the object,
         // but dereferencing it is UB
-        let _x = offset(ptr, 3);
+        let _x = offset(ptr, 3isize);
 
         // Check that the results are the same with a pointer
         // that goes 1 element behind the original one
         let other_ptr: *const u8 = ptr.add(1);
 
-        assert_eq!(*offset(other_ptr, 0) as char, '2');
-        assert_eq!(*offset(other_ptr, 1) as char, '3');
-        assert_eq!(*offset(other_ptr, 1).sub(1) as char, '2');
+        assert_eq!(*offset(other_ptr, 0isize) as char, '2');
+        assert_eq!(*offset(other_ptr, 1isize) as char, '3');
+        assert_eq!(*offset(other_ptr, 1isize).sub(1) as char, '2');
     }
 }
