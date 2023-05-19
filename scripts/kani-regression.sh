@@ -27,11 +27,7 @@ check_kissat_version.sh
 ${SCRIPT_DIR}/kani-fmt.sh --check
 
 # Build all packages in the workspace
-if [[ "" != "${KANI_ENABLE_WRITE_JSON_SYMTAB-}" ]]; then
-  cargo build-dev -- --features write_json_symtab
-else
-  cargo build-dev
-fi
+cargo build-dev
 
 # Unit tests
 cargo test -p cprover_bindings
@@ -69,11 +65,8 @@ for testp in "${TESTS[@]}"; do
       --quiet --no-fail-fast
 done
 
-# Don't run std regression if using JSON symtab to avoid OOM issues.
-if [[ -z "${KANI_ENABLE_WRITE_JSON_SYMTAB-}" ]]; then
-    # Check codegen for the standard library
-    time "$SCRIPT_DIR"/std-lib-regression.sh
-fi
+# Check codegen for the standard library
+time "$SCRIPT_DIR"/std-lib-regression.sh
 
 # We rarely benefit from re-using build artifacts in the firecracker test,
 # and we often end up with incompatible leftover artifacts:

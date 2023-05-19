@@ -118,8 +118,10 @@ pub fn mk_rustc_arg(stub_mapping: &FxHashMap<DefPathHash, DefPathHash>) -> Strin
     // as an association list.
     let mut pairs = Vec::new();
     for (k, v) in stub_mapping {
-        let kparts = k.0.as_value();
-        let vparts = v.0.as_value();
+        let (k_a, k_b) = k.0.split();
+        let kparts = (k_a.as_u64(), k_b.as_u64());
+        let (v_a, v_b) = v.0.split();
+        let vparts = (v_a.as_u64(), v_b.as_u64());
         pairs.push((kparts, vparts));
     }
     // Store our serialized mapping as a fake LLVM argument (safe to do since

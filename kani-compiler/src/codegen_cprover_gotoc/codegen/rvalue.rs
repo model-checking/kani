@@ -18,7 +18,7 @@ use cbmc::MachineModel;
 use cbmc::{btree_string_map, InternString, InternedString};
 use num::bigint::BigInt;
 use rustc_abi::FieldIdx;
-use rustc_index::vec::IndexVec;
+use rustc_index::IndexVec;
 use rustc_middle::mir::{AggregateKind, BinOp, CastKind, NullOp, Operand, Place, Rvalue, UnOp};
 use rustc_middle::ty::adjustment::PointerCast;
 use rustc_middle::ty::layout::LayoutOf;
@@ -294,6 +294,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     fn codegen_rvalue_binary_op(
         &mut self,
+        ty: Ty<'tcx>,
         op: &BinOp,
         e1: &Operand<'tcx>,
         e2: &Operand<'tcx>,
@@ -317,7 +318,32 @@ impl<'tcx> GotocCtx<'tcx> {
             BinOp::Offset => {
                 let ce1 = self.codegen_operand(e1);
                 let ce2 = self.codegen_operand(e2);
-                ce1.plus(ce2)
+
+                // Check that computing `offset` in bytes would not overflow
+                let (offset_bytes, bytes_overflow_check) = self.count_in_bytes(
+                    ce2.clone().cast_to(Type::ssize_t()),
+                    ty,
+                    Type::ssize_t(),
+                    "offset",
+                    loc,
+                );
+
+                // Check that the computation would not overflow an `isize` which is UB:
+                // https://doc.rust-lang.org/std/primitive.pointer.html#method.offset
+                // These checks may allow a wrapping-around behavior in CBMC:
+                // https://github.com/model-checking/kani/issues/1150
+                let overflow_res = ce1.clone().cast_to(Type::ssize_t()).add_overflow(offset_bytes);
+                let overflow_check = self.codegen_assert_assume(
+                    overflow_res.overflowed.not(),
+                    PropertyClass::ArithmeticOverflow,
+                    "attempt to compute offset which would overflow",
+                    loc,
+                );
+                let res = ce1.clone().plus(ce2);
+                Expr::statement_expression(
+                    vec![bytes_overflow_check, overflow_check, res.as_stmt(loc)],
+                    ce1.typ().clone(),
+                )
             }
         }
     }
@@ -548,7 +574,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 self.codegen_operand(operand).transmute_to(goto_typ, &self.symbol_table)
             }
             Rvalue::BinaryOp(op, box (ref e1, ref e2)) => {
-                self.codegen_rvalue_binary_op(op, e1, e2, loc)
+                self.codegen_rvalue_binary_op(res_ty, op, e1, e2, loc)
             }
             Rvalue::CheckedBinaryOp(op, box (ref e1, ref e2)) => {
                 self.codegen_rvalue_checked_binary_op(op, e1, e2, res_ty)
@@ -560,6 +586,10 @@ impl<'tcx> GotocCtx<'tcx> {
                     NullOp::SizeOf => Expr::int_constant(layout.size.bytes_usize(), Type::size_t())
                         .with_size_of_annotation(self.codegen_ty(t)),
                     NullOp::AlignOf => Expr::int_constant(layout.align.abi.bytes(), Type::size_t()),
+                    NullOp::OffsetOf(fields) => Expr::int_constant(
+                        layout.offset_of_subfield(self, fields.iter().map(|f| f.index())).bytes(),
+                        Type::size_t(),
+                    ),
                 }
             }
             Rvalue::ShallowInitBox(ref operand, content_ty) => {
