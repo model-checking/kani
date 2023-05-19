@@ -6,10 +6,7 @@
 use std::collections::HashSet;
 
 use kani_queries::{QueryDb, UserInput};
-use rustc_hir::{
-    def::DefKind,
-    def_id::{DefId, LOCAL_CRATE},
-};
+use rustc_hir::{def::DefKind, def_id::LOCAL_CRATE};
 use rustc_middle::mir::mono::MonoItem;
 use rustc_middle::span_bug;
 use rustc_middle::ty::layout::{
@@ -102,11 +99,6 @@ impl SourceLocation {
             Err(_) => local_filename,
         };
         SourceLocation { filename, start_line, start_col, end_line, end_col }
-    }
-
-    pub fn def_id_loc(tcx: TyCtxt, def_id: DefId) -> Self {
-        let span = tcx.def_span(def_id);
-        Self::new(tcx, &span)
     }
 }
 
