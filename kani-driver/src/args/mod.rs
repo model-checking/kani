@@ -1,18 +1,56 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+//! Module that define Kani's command line interface. This includes all subcommands.
 
+pub mod assess_args;
+pub mod common;
+
+pub use assess_args::*;
+
+use self::common::*;
 use crate::util::warning;
-use kani_metadata::CbmcSolver;
-
 use clap::builder::{PossibleValue, TypedValueParser};
-use clap::{
-    error::ContextKind, error::ContextValue, error::Error, error::ErrorKind, CommandFactory,
-    ValueEnum,
-};
+use clap::{error::ContextKind, error::ContextValue, error::Error, error::ErrorKind, ValueEnum};
+use kani_metadata::CbmcSolver;
 use std::ffi::OsString;
 use std::path::PathBuf;
 use std::str::FromStr;
 use strum::VariantNames;
+
+/// Trait used to perform extra validation after parsing.
+pub trait ValidateArgs {
+    /// Perform post-parsing validation but do not abort.
+    fn validate(&self) -> Result<(), Error>;
+}
+
+/// Validate a set of arguments and ensure they are in a valid state.
+/// This method will abort execution with a user friendly error message if the state is invalid.
+pub fn check_is_valid<T>(command: &T)
+where
+    T: clap::Parser + ValidateArgs,
+{
+    command
+        .validate()
+        .or_else(|e| -> Result<(), ()> { e.format(&mut T::command()).exit() })
+        .unwrap()
+}
+
+pub fn print_obsolete(verbosity: &CommonArgs, option: &str) {
+    if !verbosity.quiet {
+        warning(&format!(
+            "The `{option}` option is obsolete. This option no longer has any effect and should be removed"
+        ))
+    }
+}
+
+pub fn print_deprecated(verbosity: &CommonArgs, option: &str, alternative: &str) {
+    if !verbosity.quiet {
+        warning(&format!(
+            "The `{option}` option is deprecated. This option will be removed soon. \
+            Consider using `{alternative}` instead"
+        ))
+    }
+}
 
 // By default we configure CBMC to use 16 bits to represent the object bits in pointers.
 const DEFAULT_OBJECT_BITS: u32 = 16;
@@ -29,7 +67,7 @@ pub struct StandaloneArgs {
     pub input: PathBuf,
 
     #[command(flatten)]
-    pub common_opts: KaniArgs,
+    pub verify_opts: VerificationArgs,
 }
 
 #[derive(Debug, clap::Parser)]
@@ -44,20 +82,20 @@ pub struct CargoKaniArgs {
     pub command: Option<CargoKaniSubcommand>,
 
     #[command(flatten)]
-    pub common_opts: KaniArgs,
+    pub verify_opts: VerificationArgs,
 }
 
 // cargo-kani takes optional subcommands to request specialized behavior
 #[derive(Debug, clap::Subcommand)]
 pub enum CargoKaniSubcommand {
     #[command(hide = true)]
-    Assess(crate::assess::AssessArgs),
+    Assess(Box<crate::assess::AssessArgs>),
 }
 
-// Common arguments for invoking Kani. This gets put into KaniContext, whereas
-// anything above is "local" to "main"'s control flow.
+// Common arguments for invoking Kani for verification purpose. This gets put into KaniContext,
+// whereas anything above is "local" to "main"'s control flow.
 #[derive(Debug, clap::Args)]
-pub struct KaniArgs {
+pub struct VerificationArgs {
     /// Temporary option to trigger assess mode for out test suite
     /// where we are able to add options but not subcommands
     #[arg(long, hide = true, requires("enable_unstable"))]
@@ -72,7 +110,6 @@ pub struct KaniArgs {
     /// This option does not work with `--output-format old`.
     #[arg(
         long,
-        requires("enable_unstable"),
         conflicts_with_all(&["visualize"]),
         ignore_case = true,
         value_enum
@@ -82,24 +119,6 @@ pub struct KaniArgs {
     /// behavior for `cargo-kani`.
     #[arg(long, hide_short_help = true)]
     pub keep_temps: bool,
-
-    /// Produce full debug information
-    #[arg(long)]
-    pub debug: bool,
-    /// Produces no output, just an exit code and requested artifacts; overrides --verbose
-    #[arg(long, short)]
-    pub quiet: bool,
-    /// Output processing stages and commands, along with minor debug information
-    #[arg(long, short, default_value_if("debug", "true", Some("true")))]
-    pub verbose: bool,
-    /// Enable usage of unstable options
-    #[arg(long, hide_short_help = true)]
-    pub enable_unstable: bool,
-
-    /// We no longer support dry-run. Use `--verbose` to see the commands being printed during
-    /// Kani execution.
-    #[arg(long, hide = true)]
-    pub dry_run: bool,
 
     /// Generate C file equivalent to inputted program.
     /// This feature is unstable and it requires `--enable-unstable` to be used
@@ -259,12 +278,11 @@ pub struct KaniArgs {
     #[command(flatten)]
     pub cargo: CargoArgs,
 
-    /// Enable an unstable feature.
-    #[arg(short = 'Z', num_args(1), value_name = "UNSTABLE_FEATURE")]
-    pub unstable_features: Vec<UnstableFeatures>,
+    #[command(flatten)]
+    pub common_args: CommonArgs,
 }
 
-impl KaniArgs {
+impl VerificationArgs {
     pub fn restrict_vtable(&self) -> bool {
         self.restrict_vtable
         // if we flip the default, this will become: !self.no_restrict_vtable
@@ -298,7 +316,7 @@ impl KaniArgs {
 /// These generally have to do with selection of packages or activation of features.
 /// These do not (currently) include cargo args that kani pays special attention to:
 /// for instance, we keep `--tests` and `--target-dir` elsewhere.
-#[derive(Debug, clap::Args)]
+#[derive(Debug, Default, clap::Args)]
 pub struct CargoArgs {
     /// Activate all package features
     #[arg(long)]
@@ -351,18 +369,6 @@ pub enum ConcretePlaybackMode {
     // Otherwise clap will default to `in-place`
     #[value(name = "inplace")]
     InPlace,
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum, strum_macros::Display)]
-#[strum(serialize_all = "kebab-case")]
-pub enum UnstableFeatures {
-    /// Allow replacing certain items with stubs (mocks).
-    /// See [RFC-0002](https://model-checking.github.io/kani/rfc/rfcs/0002-function-stubbing.html)
-    Stubbing,
-    /// Generate a C-like file equivalent to input program used for debugging purpose.
-    GenC,
-    /// Allow Kani to link against C code.
-    CFfi,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, ValueEnum)]
@@ -454,15 +460,9 @@ impl CheckArgs {
     }
 }
 
-impl StandaloneArgs {
-    pub fn validate(&self) {
-        self.common_opts.validate::<Self>();
-        self.valid_input()
-            .or_else(|e| -> Result<(), ()> { e.format(&mut Self::command()).exit() })
-            .unwrap()
-    }
-
-    fn valid_input(&self) -> Result<(), Error> {
+impl ValidateArgs for StandaloneArgs {
+    fn validate(&self) -> Result<(), Error> {
+        self.verify_opts.validate()?;
         if !self.input.is_file() {
             Err(Error::raw(
                 ErrorKind::InvalidValue,
@@ -476,30 +476,26 @@ impl StandaloneArgs {
         }
     }
 }
-impl CargoKaniArgs {
-    pub fn validate(&self) {
-        self.common_opts.validate::<Self>();
+
+impl ValidateArgs for CargoKaniArgs {
+    fn validate(&self) -> Result<(), Error> {
+        self.verify_opts.validate()?;
         // --assess requires --enable-unstable, but the subcommand needs manual checking
-        if (matches!(self.command, Some(CargoKaniSubcommand::Assess(_))) || self.common_opts.assess)
-            && !self.common_opts.enable_unstable
+        if (matches!(self.command, Some(CargoKaniSubcommand::Assess(_))) || self.verify_opts.assess)
+            && !self.verify_opts.common_args.enable_unstable
         {
-            Self::command()
-                .error(
-                    ErrorKind::MissingRequiredArgument,
-                    "Assess is unstable and requires 'cargo kani --enable-unstable assess'",
-                )
-                .exit()
+            return Err(Error::raw(
+                ErrorKind::MissingRequiredArgument,
+                "Assess is unstable and requires 'cargo kani --enable-unstable assess'",
+            ));
         }
+        Ok(())
     }
 }
-impl KaniArgs {
-    pub fn validate<T: clap::Parser>(&self) {
-        self.validate_inner()
-            .or_else(|e| -> Result<(), ()> { e.format(&mut T::command()).exit() })
-            .unwrap()
-    }
 
-    fn validate_inner(&self) -> Result<(), Error> {
+impl ValidateArgs for VerificationArgs {
+    fn validate(&self) -> Result<(), Error> {
+        self.common_args.validate()?;
         let extra_unwind =
             self.cbmc_args.iter().any(|s| s.to_str().unwrap().starts_with("--unwind"));
         let natives_unwind = self.default_unwind.is_some() || self.unwind.is_some();
@@ -518,7 +514,7 @@ impl KaniArgs {
             );
         }
 
-        if self.visualize && !self.enable_unstable {
+        if self.visualize && !self.common_args.enable_unstable {
             return Err(Error::raw(
                 ErrorKind::MissingRequiredArgument,
                 "Missing argument: --visualize now requires --enable-unstable
@@ -527,11 +523,11 @@ impl KaniArgs {
         }
 
         if self.mir_linker {
-            self.print_deprecated("--mir-linker");
+            print_obsolete(&self.common_args, "--mir-linker");
         }
 
         if self.legacy_linker {
-            self.print_deprecated("--legacy-linker");
+            print_obsolete(&self.common_args, "--legacy-linker");
         }
 
         // TODO: these conflicting flags reflect what's necessary to pass current tests unmodified.
@@ -548,7 +544,7 @@ impl KaniArgs {
                 "Invalid flag: --function should be provided to Kani directly, not via --cbmc-args.",
             ));
         }
-        if self.quiet && self.concrete_playback == Some(ConcretePlaybackMode::Print) {
+        if self.common_args.quiet && self.concrete_playback == Some(ConcretePlaybackMode::Print) {
             return Err(Error::raw(
                 ErrorKind::ArgumentConflict,
                 "Conflicting options: --concrete-playback=print and --quiet.",
@@ -576,13 +572,6 @@ impl KaniArgs {
                 "Conflicting options: --jobs requires `--output-format=terse`",
             ));
         }
-
-        if self.dry_run {
-            return Err(Error::raw(
-                ErrorKind::ValueValidation,
-                "The `--dry-run` option is obsolete. Use --verbose instead.",
-            ));
-        }
         if let Some(out_dir) = &self.target_dir {
             if out_dir.exists() && !out_dir.is_dir() {
                 return Err(Error::raw(
@@ -595,26 +584,35 @@ impl KaniArgs {
             }
         }
 
-        if !self.c_lib.is_empty() && !self.unstable_features.contains(&UnstableFeatures::CFfi) {
-            if self.enable_unstable {
-                self.print_deprecated("`--enable-unstable`");
+        if self.concrete_playback.is_some()
+            && !self.common_args.unstable_features.contains(&UnstableFeatures::ConcretePlayback)
+        {
+            if self.common_args.enable_unstable {
+                print_deprecated(&self.common_args, "--enable-unstable", "-Z concrete-playback");
+            } else {
+                return Err(Error::raw(
+                    ErrorKind::MissingRequiredArgument,
+                    "The `--concrete-playback` argument is unstable and requires `-Z \
+                concrete-playback` to be used.",
+                ));
             }
-            return Err(Error::raw(
-                ErrorKind::MissingRequiredArgument,
-                "The `--c-lib` argument is unstable and requires `-Z c-ffi` to enable \
+        }
+
+        if !self.c_lib.is_empty()
+            && !self.common_args.unstable_features.contains(&UnstableFeatures::CFfi)
+        {
+            if self.common_args.enable_unstable {
+                print_deprecated(&self.common_args, "`--enable-unstable`", "-Z c-ffi");
+            } else {
+                return Err(Error::raw(
+                    ErrorKind::MissingRequiredArgument,
+                    "The `--c-lib` argument is unstable and requires `-Z c-ffi` to enable \
                 unstable C-FFI support.",
-            ));
+                ));
+            }
         }
 
         Ok(())
-    }
-
-    fn print_deprecated(&self, option: &str) {
-        if !self.quiet {
-            warning(&format!(
-                "The `{option}` option is deprecated. This option no longer has any effect and should be removed"
-            ))
-        }
     }
 }
 
@@ -691,7 +689,7 @@ mod tests {
             "--here",
         ])
         .unwrap();
-        assert_eq!(a.common_opts.cbmc_args, vec!["--multiple", "args", "--here"]);
+        assert_eq!(a.verify_opts.cbmc_args, vec!["--multiple", "args", "--here"]);
         let _b = StandaloneArgs::try_parse_from(vec![
             "kani",
             "file.rs",
@@ -708,7 +706,7 @@ mod tests {
         let args =
             StandaloneArgs::try_parse_from("kani input.rs --harness a --harness b".split(" "))
                 .unwrap();
-        assert_eq!(args.common_opts.harnesses, vec!["a".to_owned(), "b".to_owned()]);
+        assert_eq!(args.verify_opts.harnesses, vec!["a".to_owned(), "b".to_owned()]);
     }
 
     #[test]
@@ -724,7 +722,7 @@ mod tests {
     fn check_multiple_packages() {
         // accepts repeated:
         let a = CargoKaniArgs::try_parse_from(vec!["cargo-kani", "-p", "a", "-p", "b"]).unwrap();
-        assert_eq!(a.common_opts.cargo.package, vec!["a".to_owned(), "b".to_owned()]);
+        assert_eq!(a.verify_opts.cargo.package, vec!["a".to_owned(), "b".to_owned()]);
         let b = CargoKaniArgs::try_parse_from(vec![
             "cargo-kani",
             "-p",
@@ -751,13 +749,13 @@ mod tests {
 
     macro_rules! check_unstable_flag {
         ($args:expr, $name:ident) => {
-            check($args, true, |p| p.common_opts.$name)
+            check($args, true, |p| p.verify_opts.$name)
         };
     }
 
     macro_rules! check_opt {
         ($args:expr, $require_unstable:expr, $name:ident, $expected:expr) => {
-            check($args, $require_unstable, |p| p.common_opts.$name == $expected)
+            check($args, $require_unstable, |p| p.verify_opts.$name == $expected)
         };
     }
 
@@ -777,11 +775,8 @@ mod tests {
     fn check_dry_run_fails() {
         // We don't support --dry-run anymore but we print a friendly reminder for now.
         let args = vec!["kani", "file.rs", "--dry-run"];
-        let err = StandaloneArgs::try_parse_from(&args)
-            .unwrap()
-            .common_opts
-            .validate_inner()
-            .unwrap_err();
+        let err =
+            StandaloneArgs::try_parse_from(&args).unwrap().verify_opts.validate().unwrap_err();
         assert_eq!(err.kind(), ErrorKind::ValueValidation);
     }
 
@@ -789,7 +784,7 @@ mod tests {
     #[test]
     fn check_invalid_input_fails() {
         let args = vec!["kani", "."];
-        let err = StandaloneArgs::try_parse_from(&args).unwrap().valid_input().unwrap_err();
+        let err = StandaloneArgs::try_parse_from(&args).unwrap().validate().unwrap_err();
         assert_eq!(err.kind(), ErrorKind::InvalidValue);
     }
 
@@ -833,24 +828,23 @@ mod tests {
 
     #[test]
     fn check_concrete_playback_unstable() {
-        check_opt!(
-            "--concrete-playback inplace",
-            true,
-            concrete_playback,
-            Some(ConcretePlaybackMode::InPlace)
-        );
-        check_opt!(
-            "--concrete-playback print",
-            true,
-            concrete_playback,
-            Some(ConcretePlaybackMode::Print)
-        );
+        let check = |input: &str| {
+            let args = input.split_whitespace();
+            let result = StandaloneArgs::try_parse_from(args).unwrap().validate();
+            assert!(result.is_err());
+
+            let kind = result.unwrap_err().kind();
+            assert!(matches!(kind, ErrorKind::MissingRequiredArgument), "Found {kind:?}");
+        };
+
+        check("kani file.rs --concrete-playback=inplace");
+        check("kani file.rs --concrete-playback=print");
     }
 
     /// Check if parsing the given argument string results in the given error.
     fn expect_validation_error(arg: &str, err: ErrorKind) {
         let args = StandaloneArgs::try_parse_from(arg.split_whitespace()).unwrap();
-        assert_eq!(args.common_opts.validate_inner().unwrap_err().kind(), err);
+        assert_eq!(args.verify_opts.validate().unwrap_err().kind(), err);
     }
 
     #[test]
@@ -883,7 +877,7 @@ mod tests {
     #[test]
     fn check_features_parsing() {
         fn parse(args: &[&str]) -> Vec<String> {
-            CargoKaniArgs::try_parse_from(args).unwrap().common_opts.cargo.features()
+            CargoKaniArgs::try_parse_from(args).unwrap().verify_opts.cargo.features()
         }
 
         // spaces, commas, multiple repeated args, all ok

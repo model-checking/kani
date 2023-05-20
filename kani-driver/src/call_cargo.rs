@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use crate::args::KaniArgs;
+use crate::args::VerificationArgs;
 use crate::call_single_file::to_rustc_arg;
 use crate::project::Artifact;
 use crate::session::KaniSession;
@@ -95,7 +95,7 @@ impl KaniSession {
             cargo_args.push("test".into());
         }
 
-        if self.args.verbose {
+        if self.args.common_args.verbose {
             cargo_args.push("-v".into());
         }
 
@@ -205,7 +205,7 @@ impl KaniSession {
                             )));
                         }
                         _ => {
-                            if !self.args.quiet {
+                            if !self.args.common_args.quiet {
                                 print_msg(&msg.message, support_color)?;
                             }
                         }
@@ -223,14 +223,14 @@ impl KaniSession {
                         // do nothing
                     }
                     Message::TextLine(msg) => {
-                        if !self.args.quiet {
+                        if !self.args.common_args.quiet {
                             println!("{msg}");
                         }
                     }
 
                     // Non-exhaustive enum.
                     _ => {
-                        if !self.args.quiet {
+                        if !self.args.common_args.quiet {
                             println!("{message:?}");
                         }
                     }
@@ -292,7 +292,10 @@ fn validate_package_names(package_names: &[String], packages: &[Package]) -> Res
 /// In addition, if either `--package <pkg>` or `--exclude <pkg>` is given,
 /// validate that `<pkg>` is a package name in the workspace, or return an error
 /// otherwise.
-fn packages_to_verify<'b>(args: &KaniArgs, metadata: &'b Metadata) -> Result<Vec<&'b Package>> {
+fn packages_to_verify<'b>(
+    args: &VerificationArgs,
+    metadata: &'b Metadata,
+) -> Result<Vec<&'b Package>> {
     debug!(package_selection=?args.cargo.package, package_exclusion=?args.cargo.exclude, workspace=args.cargo.workspace, "packages_to_verify args");
     let packages = if !args.cargo.package.is_empty() {
         validate_package_names(&args.cargo.package, &metadata.packages)?;
@@ -403,7 +406,7 @@ impl Display for VerificationTarget {
 /// The documentation for `crate-type` explicitly states that the only time `kind` and
 /// `crate-type` differs is for examples.
 /// <https://docs.rs/cargo_metadata/0.15.0/cargo_metadata/struct.Target.html#structfield.crate_types>
-fn package_targets(args: &KaniArgs, package: &Package) -> Vec<VerificationTarget> {
+fn package_targets(args: &VerificationArgs, package: &Package) -> Vec<VerificationTarget> {
     let mut ignored_tests = vec![];
     let mut ignored_unsupported = vec![];
     let mut verification_targets = vec![];
@@ -450,7 +453,7 @@ fn package_targets(args: &KaniArgs, package: &Package) -> Vec<VerificationTarget
         }
     }
 
-    if args.verbose {
+    if args.common_args.verbose {
         // Print targets that were skipped only on verbose mode.
         if !ignored_tests.is_empty() {
             println!("Skipped the following test targets: '{}'.", ignored_tests.join("', '"));

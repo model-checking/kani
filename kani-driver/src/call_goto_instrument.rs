@@ -52,7 +52,7 @@ impl KaniSession {
 
             self.gen_c(output, &c_outfile)?;
 
-            if !self.args.quiet {
+            if !self.args.common_args.quiet {
                 println!("Generated C code written to {}", c_outfile.to_string_lossy());
             }
 
@@ -60,7 +60,7 @@ impl KaniSession {
             let prett_name_map =
                 project.get_harness_artifact(&harness, ArtifactType::PrettyNameMap).unwrap();
             self.demangle_c(prett_name_map, &c_outfile, &c_demangled)?;
-            if !self.args.quiet {
+            if !self.args.common_args.quiet {
                 println!("Demangled GotoC code written to {}", c_demangled.to_string_lossy())
             }
         }

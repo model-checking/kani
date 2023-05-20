@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use crate::args::KaniArgs;
+use crate::args::VerificationArgs;
 use crate::util::render_command;
 use anyhow::{bail, Context, Result};
 use std::io::Write;
@@ -22,7 +22,7 @@ const LOG_ENV_VAR: &str = "KANI_LOG";
 /// Contains information about the execution environment and arguments that affect operations
 pub struct KaniSession {
     /// The common command-line arguments
-    pub args: KaniArgs,
+    pub args: VerificationArgs,
 
     /// Include all publicly-visible symbols in the generated goto binary, not just those reachable from
     /// a proof harness. Useful when attempting to verify things that were not annotated with kani
@@ -51,7 +51,7 @@ enum InstallType {
 }
 
 impl KaniSession {
-    pub fn new(args: KaniArgs) -> Result<Self> {
+    pub fn new(args: VerificationArgs) -> Result<Self> {
         init_logger(&args);
         let install = InstallType::new()?;
 
@@ -132,11 +132,11 @@ impl KaniSession {
 
     /// Run a job, leave it outputting to terminal (unless --quiet), and fail if there's a problem.
     pub fn run_terminal(&self, mut cmd: Command) -> Result<()> {
-        if self.args.quiet {
+        if self.args.common_args.quiet {
             cmd.stdout(std::process::Stdio::null());
             cmd.stderr(std::process::Stdio::null());
         }
-        if self.args.verbose {
+        if self.args.common_args.verbose {
             println!("[Kani] Running: `{}`", render_command(&cmd).to_string_lossy());
         }
         let program = cmd.get_program().to_string_lossy().to_string();
@@ -155,7 +155,8 @@ impl KaniSession {
 
     /// Run a job, but only output (unless --quiet) if it fails, and fail if there's a problem.
     pub fn run_suppress(&self, mut cmd: Command) -> Result<()> {
-        if self.args.quiet || self.args.debug || self.args.verbose {
+        let verbosity = &self.args.common_args;
+        if verbosity.quiet | verbosity.verbose | verbosity.debug {
             return self.run_terminal(cmd);
         }
         let result = cmd
@@ -176,7 +177,7 @@ impl KaniSession {
 
     /// Run a job, redirect its output to a file, and allow the caller to decide what to do with failure.
     pub fn run_redirect(&self, mut cmd: Command, stdout: &Path) -> Result<ExitStatus> {
-        if self.args.verbose {
+        if self.args.common_args.verbose {
             println!(
                 "[Kani] Running: `{} > {}`",
                 render_command(&cmd).to_string_lossy(),
@@ -202,7 +203,7 @@ impl KaniSession {
     /// NOTE: Unlike other `run_` functions, this function does not attempt to indicate
     /// the process exit code, you need to remember to check this yourself.
     pub fn run_piped(&self, mut cmd: Command) -> Result<Option<Child>> {
-        if self.args.verbose {
+        if self.args.common_args.verbose {
             println!("[Kani] Running: `{}`", render_command(&cmd).to_string_lossy());
         }
         // Run the process as a child process
@@ -222,7 +223,7 @@ impl KaniSession {
     {
         let start = Instant::now();
         let ret = func();
-        if self.args.verbose || self.args.debug {
+        if self.args.common_args.verbose || self.args.common_args.debug {
             let elapsed = start.elapsed();
             println!("Finished {description} in {}s", elapsed.as_secs_f32())
         }
@@ -318,9 +319,13 @@ fn expect_path(path: PathBuf) -> Result<PathBuf> {
 }
 
 /// Initialize the logger using the KANI_LOG environment variable and `--debug` argument.
-fn init_logger(args: &KaniArgs) {
+fn init_logger(args: &VerificationArgs) {
     let filter = EnvFilter::from_env(LOG_ENV_VAR);
-    let filter = if args.debug { filter.add_directive(LevelFilter::DEBUG.into()) } else { filter };
+    let filter = if args.common_args.debug {
+        filter.add_directive(LevelFilter::DEBUG.into())
+    } else {
+        filter
+    };
 
     // Use a hierarchical view for now.
     let use_colors = atty::is(atty::Stream::Stdout);
