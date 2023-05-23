@@ -3,7 +3,6 @@
 
 //! This file contains the code necessary to interface with the compiler backend
 
-use crate::codegen_cprover_gotoc::archive::ArchiveBuilder;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::analysis;
 use crate::kani_middle::attributes::is_proof_harness;
@@ -24,6 +23,9 @@ use kani_metadata::CompilerArtifactStub;
 use kani_metadata::UnsupportedFeature;
 use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata};
 use kani_queries::{QueryDb, ReachabilityType, UserInput};
+use rustc_codegen_ssa::back::archive::{
+    get_native_object_symbols, ArArchiveBuilder, ArchiveBuilder,
+};
 use rustc_codegen_ssa::back::metadata::create_wrapper_file;
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_codegen_ssa::{CodegenResults, CrateInfo};
@@ -338,7 +340,7 @@ impl CodegenBackend for GotocCodegenBackend {
             debug!(?crate_type, ?out_path, "link");
             if *crate_type == CrateType::Rlib {
                 // Emit the `rlib` that contains just one file: `<crate>.rmeta`
-                let mut builder = ArchiveBuilder::new(sess);
+                let mut builder = Box::new(ArArchiveBuilder::new(sess, get_native_object_symbols));
                 let tmp_dir = TempFileBuilder::new().prefix("kani").tempdir().unwrap();
                 let path = MaybeTempDir::new(tmp_dir, sess.opts.cg.save_temps);
                 let (metadata, _metadata_position) = create_wrapper_file(
