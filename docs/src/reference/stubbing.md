@@ -83,7 +83,7 @@ Note that this is a fair assumption to do: `rand::random` is expected to return 
 Now, let's run it through Kani:
 
 ```bash
-cargo kani --enable-unstable --enable-stubbing --harness random_cannot_be_zero
+cargo kani --enable-unstable --enable-stubbing --harness encrypt_then_decrypt_is_identity
 ```
 
 The verification result is composed of a single check: the assertion corresponding to `assert_eq!(data, decrypted_data)`.
