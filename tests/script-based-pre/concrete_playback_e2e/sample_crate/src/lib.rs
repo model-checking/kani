@@ -1,9 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// This test checks that running the unit test generated using the concrete playback feature
-// with `RUSTFLAGS="--cfg=kani" cargo +nightly test doesn't cause a compilation error.
-// There is an existing UI test to generate the unit test itself (in kani/tests/ui/concrete-playback/result).
+//! This test checks that we can correctly generate tests from a cover statement and run them.
 
 #[cfg(kani)]
 mod verify {

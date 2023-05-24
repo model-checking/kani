@@ -68,9 +68,20 @@ pub fn build_lib() -> Result<()> {
     build_playback_lib()
 }
 
-/// Build the `lib/` folder for the new sysroot used during verifaction.
+/// Build the `lib/` folder for the new sysroot used during verification.
 /// This will include Kani's libraries as well as the standard libraries compiled with --emit-mir.
-pub fn build_verification_lib() -> Result<()> {
+fn build_verification_lib() -> Result<()> {
+    build_kani_lib(&kani_sysroot_lib(), &[])
+}
+
+/// Build the `lib-playback/` folder that will be used during counter example playback.
+/// This will include Kani's libraries compiled with `concrete-playback` feature enabled.
+fn build_playback_lib() -> Result<()> {
+    let extra_args = ["--features=std/concrete_playback,kani/concrete_playback"];
+    build_kani_lib(&kani_playback_lib(), &extra_args)
+}
+
+fn build_kani_lib(path: &Path, extra_args: &[&str]) -> Result<()> {
     // Run cargo build with -Z build-std
     let target = env!("TARGET");
     let target_dir = env!("KANI_BUILD_LIBS");
@@ -113,6 +124,7 @@ pub fn build_verification_lib() -> Result<()> {
             ["--cfg=kani", "--cfg=kani_sysroot", "-Z", "always-encode-mir"].join("\x1f"),
         )
         .args(args)
+        .args(extra_args)
         .stdout(Stdio::piped())
         .spawn()
         .expect("Failed to run `cargo build`.");
@@ -127,75 +139,11 @@ pub fn build_verification_lib() -> Result<()> {
     }
 
     // Create sysroot folder hierarchy.
-    copy_artifacts(&artifacts, kani_sysroot_lib(), target)
+    copy_artifacts(&artifacts, path, target)
 }
 
-/// Build the `lib-playback/` folder that will be used during counter example playback.
-/// This will include Kani's libraries compiled with `concrete-playback` feature enabled.
-/// TODO: Join this function with build_verification_lib()
-pub fn build_playback_lib() -> Result<()> {
-    // Run cargo build with -Z build-std
-    let target = env!("TARGET");
-    let target_dir = env!("KANI_BUILD_LIBS");
-    let args = [
-        "build",
-        "-p",
-        "std",
-        "--features=std/concrete_playback",
-        "-p",
-        "kani",
-        "--features=kani/concrete_playback",
-        "-p",
-        "kani_macros",
-        "-Z",
-        "unstable-options",
-        "--target-dir",
-        target_dir,
-        "-Z",
-        "target-applies-to-host",
-        "-Z",
-        "host-config",
-        "-Z",
-        "build-std=panic_abort,std,test",
-        "--profile",
-        "dev",
-        "--config",
-        "profile.dev.panic=\"abort\"",
-        // Disable debug assertions for now as a mitigation for
-        // https://github.com/model-checking/kani/issues/1740
-        "--config",
-        "profile.dev.debug-assertions=false",
-        "--config",
-        "host.rustflags=[\"--cfg=kani\", \"--cfg=kani_sysroot\"]",
-        "--target",
-        target,
-        "--message-format",
-        "json-diagnostic-rendered-ansi",
-    ];
-    let mut cmd = Command::new("cargo")
-        .env(
-            "CARGO_ENCODED_RUSTFLAGS",
-            ["--cfg=kani", "--cfg=kani_sysroot", "-Z", "always-encode-mir"].join("\x1f"),
-        )
-        .args(args)
-        .stdout(Stdio::piped())
-        .spawn()
-        .expect("Failed to run `cargo build`.");
-
-    // Collect the build artifacts.
-    let artifacts = build_artifacts(&mut cmd);
-    let exit_status = cmd.wait().expect("Couldn't get cargo's exit status");
-    // `exit_ok` is an experimental API where we could do `.exit_ok().expect("...")` instead of the
-    // below use of `panic`.
-    if !exit_status.success() {
-        bail!("Build failed: `cargo build-dev` didn't complete successfully");
-    }
-
-    copy_artifacts(&artifacts, kani_playback_lib(), target)
-}
-
-/// Copy all the artifacts to its correct place to generate the artifacts.
-fn copy_artifacts(artifacts: &[Artifact], sysroot_lib: PathBuf, target: &str) -> Result<()> {
+/// Copy all the artifacts to their correct place to generate a valid sysroot.
+fn copy_artifacts(artifacts: &[Artifact], sysroot_lib: &Path, target: &str) -> Result<()> {
     // Create sysroot folder hierarchy.
     sysroot_lib.exists().then(|| fs::remove_dir_all(&sysroot_lib));
     let std_path = path_buf!(&sysroot_lib, "rustlib", target, "lib");

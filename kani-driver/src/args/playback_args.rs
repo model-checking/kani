@@ -116,7 +116,7 @@ mod tests {
     #[test]
     fn check_cargo_parse_pkg_works() {
         let input = "playback -Z concrete-playback --test TEST_NAME -p PKG_NAME".split_whitespace();
-        let args = CargoPlaybackArgs::try_parse_from(input.clone()).unwrap();
+        let args = CargoPlaybackArgs::try_parse_from(input).unwrap();
         args.validate().unwrap();
         assert_eq!(args.playback.test, "TEST_NAME");
         assert_eq!(&args.cargo.package, &["PKG_NAME"])
@@ -126,7 +126,7 @@ mod tests {
     fn check_parse_format_works() {
         let input = "playback -Z concrete-playback --test TEST_NAME --message-format=json"
             .split_whitespace();
-        let args = CargoPlaybackArgs::try_parse_from(input.clone()).unwrap();
+        let args = CargoPlaybackArgs::try_parse_from(input).unwrap();
         args.validate().unwrap();
         assert_eq!(args.playback.test, "TEST_NAME");
         assert_eq!(args.playback.message_format, MessageFormat::Json)
