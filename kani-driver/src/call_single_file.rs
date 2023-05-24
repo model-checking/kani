@@ -3,7 +3,7 @@
 
 use anyhow::Result;
 use std::ffi::OsString;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::session::{base_folder, lib_folder, KaniSession};
@@ -117,41 +117,7 @@ impl KaniSession {
     /// This function generates all rustc configurations required by our goto-c codegen.
     pub fn kani_rustc_flags(&self) -> Vec<OsString> {
         let lib_path = lib_folder().unwrap();
-        let kani_std_rlib = lib_path.join("libstd.rlib");
-        let kani_std_wrapper = format!("noprelude:std={}", kani_std_rlib.to_str().unwrap());
-        let sysroot = base_folder().unwrap();
-        let args = vec![
-            "-C",
-            "overflow-checks=on",
-            "-C",
-            "panic=abort",
-            "-C",
-            "symbol-mangling-version=v0",
-            "-Z",
-            "unstable-options",
-            "-Z",
-            "panic_abort_tests=yes",
-            "-Z",
-            "trim-diagnostic-paths=no",
-            "-Z",
-            "human_readable_cgu_names",
-            "-Z",
-            "always-encode-mir",
-            "--cfg=kani",
-            "-Z",
-            "crate-attr=feature(register_tool)",
-            "-Z",
-            "crate-attr=register_tool(kanitool)",
-            "--sysroot",
-            sysroot.to_str().unwrap(),
-            "-L",
-            lib_path.to_str().unwrap(),
-            "--extern",
-            "kani",
-            "--extern",
-            kani_std_wrapper.as_str(),
-        ];
-        let mut flags: Vec<_> = args.iter().map(OsString::from).collect();
+        let mut flags: Vec<_> = base_rustc_flags(lib_path);
         if self.args.use_abs {
             flags.push("-Z".into());
             flags.push("force-unstable-if-unmarked=yes".into()); // ??
@@ -182,6 +148,45 @@ impl KaniSession {
 
         flags
     }
+}
+
+pub fn base_rustc_flags(lib_path: PathBuf) -> Vec<OsString> {
+    let kani_std_rlib = lib_path.join("libstd.rlib");
+    let kani_std_wrapper = format!("noprelude:std={}", kani_std_rlib.to_str().unwrap());
+    let sysroot = base_folder().unwrap();
+    [
+        "-C",
+        "overflow-checks=on",
+        "-C",
+        "panic=abort",
+        "-C",
+        "symbol-mangling-version=v0",
+        "-Z",
+        "unstable-options",
+        "-Z",
+        "panic_abort_tests=yes",
+        "-Z",
+        "trim-diagnostic-paths=no",
+        "-Z",
+        "human_readable_cgu_names",
+        "-Z",
+        "always-encode-mir",
+        "--cfg=kani",
+        "-Z",
+        "crate-attr=feature(register_tool)",
+        "-Z",
+        "crate-attr=register_tool(kanitool)",
+        "--sysroot",
+        sysroot.to_str().unwrap(),
+        "-L",
+        lib_path.to_str().unwrap(),
+        "--extern",
+        "kani",
+        "--extern",
+        kani_std_wrapper.as_str(),
+    ]
+    .map(OsString::from)
+    .to_vec()
 }
 
 /// This function can be used to convert Kani compiler specific arguments into a rustc one.
