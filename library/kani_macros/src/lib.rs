@@ -194,7 +194,7 @@ mod sysroot {
 /// This module provides dummy implementations of Kani attributes which cannot be interpreted by
 /// other tools such as MIRI and the regular rust compiler.
 ///
-/// This allow users to use code marked with Kani attributes, for example, during concrete playback.
+/// This allow users to use code marked with Kani attributes, for example, for IDE code inspection.
 #[cfg(not(kani_sysroot))]
 mod regular {
     use super::*;

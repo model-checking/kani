@@ -55,3 +55,34 @@ impl ValidateArgs for CommonArgs {
         Ok(())
     }
 }
+
+/// The verbosity level to be used in Kani.
+pub trait Verbosity {
+    /// Whether we should be quiet.
+    fn quiet(&self) -> bool;
+    /// Whether we should be verbose.
+    /// Note that `debug() == true` must imply `verbose() == true`.
+    fn verbose(&self) -> bool;
+    /// Whether we should emit debug messages.
+    fn debug(&self) -> bool;
+    /// Whether any verbosity was selected.
+    fn is_set(&self) -> bool;
+}
+
+impl Verbosity for CommonArgs {
+    fn quiet(&self) -> bool {
+        self.quiet
+    }
+
+    fn verbose(&self) -> bool {
+        self.verbose || self.debug
+    }
+
+    fn debug(&self) -> bool {
+        self.debug
+    }
+
+    fn is_set(&self) -> bool {
+        self.quiet || self.verbose || self.debug
+    }
+}
