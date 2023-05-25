@@ -23,7 +23,9 @@ pub use arbitrary::Arbitrary;
 pub use concrete_playback::concrete_playback_run;
 #[cfg(not(feature = "concrete_playback"))]
 /// NOP `concrete_playback` for type checking during verification mode.
-pub fn concrete_playback_run<F: Fn()>(_: Vec<Vec<u8>>, _: F) {}
+pub fn concrete_playback_run<F: Fn()>(_: Vec<Vec<u8>>, _: F) {
+    unreachable!("Concrete playback does not work during verification")
+}
 
 pub use futures::block_on;
 
