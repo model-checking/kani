@@ -4,6 +4,7 @@
 
 pub mod assess_args;
 pub mod common;
+pub mod playback_args;
 
 pub use assess_args::*;
 
@@ -60,14 +61,29 @@ const DEFAULT_OBJECT_BITS: u32 = 16;
     version,
     name = "kani",
     about = "Verify a single Rust crate. For more information, see https://github.com/model-checking/kani",
-    args_override_self = true
+    args_override_self = true,
+    subcommand_negates_reqs = true,
+    subcommand_precedence_over_arg = true,
+    args_conflicts_with_subcommands = true
 )]
 pub struct StandaloneArgs {
     /// Rust file to verify
-    pub input: PathBuf,
+    #[arg(required = true)]
+    pub input: Option<PathBuf>,
 
     #[command(flatten)]
     pub verify_opts: VerificationArgs,
+
+    #[command(subcommand)]
+    pub command: Option<StandaloneSubcommand>,
+}
+
+/// Kani takes optional subcommands to request specialized behavior.
+/// When no subcommand is provided, there is an implied verification subcommand.
+#[derive(Debug, clap::Subcommand)]
+pub enum StandaloneSubcommand {
+    /// Execute concrete playback testcases of a local crate.
+    Playback(Box<playback_args::KaniPlaybackArgs>),
 }
 
 #[derive(Debug, clap::Parser)]
@@ -85,11 +101,14 @@ pub struct CargoKaniArgs {
     pub verify_opts: VerificationArgs,
 }
 
-// cargo-kani takes optional subcommands to request specialized behavior
+/// cargo-kani takes optional subcommands to request specialized behavior
 #[derive(Debug, clap::Subcommand)]
 pub enum CargoKaniSubcommand {
     #[command(hide = true)]
     Assess(Box<crate::assess::AssessArgs>),
+
+    /// Execute concrete playback testcases of a local package.
+    Playback(Box<playback_args::CargoPlaybackArgs>),
 }
 
 // Common arguments for invoking Kani for verification purpose. This gets put into KaniContext,
@@ -361,6 +380,42 @@ impl CargoArgs {
         }
         result
     }
+
+    /// Convert the arguments back to a format that cargo can understand.
+    /// Note that the `exclude` option requires special processing and it's not included here.
+    pub fn to_cargo_args(&self) -> Vec<OsString> {
+        let mut cargo_args: Vec<OsString> = vec![];
+        if self.all_features {
+            cargo_args.push("--all-features".into());
+        }
+
+        if self.no_default_features {
+            cargo_args.push("--no-default-features".into());
+        }
+
+        let features = self.features();
+        if !features.is_empty() {
+            cargo_args.push(format!("--features={}", features.join(",")).into());
+        }
+
+        if let Some(path) = &self.manifest_path {
+            cargo_args.push("--manifest-path".into());
+            cargo_args.push(path.into());
+        }
+        if self.workspace {
+            cargo_args.push("--workspace".into())
+        }
+
+        cargo_args.extend(self.package.iter().map(|pkg| format!("-p={pkg}").into()));
+        cargo_args
+    }
+}
+
+/// Leave it for Cargo to validate these for now.
+impl ValidateArgs for CargoArgs {
+    fn validate(&self) -> Result<(), Error> {
+        Ok(())
+    }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
@@ -463,16 +518,36 @@ impl CheckArgs {
 impl ValidateArgs for StandaloneArgs {
     fn validate(&self) -> Result<(), Error> {
         self.verify_opts.validate()?;
-        if !self.input.is_file() {
-            Err(Error::raw(
-                ErrorKind::InvalidValue,
-                &format!(
-                    "Invalid argument: Input invalid. `{}` is not a regular file.",
-                    self.input.display()
-                ),
-            ))
-        } else {
-            Ok(())
+        if let Some(input) = &self.input {
+            if !input.is_file() {
+                return Err(Error::raw(
+                    ErrorKind::InvalidValue,
+                    &format!(
+                        "Invalid argument: Input invalid. `{}` is not a regular file.",
+                        input.display()
+                    ),
+                ));
+            }
+        }
+        Ok(())
+    }
+}
+
+impl<T> ValidateArgs for Option<T>
+where
+    T: ValidateArgs,
+{
+    fn validate(&self) -> Result<(), Error> {
+        self.as_ref().map_or(Ok(()), |inner| inner.validate())
+    }
+}
+
+impl ValidateArgs for CargoKaniSubcommand {
+    fn validate(&self) -> Result<(), Error> {
+        match self {
+            // Assess doesn't implement validation yet.
+            CargoKaniSubcommand::Assess(_) => Ok(()),
+            CargoKaniSubcommand::Playback(playback) => playback.validate(),
         }
     }
 }
@@ -480,6 +555,7 @@ impl ValidateArgs for StandaloneArgs {
 impl ValidateArgs for CargoKaniArgs {
     fn validate(&self) -> Result<(), Error> {
         self.verify_opts.validate()?;
+        self.command.validate()?;
         // --assess requires --enable-unstable, but the subcommand needs manual checking
         if (matches!(self.command, Some(CargoKaniSubcommand::Assess(_))) || self.verify_opts.assess)
             && !self.verify_opts.common_args.enable_unstable
@@ -885,5 +961,13 @@ mod tests {
         assert_eq!(parse(&["kani", "--features", "a,b,c"]), ["a", "b", "c"]);
         assert_eq!(parse(&["kani", "--features", "a", "--features", "b,c"]), ["a", "b", "c"]);
         assert_eq!(parse(&["kani", "--features", "a b", "-Fc"]), ["a", "b", "c"]);
+    }
+
+    #[test]
+    fn check_kani_playback() {
+        let input = "kani playback --test dummy file.rs".split_whitespace();
+        let args = StandaloneArgs::try_parse_from(input).unwrap();
+        assert_eq!(args.input, None);
+        assert!(matches!(args.command, Some(StandaloneSubcommand::Playback(..))));
     }
 }

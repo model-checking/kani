@@ -157,11 +157,6 @@ pub fn render_command(cmd: &Command) -> OsString {
     str
 }
 
-/// Generate the filename for a specialized harness from the base linked object
-pub fn specialized_harness_name(linked_obj: &Path, harness_filename: &str) -> PathBuf {
-    alter_extension(linked_obj, &format!("for-{harness_filename}.out"))
-}
-
 /// Print a warning message. This will add a "warning:" tag before the message and style accordingly.
 pub fn warning(msg: &str) {
     let warning = console::style("warning:").bold().yellow();
@@ -174,6 +169,13 @@ pub fn error(msg: &str) {
     let error = console::style("error:").bold().red();
     let msg_fmt = console::style(msg).bold();
     println!("{error} {msg_fmt}")
+}
+
+/// Print an info message. This will print the stage in bold green and the rest in regular style.
+pub fn info_operation(op: &str, msg: &str) {
+    let op_fmt = console::style(op).bold().green();
+    let msg_fmt = console::style(msg);
+    println!("{op_fmt} {msg_fmt}")
 }
 
 #[cfg(test)]
@@ -221,22 +223,5 @@ mod tests {
         assert_eq!(render_command(&c1), OsString::from("a b \"/c d/\""));
         c1.env("PARAM", "VALUE");
         assert_eq!(render_command(&c1), OsString::from("PARAM=\"VALUE\" a b \"/c d/\""));
-    }
-
-    #[test]
-    fn check_specialized_harness_name() {
-        // It's important that the filenames produced end in `.out` as we produce
-        // `--gen-c` filenames with `alter_extension` and we previously had a bug where
-        // `for-harness` was the "extension" being removed, and all filenames collided.
-
-        // cargo kani typically produced a file name like this
-        let h1 = PathBuf::from("./cbmc-linked.out");
-        assert_eq!(specialized_harness_name(&h1, "main"), Path::new("./cbmc-linked.for-main.out"));
-        assert_eq!(specialized_harness_name(&h1, "hs_n"), Path::new("./cbmc-linked.for-hs_n.out"));
-
-        // kani typically produces a file name like this
-        let h2 = PathBuf::from("./rs-file.out");
-        assert_eq!(specialized_harness_name(&h2, "main"), Path::new("./rs-file.for-main.out"));
-        assert_eq!(specialized_harness_name(&h2, "hs_n"), Path::new("./rs-file.for-hs_n.out"));
     }
 }
