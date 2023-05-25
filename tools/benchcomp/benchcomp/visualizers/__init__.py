@@ -22,6 +22,7 @@ class error_on_regression:
     This visualization checks whether any benchmark regressed from one variant
     to another. Sample configuration:
 
+    ```
     visualize:
     - type: error_on_regression
       variant_pairs:
@@ -32,6 +33,7 @@ class error_on_regression:
         test: "lambda old, new: new / old > 1.1"
       - metric: passed
         test: "lambda old, new: False if not old else not new"
+    ```
 
     This says to check whether any benchmark regressed when run under variant_2
     compared to variant_1. A benchmark is considered to have regressed if the
@@ -64,9 +66,11 @@ class dump_yaml:
 
     Sample configuration:
 
+    ```
     visualize:
     - type: dump_yaml
       out_file: '-'
+    ```
     """
 
 
@@ -113,7 +117,7 @@ class dump_markdown_results_table:
           text: >
             lambda b: str(b["variant_2"]/b["variant_1"])
             if b["variant_2"] < (1.5 * b["variant_1"])
-            else "**" + str(b["variant_2"]/b["variant_1"])
+            else "**" + str(b["variant_2"]/b["variant_1"]) + "**"
         success:
         - column_name: change
           text: >
@@ -134,7 +138,7 @@ class dump_markdown_results_table:
 
     ## success
 
-    | Benchmark |  variant_1 | variant_2 | notes |
+    | Benchmark |  variant_1 | variant_2 | change |
     | --- | --- | --- | --- |
     | bench_1 | True | True |  |
     | bench_2 | True | False | regressed |
