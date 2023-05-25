@@ -49,11 +49,15 @@ fn print_artifact(artifact: &Path, format: MessageFormat) {
 
 fn run_test(exe: &Path, args: &KaniPlaybackArgs) -> Result<()> {
     let mut cmd = Command::new(exe);
-    cmd.arg(&args.playback.test);
 
-    if args.playback.common_opts.verbose() {
+    if args.playback.common_opts.verbose()
+        && !args.playback.test_args.contains(&"--nocapture".to_string())
+    {
+        // Repeated arguments cause an execution error.
         cmd.arg("--nocapture");
     }
+
+    cmd.args(&args.playback.test_args);
 
     session::run_terminal(&args.playback.common_opts, cmd)?;
     Ok(())
@@ -109,7 +113,12 @@ fn cargo_test(install: &InstallType, args: CargoPlaybackArgs) -> Result<()> {
     }
 
     cargo_args.append(&mut args.cargo.to_cargo_args());
-    cargo_args.push(args.playback.test.into());
+
+    // These have to be the last arguments to cargo test.
+    if !args.playback.test_args.is_empty() {
+        cargo_args.push("--".into());
+        cargo_args.extend(args.playback.test_args.iter().map(|arg| arg.into()));
+    }
 
     // Arguments that will only be passed to the target package.
     let mut cmd = Command::new("cargo");
