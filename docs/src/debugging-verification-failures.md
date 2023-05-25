@@ -37,7 +37,7 @@ provided for VSCode.
 
 To manually compile and run the test, you can use Kani's `playback` subcommand:
 ```
-cargo kani playback -Z concrete-playback -- {unit_test_func_name}
+cargo kani playback -Z concrete-playback -- ${unit_test_func_name}
 ```
 
 The output from this command is similar to `cargo test`.
