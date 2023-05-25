@@ -11,7 +11,7 @@ use crate::args::OutputFormat;
 use crate::call_cbmc::{VerificationResult, VerificationStatus};
 use crate::project::Project;
 use crate::session::KaniSession;
-use crate::util::{error, specialized_harness_name, warning};
+use crate::util::{error, warning};
 
 /// A HarnessRunner is responsible for checking all proof harnesses. The data in this structure represents
 /// "background information" that the controlling driver (e.g. cargo-kani or kani) computed.
@@ -56,24 +56,13 @@ impl<'sess, 'pr> HarnessRunner<'sess, 'pr> {
                     let report_dir = self.project.outdir.join(format!("report-{harness_filename}"));
                     let goto_file =
                         self.project.get_harness_artifact(&harness, ArtifactType::Goto).unwrap();
-                    let specialized_obj = specialized_harness_name(goto_file, &harness_filename);
-                    self.sess.record_temporary_file(&specialized_obj);
-                    self.sess.instrument_model(
-                        goto_file,
-                        &specialized_obj,
-                        &self.project,
-                        &harness,
-                    )?;
+                    self.sess.instrument_model(goto_file, goto_file, &self.project, &harness)?;
 
                     if self.sess.args.synthesize_loop_contracts {
-                        self.sess.synthesize_loop_contracts(
-                            &specialized_obj,
-                            &specialized_obj,
-                            &harness,
-                        )?;
+                        self.sess.synthesize_loop_contracts(goto_file, &goto_file, &harness)?;
                     }
 
-                    let result = self.sess.check_harness(&specialized_obj, &report_dir, harness)?;
+                    let result = self.sess.check_harness(goto_file, &report_dir, harness)?;
                     Ok(HarnessResult { harness, result })
                 })
                 .collect::<Result<Vec<_>>>()
