@@ -14,6 +14,7 @@ DEPS=(
   gcc
   git
   gpg-agent
+  jq
   libssl-dev
   lsb-release
   make
