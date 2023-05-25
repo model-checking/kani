@@ -21,6 +21,10 @@ pub mod vec;
 pub use arbitrary::Arbitrary;
 #[cfg(feature = "concrete_playback")]
 pub use concrete_playback::concrete_playback_run;
+#[cfg(not(feature = "concrete_playback"))]
+/// NOP `concrete_playback` for type checking during verification mode.
+pub fn concrete_playback_run<F: Fn()>(_: Vec<Vec<u8>>, _: F) {}
+
 pub use futures::block_on;
 
 /// Creates an assumption that will be valid after this statement run. Note that the assumption

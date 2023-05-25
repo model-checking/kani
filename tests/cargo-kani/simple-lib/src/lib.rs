@@ -22,4 +22,9 @@ mod kani_tests {
         let p = Pair::new(a, b);
         assert!(p.sum() == a.wrapping_add(b));
     }
+
+    #[test]
+    fn _playback_type_checks() {
+        kani::concrete_playback_run(vec![], test_sum);
+    }
 }
