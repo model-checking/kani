@@ -12,9 +12,9 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 cd $SCRIPT_DIR
 
 if [ $(uname -m) = "arm64" ]; then
-  if ! $(which mdbook >/dev/null 2>&1); then
-    echo "Pre-built mdbook binaries for Apple ARM are not available."
-    echo 'Run `cargo install mdbook` and try again.'
+  if ! $(which xmdbook >/dev/null 2>&1); then
+    >&2 echo "Pre-built mdbook binaries for Apple ARM are not available."
+    >&2 echo 'Run `cargo install mdbook` and try again.'
     exit 1
   fi
   MDBOOK=mdbook
