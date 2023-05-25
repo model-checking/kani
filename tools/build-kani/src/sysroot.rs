@@ -50,15 +50,38 @@ pub fn kani_sysroot_lib() -> PathBuf {
     path_buf!(kani_sysroot(), "lib")
 }
 
+/// Returns the path to where Kani libraries for concrete playback is kept.
+pub fn kani_playback_lib() -> PathBuf {
+    path_buf!(kani_sysroot(), "lib-playback")
+}
+
 /// Returns the path to where Kani's pre-compiled binaries are stored.
 pub fn kani_sysroot_bin() -> PathBuf {
     path_buf!(kani_sysroot(), "bin")
 }
 
-/// Build the `lib/` folder for the new sysroot.
-/// This will include Kani's libraries as well as the standard libraries compiled with --emit-mir.
-/// TODO: Don't copy Kani's libstd.
+/// Build the `lib/` folder and `lib-playback/` for the new sysroot.
+/// - The `lib/` folder contains the sysroot for verification.
+/// - The `lib-playback/` folder contains the sysroot used for playback.
 pub fn build_lib() -> Result<()> {
+    build_verification_lib()?;
+    build_playback_lib()
+}
+
+/// Build the `lib/` folder for the new sysroot used during verification.
+/// This will include Kani's libraries as well as the standard libraries compiled with --emit-mir.
+fn build_verification_lib() -> Result<()> {
+    build_kani_lib(&kani_sysroot_lib(), &[])
+}
+
+/// Build the `lib-playback/` folder that will be used during counter example playback.
+/// This will include Kani's libraries compiled with `concrete-playback` feature enabled.
+fn build_playback_lib() -> Result<()> {
+    let extra_args = ["--features=std/concrete_playback,kani/concrete_playback"];
+    build_kani_lib(&kani_playback_lib(), &extra_args)
+}
+
+fn build_kani_lib(path: &Path, extra_args: &[&str]) -> Result<()> {
     // Run cargo build with -Z build-std
     let target = env!("TARGET");
     let target_dir = env!("KANI_BUILD_LIBS");
@@ -101,6 +124,7 @@ pub fn build_lib() -> Result<()> {
             ["--cfg=kani", "--cfg=kani_sysroot", "-Z", "always-encode-mir"].join("\x1f"),
         )
         .args(args)
+        .args(extra_args)
         .stdout(Stdio::piped())
         .spawn()
         .expect("Failed to run `cargo build`.");
@@ -115,7 +139,12 @@ pub fn build_lib() -> Result<()> {
     }
 
     // Create sysroot folder hierarchy.
-    let sysroot_lib = kani_sysroot_lib();
+    copy_artifacts(&artifacts, path, target)
+}
+
+/// Copy all the artifacts to their correct place to generate a valid sysroot.
+fn copy_artifacts(artifacts: &[Artifact], sysroot_lib: &Path, target: &str) -> Result<()> {
+    // Create sysroot folder hierarchy.
     sysroot_lib.exists().then(|| fs::remove_dir_all(&sysroot_lib));
     let std_path = path_buf!(&sysroot_lib, "rustlib", target, "lib");
     fs::create_dir_all(&std_path).expect(&format!("Failed to create {std_path:?}"));
@@ -124,7 +153,6 @@ pub fn build_lib() -> Result<()> {
     copy_libs(&artifacts, &sysroot_lib, &is_kani_lib);
     //  Copy standard libraries into rustlib/<target>/lib/ folder.
     copy_libs(&artifacts, &std_path, &is_std_lib);
-
     Ok(())
 }
 
