@@ -12,13 +12,13 @@ echo "[TEST] Generate test..."
 kani ${RS_FILE} -Z concrete-playback --concrete-playback=inplace
 
 echo "[TEST] Only codegen test..."
-kani playback -Z concrete-playback --test kani_concrete_playback --only-codegen ${RS_FILE}
+kani playback -Z concrete-playback --only-codegen ${RS_FILE} -- kani_concrete_playback
 
 echo "[TEST] Run test..."
-kani playback -Z concrete-playback --test kani_concrete_playback ${RS_FILE}
+kani playback -Z concrete-playback ${RS_FILE} -- kani_concrete_playback
 
 echo "[TEST] Json format..."
-kani playback -Z concrete-playback --test kani_concrete_playback ${RS_FILE} --only-codegen --message-format=json
+kani playback -Z concrete-playback ${RS_FILE} --only-codegen --message-format=json -- kani_concrete_playback
 
 # Cleanup
 rm ${RS_FILE}
