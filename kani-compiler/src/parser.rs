@@ -36,14 +36,12 @@ pub const IGNORE_GLOBAL_ASM: &str = "ignore-global-asm";
 
 /// Option used to write JSON symbol tables instead of GOTO binaries.
 pub const WRITE_JSON_SYMTAB: &str = "write-json-symtab";
+
 /// Option used for checking function contracts.
 pub const ENFORCE_CONTRACTS: &str = "enforce-contracts";
 
 /// Option used for replacing function with its contract.
 pub const REPLACE_WITH_CONTRACTS: &str = "replace-with-contracts";
-
-/// Option name used to override the sysroot.
-pub const SYSROOT: &str = "sysroot";
 
 /// Option name used to select which reachability analysis to perform.
 pub const REACHABILITY: &str = "reachability";
@@ -165,15 +163,17 @@ pub fn parser() -> Command {
                 .value_name("UNSTABLE_FEATURE")
                 .action(ArgAction::Append),
         ).arg(
-            Arg::with_name(ENFORCE_CONTRACTS)
-                .long("--enforce-contracts")
-                .help("Check if functions satisfy their contracts."),
+            Arg::new(ENFORCE_CONTRACTS)
+                .long(ENFORCE_CONTRACTS)
+                .help("Check if functions satisfy their contracts.")
+                .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::with_name(REPLACE_WITH_CONTRACTS)
-                .long("--replace-with-contracts")
+            Arg::new(REPLACE_WITH_CONTRACTS)
+                .long(REPLACE_WITH_CONTRACTS)
                 .help("Replace functions with their contracts.")
-                .conflicts_with(ENFORCE_CONTRACTS),
+                .conflicts_with(ENFORCE_CONTRACTS)
+                .action(ArgAction::SetTrue),
         );
     app
 }

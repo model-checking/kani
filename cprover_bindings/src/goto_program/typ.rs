@@ -1330,6 +1330,7 @@ impl Type {
             | FlexibleArray { .. }
             | IncompleteStruct { .. }
             | IncompleteUnion { .. }
+            | MathematicalFunction { .. }
             | VariadicCode { .. } => panic!("Can't zero init {self:?}"),
         }
     }

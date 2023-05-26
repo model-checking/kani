@@ -173,6 +173,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 Type::IncompleteUnion { .. } => todo!(),
                 Type::InfiniteArray { .. } => todo!(),
                 Type::Integer => write!(out, "integer")?,
+                Type::MathematicalFunction { .. } => todo!(),
                 Type::Pointer { typ } => {
                     write!(out, "*")?;
                     debug_write_type(ctx, typ, out, indent)?;

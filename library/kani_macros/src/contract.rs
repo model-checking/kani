@@ -5,7 +5,7 @@
 use proc_macro2::TokenStream as TokenStream2;
 use proc_macro2::{Ident, Span};
 use quote::quote;
-use syn::{Attribute, Expr, FnArg, ItemFn, Path, Signature};
+use syn::{Attribute, Expr, FnArg, ItemFn, Signature};
 use uuid::Uuid;
 
 /// Given a function `foo`, this function creates a closure with name

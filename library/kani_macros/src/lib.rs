@@ -13,7 +13,6 @@ mod derive;
 // proc_macro::quote is nightly-only, so we'll cobble things together instead
 use proc_macro::TokenStream;
 use proc_macro_error::proc_macro_error;
-use proc_macro2::TokenStream as TokenStream2;
 mod contract;
 use syn::{parse_macro_input, punctuated::Punctuated, Expr, ItemFn, Token};
 
@@ -251,7 +250,7 @@ pub fn ensures(attr: TokenStream, item: TokenStream) -> TokenStream {
     let parsed_attr = parse_macro_input!(attr as Expr);
 
     // Extract other contract clauses from "item"
-    let mut parsed_item = parse_macro_input!(item as ItemFn);
+    let parsed_item = parse_macro_input!(item as ItemFn);
     let other_attributes = parsed_item.attrs.clone();
     let non_inlined = contract::extract_non_inlined_attributes(&other_attributes);
     let pre = contract::extract_requires_as_preconditions(&other_attributes);
@@ -306,7 +305,7 @@ pub fn requires(attr: TokenStream, item: TokenStream) -> TokenStream {
     let parsed_attr = parse_macro_input!(attr as Expr);
 
     // Extract other contract clauses from "item"
-    let mut parsed_item = parse_macro_input!(item as ItemFn);
+    let parsed_item = parse_macro_input!(item as ItemFn);
     let other_attributes = parsed_item.attrs.clone();
     let non_inlined = contract::extract_non_inlined_attributes(&other_attributes);
     let pre = contract::extract_requires_as_preconditions(&other_attributes);

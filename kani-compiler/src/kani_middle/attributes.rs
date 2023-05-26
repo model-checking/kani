@@ -20,6 +20,7 @@ use super::resolve;
 #[derive(Debug, Clone, Copy, AsRefStr, EnumString, PartialEq, Eq, PartialOrd, Ord)]
 #[strum(serialize_all = "snake_case")]
 enum KaniAttributeKind {
+    Modifies,
     Proof,
     ShouldPanic,
     Solver,
@@ -38,7 +39,7 @@ impl KaniAttributeKind {
             | KaniAttributeKind::Solver
             | KaniAttributeKind::Stub
             | KaniAttributeKind::Unwind => true,
-            KaniAttributeKind::Unstable => false,
+            KaniAttributeKind::Modifies | KaniAttributeKind::Unstable => false,
         }
     }
 }
@@ -113,7 +114,7 @@ pub fn extract_harness_attributes(tcx: TyCtxt, def_id: DefId) -> Option<HarnessA
                             parse_unwind(tcx, expect_single(tcx, kind, &attributes))
                     }
                     KaniAttributeKind::Proof => harness.proof = true,
-                    KaniAttributeKind::Unstable => {
+                    KaniAttributeKind::Modifies | KaniAttributeKind::Unstable => {
                         // Internal attribute which shouldn't exist here.
                         unreachable!()
                     }
@@ -158,6 +159,22 @@ pub fn check_unstable_features(tcx: TyCtxt, enabled_features: &[String], def_id:
                 }
             }
         }
+    }
+}
+
+/// Get the contract annotations of the function (if any)
+pub fn get_modifies_annotations(tcx: TyCtxt, instance: &Instance) -> Option<Vec<NestedMetaItem>> {
+    let def_id = instance.def_id();
+    if !matches!(tcx.type_of(def_id).0.kind(), TyKind::FnDef(..)) {
+        // skip closures due to an issue with rustc.
+        // https://github.com/model-checking/kani/pull/2406#issuecomment-1534333862
+        return None;
+    }
+    let attributes = extract_kani_attributes(tcx, def_id);
+    if let Some(modifies) = attributes.get(&KaniAttributeKind::Modifies) {
+        Some(modifies.iter().flat_map(|attr| attr.meta_item_list().unwrap()).collect())
+    } else {
+        None
     }
 }
 

@@ -3,7 +3,7 @@
 use super::super::codegen::TypeExt;
 use crate::codegen_cprover_gotoc::codegen::typ::{is_pointer, pointee_type};
 use crate::codegen_cprover_gotoc::GotocCtx;
-use cbmc::goto_program::{Expr, ExprValue, Location, Stmt, Symbol, SymbolTable, Type};
+use cbmc::goto_program::{Expr, ExprValue, Location, Symbol, SymbolTable, Type};
 use cbmc::{btree_string_map, InternedString};
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{Instance, Ty};

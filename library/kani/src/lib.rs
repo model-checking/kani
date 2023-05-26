@@ -257,6 +257,7 @@ macro_rules! cover {
     ($cond:expr, $msg:literal) => {
         kani::cover($cond, $msg);
     };
+}
 
 /// Function used to inline `#[kani::requires(...)]` function contract clauses as "precondition(..)"
 /// statements within the function body.

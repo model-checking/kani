@@ -11,7 +11,8 @@
 use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
-use cbmc::goto_program::{BuiltinFn, DatatypeComponent, Expr, Location, Stmt, Type};
+use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Type};
+use kani_queries::UserInput;
 use rustc_middle::mir::{BasicBlock, Place};
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{Instance, TyCtxt};
@@ -221,13 +222,13 @@ impl<'tcx> GotocHook<'tcx> for Panic {
 }
 
 /// Function to create a function argument from a string constant.
-fn farg_from_string<'tcx>(tcx: &mut GotocCtx<'tcx>, msg: &str) -> Expr {
-    let msg = Expr::string_constant(msg);
-    let struct_tag = tcx.ensure_struct(&"msg", Some("msg"), |_, _| {
-        vec![DatatypeComponent::field("msg", msg.typ().clone())]
-    });
-    Expr::struct_expr_from_values(struct_tag, vec![msg], &tcx.symbol_table)
-}
+//fn farg_from_string<'tcx>(tcx: &mut GotocCtx<'tcx>, msg: &str) -> Expr {
+//    let msg = Expr::string_constant(msg);
+//    let struct_tag = tcx.ensure_struct(&"msg", &"msg", |_, _| {
+//        vec![DatatypeComponent::field("msg", msg.typ().clone())]
+//    });
+//    Expr::struct_expr_from_values(struct_tag, vec![msg], &tcx.symbol_table)
+//}
 
 /// Hook for handling postconditions in function contracts.
 struct Postcondition;
@@ -250,8 +251,17 @@ impl<'tcx> GotocHook<'tcx> for Postcondition {
         let loc = tcx.codegen_span_option(span);
 
         if tcx.queries.get_enforce_contracts() {
-            fargs.push(farg_from_string(tcx, "Post-condition failed"));
-            Assert.handle(tcx, instance, fargs, assign_to, target, span)
+            let cond = fargs.remove(0).cast_to(Type::bool());
+            let msg = "Post condition failed";
+            //fargs.push(farg_from_string(tcx, "Post-condition failed"));
+            //Assert.handle(tcx, instance, fargs, assign_to, target, span)
+            Stmt::block(
+                vec![
+                    tcx.codegen_assert_assume(cond, PropertyClass::Assertion, msg, loc),
+                    Stmt::goto(tcx.current_fn().find_label(&target.unwrap()), loc),
+                ],
+                loc,
+            )
         } else if tcx.queries.get_replace_with_contracts() {
             Assume.handle(tcx, instance, fargs, assign_to, target, span)
         } else {
@@ -284,83 +294,21 @@ impl<'tcx> GotocHook<'tcx> for Precondition {
         if tcx.queries.get_enforce_contracts() {
             Assume.handle(tcx, instance, fargs, assign_to, target, span)
         } else if tcx.queries.get_replace_with_contracts() {
-            fargs.push(farg_from_string(tcx, "Pre-condition failed"));
-            Assert.handle(tcx, instance, fargs, assign_to, target, span)
+            let cond = fargs.remove(0).cast_to(Type::bool());
+            let msg = "Pre condition failed";
+            //fargs.push(farg_from_string(tcx, "Pre-condition failed"));
+            //Assert.handle(tcx, instance, fargs, assign_to, target, span)
+            Stmt::block(
+                vec![
+                    tcx.codegen_assert_assume(cond, PropertyClass::Assertion, msg, loc),
+                    Stmt::goto(tcx.current_fn().find_label(&target.unwrap()), loc),
+                ],
+                loc,
+            )
         } else {
             // The function contract is being ignored in this case.
             Stmt::block(vec![Stmt::goto(tcx.current_fn().find_label(&target.unwrap()), loc)], loc)
         }
-    }
-}
-
-struct PtrRead;
-
-impl<'tcx> GotocHook<'tcx> for PtrRead {
-    fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-        let name = with_no_trimmed_paths!(tcx.def_path_str(instance.def_id()));
-        name == "core::ptr::read"
-            || name == "core::ptr::read_unaligned"
-            || name == "core::ptr::read_volatile"
-            || name == "std::ptr::read"
-            || name == "std::ptr::read_unaligned"
-            || name == "std::ptr::read_volatile"
-    }
-
-    fn handle(
-        &self,
-        tcx: &mut GotocCtx<'tcx>,
-        _instance: Instance<'tcx>,
-        mut fargs: Vec<Expr>,
-        assign_to: Place<'tcx>,
-        target: Option<BasicBlock>,
-        span: Option<Span>,
-    ) -> Stmt {
-        let loc = tcx.codegen_span_option(span);
-        let target = target.unwrap();
-        let src = fargs.remove(0);
-        Stmt::block(
-            vec![
-                unwrap_or_return_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&assign_to))
-                    .goto_expr
-                    .assign(src.dereference().with_location(loc), loc),
-                Stmt::goto(tcx.current_fn().find_label(&target), loc),
-            ],
-            loc,
-        )
-    }
-}
-
-struct PtrWrite;
-
-impl<'tcx> GotocHook<'tcx> for PtrWrite {
-    fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-        let name = with_no_trimmed_paths!(tcx.def_path_str(instance.def_id()));
-        name == "core::ptr::write"
-            || name == "core::ptr::write_unaligned"
-            || name == "std::ptr::write"
-            || name == "std::ptr::write_unaligned"
-    }
-
-    fn handle(
-        &self,
-        tcx: &mut GotocCtx<'tcx>,
-        _instance: Instance<'tcx>,
-        mut fargs: Vec<Expr>,
-        _assign_to: Place<'tcx>,
-        target: Option<BasicBlock>,
-        span: Option<Span>,
-    ) -> Stmt {
-        let loc = tcx.codegen_span_option(span);
-        let target = target.unwrap();
-        let dst = fargs.remove(0);
-        let src = fargs.remove(0);
-        Stmt::block(
-            vec![
-                dst.dereference().assign(src, loc).with_location(loc),
-                Stmt::goto(tcx.current_fn().find_label(&target), loc),
-            ],
-            loc,
-        )
     }
 }
 
@@ -395,7 +343,6 @@ impl<'tcx> GotocHook<'tcx> for ReplaceFunctionBody {
     }
 }
 
->>>>>>> Add hooks for handling pre and post conditions in function contracts. (#1511)
 struct RustAlloc;
 // Removing this hook causes regression failures.
 // https://github.com/model-checking/kani/issues/1170
@@ -544,8 +491,6 @@ pub fn fn_hooks<'tcx>() -> GotocHooks<'tcx> {
             Rc::new(Nondet),
             Rc::new(Postcondition),
             Rc::new(Precondition),
-            Rc::new(PtrRead),
-            Rc::new(PtrWrite),
             Rc::new(ReplaceFunctionBody),
             Rc::new(RustAlloc),
             Rc::new(SliceFromRawPart),

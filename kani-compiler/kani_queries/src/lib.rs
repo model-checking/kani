@@ -77,6 +77,8 @@ impl QueryDb {
             reachability_analysis: ReachabilityType::None,
             stubbing_enabled: false,
             unstable_features: vec![],
+            enforce_contracts: false,
+            replace_with_contracts: false,
         }))
     }
 }
@@ -147,17 +149,18 @@ impl UserInput for QueryDb {
     }
 
     fn set_enforce_contracts(&mut self, enforce_contracts: bool) {
-        self.enforce_contracts.store(enforce_contracts, Ordering::Relaxed);
+        self.enforce_contracts = enforce_contracts;
     }
+
     fn get_enforce_contracts(&self) -> bool {
-        self.enforce_contracts.load(Ordering::Relaxed)
+        self.enforce_contracts
     }
 
     fn set_replace_with_contracts(&mut self, replace_with_contracts: bool) {
-        self.replace_with_contracts.store(replace_with_contracts, Ordering::Relaxed);
+        self.replace_with_contracts = replace_with_contracts;
     }
 
     fn get_replace_with_contracts(&self) -> bool {
-        self.replace_with_contracts.load(Ordering::Relaxed)
+        self.replace_with_contracts
     }
 }

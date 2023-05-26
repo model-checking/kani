@@ -252,6 +252,14 @@ pub struct VerificationArgs {
     #[arg(long, hide_short_help = true, requires("enable_unstable"))]
     pub ignore_global_asm: bool,
 
+    /// Check if functions satisfy their contracts.
+    #[arg(long, hide_short_help = true, requires("enable_unstable"))]
+    pub enforce_contracts: bool,
+
+    /// Replace functions with their contracts.
+    #[arg(long, hide_short_help = true, requires("enable_unstable"))]
+    pub replace_with_contracts: bool,
+
     /// Write the GotoC symbol table to a file in JSON format instead of goto binary format.
     #[arg(long, hide_short_help = true)]
     pub write_json_symtab: bool,

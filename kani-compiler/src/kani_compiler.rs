@@ -15,8 +15,6 @@
 //! in order to apply the stubs. For the subsequent runs, we add the stub configuration to
 //! `-C llvm-args`.
 
-#[cfg(feature = "boogie")]
-use crate::codegen_boogie::BoogieCodegenBackend;
 #[cfg(feature = "cprover")]
 use crate::codegen_cprover_gotoc::GotocCodegenBackend;
 use crate::kani_middle::stubbing;
@@ -54,12 +52,6 @@ pub fn run(mut args: Vec<String>) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// Configure the boogie backend that generate boogie programs.
-#[cfg(feature = "boogie")]
-fn backend(queries: Arc<Mutex<QueryDb>>) -> Box<dyn CodegenBackend> {
-    Box::new(BoogieCodegenBackend::new(queries))
-}
-
 /// Configure the cprover backend that generate goto-programs.
 #[cfg(feature = "cprover")]
 fn backend(queries: Arc<Mutex<QueryDb>>) -> Box<dyn CodegenBackend> {
@@ -67,9 +59,9 @@ fn backend(queries: Arc<Mutex<QueryDb>>) -> Box<dyn CodegenBackend> {
 }
 
 /// Fallback backend. It will trigger an error if no backend has been enabled.
-#[cfg(not(any(feature = "cprover", feature = "boogie")))]
+#[cfg(not(feature = "cprover"))]
 fn backend(queries: Arc<Mutex<QueryDb>>) -> Box<CodegenBackend> {
-    compile_error!("No backend is available. Only supported value today is `cprover` and `boogie`");
+    compile_error!("No backend is available. Only supported value today is `cprover`");
 }
 
 /// This object controls the compiler behavior.

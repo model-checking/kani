@@ -66,8 +66,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let mir = self.current_fn().mir();
         let loc = self.codegen_span(&mir.span);
         let sig = self.current_fn().sig();
-        let sig =
-            self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig.unwrap());
+        let sig = self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig);
         let typ = self.fn_typ();
 
         let name = format!("contract::{}", self.current_fn().name()); // name of the contract symbol
