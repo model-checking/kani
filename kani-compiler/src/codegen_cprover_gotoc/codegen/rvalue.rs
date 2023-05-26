@@ -144,18 +144,11 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         op: &Operand<'tcx>,
         sz: ty::Const<'tcx>,
-        res_ty: Ty<'tcx>,
         loc: Location,
     ) -> Expr {
-        let res_t = self.codegen_ty(res_ty);
         let op_expr = self.codegen_operand(op);
         let width = sz.try_eval_target_usize(self.tcx, ty::ParamEnv::reveal_all()).unwrap();
-        Expr::struct_expr(
-            res_t,
-            btree_string_map![("0", op_expr.array_constant(width))],
-            &self.symbol_table,
-        )
-        .with_location(loc)
+        op_expr.array_constant(width).with_location(loc)
     }
 
     fn codegen_rvalue_len(&mut self, p: &Place<'tcx>) -> Expr {
@@ -456,23 +449,9 @@ impl<'tcx> GotocCtx<'tcx> {
         loc: Location,
     ) -> Expr {
         match *aggregate {
-            AggregateKind::Array(et) => {
-                if et.is_unit() {
-                    Expr::struct_expr_from_values(
-                        self.codegen_ty(res_ty),
-                        vec![],
-                        &self.symbol_table,
-                    )
-                } else {
-                    Expr::struct_expr_from_values(
-                        self.codegen_ty(res_ty),
-                        vec![Expr::array_expr(
-                            self.codegen_ty_raw_array(res_ty),
-                            operands.iter().map(|o| self.codegen_operand(o)).collect(),
-                        )],
-                        &self.symbol_table,
-                    )
-                }
+            AggregateKind::Array(_et) => {
+                let typ = self.codegen_ty(res_ty);
+                Expr::array_expr(typ, operands.iter().map(|o| self.codegen_operand(o)).collect())
             }
             AggregateKind::Adt(_, _, _, _, Some(active_field_index)) => {
                 assert!(res_ty.is_union());
@@ -535,7 +514,7 @@ impl<'tcx> GotocCtx<'tcx> {
             Rvalue::Use(p) => self.codegen_operand(p),
             Rvalue::Repeat(op, sz) => {
                 let sz = self.monomorphize(*sz);
-                self.codegen_rvalue_repeat(op, sz, res_ty, loc)
+                self.codegen_rvalue_repeat(op, sz, loc)
             }
             Rvalue::Ref(_, _, p) | Rvalue::AddressOf(_, p) => self.codegen_place_ref(p),
             Rvalue::Len(p) => self.codegen_rvalue_len(p),
@@ -905,7 +884,6 @@ impl<'tcx> GotocCtx<'tcx> {
                         if let ty::Array(_, _) = ty.kind() {
                             let oe = self.codegen_operand(operand);
                             oe.dereference() // : struct [T; n]
-                                .member("0", &self.symbol_table) // : T[n]
                                 .array_to_ptr() // : T*
                         } else {
                             unreachable!()
