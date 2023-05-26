@@ -965,7 +965,7 @@ mod tests {
 
     #[test]
     fn check_kani_playback() {
-        let input = "kani playback --test dummy file.rs".split_whitespace();
+        let input = "kani playback file.rs -- dummy".split_whitespace();
         let args = StandaloneArgs::try_parse_from(input).unwrap();
         assert_eq!(args.input, None);
         assert!(matches!(args.command, Some(StandaloneSubcommand::Playback(..))));
