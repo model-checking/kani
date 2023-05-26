@@ -53,6 +53,8 @@ pub struct VerificationResult {
     pub runtime: Duration,
     /// Whether concrete playback generated a test
     pub generated_concrete_test: bool,
+    /// the test case to print for concrete playback.
+    pub maybe_concrete_test_to_print: Option<String>,
 }
 
 impl KaniSession {
@@ -266,6 +268,7 @@ impl VerificationResult {
                 results: Ok(results),
                 runtime,
                 generated_concrete_test: false,
+                maybe_concrete_test_to_print: None,
             }
         } else {
             // We never got results from CBMC - something went wrong (e.g. crash) so it's failure
@@ -276,6 +279,7 @@ impl VerificationResult {
                 results: Err(output.process_status),
                 runtime,
                 generated_concrete_test: false,
+                maybe_concrete_test_to_print: None,
             }
         }
     }
@@ -288,6 +292,7 @@ impl VerificationResult {
             results: Ok(vec![]),
             runtime: Duration::from_secs(0),
             generated_concrete_test: false,
+            maybe_concrete_test_to_print: None,
         }
     }
 
@@ -302,6 +307,7 @@ impl VerificationResult {
             results: Err(42),
             runtime: Duration::from_secs(0),
             generated_concrete_test: false,
+            maybe_concrete_test_to_print: None,
         }
     }
 
