@@ -66,8 +66,7 @@ impl KaniSession {
 
         let start_time = Instant::now();
 
-        let verification_results = if self.args.output_format == crate::args::OutputFormat::Old
-        {
+        let verification_results = if self.args.output_format == crate::args::OutputFormat::Old {
             if self.run_terminal(cmd).is_err() {
                 VerificationResult::mock_failure()
             } else {
