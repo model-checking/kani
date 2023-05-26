@@ -3,4 +3,4 @@
 [TEST] Only codegen test...
     Finished test
 [TEST] Executable
-sample_crate/target/debug/deps/sample_crate-
+debug/deps/sample_crate-

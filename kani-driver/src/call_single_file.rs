@@ -136,12 +136,6 @@ impl KaniSession {
             }
         }
 
-        // e.g. compiletest will set 'compile-flags' here and we should pass those down to rustc
-        // and we fail in `tests/kani/Match/match_bool.rs`
-        if let Ok(str) = std::env::var("RUSTFLAGS") {
-            flags.extend(str.split(' ').map(OsString::from));
-        }
-
         // This argument will select the Kani flavour of the compiler. It will be removed before
         // rustc driver is invoked.
         flags.push("--kani-compiler".into());
@@ -154,7 +148,7 @@ pub fn base_rustc_flags(lib_path: PathBuf) -> Vec<OsString> {
     let kani_std_rlib = lib_path.join("libstd.rlib");
     let kani_std_wrapper = format!("noprelude:std={}", kani_std_rlib.to_str().unwrap());
     let sysroot = base_folder().unwrap();
-    [
+    let mut flags = [
         "-C",
         "overflow-checks=on",
         "-C",
@@ -186,7 +180,15 @@ pub fn base_rustc_flags(lib_path: PathBuf) -> Vec<OsString> {
         kani_std_wrapper.as_str(),
     ]
     .map(OsString::from)
-    .to_vec()
+    .to_vec();
+
+    // e.g. compiletest will set 'compile-flags' here and we should pass those down to rustc
+    // and we fail in `tests/kani/Match/match_bool.rs`
+    if let Ok(str) = std::env::var("RUSTFLAGS") {
+        flags.extend(str.split(' ').map(OsString::from));
+    }
+
+    flags
 }
 
 /// This function can be used to convert Kani compiler specific arguments into a rustc one.
