@@ -2,7 +2,7 @@ VERIFICATION:- SUCCESSFUL
 
 
 Concrete playback unit test for `dummy`:
-```rust
+```
 #[test]
 fn kani_concrete_playback_dummy
     let concrete_vals: Vec<Vec<u8>> = vec![
