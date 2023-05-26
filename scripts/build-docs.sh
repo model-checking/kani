@@ -21,7 +21,7 @@ if [ $(uname -m) = "arm64" ]; then
 else
   # Download mdbook release (vs spending time building it via cargo install)
   MDBOOK_VERSION=v0.4.18
-  FILE="mdbook-${MDBOOK_VERSION}-${ARCH}.tar.gz"
+  FILE="mdbook-${MDBOOK_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
   URL="https://github.com/rust-lang/mdBook/releases/download/${MDBOOK_VERSION}/$FILE"
   EXPECTED_HASH="d276b0e594d5980de6a7917ce74c348f28d3cb8b353ca4eaae344ae8a4c40bea"
   if [ ! -x mdbook ]; then
