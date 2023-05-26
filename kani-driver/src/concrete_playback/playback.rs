@@ -99,7 +99,7 @@ fn cargo_test(install: &InstallType, args: CargoPlaybackArgs) -> Result<()> {
     let mut cargo_args: Vec<OsString> = vec!["test".into()];
 
     if args.playback.common_opts.verbose() {
-        cargo_args.push("--verbose".into());
+        cargo_args.push("-vv".into());
     } else if args.playback.common_opts.quiet {
         cargo_args.push("--quiet".into())
     }
@@ -113,6 +113,8 @@ fn cargo_test(install: &InstallType, args: CargoPlaybackArgs) -> Result<()> {
     }
 
     cargo_args.append(&mut args.cargo.to_cargo_args());
+    cargo_args.push("--target".into());
+    cargo_args.push(env!("TARGET").into());
 
     // These have to be the last arguments to cargo test.
     if !args.playback.test_args.is_empty() {
