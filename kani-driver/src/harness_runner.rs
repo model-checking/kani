@@ -97,7 +97,9 @@ impl KaniSession {
                 println!(
                     "{}{}",
                     result.render(&self.args.output_format, harness.attributes.should_panic),
-                    result.maybe_concrete_test_to_print.as_ref()
+                    result
+                        .maybe_concrete_test_to_print
+                        .as_ref()
                         .map(|message| format!("\n\n{}", message))
                         .unwrap_or("".to_string())
                 );

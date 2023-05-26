@@ -43,19 +43,17 @@ impl KaniSession {
                     let generated_unit_test = format_unit_test(&pretty_name, &concrete_vals);
                     match playback_mode {
                         ConcretePlaybackMode::Print => {
-                            verification_result.maybe_concrete_test_to_print = Some(
-                                format!(
-                                    "Concrete playback unit test for `{}`:
+                            verification_result.maybe_concrete_test_to_print = Some(format!(
+                                "Concrete playback unit test for `{}`:
 ```rust
 {}
 ```
 INFO: To automatically add the concrete playback unit test `{}` to the src code, \
 run Kani with `--concrete-playback=inplace`.",
-                                    &harness.pretty_name,
-                                    &generated_unit_test.code.join("\n"),
-                                    &generated_unit_test.name,
-                                )
-                            );
+                                &harness.pretty_name,
+                                &generated_unit_test.code.join("\n"),
+                                &generated_unit_test.name,
+                            ));
                         }
                         ConcretePlaybackMode::InPlace => {
                             if !self.args.common_args.quiet {
