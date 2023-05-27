@@ -43,7 +43,7 @@ impl<'tcx> GotocCtx<'tcx> {
         vars.push(ret);
         let args = self.extract_function_arguments(sig);
         vars.extend(args);
-        return vars;
+        vars
     }
 
     /// Generates a specification containing a lambda expression with "true" as its body
@@ -81,7 +81,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 match self.lookup_local_decl_by_name(basename) {
                     // lookup the symbol for the argument in the symbol table
                     Some(sym) => {
-                        let expr = Expr::symbol_expression(sym.name.clone(), sym.typ.clone());
+                        let expr = Expr::symbol_expression(sym.name, sym.typ.clone());
                         Some(Spec::new(bv, expr, loc))
                     }
                     None => {

@@ -17,7 +17,7 @@ pub fn convert_to_closure(item: &ItemFn) -> (Ident, TokenStream2) {
     let body = &item.block;
     let args_with_ty = &fn_sig.inputs;
     let rt = &fn_sig.output;
-    let name = format!("{}_{}", fn_sig.ident.clone().to_string(), Uuid::new_v4()).replace("-", "_");
+    let name = format!("{}_{}", fn_sig.ident.clone().to_string(), Uuid::new_v4()).replace('-', "_");
     let ident = Ident::new(name.as_str(), Span::call_site());
     let inner_fn = quote! {
         let #ident = |#args_with_ty| #rt #body;
@@ -28,7 +28,7 @@ pub fn convert_to_closure(item: &ItemFn) -> (Ident, TokenStream2) {
 /// If the attribute is named `kani::name`, this extracts `name`
 fn kani_attr_name(attr: &Attribute) -> Option<String> {
     let segments = &attr.path.segments;
-    if segments.len() == 2 && segments[0].ident.to_string() == "kani" {
+    if segments.len() == 2 && segments[0].ident == "kani" {
         Some(segments[1].ident.to_string())
     } else {
         None
@@ -36,7 +36,7 @@ fn kani_attr_name(attr: &Attribute) -> Option<String> {
 }
 
 /// Converts all "#[kani::ensures(...)]" attributes to "kani::postcondition(...)" statement tokens.
-pub fn extract_ensures_as_postconditions(attributes: &Vec<Attribute>) -> TokenStream2 {
+pub fn extract_ensures_as_postconditions(attributes: &[Attribute]) -> TokenStream2 {
     attributes
         .iter()
         .filter_map(|a| {
@@ -71,7 +71,7 @@ pub fn extract_function_args(sig: &Signature) -> Vec<syn::Pat> {
 
 /// Return all attributes that are not inlined during macro expansion
 /// (that is, not "#[kani::requires(...)]" or "#[kani::ensures(...)]").
-pub fn extract_non_inlined_attributes(attributes: &Vec<Attribute>) -> TokenStream2 {
+pub fn extract_non_inlined_attributes(attributes: &[Attribute]) -> TokenStream2 {
     attributes
         .iter()
         .filter_map(|a| {
@@ -85,7 +85,7 @@ pub fn extract_non_inlined_attributes(attributes: &Vec<Attribute>) -> TokenStrea
 }
 
 /// Converts all "#[kani::requires(...)]" attributes to "kani::precondition(...)" statement tokens.
-pub fn extract_requires_as_preconditions(attributes: &Vec<Attribute>) -> TokenStream2 {
+pub fn extract_requires_as_preconditions(attributes: &[Attribute]) -> TokenStream2 {
     attributes
         .iter()
         .filter_map(|a| {
@@ -104,7 +104,7 @@ pub fn extract_requires_as_preconditions(attributes: &Vec<Attribute>) -> TokenSt
 }
 
 /// Splits a vector of attributes into a vector of "#[kani::modifies(...)]" attributes only and the rest.
-pub fn handle_modifies_attributes(attributes: &Vec<Attribute>) -> (TokenStream2, TokenStream2) {
+pub fn handle_modifies_attributes(attributes: &[Attribute]) -> (TokenStream2, TokenStream2) {
     let modifies_attrs = attributes
         .iter()
         .filter_map(|a| {

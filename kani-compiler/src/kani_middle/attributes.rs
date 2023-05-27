@@ -171,11 +171,9 @@ pub fn get_modifies_annotations(tcx: TyCtxt, instance: &Instance) -> Option<Vec<
         return None;
     }
     let attributes = extract_kani_attributes(tcx, def_id);
-    if let Some(modifies) = attributes.get(&KaniAttributeKind::Modifies) {
-        Some(modifies.iter().flat_map(|attr| attr.meta_item_list().unwrap()).collect())
-    } else {
-        None
-    }
+    attributes
+        .get(&KaniAttributeKind::Modifies)
+        .map(|modifies| modifies.iter().flat_map(|attr| attr.meta_item_list().unwrap()).collect())
 }
 
 /// Report misusage of an unstable feature that was not enabled.

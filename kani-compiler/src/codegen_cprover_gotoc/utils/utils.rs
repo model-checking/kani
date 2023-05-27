@@ -223,7 +223,6 @@ impl<'tcx> GotocCtx<'tcx> {
         let ldecls = &mir.local_decls;
         let sym_name = ldecls
             .indices()
-            .into_iter()
             .find(|lc| self.codegen_var_base_name(&lc) == target)
             .map_or_else(|| None, |lc| Some(self.codegen_var_name(&lc)))?;
         self.symbol_table.lookup(sym_name)
