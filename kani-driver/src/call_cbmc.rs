@@ -66,8 +66,7 @@ impl KaniSession {
 
         let start_time = Instant::now();
 
-        let mut verification_results = if self.args.output_format == crate::args::OutputFormat::Old
-        {
+        let verification_results = if self.args.output_format == crate::args::OutputFormat::Old {
             if self.run_terminal(cmd).is_err() {
                 VerificationResult::mock_failure()
             } else {
@@ -93,7 +92,6 @@ impl KaniSession {
             VerificationResult::from(output, harness.attributes.should_panic, start_time)
         };
 
-        self.gen_and_add_concrete_playback(harness, &mut verification_results)?;
         Ok(verification_results)
     }
 
