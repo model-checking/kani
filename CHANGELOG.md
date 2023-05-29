@@ -4,6 +4,24 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
+## [0.29.0]
+
+### What's Changed
+* Fix symtab json file removal and reduce regression scope ([pull request](https://github.com/model-checking/kani/pull/2447) by @celinval)
+* Fix regression on concrete playback inplace ([pull request](https://github.com/model-checking/kani/pull/2454) by @celinval)
+* Update rust toolchain to 2023-04-29 ([pull request](https://github.com/model-checking/kani/pull/2452) by @zhassan-aws)
+* Update stubbing.md with the right command ([pull request](https://github.com/model-checking/kani/pull/2460) by @jaisnan)
+* Create a playback command to make it easier to run Kani generated tests ([pull request](https://github.com/model-checking/kani/pull/2464) by @celinval)
+* Fix static variable initialization when they have the same value ([pull request](https://github.com/model-checking/kani/pull/2469) by @celinval)
+* Add jq to deps ([pull request](https://github.com/model-checking/kani/pull/2471) by @zhassan-aws)
+* Update concrete playback documentation ([pull request](https://github.com/model-checking/kani/pull/2465) by @celinval)
+* Improve assess and regression time ([pull request](https://github.com/model-checking/kani/pull/2478) by @celinval)
+* Fix playback with build scripts ([pull request](https://github.com/model-checking/kani/pull/2477) by @celinval)
+* Delay printing playback harness until after verification status ([pull request](https://github.com/model-checking/kani/pull/2480) by @YoshikiTakashima)
+* Bump CBMC version to 5.84.0 ([pull request](https://github.com/model-checking/kani/pull/2483) by @tautschn)
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.28.0...kani-0.29.0
+
 ## [0.28.0]
 
 ### Breaking Changes
