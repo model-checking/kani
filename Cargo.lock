@@ -529,7 +529,6 @@ dependencies = [
  "home",
  "itertools",
  "kani_metadata",
- "kani_queries",
  "lazy_static",
  "num",
  "regex",
@@ -599,15 +598,6 @@ dependencies = [
  "serde",
  "strum",
  "strum_macros",
-]
-
-[[package]]
-name = "kani_queries"
-version = "0.28.0"
-dependencies = [
- "strum",
- "strum_macros",
- "tracing",
 ]
 
 [[package]]

@@ -5,7 +5,7 @@
 
 use std::collections::HashSet;
 
-use kani_queries::{QueryDb, UserInput};
+use crate::kani_queries::QueryDb;
 use rustc_hir::{def::DefKind, def_id::LOCAL_CRATE};
 use rustc_middle::mir::mono::MonoItem;
 use rustc_middle::span_bug;

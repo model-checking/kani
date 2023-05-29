@@ -14,6 +14,7 @@ use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{
     collect_reachable_items, filter_const_crate_items, filter_crate_items,
 };
+use crate::kani_queries::{QueryDb, ReachabilityType};
 use cbmc::goto_program::Location;
 use cbmc::irep::goto_binary_serde::write_goto_binary_file;
 use cbmc::RoundingMode;
@@ -22,7 +23,6 @@ use kani_metadata::artifact::convert_type;
 use kani_metadata::CompilerArtifactStub;
 use kani_metadata::UnsupportedFeature;
 use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata};
-use kani_queries::{QueryDb, ReachabilityType, UserInput};
 use rustc_codegen_ssa::back::archive::{
     get_native_object_symbols, ArArchiveBuilder, ArchiveBuilder,
 };

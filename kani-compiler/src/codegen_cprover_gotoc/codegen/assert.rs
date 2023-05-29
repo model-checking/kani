@@ -21,7 +21,6 @@
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{Expr, Location, Stmt, Type};
 use cbmc::InternedString;
-use kani_queries::UserInput;
 use rustc_span::Span;
 use std::convert::AsRef;
 use strum_macros::{AsRefStr, EnumString};

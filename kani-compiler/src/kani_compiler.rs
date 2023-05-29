@@ -18,11 +18,11 @@
 #[cfg(feature = "cprover")]
 use crate::codegen_cprover_gotoc::GotocCodegenBackend;
 use crate::kani_middle::stubbing;
+use crate::kani_queries::{QueryDb, ReachabilityType};
 use crate::parser::{self, KaniCompilerParser};
 use crate::session::init_session;
 use clap::ArgMatches;
 use itertools::Itertools;
-use kani_queries::{QueryDb, ReachabilityType, UserInput};
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_driver::{Callbacks, Compilation, RunCompiler};

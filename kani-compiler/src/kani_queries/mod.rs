@@ -1,5 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+//! Define the communication between KaniCompiler and the codegen implementation.
 
 use std::sync::{Arc, Mutex};
 use strum_macros::{AsRefStr, EnumString, EnumVariantNames};
@@ -16,32 +17,6 @@ pub enum ReachabilityType {
     PubFns,
     /// Start the cross-crate reachability analysis from all *test* (i.e. `#[test]`) harnesses in the local crate.
     Tests,
-}
-
-pub trait UserInput {
-    fn set_emit_vtable_restrictions(&mut self, restrictions: bool);
-    fn get_emit_vtable_restrictions(&self) -> bool;
-
-    fn set_check_assertion_reachability(&mut self, reachability: bool);
-    fn get_check_assertion_reachability(&self) -> bool;
-
-    fn set_output_pretty_json(&mut self, pretty_json: bool);
-    fn get_output_pretty_json(&self) -> bool;
-
-    fn set_ignore_global_asm(&mut self, global_asm: bool);
-    fn get_ignore_global_asm(&self) -> bool;
-
-    fn set_write_json_symtab(&mut self, write_json_symtab: bool);
-    fn get_write_json_symtab(&self) -> bool;
-
-    fn set_reachability_analysis(&mut self, reachability: ReachabilityType);
-    fn get_reachability_analysis(&self) -> ReachabilityType;
-
-    fn set_stubbing_enabled(&mut self, stubbing_enabled: bool);
-    fn get_stubbing_enabled(&self) -> bool;
-
-    fn set_unstable_features(&mut self, features: &[String]);
-    fn get_unstable_features(&self) -> &[String];
 }
 
 /// This structure should only be used behind a synchronized reference or a snapshot.
@@ -73,68 +48,68 @@ impl QueryDb {
     }
 }
 
-impl UserInput for QueryDb {
-    fn set_emit_vtable_restrictions(&mut self, restrictions: bool) {
+impl QueryDb {
+    pub fn set_emit_vtable_restrictions(&mut self, restrictions: bool) {
         self.emit_vtable_restrictions = restrictions;
     }
 
-    fn get_emit_vtable_restrictions(&self) -> bool {
+    pub fn get_emit_vtable_restrictions(&self) -> bool {
         self.emit_vtable_restrictions
     }
 
-    fn set_check_assertion_reachability(&mut self, reachability: bool) {
+    pub fn set_check_assertion_reachability(&mut self, reachability: bool) {
         self.check_assertion_reachability = reachability;
     }
 
-    fn get_check_assertion_reachability(&self) -> bool {
+    pub fn get_check_assertion_reachability(&self) -> bool {
         self.check_assertion_reachability
     }
 
-    fn set_output_pretty_json(&mut self, pretty_json: bool) {
+    pub fn set_output_pretty_json(&mut self, pretty_json: bool) {
         self.json_pretty_print = pretty_json;
     }
 
-    fn get_output_pretty_json(&self) -> bool {
+    pub fn get_output_pretty_json(&self) -> bool {
         self.json_pretty_print
     }
 
-    fn set_ignore_global_asm(&mut self, global_asm: bool) {
+    pub fn set_ignore_global_asm(&mut self, global_asm: bool) {
         self.ignore_global_asm = global_asm;
     }
 
-    fn get_ignore_global_asm(&self) -> bool {
+    pub fn get_ignore_global_asm(&self) -> bool {
         self.ignore_global_asm
     }
 
-    fn set_reachability_analysis(&mut self, reachability: ReachabilityType) {
+    pub fn set_reachability_analysis(&mut self, reachability: ReachabilityType) {
         self.reachability_analysis = reachability;
     }
 
-    fn get_reachability_analysis(&self) -> ReachabilityType {
+    pub fn get_reachability_analysis(&self) -> ReachabilityType {
         self.reachability_analysis
     }
 
-    fn set_stubbing_enabled(&mut self, stubbing_enabled: bool) {
+    pub fn set_stubbing_enabled(&mut self, stubbing_enabled: bool) {
         self.stubbing_enabled = stubbing_enabled;
     }
 
-    fn get_stubbing_enabled(&self) -> bool {
+    pub fn get_stubbing_enabled(&self) -> bool {
         self.stubbing_enabled
     }
 
-    fn set_write_json_symtab(&mut self, write_json_symtab: bool) {
+    pub fn set_write_json_symtab(&mut self, write_json_symtab: bool) {
         self.write_json_symtab = write_json_symtab;
     }
 
-    fn get_write_json_symtab(&self) -> bool {
+    pub fn get_write_json_symtab(&self) -> bool {
         self.write_json_symtab
     }
 
-    fn set_unstable_features(&mut self, features: &[String]) {
+    pub fn set_unstable_features(&mut self, features: &[String]) {
         self.unstable_features = Vec::from_iter(features.iter().cloned());
     }
 
-    fn get_unstable_features(&self) -> &[String] {
+    pub fn get_unstable_features(&self) -> &[String] {
         &self.unstable_features
     }
 }

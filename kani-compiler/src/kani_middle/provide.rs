@@ -7,7 +7,7 @@
 use crate::kani_middle::reachability::{collect_reachable_items, filter_crate_items};
 use crate::kani_middle::stubbing;
 use crate::kani_middle::ty::query::query_provided::collect_and_partition_mono_items;
-use kani_queries::{QueryDb, UserInput};
+use crate::kani_queries::QueryDb;
 use rustc_hir::def_id::{DefId, LocalDefId};
 use rustc_interface;
 use rustc_middle::{

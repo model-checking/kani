@@ -14,7 +14,6 @@ use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle;
 use cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
 use cbmc::{InternString, InternedString};
-use kani_queries::UserInput;
 use lazy_static::lazy_static;
 use rustc_middle::ty::Instance;
 use rustc_target::abi::call::Conv;
