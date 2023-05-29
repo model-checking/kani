@@ -66,7 +66,7 @@ A trace is a record of exactly how execution proceeded, including concrete choic
 To get a trace for a failing check in Kani, run:
 
 ```
-cargo kani --visualize
+kani test.rs --visualize --enable-unstable
 ```
 
 This command runs Kani and generates an HTML report that includes a trace.
