@@ -53,7 +53,7 @@ impl QueryDb {
         self.emit_vtable_restrictions = restrictions;
     }
 
-    pub fn get_emit_vtable_restrictions(&self) -> bool {
+    pub fn emit_vtable_restrictions(&self) -> bool {
         self.emit_vtable_restrictions
     }
 
@@ -61,7 +61,7 @@ impl QueryDb {
         self.check_assertion_reachability = reachability;
     }
 
-    pub fn get_check_assertion_reachability(&self) -> bool {
+    pub fn check_assertion_reachability(&self) -> bool {
         self.check_assertion_reachability
     }
 
@@ -69,7 +69,7 @@ impl QueryDb {
         self.json_pretty_print = pretty_json;
     }
 
-    pub fn get_output_pretty_json(&self) -> bool {
+    pub fn output_pretty_json(&self) -> bool {
         self.json_pretty_print
     }
 
@@ -77,7 +77,7 @@ impl QueryDb {
         self.ignore_global_asm = global_asm;
     }
 
-    pub fn get_ignore_global_asm(&self) -> bool {
+    pub fn ignore_global_asm(&self) -> bool {
         self.ignore_global_asm
     }
 
@@ -85,7 +85,7 @@ impl QueryDb {
         self.reachability_analysis = reachability;
     }
 
-    pub fn get_reachability_analysis(&self) -> ReachabilityType {
+    pub fn reachability_analysis(&self) -> ReachabilityType {
         self.reachability_analysis
     }
 
@@ -93,7 +93,7 @@ impl QueryDb {
         self.stubbing_enabled = stubbing_enabled;
     }
 
-    pub fn get_stubbing_enabled(&self) -> bool {
+    pub fn stubbing_enabled(&self) -> bool {
         self.stubbing_enabled
     }
 
@@ -101,7 +101,7 @@ impl QueryDb {
         self.write_json_symtab = write_json_symtab;
     }
 
-    pub fn get_write_json_symtab(&self) -> bool {
+    pub fn write_json_symtab(&self) -> bool {
         self.write_json_symtab
     }
 
@@ -109,7 +109,7 @@ impl QueryDb {
         self.unstable_features = Vec::from_iter(features.iter().cloned());
     }
 
-    pub fn get_unstable_features(&self) -> &[String] {
+    pub fn unstable_features(&self) -> &[String] {
         &self.unstable_features
     }
 }

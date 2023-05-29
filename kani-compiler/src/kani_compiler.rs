@@ -152,7 +152,7 @@ impl Callbacks for KaniCompiler {
 
             // If appropriate, collect and set the stub mapping.
             if matches.get_flag(parser::ENABLE_STUBBING)
-                && queries.get_reachability_analysis() == ReachabilityType::Harnesses
+                && queries.reachability_analysis() == ReachabilityType::Harnesses
             {
                 queries.set_stubbing_enabled(true);
             }
@@ -167,7 +167,7 @@ impl Callbacks for KaniCompiler {
         _compiler: &rustc_interface::interface::Compiler,
         rustc_queries: &'tcx rustc_interface::Queries<'tcx>,
     ) -> Compilation {
-        if self.stubs.is_none() && self.queries.lock().unwrap().get_stubbing_enabled() {
+        if self.stubs.is_none() && self.queries.lock().unwrap().stubbing_enabled() {
             rustc_queries.global_ctxt().unwrap().enter(|tcx| {
                 let stubs = self.stubs.insert(self.collect_stubs(tcx));
                 debug!(?stubs, "after_analysis");

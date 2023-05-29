@@ -78,7 +78,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> GotocCtx<'tcx> {
         let fhks = fn_hooks();
         let symbol_table = SymbolTable::new(machine_model.clone());
-        let emit_vtable_restrictions = queries.get_emit_vtable_restrictions();
+        let emit_vtable_restrictions = queries.emit_vtable_restrictions();
         GotocCtx {
             tcx,
             queries,
