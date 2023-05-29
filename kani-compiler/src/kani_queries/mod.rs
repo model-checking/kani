@@ -22,15 +22,15 @@ pub enum ReachabilityType {
 /// This structure should only be used behind a synchronized reference or a snapshot.
 #[derive(Debug, Clone)]
 pub struct QueryDb {
-    check_assertion_reachability: bool,
-    emit_vtable_restrictions: bool,
-    json_pretty_print: bool,
-    ignore_global_asm: bool,
+    pub check_assertion_reachability: bool,
+    pub emit_vtable_restrictions: bool,
+    pub output_pretty_json: bool,
+    pub ignore_global_asm: bool,
     /// When set, instructs the compiler to produce the symbol table for CBMC in JSON format and use symtab2gb.
-    write_json_symtab: bool,
-    reachability_analysis: ReachabilityType,
-    stubbing_enabled: bool,
-    unstable_features: Vec<String>,
+    pub write_json_symtab: bool,
+    pub reachability_analysis: ReachabilityType,
+    pub stubbing_enabled: bool,
+    pub unstable_features: Vec<String>,
 }
 
 impl QueryDb {
@@ -38,78 +38,12 @@ impl QueryDb {
         Arc::new(Mutex::new(QueryDb {
             check_assertion_reachability: false,
             emit_vtable_restrictions: false,
-            json_pretty_print: false,
+            output_pretty_json: false,
             ignore_global_asm: false,
             write_json_symtab: false,
             reachability_analysis: ReachabilityType::None,
             stubbing_enabled: false,
             unstable_features: vec![],
         }))
-    }
-}
-
-impl QueryDb {
-    pub fn set_emit_vtable_restrictions(&mut self, restrictions: bool) {
-        self.emit_vtable_restrictions = restrictions;
-    }
-
-    pub fn emit_vtable_restrictions(&self) -> bool {
-        self.emit_vtable_restrictions
-    }
-
-    pub fn set_check_assertion_reachability(&mut self, reachability: bool) {
-        self.check_assertion_reachability = reachability;
-    }
-
-    pub fn check_assertion_reachability(&self) -> bool {
-        self.check_assertion_reachability
-    }
-
-    pub fn set_output_pretty_json(&mut self, pretty_json: bool) {
-        self.json_pretty_print = pretty_json;
-    }
-
-    pub fn output_pretty_json(&self) -> bool {
-        self.json_pretty_print
-    }
-
-    pub fn set_ignore_global_asm(&mut self, global_asm: bool) {
-        self.ignore_global_asm = global_asm;
-    }
-
-    pub fn ignore_global_asm(&self) -> bool {
-        self.ignore_global_asm
-    }
-
-    pub fn set_reachability_analysis(&mut self, reachability: ReachabilityType) {
-        self.reachability_analysis = reachability;
-    }
-
-    pub fn reachability_analysis(&self) -> ReachabilityType {
-        self.reachability_analysis
-    }
-
-    pub fn set_stubbing_enabled(&mut self, stubbing_enabled: bool) {
-        self.stubbing_enabled = stubbing_enabled;
-    }
-
-    pub fn stubbing_enabled(&self) -> bool {
-        self.stubbing_enabled
-    }
-
-    pub fn set_write_json_symtab(&mut self, write_json_symtab: bool) {
-        self.write_json_symtab = write_json_symtab;
-    }
-
-    pub fn write_json_symtab(&self) -> bool {
-        self.write_json_symtab
-    }
-
-    pub fn set_unstable_features(&mut self, features: &[String]) {
-        self.unstable_features = Vec::from_iter(features.iter().cloned());
-    }
-
-    pub fn unstable_features(&self) -> &[String] {
-        &self.unstable_features
     }
 }

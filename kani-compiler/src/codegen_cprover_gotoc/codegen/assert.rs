@@ -150,7 +150,7 @@ impl<'tcx> GotocCtx<'tcx> {
         span: Option<Span>,
     ) -> (String, Stmt) {
         let loc = self.codegen_caller_span(&span);
-        if self.queries.check_assertion_reachability() {
+        if self.queries.check_assertion_reachability {
             // Generate a unique ID for the assert
             let assert_id = self.next_check_id();
             // Also add the unique ID as a prefix to the assert message so that it can be

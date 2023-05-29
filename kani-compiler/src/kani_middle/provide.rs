@@ -19,7 +19,7 @@ use rustc_middle::{
 /// the present crate.
 pub fn provide(providers: &mut Providers, queries: &QueryDb) {
     providers.optimized_mir = run_mir_passes;
-    if queries.stubbing_enabled() {
+    if queries.stubbing_enabled {
         providers.collect_and_partition_mono_items = collect_and_partition_mono_items;
     }
 }
