@@ -96,7 +96,7 @@ fn bundle_kani(dir: &Path) -> Result<()> {
 
     // 4. Pre-compiled library files
     cp_dir(&kani_sysroot_lib(), dir)?;
-    cp_dir(&kani_playback_lib(), dir)?;
+    cp_dir(&kani_playback_lib().parent().unwrap(), dir)?;
 
     // 5. Record the exact toolchain we use
     std::fs::write(dir.join("rust-toolchain-version"), env!("RUSTUP_TOOLCHAIN"))?;
