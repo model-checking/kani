@@ -1,0 +1,17 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+[package]
+name = "sample_crate"
+version = "0.1.0"
+edition = "2021"
+doctest = false
+
+[[bin]]
+name = "foo"
+doctest = false
+
+
+[[bin]]
+name = "bar"
+doctest = false
+
