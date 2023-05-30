@@ -14,6 +14,14 @@ pub struct CargoPlaybackArgs {
     #[command(flatten)]
     pub playback: PlaybackArgs,
 
+    /// Test all binaries.
+    #[arg(long)]
+    pub bins: bool,
+
+    /// Test only the package's library unit tests.
+    #[arg(long)]
+    pub lib: bool,
+
     /// Arguments to pass down to Cargo
     #[command(flatten)]
     pub cargo: CargoArgs,
