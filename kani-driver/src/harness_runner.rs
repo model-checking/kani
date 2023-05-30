@@ -89,7 +89,7 @@ impl KaniSession {
             // Strictly speaking, we're faking success here. This is more "no error"
             Ok(VerificationResult::mock_success())
         } else {
-            let result = self.with_timer(|| self.run_cbmc(binary, harness), "run_cbmc")?;
+            let mut result = self.with_timer(|| self.run_cbmc(binary, harness), "run_cbmc")?;
 
             // When quiet, we don't want to print anything at all.
             // When output is old, we also don't have real results to print.
@@ -99,7 +99,7 @@ impl KaniSession {
                     result.render(&self.args.output_format, harness.attributes.should_panic)
                 );
             }
-
+            self.gen_and_add_concrete_playback(harness, &mut result)?;
             Ok(result)
         }
     }

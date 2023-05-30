@@ -6,7 +6,13 @@ set -eu
 
 # Test for platform
 PLATFORM=$(uname -sp)
-if [[ $PLATFORM != "Linux x86_64" ]]; then
+
+if [[ $PLATFORM == "Linux x86_64" ]]
+then
+  TARGET="x86_64-unknown-linux-gnu"
+  # 'env' necessary to avoid bash built-in 'time'
+  WRAPPER="env time -v"
+else
   echo
   echo "Firecracker codegen regression only works on Linux x86 platform, skipping..."
   echo
@@ -23,11 +29,27 @@ echo
 
 # At the moment, we only test codegen for the virtio module
 cd $KANI_DIR/firecracker/src/devices/src/virtio/
+
+# Clean first
+cargo clean
+
 export KANI_LOG=error
 export RUSTC_LOG=error
 export RUST_BACKTRACE=1
-# Use cargo assess since this is now our default way of assessing Kani suitability to verify a crate.
-cargo kani --enable-unstable --only-codegen assess
+
+# Compile rust to iRep
+RUST_FLAGS=(
+    "--kani-compiler"
+    "-Cpanic=abort"
+    "-Zalways-encode-mir"
+    "-Cllvm-args=--goto-c"
+    "-Cllvm-args=--ignore-global-asm"
+    "-Cllvm-args=--reachability=pub_fns"
+    "--sysroot=${KANI_DIR}/target/kani"
+)
+export RUSTFLAGS="${RUST_FLAGS[@]}"
+export RUSTC="$KANI_DIR/target/kani/bin/kani-compiler"
+$WRAPPER cargo build --verbose --lib --target $TARGET
 
 echo
 echo "Finished Firecracker codegen regression successfully..."
