@@ -32,6 +32,11 @@
     - [Regression testing](./regression-testing.md)
     - [Book runner](./bookrunner.md)
     - [(Experimental) Testing with a Large Number of Repositories](./repo-crawl.md)
+  - [Performance comparisons](./performance-comparisons.md)
+    - [`benchcomp` command line](./benchcomp-cli.md)
+    - [`benchcomp` configuration file](./benchcomp-conf.md)
+    - [Custom visualizations](./benchcomp-viz.md)
+    - [Custom parsers](./benchcomp-parse.md)
 
 - [Limitations](./limitations.md)
   - [Undefined behaviour](./undefined-behaviour.md)
