@@ -6,7 +6,7 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::session::{base_folder, lib_folder, KaniSession};
+use crate::session::{lib_folder, KaniSession};
 
 impl KaniSession {
     /// Used by `kani` and not `cargo-kani` to process a single Rust file into a `.symtab.json`
@@ -118,6 +118,17 @@ impl KaniSession {
     pub fn kani_rustc_flags(&self) -> Vec<OsString> {
         let lib_path = lib_folder().unwrap();
         let mut flags: Vec<_> = base_rustc_flags(lib_path);
+        flags.extend_from_slice(
+            &[
+                "-C",
+                "panic=abort",
+                "-C",
+                "symbol-mangling-version=v0",
+                "-Z",
+                "panic_abort_tests=yes",
+            ]
+            .map(OsString::from),
+        );
         if self.args.use_abs {
             flags.push("-Z".into());
             flags.push("force-unstable-if-unmarked=yes".into()); // ??
@@ -147,18 +158,12 @@ impl KaniSession {
 pub fn base_rustc_flags(lib_path: PathBuf) -> Vec<OsString> {
     let kani_std_rlib = lib_path.join("libstd.rlib");
     let kani_std_wrapper = format!("noprelude:std={}", kani_std_rlib.to_str().unwrap());
-    let sysroot = base_folder().unwrap();
+    let sysroot = lib_path.parent().unwrap();
     let mut flags = [
         "-C",
         "overflow-checks=on",
-        "-C",
-        "panic=abort",
-        "-C",
-        "symbol-mangling-version=v0",
         "-Z",
         "unstable-options",
-        "-Z",
-        "panic_abort_tests=yes",
         "-Z",
         "trim-diagnostic-paths=no",
         "-Z",
