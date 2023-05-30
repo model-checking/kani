@@ -60,6 +60,10 @@ else
 fi
 
 echo "Building user documentation..."
+# Generate benchcomp documentation from source code
+mkdir -p gen_src
+"${SCRIPT_DIR}/gen_benchcomp_schemas.py" gen_src
+
 # Build the book into ./book/
 mkdir -p book
 mkdir -p book/rfc
