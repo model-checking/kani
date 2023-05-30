@@ -112,6 +112,14 @@ fn cargo_test(install: &InstallType, args: CargoPlaybackArgs) -> Result<()> {
         cargo_args.push("--no-run".into());
     }
 
+    if args.bins {
+        cargo_args.push("--bins".into());
+    }
+
+    if args.lib {
+        cargo_args.push("--lib".into());
+    }
+
     cargo_args.append(&mut args.cargo.to_cargo_args());
     cargo_args.push("--target".into());
     cargo_args.push(env!("TARGET").into());
