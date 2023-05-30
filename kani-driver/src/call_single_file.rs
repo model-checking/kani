@@ -118,6 +118,7 @@ impl KaniSession {
     pub fn kani_rustc_flags(&self) -> Vec<OsString> {
         let lib_path = lib_folder().unwrap();
         let mut flags: Vec<_> = base_rustc_flags(lib_path);
+        // We only use panic abort strategy for verification since we cannot handle unwind logic.
         flags.extend_from_slice(
             &[
                 "-C",
@@ -155,6 +156,7 @@ impl KaniSession {
     }
 }
 
+/// Common flags used for compiling user code for verification and playback flow.
 pub fn base_rustc_flags(lib_path: PathBuf) -> Vec<OsString> {
     let kani_std_rlib = lib_path.join("libstd.rlib");
     let kani_std_wrapper = format!("noprelude:std={}", kani_std_rlib.to_str().unwrap());
