@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! Implements the subcommand handling of the playback subcommand
 
+use crate::args::cargo::CargoTestArgs;
 use crate::args::common::UnstableFeatures;
-use crate::args::{CargoArgs, CommonArgs, ValidateArgs};
+use crate::args::{CommonArgs, ValidateArgs};
 use clap::error::ErrorKind;
 use clap::{Error, Parser, ValueEnum};
 use std::path::PathBuf;
@@ -14,17 +15,9 @@ pub struct CargoPlaybackArgs {
     #[command(flatten)]
     pub playback: PlaybackArgs,
 
-    /// Test all binaries.
-    #[arg(long)]
-    pub bins: bool,
-
-    /// Test only the package's library unit tests.
-    #[arg(long)]
-    pub lib: bool,
-
-    /// Arguments to pass down to Cargo
+    /// Arguments to pass down to Cargo that are specific to tests.
     #[command(flatten)]
-    pub cargo: CargoArgs,
+    pub cargo: CargoTestArgs,
 }
 
 /// Execute concrete playback testcases of a local crate.
@@ -126,7 +119,7 @@ mod tests {
         let input = "playback -Z concrete-playback -p PKG_NAME".split_whitespace();
         let args = CargoPlaybackArgs::try_parse_from(input).unwrap();
         args.validate().unwrap();
-        assert_eq!(&args.cargo.package, &["PKG_NAME"])
+        assert_eq!(&args.cargo.common.package, &["PKG_NAME"])
     }
 
     #[test]
