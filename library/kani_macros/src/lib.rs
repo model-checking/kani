@@ -13,8 +13,8 @@ mod derive;
 // proc_macro::quote is nightly-only, so we'll cobble things together instead
 use proc_macro::TokenStream;
 use proc_macro_error::proc_macro_error;
+use syn::{parse_macro_input, punctuated::Punctuated, Expr, ItemFn, Token};
 mod contract;
-use syn::{punctuated::Punctuated, Expr, Token};
 
 #[cfg(kani_sysroot)]
 use sysroot as attr_impl;
@@ -30,18 +30,6 @@ pub fn proof(attr: TokenStream, item: TokenStream) -> TokenStream {
     attr_impl::proof(attr, item)
 }
 
-#[proc_macro_attribute]
-pub fn ensures(attr: TokenStream, item: TokenStream) -> TokenStream {
-    attr_impl::ensures(attr, item)
-}
-#[proc_macro_attribute]
-pub fn modifies(attr: TokenStream, item: TokenStream) -> TokenStream {
-    attr_impl::modifies(attr, item)
-}
-#[proc_macro_attribute]
-pub fn requires(attr: TokenStream, item: TokenStream) -> TokenStream {
-    attr_impl::requires(attr, item)
-}
 /// Specifies that a proof harness is expected to panic.**
 ///
 /// This attribute allows users to exercise *negative verification*.
@@ -198,137 +186,6 @@ mod sysroot {
         }
     }
 
-    /// If config is Kani, `#[kani::ensures(arg)]` specifies a postcondition on the function.
-    /// The postcondition is treated as part of the function's "contract" specification.
-    /// arg - Takes in a boolean expression that represents the precondition.
-    /// The following transformations take place during macro expansion:
-    /// 1) All `#[kani::requires(arg)]` attributes gets translated to `kani::precondition(arg)` and
-    ///     gets injected to the body of the function right before the actual body begins.
-    /// 2) All `#[kani::ensures(arg)]` attributes gets translated to `kani::postcondition(arg)` and
-    ///     gets injected to the body of the function, after the actual body begins.
-    /// 3) The body of the original function (say function `foo`) gets wrapped into a closure
-    ///     with name `foo_<uuid>(...)` and the closure is subsequently called.
-    ///     This is done to handle the return value of the original function
-    ///     as `kani:postcondition(..)` gets injected after the body of the function.
-    pub fn ensures(attr: TokenStream, item: TokenStream) -> TokenStream {
-        let parsed_attr = parse_macro_input!(attr as Expr);
-
-        // Extract other contract clauses from "item"
-        let parsed_item = parse_macro_input!(item as ItemFn);
-        let other_attributes = parsed_item.attrs.clone();
-        let non_inlined = contract::extract_non_inlined_attributes(&other_attributes);
-        let pre = contract::extract_requires_as_preconditions(&other_attributes);
-        let post = contract::extract_ensures_as_postconditions(&other_attributes);
-
-        // Extract components of the function from "item"
-        let fn_vis = parsed_item.vis.clone();
-        let fn_sig = parsed_item.sig.clone();
-        let args = contract::extract_function_args(&fn_sig);
-
-        // Wrap original function body in a closure
-        let (closure_ident, fn_closure) = contract::convert_to_closure(&parsed_item);
-        quote::quote! {
-            #non_inlined
-            #fn_vis #fn_sig {
-                #pre
-                #fn_closure
-                let ret = if kani::replace_function_body() {
-                    kani::any()
-                } else {
-                    #closure_ident(#(#args,)*)
-                };
-                kani::postcondition(#parsed_attr);
-                #post
-                ret
-            }
-        }
-        .into()
-    }
-
-    /// If config is Kani, `#[kani::requires(arg)]` adds a precondition on the function.
-    /// The precondition is treated as part of the function's "contract" specification.
-    /// The following transformations take place during macro expansion:
-    /// 1) All `#[kani::requires(arg)]` attributes gets translated to `kani::precondition(arg)` and
-    ///     gets injected to the body of the function right before the actual body begins.
-    /// 2) All `#[kani::ensures(arg)]` attributes gets translated to `kani::postcondition(arg)` and
-    ///     gets injected to the body of the function, after the actual body begins.
-    /// 3) The body of the original function (say function `foo`) gets wrapped into a closure
-    ///     with name `foo_<uuid>(...)` and the closure is subsequently called.
-    ///     This is done to handle the return value of the original function
-    ///     as `kani:postcondition(..)` gets injected after the body of the function.
-    pub fn requires(attr: TokenStream, item: TokenStream) -> TokenStream {
-        let parsed_attr = parse_macro_input!(attr as Expr);
-
-        // Extract other contract clauses from "item"
-        let parsed_item = parse_macro_input!(item as ItemFn);
-        let other_attributes = parsed_item.attrs.clone();
-        let non_inlined = contract::extract_non_inlined_attributes(&other_attributes);
-        let pre = contract::extract_requires_as_preconditions(&other_attributes);
-        let post = contract::extract_ensures_as_postconditions(&other_attributes);
-
-        // Extract components of the function from "item"
-        let fn_vis = parsed_item.vis.clone();
-        let fn_sig = parsed_item.sig.clone();
-        let args = contract::extract_function_args(&fn_sig);
-
-        // Wrap original function body in a closure
-        let (closure_ident, fn_closure) = contract::convert_to_closure(&parsed_item);
-        quote::quote! {
-            #non_inlined
-            #fn_vis #fn_sig {
-                kani::precondition(#parsed_attr);
-                #pre
-                #fn_closure
-                let ret = if kani::replace_function_body() {
-                    kani::any()
-                } else {
-                    #closure_ident(#(#args,)*)
-                };
-                #post
-                ret
-            }
-        }
-        .into()
-    }
-
-    /// The attribute '#[kani::modifies(arg1, arg2, ...)]' defines the write set of the function.
-    /// arg - Zero or more comma-separated “targets” which can be variables.
-    pub fn modifies(attr: TokenStream, item: TokenStream) -> TokenStream {
-        // Parse 'arg'
-        let mut targets: Vec<Expr> =
-            parse_macro_input!(attr with Punctuated::<Expr, Token![,]>::parse_terminated)
-                .into_iter()
-                .collect();
-
-        // Parse 'item' and extract out the function and the remaining attributes.
-        let mut parsed_item = parse_macro_input!(item as ItemFn);
-
-        // Extract other modifies clauses from "item"
-        let other_attributes = parsed_item.attrs.clone();
-
-        other_attributes.iter().enumerate().for_each(|(i, a)| {
-            let name = a.path.segments.last().unwrap().ident.to_string();
-            match name.as_str() {
-                "modifies" => {
-                    // Remove from parsed_item.
-                    parsed_item.attrs.remove(i);
-                    // Add arguments to list of targets.
-                    let new_targets: Punctuated<Expr, Token![,]> =
-                        a.parse_args_with(Punctuated::parse_terminated).unwrap();
-                    let new_targets_vec: Vec<Expr> = new_targets.into_iter().collect();
-                    targets.extend(new_targets_vec);
-                }
-                _ => {}
-            }
-        });
-
-        quote::quote! {
-            #[kanitool::modifies(#(#targets,)*)]
-            #parsed_item
-        }
-        .into()
-    }
-
     kani_attribute!(should_panic, no_args);
     kani_attribute!(solver);
     kani_attribute!(stub);
@@ -361,12 +218,138 @@ mod regular {
         result
     }
 
-    no_op!(ensures);
-    no_op!(modifies);
-    no_op!(requires);
     no_op!(should_panic);
     no_op!(solver);
     no_op!(stub);
     no_op!(unstable);
     no_op!(unwind);
+}
+
+/// If config is Kani, `#[kani::ensures(arg)]` specifies a postcondition on the function.
+/// The postcondition is treated as part of the function's "contract" specification.
+/// arg - Takes in a boolean expression that represents the precondition.
+/// The following transformations take place during macro expansion:
+/// 1) All `#[kani::requires(arg)]` attributes gets translated to `kani::precondition(arg)` and
+///     gets injected to the body of the function right before the actual body begins.
+/// 2) All `#[kani::ensures(arg)]` attributes gets translated to `kani::postcondition(arg)` and
+///     gets injected to the body of the function, after the actual body begins.
+/// 3) The body of the original function (say function `foo`) gets wrapped into a closure
+///     with name `foo_<uuid>(...)` and the closure is subsequently called.
+///     This is done to handle the return value of the original function
+///     as `kani:postcondition(..)` gets injected after the body of the function.
+#[proc_macro_attribute]
+pub fn ensures(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let parsed_attr = parse_macro_input!(attr as Expr);
+
+    // Extract other contract clauses from "item"
+    let parsed_item = parse_macro_input!(item as ItemFn);
+    let (closure_ident, fn_closure) = contract::convert_to_closure(&parsed_item);
+    let non_inlined = contract::extract_non_inlined_attributes(&parsed_item.attrs);
+    let pre = contract::extract_requires_as_preconditions(&parsed_item.attrs);
+    let post = contract::extract_ensures_as_postconditions(&parsed_item.attrs);
+
+    // Extract components of the function from "item"
+    let fn_vis = parsed_item.vis;
+    let fn_sig = parsed_item.sig;
+    let args = contract::extract_function_args(&fn_sig);
+
+    // Wrap original function body in a closure
+    quote::quote! {
+        #non_inlined
+        #fn_vis #fn_sig {
+            #pre
+            #fn_closure
+            let ret = if kani::replace_function_body() {
+                kani::any()
+            } else {
+                #closure_ident(#(#args,)*)
+            };
+            kani::postcondition(#parsed_attr);
+            #post
+            ret
+        }
+    }
+    .into()
+}
+
+/// If config is Kani, `#[kani::requires(arg)]` adds a precondition on the function.
+/// The precondition is treated as part of the function's "contract" specification.
+/// The following transformations take place during macro expansion:
+/// 1) All `#[kani::requires(arg)]` attributes gets translated to `kani::precondition(arg)` and
+///     gets injected to the body of the function right before the actual body begins.
+/// 2) All `#[kani::ensures(arg)]` attributes gets translated to `kani::postcondition(arg)` and
+///     gets injected to the body of the function, after the actual body begins.
+/// 3) The body of the original function (say function `foo`) gets wrapped into a closure
+///     with name `foo_<uuid>(...)` and the closure is subsequently called.
+///     This is done to handle the return value of the original function
+///     as `kani:postcondition(..)` gets injected after the body of the function.
+#[proc_macro_attribute]
+pub fn requires(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let parsed_attr = parse_macro_input!(attr as Expr);
+
+    // Extract other contract clauses from "item"
+    let parsed_item = parse_macro_input!(item as ItemFn);
+    let (closure_ident, fn_closure) = contract::convert_to_closure(&parsed_item);
+    let non_inlined = contract::extract_non_inlined_attributes(&parsed_item.attrs);
+    let pre = contract::extract_requires_as_preconditions(&parsed_item.attrs);
+    let post = contract::extract_ensures_as_postconditions(&parsed_item.attrs);
+
+    // Extract components of the function from "item"
+    let fn_vis = parsed_item.vis;
+    let fn_sig = parsed_item.sig;
+    let args = contract::extract_function_args(&fn_sig);
+
+    // Wrap original function body in a closure
+    quote::quote! {
+        #non_inlined
+        #fn_vis #fn_sig {
+            kani::precondition(#parsed_attr);
+            #pre
+            #fn_closure
+            let ret = if kani::replace_function_body() {
+                kani::any()
+            } else {
+                #closure_ident(#(#args,)*)
+            };
+            #post
+            ret
+        }
+    }
+    .into()
+}
+
+/// The attribute '#[kani::modifies(arg1, arg2, ...)]' defines the write set of the function.
+/// arg - Zero or more comma-separated “targets” which can be variables.
+#[proc_macro_attribute]
+pub fn modifies(attr: TokenStream, item: TokenStream) -> TokenStream {
+    // Parse 'arg'
+    let mut targets: Vec<Expr> =
+        parse_macro_input!(attr with Punctuated::<Expr, Token![,]>::parse_terminated)
+            .into_iter()
+            .collect();
+
+    // Parse 'item' and extract out the function and the remaining attributes.
+    let mut parsed_item = parse_macro_input!(item as ItemFn);
+
+    // Extract other modifies clauses from "item"
+    let other_attributes = parsed_item.attrs.clone();
+
+    other_attributes.iter().enumerate().for_each(|(i, a)| {
+        let name = a.path.segments.last().unwrap().ident.to_string();
+        if name.as_str() == "modifies" {
+                // Remove from parsed_item.
+                parsed_item.attrs.remove(i);
+                // Add arguments to list of targets.
+                let new_targets: Punctuated<Expr, Token![,]> =
+                    a.parse_args_with(Punctuated::parse_terminated).unwrap();
+                let new_targets_vec: Vec<Expr> = new_targets.into_iter().collect();
+                targets.extend(new_targets_vec);
+        }
+    });
+
+    quote::quote! {
+        #[kanitool::modifies(#(#targets,)*)]
+        #parsed_item
+    }
+    .into()
 }

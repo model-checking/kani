@@ -102,28 +102,3 @@ pub fn extract_requires_as_preconditions(attributes: &[Attribute]) -> TokenStrea
         })
         .collect()
 }
-
-/// Splits a vector of attributes into a vector of "#[kani::modifies(...)]" attributes only and the rest.
-pub fn handle_modifies_attributes(attributes: &[Attribute]) -> (TokenStream2, TokenStream2) {
-    let modifies_attrs = attributes
-        .iter()
-        .filter_map(|a| {
-            let name = kani_attr_name(a);
-            match name.as_deref() {
-                Some("modifies") => Some(quote! {#a}),
-                _ => None,
-            }
-        })
-        .fold(quote! {}, |acc, new| quote! {#acc #new});
-    let non_modifies_attrs = attributes
-        .iter()
-        .filter_map(|a| {
-            let name = kani_attr_name(a);
-            match name.as_deref() {
-                Some("modifies") => None,
-                _ => Some(quote! {#a}),
-            }
-        })
-        .fold(quote! {}, |acc, new| quote! {#acc #new});
-    (modifies_attrs, non_modifies_attrs)
-}
