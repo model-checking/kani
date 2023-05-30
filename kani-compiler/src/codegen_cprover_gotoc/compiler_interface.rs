@@ -256,14 +256,26 @@ impl CodegenBackend for GotocCodegenBackend {
                         false
                     }
                 });
+                // Codegen still takes a considerable amount, thus, we only generate one model for
+                // all harnesses and copy them for each harness.
+                // We will be able to remove this once we optimize all calls to CBMC utilities.
+                // https://github.com/model-checking/kani/issues/1971
+                let model_path = base_filename.with_extension(ArtifactType::SymTabGoto);
+                let (gcx, items) =
+                    self.codegen_items(tcx, &harnesses, &model_path, &results.machine_model);
+                results.extend(gcx, items, None);
+
                 for (test_fn, test_desc) in harnesses.iter().zip(descriptions.iter()) {
                     let instance =
                         if let MonoItem::Fn(instance) = test_fn { instance } else { continue };
                     let metadata = gen_test_metadata(tcx, *test_desc, *instance, &base_filename);
-                    let model_path = &metadata.goto_file.as_ref().unwrap();
-                    let (gcx, items) =
-                        self.codegen_items(tcx, &[*test_fn], model_path, &results.machine_model);
-                    results.extend(gcx, items, Some(metadata));
+                    let test_model_path = &metadata.goto_file.as_ref().unwrap();
+                    std::fs::copy(&model_path, &test_model_path).expect(&format!(
+                        "Failed to copy {} to {}",
+                        model_path.display(),
+                        test_model_path.display()
+                    ));
+                    results.harnesses.push(metadata);
                 }
             }
             ReachabilityType::None => {}
