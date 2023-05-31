@@ -280,7 +280,7 @@ pub fn lib_folder() -> Result<PathBuf> {
 
 /// Return the path for the folder where the pre-compiled rust libraries are located.
 pub fn lib_playback_folder() -> Result<PathBuf> {
-    Ok(base_folder()?.join("lib-playback"))
+    Ok(base_folder()?.join("playback/lib"))
 }
 
 /// Return the base folder for the entire kani installation.
