@@ -32,13 +32,16 @@ impl KaniSession {
         };
 
         if let Ok(result_items) = &verification_result.results {
-            match extract_harness_values(result_items) {
-                None => println!(
+            let harness_values: Vec<Vec<ConcreteVal>> = extract_harness_values(result_items);
+
+            if harness_values.is_empty() {
+                println!(
                     "WARNING: Kani could not produce a concrete playback for `{}` because there \
                     were no failing panic checks.",
                     harness.pretty_name
-                ),
-                Some(concrete_vals) => {
+                )
+            } else {
+                for concrete_vals in harness_values.iter() {
                     let pretty_name = harness.get_harness_name_unqualified();
                     let generated_unit_test = format_unit_test(&pretty_name, &concrete_vals);
                     match playback_mode {
@@ -289,35 +292,25 @@ mod concrete_vals_extractor {
 
     /// Extract a set of concrete values that trigger one assertion failure.
     /// This will return None if the failure is not related to a user assertion.
-    pub fn extract_harness_values(result_items: &[Property]) -> Option<Vec<ConcreteVal>> {
-        let mut failures = result_items.iter().filter(|prop| {
-            (prop.property_class() == "assertion" && prop.status == CheckStatus::Failure)
-                || (prop.property_class() == "cover" && prop.status == CheckStatus::Satisfied)
-        });
+    pub fn extract_harness_values(result_items: &[Property]) -> Vec<Vec<ConcreteVal>> {
+        result_items
+            .iter()
+            .filter(|prop| {
+                (prop.property_class() == "assertion" && prop.status == CheckStatus::Failure)
+                    || (prop.property_class() == "cover" && prop.status == CheckStatus::Satisfied)
+            })
+            .map(|property| {
+                // Extract values for the first assertion that has failed.
+                let trace = property
+                    .trace
+                    .as_ref()
+                    .expect(&format!("Missing trace for {}", property.property_name()));
+                let concrete_vals: Vec<ConcreteVal> =
+                    trace.iter().filter_map(&extract_from_trace_item).collect();
 
-        // Process the first assertion failure.
-        let first_failure = failures.next();
-        if let Some(property) = first_failure {
-            // Extract values for the first assertion that has failed.
-            let trace = property
-                .trace
-                .as_ref()
-                .expect(&format!("Missing trace for {}", property.property_name()));
-            let concrete_vals = trace.iter().filter_map(&extract_from_trace_item).collect();
-
-            // Print warnings for all the other failures that were not handled in case they expected
-            // even future checks to be extracted.
-            for unhandled in failures {
-                println!(
-                    "WARNING: Unable to extract concrete values from multiple failing assertions. Skipping property `{}` with description `{}`.",
-                    unhandled.property_name(),
-                    unhandled.description,
-                );
-            }
-            Some(concrete_vals)
-        } else {
-            None
-        }
+                concrete_vals
+            })
+            .collect()
     }
 
     /// Extracts individual bytes returned by kani::any() calls.
