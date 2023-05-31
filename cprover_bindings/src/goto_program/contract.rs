@@ -7,7 +7,7 @@ use std::fmt::Debug;
 /// A `Contract` represents a code contract type.
 /// A contract describes specifications (in the form of preconditions, postconditions, and invariants) of certain expressions.
 /// Further details about the CBMC implementation can be found here -
-/// https://github.com/diffblue/cbmc/blob/develop/doc/cprover-manual/contracts.md
+/// <https://github.com/diffblue/cbmc/blob/develop/doc/cprover-manual/contracts.md>
 
 /// Represents a contract on a function, loop, etc.
 #[derive(Clone, Debug)]
