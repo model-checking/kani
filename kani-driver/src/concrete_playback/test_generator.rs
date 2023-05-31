@@ -562,7 +562,7 @@ mod tests {
                 }),
             }]),
         }];
-        let concrete_vals = extract_harness_values(&processed_items).unwrap();
+        let concrete_vals = extract_harness_values(&processed_items).pop().unwrap();
         let concrete_val = &concrete_vals[0];
 
         assert_eq!(concrete_val.byte_arr, vec![1, 3]);
