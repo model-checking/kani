@@ -15,6 +15,7 @@ mod verify {
         let result = NonZeroU8::try_from(val);
         match result {
             Ok(nz_val) => {
+                kani::assume(val == 16); // stabilize value for playback
                 cover!(true, "Ok"); // Cover 1
                 assert_eq!(nz_val.get(), val);
             }
