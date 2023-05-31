@@ -337,13 +337,13 @@ pub fn modifies(attr: TokenStream, item: TokenStream) -> TokenStream {
     other_attributes.iter().enumerate().for_each(|(i, a)| {
         let name = a.path.segments.last().unwrap().ident.to_string();
         if name.as_str() == "modifies" {
-                // Remove from parsed_item.
-                parsed_item.attrs.remove(i);
-                // Add arguments to list of targets.
-                let new_targets: Punctuated<Expr, Token![,]> =
-                    a.parse_args_with(Punctuated::parse_terminated).unwrap();
-                let new_targets_vec: Vec<Expr> = new_targets.into_iter().collect();
-                targets.extend(new_targets_vec);
+            // Remove from parsed_item.
+            parsed_item.attrs.remove(i);
+            // Add arguments to list of targets.
+            let new_targets: Punctuated<Expr, Token![,]> =
+                a.parse_args_with(Punctuated::parse_terminated).unwrap();
+            let new_targets_vec: Vec<Expr> = new_targets.into_iter().collect();
+            targets.extend(new_targets_vec);
         }
     });
 
