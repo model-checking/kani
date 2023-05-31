@@ -37,7 +37,7 @@ impl KaniSession {
             if harness_values.is_empty() {
                 println!(
                     "WARNING: Kani could not produce a concrete playback for `{}` because there \
-                    were no failing panic checks.",
+                    were no failing panic checks or satisfiable cover statements.",
                     harness.pretty_name
                 )
             } else {
@@ -290,8 +290,9 @@ mod concrete_vals_extractor {
         pub interp_val: String,
     }
 
-    /// Extract a set of concrete values that trigger one assertion failure.
-    /// This will return None if the failure is not related to a user assertion.
+    /// Extract a set of concrete values that trigger one assertion
+    /// failure. Each element of the outer vector corresponds to
+    /// inputs triggering one assertion failure or cover statement.
     pub fn extract_harness_values(result_items: &[Property]) -> Vec<Vec<ConcreteVal>> {
         result_items
             .iter()
@@ -300,7 +301,7 @@ mod concrete_vals_extractor {
                     || (prop.property_class() == "cover" && prop.status == CheckStatus::Satisfied)
             })
             .map(|property| {
-                // Extract values for the first assertion that has failed.
+                // Extract values for each assertion that has failed.
                 let trace = property
                     .trace
                     .as_ref()
