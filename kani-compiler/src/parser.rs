@@ -1,8 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+use crate::kani_queries::ReachabilityType;
 use clap::{builder::PossibleValuesParser, command, Arg, ArgAction, ArgMatches, Command};
-use kani_queries::ReachabilityType;
 use std::env;
 use std::str::FromStr;
 use strum::VariantNames as _;

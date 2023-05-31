@@ -14,6 +14,7 @@ use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{
     collect_reachable_items, filter_const_crate_items, filter_crate_items,
 };
+use crate::kani_queries::{QueryDb, ReachabilityType};
 use cbmc::goto_program::Location;
 use cbmc::irep::goto_binary_serde::write_goto_binary_file;
 use cbmc::RoundingMode;
@@ -22,7 +23,6 @@ use kani_metadata::artifact::convert_type;
 use kani_metadata::CompilerArtifactStub;
 use kani_metadata::UnsupportedFeature;
 use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata};
-use kani_queries::{QueryDb, ReachabilityType, UserInput};
 use rustc_codegen_ssa::back::archive::{
     get_native_object_symbols, ArArchiveBuilder, ArchiveBuilder,
 };
@@ -167,9 +167,9 @@ impl GotocCodegenBackend {
 
         // No output should be generated if user selected no_codegen.
         if !tcx.sess.opts.unstable_opts.no_codegen && tcx.sess.opts.output_types.should_codegen() {
-            let pretty = self.queries.lock().unwrap().get_output_pretty_json();
+            let pretty = self.queries.lock().unwrap().output_pretty_json;
             write_file(&symtab_goto, ArtifactType::PrettyNameMap, &pretty_name_map, pretty);
-            if gcx.queries.get_write_json_symtab() {
+            if gcx.queries.write_json_symtab {
                 write_file(&symtab_goto, ArtifactType::SymTab, &gcx.symbol_table, pretty);
                 symbol_table_to_gotoc(&tcx, &symtab_goto);
             } else {
@@ -220,7 +220,7 @@ impl CodegenBackend for GotocCodegenBackend {
         let queries = self.queries.lock().unwrap().clone();
         check_target(tcx.sess);
         check_options(tcx.sess);
-        check_crate_items(tcx, queries.get_ignore_global_asm());
+        check_crate_items(tcx, queries.ignore_global_asm);
 
         // Codegen all items that need to be processed according to the selected reachability mode:
         //
@@ -229,7 +229,7 @@ impl CodegenBackend for GotocCodegenBackend {
         // - PubFns: Generate code for all reachable logic starting from the local public functions.
         // - None: Don't generate code. This is used to compile dependencies.
         let base_filename = tcx.output_filenames(()).output_path(OutputType::Object);
-        let reachability = queries.get_reachability_analysis();
+        let reachability = queries.reachability_analysis;
         let mut results = GotoCodegenResults::new(tcx, reachability);
         match reachability {
             ReachabilityType::Harnesses => {
@@ -304,7 +304,7 @@ impl CodegenBackend for GotocCodegenBackend {
                 &base_filename,
                 ArtifactType::Metadata,
                 &results.generate_metadata(),
-                queries.get_output_pretty_json(),
+                queries.output_pretty_json,
             );
         }
         codegen_results(tcx, rustc_metadata, &results.machine_model)

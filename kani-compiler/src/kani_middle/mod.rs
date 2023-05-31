@@ -5,7 +5,7 @@
 
 use std::collections::HashSet;
 
-use kani_queries::{QueryDb, UserInput};
+use crate::kani_queries::QueryDb;
 use rustc_hir::{def::DefKind, def_id::LOCAL_CRATE};
 use rustc_middle::mir::mono::MonoItem;
 use rustc_middle::span_bug;
@@ -66,7 +66,7 @@ pub fn check_reachable_items(tcx: TyCtxt, queries: &QueryDb, items: &[MonoItem])
         let def_id = item.def_id();
         if !def_ids.contains(&def_id) {
             // Check if any unstable attribute was reached.
-            check_unstable_features(tcx, queries.get_unstable_features(), def_id);
+            check_unstable_features(tcx, &queries.unstable_features, def_id);
             def_ids.insert(def_id);
         }
     }

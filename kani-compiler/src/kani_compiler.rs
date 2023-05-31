@@ -18,11 +18,11 @@
 #[cfg(feature = "cprover")]
 use crate::codegen_cprover_gotoc::GotocCodegenBackend;
 use crate::kani_middle::stubbing;
+use crate::kani_queries::{QueryDb, ReachabilityType};
 use crate::parser::{self, KaniCompilerParser};
 use crate::session::init_session;
 use clap::ArgMatches;
 use itertools::Itertools;
-use kani_queries::{QueryDb, ReachabilityType, UserInput};
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_driver::{Callbacks, Compilation, RunCompiler};
@@ -136,25 +136,23 @@ impl Callbacks for KaniCompiler {
 
             // Configure queries.
             let queries = &mut (*self.queries.lock().unwrap());
-            queries.set_emit_vtable_restrictions(matches.get_flag(parser::RESTRICT_FN_PTRS));
-            queries
-                .set_check_assertion_reachability(matches.get_flag(parser::ASSERTION_REACH_CHECKS));
-            queries.set_output_pretty_json(matches.get_flag(parser::PRETTY_OUTPUT_FILES));
-            queries.set_ignore_global_asm(matches.get_flag(parser::IGNORE_GLOBAL_ASM));
-            queries.set_write_json_symtab(
-                cfg!(feature = "write_json_symtab") || matches.get_flag(parser::WRITE_JSON_SYMTAB),
-            );
-            queries.set_reachability_analysis(matches.reachability_type());
+            queries.emit_vtable_restrictions = matches.get_flag(parser::RESTRICT_FN_PTRS);
+            queries.check_assertion_reachability = matches.get_flag(parser::ASSERTION_REACH_CHECKS);
+            queries.output_pretty_json = matches.get_flag(parser::PRETTY_OUTPUT_FILES);
+            queries.ignore_global_asm = matches.get_flag(parser::IGNORE_GLOBAL_ASM);
+            queries.write_json_symtab =
+                cfg!(feature = "write_json_symtab") || matches.get_flag(parser::WRITE_JSON_SYMTAB);
+            queries.reachability_analysis = matches.reachability_type();
 
             if let Some(features) = matches.get_many::<String>(parser::UNSTABLE_FEATURE) {
-                queries.set_unstable_features(&features.cloned().collect::<Vec<_>>());
+                queries.unstable_features = features.cloned().collect::<Vec<_>>();
             }
 
             // If appropriate, collect and set the stub mapping.
             if matches.get_flag(parser::ENABLE_STUBBING)
-                && queries.get_reachability_analysis() == ReachabilityType::Harnesses
+                && queries.reachability_analysis == ReachabilityType::Harnesses
             {
-                queries.set_stubbing_enabled(true);
+                queries.stubbing_enabled = true;
             }
             self.args = Some(matches);
             debug!(?queries, "config end");
@@ -167,7 +165,7 @@ impl Callbacks for KaniCompiler {
         _compiler: &rustc_interface::interface::Compiler,
         rustc_queries: &'tcx rustc_interface::Queries<'tcx>,
     ) -> Compilation {
-        if self.stubs.is_none() && self.queries.lock().unwrap().get_stubbing_enabled() {
+        if self.stubs.is_none() && self.queries.lock().unwrap().stubbing_enabled {
             rustc_queries.global_ctxt().unwrap().enter(|tcx| {
                 let stubs = self.stubs.insert(self.collect_stubs(tcx));
                 debug!(?stubs, "after_analysis");
