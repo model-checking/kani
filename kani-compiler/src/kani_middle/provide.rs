@@ -7,7 +7,7 @@
 use crate::kani_middle::reachability::{collect_reachable_items, filter_crate_items};
 use crate::kani_middle::stubbing;
 use crate::kani_middle::ty::query::query_provided::collect_and_partition_mono_items;
-use kani_queries::{QueryDb, UserInput};
+use crate::kani_queries::QueryDb;
 use rustc_hir::def_id::{DefId, LocalDefId};
 use rustc_interface;
 use rustc_middle::{
@@ -19,7 +19,7 @@ use rustc_middle::{
 /// the present crate.
 pub fn provide(providers: &mut Providers, queries: &QueryDb) {
     providers.optimized_mir = run_mir_passes;
-    if queries.get_stubbing_enabled() {
+    if queries.stubbing_enabled {
         providers.collect_and_partition_mono_items = collect_and_partition_mono_items;
     }
 }

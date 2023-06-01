@@ -9,50 +9,46 @@ enumerates the execution steps leading to the check failure.
 
 ## Concrete playback
 
-This section describes the concrete playback feature in more detail.
+When concrete playback is enabled, Kani will generate unit tests for assertions that failed during verification,
+as well as cover statements that are reachable.
 
-### Setup
-
-The Kani library needs to be linked as a dev dependency to the crate you're trying to debug.
-This requires adding the following lines to your `Cargo.toml` file,
-which differ depending on what version of the Kani library you would like to use:
-* The latest version:
-```toml
-[dev-dependencies]
-kani = { git = "https://github.com/model-checking/kani", features = ["concrete_playback"] }
-```
-* A specific version of the Kani library (v0.9+) that's already downloaded:
-```toml
-[dev-dependencies]
-kani = { path = "{path_to_kani_root}/library/kani", features = ["concrete_playback"] }
-```
+These tests can then be executed using Kani's playback subcommand.
 
 ### Usage
 
-In order to enable this feature, run Kani with the `--enable-unstable --concrete-playback=[print|inplace]` flag.
+In order to enable this feature, run Kani with the `-Z concrete-playback --concrete-playback=[print|inplace]` flag.
 After getting a verification failure, Kani will generate a Rust unit test case that plays back a failing
 proof harness with a concrete counterexample.
 The concrete playback modes mean the following:
 * `print`: Kani will just print the unit test to stdout.
 You will then need to copy this unit test into the same module as your proof harness.
+This is also helpful if you just want to quickly find out which values were assigned by `kani::any()` calls.
 * `inplace`: Kani will automatically copy the unit test into your source code.
 Before running this mode, you might find it helpful to have your existing code committed to `git`.
 That way, you can easily remove the unit test with `git revert`.
 Note that Kani will not copy the unit test into your source code if it detects
 that the exact same test already exists. 
 
-After the unit test is in your source code, you can run it with `cargo test`.
+After the unit test is in your source code, you can run it with the `playback` subcommand.
 To debug it, there are a couple of options:
-* If you have certain IDEs, there are extensions (e.g., `rust-analyzer` for `VS Code`)
-that support UI elements like a `Run Test | Debug` button next to all unit tests.
+* You can try [Kani's experimental extension](https://github.com/model-checking/kani-vscode-extension)
+provided for VSCode.
 * Otherwise, you can debug the unit test on the command line.
-To do this, you first run `cargo test {unit_test_func_name}`.
-The output from this will have a line in the beginning like `Running unittests {files} ({binary})`.
-You can then debug the binary with tools like `rust-gdb` or `lldb`.
+
+To manually compile and run the test, you can use Kani's `playback` subcommand:
+```
+cargo kani playback -Z concrete-playback -- ${unit_test_func_name}
+```
+
+The output from this command is similar to `cargo test`.
+The output will have a line in the beginning like
+`Running unittests {files} ({binary})`.
+
+You can further debug the binary with tools like `rust-gdb` or `lldb`.
 
 ### Example
 
-Running `kani --enable-unstable --concrete-playback=print` on the following source file:
+Running `kani -Z concrete-playback --concrete-playback=print` on the following source file:
 ```rust
 #[kani::proof]
 fn proof_harness() {
@@ -62,7 +58,7 @@ fn proof_harness() {
             b / 2 * 2 == b);
 }
 ```
-yields this concrete playback Rust unit test:
+yields a concrete playback Rust unit test similar to the one below:
 ```rust
 #[test]
 fn kani_concrete_playback_proof_harness_16220658101615121791() {
@@ -78,12 +74,6 @@ fn kani_concrete_playback_proof_harness_16220658101615121791() {
 Here, `133` and `35207` are the concrete values that, when substituted for `a` and `b`,
 cause an assertion failure.
 `vec![135, 137]` is the byte array representation of `35207`.
-
-### Common issues
-
-* `error[E0425]: cannot find function x in this scope`:
-this is usually caused by having `#[cfg(kani)]` somewhere in the control flow path of the user's proof harness.
-To fix this, remove `#[cfg(kani)]` from those paths.
 
 ### Request for comments
 
@@ -101,7 +91,5 @@ Kani generates warning messages for this.
 * This feature does not support generating unit tests for multiple assertion failures within the same harness.
 This limitation might be removed in the future.
 Kani generates warning messages for this.
-* This feature requires that you do not change your code or runtime configurations between when Kani generates the unit test and when you run it.
-For instance, if you linked with library A during unit test generation and library B during unit test play back,
-that might cause unintended errors in the unit test counterexample.
-Kani currently has no way to detect this issue.
+* This feature requires that you use the same Kani version to generate the test and to playback. 
+Any extra compilation option used during verification must be used during playback.

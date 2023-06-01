@@ -14,7 +14,6 @@ use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle;
 use cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
 use cbmc::{InternString, InternedString};
-use kani_queries::UserInput;
 use lazy_static::lazy_static;
 use rustc_middle::ty::Instance;
 use rustc_target::abi::call::Conv;
@@ -90,7 +89,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Checks whether C-FFI has been enabled or not.
     /// When enabled, we blindly encode the function type as is.
     fn is_cffi_enabled(&self) -> bool {
-        self.queries.get_unstable_features().contains(&"c-ffi".to_string())
+        self.queries.unstable_features.contains(&"c-ffi".to_string())
     }
 
     /// Generate code for a foreign function shim.
