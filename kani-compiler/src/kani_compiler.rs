@@ -164,7 +164,7 @@ impl KaniCompiler {
                     self.run_compilation_session(&orig_args)?;
                 }
                 CompilationStage::CodegenNoStubs { .. } => {
-                    unreachable!("This stage should always run in the same session an Init");
+                    unreachable!("This stage should always run in the same session as Init");
                 }
                 CompilationStage::CodegenWithStubs { target_harness, all_harnesses, .. } => {
                     let extra_arg =
