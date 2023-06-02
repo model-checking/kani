@@ -1,8 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! Check that Kani correctly adds tests to the cover checks reachable in a harness.
-//! This should emit two tests, but we currently only support one test. See
-//! <https://github.com/model-checking/kani/issues/2461> for more details.
 extern crate kani;
 
 #[cfg(kani)]
