@@ -13,7 +13,7 @@ use concrete_vals_extractor::{extract_harness_values, ConcreteVal};
 use kani_metadata::HarnessMetadata;
 use std::collections::hash_map::DefaultHasher;
 use std::ffi::OsString;
-use std::fs::File;
+use std::fs::{read_to_string, File};
 use std::hash::{Hash, Hasher};
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
@@ -124,11 +124,28 @@ impl KaniSession {
         &self,
         source_path: &str,
         proof_harness_end_line: usize,
-        unit_tests: Vec<UnitTest>,
+        mut unit_tests: Vec<UnitTest>,
     ) -> Result<bool> {
         // Read from source
         let source_file = File::open(source_path).unwrap();
         let source_reader = BufReader::new(source_file);
+        let source_string = read_to_string(source_path).unwrap();
+
+        // filter out existing harnesses.
+        unit_tests.retain(|unit_test| {
+            if source_string.contains(&unit_test.name) {
+                if !self.args.common_args.quiet {
+                    println!(
+                        "Concrete playback unit test `{}/{}` already found in source code, so skipping modification.",
+                        source_path, unit_test.name,
+                    );
+                }
+
+                false
+            } else {
+                true
+            }
+        });
 
         // Create temp file
         let mut temp_file = TempFile::try_new("concrete_playback.tmp")?;
@@ -137,15 +154,6 @@ impl KaniSession {
         // Use a buffered reader/writer to generate the unit test line by line
         let mut is_new_injection = false;
         for line in source_reader.lines().flatten() {
-            for unit_test in unit_tests.iter() {
-                if line.contains(&unit_test.name) && !self.args.common_args.quiet {
-                    println!(
-                        "Concrete playback unit test `{}/{}` already found in source code, so skipping modification.",
-                        source_path, unit_test.name,
-                    );
-                }
-            }
-
             curr_line_num += 1;
             if let Some(temp_writer) = temp_file.writer.as_mut() {
                 writeln!(temp_writer, "{line}")?;
