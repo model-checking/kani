@@ -32,12 +32,4 @@ mod verify {
         ];
         kani::concrete_playback_run(concrete_vals, try_nz_u8);
     }
-    #[test]
-    fn kani_concrete_playback_try_nz_u8_4045373807148417467() {
-        let concrete_vals: Vec<Vec<u8>> = vec![
-            // 16
-            vec![16],
-        ];
-        kani::concrete_playback_run(concrete_vals, try_nz_u8);
-    }
 }

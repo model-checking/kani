@@ -2,7 +2,6 @@
 Checking harness verify::try_nz_u8
 
 already found in source code, so skipping modification.
-already found in source code, so skipping modification.
 
 [TEST] Only codegen test...
 Building modified.rs
