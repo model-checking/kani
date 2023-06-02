@@ -8,12 +8,12 @@ use crate::kani_middle::analysis;
 use crate::kani_middle::attributes::is_proof_harness;
 use crate::kani_middle::attributes::is_test_harness_description;
 use crate::kani_middle::check_crate_items;
-use crate::kani_middle::check_reachable_items;
 use crate::kani_middle::metadata::{gen_proof_metadata, gen_test_metadata};
 use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{
     collect_reachable_items, filter_const_crate_items, filter_crate_items,
 };
+use crate::kani_middle::{check_reachable_items, dump_mir_items};
 use crate::kani_queries::{QueryDb, ReachabilityType};
 use cbmc::goto_program::Location;
 use cbmc::irep::goto_binary_serde::write_goto_binary_file;
@@ -37,14 +37,12 @@ use rustc_metadata::fs::{emit_wrapper_file, METADATA_FILENAME};
 use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
 use rustc_middle::mir::mono::MonoItem;
-use rustc_middle::mir::write_mir_pretty;
 use rustc_middle::ty::query::Providers;
-use rustc_middle::ty::{self, InstanceDef, TyCtxt};
+use rustc_middle::ty::{self, TyCtxt};
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::cstore::MetadataLoaderDyn;
 use rustc_session::output::out_filename;
 use rustc_session::Session;
-use rustc_span::def_id::DefId;
 use rustc_target::abi::Endian;
 use rustc_target::spec::PanicStrategy;
 use std::any::Any;
@@ -53,7 +51,6 @@ use std::ffi::OsString;
 use std::fmt::Write;
 use std::fs::File;
 use std::io::BufWriter;
-use std::io::Write as IoWrite;
 use std::iter::FromIterator;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -484,37 +481,6 @@ fn symbol_table_to_gotoc(tcx: &TyCtxt, base_path: &Path) -> PathBuf {
         tcx.sess.abort_if_errors();
     };
     output_filename
-}
-
-/// Print MIR for the reachable items if the `--emit mir` option was provided to rustc.
-fn dump_mir_items(tcx: TyCtxt, items: &[MonoItem]) {
-    /// Convert MonoItem into a DefId.
-    /// Skip stuff that we cannot generate the MIR items.
-    fn visible_item<'tcx>(item: &MonoItem<'tcx>) -> Option<(MonoItem<'tcx>, DefId)> {
-        match item {
-            // Exclude FnShims and others that cannot be dumped.
-            MonoItem::Fn(instance) if matches!(instance.def, InstanceDef::Item(..)) => {
-                Some((*item, instance.def_id()))
-            }
-            MonoItem::Fn(..) => None,
-            MonoItem::Static(def_id) => Some((*item, *def_id)),
-            MonoItem::GlobalAsm(_) => None,
-        }
-    }
-
-    if tcx.sess.opts.output_types.contains_key(&OutputType::Mir) {
-        // Create output buffer.
-        let outputs = tcx.output_filenames(());
-        let path = outputs.output_path(OutputType::Mir).with_extension("kani.mir");
-        let out_file = File::create(&path).unwrap();
-        let mut writer = BufWriter::new(out_file);
-
-        // For each def_id, dump their MIR
-        for (item, def_id) in items.iter().filter_map(visible_item) {
-            writeln!(writer, "// Item: {item:?}").unwrap();
-            write_mir_pretty(tcx, Some(def_id), &mut writer).unwrap();
-        }
-    }
 }
 
 pub fn write_file<T>(base_path: &Path, file_type: ArtifactType, source: &T, pretty: bool)
