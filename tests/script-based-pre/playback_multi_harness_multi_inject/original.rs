@@ -1,9 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! Check that Kani correctly adds tests to the cover checks reachable
-//! in a harness. 2 replicas for testing multiple adds. Expecting 4
-//! harnesses inserted.
+//! Check that Kani correctly adds tests when multiple harnesses are
+//! present with each having multiple unit tests injected.
 
 extern crate kani;
 
