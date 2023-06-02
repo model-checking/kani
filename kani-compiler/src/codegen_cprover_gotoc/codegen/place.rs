@@ -696,7 +696,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     pub fn codegen_idx_array(&mut self, arr: Expr, idx: Expr) -> Expr {
-        arr.member("0", &self.symbol_table).index_array(idx)
+        arr.index_array(idx)
     }
 }
 
