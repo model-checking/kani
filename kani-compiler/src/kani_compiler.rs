@@ -82,7 +82,7 @@ struct HarnessInfo {
 ///
 /// - We always start in the [CompilationStage::Init].
 /// - After [CompilationStage::Init] we transition to either
-///   - [CompilationStage::CodegenNoStubs] on a regular crate compilatin, this will follow Init.
+///   - [CompilationStage::CodegenNoStubs] on a regular crate compilation, this will follow Init.
 ///   - [CompilationStage::Done], running the compiler to gather information, such as `--version`
 ///     will skip code generation completely, and there is no work to be done.
 /// - After the [CompilationStage::CodegenNoStubs], we transition to either
