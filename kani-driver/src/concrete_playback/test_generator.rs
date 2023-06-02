@@ -97,10 +97,8 @@ impl KaniSession {
         unit_tests: Vec<UnitTest>,
     ) -> Result<()> {
         // compute range to run rustfmt on.
-        let concrete_playback_num_lines = unit_tests
-            .iter()
-            .map(|unit_test| unit_test.code.len())
-            .fold(0, |total, latest| total + latest);
+        let concrete_playback_num_lines: usize =
+            unit_tests.iter().map(|unit_test| unit_test.code.len()).sum();
         let unit_test_start_line = proof_harness_end_line + 1;
         let unit_test_end_line = unit_test_start_line + concrete_playback_num_lines - 1;
 
@@ -140,13 +138,11 @@ impl KaniSession {
         let mut is_new_injection = false;
         for line in source_reader.lines().flatten() {
             for unit_test in unit_tests.iter() {
-                if line.contains(&unit_test.name) {
-                    if !self.args.common_args.quiet {
-                        println!(
-                            "Concrete playback unit test `{}/{}` already found in source code, so skipping modification.",
-                            source_path, unit_test.name,
-                        );
-                    }
+                if line.contains(&unit_test.name) && !self.args.common_args.quiet {
+                    println!(
+                        "Concrete playback unit test `{}/{}` already found in source code, so skipping modification.",
+                        source_path, unit_test.name,
+                    );
                 }
             }
 
