@@ -95,9 +95,6 @@ impl KaniSession {
         if self.args.enable_stubbing {
             flags.push("--enable-stubbing".into());
         }
-        for harness in &self.args.harnesses {
-            flags.push(format!("--harness={harness}"));
-        }
 
         flags.extend(
             self.args
