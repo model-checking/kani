@@ -1,0 +1,10 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+# Create a workspace with multiple packages with stubs
+[workspace]
+members = ["dependency", "top"]
+
+[workspace.metadata.kani.flags]
+enable-unstable=true
+enable-stubbing=true

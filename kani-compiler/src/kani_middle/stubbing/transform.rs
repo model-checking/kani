@@ -6,9 +6,11 @@
 //! body of its stub, if appropriate. The stub mapping it uses is set via rustc
 //! arguments.
 
+use std::collections::HashMap;
+
 use lazy_static::lazy_static;
 use regex::Regex;
-use rustc_data_structures::{fingerprint::Fingerprint, fx::FxHashMap};
+use rustc_data_structures::fingerprint::Fingerprint;
 use rustc_hir::{def_id::DefId, definitions::DefPathHash};
 use rustc_middle::{mir::Body, ty::TyCtxt};
 
@@ -113,7 +115,7 @@ fn check_compatibility<'a, 'tcx>(
 const RUSTC_ARG_PREFIX: &str = "kani_stubs=";
 
 /// Serializes the stub mapping into a rustc argument.
-pub fn mk_rustc_arg(stub_mapping: &FxHashMap<DefPathHash, DefPathHash>) -> String {
+pub fn mk_rustc_arg(stub_mapping: &HashMap<DefPathHash, DefPathHash>) -> String {
     // Serialize each `DefPathHash` as a pair of `u64`s, and the whole mapping
     // as an association list.
     let mut pairs = Vec::new();
@@ -130,14 +132,14 @@ pub fn mk_rustc_arg(stub_mapping: &FxHashMap<DefPathHash, DefPathHash>) -> Strin
 }
 
 /// Deserializes the stub mapping from the rustc argument value.
-fn deserialize_mapping(tcx: TyCtxt, val: &str) -> FxHashMap<DefId, DefId> {
+fn deserialize_mapping(tcx: TyCtxt, val: &str) -> HashMap<DefId, DefId> {
     type Item = (u64, u64);
     let item_to_def_id = |item: Item| -> DefId {
         let hash = DefPathHash(Fingerprint::new(item.0, item.1));
         tcx.def_path_hash_to_def_id(hash, &mut || panic!())
     };
     let pairs: Vec<(Item, Item)> = serde_json::from_str(val).unwrap();
-    let mut m = FxHashMap::default();
+    let mut m = HashMap::default();
     for (k, v) in pairs {
         let kid = item_to_def_id(k);
         let vid = item_to_def_id(v);
@@ -147,7 +149,7 @@ fn deserialize_mapping(tcx: TyCtxt, val: &str) -> FxHashMap<DefId, DefId> {
 }
 
 /// Retrieves the stub mapping from the compiler configuration.
-fn get_stub_mapping(tcx: TyCtxt) -> Option<FxHashMap<DefId, DefId>> {
+fn get_stub_mapping(tcx: TyCtxt) -> Option<HashMap<DefId, DefId>> {
     // Use a static so that we compile the regex only once.
     lazy_static! {
         static ref RE: Regex = Regex::new(&format!("'{RUSTC_ARG_PREFIX}(.*)'")).unwrap();
