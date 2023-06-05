@@ -10,6 +10,7 @@ pub mod playback_args;
 pub use assess_args::*;
 
 use self::common::*;
+use crate::args::cargo::CargoTargetArgs;
 use crate::util::warning;
 use cargo::CargoCommonArgs;
 use clap::builder::{PossibleValue, TypedValueParser};
@@ -299,6 +300,10 @@ pub struct VerificationArgs {
     #[command(flatten)]
     pub cargo: CargoCommonArgs,
 
+    /// Arguments used to select Cargo target.
+    #[command(flatten)]
+    pub target: CargoTargetArgs,
+
     #[command(flatten)]
     pub common_args: CommonArgs,
 }
@@ -430,9 +435,38 @@ impl CheckArgs {
     }
 }
 
+/// Utility function to error out on arguments that are invalid Cargo specific.
+///
+/// We currently define a bunch of cargo specific arguments as part of the overall arguments,
+/// however, they are invalid in the Kani standalone usage. Explicitly check them for now.
+/// TODO: Remove this as part of https://github.com/model-checking/kani/issues/1831
+fn check_no_cargo_opt(is_set: bool, name: &str) -> Result<(), Error> {
+    if is_set {
+        Err(Error::raw(
+            ErrorKind::UnknownArgument,
+            &format!("argument `{}` cannot be used with standalone Kani.", name),
+        ))
+    } else {
+        Ok(())
+    }
+}
+
 impl ValidateArgs for StandaloneArgs {
     fn validate(&self) -> Result<(), Error> {
         self.verify_opts.validate()?;
+        // Cargo target arguments.
+        check_no_cargo_opt(self.verify_opts.target.bins, "--bins")?;
+        check_no_cargo_opt(self.verify_opts.target.lib, "--lib")?;
+        check_no_cargo_opt(!self.verify_opts.target.bin.is_empty(), "--bin")?;
+        // Cargo common arguments.
+        check_no_cargo_opt(self.verify_opts.cargo.all_features, "--all-features")?;
+        check_no_cargo_opt(self.verify_opts.cargo.no_default_features, "--no-default-features")?;
+        check_no_cargo_opt(!self.verify_opts.cargo.features().is_empty(), "--features / -F")?;
+        check_no_cargo_opt(!self.verify_opts.cargo.package.is_empty(), "--package / -p")?;
+        check_no_cargo_opt(!self.verify_opts.cargo.exclude.is_empty(), "--exclude")?;
+        check_no_cargo_opt(self.verify_opts.cargo.workspace, "--workspace")?;
+        check_no_cargo_opt(self.verify_opts.cargo.manifest_path.is_some(), "--manifest-path")?;
+        check_no_cargo_opt(self.verify_opts.cargo.workspace, "--workspace")?;
         if let Some(input) = &self.input {
             if !input.is_file() {
                 return Err(Error::raw(
@@ -884,5 +918,28 @@ mod tests {
         let args = StandaloneArgs::try_parse_from(input).unwrap();
         assert_eq!(args.input, None);
         assert!(matches!(args.command, Some(StandaloneSubcommand::Playback(..))));
+    }
+
+    #[test]
+    fn check_standalone_does_not_accept_cargo_opts() {
+        fn check_invalid_args<'a, I>(args: I)
+        where
+            I: IntoIterator<Item = &'a str>,
+        {
+            let err = StandaloneArgs::try_parse_from(args).unwrap().validate().unwrap_err();
+            assert_eq!(err.kind(), ErrorKind::UnknownArgument)
+        }
+
+        check_invalid_args("kani input.rs --bins".split_whitespace());
+        check_invalid_args("kani input.rs --bin Binary".split_whitespace());
+        check_invalid_args("kani input.rs --lib".split_whitespace());
+
+        check_invalid_args("kani input.rs --all-features".split_whitespace());
+        check_invalid_args("kani input.rs --no-default-features".split_whitespace());
+        check_invalid_args("kani input.rs --features feat".split_whitespace());
+        check_invalid_args("kani input.rs --manifest-path pkg/Cargo.toml".split_whitespace());
+        check_invalid_args("kani input.rs --workspace".split_whitespace());
+        check_invalid_args("kani input.rs --package foo".split_whitespace());
+        check_invalid_args("kani input.rs --exclude bar --workspace".split_whitespace());
     }
 }

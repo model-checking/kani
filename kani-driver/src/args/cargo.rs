@@ -94,9 +94,9 @@ impl ValidateArgs for CargoCommonArgs {
     }
 }
 
-/// Arguments that Kani pass down into Cargo test essentially uninterpreted.
+/// Arguments that cargo Kani supports to select build / test target.
 #[derive(Debug, Default, clap::Args)]
-pub struct CargoTestArgs {
+pub struct CargoTargetArgs {
     /// Test only the specified binary target.
     #[arg(long)]
     pub bin: Vec<String>,
@@ -108,16 +108,16 @@ pub struct CargoTestArgs {
     /// Test only the package's library unit tests.
     #[arg(long)]
     pub lib: bool,
-
-    /// Arguments to pass down to Cargo
-    #[command(flatten)]
-    pub common: CargoCommonArgs,
 }
 
-impl CargoTestArgs {
+impl CargoTargetArgs {
     /// Convert the arguments back to a format that cargo can understand.
     pub fn to_cargo_args(&self) -> Vec<OsString> {
-        let mut cargo_args = self.common.to_cargo_args();
+        let mut cargo_args = self
+            .bin
+            .iter()
+            .map(|binary| format!("--bin={binary}").into())
+            .collect::<Vec<OsString>>();
 
         if self.bins {
             cargo_args.push("--bins".into());
@@ -127,14 +127,52 @@ impl CargoTestArgs {
             cargo_args.push("--lib".into());
         }
 
-        cargo_args.extend(self.bin.iter().map(|binary| format!("--bin={binary}").into()));
+        cargo_args
+    }
+
+    pub fn include_bin(&self, name: &String) -> bool {
+        self.bins || (self.bin.is_empty() && !self.lib) || self.bin.contains(name)
+    }
+
+    pub fn include_lib(&self) -> bool {
+        self.lib || (!self.bins && self.bin.is_empty())
+    }
+
+    pub fn include_tests(&self) -> bool {
+        !self.lib && !self.bins && self.bin.is_empty()
+    }
+}
+
+impl ValidateArgs for CargoTargetArgs {
+    fn validate(&self) -> Result<(), Error> {
+        Ok(())
+    }
+}
+
+/// Arguments that Kani pass down into Cargo test essentially uninterpreted.
+#[derive(Debug, Default, clap::Args)]
+pub struct CargoTestArgs {
+    /// Arguments to pass down to Cargo
+    #[command(flatten)]
+    pub common: CargoCommonArgs,
+
+    /// Arguments used to select Cargo target.
+    #[command(flatten)]
+    pub target: CargoTargetArgs,
+}
+
+impl CargoTestArgs {
+    /// Convert the arguments back to a format that cargo can understand.
+    pub fn to_cargo_args(&self) -> Vec<OsString> {
+        let mut cargo_args = self.common.to_cargo_args();
+        cargo_args.append(&mut self.target.to_cargo_args());
         cargo_args
     }
 }
 
-/// Leave it for Cargo to validate these for now.
 impl ValidateArgs for CargoTestArgs {
     fn validate(&self) -> Result<(), Error> {
-        self.common.validate()
+        self.common.validate()?;
+        self.target.validate()
     }
 }
