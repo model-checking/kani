@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use crate::args::OutputFormat;
-use crate::call_cbmc::{FailedProperties, VerificationStatus};
+use crate::call_cbmc::{GlobalCondition, VerificationStatus};
 use crate::cbmc_output_parser::{CheckStatus, ParserItem, Property, TraceItem};
 use console::style;
 use once_cell::sync::Lazy;
@@ -245,8 +245,7 @@ fn format_item_terse(_item: &ParserItem) -> Option<String> {
 pub fn format_result(
     properties: &Vec<Property>,
     status: VerificationStatus,
-    should_panic: bool,
-    failed_properties: FailedProperties,
+    global_conditions: &Vec<GlobalCondition>,
     show_checks: bool,
 ) -> String {
     let mut result_str = String::new();
@@ -322,6 +321,27 @@ pub fn format_result(
         index += 1;
     }
 
+    let enabled_global_conditions = !global_conditions
+        .iter()
+        .filter(|cond| cond.enabled())
+        .collect::<Vec<&GlobalCondition>>()
+        .is_empty();
+
+    let mut global_condition_failures = false;
+    if enabled_global_conditions {
+        result_str.push_str("GLOBAL CONDITIONS:\n");
+        for cond in global_conditions {
+            if cond.enabled() {
+                let cond_status = if cond.passed() {
+                    CheckStatus::Success
+                } else {
+                    global_condition_failures = true;
+                    CheckStatus::Failure
+                };
+                result_str.push_str(&format!("- {}: {}\n", cond.name(), cond_status));
+            }
+        }
+    }
     if show_checks {
         result_str.push_str("\nSUMMARY:");
     } else {
@@ -388,19 +408,14 @@ pub fn format_result(
     } else {
         style("FAILED").red()
     };
-    let should_panic_info = if should_panic {
-        match failed_properties {
-            FailedProperties::None => " (encountered no panics, but at least one was expected)",
-            FailedProperties::PanicsOnly => " (encountered one or more panics as expected)",
-            FailedProperties::Other => {
-                " (encountered failures other than panics, which were unexpected)"
-            }
-        }
-    } else {
-        ""
-    };
-    let overall_result = format!("\nVERIFICATION:- {verification_result}{should_panic_info}\n");
+
+    let overall_result = format!("\nVERIFICATION:- {verification_result}");
+
     result_str.push_str(&overall_result);
+    if global_condition_failures {
+        result_str.push_str(" (one or more global conditions failed)");
+    }
+    result_str.push('\n');
 
     // Ideally, we should generate two `ParserItem::Message` and push them
     // into the parser iterator so they are the next messages to be processed.

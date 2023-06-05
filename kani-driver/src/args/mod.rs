@@ -156,6 +156,9 @@ pub struct VerificationArgs {
     #[arg(long)]
     pub force_build: bool,
 
+    #[arg(long, requires("enable_unstable"))]
+    pub fail_uncoverable: bool,
+
     /// Toggle between different styles of output
     #[arg(long, default_value = "regular", ignore_case = true, value_enum)]
     pub output_format: OutputFormat,

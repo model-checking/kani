@@ -94,10 +94,7 @@ impl KaniSession {
             // When quiet, we don't want to print anything at all.
             // When output is old, we also don't have real results to print.
             if !self.args.common_args.quiet && self.args.output_format != OutputFormat::Old {
-                println!(
-                    "{}",
-                    result.render(&self.args.output_format, harness.attributes.should_panic)
-                );
+                println!("{}", result.render(&self.args.output_format));
             }
             self.gen_and_add_concrete_playback(harness, &mut result)?;
             Ok(result)
