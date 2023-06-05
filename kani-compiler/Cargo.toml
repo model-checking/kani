@@ -29,7 +29,8 @@ tracing-tree = "0.2.2"
 
 # Future proofing: enable backend dependencies using feature.
 [features]
-default = ['cprover']
+default = ['boogie', 'cprover']
+boogie = ['serde']
 cprover = ['cbmc', 'num', 'serde']
 write_json_symtab = []
 

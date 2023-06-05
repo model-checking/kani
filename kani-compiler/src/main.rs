@@ -32,6 +32,8 @@ extern crate rustc_target;
 // We can't add this directly as a dependency because we need the version to match rustc
 extern crate tempfile;
 
+#[cfg(feature = "boogie")]
+mod codegen_boogie;
 #[cfg(feature = "cprover")]
 mod codegen_cprover_gotoc;
 mod kani_compiler;

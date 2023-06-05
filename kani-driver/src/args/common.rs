@@ -42,6 +42,8 @@ pub enum UnstableFeatures {
     CFfi,
     /// Enable concrete playback flow.
     ConcretePlayback,
+    /// Boogie backend.
+    Boogie,
 }
 
 impl ValidateArgs for CommonArgs {
