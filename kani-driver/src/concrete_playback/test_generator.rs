@@ -126,7 +126,7 @@ impl KaniSession {
     }
 
     /// Writes the new source code to a user's source file using a tempfile as the means.
-    /// Returns whether the unit test was already in the source code,
+    /// Returns whether the unit test was already in the source code.
     fn add_test_inplace(
         &self,
         source_path: &str,
