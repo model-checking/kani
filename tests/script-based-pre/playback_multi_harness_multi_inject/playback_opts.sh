@@ -11,14 +11,11 @@ cp original.rs ${RS_FILE}
 echo "[TEST] Generate test..."
 kani ${RS_FILE} -Z concrete-playback --concrete-playback=inplace
 
-echo "[TEST] Only codegen test..."
-kani playback -Z concrete-playback --only-codegen ${RS_FILE} -- kani_concrete_playback
+# second Kani command will not inject tests because it is already injected.
+kani ${RS_FILE} -Z concrete-playback --concrete-playback=inplace
 
 echo "[TEST] Run test..."
 kani playback -Z concrete-playback ${RS_FILE} -- kani_concrete_playback
-
-echo "[TEST] Json format..."
-kani playback -Z concrete-playback ${RS_FILE} --only-codegen --message-format=json -- kani_concrete_playback
 
 # Cleanup
 rm ${RS_FILE}
