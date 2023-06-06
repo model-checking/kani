@@ -56,21 +56,28 @@ impl KaniSession {
                                 &harness.pretty_name,
                                 &generated_unit_test.code.join("\n")
                             );
+                        }
+
+                        if !unit_tests.is_empty() {
                             println!(
-                                "INFO: To automatically add the concrete playback unit test `{}` to the \
+                                "INFO: To automatically add the concrete playback unit test(s) to the \
                                  src code, run Kani with `--concrete-playback=inplace`.",
-                                &generated_unit_test.name
                             );
                         }
                     }
                     ConcretePlaybackMode::InPlace => {
-                        if !self.args.common_args.quiet {
-                            for generated_unit_test in unit_tests.iter() {
-                                println!(
-                                    "INFO: Now modifying the source code to include the concrete playback unit test `{}`.",
-                                    &generated_unit_test.name
-                                );
-                            }
+                        if !self.args.common_args.quiet && !unit_tests.is_empty() {
+                            println!(
+                                "INFO: Now modifying the source code to include the concrete playback unit test: [{}].",
+                                unit_tests
+                                    .iter()
+                                    .map(|generated_unit_test| format!(
+                                        "`{}`",
+                                        &generated_unit_test.name
+                                    ))
+                                    .collect::<Vec<String>>()
+                                    .join(", ")
+                            );
                         }
                         self.modify_src_code(
                             &harness.original_file,
@@ -99,13 +106,13 @@ impl KaniSession {
         // compute range to run rustfmt on.
         let concrete_playback_num_lines: usize =
             unit_tests.iter().map(|unit_test| unit_test.code.len()).sum();
-        let unit_test_start_line = proof_harness_end_line + 1;
-        let unit_test_end_line = unit_test_start_line + concrete_playback_num_lines - 1;
 
         let is_new_injection =
             self.add_test_inplace(src_path, proof_harness_end_line, unit_tests)?;
 
         if is_new_injection {
+            let unit_test_start_line = proof_harness_end_line + 1;
+            let unit_test_end_line = unit_test_start_line + concrete_playback_num_lines - 1;
             let src_path = Path::new(src_path);
             let (path, file_name) = extract_parent_dir_and_src_file(src_path)?;
             let file_line_ranges = vec![FileLineRange {
@@ -119,7 +126,7 @@ impl KaniSession {
     }
 
     /// Writes the new source code to a user's source file using a tempfile as the means.
-    /// Returns whether new unit test was injected.
+    /// Returns whether the unit test was already in the source code,
     fn add_test_inplace(
         &self,
         source_path: &str,
@@ -148,29 +155,29 @@ impl KaniSession {
         });
 
         // Create temp file
-        let mut temp_file = TempFile::try_new("concrete_playback.tmp")?;
-        let mut curr_line_num = 0;
+        if !unit_tests.is_empty() {
+            let mut temp_file = TempFile::try_new("concrete_playback.tmp")?;
+            let mut curr_line_num = 0;
 
-        // Use a buffered reader/writer to generate the unit test line by line
-        let mut is_new_injection = false;
-        for line in source_reader.lines().flatten() {
-            curr_line_num += 1;
-            if let Some(temp_writer) = temp_file.writer.as_mut() {
-                writeln!(temp_writer, "{line}")?;
-                if curr_line_num == proof_harness_end_line {
-                    is_new_injection = true;
-                    for unit_test in unit_tests.iter() {
-                        for unit_test_line in unit_test.code.iter() {
-                            curr_line_num += 1;
-                            writeln!(temp_writer, "{unit_test_line}")?;
+            // Use a buffered reader/writer to generate the unit test line by line
+            for line in source_reader.lines().flatten() {
+                curr_line_num += 1;
+                if let Some(temp_writer) = temp_file.writer.as_mut() {
+                    writeln!(temp_writer, "{line}")?;
+                    if curr_line_num == proof_harness_end_line {
+                        for unit_test in unit_tests.iter() {
+                            for unit_test_line in unit_test.code.iter() {
+                                curr_line_num += 1;
+                                writeln!(temp_writer, "{unit_test_line}")?;
+                            }
                         }
                     }
                 }
             }
+            temp_file.rename(source_path).expect("Could not rename file");
         }
 
-        temp_file.rename(source_path).expect("Could not rename file");
-        Ok(is_new_injection)
+        Ok(!unit_tests.is_empty())
     }
 
     /// Run rustfmt on the given src file, and optionally on only the specific lines.
