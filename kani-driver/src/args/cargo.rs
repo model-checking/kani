@@ -94,18 +94,20 @@ impl ValidateArgs for CargoCommonArgs {
     }
 }
 
-/// Arguments that cargo Kani supports to select build / test target.
+/// Arguments that cargo Kani supports to select build / verification / test target.
+/// See <https://doc.rust-lang.org/cargo/commands/cargo-test.html#target-selection> for more
+/// details.
 #[derive(Debug, Default, clap::Args)]
 pub struct CargoTargetArgs {
-    /// Test only the specified binary target.
+    /// Check only the specified binary target.
     #[arg(long)]
     pub bin: Vec<String>,
 
-    /// Test all binaries.
+    /// Check all binaries.
     #[arg(long)]
     pub bins: bool,
 
-    /// Test only the package's library unit tests.
+    /// Check only the package's library unit tests.
     #[arg(long)]
     pub lib: bool,
 }

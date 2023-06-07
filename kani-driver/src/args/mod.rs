@@ -465,7 +465,6 @@ impl ValidateArgs for StandaloneArgs {
         check_no_cargo_opt(!self.verify_opts.cargo.exclude.is_empty(), "--exclude")?;
         check_no_cargo_opt(self.verify_opts.cargo.workspace, "--workspace")?;
         check_no_cargo_opt(self.verify_opts.cargo.manifest_path.is_some(), "--manifest-path")?;
-        check_no_cargo_opt(self.verify_opts.cargo.workspace, "--workspace")?;
         if let Some(input) = &self.input {
             if !input.is_file() {
                 return Err(Error::raw(
