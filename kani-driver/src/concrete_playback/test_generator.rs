@@ -76,7 +76,7 @@ impl KaniSession {
                                         &generated_unit_test.name
                                     ))
                                     .collect::<Vec<String>>()
-                                    .join(", ")
+                                    .join(",\n")
                             );
                         }
                         self.modify_src_code(
