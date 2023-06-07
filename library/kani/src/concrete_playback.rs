@@ -40,7 +40,9 @@ pub fn concrete_playback_run<F: Fn()>(mut local_concrete_vals: Vec<Vec<u8>>, pro
     });
 }
 
-/// Concrete playback implementation of kani::any_raw_internal.
+/// Concrete playback implementation of
+/// kani::any_raw_internal. Because CBMC does not bother putting in
+/// Zero-Sized Types, those are defaulted to an empty vector.
 ///
 /// # Safety
 ///
@@ -49,7 +51,11 @@ pub(crate) unsafe fn any_raw_internal<T, const SIZE_T: usize>() -> T {
     let mut next_concrete_val: Vec<u8> = Vec::new();
     CONCRETE_VALS.with(|glob_concrete_vals| {
         let mut_ref_glob_concrete_vals = &mut *glob_concrete_vals.borrow_mut();
-        next_concrete_val = mut_ref_glob_concrete_vals.pop().expect("Not enough det vals found");
+        next_concrete_val = if SIZE_T > 0 {
+            mut_ref_glob_concrete_vals.pop().expect("Not enough det vals found")
+        } else {
+            vec![]
+        };
     });
     let next_concrete_val_len = next_concrete_val.len();
     let bytes_t: [u8; SIZE_T] = next_concrete_val.try_into().expect(&format!(
