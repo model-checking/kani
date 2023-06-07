@@ -854,10 +854,6 @@ impl Expr {
     /// Initializer for a zero sized type (ZST).
     /// Since this is a ZST, we call nondet to simplify everything.
     pub fn init_unit(typ: Type, symbol_table: &SymbolTable) -> Self {
-        assert!(
-            typ.is_struct_tag(),
-            "Zero sized types should be represented as struct: but found: {typ:?}"
-        );
         assert_eq!(typ.sizeof_in_bits(symbol_table), 0);
         Expr::nondet(typ)
     }

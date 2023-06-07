@@ -405,10 +405,11 @@ impl<'tcx> GotocCtx<'tcx> {
                 expr_int.transmute_to(overall_t, &self.symbol_table)
             }
             (_, ty::Array(_, _)) => {
+                let typ = self.codegen_ty(ty);
                 // we must have zero size array here
                 Expr::struct_expr_from_values(
-                    self.codegen_ty(ty),
-                    vec![Expr::array_expr(self.codegen_ty_raw_array(ty), vec![])],
+                    typ.clone(),
+                    vec![Expr::array_expr(typ, vec![])],
                     &self.symbol_table,
                 )
             }

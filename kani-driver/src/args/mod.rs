@@ -291,7 +291,6 @@ pub struct VerificationArgs {
         long,
         hide_short_help = true,
         requires("enable_unstable"),
-        requires("harnesses"),
         conflicts_with("concrete_playback")
     )]
     pub enable_stubbing: bool,
@@ -888,9 +887,7 @@ mod tests {
     fn check_enable_stubbing() {
         check_unstable_flag!("--enable-stubbing --harness foo", enable_stubbing);
 
-        // `--enable-stubbing` cannot be called without `--harness`
-        let err = parse_unstable_enabled("--enable-stubbing").unwrap_err();
-        assert_eq!(err.kind(), ErrorKind::MissingRequiredArgument);
+        check_unstable_flag!("--enable-stubbing", enable_stubbing);
 
         // `--enable-stubbing` cannot be called with `--concrete-playback`
         let err =
