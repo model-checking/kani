@@ -108,7 +108,7 @@ impl KaniSession {
             unit_tests.iter().map(|unit_test| unit_test.code.len()).sum();
 
         let is_new_injection =
-            self.add_test_inplace(src_path, proof_harness_end_line, unit_tests)?;
+            self.add_tests_inplace(src_path, proof_harness_end_line, unit_tests)?;
 
         if is_new_injection {
             let unit_test_start_line = proof_harness_end_line + 1;
@@ -126,8 +126,8 @@ impl KaniSession {
     }
 
     /// Writes the new source code to a user's source file using a tempfile as the means.
-    /// Returns whether the unit test was already in the source code.
-    fn add_test_inplace(
+    /// Returns whether new unit test was injected.
+    fn add_tests_inplace(
         &self,
         source_path: &str,
         proof_harness_end_line: usize,
