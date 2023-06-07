@@ -418,23 +418,31 @@ fn package_targets(args: &VerificationArgs, package: &Package) -> Vec<Verificati
         for kind in &target.kind {
             match kind.as_str() {
                 CRATE_TYPE_BIN => {
-                    // Binary targets.
-                    verification_targets.push(VerificationTarget::Bin(target.clone()));
+                    if args.target.include_bin(&target.name) {
+                        // Binary targets.
+                        verification_targets.push(VerificationTarget::Bin(target.clone()));
+                    }
                 }
                 CRATE_TYPE_LIB | CRATE_TYPE_RLIB | CRATE_TYPE_CDYLIB | CRATE_TYPE_DYLIB
                 | CRATE_TYPE_STATICLIB => {
-                    supported_lib = true;
+                    if args.target.include_lib() {
+                        supported_lib = true;
+                    }
                 }
                 CRATE_TYPE_PROC_MACRO => {
-                    unsupported_lib = true;
-                    ignored_unsupported.push(target.name.as_str());
+                    if args.target.include_lib() {
+                        unsupported_lib = true;
+                        ignored_unsupported.push(target.name.as_str());
+                    }
                 }
                 CRATE_TYPE_TEST => {
                     // Test target.
-                    if args.tests {
-                        verification_targets.push(VerificationTarget::Test(target.clone()));
-                    } else {
-                        ignored_tests.push(target.name.as_str());
+                    if args.target.include_tests() {
+                        if args.tests {
+                            verification_targets.push(VerificationTarget::Test(target.clone()));
+                        } else {
+                            ignored_tests.push(target.name.as_str());
+                        }
                     }
                 }
                 _ => {
