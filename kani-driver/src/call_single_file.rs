@@ -6,6 +6,7 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use crate::args::common::UnstableFeature;
 use crate::session::{lib_folder, KaniSession};
 
 impl KaniSession {
@@ -19,6 +20,12 @@ impl KaniSession {
     ) -> Result<()> {
         let mut kani_args = self.kani_compiler_flags();
         kani_args.push(format!("--reachability={}", self.reachability_mode()));
+
+        if self.args.common_args.unstable_features.contains(UnstableFeature::Boogie) {
+            kani_args.push("--backend=boogie".into());
+        } else {
+            kani_args.push("--backend=c_prover".into());
+        }
 
         let mut rustc_args = self.kani_rustc_flags();
         rustc_args.push(file.into());
@@ -64,6 +71,14 @@ impl KaniSession {
         to_rustc_arg(vec![format!("--reachability={}", self.reachability_mode())])
     }
 
+    pub fn backend_arg(&self) -> Option<String> {
+        if self.args.common_args.unstable_features.contains(UnstableFeature::Boogie) {
+            Some(to_rustc_arg(vec!["--backend=boogie".into()]))
+        } else {
+            None
+        }
+    }
+
     /// These arguments are arguments passed to kani-compiler that are `kani` compiler specific.
     pub fn kani_compiler_flags(&self) -> Vec<String> {
         let mut flags = vec![check_version()];
@@ -101,10 +116,6 @@ impl KaniSession {
         }
 
         flags.extend(self.args.common_args.unstable_features.as_arguments().map(str::to_string));
-
-        // This argument will select the Kani flavour of the compiler. It will be removed before
-        // rustc driver is invoked.
-        flags.push("--goto-c".into());
 
         flags
     }
