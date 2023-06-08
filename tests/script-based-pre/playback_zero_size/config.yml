@@ -1,4 +1,4 @@
 # Copyright Kani Contributors
 # SPDX-License-Identifier: Apache-2.0 OR MIT
-script: playback_opts.sh
-expected: playback_opts.expected
+script: playback_zst.sh
+expected: playback_zst.expected
