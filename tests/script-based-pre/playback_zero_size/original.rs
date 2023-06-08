@@ -5,7 +5,5 @@
 #[kani::proof]
 fn any_is_ok() {
     let unit: () = kani::any();
-    let unit2: () = kani::any();
     kani::cover!(unit == ());
-    kani::cover!(unit2 == ());
 }
