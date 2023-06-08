@@ -183,7 +183,7 @@ impl<'test> TestCx<'test> {
     fn check(&self) {
         let mut rustc = Command::new("kani-compiler");
         rustc
-            .args(["--goto-c"])
+            .args(["--backend=c_prover"])
             .args(self.props.compile_flags.clone())
             .args(["-Z", "no-codegen"])
             .arg(&self.testpaths.file);
@@ -203,7 +203,7 @@ impl<'test> TestCx<'test> {
     fn codegen(&self) {
         let mut rustc = Command::new("kani-compiler");
         rustc
-            .args(["--goto-c"])
+            .args(["--backend=c_prover"])
             .args(self.props.compile_flags.clone())
             .args(["--out-dir"])
             .arg(self.output_base_dir())

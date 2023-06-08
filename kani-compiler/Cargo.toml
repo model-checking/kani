@@ -27,7 +27,8 @@ tracing-subscriber = {version = "0.3.8", features = ["env-filter", "json", "fmt"
 
 # Future proofing: enable backend dependencies using feature.
 [features]
-default = ['cprover']
+default = ['boogie', 'cprover']
+boogie = ['serde']
 cprover = ['cbmc', 'num', 'serde']
 write_json_symtab = []
 

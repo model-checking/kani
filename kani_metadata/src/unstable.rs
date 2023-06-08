@@ -82,6 +82,8 @@ pub enum UnstableFeature {
     LineCoverage,
     /// Enable function contracts [RFC 9](https://model-checking.github.io/kani/rfc/rfcs/0009-function-contracts.html)
     FunctionContracts,
+    /// Boogie backend.
+    Boogie,
 }
 
 impl UnstableFeature {
