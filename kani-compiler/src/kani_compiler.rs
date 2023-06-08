@@ -15,7 +15,9 @@
 //! in order to apply the stubs. For the subsequent runs, we add the stub configuration to
 //! `-C llvm-args`.
 
-use crate::args::{Arguments, ReachabilityType};
+use crate::args::{Arguments, BackendOption, ReachabilityType};
+#[cfg(feature = "boogie")]
+use crate::codegen_boogie::BoogieCodegenBackend;
 #[cfg(feature = "cprover")]
 use crate::codegen_cprover_gotoc::GotocCodegenBackend;
 use crate::kani_middle::attributes::is_proof_harness;
@@ -55,16 +57,53 @@ pub fn run(args: Vec<String>) -> ExitCode {
     }
 }
 
-/// Configure the cprover backend that generate goto-programs.
-#[cfg(feature = "cprover")]
+/// Configure the boogie backend that generates boogie programs.
+fn boogie_backend(_queries: Arc<Mutex<QueryDb>>) -> Box<dyn CodegenBackend> {
+    #[cfg(feature = "boogie")]
+    return Box::new(BoogieCodegenBackend::new(_queries));
+    #[cfg(not(feature = "boogie"))]
+    rustc_session::early_error(
+        ErrorOutputType::default(),
+        "`--backend boogie` requires enabling the `boogie` feature",
+    );
+}
+
+/// Configure the cprover backend that generates goto-programs.
+fn cprover_backend(_queries: Arc<Mutex<QueryDb>>) -> Box<dyn CodegenBackend> {
+    #[cfg(feature = "cprover")]
+    return Box::new(GotocCodegenBackend::new(_queries));
+    #[cfg(not(feature = "cprover"))]
+    rustc_session::early_error(
+        ErrorOutputType::default(),
+        "`--backend cprover` requires enabling the `cprover` feature",
+    );
+}
+
+#[cfg(any(feature = "cprover", feature = "boogie"))]
 fn backend(queries: Arc<Mutex<QueryDb>>) -> Box<dyn CodegenBackend> {
-    Box::new(GotocCodegenBackend::new(queries))
+    let backend = queries.lock().unwrap().args().backend;
+    match backend {
+        BackendOption::None => {
+            // priority list of backends
+            if cfg!(feature = "cprover") {
+                cprover_backend(queries)
+            } else if cfg!(feature = "boogie") {
+                boogie_backend(queries)
+            } else {
+                unreachable!();
+            }
+        }
+        BackendOption::CProver => cprover_backend(queries),
+        BackendOption::Boogie => boogie_backend(queries),
+    }
 }
 
 /// Fallback backend. It will trigger an error if no backend has been enabled.
-#[cfg(not(feature = "cprover"))]
+#[cfg(not(any(feature = "cprover", feature = "boogie")))]
 fn backend(queries: Arc<Mutex<QueryDb>>) -> Box<CodegenBackend> {
-    compile_error!("No backend is available. Only supported value today is `cprover`");
+    compile_error!(
+        "No backend is available. Only supported values today are `cprover` and `boogie`"
+    );
 }
 
 /// A stable (across compilation sessions) identifier for the harness function.
