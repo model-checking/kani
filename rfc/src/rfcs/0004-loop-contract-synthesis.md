@@ -11,18 +11,19 @@ A new option that allows users to verify programs without unwinding loops by syn
 
 
 ## User Impact
-Currently Kani does not support proving correctness (i.e. assertions never fail) on programs with unbounded control flow (e.g. loops with dynamic bounds). Kani unrolls all unbounded loops until a global threshold (unwinding number) specified by the user and then verifies this unrolled program, which limits the set of programs it can verify.
+Currently Kani does not support verification on programs with unbounded control flow (e.g. loops with dynamic bounds).
+Kani unrolls all unbounded loops until a global threshold (unwinding number) specified by the user and then verifies this unrolled program, which limits the set of programs it can verify.
 
 A new Kani flag `--synthesize-loop-contracts` will be created that can be used to enable the goto-level loop-contract synthesizer `goto-synthesizer`.
-The idea of [loop contracts](https://arxiv.org/pdf/2010.05812.pdf) is, instead of unwinding loops, we abstracts those loops as non-loop structures that can cover arbitrary iterations of the loops.
+The idea of [loop contracts](https://arxiv.org/pdf/2010.05812.pdf) is, instead of unwinding loops, we abstract those loops as non-loop structures that can cover arbitrary iterations of the loops.
 The loop contract synthesizer, when enabled, will attempt to synthesize loop contracts for all loops.
 CBMC can then apply the synthesized loop contracts and verify the program without unwinding any loop.
 So, the synthesizer will help to verify the programs that require Kani to unwind loops for a very large number of times to cover all iterations.
 
 
-For example, the number of executed iterations of the loop in the following harness is dynamically bounded by an unbounded variable `y`.
-Only an unwinding value of `i32::MAX` can guarantee to cover all iteration of the loop, and hence satisfies the unwinding assertions.
-Unwinding the loop `i32::MAX` number of time will result in a too large goto program to be verified by CBMC.  
+For example, the number of executed iterations of the loop in the following harness is dynamically bounded by an unbounded variable `y` [^1].
+Only an unwinding value of `i32::MAX` can guarantee to cover all iterations of the loop, and hence satisfy the unwinding assertions.
+Unwinding the loop an `i32::MAX` number of times will result in a too large goto program to be verified by CBMC.  
 ```rust
 #[kani::proof]
 fn main() {
@@ -58,19 +59,19 @@ fn main() {
 The `goto-synthesizer` is an [enumeration-based synthesizer](https://www.cis.upenn.edu/~alur/SyGuS13.pdf).
 It enumerates candidate invariants from a pre-designed search space described by a given regular tree grammar and verifies if the candidate is an inductive invariant.
 Therefore it has the following limitations:
-1. the search space is not complete, so it may fail to find a working candidate. The current search space consists of only conjunction of linear inequalities built from the variables in the loop, which is not expressive enough to capture all loop invariants.
-For example, the loop invariant `a[i] == 0` contains array access and cannot be captured by the current search space.
+1. the search space is not complete, so it may fail to find a working candidate. The current search space consists of only conjunctions of linear inequalities built from the variables in the loop, which is not expressive enough to capture all loop invariants.
+For example, the loop invariant `a[i] == 0` contains an array access and cannot be captured by the current search space.
 However, we can easily extend the search space to include more complex expressions with the cost of an exponential increase of the running time of the synthesizer.
 2. the synthesizer suffers from the same limitation as the loop contract verification in CBMC. For example, it does not support unbounded quantifiers, or dynamic allocations in the loop body. 
 
 ## User Experience
 
-Once this RFC has been stabilized, users will be able to use the new command-line flag `--synthesize-loop-contracts` to run the synthesizer, which will attempt to synthesize loop contracts, and verify programs with the synthesized loop contracts.
+Users will be able to use the new command-line flag `--synthesize-loop-contracts` to run the synthesizer, which will attempt to synthesize loop contracts, and verify programs with the synthesized loop contracts.
 
 
 #### Limit Resource Used by Synthesizer for Termination
 Without a resource limit, an enumerative synthesizer may run forever to exhaust a search space consisting of an infinite number of candidates, especially when there is no solution in the search space.
-So, for the guarantee of termination, we provide users options: `--limit-synthesis-time T` to limit the running time of the synthesizer.
+So, for the guarantee of termination, we provide users options: `--limit-synthesis-time T` to limit the running time of the synthesizer to be less than `T` seconds.
 
 
 #### Output of Kani when the Synthesizer is Enabled
@@ -92,7 +93,7 @@ When invoking ```goto-synthesizer```, we pass the following parameters to it wit
 - the resource limit of the synthesis;
 - the solver options to specify what SAT solver we use to verify invariant candidates.
 
-The enumerator used in the synthesizer enumerates candidates from the language of the following grammar template
+The enumerator used in the synthesizer enumerates candidates from the language of the following grammar template.
 ```
 NT_Bool -> NT_Bool && NT_Bool | NT_int == NT_int 
             | NT_int <= NT_int | NT_int < NT_int 
@@ -102,7 +103,7 @@ NT_int  -> NT_int + NT_int | terminals_int | LOOP_ENTRY(terminals_int)
             | POINTER_OFFSET(terminals_ptr) | OBJECT_SIZE(terminals_ptr)
             | POINTER_OFFSET(LOOP_ENTRY(terminals_ptr)) | 1
 ```
-where `terminals_ptr` are all pointer variables in the scope, and `terminal_int` are all integers variables in the scope.
+where `terminals_ptr` are all pointer variables in the scope, and `terminal_int` are all integer variables in the scope.
 For every candidate invariant, `goto-synthesizer` applies it to the GOTO program and runs CBMC to verify the program.
 - If all checks in the program pass, ```goto-synthesizer``` returns it as a solution.
 - If the inductive checks pass but some of the other checks fail, the candidate invariant is inductive. 
@@ -142,7 +143,7 @@ For example, the candidate `y == y` is verified to be an inductive invariant, bu
 The candidate `y == 1` is not inductive.
 The synthesizer rejects all candidates until it finds the candidate `1 <= y + 1`, which can be simplified to `y >= 0`.
 `y >= 0` is an inductive invariant that can be used to prove the post-condition.
-So the synthesizer will return `y >= 0` and apply it in the goto model to get `main_synthesized.goto`.
+So the synthesizer will return `y >= 0` and apply it to the goto model to get `main_synthesized.goto`.
 Then Kani will call `cbmc` on `main_synthesized.goto` to verify the program with the synthesized loop contracts. 
 
 ## Rationale and alternatives
@@ -161,16 +162,16 @@ There may exist some loops for which the synthesizer cannot find loop contracts,
 In this case, we may want to unwind some loops in the program while synthesizing loop contracts for other loops.
 It requires us to have a way to identify and specify which loops we want to unwind. 
 
-In C programs, we identify loops by **loop id**, which is a pair (function name, loop number).
-However, it Rust programs, loops are usually in library functions such as `Iterator::for_each`.
+In C programs, we identify loops by the **loop ID**, which is a pair `(function name, loop number)`.
+However, in Rust programs, loops are usually in library functions such as `Iterator::for_each`.
 And a library function may be called from different places in the program.
 We may want to unwind the loop in some calls but not in other calls.
 
 **How do we output the synthesized loop contracts?**
 To better earn users' trust, we want to be able to report what loop contracts we synthesized and used to verify the given programs.
-Now `goto-synthesizer` can dump the synthesized loop contracts into a json file.
+Now `goto-synthesizer` can dump the synthesized loop contracts into a JSON file.
 Here is an example of the dumped loop contracts.
-It contains the location of source files of the loops, the synthesized loop invariants and loop assigns for loops identified by loop numbers.
+It contains the location of source files of the loops, the synthesized invariant clauses and assign clauses for loops identified by loop numbers.
 ```json
 {
     "sources": [ "/Users/qinhh/Repos/playground/kani/synthesis/base_2/test.rs" ],
@@ -187,7 +188,7 @@ It contains the location of source files of the loops, the synthesized loop inva
 There are two challenges here if we want to also dump synthesized loop contracts in Kani.
 1. We need to have a consistent way to identify loops.
 2. We need to dump loop invariants in `rust` instead of `c`.
-3. There are many auxiliary variables we added in Kani-compiled GOTO, such as `var_9`, `var_10`, `var_11`, and `var_12` in the above json file.
+3. There are many auxiliary variables we added in Kani-compiled GOTO, such as `var_9`, `var_10`, `var_11`, and `var_12` in the above JSON file.
 We need to translate them back to the original variables they represent.
 
 
@@ -207,3 +208,5 @@ fn check() {
     // it is enabled in this block of code until the end of the program
 }
 ```
+
+[^1]: We say an integer variable is unbounded if there is no other bound on its value besides the width of its bit-vector representation. 
