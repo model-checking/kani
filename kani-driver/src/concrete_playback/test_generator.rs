@@ -68,15 +68,15 @@ impl KaniSession {
                     ConcretePlaybackMode::InPlace => {
                         if !self.args.common_args.quiet && !unit_tests.is_empty() {
                             println!(
-                                "INFO: Now modifying the source code to include the concrete playback unit test: [{}].",
+                                "INFO: Now modifying the source code to include the concrete playback unit test:{}.",
                                 unit_tests
                                     .iter()
                                     .map(|generated_unit_test| format!(
-                                        "`{}`",
+                                        "\n  - {}",
                                         &generated_unit_test.name
                                     ))
                                     .collect::<Vec<String>>()
-                                    .join(",\n")
+                                    .join("")
                             );
                         }
                         self.modify_src_code(
