@@ -13,7 +13,7 @@ use concrete_vals_extractor::{extract_harness_values, ConcreteVal};
 use kani_metadata::HarnessMetadata;
 use std::collections::hash_map::DefaultHasher;
 use std::ffi::OsString;
-use std::fs::File;
+use std::fs::{read_to_string, File};
 use std::hash::{Hash, Hasher};
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
@@ -32,48 +32,65 @@ impl KaniSession {
         };
 
         if let Ok(result_items) = &verification_result.results {
-            match extract_harness_values(result_items) {
-                None => println!(
+            let harness_values: Vec<Vec<ConcreteVal>> = extract_harness_values(result_items);
+
+            if harness_values.is_empty() {
+                println!(
                     "WARNING: Kani could not produce a concrete playback for `{}` because there \
-                    were no failing panic checks.",
+                    were no failing panic checks or satisfiable cover statements.",
                     harness.pretty_name
-                ),
-                Some(concrete_vals) => {
-                    let pretty_name = harness.get_harness_name_unqualified();
-                    let generated_unit_test = format_unit_test(&pretty_name, &concrete_vals);
-                    match playback_mode {
-                        ConcretePlaybackMode::Print => {
+                )
+            } else {
+                let unit_tests: Vec<UnitTest> = harness_values
+                    .iter()
+                    .map(|concrete_vals| {
+                        let pretty_name = harness.get_harness_name_unqualified();
+                        format_unit_test(&pretty_name, &concrete_vals)
+                    })
+                    .collect();
+                match playback_mode {
+                    ConcretePlaybackMode::Print => {
+                        for generated_unit_test in unit_tests.iter() {
                             println!(
                                 "Concrete playback unit test for `{}`:\n```\n{}\n```",
                                 &harness.pretty_name,
                                 &generated_unit_test.code.join("\n")
                             );
+                        }
+
+                        if !unit_tests.is_empty() {
                             println!(
-                                "INFO: To automatically add the concrete playback unit test `{}` to the \
-                        src code, run Kani with `--concrete-playback=inplace`.",
-                                &generated_unit_test.name
+                                "INFO: To automatically add the concrete playback unit test(s) to the \
+                                 src code, run Kani with `--concrete-playback=inplace`.",
                             );
                         }
-                        ConcretePlaybackMode::InPlace => {
-                            if !self.args.common_args.quiet {
-                                println!(
-                                    "INFO: Now modifying the source code to include the concrete playback unit test `{}`.",
-                                    &generated_unit_test.name
-                                );
-                            }
-                            self.modify_src_code(
-                                &harness.original_file,
-                                harness.original_end_line,
-                                &generated_unit_test,
-                            )
-                            .expect(&format!(
-                                "Failed to modify source code for the file `{}`",
-                                &harness.original_file
-                            ));
-                        }
                     }
-                    verification_result.generated_concrete_test = true;
+                    ConcretePlaybackMode::InPlace => {
+                        if !self.args.common_args.quiet && !unit_tests.is_empty() {
+                            println!(
+                                "INFO: Now modifying the source code to include the concrete playback unit test:{}.",
+                                unit_tests
+                                    .iter()
+                                    .map(|generated_unit_test| format!(
+                                        "\n  - {}",
+                                        &generated_unit_test.name
+                                    ))
+                                    .collect::<Vec<String>>()
+                                    .join("")
+                            );
+                        }
+                        self.modify_src_code(
+                            &harness.original_file,
+                            harness.original_end_line,
+                            unit_tests,
+                        )
+                        .expect(&format!(
+                            "Failed to modify source code for the file `{}`",
+                            &harness.original_file
+                        ));
+                    }
                 }
+                verification_result.generated_concrete_test = true;
             }
         }
         Ok(())
@@ -84,71 +101,83 @@ impl KaniSession {
         &self,
         src_path: &str,
         proof_harness_end_line: usize,
-        unit_test: &UnitTest,
+        unit_tests: Vec<UnitTest>,
     ) -> Result<()> {
-        let unit_test_already_in_src =
-            self.add_test_inplace(src_path, proof_harness_end_line, unit_test)?;
+        // compute range to run rustfmt on.
+        let concrete_playback_num_lines: usize =
+            unit_tests.iter().map(|unit_test| unit_test.code.len()).sum();
 
-        if unit_test_already_in_src {
-            return Ok(());
+        let is_new_injection =
+            self.add_tests_inplace(src_path, proof_harness_end_line, unit_tests)?;
+
+        if is_new_injection {
+            let unit_test_start_line = proof_harness_end_line + 1;
+            let unit_test_end_line = unit_test_start_line + concrete_playback_num_lines - 1;
+            let src_path = Path::new(src_path);
+            let (path, file_name) = extract_parent_dir_and_src_file(src_path)?;
+            let file_line_ranges = vec![FileLineRange {
+                file: file_name,
+                line_range: Some((unit_test_start_line, unit_test_end_line)),
+            }];
+            self.run_rustfmt(&file_line_ranges, Some(&path))?;
         }
 
-        // Run rustfmt on just the inserted lines.
-        let concrete_playback_num_lines = unit_test.code.len();
-        let unit_test_start_line = proof_harness_end_line + 1;
-        let unit_test_end_line = unit_test_start_line + concrete_playback_num_lines - 1;
-        let src_path = Path::new(src_path);
-        let (path, file_name) = extract_parent_dir_and_src_file(src_path)?;
-        let file_line_ranges = vec![FileLineRange {
-            file: file_name,
-            line_range: Some((unit_test_start_line, unit_test_end_line)),
-        }];
-        self.run_rustfmt(&file_line_ranges, Some(&path))?;
         Ok(())
     }
 
     /// Writes the new source code to a user's source file using a tempfile as the means.
-    /// Returns whether the unit test was already in the old source code.
-    fn add_test_inplace(
+    /// Returns whether new unit test was injected.
+    fn add_tests_inplace(
         &self,
         source_path: &str,
         proof_harness_end_line: usize,
-        unit_test: &UnitTest,
+        mut unit_tests: Vec<UnitTest>,
     ) -> Result<bool> {
         // Read from source
         let source_file = File::open(source_path).unwrap();
         let source_reader = BufReader::new(source_file);
+        let source_string = read_to_string(source_path).unwrap();
 
-        // Create temp file
-        let mut temp_file = TempFile::try_new("concrete_playback.tmp")?;
-        let mut curr_line_num = 0;
-
-        // Use a buffered reader/writer to generate the unit test line by line
-        for line in source_reader.lines().flatten() {
-            if line.contains(&unit_test.name) {
+        // filter out existing harnesses.
+        unit_tests.retain(|unit_test| {
+            if source_string.contains(&unit_test.name) {
                 if !self.args.common_args.quiet {
                     println!(
                         "Concrete playback unit test `{}/{}` already found in source code, so skipping modification.",
                         source_path, unit_test.name,
                     );
                 }
-                // the drop impl will take care of flushing and resetting
-                return Ok(true);
+
+                false
+            } else {
+                true
             }
-            curr_line_num += 1;
-            if let Some(temp_writer) = temp_file.writer.as_mut() {
-                writeln!(temp_writer, "{line}")?;
-                if curr_line_num == proof_harness_end_line {
-                    for unit_test_line in unit_test.code.iter() {
-                        curr_line_num += 1;
-                        writeln!(temp_writer, "{unit_test_line}")?;
+        });
+
+        // Create temp file
+        if !unit_tests.is_empty() {
+            let mut temp_file = TempFile::try_new("concrete_playback.tmp")?;
+            let mut curr_line_num = 0;
+
+            // Use a buffered reader/writer to generate the unit test line by line
+            for line in source_reader.lines().flatten() {
+                curr_line_num += 1;
+                if let Some(temp_writer) = temp_file.writer.as_mut() {
+                    writeln!(temp_writer, "{line}")?;
+                    if curr_line_num == proof_harness_end_line {
+                        for unit_test in unit_tests.iter() {
+                            for unit_test_line in unit_test.code.iter() {
+                                curr_line_num += 1;
+                                writeln!(temp_writer, "{unit_test_line}")?;
+                            }
+                        }
                     }
                 }
             }
+            temp_file.rename(source_path).expect("Could not rename file");
         }
 
-        temp_file.rename(source_path).expect("Could not rename file");
-        Ok(false)
+        Ok(!unit_tests.is_empty())
     }
 
     /// Run rustfmt on the given src file, and optionally on only the specific lines.
@@ -287,37 +316,28 @@ mod concrete_vals_extractor {
         pub interp_val: String,
     }
 
-    /// Extract a set of concrete values that trigger one assertion failure.
-    /// This will return None if the failure is not related to a user assertion.
-    pub fn extract_harness_values(result_items: &[Property]) -> Option<Vec<ConcreteVal>> {
-        let mut failures = result_items.iter().filter(|prop| {
-            (prop.property_class() == "assertion" && prop.status == CheckStatus::Failure)
-                || (prop.property_class() == "cover" && prop.status == CheckStatus::Satisfied)
-        });
+    /// Extract a set of concrete values that trigger one assertion
+    /// failure. Each element of the outer vector corresponds to
+    /// inputs triggering one assertion failure or cover statement.
+    pub fn extract_harness_values(result_items: &[Property]) -> Vec<Vec<ConcreteVal>> {
+        result_items
+            .iter()
+            .filter(|prop| {
+                (prop.property_class() == "assertion" && prop.status == CheckStatus::Failure)
+                    || (prop.property_class() == "cover" && prop.status == CheckStatus::Satisfied)
+            })
+            .map(|property| {
+                // Extract values for each assertion that has failed.
+                let trace = property
+                    .trace
+                    .as_ref()
+                    .expect(&format!("Missing trace for {}", property.property_name()));
+                let concrete_vals: Vec<ConcreteVal> =
+                    trace.iter().filter_map(&extract_from_trace_item).collect();
 
-        // Process the first assertion failure.
-        let first_failure = failures.next();
-        if let Some(property) = first_failure {
-            // Extract values for the first assertion that has failed.
-            let trace = property
-                .trace
-                .as_ref()
-                .expect(&format!("Missing trace for {}", property.property_name()));
-            let concrete_vals = trace.iter().filter_map(&extract_from_trace_item).collect();
-
-            // Print warnings for all the other failures that were not handled in case they expected
-            // even future checks to be extracted.
-            for unhandled in failures {
-                println!(
-                    "WARNING: Unable to extract concrete values from multiple failing assertions. Skipping property `{}` with description `{}`.",
-                    unhandled.property_name(),
-                    unhandled.description,
-                );
-            }
-            Some(concrete_vals)
-        } else {
-            None
-        }
+                concrete_vals
+            })
+            .collect()
     }
 
     /// Extracts individual bytes returned by kani::any() calls.
@@ -569,7 +589,7 @@ mod tests {
                 }),
             }]),
         }];
-        let concrete_vals = extract_harness_values(&processed_items).unwrap();
+        let concrete_vals = extract_harness_values(&processed_items).pop().unwrap();
         let concrete_val = &concrete_vals[0];
 
         assert_eq!(concrete_val.byte_arr, vec![1, 3]);
