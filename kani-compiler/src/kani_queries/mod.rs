@@ -12,6 +12,20 @@ use strum_macros::{AsRefStr, EnumString, EnumVariantNames};
 
 #[derive(Debug, Default, Clone, Copy, AsRefStr, EnumString, EnumVariantNames, PartialEq, Eq)]
 #[strum(serialize_all = "snake_case")]
+pub enum BackendOption {
+    /// Boogie backend
+    Boogie,
+
+    /// CProver (Goto) backend
+    CProver,
+
+    /// Backend option was not explicitly set
+    #[default]
+    None,
+}
+
+#[derive(Debug, Default, Clone, Copy, AsRefStr, EnumString, EnumVariantNames, PartialEq, Eq)]
+#[strum(serialize_all = "snake_case")]
 pub enum ReachabilityType {
     /// Start the cross-crate reachability analysis from all harnesses in the local crate.
     Harnesses,
@@ -27,6 +41,7 @@ pub enum ReachabilityType {
 /// This structure should only be used behind a synchronized reference or a snapshot.
 #[derive(Debug, Default, Clone)]
 pub struct QueryDb {
+    pub backend: BackendOption,
     pub check_assertion_reachability: bool,
     pub emit_vtable_restrictions: bool,
     pub output_pretty_json: bool,

@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use crate::kani_queries::ReachabilityType;
+use crate::kani_queries::{BackendOption, ReachabilityType};
 use clap::{builder::PossibleValuesParser, command, Arg, ArgAction, ArgMatches, Command};
 use std::env;
 use std::str::FromStr;
@@ -9,9 +9,6 @@ use strum::VariantNames as _;
 
 /// Option name used to set log level.
 pub const LOG_LEVEL: &str = "log-level";
-
-/// Option name used to enable goto-c compilation.
-pub const GOTO_C: &str = "goto-c";
 
 /// Option name used to override Kani library path.
 pub const KANI_LIB: &str = "kani-lib";
@@ -40,6 +37,9 @@ pub const WRITE_JSON_SYMTAB: &str = "write-json-symtab";
 /// Option name used to select which reachability analysis to perform.
 pub const REACHABILITY: &str = "reachability";
 
+/// Option name used to select which backend to use.
+pub const BACKEND: &str = "backend";
+
 /// Option name used to enable stubbing.
 pub const ENABLE_STUBBING: &str = "enable-stubbing";
 
@@ -55,12 +55,6 @@ pub fn parser() -> Command {
                 .value_name("FOLDER_PATH")
                 .help("Sets the path to locate the kani library.")
                 .action(ArgAction::Set),
-        )
-        .arg(
-            Arg::new(GOTO_C)
-                .long(GOTO_C)
-                .help("Enables compilation to goto-c intermediate representation.")
-                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(LOG_LEVEL)
@@ -108,6 +102,15 @@ pub fn parser() -> Command {
                 .action(ArgAction::Set),
         )
         .arg(
+            Arg::new(BACKEND)
+                .long(BACKEND)
+                .value_parser(PossibleValuesParser::new(BackendOption::VARIANTS))
+                .required(false)
+                .default_value(BackendOption::None.as_ref())
+                .help("Selects the backend to use.")
+                .action(ArgAction::Set),
+        )
+        .arg(
             Arg::new(PRETTY_OUTPUT_FILES)
                 .long(PRETTY_OUTPUT_FILES)
                 .help("Output json files in a more human-readable format (with spaces).")
@@ -149,12 +152,18 @@ pub fn parser() -> Command {
 
 pub trait KaniCompilerParser {
     fn reachability_type(&self) -> ReachabilityType;
+    fn backend(&self) -> BackendOption;
 }
 
 impl KaniCompilerParser for ArgMatches {
     fn reachability_type(&self) -> ReachabilityType {
         self.get_one::<String>(REACHABILITY)
             .map_or(ReachabilityType::None, |arg| ReachabilityType::from_str(arg).unwrap())
+    }
+
+    fn backend(&self) -> BackendOption {
+        self.get_one::<String>(BACKEND)
+            .map_or(BackendOption::None, |arg| BackendOption::from_str(arg).unwrap())
     }
 }
 
@@ -195,9 +204,9 @@ mod parser_test {
 
     #[test]
     fn test_kani_flags() {
-        let args = vec!["kani-compiler", "--goto-c", "--kani-lib", "some/path"];
+        let args = vec!["kani-compiler", "--backend=c_prover", "--kani-lib", "some/path"];
         let matches = parser().get_matches_from(args);
-        assert!(matches.get_flag("goto-c"));
+        assert_eq!(matches.get_one::<String>("backend"), Some(&"c_prover".to_string()));
         assert_eq!(matches.get_one::<String>("kani-lib"), Some(&"some/path".to_string()));
     }
 
