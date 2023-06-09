@@ -193,6 +193,8 @@ We need to translate them back to the original variables they represent.
 
 
 ## Future possibilities
+
+**User-provided loop contracts.**
 If we have a good answer for how to identify loops and dump synthesized loop contracts, we could probably also allow users to provide the loop contracts they wrote to Kani, and verify programs with user-provided loop contracts.
 
 When users want to unwind some loops, we can also introduce macros to enable/disable unwinding for certain block of code.
@@ -208,5 +210,10 @@ fn check() {
     // it is enabled in this block of code until the end of the program
 }
 ```
+
+**Invariant caching.**
+The loop invariant could be broken when users modify their code.
+However, we could probably cache previously working loop invariants and attempt to reuse them when users modify their code.
+Even if the cached loop invariants are not enough to prove the post-condition, they could still be used as a starting point for the synthesizer to find new loop invariants.
 
 [^1]: We say an integer variable is unbounded if there is no other bound on its value besides the width of its bit-vector representation. 
