@@ -41,13 +41,14 @@ impl KaniSession {
                     harness.pretty_name
                 )
             } else {
-                let unit_tests: Vec<UnitTest> = harness_values
+                let mut unit_tests: Vec<UnitTest> = harness_values
                     .iter()
                     .map(|concrete_vals| {
                         let pretty_name = harness.get_harness_name_unqualified();
                         format_unit_test(&pretty_name, &concrete_vals)
                     })
                     .collect();
+                unit_tests.dedup_by(|a, b| a.name == b.name);
                 match playback_mode {
                     ConcretePlaybackMode::Print => {
                         for generated_unit_test in unit_tests.iter() {
