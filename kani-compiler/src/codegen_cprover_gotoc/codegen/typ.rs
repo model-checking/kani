@@ -7,15 +7,15 @@ use cbmc::utils::aggr_tag;
 use cbmc::{InternString, InternedString};
 use rustc_ast::ast::Mutability;
 use rustc_hir::{LangItem, Unsafety};
-use rustc_index::vec::IndexVec;
+use rustc_index::IndexVec;
 use rustc_middle::mir::{HasLocalDecls, Local, Operand, Place, Rvalue};
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::print::FmtPrinter;
 use rustc_middle::ty::subst::InternalSubsts;
 use rustc_middle::ty::{
-    self, AdtDef, FloatTy, GeneratorSubsts, Instance, IntTy, PolyFnSig, Ty, TyCtxt, TyKind, UintTy,
-    VariantDef, VtblEntry,
+    self, AdtDef, Const, FloatTy, GeneratorSubsts, Instance, IntTy, PolyFnSig, Ty, TyCtxt, TyKind,
+    UintTy, VariantDef, VtblEntry,
 };
 use rustc_middle::ty::{List, TypeFoldable};
 use rustc_span::def_id::DefId;
@@ -26,7 +26,6 @@ use rustc_target::abi::{
 use rustc_target::spec::abi::Abi;
 use std::iter;
 use tracing::{debug, trace, warn};
-use ty::layout::HasParamEnv;
 
 /// Map the unit type to an empty struct
 ///
@@ -666,7 +665,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             _ => {
                 // This hash is documented to be the same no matter the crate context
-                let id_u64 = self.tcx.type_id_hash(t);
+                let id_u64 = self.tcx.type_id_hash(t).as_u64();
                 format!("_{id_u64}").intern()
             }
         }
@@ -682,15 +681,10 @@ impl<'tcx> GotocCtx<'tcx> {
         format!("{}::{}", self.ty_mangled_name(ty), case.name)
     }
 
-    pub fn codegen_ty_raw_array(&mut self, ty: Ty<'tcx>) -> Type {
-        match ty.kind() {
-            ty::Array(t, c) => {
-                let size = self.codegen_const(*c, None).int_constant_value().unwrap();
-                let elemt = self.codegen_ty(*t);
-                elemt.array_of(size)
-            }
-            _ => unreachable!("should only call on array"),
-        }
+    fn codegen_ty_raw_array(&mut self, elem_ty: Ty<'tcx>, len: Const<'tcx>) -> Type {
+        let size = self.codegen_const(len, None).int_constant_value().unwrap();
+        let elemt = self.codegen_ty(elem_ty);
+        elemt.array_of(size)
     }
 
     /// A foreign type is a type that rust does not know the contents of.
@@ -776,27 +770,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
             }
             ty::Foreign(defid) => self.codegen_foreign(ty, *defid),
-            ty::Array(et, len) => {
-                let evaluated_len = len.try_eval_target_usize(self.tcx, self.param_env()).unwrap();
-                let array_name = format!("[{}; {evaluated_len}]", self.ty_mangled_name(*et));
-                let array_pretty_name = format!("[{}; {evaluated_len}]", self.ty_pretty_name(*et));
-                // wrap arrays into struct so that one can take advantage of struct copy in C
-                //
-                // struct [T; n] {
-                //   T _0[n];
-                // }
-                self.ensure_struct(&array_name, &array_pretty_name, |ctx, _| {
-                    if et.is_unit() {
-                        // we do not generate a struct with an array of units
-                        vec![]
-                    } else {
-                        vec![DatatypeComponent::field(
-                            &0usize.to_string(),
-                            ctx.codegen_ty_raw_array(ty),
-                        )]
-                    }
-                })
-            }
+            ty::Array(et, len) => self.codegen_ty_raw_array(*et, *len),
             ty::Dynamic(..) => {
                 // This is `dyn Trait` not a reference.
                 self.codegen_trait_data(ty)

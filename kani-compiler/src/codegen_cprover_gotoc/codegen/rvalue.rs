@@ -18,7 +18,7 @@ use cbmc::MachineModel;
 use cbmc::{btree_string_map, InternString, InternedString};
 use num::bigint::BigInt;
 use rustc_abi::FieldIdx;
-use rustc_index::vec::IndexVec;
+use rustc_index::IndexVec;
 use rustc_middle::mir::{AggregateKind, BinOp, CastKind, NullOp, Operand, Place, Rvalue, UnOp};
 use rustc_middle::ty::adjustment::PointerCast;
 use rustc_middle::ty::layout::LayoutOf;
@@ -144,18 +144,11 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         op: &Operand<'tcx>,
         sz: ty::Const<'tcx>,
-        res_ty: Ty<'tcx>,
         loc: Location,
     ) -> Expr {
-        let res_t = self.codegen_ty(res_ty);
         let op_expr = self.codegen_operand(op);
         let width = sz.try_eval_target_usize(self.tcx, ty::ParamEnv::reveal_all()).unwrap();
-        Expr::struct_expr(
-            res_t,
-            btree_string_map![("0", op_expr.array_constant(width))],
-            &self.symbol_table,
-        )
-        .with_location(loc)
+        op_expr.array_constant(width).with_location(loc)
     }
 
     fn codegen_rvalue_len(&mut self, p: &Place<'tcx>) -> Expr {
@@ -294,6 +287,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     fn codegen_rvalue_binary_op(
         &mut self,
+        ty: Ty<'tcx>,
         op: &BinOp,
         e1: &Operand<'tcx>,
         e2: &Operand<'tcx>,
@@ -317,7 +311,32 @@ impl<'tcx> GotocCtx<'tcx> {
             BinOp::Offset => {
                 let ce1 = self.codegen_operand(e1);
                 let ce2 = self.codegen_operand(e2);
-                ce1.plus(ce2)
+
+                // Check that computing `offset` in bytes would not overflow
+                let (offset_bytes, bytes_overflow_check) = self.count_in_bytes(
+                    ce2.clone().cast_to(Type::ssize_t()),
+                    ty,
+                    Type::ssize_t(),
+                    "offset",
+                    loc,
+                );
+
+                // Check that the computation would not overflow an `isize` which is UB:
+                // https://doc.rust-lang.org/std/primitive.pointer.html#method.offset
+                // These checks may allow a wrapping-around behavior in CBMC:
+                // https://github.com/model-checking/kani/issues/1150
+                let overflow_res = ce1.clone().cast_to(Type::ssize_t()).add_overflow(offset_bytes);
+                let overflow_check = self.codegen_assert_assume(
+                    overflow_res.overflowed.not(),
+                    PropertyClass::ArithmeticOverflow,
+                    "attempt to compute offset which would overflow",
+                    loc,
+                );
+                let res = ce1.clone().plus(ce2);
+                Expr::statement_expression(
+                    vec![bytes_overflow_check, overflow_check, res.as_stmt(loc)],
+                    ce1.typ().clone(),
+                )
             }
         }
     }
@@ -430,23 +449,9 @@ impl<'tcx> GotocCtx<'tcx> {
         loc: Location,
     ) -> Expr {
         match *aggregate {
-            AggregateKind::Array(et) => {
-                if et.is_unit() {
-                    Expr::struct_expr_from_values(
-                        self.codegen_ty(res_ty),
-                        vec![],
-                        &self.symbol_table,
-                    )
-                } else {
-                    Expr::struct_expr_from_values(
-                        self.codegen_ty(res_ty),
-                        vec![Expr::array_expr(
-                            self.codegen_ty_raw_array(res_ty),
-                            operands.iter().map(|o| self.codegen_operand(o)).collect(),
-                        )],
-                        &self.symbol_table,
-                    )
-                }
+            AggregateKind::Array(_et) => {
+                let typ = self.codegen_ty(res_ty);
+                Expr::array_expr(typ, operands.iter().map(|o| self.codegen_operand(o)).collect())
             }
             AggregateKind::Adt(_, _, _, _, Some(active_field_index)) => {
                 assert!(res_ty.is_union());
@@ -509,7 +514,7 @@ impl<'tcx> GotocCtx<'tcx> {
             Rvalue::Use(p) => self.codegen_operand(p),
             Rvalue::Repeat(op, sz) => {
                 let sz = self.monomorphize(*sz);
-                self.codegen_rvalue_repeat(op, sz, res_ty, loc)
+                self.codegen_rvalue_repeat(op, sz, loc)
             }
             Rvalue::Ref(_, _, p) | Rvalue::AddressOf(_, p) => self.codegen_place_ref(p),
             Rvalue::Len(p) => self.codegen_rvalue_len(p),
@@ -548,7 +553,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 self.codegen_operand(operand).transmute_to(goto_typ, &self.symbol_table)
             }
             Rvalue::BinaryOp(op, box (ref e1, ref e2)) => {
-                self.codegen_rvalue_binary_op(op, e1, e2, loc)
+                self.codegen_rvalue_binary_op(res_ty, op, e1, e2, loc)
             }
             Rvalue::CheckedBinaryOp(op, box (ref e1, ref e2)) => {
                 self.codegen_rvalue_checked_binary_op(op, e1, e2, res_ty)
@@ -560,6 +565,10 @@ impl<'tcx> GotocCtx<'tcx> {
                     NullOp::SizeOf => Expr::int_constant(layout.size.bytes_usize(), Type::size_t())
                         .with_size_of_annotation(self.codegen_ty(t)),
                     NullOp::AlignOf => Expr::int_constant(layout.align.abi.bytes(), Type::size_t()),
+                    NullOp::OffsetOf(fields) => Expr::int_constant(
+                        layout.offset_of_subfield(self, fields.iter().map(|f| f.index())).bytes(),
+                        Type::size_t(),
+                    ),
                 }
             }
             Rvalue::ShallowInitBox(ref operand, content_ty) => {
@@ -875,7 +884,6 @@ impl<'tcx> GotocCtx<'tcx> {
                         if let ty::Array(_, _) = ty.kind() {
                             let oe = self.codegen_operand(operand);
                             oe.dereference() // : struct [T; n]
-                                .member("0", &self.symbol_table) // : T[n]
                                 .array_to_ptr() // : T*
                         } else {
                             unreachable!()

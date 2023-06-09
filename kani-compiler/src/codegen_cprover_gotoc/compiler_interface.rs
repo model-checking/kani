@@ -3,18 +3,16 @@
 
 //! This file contains the code necessary to interface with the compiler backend
 
-use crate::codegen_cprover_gotoc::archive::ArchiveBuilder;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::analysis;
-use crate::kani_middle::attributes::is_proof_harness;
 use crate::kani_middle::attributes::is_test_harness_description;
-use crate::kani_middle::check_crate_items;
-use crate::kani_middle::check_reachable_items;
-use crate::kani_middle::metadata::{gen_proof_metadata, gen_test_metadata};
+use crate::kani_middle::metadata::gen_test_metadata;
 use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{
     collect_reachable_items, filter_const_crate_items, filter_crate_items,
 };
+use crate::kani_middle::{check_crate_items, check_reachable_items, dump_mir_items};
+use crate::kani_queries::{QueryDb, ReachabilityType};
 use cbmc::goto_program::Location;
 use cbmc::irep::goto_binary_serde::write_goto_binary_file;
 use cbmc::RoundingMode;
@@ -23,7 +21,9 @@ use kani_metadata::artifact::convert_type;
 use kani_metadata::CompilerArtifactStub;
 use kani_metadata::UnsupportedFeature;
 use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata};
-use kani_queries::{QueryDb, ReachabilityType, UserInput};
+use rustc_codegen_ssa::back::archive::{
+    get_native_object_symbols, ArArchiveBuilder, ArchiveBuilder,
+};
 use rustc_codegen_ssa::back::metadata::create_wrapper_file;
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_codegen_ssa::{CodegenResults, CrateInfo};
@@ -31,27 +31,26 @@ use rustc_data_structures::fx::FxHashMap;
 use rustc_data_structures::temp_dir::MaybeTempDir;
 use rustc_errors::{ErrorGuaranteed, DEFAULT_LOCALE_RESOURCE};
 use rustc_hir::def_id::LOCAL_CRATE;
+use rustc_hir::definitions::DefPathHash;
 use rustc_metadata::fs::{emit_wrapper_file, METADATA_FILENAME};
 use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
 use rustc_middle::mir::mono::MonoItem;
-use rustc_middle::mir::write_mir_pretty;
 use rustc_middle::ty::query::Providers;
-use rustc_middle::ty::{self, InstanceDef, TyCtxt};
+use rustc_middle::ty::{self, TyCtxt};
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::cstore::MetadataLoaderDyn;
 use rustc_session::output::out_filename;
 use rustc_session::Session;
-use rustc_span::def_id::DefId;
 use rustc_target::abi::Endian;
 use rustc_target::spec::PanicStrategy;
 use std::any::Any;
 use std::collections::BTreeMap;
+use std::collections::HashSet;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::fs::File;
 use std::io::BufWriter;
-use std::io::Write as IoWrite;
 use std::iter::FromIterator;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -165,9 +164,9 @@ impl GotocCodegenBackend {
 
         // No output should be generated if user selected no_codegen.
         if !tcx.sess.opts.unstable_opts.no_codegen && tcx.sess.opts.output_types.should_codegen() {
-            let pretty = self.queries.lock().unwrap().get_output_pretty_json();
+            let pretty = self.queries.lock().unwrap().output_pretty_json;
             write_file(&symtab_goto, ArtifactType::PrettyNameMap, &pretty_name_map, pretty);
-            if gcx.queries.get_write_json_symtab() {
+            if gcx.queries.write_json_symtab {
                 write_file(&symtab_goto, ArtifactType::SymTab, &gcx.symbol_table, pretty);
                 symbol_table_to_gotoc(&tcx, &symtab_goto);
             } else {
@@ -218,7 +217,7 @@ impl CodegenBackend for GotocCodegenBackend {
         let queries = self.queries.lock().unwrap().clone();
         check_target(tcx.sess);
         check_options(tcx.sess);
-        check_crate_items(tcx, queries.get_ignore_global_asm());
+        check_crate_items(tcx, queries.ignore_global_asm);
 
         // Codegen all items that need to be processed according to the selected reachability mode:
         //
@@ -227,18 +226,22 @@ impl CodegenBackend for GotocCodegenBackend {
         // - PubFns: Generate code for all reachable logic starting from the local public functions.
         // - None: Don't generate code. This is used to compile dependencies.
         let base_filename = tcx.output_filenames(()).output_path(OutputType::Object);
-        let reachability = queries.get_reachability_analysis();
+        let reachability = queries.reachability_analysis;
         let mut results = GotoCodegenResults::new(tcx, reachability);
         match reachability {
             ReachabilityType::Harnesses => {
                 // Cross-crate collecting of all items that are reachable from the crate harnesses.
-                let harnesses = filter_crate_items(tcx, |_, def_id| is_proof_harness(tcx, def_id));
+                let harnesses = queries.target_harnesses();
+                let mut items: HashSet<DefPathHash> = HashSet::with_capacity(harnesses.len());
+                items.extend(harnesses.into_iter());
+                let harnesses =
+                    filter_crate_items(tcx, |_, def_id| items.contains(&tcx.def_path_hash(def_id)));
                 for harness in harnesses {
-                    let metadata = gen_proof_metadata(tcx, harness.def_id(), &base_filename);
-                    let model_path = &metadata.goto_file.as_ref().unwrap();
+                    let model_path =
+                        queries.harness_model_path(&tcx.def_path_hash(harness.def_id())).unwrap();
                     let (gcx, items) =
                         self.codegen_items(tcx, &[harness], model_path, &results.machine_model);
-                    results.extend(gcx, items, Some(metadata));
+                    results.extend(gcx, items, None);
                 }
             }
             ReachabilityType::Tests => {
@@ -254,14 +257,26 @@ impl CodegenBackend for GotocCodegenBackend {
                         false
                     }
                 });
+                // Codegen still takes a considerable amount, thus, we only generate one model for
+                // all harnesses and copy them for each harness.
+                // We will be able to remove this once we optimize all calls to CBMC utilities.
+                // https://github.com/model-checking/kani/issues/1971
+                let model_path = base_filename.with_extension(ArtifactType::SymTabGoto);
+                let (gcx, items) =
+                    self.codegen_items(tcx, &harnesses, &model_path, &results.machine_model);
+                results.extend(gcx, items, None);
+
                 for (test_fn, test_desc) in harnesses.iter().zip(descriptions.iter()) {
                     let instance =
                         if let MonoItem::Fn(instance) = test_fn { instance } else { continue };
                     let metadata = gen_test_metadata(tcx, *test_desc, *instance, &base_filename);
-                    let model_path = &metadata.goto_file.as_ref().unwrap();
-                    let (gcx, items) =
-                        self.codegen_items(tcx, &[*test_fn], model_path, &results.machine_model);
-                    results.extend(gcx, items, Some(metadata));
+                    let test_model_path = &metadata.goto_file.as_ref().unwrap();
+                    std::fs::copy(&model_path, &test_model_path).expect(&format!(
+                        "Failed to copy {} to {}",
+                        model_path.display(),
+                        test_model_path.display()
+                    ));
+                    results.harnesses.push(metadata);
                 }
             }
             ReachabilityType::None => {}
@@ -282,16 +297,18 @@ impl CodegenBackend for GotocCodegenBackend {
             // Print compilation report.
             results.print_report(tcx);
 
-            // In a workspace, cargo seems to be using the same file prefix to build a crate that is
-            // a package lib and also a dependency of another package.
-            // To avoid overriding the metadata for its verification, we skip this step when
-            // reachability is None, even because there is nothing to record.
-            write_file(
-                &base_filename,
-                ArtifactType::Metadata,
-                &results.generate_metadata(),
-                queries.get_output_pretty_json(),
-            );
+            if reachability != ReachabilityType::Harnesses {
+                // In a workspace, cargo seems to be using the same file prefix to build a crate that is
+                // a package lib and also a dependency of another package.
+                // To avoid overriding the metadata for its verification, we skip this step when
+                // reachability is None, even because there is nothing to record.
+                write_file(
+                    &base_filename,
+                    ArtifactType::Metadata,
+                    &results.generate_metadata(),
+                    queries.output_pretty_json,
+                );
+            }
         }
         codegen_results(tcx, rustc_metadata, &results.machine_model)
     }
@@ -338,7 +355,7 @@ impl CodegenBackend for GotocCodegenBackend {
             debug!(?crate_type, ?out_path, "link");
             if *crate_type == CrateType::Rlib {
                 // Emit the `rlib` that contains just one file: `<crate>.rmeta`
-                let mut builder = ArchiveBuilder::new(sess);
+                let mut builder = Box::new(ArArchiveBuilder::new(sess, get_native_object_symbols));
                 let tmp_dir = TempFileBuilder::new().prefix("kani").tempdir().unwrap();
                 let path = MaybeTempDir::new(tmp_dir, sess.opts.cg.save_temps);
                 let (metadata, _metadata_position) = create_wrapper_file(
@@ -470,37 +487,6 @@ fn symbol_table_to_gotoc(tcx: &TyCtxt, base_path: &Path) -> PathBuf {
         tcx.sess.abort_if_errors();
     };
     output_filename
-}
-
-/// Print MIR for the reachable items if the `--emit mir` option was provided to rustc.
-fn dump_mir_items(tcx: TyCtxt, items: &[MonoItem]) {
-    /// Convert MonoItem into a DefId.
-    /// Skip stuff that we cannot generate the MIR items.
-    fn visible_item<'tcx>(item: &MonoItem<'tcx>) -> Option<(MonoItem<'tcx>, DefId)> {
-        match item {
-            // Exclude FnShims and others that cannot be dumped.
-            MonoItem::Fn(instance) if matches!(instance.def, InstanceDef::Item(..)) => {
-                Some((*item, instance.def_id()))
-            }
-            MonoItem::Fn(..) => None,
-            MonoItem::Static(def_id) => Some((*item, *def_id)),
-            MonoItem::GlobalAsm(_) => None,
-        }
-    }
-
-    if tcx.sess.opts.output_types.contains_key(&OutputType::Mir) {
-        // Create output buffer.
-        let outputs = tcx.output_filenames(());
-        let path = outputs.output_path(OutputType::Mir).with_extension("kani.mir");
-        let out_file = File::create(&path).unwrap();
-        let mut writer = BufWriter::new(out_file);
-
-        // For each def_id, dump their MIR
-        for (item, def_id) in items.iter().filter_map(visible_item) {
-            writeln!(writer, "// Item: {item:?}").unwrap();
-            write_mir_pretty(tcx, Some(def_id), &mut writer).unwrap();
-        }
-    }
 }
 
 pub fn write_file<T>(base_path: &Path, file_type: ArtifactType, source: &T, pretty: bool)

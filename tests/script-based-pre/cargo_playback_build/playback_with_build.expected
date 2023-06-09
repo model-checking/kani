@@ -1,0 +1,10 @@
+[TEST] Generate test...
+Checking harness harnesses::harness...
+VERIFICATION:- SUCCESSFUL
+
+[TEST] Run test...
+running 2 tests
+test harnesses::kani_concrete_playback_harness
+test test::print_os_name
+
+test result: ok. 2 passed; 0 failed;

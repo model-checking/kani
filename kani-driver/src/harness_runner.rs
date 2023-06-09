@@ -11,7 +11,7 @@ use crate::args::OutputFormat;
 use crate::call_cbmc::{VerificationResult, VerificationStatus};
 use crate::project::Project;
 use crate::session::KaniSession;
-use crate::util::{error, specialized_harness_name, warning};
+use crate::util::{error, warning};
 
 /// A HarnessRunner is responsible for checking all proof harnesses. The data in this structure represents
 /// "background information" that the controlling driver (e.g. cargo-kani or kani) computed.
@@ -56,24 +56,13 @@ impl<'sess, 'pr> HarnessRunner<'sess, 'pr> {
                     let report_dir = self.project.outdir.join(format!("report-{harness_filename}"));
                     let goto_file =
                         self.project.get_harness_artifact(&harness, ArtifactType::Goto).unwrap();
-                    let specialized_obj = specialized_harness_name(goto_file, &harness_filename);
-                    self.sess.record_temporary_file(&specialized_obj);
-                    self.sess.instrument_model(
-                        goto_file,
-                        &specialized_obj,
-                        &self.project,
-                        &harness,
-                    )?;
+                    self.sess.instrument_model(goto_file, goto_file, &self.project, &harness)?;
 
                     if self.sess.args.synthesize_loop_contracts {
-                        self.sess.synthesize_loop_contracts(
-                            &specialized_obj,
-                            &specialized_obj,
-                            &harness,
-                        )?;
+                        self.sess.synthesize_loop_contracts(goto_file, &goto_file, &harness)?;
                     }
 
-                    let result = self.sess.check_harness(&specialized_obj, &report_dir, harness)?;
+                    let result = self.sess.check_harness(goto_file, &report_dir, harness)?;
                     Ok(HarnessResult { harness, result })
                 })
                 .collect::<Result<Vec<_>>>()
@@ -91,7 +80,7 @@ impl KaniSession {
         report_dir: &Path,
         harness: &HarnessMetadata,
     ) -> Result<VerificationResult> {
-        if !self.args.quiet {
+        if !self.args.common_args.quiet {
             println!("Checking harness {}...", harness.pretty_name);
         }
 
@@ -100,17 +89,17 @@ impl KaniSession {
             // Strictly speaking, we're faking success here. This is more "no error"
             Ok(VerificationResult::mock_success())
         } else {
-            let result = self.with_timer(|| self.run_cbmc(binary, harness), "run_cbmc")?;
+            let mut result = self.with_timer(|| self.run_cbmc(binary, harness), "run_cbmc")?;
 
             // When quiet, we don't want to print anything at all.
             // When output is old, we also don't have real results to print.
-            if !self.args.quiet && self.args.output_format != OutputFormat::Old {
+            if !self.args.common_args.quiet && self.args.output_format != OutputFormat::Old {
                 println!(
                     "{}",
                     result.render(&self.args.output_format, harness.attributes.should_panic)
                 );
             }
-
+            self.gen_and_add_concrete_playback(harness, &mut result)?;
             Ok(result)
         }
     }
@@ -156,7 +145,7 @@ impl KaniSession {
         let total = succeeding + failing;
 
         if self.args.concrete_playback.is_some()
-            && !self.args.quiet
+            && !self.args.common_args.quiet
             && results.iter().all(|r| !r.result.generated_concrete_test)
         {
             println!(
@@ -165,7 +154,7 @@ impl KaniSession {
         }
 
         // We currently omit a summary if there was just 1 harness
-        if !self.args.quiet && !self.args.visualize && total != 1 {
+        if !self.args.common_args.quiet && !self.args.visualize && total != 1 {
             if failing > 0 {
                 println!("Summary:");
             }

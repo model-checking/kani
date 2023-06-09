@@ -5,22 +5,24 @@
 
 use std::collections::HashSet;
 
-use kani_queries::{QueryDb, UserInput};
-use rustc_hir::{
-    def::DefKind,
-    def_id::{DefId, LOCAL_CRATE},
-};
+use crate::kani_queries::QueryDb;
+use rustc_hir::{def::DefKind, def_id::DefId, def_id::LOCAL_CRATE};
 use rustc_middle::mir::mono::MonoItem;
+use rustc_middle::mir::write_mir_pretty;
 use rustc_middle::span_bug;
 use rustc_middle::ty::layout::{
     FnAbiError, FnAbiOf, FnAbiOfHelpers, FnAbiRequest, HasParamEnv, HasTyCtxt, LayoutError,
     LayoutOfHelpers, TyAndLayout,
 };
-use rustc_middle::ty::{self, Instance, Ty, TyCtxt};
+use rustc_middle::ty::{self, Instance, InstanceDef, Ty, TyCtxt};
+use rustc_session::config::OutputType;
 use rustc_span::source_map::respan;
 use rustc_span::Span;
 use rustc_target::abi::call::FnAbi;
 use rustc_target::abi::{HasDataLayout, TargetDataLayout};
+use std::fs::File;
+use std::io::BufWriter;
+use std::io::Write;
 
 use self::attributes::{check_attributes, check_unstable_features};
 
@@ -69,11 +71,42 @@ pub fn check_reachable_items(tcx: TyCtxt, queries: &QueryDb, items: &[MonoItem])
         let def_id = item.def_id();
         if !def_ids.contains(&def_id) {
             // Check if any unstable attribute was reached.
-            check_unstable_features(tcx, queries.get_unstable_features(), def_id);
+            check_unstable_features(tcx, &queries.unstable_features, def_id);
             def_ids.insert(def_id);
         }
     }
     tcx.sess.abort_if_errors();
+}
+
+/// Print MIR for the reachable items if the `--emit mir` option was provided to rustc.
+pub fn dump_mir_items(tcx: TyCtxt, items: &[MonoItem]) {
+    /// Convert MonoItem into a DefId.
+    /// Skip stuff that we cannot generate the MIR items.
+    fn visible_item<'tcx>(item: &MonoItem<'tcx>) -> Option<(MonoItem<'tcx>, DefId)> {
+        match item {
+            // Exclude FnShims and others that cannot be dumped.
+            MonoItem::Fn(instance) if matches!(instance.def, InstanceDef::Item(..)) => {
+                Some((*item, instance.def_id()))
+            }
+            MonoItem::Fn(..) => None,
+            MonoItem::Static(def_id) => Some((*item, *def_id)),
+            MonoItem::GlobalAsm(_) => None,
+        }
+    }
+
+    if tcx.sess.opts.output_types.contains_key(&OutputType::Mir) {
+        // Create output buffer.
+        let outputs = tcx.output_filenames(());
+        let path = outputs.output_path(OutputType::Mir).with_extension("kani.mir");
+        let out_file = File::create(&path).unwrap();
+        let mut writer = BufWriter::new(out_file);
+
+        // For each def_id, dump their MIR
+        for (item, def_id) in items.iter().filter_map(visible_item) {
+            writeln!(writer, "// Item: {item:?}").unwrap();
+            write_mir_pretty(tcx, Some(def_id), &mut writer).unwrap();
+        }
+    }
 }
 
 /// Structure that represents the source location of a definition.
@@ -102,11 +135,6 @@ impl SourceLocation {
             Err(_) => local_filename,
         };
         SourceLocation { filename, start_line, start_col, end_line, end_col }
-    }
-
-    pub fn def_id_loc(tcx: TyCtxt, def_id: DefId) -> Self {
-        let span = tcx.def_span(def_id);
-        Self::new(tcx, &span)
     }
 }
 

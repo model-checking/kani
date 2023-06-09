@@ -70,7 +70,7 @@ fn cargo_locate_project(input_args: &[OsString]) -> Result<PathBuf> {
     // Try parsing our command line arguments as they presently look, to see if a "manifest-path" has been given.
     let current_args = crate::args::CargoKaniArgs::parse_from(input_args);
 
-    if let Some(path) = current_args.common_opts.cargo.manifest_path {
+    if let Some(path) = current_args.verify_opts.cargo.manifest_path {
         Ok(path)
     } else {
         let cmd =

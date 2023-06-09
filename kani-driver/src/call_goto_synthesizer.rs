@@ -21,7 +21,7 @@ impl KaniSession {
         output: &Path,
         harness_metadata: &HarnessMetadata,
     ) -> Result<()> {
-        if !self.args.quiet {
+        if !self.args.common_args.quiet {
             println!("Running loop contract synthesizer.");
             warning("This process may not terminate.");
             warning(

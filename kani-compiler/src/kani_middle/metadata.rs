@@ -8,7 +8,7 @@ use std::path::Path;
 use crate::kani_middle::attributes::test_harness_name;
 use kani_metadata::{ArtifactType, HarnessAttributes, HarnessMetadata};
 use rustc_hir::def_id::DefId;
-use rustc_middle::ty::{Instance, TyCtxt};
+use rustc_middle::ty::{Instance, InstanceDef, TyCtxt};
 
 use super::{attributes::extract_harness_attributes, SourceLocation};
 
@@ -24,7 +24,8 @@ pub fn gen_proof_metadata(tcx: TyCtxt, def_id: DefId, base_name: &Path) -> Harne
         tcx.symbol_name(Instance::mono(tcx, def_id)).to_string()
     };
 
-    let loc = SourceLocation::def_id_loc(tcx, def_id);
+    let body = tcx.instance_mir(InstanceDef::Item(def_id));
+    let loc = SourceLocation::new(tcx, &body.span);
     let file_stem = format!("{}_{mangled_name}", base_name.file_stem().unwrap().to_str().unwrap());
     let model_file = base_name.with_file_name(file_stem).with_extension(ArtifactType::SymTabGoto);
 
@@ -51,7 +52,8 @@ pub fn gen_test_metadata<'tcx>(
 ) -> HarnessMetadata {
     let pretty_name = test_harness_name(tcx, test_desc);
     let mangled_name = tcx.symbol_name(test_fn).to_string();
-    let loc = SourceLocation::def_id_loc(tcx, test_desc);
+    let body = tcx.instance_mir(InstanceDef::Item(test_desc));
+    let loc = SourceLocation::new(tcx, &body.span);
     let file_stem = format!("{}_{mangled_name}", base_name.file_stem().unwrap().to_str().unwrap());
     let model_file = base_name.with_file_name(file_stem).with_extension(ArtifactType::SymTabGoto);
 
