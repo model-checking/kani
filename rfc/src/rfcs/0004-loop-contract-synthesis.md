@@ -62,7 +62,7 @@ Therefore it has the following limitations:
 1. the search space is not complete, so it may fail to find a working candidate. The current search space consists of only conjunctions of linear inequalities built from the variables in the loop, which is not expressive enough to capture all loop invariants.
 For example, the loop invariant `a[i] == 0` contains an array access and cannot be captured by the current search space.
 However, we can easily extend the search space to include more complex expressions with the cost of an exponential increase of the running time of the synthesizer.
-2. the synthesizer suffers from the same limitation as the loop contract verification in CBMC. For example, it does not support unbounded quantifiers, or dynamic allocations in the loop body. 
+2. the synthesizer suffers from the same limitation as the loop contract verification in CBMC. For example, it does not support unbounded quantifiers, or dynamic allocations in the loop body.
 
 ## User Experience
 
@@ -144,6 +144,10 @@ The candidate `y == 1` is not inductive.
 The synthesizer rejects all candidates until it finds the candidate `1 <= y + 1`, which can be simplified to `y >= 0`.
 `y >= 0` is an inductive invariant that can be used to prove the post-condition.
 So the synthesizer will return `y >= 0` and apply it to the goto model to get `main_synthesized.goto`.
+
+For assign clauses, the synthesizer will first use alias analysis to determine an initial set of assign targets.
+During the following iteration, if any assignable-check is violated, the synthesizer will extract the assign target from the violated check.
+
 Then Kani will call `cbmc` on `main_synthesized.goto` to verify the program with the synthesized loop contracts. 
 
 ## Rationale and alternatives
