@@ -1,0 +1,8 @@
+[TEST] Generate test...
+Checking harness verify::try_nz_u8
+
+WARNING: Failed to rustfmt modified source code
+
+[TEST] Run test...
+test result: ok. 2 passed; 0 failed;
+

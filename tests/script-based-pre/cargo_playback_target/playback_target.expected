@@ -1,0 +1,14 @@
+[TEST] Run all...\
+test verify::kani_concrete_playback_cover_bar_1234\
+test verify::kani_concrete_playback_cover_foo_1234\
+test verify::kani_concrete_playback_cover_lib_1234
+
+[TEST] Run lib...\
+test verify::kani_concrete_playback_cover_lib_1234
+
+[TEST] Run bins...\
+test verify::kani_concrete_playback_cover_bar_1234\
+test verify::kani_concrete_playback_cover_foo_1234
+
+[TEST] Only foo tests...\
+test verify::kani_concrete_playback_cover_foo_1234

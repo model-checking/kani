@@ -55,7 +55,7 @@ impl KaniSession {
         self.run_suppress(cmd)?;
 
         // Let the user know
-        if !self.args.quiet {
+        if !self.args.common_args.quiet {
             println!("Report written to: {}/html/index.html", report_dir.to_string_lossy());
             warning("coverage information has been disabled for `--visualize` reports");
             // If using VS Code with Remote-SSH, suggest an option for remote viewing:

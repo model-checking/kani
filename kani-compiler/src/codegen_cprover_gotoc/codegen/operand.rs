@@ -130,8 +130,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             ConstValue::ByRef { alloc, offset } => {
                 debug!("ConstValue by ref {:?} {:?}", alloc, offset);
-                let mem_var = self
-                    .codegen_allocation_auto_imm_name(alloc.inner(), |tcx| tcx.next_global_name());
+                let mem_var = self.codegen_const_allocation(alloc.inner(), None);
                 mem_var
                     .cast_to(Type::unsigned_int(8).to_pointer())
                     .plus(Expr::int_constant(offset.bytes(), Type::unsigned_int(64)))
@@ -165,8 +164,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     // These seem to always start at 0
                     assert_eq!(start, 0);
                     // Create a static variable that holds its value
-                    let mem_var =
-                        self.codegen_allocation_auto_imm_name(data, |tcx| tcx.next_global_name());
+                    let mem_var = self.codegen_const_allocation(data, None);
 
                     // Extract identifier for static variable.
                     // codegen_allocation_auto_imm_name returns the *address* of
@@ -407,10 +405,11 @@ impl<'tcx> GotocCtx<'tcx> {
                 expr_int.transmute_to(overall_t, &self.symbol_table)
             }
             (_, ty::Array(_, _)) => {
+                let typ = self.codegen_ty(ty);
                 // we must have zero size array here
                 Expr::struct_expr_from_values(
-                    self.codegen_ty(ty),
-                    vec![Expr::array_expr(self.codegen_ty_raw_array(ty), vec![])],
+                    typ.clone(),
+                    vec![Expr::array_expr(typ, vec![])],
                     &self.symbol_table,
                 )
             }
@@ -464,7 +463,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // crates do not conflict. The name alone is insufficient because Rust
                 // allows different versions of the same crate to be used.
                 let name = format!("{}::{alloc_id:?}", self.full_crate_name());
-                self.codegen_allocation(alloc.inner(), |_| name.clone(), Some(name.clone()))
+                self.codegen_const_allocation(alloc.inner(), Some(name))
             }
             GlobalAlloc::VTable(ty, trait_ref) => {
                 // This is similar to GlobalAlloc::Memory but the type is opaque to rust and it
@@ -472,7 +471,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let alloc_id = self.tcx.vtable_allocation((ty, trait_ref));
                 let alloc = self.tcx.global_alloc(alloc_id).unwrap_memory();
                 let name = format!("{}::{alloc_id:?}", self.full_crate_name());
-                self.codegen_allocation(alloc.inner(), |_| name.clone(), Some(name.clone()))
+                self.codegen_const_allocation(alloc.inner(), Some(name))
             }
         };
         assert!(res_t.is_pointer() || res_t.is_transparent_type(&self.symbol_table));
@@ -530,77 +529,36 @@ impl<'tcx> GotocCtx<'tcx> {
         sym.clone().to_expr().address_of()
     }
 
-    /// `codegen_allocation` but without an `imm_name`
+    /// Generate an expression that represents the address for a constant allocation.
     ///
-    /// TODO: This could use some refactoring. This function is only ever invoked as:
-    /// `self.codegen_allocation_auto_imm_name(alloc, |tcx| tcx.next_global_name())`
-    fn codegen_allocation_auto_imm_name<F: FnOnce(&mut GotocCtx<'tcx>) -> String>(
-        &mut self,
-        alloc: &'tcx Allocation,
-        mut_name: F,
-    ) -> Expr {
-        self.codegen_allocation(alloc, mut_name, None)
-    }
-
-    /// Add a new static allocation to the symbol table (if not already present) and
-    /// generate a goto expression that points to it.
+    /// This function will only allocate a new memory location if necessary. The standard does
+    /// not offer any guarantees over the location of a constant.
     ///
-    /// This is *the* mechanism for generating (and ensuring the intialization of) a global
-    /// (often but not necessarily immutable) variable in the symbol table.
-    ///
-    /// We need to codegen allocations from two sources:
-    /// 1. `codegen_static` which supplies the initialization code for top-level statics.
-    /// 2. Constants, scattered throughout the source, which need to be initialized statically,
-    /// so those functions can reference them. (These should always be immutable.)
-    /// (These also require de-duplication.)
-    ///
-    /// TODO: This function could use some refactoring. Outside of `codegen_allocation_auto_imm_name`
-    /// above, this function is only ever invoked as:
-    /// `self.codegen_allocation(alloc, |_| name.clone(), Some(name.clone()))`
-    pub fn codegen_allocation<F: FnOnce(&mut GotocCtx<'tcx>) -> String>(
-        &mut self,
-        alloc: &'tcx Allocation,
-        mut_name: F,
-        imm_name: Option<String>,
-    ) -> Expr {
-        debug!("codegen_allocation imm_name {:?}", imm_name);
-        let mem_var = match alloc.mutability {
-            Mutability::Mut => {
-                let name = mut_name(self);
-                self.codegen_alloc_in_memory(alloc, name.clone());
-                // here we know name must be in the symbol table
-                self.symbol_table.lookup(&name).unwrap().clone().to_expr()
-            }
-            Mutability::Not => self.codegen_immutable_allocation(alloc, imm_name),
-        };
-        mem_var.address_of()
-    }
-
-    /// Generate a goto expression for an immutable (constant) allocation.
-    ///
-    /// This function's primary purpose is to de-duplicate immutable global constants.
-    /// If it already has been codegen'd, use that.
-    /// If not, we otherwise proceed identically to the mutable case and call `codegen_alloc_in_memory`
-    fn codegen_immutable_allocation(
-        &mut self,
-        alloc: &'tcx Allocation,
-        name: Option<String>,
-    ) -> Expr {
+    /// These constants can be named constants which are declared by the user, or constant values
+    /// used scattered throughout the source
+    fn codegen_const_allocation(&mut self, alloc: &'tcx Allocation, name: Option<String>) -> Expr {
+        debug!(?name, "codegen_const_allocation");
+        assert_eq!(
+            alloc.mutability,
+            Mutability::Not,
+            "Expected constant allocation for `{name:?}`, but got a mutable instead"
+        );
         if !self.alloc_map.contains_key(&alloc) {
             let name = if let Some(name) = name { name } else { self.next_global_name() };
             self.codegen_alloc_in_memory(alloc, name);
         }
 
-        self.symbol_table.lookup(&self.alloc_map.get(&alloc).unwrap()).unwrap().to_expr()
+        let mem_place =
+            self.symbol_table.lookup(&self.alloc_map.get(&alloc).unwrap()).unwrap().to_expr();
+        mem_place.address_of()
     }
 
     /// Insert an allocation into the goto symbol table, and generate a goto function that will
     /// initialize it.
     ///
     /// This function is ultimately responsible for creating new statically initialized global variables
-    /// in our goto binaries. These may be actual (potentially mutable) globals or (more often) constants
-    /// that were encountered during code generation (that are of course immutable).
-    fn codegen_alloc_in_memory(&mut self, alloc: &'tcx Allocation, name: String) {
+    /// in our goto binaries.
+    pub fn codegen_alloc_in_memory(&mut self, alloc: &'tcx Allocation, name: String) {
         debug!("codegen_alloc_in_memory name: {}", name);
         let struct_name = &format!("{name}::struct");
 

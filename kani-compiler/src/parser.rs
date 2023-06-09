@@ -1,8 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+use crate::kani_queries::ReachabilityType;
 use clap::{builder::PossibleValuesParser, command, Arg, ArgAction, ArgMatches, Command};
-use kani_queries::ReachabilityType;
 use std::env;
 use std::str::FromStr;
 use strum::VariantNames as _;
@@ -39,9 +39,6 @@ pub const WRITE_JSON_SYMTAB: &str = "write-json-symtab";
 
 /// Option name used to select which reachability analysis to perform.
 pub const REACHABILITY: &str = "reachability";
-
-/// Option name used to specify which harness is the target.
-pub const HARNESS: &str = "harness";
 
 /// Option name used to enable stubbing.
 pub const ENABLE_STUBBING: &str = "enable-stubbing";
@@ -129,19 +126,9 @@ pub fn parser() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            // TODO: Remove this argument once stubbing works for multiple harnesses at a time.
-            // <https://github.com/model-checking/kani/issues/1841>
-            Arg::new(HARNESS)
-                .long(HARNESS)
-                .help("Selects the harness to target.")
-                .value_name("HARNESS")
-                .action(ArgAction::Append),
-        )
-        .arg(
             Arg::new(ENABLE_STUBBING)
                 .long(ENABLE_STUBBING)
                 .help("Instruct the compiler to perform stubbing.")
-                .requires(HARNESS)
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -197,8 +184,6 @@ pub fn is_kani_compiler(args: Vec<String>) -> (bool, Vec<String>) {
 
 #[cfg(test)]
 mod parser_test {
-    use clap::error::ErrorKind;
-
     use super::*;
 
     #[test]
@@ -218,15 +203,9 @@ mod parser_test {
 
     #[test]
     fn test_stubbing_flags() {
-        let args = vec!["kani-compiler", "--enable-stubbing", "--harness", "foo"];
+        let args = vec!["kani-compiler", "--enable-stubbing"];
         let matches = parser().get_matches_from(args);
         assert!(matches.get_flag("enable-stubbing"));
-        assert_eq!(matches.get_one::<String>("harness"), Some(&"foo".to_string()));
-
-        // `--enable-stubbing` cannot be called without `--harness`
-        let args = vec!["kani-compiler", "--enable-stubbing"];
-        let err = parser().try_get_matches_from(args).unwrap_err();
-        assert_eq!(err.kind(), ErrorKind::MissingRequiredArgument);
     }
 
     #[test]

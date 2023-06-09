@@ -18,11 +18,11 @@ use super::vtable_ctx::VtableCtx;
 use crate::codegen_cprover_gotoc::overrides::{fn_hooks, GotocHooks};
 use crate::codegen_cprover_gotoc::utils::full_crate_name;
 use crate::codegen_cprover_gotoc::UnsupportedConstructs;
+use crate::kani_queries::QueryDb;
 use cbmc::goto_program::{DatatypeComponent, Expr, Location, Stmt, Symbol, SymbolTable, Type};
 use cbmc::utils::aggr_tag;
 use cbmc::{InternedString, MachineModel};
 use kani_metadata::HarnessMetadata;
-use kani_queries::{QueryDb, UserInput};
 use rustc_data_structures::fx::FxHashMap;
 use rustc_middle::mir::interpret::Allocation;
 use rustc_middle::span_bug;
@@ -78,7 +78,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> GotocCtx<'tcx> {
         let fhks = fn_hooks();
         let symbol_table = SymbolTable::new(machine_model.clone());
-        let emit_vtable_restrictions = queries.get_emit_vtable_restrictions();
+        let emit_vtable_restrictions = queries.emit_vtable_restrictions;
         GotocCtx {
             tcx,
             queries,
