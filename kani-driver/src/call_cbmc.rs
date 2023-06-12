@@ -73,17 +73,19 @@ impl GlobalCondition {
 
     pub fn reason(&self) -> &str {
         match &self {
-            Self::ShouldPanic { status, .. } =>
-                match *status {
-                    FailedProperties::None => "encountered no panics, but at least one was expected",
-                    FailedProperties::PanicsOnly => "encountered one or more panics as expected",
-                    FailedProperties::Other => "encountered failures other than panics, which were unexpected",
+            Self::ShouldPanic { status, .. } => match *status {
+                FailedProperties::None => "encountered no panics, but at least one was expected",
+                FailedProperties::PanicsOnly => "encountered one or more panics as expected",
+                FailedProperties::Other => {
+                    "encountered failures other than panics, which were unexpected"
                 }
-            Self::FailUncoverable { status, .. } =>
-                match *status {
-                    CoversStatus::AllSatisfied => "all cover statements were satisfied as expected",
-                    CoversStatus::Other => "encountered one or more cover statements which were not satisfied",
+            },
+            Self::FailUncoverable { status, .. } => match *status {
+                CoversStatus::AllSatisfied => "all cover statements were satisfied as expected",
+                CoversStatus::Other => {
+                    "encountered one or more cover statements which were not satisfied"
                 }
+            },
         }
     }
 }
