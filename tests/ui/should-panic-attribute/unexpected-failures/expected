@@ -2,8 +2,11 @@ undefined-shift\
 Status: FAILURE\
 Description: "shift distance too large"
 
+GLOBAL CONDITIONS:\
+- should_panic: FAILURE
+
 Failed Checks: panicked on the `1` arm!
 Failed Checks: panicked on the `0` arm!
 Failed Checks: shift distance too large
 
-VERIFICATION:- FAILED (encountered failures other than panics, which were unexpected)
+VERIFICATION:- FAILED
