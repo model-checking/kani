@@ -338,7 +338,7 @@ pub fn format_result(
                     global_condition_failures = true;
                     CheckStatus::Failure
                 };
-                result_str.push_str(&format!("- {}: {}\n", cond.name(), cond_status));
+                result_str.push_str(&format!(" - {}: {} ({})\n", cond.name(), cond_status, cond.reason()));
             }
         }
     }
