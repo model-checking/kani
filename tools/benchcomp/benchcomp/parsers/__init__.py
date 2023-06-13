@@ -53,7 +53,7 @@ class _ModuleParser:
             logging.error(
                 "Parser '%s' in directory %s failed: %s",
                 self.parser_mod_name, str(root_directory), str(exe))
-            return _empty_parser_result()
+            return get_empty_parser_result()
 
 
 
@@ -74,12 +74,12 @@ class _CommandParser:
             logging.warning(
                 "Invocation of parser '%s' in directory %s exited with code %d",
                 self.shell_cmd, str(root_directory), exc.returncode)
-            return _empty_parser_result()
+            return get_empty_parser_result()
         except (OSError, subprocess.SubprocessError) as exe:
             logging.error(
                 "Invocation of parser '%s' in directory %s failed: %s",
                 self.shell_cmd, str(root_directory), str(exe))
-            return _empty_parser_result()
+            return get_empty_parser_result()
 
         try:
             return yaml.safe_load(out)
@@ -87,11 +87,11 @@ class _CommandParser:
             logging.error(
                 "Parser '%s' in directory %s printed invalid YAML:<%s>",
                 self.shell_cmd, str(root_directory), out)
-            return _empty_parser_result()
+            return get_empty_parser_result()
 
 
 
-def _empty_parser_result():
+def get_empty_parser_result():
     return {
         "benchmarks": {},
         "metrics": {},
