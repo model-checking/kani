@@ -10,9 +10,13 @@
 # returns the result of the run (by parsing output files in the directory etc).
 
 
+import dataclasses
+import subprocess
 import logging
 import importlib
 import sys
+
+import yaml
 
 
 def get_parser(parser_config):
@@ -49,6 +53,40 @@ class _ModuleParser:
             logging.error(
                 "Parser '%s' in directory %s failed: %s",
                 self.parser_mod_name, str(root_directory), str(exe))
+            return _empty_parser_result()
+
+
+
+@dataclasses.dataclass
+class _CommandParser:
+    """A parser that is a command that prints the parse result to stdout"""
+
+    shell_cmd: str
+
+
+    def __call__(self, root_directory):
+        try:
+            with subprocess.Popen(
+                    self.shell_cmd, shell=True, text=True,
+                    stdout=subprocess.PIPE, cwd=root_directory) as proc:
+                out, _ = proc.communicate(timeout=120)
+        except subprocess.CalledProcessError as exc:
+            logging.warning(
+                "Invocation of parser '%s' in directory %s exited with code %d",
+                self.shell_cmd, str(root_directory), exc.returncode)
+            return _empty_parser_result()
+        except (OSError, subprocess.SubprocessError) as exe:
+            logging.error(
+                "Invocation of parser '%s' in directory %s failed: %s",
+                self.shell_cmd, str(root_directory), str(exe))
+            return _empty_parser_result()
+
+        try:
+            return yaml.safe_load(out)
+        except yaml.YAMLError:
+            logging.error(
+                "Parser '%s' in directory %s printed invalid YAML:<%s>",
+                self.shell_cmd, str(root_directory), out)
             return _empty_parser_result()
 
 
