@@ -145,7 +145,9 @@ impl BoogieCodegenBackend {
                 for item in &items {
                     match *item {
                         MonoItem::Fn(instance) => {
-                            bcx.declare_function(instance);
+                            if let Some(procedure) = bcx.codegen_function(instance) {
+                                bcx.add_procedure(procedure);
+                            }
                         }
                         MonoItem::Static(_def_id) => {}
                         MonoItem::GlobalAsm(_) => {} // Ignore this. We have already warned about it.
@@ -163,6 +165,15 @@ impl BoogieCodegenBackend {
             },
             "codegen",
         );
+
+        if !tcx.sess.opts.unstable_opts.no_codegen && tcx.sess.opts.output_types.should_codegen() {
+            let mut pb = boogie_file.to_path_buf();
+            pb.set_extension("bpl");
+            debug!("Writing Boogie file to {}", pb.display());
+            let file = File::create(&pb).unwrap();
+            let mut writer = BufWriter::new(file);
+            bcx.write(&mut writer).unwrap();
+        }
 
         (bcx, items)
     }
