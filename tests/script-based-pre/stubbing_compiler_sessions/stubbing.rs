@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
 // Check that Kani handle different sets of stubbing correctly.
+// I.e., not correctly replacing the stubs will cause a harness to fail.
 
 fn identity(i: i8) -> i8 {
     i

@@ -168,7 +168,7 @@ impl KaniCompiler {
                     unreachable!("This stage should always run in the same session as Init");
                 }
                 CompilationStage::CodegenWithStubs { target_harnesses, all_harnesses, .. } => {
-                    assert!(!target_harnesses.is_empty());
+                    assert!(!target_harnesses.is_empty(), "expected at least one target harness");
                     let target_harness = &target_harnesses[0];
                     let extra_arg =
                         stubbing::mk_rustc_arg(&all_harnesses[&target_harness].stub_map);
@@ -196,7 +196,7 @@ impl KaniCompiler {
             CompilationStage::CodegenNoStubs { next_harnesses, all_harnesses, .. }
             | CompilationStage::CodegenWithStubs { next_harnesses, all_harnesses, .. } => {
                 if let Some(target_harnesses) = next_harnesses.pop() {
-                    assert!(!target_harnesses.is_empty());
+                    assert!(!target_harnesses.is_empty(), "expected at least one target harness");
                     CompilationStage::CodegenWithStubs {
                         target_harnesses,
                         next_harnesses: mem::take(next_harnesses),

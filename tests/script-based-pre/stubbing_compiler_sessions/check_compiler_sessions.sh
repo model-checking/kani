@@ -16,8 +16,10 @@ cat $log_file
 echo "----------------------------"
 
 # We print the reachability analysis results once for each session.
-# Once we unify the stats per Kani compiler run, we should include number of
-# sessions to the result.
+# This is the only reliable way to get the number of sessions from the compiler.
+# The other option would be to use debug comments.
+# Ideally, the compiler should only print one set of statistics at the end of its run.
+# In that case, we should include number of sessions to those stats.
 runs=$(/usr/bin/env grep -c "Reachability Analysis Result" ${log_file})
 echo "Rust compiler sessions: ${runs}"
 
