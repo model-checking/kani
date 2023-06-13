@@ -116,4 +116,6 @@ if __name__ == "__main__":
         result = main(os.getcwd())
         print(yaml.dump(result, default_flow_style=False))
     except BaseException:
-        print(benchcomp.parsers.get_empty_parser_result())
+        print(yaml.dump(
+            benchcomp.parsers.get_empty_parser_result(),
+            default_flow_style=False))
