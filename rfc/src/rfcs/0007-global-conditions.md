@@ -67,7 +67,7 @@ However, we may consider adding a new subsection `Global conditions` to the `Ref
 ## Detailed Design
 
 The only component to be modified is `kani-driver` since that's where verification results are built and determined.
-But given the growing complexity of `kani-driver`, we should consider moving the logic related to global conditions onto a new crate.
+But we should consider moving this logic into another crate.
 
 We don't need new dependencies.
 The corner cases will depend on the specific global conditions to be implemented.
@@ -77,9 +77,6 @@ The corner cases will depend on the specific global conditions to be implemented
 As mentioned earlier, we're proposing this change to help users understand global conditions and how they're determined.
 In many cases, global conditions empower users to write harnesses which weren't possible to write before.
 As an example, the `#[kani::should_panic]` attribute allowed users to write harnesses expecting panic-related failures.
-
-On the other hand, this proposal will add a significant amount of code to `kani-driver`.
-It's possible to move some code into another crate, but even then some code will be added in `kani-driver`.
 
 Also, we don't really know if more global conditions will be requested in the future.
 We may consider discarding this proposal and waiting for the next feature that can be implemented as a global condition to be requested.
