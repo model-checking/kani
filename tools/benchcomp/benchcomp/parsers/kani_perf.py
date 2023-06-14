@@ -2,9 +2,14 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
 
+import os
 import pathlib
-import textwrap
 import re
+import textwrap
+
+import yaml
+
+import benchcomp.parsers
 
 
 def get_description():
@@ -107,3 +112,13 @@ def main(root_dir):
         "metrics": get_metrics(),
         "benchmarks": benchmarks,
     }
+
+
+if __name__ == "__main__":
+    try:
+        result = main(os.getcwd())
+        print(yaml.dump(result, default_flow_style=False))
+    except BaseException:
+        print(yaml.dump(
+            benchcomp.parsers.get_empty_parser_result(),
+            default_flow_style=False))
