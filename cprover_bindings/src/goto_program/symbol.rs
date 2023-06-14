@@ -13,6 +13,7 @@ pub struct Symbol {
     pub location: Location,
     pub typ: Type,
     pub value: SymbolValues,
+    pub contract: Option<Contract>,
 
     /// Optional debugging information
 
@@ -42,6 +43,23 @@ pub struct Symbol {
     pub is_thread_local: bool,
     pub is_volatile: bool,
     pub is_weak: bool,
+}
+
+#[derive(Clone, Debug)]
+pub struct Contract {
+    pub(crate) requires: Option<Box<Expr>>,
+    pub(crate) ensures: Option<Box<Expr>>,
+    pub(crate) assigns: Option<Box<Expr>>,
+}
+
+impl Contract {
+    pub fn new(requires: Option<Expr>, ensures: Option<Expr>, assigns: Option<Expr>) -> Self {
+        Self {
+            requires: requires.map(Box::new),
+            ensures: ensures.map(Box::new),
+            assigns: assigns.map(Box::new),
+        }
+    }
 }
 
 /// Currently, only C is understood by CBMC.
@@ -84,6 +102,7 @@ impl Symbol {
             base_name,
             pretty_name,
 
+            contract: None,
             module: None,
             mode: SymbolModes::C,
             // global properties
@@ -105,6 +124,11 @@ impl Symbol {
             is_volatile: false,
             is_weak: false,
         }
+    }
+
+    pub fn with_contract(mut self, contract: Contract) -> Self {
+        assert!(self.contract.replace(contract).is_none());
+        self
     }
 
     /// The symbol that defines the type of the struct or union.

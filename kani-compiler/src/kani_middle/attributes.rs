@@ -5,7 +5,10 @@
 use std::collections::BTreeMap;
 
 use kani_metadata::{CbmcSolver, HarnessAttributes, Stub};
-use rustc_ast::{attr, AttrKind, Attribute, LitKind, MetaItem, MetaItemKind, NestedMetaItem};
+use rustc_ast::{
+    attr, AttrArgs, AttrArgsEq, AttrKind, Attribute, LitKind, MetaItem, MetaItemKind,
+    NestedMetaItem,
+};
 use rustc_errors::ErrorGuaranteed;
 use rustc_hir::{def::DefKind, def_id::DefId};
 use rustc_middle::ty::{Instance, TyCtxt, TyKind};
@@ -27,6 +30,8 @@ enum KaniAttributeKind {
     /// Attribute used to mark unstable APIs.
     Unstable,
     Unwind,
+    Requires,
+    Ensures,
 }
 
 impl KaniAttributeKind {
@@ -38,7 +43,9 @@ impl KaniAttributeKind {
             | KaniAttributeKind::Solver
             | KaniAttributeKind::Stub
             | KaniAttributeKind::Unwind => true,
-            KaniAttributeKind::Unstable => false,
+            KaniAttributeKind::Unstable
+            | KaniAttributeKind::Ensures
+            | KaniAttributeKind::Requires => false,
         }
     }
 }
@@ -117,6 +124,9 @@ pub fn extract_harness_attributes(tcx: TyCtxt, def_id: DefId) -> Option<HarnessA
                         // Internal attribute which shouldn't exist here.
                         unreachable!()
                     }
+                    KaniAttributeKind::Ensures | KaniAttributeKind::Requires => {
+                        todo!("Contract attributes are not supported on proofs (yet)")
+                    }
                 };
                 harness
             },
@@ -124,6 +134,37 @@ pub fn extract_harness_attributes(tcx: TyCtxt, def_id: DefId) -> Option<HarnessA
     } else {
         None
     }
+}
+
+pub fn extract_contract(tcx: TyCtxt, def_id: DefId) -> super::contracts::FnContract {
+    use rustc_ast::ExprKind;
+    use rustc_hir::def::Res;
+
+    let crate_items = tcx.module_children(tcx.parent(def_id));
+    let parse_and_resolve = |attr: &Vec<&Attribute>| match attr.as_slice() {
+        [one] => match &one.get_normal_item().args {
+            AttrArgs::Eq(_, it) => {
+                let sym = match it {
+                    AttrArgsEq::Ast(expr) => match expr.kind {
+                        ExprKind::Lit(tok) => LitKind::from_token_lit(tok).unwrap().str(),
+                        _ => unreachable!(),
+                    },
+                    AttrArgsEq::Hir(lit) => lit.kind.str(),
+                }
+                .unwrap();
+                match crate_items.iter().find(|c| c.ident.name == sym).unwrap().res {
+                    Res::Def(_, id) => id,
+                    _ => unreachable!(),
+                }
+            }
+            _ => unreachable!(),
+        },
+        _ => todo!("Multiple requires/enusres clauses are not yet supported"),
+    };
+    let attributes = extract_kani_attributes(tcx, def_id);
+    let requires = attributes.get(&KaniAttributeKind::Requires).map(parse_and_resolve);
+    let ensures = attributes.get(&KaniAttributeKind::Ensures).map(parse_and_resolve);
+    super::contracts::FnContract::new(requires, ensures, None)
 }
 
 /// Check that any unstable API has been enabled. Otherwise, emit an error.

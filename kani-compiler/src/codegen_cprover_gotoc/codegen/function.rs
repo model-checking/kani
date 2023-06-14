@@ -4,7 +4,8 @@
 //! This file contains functions related to codegenning MIR functions into gotoc
 
 use crate::codegen_cprover_gotoc::GotocCtx;
-use cbmc::goto_program::{Expr, Stmt, Symbol};
+use crate::kani_middle::contracts::GFnContract;
+use cbmc::goto_program::{Contract, Expr, Stmt, Symbol};
 use cbmc::InternString;
 use rustc_middle::mir::traversal::reverse_postorder;
 use rustc_middle::mir::{Body, HasLocalDecls, Local};
@@ -222,20 +223,57 @@ impl<'tcx> GotocCtx<'tcx> {
         );
     }
 
-    pub fn declare_function(&mut self, instance: Instance<'tcx>) {
+    fn as_goto_contract(
+        &mut self,
+        annotated_function: Instance<'tcx>,
+        fn_contract: &GFnContract<Instance<'tcx>>,
+    ) -> Contract {
+        use rustc_middle::mir;
+        let mut handle_contract_expr = |instance, add_return| {
+            let func_expr = self.codegen_func_expr(instance, None);
+            let annotated_function_args =
+                self.tcx.fn_sig(annotated_function.def_id()).skip_binder().inputs().skip_binder();
+            let mir_arguments: Vec<_> =
+                std::iter::successors(Some(mir::Local::from_usize(1)), |i| Some(*i + 1))
+                    .map(|l| mir::Operand::Copy(l.into()))
+                    .take(annotated_function_args.len())
+                    .collect();
+            let arguments = self.codegen_funcall_args(&mir_arguments, true);
+            if add_return {
+                todo!();
+            }
+            func_expr.call(arguments)
+        };
+
+        let requires = fn_contract.requires().map(|c| handle_contract_expr(c, false));
+        let ensures = fn_contract.ensures().map(|c| handle_contract_expr(c, true));
+        Contract::new(requires, ensures, None)
+    }
+
+    pub fn declare_function(
+        &mut self,
+        instance: Instance<'tcx>,
+        contract: &Option<GFnContract<Instance<'tcx>>>,
+    ) {
         debug!("declaring {}; {:?}", instance, instance);
         self.set_current_fn(instance);
         debug!(krate = self.current_fn().krate().as_str());
         debug!(is_std = self.current_fn().is_std());
+        let goto_contract =
+            contract.as_ref().map(|contract| self.as_goto_contract(instance, contract));
         self.ensure(&self.current_fn().name(), |ctx, fname| {
             let mir = ctx.current_fn().mir();
-            Symbol::function(
+            let mut sym = Symbol::function(
                 fname,
                 ctx.fn_typ(),
                 None,
                 ctx.current_fn().readable_name(),
                 ctx.codegen_span(&mir.span),
-            )
+            );
+            if let Some(contract) = goto_contract {
+                sym = sym.with_contract(contract);
+            }
+            sym
         });
         self.reset_current_fn();
     }

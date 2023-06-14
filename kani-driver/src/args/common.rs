@@ -42,6 +42,8 @@ pub enum UnstableFeatures {
     CFfi,
     /// Enable concrete playback flow.
     ConcretePlayback,
+    /// Enable function contracts
+    Contracts,
 }
 
 impl ValidateArgs for CommonArgs {

@@ -5,6 +5,7 @@
 use super::super::goto_program;
 use super::super::MachineModel;
 use super::{Irep, IrepId};
+use crate::goto_program::Contract;
 use crate::linear_map;
 use goto_program::{
     BinaryOperator, CIntType, DatatypeComponent, Expr, ExprValue, Location, Parameter,
@@ -501,8 +502,20 @@ impl ToIrep for SwitchCase {
 
 impl goto_program::Symbol {
     pub fn to_irep(&self, mm: &MachineModel) -> super::Symbol {
+        let mut typ = self.typ.to_irep(mm);
+        if let Some(Contract { requires, ensures, assigns }) = &self.contract {
+            if let Some(requires) = requires {
+                typ = typ.with_named_sub(IrepId::CSpecRequires, requires.to_irep(mm));
+            }
+            if let Some(ensures) = ensures {
+                typ = typ.with_named_sub(IrepId::CSpecEnsures, ensures.to_irep(mm));
+            }
+            if let Some(assigns) = assigns {
+                typ = typ.with_named_sub(IrepId::CSpecAssigns, assigns.to_irep(mm));
+            }
+        }
         super::Symbol {
-            typ: self.typ.to_irep(mm),
+            typ,
             value: match &self.value {
                 SymbolValues::Expr(e) => e.to_irep(mm),
                 SymbolValues::Stmt(s) => s.to_irep(mm),

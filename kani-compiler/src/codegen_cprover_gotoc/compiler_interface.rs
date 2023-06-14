@@ -85,10 +85,11 @@ impl GotocCodegenBackend {
         symtab_goto: &Path,
         machine_model: &MachineModel,
     ) -> (GotocCtx<'tcx>, Vec<MonoItem<'tcx>>) {
-        let items = with_timer(
+        let items_with_contracts = with_timer(
             || collect_reachable_items(tcx, starting_items),
             "codegen reachability analysis",
         );
+        let items: Vec<_> = items_with_contracts.iter().map(|i| i.0).collect();
         dump_mir_items(tcx, &items);
 
         // Follow rustc naming convention (cx is abbrev for context).
@@ -99,11 +100,11 @@ impl GotocCodegenBackend {
         with_timer(
             || {
                 // we first declare all items
-                for item in &items {
+                for (item, contract) in &items_with_contracts {
                     match *item {
                         MonoItem::Fn(instance) => {
                             gcx.call_with_panic_debug_info(
-                                |ctx| ctx.declare_function(instance),
+                                |ctx| ctx.declare_function(instance, contract),
                                 format!(
                                     "declare_function: {}",
                                     gcx.readable_instance_name(instance)

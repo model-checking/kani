@@ -89,16 +89,30 @@ pub fn derive_arbitrary(item: TokenStream) -> TokenStream {
     derive::expand_derive_arbitrary(item)
 }
 
+#[proc_macro_attribute]
+pub fn requires(attr: TokenStream, item: TokenStream) -> TokenStream {
+    attr_impl::requires(attr, item)
+}
+
+#[proc_macro_attribute]
+pub fn ensures(attr: TokenStream, item: TokenStream) -> TokenStream {
+    attr_impl::ensures(attr, item)
+}
+
 /// This module implements Kani attributes in a way that only Kani's compiler can understand.
 /// This code should only be activated when pre-building Kani's sysroot.
 #[cfg(kani_sysroot)]
 mod sysroot {
+
     use super::*;
 
     use {
         quote::{format_ident, quote},
         syn::{parse_macro_input, ItemFn},
     };
+
+    use proc_macro2::Ident;
+    use syn::Signature;
 
     /// Annotate the harness with a #[kanitool::<name>] with optional arguments.
     macro_rules! kani_attribute {
@@ -184,6 +198,52 @@ mod sysroot {
         }
     }
 
+    fn generate_identifier(s: &str) -> Ident {
+        Ident::new(s, proc_macro2::Span::mixed_site())
+    }
+
+    macro_rules! requires_ensures {
+        ($name: ident, $append_return:literal) => {
+            pub fn $name(attr: TokenStream, item: TokenStream) -> TokenStream {
+                let attr = proc_macro2::TokenStream::from(attr);
+                let item_fn @ ItemFn { sig, .. } = &parse_macro_input!(item as ItemFn);
+                let Signature { ident, generics, inputs, output , .. } = sig;
+
+
+                let gen_fn_name = generate_identifier(&format!(concat!("{}_", stringify!(name)), ident));
+                let attribute = format_ident!("{}", stringify!($name));
+
+                let kani_attributes = quote!(
+                    #[allow(dead_code)]
+                    #[kanitool::#attribute = #gen_fn_name]
+                );
+
+                assert!(
+                    generics.params.is_empty() && generics.where_clause.is_none(),
+                    "Generics are not yet implemented",
+                );
+
+                let gen_fn_inputs = if $append_return {
+                    quote!(#inputs, result: #output)
+                } else {
+                    quote!(#inputs)
+                };
+
+                quote!(
+                    fn #gen_fn_name(#gen_fn_inputs) -> bool {
+                        #attr
+                    }
+
+                    #kani_attributes
+                    #item_fn
+                ).into()
+            }
+        }
+    }
+
+    requires_ensures!(requires, false);
+    requires_ensures!(ensures, true);
+
     kani_attribute!(should_panic, no_args);
     kani_attribute!(solver);
     kani_attribute!(stub);
@@ -221,4 +281,6 @@ mod regular {
     no_op!(stub);
     no_op!(unstable);
     no_op!(unwind);
+    no_op!(requires);
+    no_op!(ensures);
 }
