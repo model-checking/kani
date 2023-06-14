@@ -20,7 +20,7 @@ echo "----------------------------"
 # The other option would be to use debug comments.
 # Ideally, the compiler should only print one set of statistics at the end of its run.
 # In that case, we should include number of sessions to those stats.
-runs=$(/usr/bin/env grep -c "Reachability Analysis Result" ${log_file})
+runs=$(grep -c "Reachability Analysis Result" ${log_file})
 echo "Rust compiler sessions: ${runs}"
 
 # Cleanup
