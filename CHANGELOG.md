@@ -15,7 +15,7 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 * Upgrade rust toolchain to 2023-04-30 by @zhassan-aws in https://github.com/model-checking/kani/pull/2456
 * De-duplicate same input injections for the same harness. by @YoshikiTakashima in https://github.com/model-checking/kani/pull/2513
 
-**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.29.0...test
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.29.0...kani-0.30.0
 
 
 ## [0.29.0]
