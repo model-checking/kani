@@ -259,39 +259,6 @@ impl<'tcx> GotocHook<'tcx> for RustAlloc {
     }
 }
 
-struct SliceFromRawPart;
-
-impl<'tcx> GotocHook<'tcx> for SliceFromRawPart {
-    fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-        let name = with_no_trimmed_paths!(tcx.def_path_str(instance.def_id()));
-        name == "core::ptr::slice_from_raw_parts"
-            || name == "std::ptr::slice_from_raw_parts"
-            || name == "core::ptr::slice_from_raw_parts_mut"
-            || name == "std::ptr::slice_from_raw_parts_mut"
-    }
-
-    fn handle(
-        &self,
-        tcx: &mut GotocCtx<'tcx>,
-        _instance: Instance<'tcx>,
-        mut fargs: Vec<Expr>,
-        assign_to: Place<'tcx>,
-        target: Option<BasicBlock>,
-        span: Option<Span>,
-    ) -> Stmt {
-        let loc = tcx.codegen_span_option(span);
-        let target = target.unwrap();
-        let pt = tcx.codegen_ty(tcx.place_ty(&assign_to));
-        let data = fargs.remove(0);
-        let len = fargs.remove(0);
-        let code = unwrap_or_return_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&assign_to))
-            .goto_expr
-            .assign(Expr::struct_expr_from_values(pt, vec![data, len], &tcx.symbol_table), loc)
-            .with_location(loc);
-        Stmt::block(vec![code, Stmt::goto(tcx.current_fn().find_label(&target), loc)], loc)
-    }
-}
-
 /// This hook intercepts calls to `memcmp` and skips CBMC's pointer checks if the number of bytes to be compared is zero.
 /// See issue <https://github.com/model-checking/kani/issues/1489>
 ///
@@ -367,7 +334,6 @@ pub fn fn_hooks<'tcx>() -> GotocHooks<'tcx> {
             Rc::new(Cover),
             Rc::new(Nondet),
             Rc::new(RustAlloc),
-            Rc::new(SliceFromRawPart),
             Rc::new(MemCmp),
         ],
     }
