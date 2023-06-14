@@ -59,7 +59,7 @@ VERIFICATION:- FAILURE (one or more global conditions failed)
 This last UI change will also be implemented for the terse output.
 
 **Global conditions which aren't enabled won't appear in the `GLOBAL CONDITIONS` section**.
-Their status will be computed regardless, and we may consider showing this status when the `--verbose` option is passed.
+Their status will be computed regardless[^status-computation], and we may consider showing this status when the `--verbose` option is passed.
 
 The documentation of global conditions will depend on how they're enabled, which depends on a case-by-case basis.
 However, we may consider adding a new subsection `Global conditions` to the `Reference` section that collects all of them so it's easier for users to consult all of them in one place.
@@ -87,7 +87,7 @@ We may consider discarding this proposal and waiting for the next feature that c
 ### Alternative: Global conditions as regular checks
 
 One option we've considered in the past is to enable global conditions as a regular checks.
-While it's technically doable, it doesn't feel appropriate for global conditions to reported through regular since generally a higher degree of visibility will be appreciated.
+While it's technically doable, it doesn't feel appropriate for global conditions to reported through regular checks since generally a higher degree of visibility may be appreciated.
 
 ## Open questions
 
@@ -96,3 +96,6 @@ No open questions.
 ## Future possibilities
 
 A redesign of Kani's output is likely to change the style/architecture to report global conditions.
+
+[^status-computation]: The results for global conditions would be computed during postprocessing based on the results of other checks.
+Global conditions' checks aren't part of the SAT, therefore this computation won't impact verification time.
