@@ -177,6 +177,10 @@ pub struct VerificationArgs {
     )]
     pub harnesses: Vec<String>,
 
+    /// If specified, with the fully qualified name of the harness provided, runs that specific harness and nothing more
+    #[arg(long, requires("harnesses"))]
+    pub exact: bool,
+
     /// Link external C files referenced by Rust code.
     /// This is an experimental feature and requires `-Z c-ffi` to be used
     #[arg(long, hide = true, num_args(1..))]

@@ -124,7 +124,8 @@ impl KaniSession {
         if harnesses.is_empty() {
             Ok(Vec::from(all_harnesses))
         } else {
-            let harnesses = find_proof_harnesses(harnesses, all_harnesses);
+            let harnesses: Vec<&HarnessMetadata> =
+                find_proof_harnesses(harnesses, all_harnesses, self.args.exact);
             Ok(harnesses)
         }
     }
@@ -169,18 +170,29 @@ pub fn mock_proof_harness(
 fn find_proof_harnesses<'a>(
     targets: BTreeSet<&String>,
     all_harnesses: &[&'a HarnessMetadata],
+    exact_filter: bool,
 ) -> Vec<&'a HarnessMetadata> {
     debug!(?targets, "find_proof_harness");
     let mut result = vec![];
     for md in all_harnesses.iter() {
-        // Either an exact match, or a substring match. We check the exact first since it's cheaper.
-        if targets.contains(&md.pretty_name)
-            || targets.contains(&md.get_harness_name_unqualified().to_string())
-            || targets.iter().any(|target| md.pretty_name.contains(*target))
-        {
-            result.push(*md);
+        // Check for exact match only
+        if exact_filter {
+            if targets.contains(&md.pretty_name) {
+                // if exact match found, stop searching
+                result.push(*md);
+            } else {
+                trace!(skip = md.pretty_name, "find_proof_harnesses");
+            }
         } else {
-            trace!(skip = md.pretty_name, "find_proof_harnesses");
+            // Either an exact match, or a substring match. We check the exact first since it's cheaper.
+            if targets.contains(&md.pretty_name)
+                || targets.contains(&md.get_harness_name_unqualified().to_string())
+                || targets.iter().any(|target| md.pretty_name.contains(*target))
+            {
+                result.push(*md);
+            } else {
+                trace!(skip = md.pretty_name, "find_proof_harnesses");
+            }
         }
     }
     result
@@ -191,31 +203,83 @@ mod tests {
     use super::*;
 
     #[test]
-    fn check_find_proof_harness() {
+    fn check_find_proof_harness_without_exact() {
         let harnesses = vec![
             mock_proof_harness("check_one", None, None, None),
             mock_proof_harness("module::check_two", None, None, None),
             mock_proof_harness("module::not_check_three", None, None, None),
         ];
         let ref_harnesses = harnesses.iter().collect::<Vec<_>>();
+
+        // Check with harness filtering
         assert_eq!(
-            find_proof_harnesses(BTreeSet::from([&"check_three".to_string()]), &ref_harnesses)
-                .len(),
+            find_proof_harnesses(
+                BTreeSet::from([&"check_three".to_string()]),
+                &ref_harnesses,
+                false
+            )
+            .len(),
             1
         );
         assert!(
-            find_proof_harnesses(BTreeSet::from([&"check_two".to_string()]), &ref_harnesses)
+            find_proof_harnesses(BTreeSet::from([&"check_two".to_string()]), &ref_harnesses, false)
                 .first()
                 .unwrap()
                 .mangled_name
                 == "module::check_two"
         );
         assert!(
-            find_proof_harnesses(BTreeSet::from([&"check_one".to_string()]), &ref_harnesses)
+            find_proof_harnesses(BTreeSet::from([&"check_one".to_string()]), &ref_harnesses, false)
                 .first()
                 .unwrap()
                 .mangled_name
                 == "check_one"
+        );
+
+        // Check with exact match
+        assert_eq!(
+            find_proof_harnesses(
+                BTreeSet::from([&"check_three".to_string()]),
+                &ref_harnesses,
+                true
+            )
+            .len(),
+            0
+        );
+        assert_eq!(
+            find_proof_harnesses(BTreeSet::from([&"check_two".to_string()]), &ref_harnesses, true)
+                .first()
+                .is_none(),
+            true
+        );
+        assert_eq!(
+            find_proof_harnesses(BTreeSet::from([&"check_one".to_string()]), &ref_harnesses, true)
+                .first()
+                .unwrap()
+                .mangled_name,
+            "check_one"
+        );
+        assert_ne!(
+            find_proof_harnesses(
+                BTreeSet::from([&"module::not_check_three".to_string()]),
+                &ref_harnesses,
+                true
+            )
+            .first()
+            .unwrap()
+            .mangled_name,
+            "not_check_three"
+        );
+        assert_eq!(
+            find_proof_harnesses(
+                BTreeSet::from([&"module::not_check_three".to_string()]),
+                &ref_harnesses,
+                true
+            )
+            .first()
+            .unwrap()
+            .mangled_name,
+            "module::not_check_three"
         );
     }
 }
