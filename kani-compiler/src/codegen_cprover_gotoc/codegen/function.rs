@@ -250,30 +250,34 @@ impl<'tcx> GotocCtx<'tcx> {
         Contract::new(requires, ensures, None)
     }
 
-    pub fn declare_function(
+    pub fn attach_contract(
         &mut self,
         instance: Instance<'tcx>,
-        contract: &Option<GFnContract<Instance<'tcx>>>,
+        contract: &GFnContract<Instance<'tcx>>,
     ) {
+        // This should be safe, since the contract is pretty much evaluated as
+        // though it was the first (or last) assertion in the function.
+        self.set_current_fn(instance);
+        let goto_contract = self.as_goto_contract(instance, contract);
+        let name = self.current_fn().name();
+        self.symbol_table.attach_contract(name, goto_contract);
+        self.reset_current_fn()
+    }
+
+    pub fn declare_function(&mut self, instance: Instance<'tcx>) {
         debug!("declaring {}; {:?}", instance, instance);
         self.set_current_fn(instance);
         debug!(krate = self.current_fn().krate().as_str());
         debug!(is_std = self.current_fn().is_std());
-        let goto_contract =
-            contract.as_ref().map(|contract| self.as_goto_contract(instance, contract));
         self.ensure(&self.current_fn().name(), |ctx, fname| {
             let mir = ctx.current_fn().mir();
-            let mut sym = Symbol::function(
+            Symbol::function(
                 fname,
                 ctx.fn_typ(),
                 None,
                 ctx.current_fn().readable_name(),
                 ctx.codegen_span(&mir.span),
-            );
-            if let Some(contract) = goto_contract {
-                sym = sym.with_contract(contract);
-            }
-            sym
+            )
         });
         self.reset_current_fn();
     }

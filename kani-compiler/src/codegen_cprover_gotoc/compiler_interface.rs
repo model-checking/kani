@@ -9,6 +9,7 @@ use crate::kani_middle::attributes::is_proof_harness;
 use crate::kani_middle::attributes::is_test_harness_description;
 use crate::kani_middle::check_crate_items;
 use crate::kani_middle::check_reachable_items;
+use crate::kani_middle::contracts::GFnContract;
 use crate::kani_middle::metadata::{gen_proof_metadata, gen_test_metadata};
 use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{
@@ -39,7 +40,7 @@ use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
 use rustc_middle::mir::mono::MonoItem;
 use rustc_middle::mir::write_mir_pretty;
 use rustc_middle::ty::query::Providers;
-use rustc_middle::ty::{self, InstanceDef, TyCtxt};
+use rustc_middle::ty::{self, Instance, InstanceDef, TyCtxt};
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::cstore::MetadataLoaderDyn;
 use rustc_session::output::out_filename;
@@ -84,7 +85,7 @@ impl GotocCodegenBackend {
         starting_items: &[MonoItem<'tcx>],
         symtab_goto: &Path,
         machine_model: &MachineModel,
-    ) -> (GotocCtx<'tcx>, Vec<MonoItem<'tcx>>) {
+    ) -> (GotocCtx<'tcx>, Vec<(MonoItem<'tcx>, Option<GFnContract<Instance<'tcx>>>)>) {
         let items_with_contracts = with_timer(
             || collect_reachable_items(tcx, starting_items),
             "codegen reachability analysis",
@@ -100,11 +101,11 @@ impl GotocCodegenBackend {
         with_timer(
             || {
                 // we first declare all items
-                for (item, contract) in &items_with_contracts {
+                for item in &items {
                     match *item {
                         MonoItem::Fn(instance) => {
                             gcx.call_with_panic_debug_info(
-                                |ctx| ctx.declare_function(instance, contract),
+                                |ctx| ctx.declare_function(instance),
                                 format!(
                                     "declare_function: {}",
                                     gcx.readable_instance_name(instance)
@@ -120,6 +121,18 @@ impl GotocCodegenBackend {
                             );
                         }
                         MonoItem::GlobalAsm(_) => {} // Ignore this. We have already warned about it.
+                    }
+                }
+
+                // Gets its own loop, because the functions used in the contract
+                // expressions must have been declared before
+                for (item, contract) in &items_with_contracts {
+                    if let Some(contract) = contract {
+                        let instance = match item {
+                            MonoItem::Fn(instance) => *instance,
+                            _ => unreachable!(),
+                        };
+                        gcx.attach_contract(instance, contract);
                     }
                 }
 
@@ -183,7 +196,7 @@ impl GotocCodegenBackend {
             }
         }
 
-        (gcx, items)
+        (gcx, items_with_contracts)
     }
 }
 
@@ -237,10 +250,23 @@ impl CodegenBackend for GotocCodegenBackend {
                 // Cross-crate collecting of all items that are reachable from the crate harnesses.
                 let harnesses = filter_crate_items(tcx, |_, def_id| is_proof_harness(tcx, def_id));
                 for harness in harnesses {
-                    let metadata = gen_proof_metadata(tcx, harness.def_id(), &base_filename);
+                    let mut metadata = gen_proof_metadata(tcx, harness.def_id(), &base_filename);
                     let model_path = &metadata.goto_file.as_ref().unwrap();
-                    let (gcx, items) =
+                    let (gcx, items_with_contracts) =
                         self.codegen_items(tcx, &[harness], model_path, &results.machine_model);
+                    let items = items_with_contracts
+                        .into_iter()
+                        .map(|(i, contract)| {
+                            if let Some(_) = contract {
+                                let instance = match i {
+                                    MonoItem::Fn(f) => f,
+                                    _ => unreachable!(),
+                                };
+                                metadata.contracts.push(gcx.symbol_name(instance))
+                            }
+                            i
+                        })
+                        .collect();
                     results.extend(gcx, items, Some(metadata));
                 }
             }
@@ -262,14 +288,30 @@ impl CodegenBackend for GotocCodegenBackend {
                 // We will be able to remove this once we optimize all calls to CBMC utilities.
                 // https://github.com/model-checking/kani/issues/1971
                 let model_path = base_filename.with_extension(ArtifactType::SymTabGoto);
-                let (gcx, items) =
+                let (gcx, items_with_contracts) =
                     self.codegen_items(tcx, &harnesses, &model_path, &results.machine_model);
+                let mut functions_with_contracts = vec![];
+                let items = items_with_contracts
+                    .into_iter()
+                    .map(|(i, contract)| {
+                        if let Some(_) = contract {
+                            let instance = match i {
+                                MonoItem::Fn(f) => f,
+                                _ => unreachable!(),
+                            };
+                            functions_with_contracts.push(gcx.symbol_name(instance))
+                        }
+                        i
+                    })
+                    .collect();
                 results.extend(gcx, items, None);
 
                 for (test_fn, test_desc) in harnesses.iter().zip(descriptions.iter()) {
                     let instance =
                         if let MonoItem::Fn(instance) = test_fn { instance } else { continue };
-                    let metadata = gen_test_metadata(tcx, *test_desc, *instance, &base_filename);
+                    let mut metadata =
+                        gen_test_metadata(tcx, *test_desc, *instance, &base_filename);
+                    metadata.contracts = functions_with_contracts.clone();
                     let test_model_path = &metadata.goto_file.as_ref().unwrap();
                     std::fs::copy(&model_path, &test_model_path).expect(&format!(
                         "Failed to copy {} to {}",
@@ -287,8 +329,15 @@ impl CodegenBackend for GotocCodegenBackend {
                         || entry_fn == Some(def_id)
                 });
                 let model_path = base_filename.with_extension(ArtifactType::SymTabGoto);
-                let (gcx, items) =
+                let (gcx, items_with_contracts) =
                     self.codegen_items(tcx, &local_reachable, &model_path, &results.machine_model);
+                let items = items_with_contracts
+                    .into_iter()
+                    .map(|(i, contract)| {
+                        assert!(contract.is_none());
+                        i
+                    })
+                    .collect();
                 results.extend(gcx, items, None);
             }
         }

@@ -24,6 +24,8 @@ pub struct HarnessMetadata {
     pub goto_file: Option<PathBuf>,
     /// The `#[kani::<>]` attributes added to a harness.
     pub attributes: HarnessAttributes,
+
+    pub contracts: Vec<String>,
 }
 
 /// The attributes added by the user to control how a harness is executed.

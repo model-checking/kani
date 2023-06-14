@@ -176,18 +176,30 @@ impl<'tcx> MonoItemsCollector<'tcx> {
     fn reachable_items(&mut self) {
         while let Some(to_visit) = self.queue.pop() {
             if !self.collected.contains_key(&to_visit) {
-                let def_id_contract = attributes::extract_contract(self.tcx, to_visit.def_id());
-                let instance_contract = def_id_contract.map(|def_id| {
-                    Instance::resolve(
-                        self.tcx,
-                        ParamEnv::reveal_all(),
-                        *def_id,
-                        rustc_middle::ty::List::empty(),
-                    )
-                    .unwrap()
-                    .expect("No specific instance found")
+                let opt_contract = to_visit.def_id().as_local().map(|local_def_id| {
+                    attributes::extract_contract(self.tcx, local_def_id).map(|def_id| {
+                        Instance::resolve(
+                            self.tcx,
+                            ParamEnv::reveal_all(),
+                            *def_id,
+                            rustc_middle::ty::List::empty(),
+                        )
+                        .unwrap()
+                        .expect("No specific instance found")
+                    })
                 });
-                self.collected.insert(to_visit, Some(instance_contract));
+                let visit_obligations_from_contract = if let Some(contract) = opt_contract.as_ref()
+                {
+                    [contract.requires(), contract.ensures()]
+                        .into_iter()
+                        .filter_map(Option::as_ref)
+                        .copied()
+                        .map(MonoItem::Fn)
+                        .collect()
+                } else {
+                    vec![]
+                };
+                self.collected.insert(to_visit, opt_contract);
                 let next_items = match to_visit {
                     MonoItem::Fn(instance) => self.visit_fn(instance),
                     MonoItem::Static(def_id) => self.visit_static(def_id),
@@ -200,7 +212,10 @@ impl<'tcx> MonoItemsCollector<'tcx> {
                 self.call_graph.add_edges(to_visit, &next_items);
 
                 self.queue.extend(
-                    next_items.into_iter().filter(|item| !self.collected.contains_key(item)),
+                    next_items
+                        .into_iter()
+                        .chain(visit_obligations_from_contract)
+                        .filter(|item| !self.collected.contains_key(item)),
                 );
             }
         }

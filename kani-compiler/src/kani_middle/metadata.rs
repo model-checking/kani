@@ -39,6 +39,7 @@ pub fn gen_proof_metadata(tcx: TyCtxt, def_id: DefId, base_name: &Path) -> Harne
         attributes: attributes.unwrap_or_default(),
         // TODO: This no longer needs to be an Option.
         goto_file: Some(model_file),
+        contracts: vec![],
     }
 }
 
@@ -67,5 +68,6 @@ pub fn gen_test_metadata<'tcx>(
         attributes: HarnessAttributes::default(),
         // TODO: This no longer needs to be an Option.
         goto_file: Some(model_file),
+        contracts: vec![],
     }
 }

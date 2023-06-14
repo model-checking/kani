@@ -126,9 +126,8 @@ impl Symbol {
         }
     }
 
-    pub fn with_contract(mut self, contract: Contract) -> Self {
-        assert!(self.contract.replace(contract).is_none());
-        self
+    pub fn attach_contract(&mut self, contract: Contract) {
+        assert!(self.contract.replace(contract).is_none())
     }
 
     /// The symbol that defines the type of the struct or union.

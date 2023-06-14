@@ -112,7 +112,6 @@ mod sysroot {
     };
 
     use proc_macro2::Ident;
-    use syn::Signature;
 
     /// Annotate the harness with a #[kanitool::<name>] with optional arguments.
     macro_rules! kani_attribute {
@@ -205,29 +204,45 @@ mod sysroot {
     macro_rules! requires_ensures {
         ($name: ident, $append_return:literal) => {
             pub fn $name(attr: TokenStream, item: TokenStream) -> TokenStream {
+                use syn::{FnArg, PatType, PatIdent, Pat, Signature, Token, ReturnType};
+                use proc_macro2::Span;
                 let attr = proc_macro2::TokenStream::from(attr);
                 let item_fn @ ItemFn { sig, .. } = &parse_macro_input!(item as ItemFn);
                 let Signature { ident, generics, inputs, output , .. } = sig;
 
 
-                let gen_fn_name = generate_identifier(&format!(concat!("{}_", stringify!(name)), ident));
+                let gen_fn_name = generate_identifier(&format!(concat!("{}_", stringify!($name)), ident));
                 let attribute = format_ident!("{}", stringify!($name));
-
                 let kani_attributes = quote!(
                     #[allow(dead_code)]
-                    #[kanitool::#attribute = #gen_fn_name]
+                    #[kanitool::#attribute = stringify!(#gen_fn_name)]
                 );
+
+                let mut gen_fn_inputs = inputs.clone();
+                if let Some(typ) = $append_return.then(|| match output {
+                    ReturnType::Type(_, t) => Some(t),
+                    _ => None
+                }).flatten() {
+                    gen_fn_inputs.push(
+                        FnArg::Typed(PatType {
+                            attrs: vec![],
+                            pat: Box::new(Pat::Ident(PatIdent{
+                                attrs: vec![],
+                                by_ref: None,
+                                mutability: None,
+                                ident: Ident::new("result", Span::call_site()),
+                                subpat: None,
+                            })),
+                            colon_token: Token![:](Span::call_site()),
+                            ty: typ.clone(),
+                        })
+                    );
+                }
 
                 assert!(
                     generics.params.is_empty() && generics.where_clause.is_none(),
                     "Generics are not yet implemented",
                 );
-
-                let gen_fn_inputs = if $append_return {
-                    quote!(#inputs, result: #output)
-                } else {
-                    quote!(#inputs)
-                };
 
                 quote!(
                     fn #gen_fn_name(#gen_fn_inputs) -> bool {
@@ -236,7 +251,8 @@ mod sysroot {
 
                     #kani_attributes
                     #item_fn
-                ).into()
+                )
+                .into()
             }
         }
     }

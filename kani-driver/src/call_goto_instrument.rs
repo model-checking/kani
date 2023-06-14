@@ -26,6 +26,10 @@ impl KaniSession {
         // We actually start by calling goto-cc to start the specialization:
         self.specialize_to_proof_harness(input, output, &harness.mangled_name)?;
 
+        for function in &harness.contracts {
+            self.enforce_contract(output, &function)?;
+        }
+
         let restrictions = project.get_harness_artifact(&harness, ArtifactType::VTableRestriction);
         if let Some(restrictions_path) = restrictions {
             self.apply_vtable_restrictions(&output, restrictions_path)?;
@@ -158,6 +162,15 @@ impl KaniSession {
         ];
 
         self.call_goto_instrument(args)
+    }
+
+    pub fn enforce_contract(&self, file: &Path, function: &str) -> Result<()> {
+        self.call_goto_instrument(vec![
+            "--enforce-contract".into(),
+            function.into(),
+            file.into(),
+            file.into(),
+        ])
     }
 
     /// Generate a .demangled.c file from the .c file using the `prettyName`s from the symbol table

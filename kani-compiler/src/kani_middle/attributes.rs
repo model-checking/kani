@@ -10,7 +10,10 @@ use rustc_ast::{
     NestedMetaItem,
 };
 use rustc_errors::ErrorGuaranteed;
-use rustc_hir::{def::DefKind, def_id::DefId};
+use rustc_hir::{
+    def::DefKind,
+    def_id::{DefId, LocalDefId},
+};
 use rustc_middle::ty::{Instance, TyCtxt, TyKind};
 use rustc_span::Span;
 use std::str::FromStr;
@@ -136,11 +139,14 @@ pub fn extract_harness_attributes(tcx: TyCtxt, def_id: DefId) -> Option<HarnessA
     }
 }
 
-pub fn extract_contract(tcx: TyCtxt, def_id: DefId) -> super::contracts::FnContract {
+pub fn extract_contract(tcx: TyCtxt, local_def_id: LocalDefId) -> super::contracts::FnContract {
     use rustc_ast::ExprKind;
-    use rustc_hir::def::Res;
+    let hir_map = tcx.hir();
+    let enclosing_mod = hir_map
+        .get_module(tcx.parent_module(hir_map.local_def_id_to_hir_id(local_def_id)))
+        .0
+        .item_ids;
 
-    let crate_items = tcx.module_children(tcx.parent(def_id));
     let parse_and_resolve = |attr: &Vec<&Attribute>| match attr.as_slice() {
         [one] => match &one.get_normal_item().args {
             AttrArgs::Eq(_, it) => {
@@ -152,16 +158,24 @@ pub fn extract_contract(tcx: TyCtxt, def_id: DefId) -> super::contracts::FnContr
                     AttrArgsEq::Hir(lit) => lit.kind.str(),
                 }
                 .unwrap();
-                match crate_items.iter().find(|c| c.ident.name == sym).unwrap().res {
-                    Res::Def(_, id) => id,
-                    _ => unreachable!(),
-                }
+
+                enclosing_mod
+                    .iter()
+                    .find(|c| {
+                        let item = hir_map.item(**c);
+                        item.ident.name == sym
+                    })
+                    .unwrap()
+                    .hir_id()
+                    .expect_owner()
+                    .def_id
+                    .to_def_id()
             }
             _ => unreachable!(),
         },
         _ => todo!("Multiple requires/enusres clauses are not yet supported"),
     };
-    let attributes = extract_kani_attributes(tcx, def_id);
+    let attributes = extract_kani_attributes(tcx, local_def_id.to_def_id());
     let requires = attributes.get(&KaniAttributeKind::Requires).map(parse_and_resolve);
     let ensures = attributes.get(&KaniAttributeKind::Ensures).map(parse_and_resolve);
     super::contracts::FnContract::new(requires, ensures, None)
