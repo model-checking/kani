@@ -100,10 +100,13 @@ def main(root_dir):
                     break
 
     for bench_name, bench_info in benchmarks.items():
-        n_steps = bench_info["metrics"]["number_program_steps"]
-        rm_steps = bench_info["metrics"]["removed_program_steps"]
-        bench_info["metrics"]["number_program_steps"] = n_steps - rm_steps
-        bench_info["metrics"].pop("removed_program_steps", None)
+        try:
+            n_steps = bench_info["metrics"]["number_program_steps"]
+            rm_steps = bench_info["metrics"]["removed_program_steps"]
+            bench_info["metrics"]["number_program_steps"] = n_steps - rm_steps
+            bench_info["metrics"].pop("removed_program_steps", None)
+        except KeyError:
+            pass
 
     return {
         "metrics": get_metrics(),
