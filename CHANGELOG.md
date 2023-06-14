@@ -11,9 +11,9 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 * Generate Multiple playback harnesses when multiple crashes exist in a single harness. by @YoshikiTakashima in https://github.com/model-checking/kani/pull/2496
 * Escape Zero-size types in playback by @YoshikiTakashima in https://github.com/model-checking/kani/pull/2508
 * Do not crash when `rustfmt` fails. by @YoshikiTakashima in https://github.com/model-checking/kani/pull/2511
+* De-duplicate same input injections for the same harness. by @YoshikiTakashima in https://github.com/model-checking/kani/pull/2513
 * Update Cbmc version  by @celinval in https://github.com/model-checking/kani/pull/2512
 * Upgrade rust toolchain to 2023-04-30 by @zhassan-aws in https://github.com/model-checking/kani/pull/2456
-* De-duplicate same input injections for the same harness. by @YoshikiTakashima in https://github.com/model-checking/kani/pull/2513
 
 **Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.29.0...kani-0.30.0
 
