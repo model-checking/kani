@@ -1,6 +1,5 @@
 # Copyright Kani Contributors
 # SPDX-License-Identifier: Apache-2.0 OR MIT
-<<<<<<< HEAD
 #
 # Each *Parser class here specifies a different way that a parser can be
 # invoked: as an executable (for parsers that users write on their local
