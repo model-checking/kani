@@ -6,7 +6,9 @@ use super::super::goto_program;
 use super::super::MachineModel;
 use super::{Irep, IrepId};
 use crate::goto_program::Contract;
+use crate::goto_program::Lambda;
 use crate::linear_map;
+use crate::InternedString;
 use goto_program::{
     BinaryOperator, CIntType, DatatypeComponent, Expr, ExprValue, Location, Parameter,
     SelfOperator, Stmt, StmtBody, SwitchCase, SymbolValues, Type, UnaryOperator,
@@ -170,6 +172,14 @@ impl ToIrep for Expr {
     }
 }
 
+fn identifier_to_irep(identifier: InternedString) -> Irep {
+    Irep {
+        id: IrepId::Symbol,
+        sub: vec![],
+        named_sub: linear_map![(IrepId::Identifier, Irep::just_string_id(identifier.to_string()),)],
+    }
+}
+
 impl ToIrep for ExprValue {
     fn to_irep(&self, mm: &MachineModel) -> Irep {
         match self {
@@ -298,14 +308,7 @@ impl ToIrep for ExprValue {
                 sub: values.iter().map(|x| x.to_irep(mm)).collect(),
                 named_sub: linear_map![],
             },
-            ExprValue::Symbol { identifier } => Irep {
-                id: IrepId::Symbol,
-                sub: vec![],
-                named_sub: linear_map![(
-                    IrepId::Identifier,
-                    Irep::just_string_id(identifier.to_string()),
-                )],
-            },
+            ExprValue::Symbol { identifier } => identifier_to_irep(*identifier),
             ExprValue::Typecast(e) => {
                 Irep { id: IrepId::Typecast, sub: vec![e.to_irep(mm)], named_sub: linear_map![] }
             }
@@ -497,6 +500,36 @@ impl ToIrep for SwitchCase {
     fn to_irep(&self, mm: &MachineModel) -> Irep {
         code_irep(IrepId::SwitchCase, vec![self.case().to_irep(mm), self.body().to_irep(mm)])
             .with_location(self.body().location(), mm)
+    }
+}
+
+impl ToIrep for Lambda {
+    fn to_irep(&self, mm: &MachineModel) -> Irep {
+        let (ops_ireps, types) = self
+            .arguments
+            .iter()
+            .map(|(i, ty)| {
+                let ty_rep = ty.to_irep(mm);
+                (identifier_to_irep(*i).with_named_sub(IrepId::Type, ty_rep.clone()), ty_rep)
+            })
+            .unzip();
+        let typ = Irep {
+            id: IrepId::MathematicalFunction,
+            sub: vec![Irep::just_sub(types), self.body.typ().to_irep(mm)],
+            named_sub: Default::default(),
+        };
+        Irep::just_sub(vec![Irep {
+            id: IrepId::Lambda,
+            sub: vec![
+                Irep {
+                    id: IrepId::Tuple,
+                    sub: ops_ireps,
+                    named_sub: linear_map!((IrepId::Type, Irep::just_id(IrepId::Tuple))),
+                },
+                self.body.to_irep(mm),
+            ],
+            named_sub: linear_map!((IrepId::Type, typ)),
+        }])
     }
 }
 

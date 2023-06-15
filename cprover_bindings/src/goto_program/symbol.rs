@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use super::super::utils::aggr_tag;
-use super::{DatatypeComponent, Expr, Location, Parameter, Stmt, Type};
+use super::{DatatypeComponent, Expr, Lambda, Location, Parameter, Stmt, Type};
 use crate::{InternStringOption, InternedString};
 
 /// Based off the CBMC symbol implementation here:
@@ -47,13 +47,13 @@ pub struct Symbol {
 
 #[derive(Clone, Debug)]
 pub struct Contract {
-    pub(crate) requires: Option<Box<Expr>>,
-    pub(crate) ensures: Option<Box<Expr>>,
-    pub(crate) assigns: Option<Box<Expr>>,
+    pub(crate) requires: Option<Box<Lambda>>,
+    pub(crate) ensures: Option<Box<Lambda>>,
+    pub(crate) assigns: Option<Box<Lambda>>,
 }
 
 impl Contract {
-    pub fn new(requires: Option<Expr>, ensures: Option<Expr>, assigns: Option<Expr>) -> Self {
+    pub fn new(requires: Option<Lambda>, ensures: Option<Lambda>, assigns: Option<Lambda>) -> Self {
         Self {
             requires: requires.map(Box::new),
             ensures: ensures.map(Box::new),

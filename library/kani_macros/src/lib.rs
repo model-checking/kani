@@ -204,7 +204,7 @@ mod sysroot {
     macro_rules! requires_ensures {
         ($name: ident, $append_return:literal) => {
             pub fn $name(attr: TokenStream, item: TokenStream) -> TokenStream {
-                use syn::{FnArg, PatType, PatIdent, Pat, Signature, Token, ReturnType};
+                use syn::{FnArg, PatType, PatIdent, Pat, Signature, Token, ReturnType, TypeTuple, punctuated::Punctuated};
                 use proc_macro2::Span;
                 let attr = proc_macro2::TokenStream::from(attr);
                 let item_fn @ ItemFn { sig, .. } = &parse_macro_input!(item as ItemFn);
@@ -218,26 +218,27 @@ mod sysroot {
                     #[kanitool::#attribute = stringify!(#gen_fn_name)]
                 );
 
+                let typ = match output {
+                    ReturnType::Type(_, t) => t.clone(),
+                    _ => Box::new(TypeTuple { paren_token: Default::default(), elems: Punctuated::new() }.into()),
+                };
+
                 let mut gen_fn_inputs = inputs.clone();
-                if let Some(typ) = $append_return.then(|| match output {
-                    ReturnType::Type(_, t) => Some(t),
-                    _ => None
-                }).flatten() {
-                    gen_fn_inputs.push(
-                        FnArg::Typed(PatType {
+                gen_fn_inputs.insert(
+                    0,
+                    FnArg::Typed(PatType {
+                        attrs: vec![],
+                        pat: Box::new(Pat::Ident(PatIdent{
                             attrs: vec![],
-                            pat: Box::new(Pat::Ident(PatIdent{
-                                attrs: vec![],
-                                by_ref: None,
-                                mutability: None,
-                                ident: Ident::new("result", Span::call_site()),
-                                subpat: None,
-                            })),
-                            colon_token: Token![:](Span::call_site()),
-                            ty: typ.clone(),
-                        })
-                    );
-                }
+                            by_ref: None,
+                            mutability: None,
+                            ident: Ident::new("result", Span::call_site()),
+                            subpat: None,
+                        })),
+                        colon_token: Token![:](Span::call_site()),
+                        ty: typ,
+                    })
+                );
 
                 assert!(
                     generics.params.is_empty() && generics.where_clause.is_none(),
