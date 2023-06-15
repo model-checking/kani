@@ -1,1 +1,1 @@
-error: no harnesses matched the harness filter: `check_blah`
+error: no harnesses matched the name: `check_blah`

@@ -169,6 +169,7 @@ pub struct VerificationArgs {
     pub function: Option<String>,
     /// If specified, only run harnesses that match this filter. This option can be provided
     /// multiple times, which will run all tests matching any of the filters.
+    /// If used with --exact, the filter is removed and only exact matches are run.
     #[arg(
         long = "harness",
         conflicts_with = "function",

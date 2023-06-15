@@ -154,7 +154,7 @@ impl KaniSession {
         }
 
         // We currently omit a summary if there was just 1 harness
-        if !self.args.common_args.quiet && !self.args.visualize && total != 1 {
+        if !self.args.common_args.quiet && !self.args.visualize {
             if failing > 0 {
                 println!("Summary:");
             }
@@ -177,12 +177,22 @@ impl KaniSession {
                         )
                     }
                     ([harness], None) => {
-                        bail!("no harnesses matched the harness filter: `{harness}`")
+                        if !self.args.exact {
+                            bail!("no harnesses matched the harness filter: `{harness}`")
+                        } else {
+                            bail!("no harnesses matched the name: `{harness}`")
+                        }
                     }
-                    (harnesses, None) => bail!(
-                        "no harnesses matched the harness filters: `{}`",
-                        harnesses.join("`, `")
-                    ),
+                    (harnesses, None) => {
+                        if !self.args.exact {
+                            bail!(
+                                "no harnesses matched the harness filters: `{}`",
+                                harnesses.join("`, `")
+                            )
+                        } else {
+                            bail!("no harnesses matched the names: `{}`", harnesses.join("`, `"))
+                        }
+                    }
                     ([], Some(func)) => error(&format!("No function named {func} was found")),
                     _ => unreachable!(
                         "invalid configuration. Cannot specify harness and function at the same time"

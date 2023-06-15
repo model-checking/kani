@@ -175,8 +175,8 @@ fn find_proof_harnesses<'a>(
     debug!(?targets, "find_proof_harness");
     let mut result = vec![];
     for md in all_harnesses.iter() {
-        // Check for exact match only
         if exact_filter {
+            // Check for exact match only
             if targets.contains(&md.pretty_name) {
                 // if exact match found, stop searching
                 result.push(*md);
@@ -235,22 +235,30 @@ mod tests {
                 .mangled_name
                 == "check_one"
         );
+    }
 
+    #[test]
+    fn check_find_proof_harness_with_exact() {
         // Check with exact match
-        assert_eq!(
+
+        let harnesses = vec![
+            mock_proof_harness("check_one", None, None, None),
+            mock_proof_harness("module::check_two", None, None, None),
+            mock_proof_harness("module::not_check_three", None, None, None),
+        ];
+        let ref_harnesses = harnesses.iter().collect::<Vec<_>>();
+
+        assert!(
             find_proof_harnesses(
                 BTreeSet::from([&"check_three".to_string()]),
                 &ref_harnesses,
                 true
             )
-            .len(),
-            0
+            .is_empty()
         );
-        assert_eq!(
+        assert!(
             find_proof_harnesses(BTreeSet::from([&"check_two".to_string()]), &ref_harnesses, true)
-                .first()
-                .is_none(),
-            true
+                .is_empty()
         );
         assert_eq!(
             find_proof_harnesses(BTreeSet::from([&"check_one".to_string()]), &ref_harnesses, true)
@@ -258,17 +266,6 @@ mod tests {
                 .unwrap()
                 .mangled_name,
             "check_one"
-        );
-        assert_ne!(
-            find_proof_harnesses(
-                BTreeSet::from([&"module::not_check_three".to_string()]),
-                &ref_harnesses,
-                true
-            )
-            .first()
-            .unwrap()
-            .mangled_name,
-            "not_check_three"
         );
         assert_eq!(
             find_proof_harnesses(

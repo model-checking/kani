@@ -6,7 +6,7 @@
 mod first {
     #[kani::proof]
     fn check_foo() {
-        assert!(1 == 1);
+        assert!(1 == 2);
     }
 
     #[kani::proof]
@@ -29,7 +29,7 @@ fn existing() {
 
 #[kani::proof]
 fn existing_harness() {
-    assert!(2 == 2);
+    assert!(1 == 2);
 }
 
 /// A harness that will fail verification if it is run.

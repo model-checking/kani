@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: --harness first::check_blah --exact --harness second::verify_foo
-//! Ensure that the set of harnesses run is the union of all arguments.
+//! Ensure that only the specified harnesses are run
 
 mod first {
     #[kani::proof]
