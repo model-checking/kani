@@ -3,7 +3,7 @@
 - **RFC PR:** <https://github.com/model-checking/kani/pull/2516>
 - **Status:** *Under Review*
 - **Version:** 0
-- **Proof-of-concept:** TBD
+- **Proof-of-concept:** <https://github.com/model-checking/kani/pull/2532>
 
 ## Summary
 
