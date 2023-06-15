@@ -9,9 +9,10 @@ mod first {
         assert!(1 == 1);
     }
 
+    /// A harness that will fail verification if it is run.
     #[kani::proof]
     fn check_blah() {
-        assert!(2 == 2);
+        assert!(1 == 2);
     }
 
     /// A harness that will fail verification if it is run.
