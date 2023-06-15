@@ -315,8 +315,7 @@ impl VerificationResult {
     ) -> VerificationResult {
         let runtime = start_time.elapsed();
         let (items, results) = extract_results(output.processed_items);
-        // let global_conditions: Vec<GlobalCondition> = vec![GlobalCondition::ShouldPanic { enabled: should_panic, status: None },
-        // FailUncoverable { enabled: fail_uncoverable, status: None }];
+
         if let Some(results) = results {
             let (status, global_conditions) =
                 verification_outcome_from_properties(&results, should_panic, fail_uncoverable);
@@ -402,25 +401,27 @@ fn verification_outcome_from_properties(
     should_panic: bool,
     fail_uncoverable: bool,
 ) -> (VerificationStatus, Vec<GlobalCondition>) {
-    let should_panic_cond = should_panic_cond(should_panic, properties);
-    let fail_uncoverable_cond = fail_uncoverable_cond(fail_uncoverable, properties);
-    // let failed_covers = determine_failed_covers(properties);
+    // Compute the results for all global conditions
+    let should_panic_cond = compute_should_panic_condition(should_panic, properties);
+    let fail_uncoverable_cond = compute_fail_uncoverable_condition(fail_uncoverable, properties);
+    // Create a vector with results for global conditions
     let global_conditions = vec![should_panic_cond, fail_uncoverable_cond];
-    // global_conditions.push();
+    // Determine the overall outcome taking into account all global conditions
     let status = outcome_from_global_conditions(properties, &global_conditions);
     (status, global_conditions)
 }
 
-fn should_panic_cond(enabled: bool, properties: &[Property]) -> GlobalCondition {
+fn compute_should_panic_condition(enabled: bool, properties: &[Property]) -> GlobalCondition {
     let failed_properties = determine_failed_properties(properties);
     GlobalCondition::ShouldPanic { enabled, status: failed_properties }
 }
 
-fn fail_uncoverable_cond(enabled: bool, properties: &[Property]) -> GlobalCondition {
-    let failed_covers = determine_failed_covers(properties);
+fn compute_fail_uncoverable_condition(enabled: bool, properties: &[Property]) -> GlobalCondition {
+    let failed_covers = determine_satisfiable_covers(properties);
     GlobalCondition::FailUncoverable { enabled, status: failed_covers }
 }
 
+// Determine the overall verification result considering the enabled global conditions
 fn outcome_from_global_conditions(
     properties: &[Property],
     global_conditions: &[GlobalCondition],
@@ -468,7 +469,8 @@ fn determine_failed_properties(properties: &[Property]) -> FailedProperties {
     }
 }
 
-fn determine_failed_covers(properties: &[Property]) -> CoversStatus {
+/// Determines the `CoverStatus` variant that corresponds to an array of properties
+fn determine_satisfiable_covers(properties: &[Property]) -> CoversStatus {
     let cover_properties: Vec<&Property> =
         properties.iter().filter(|prop| prop.property_class() == "cover").collect();
     if cover_properties.iter().all(|prop| prop.status == CheckStatus::Satisfied) {
