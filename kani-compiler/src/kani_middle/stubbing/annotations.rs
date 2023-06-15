@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! This file contains code for extracting stubbing-related attributes.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use kani_metadata::Stub;
 use rustc_hir::def_id::{DefId, LocalDefId};
@@ -42,7 +42,7 @@ pub fn update_stub_mapping(
     tcx: TyCtxt,
     harness: LocalDefId,
     stub: &Stub,
-    stub_pairs: &mut HashMap<DefPathHash, DefPathHash>,
+    stub_pairs: &mut BTreeMap<DefPathHash, DefPathHash>,
 ) {
     if let Some((orig_id, stub_id)) = stub_def_ids(tcx, harness, stub) {
         let orig_hash = tcx.def_path_hash(orig_id);

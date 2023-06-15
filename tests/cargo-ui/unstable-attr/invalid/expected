@@ -1,4 +1,4 @@
-error: failed to parse `#[kani::unstable]`: missing `feature` field\
+error: failed to parse `#[kani::unstable]`:
 src/lib.rs\
 |\
 | #[kani::unstable(\
