@@ -56,35 +56,42 @@ pub fn kani_playback_lib() -> PathBuf {
 }
 
 /// Returns the path to where Kani's pre-compiled binaries are stored.
-pub fn kani_sysroot_bin() -> PathBuf {
+fn kani_sysroot_bin() -> PathBuf {
     path_buf!(kani_sysroot(), "bin")
 }
 
 /// Build the `lib/` folder and `lib-playback/` for the new sysroot.
 /// - The `lib/` folder contains the sysroot for verification.
 /// - The `lib-playback/` folder contains the sysroot used for playback.
-pub fn build_lib() -> Result<()> {
-    build_verification_lib()?;
-    build_playback_lib()
+pub fn build_lib(bin_folder: &Path) -> Result<()> {
+    let compiler = bin_folder.join("kani-compiler");
+    build_verification_lib(&compiler)?;
+    build_playback_lib(&compiler)
 }
 
 /// Build the `lib/` folder for the new sysroot used during verification.
 /// This will include Kani's libraries as well as the standard libraries compiled with --emit-mir.
-fn build_verification_lib() -> Result<()> {
+fn build_verification_lib(compiler: &Path) -> Result<()> {
     let extra_args =
         ["-Z", "build-std=panic_abort,std,test", "--config", "profile.dev.panic=\"abort\""];
-    build_kani_lib(&kani_sysroot_lib(), &extra_args)
+    let compiler_args = ["--kani-compiler", "-Cllvm-args=--ignore-global-asm"];
+    build_kani_lib(compiler, &kani_sysroot_lib(), &extra_args, &compiler_args)
 }
 
 /// Build the `lib-playback/` folder that will be used during counter example playback.
 /// This will include Kani's libraries compiled with `concrete-playback` feature enabled.
-fn build_playback_lib() -> Result<()> {
+fn build_playback_lib(compiler: &Path) -> Result<()> {
     let extra_args =
         ["--features=std/concrete_playback,kani/concrete_playback", "-Z", "build-std=std,test"];
-    build_kani_lib(&kani_playback_lib(), &extra_args)
+    build_kani_lib(compiler, &kani_playback_lib(), &extra_args, &[])
 }
 
-fn build_kani_lib(path: &Path, extra_args: &[&str]) -> Result<()> {
+fn build_kani_lib(
+    compiler: &Path,
+    path: &Path,
+    extra_cargo_args: &[&str],
+    extra_rustc_args: &[&str],
+) -> Result<()> {
     // Run cargo build with -Z build-std
     let target = env!("TARGET");
     let target_dir = env!("KANI_BUILD_LIBS");
@@ -117,13 +124,13 @@ fn build_kani_lib(path: &Path, extra_args: &[&str]) -> Result<()> {
         "--message-format",
         "json-diagnostic-rendered-ansi",
     ];
+    let mut rustc_args = vec!["--cfg=kani", "--cfg=kani_sysroot", "-Z", "always-encode-mir"];
+    rustc_args.extend_from_slice(extra_rustc_args);
     let mut cmd = Command::new("cargo")
-        .env(
-            "CARGO_ENCODED_RUSTFLAGS",
-            ["--cfg=kani", "--cfg=kani_sysroot", "-Z", "always-encode-mir"].join("\x1f"),
-        )
+        .env("CARGO_ENCODED_RUSTFLAGS", rustc_args.join("\x1f"))
+        .env("RUSTC", compiler)
         .args(args)
-        .args(extra_args)
+        .args(extra_cargo_args)
         .stdout(Stdio::piped())
         .spawn()
         .expect("Failed to run `cargo build`.");
@@ -225,18 +232,20 @@ fn build_artifacts(cargo_cmd: &mut Child) -> Vec<Artifact> {
         .collect()
 }
 
+/// Build Kani binaries with the extra arguments provided and return path to the binaries folder.
 /// Extra arguments to be given to `cargo build` while building Kani's binaries.
 /// Note that the following arguments are always provided:
 /// ```bash
 /// cargo build --bins -Z unstable-options --out-dir $KANI_SYSROOT/bin/
 /// ```
-pub fn build_bin<T: AsRef<OsStr>>(extra_args: &[T]) -> Result<()> {
+pub fn build_bin<T: AsRef<OsStr>>(extra_args: &[T]) -> Result<PathBuf> {
     let out_dir = kani_sysroot_bin();
     let args = ["--bins", "-Z", "unstable-options", "--out-dir", out_dir.to_str().unwrap()];
     Command::new("cargo")
         .arg("build")
-        .args(args)
         .args(extra_args)
+        .args(args)
         .run()
-        .or(Err(format_err!("Failed to build binaries.")))
+        .or(Err(format_err!("Failed to build binaries.")))?;
+    Ok(out_dir)
 }
