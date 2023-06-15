@@ -113,41 +113,34 @@ pub fn test_harness_name(tcx: TyCtxt, def_id: DefId) -> String {
     parse_str_value(&marker).unwrap()
 }
 
-/// Extract all Kani attributes for a given `def_id` if any exists.
+/// Extract harness attributes for a given `def_id`.
+///
 /// We only extract attributes for harnesses that are local to the current crate.
 /// Note that all attributes should be valid by now.
-pub fn extract_harness_attributes(tcx: TyCtxt, def_id: DefId) -> Option<HarnessAttributes> {
+pub fn extract_harness_attributes(tcx: TyCtxt, def_id: DefId) -> HarnessAttributes {
     // Abort if not local.
-    def_id.as_local()?;
+    assert!(def_id.is_local(), "Expected a local item, but got: {def_id:?}");
     let attributes = extract_kani_attributes(tcx, def_id);
     trace!(?def_id, ?attributes, "extract_harness_attributes");
-    if attributes.contains_key(&KaniAttributeKind::Proof) {
-        Some(attributes.into_iter().fold(
-            HarnessAttributes::default(),
-            |mut harness, (kind, attributes)| {
-                match kind {
-                    KaniAttributeKind::ShouldPanic => harness.should_panic = true,
-                    KaniAttributeKind::Solver => {
-                        harness.solver = parse_solver(tcx, attributes[0]);
-                    }
-                    KaniAttributeKind::Stub => {
-                        harness.stubs = parse_stubs(tcx, def_id, attributes);
-                    }
-                    KaniAttributeKind::Unwind => {
-                        harness.unwind_value = parse_unwind(tcx, attributes[0])
-                    }
-                    KaniAttributeKind::Proof => harness.proof = true,
-                    KaniAttributeKind::Unstable => {
-                        // Internal attribute which shouldn't exist here.
-                        unreachable!()
-                    }
-                };
-                harness
-            },
-        ))
-    } else {
-        None
-    }
+    assert!(attributes.contains_key(&KaniAttributeKind::Proof));
+    attributes.into_iter().fold(HarnessAttributes::default(), |mut harness, (kind, attributes)| {
+        match kind {
+            KaniAttributeKind::ShouldPanic => harness.should_panic = true,
+            KaniAttributeKind::Solver => {
+                harness.solver = parse_solver(tcx, attributes[0]);
+            }
+            KaniAttributeKind::Stub => {
+                harness.stubs = parse_stubs(tcx, def_id, attributes);
+            }
+            KaniAttributeKind::Unwind => harness.unwind_value = parse_unwind(tcx, attributes[0]),
+            KaniAttributeKind::Proof => harness.proof = true,
+            KaniAttributeKind::Unstable => {
+                // Internal attribute which shouldn't exist here.
+                unreachable!()
+            }
+        };
+        harness
+    })
 }
 
 /// Check that any unstable API has been enabled. Otherwise, emit an error.
@@ -511,9 +504,12 @@ fn attr_kind(tcx: TyCtxt, attr: &Attribute) -> Option<KaniAttributeKind> {
         AttrKind::Normal(normal) => {
             let segments = &normal.item.path.segments;
             if (!segments.is_empty()) && segments[0].ident.as_str() == "kanitool" {
-                assert_eq!(segments.len(), 2, "Unexpected kani attribute {segments:?}");
-                let ident_str = segments[1].ident.as_str();
-                KaniAttributeKind::try_from(ident_str)
+                let ident_str = segments[1..]
+                    .iter()
+                    .map(|segment| segment.ident.as_str())
+                    .intersperse("::")
+                    .collect::<String>();
+                KaniAttributeKind::try_from(ident_str.as_str())
                     .map_err(|err| {
                         debug!(?err, "attr_kind_failed");
                         tcx.sess.span_err(attr.span, format!("unknown attribute `{ident_str}`"));
