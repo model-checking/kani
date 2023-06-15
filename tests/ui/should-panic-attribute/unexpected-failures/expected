@@ -9,4 +9,4 @@ Failed Checks: panicked on the `1` arm!
 Failed Checks: panicked on the `0` arm!
 Failed Checks: shift distance too large
 
-VERIFICATION:- FAILED
+VERIFICATION:- FAILED (one or more global conditions failed)
