@@ -7,6 +7,7 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 ## [0.30.0]
 
 ## What's Changed
+* Remove --harness requirement from stubbing by @celinval in https://github.com/model-checking/kani/pull/2495
 * Add target selection for cargo kani by @celinval in https://github.com/model-checking/kani/pull/2507
 * Generate Multiple playback harnesses when multiple crashes exist in a single harness. by @YoshikiTakashima in https://github.com/model-checking/kani/pull/2496
 * Escape Zero-size types in playback by @YoshikiTakashima in https://github.com/model-checking/kani/pull/2508
