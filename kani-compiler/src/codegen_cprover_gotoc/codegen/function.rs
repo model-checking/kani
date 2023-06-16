@@ -5,7 +5,7 @@
 
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::contracts::GFnContract;
-use cbmc::goto_program::{Contract, Expr, Lambda, Stmt, Symbol};
+use cbmc::goto_program::{Contract, Expr, Lambda, Stmt, Symbol, Type};
 use cbmc::InternString;
 use rustc_middle::mir::traversal::reverse_postorder;
 use rustc_middle::mir::{Body, HasLocalDecls, Local};
@@ -257,7 +257,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     .map(|l| self.codegen_var_name(&l).into())
                     .zip(goto_argument_types)
                     .collect(),
-                body: func_expr.call(arguments),
+                body: func_expr.call(arguments).cast_to(Type::Bool),
             }
         };
 

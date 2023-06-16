@@ -29,4 +29,8 @@ impl<C> GFnContract<C> {
             assigns: self.assigns.as_ref().map(&mut f),
         }
     }
+
+    pub fn enforceable(&self) -> bool {
+        self.requires().is_some() || self.ensures().is_some()
+    }
 }

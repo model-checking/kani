@@ -176,17 +176,19 @@ impl<'tcx> MonoItemsCollector<'tcx> {
     fn reachable_items(&mut self) {
         while let Some(to_visit) = self.queue.pop() {
             if !self.collected.contains_key(&to_visit) {
-                let opt_contract = to_visit.def_id().as_local().map(|local_def_id| {
-                    attributes::extract_contract(self.tcx, local_def_id).map(|def_id| {
-                        Instance::resolve(
-                            self.tcx,
-                            ParamEnv::reveal_all(),
-                            *def_id,
-                            rustc_middle::ty::List::empty(),
-                        )
-                        .unwrap()
-                        .expect("No specific instance found")
-                    })
+                let opt_contract = to_visit.def_id().as_local().and_then(|local_def_id| {
+                    let contract =
+                        attributes::extract_contract(self.tcx, local_def_id).map(|def_id| {
+                            Instance::resolve(
+                                self.tcx,
+                                ParamEnv::reveal_all(),
+                                *def_id,
+                                rustc_middle::ty::List::empty(),
+                            )
+                            .unwrap()
+                            .expect("No specific instance found")
+                        });
+                    contract.enforceable().then_some(contract)
                 });
                 let visit_obligations_from_contract = if let Some(contract) = opt_contract.as_ref()
                 {

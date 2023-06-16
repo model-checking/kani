@@ -26,9 +26,7 @@ impl KaniSession {
         // We actually start by calling goto-cc to start the specialization:
         self.specialize_to_proof_harness(input, output, &harness.mangled_name)?;
 
-        for function in &harness.contracts {
-            self.enforce_contract(output, &function)?;
-        }
+        std::fs::copy(output, output.with_extension("before-transform.out"))?;
 
         let restrictions = project.get_harness_artifact(&harness, ArtifactType::VTableRestriction);
         if let Some(restrictions_path) = restrictions {
@@ -39,6 +37,10 @@ impl KaniSession {
         // transformation.
         if self.args.run_sanity_checks {
             self.goto_sanity_check(output)?;
+        }
+
+        for function in &harness.contracts {
+            self.enforce_contract(output, &function)?;
         }
 
         if self.args.checks.undefined_function_on() {
@@ -165,6 +167,7 @@ impl KaniSession {
     }
 
     pub fn enforce_contract(&self, file: &Path, function: &str) -> Result<()> {
+        println!("enforcing {function} contract");
         self.call_goto_instrument(vec![
             "--enforce-contract".into(),
             function.into(),
