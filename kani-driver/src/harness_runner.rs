@@ -177,22 +177,12 @@ impl KaniSession {
                         )
                     }
                     ([harness], None) => {
-                        if !self.args.exact {
-                            bail!("no harnesses matched the harness filter: `{harness}`")
-                        } else {
-                            bail!("no harnesses matched the name: `{harness}`")
-                        }
+                        bail!("no harnesses matched the harness filter: `{harness}`")
                     }
-                    (harnesses, None) => {
-                        if !self.args.exact {
-                            bail!(
-                                "no harnesses matched the harness filters: `{}`",
-                                harnesses.join("`, `")
-                            )
-                        } else {
-                            bail!("no harnesses matched the names: `{}`", harnesses.join("`, `"))
-                        }
-                    }
+                    (harnesses, None) => bail!(
+                        "no harnesses matched the harness filters: `{}`",
+                        harnesses.join("`, `")
+                    ),
                     ([], Some(func)) => error(&format!("No function named {func} was found")),
                     _ => unreachable!(
                         "invalid configuration. Cannot specify harness and function at the same time"

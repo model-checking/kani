@@ -1,3 +1,1 @@
-Checking harness existing...
-VERIFICATION:- SUCCESSFUL
-Complete - 1 successfully verified harnesses, 0 failures, 1 total.
+error: Please provide exact harness name. One or more of the harnesses provided don't contain the full name.

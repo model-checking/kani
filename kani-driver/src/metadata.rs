@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use std::path::{Path, PathBuf};
 use tracing::{debug, trace};
 
@@ -121,12 +121,20 @@ impl KaniSession {
             BTreeSet::from_iter(self.args.harnesses.iter())
         };
 
+        let total_harnesses = harnesses.len();
+
         if harnesses.is_empty() {
             Ok(Vec::from(all_harnesses))
         } else {
-            let harnesses: Vec<&HarnessMetadata> =
+            let harnesses_found: Vec<&HarnessMetadata> =
                 find_proof_harnesses(harnesses, all_harnesses, self.args.exact);
-            Ok(harnesses)
+            if self.args.exact && harnesses_found.len() < total_harnesses {
+                bail!(
+                    "Please provide exact harness name. One or more of the harnesses provided don't contain the full name.",
+                );
+            }
+
+            Ok(harnesses_found)
         }
     }
 }
