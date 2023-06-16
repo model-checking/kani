@@ -113,6 +113,25 @@ mod sysroot {
 
     use proc_macro2::Ident;
 
+    fn hash_of_token_stream<H: std::hash::Hasher>(
+        hasher: &mut H,
+        stream: proc_macro2::TokenStream,
+    ) {
+        use proc_macro2::TokenTree;
+        use std::hash::Hash;
+        for token in stream {
+            match token {
+                TokenTree::Ident(i) => i.hash(hasher),
+                TokenTree::Punct(p) => p.as_char().hash(hasher),
+                TokenTree::Group(g) => {
+                    std::mem::discriminant(&g.delimiter()).hash(hasher);
+                    hash_of_token_stream(hasher, g.stream());
+                }
+                TokenTree::Literal(lit) => lit.to_string().hash(hasher),
+            }
+        }
+    }
+
     /// Annotate the harness with a #[kanitool::<name>] with optional arguments.
     macro_rules! kani_attribute {
         ($name:ident) => {
@@ -207,11 +226,19 @@ mod sysroot {
                 use syn::{FnArg, PatType, PatIdent, Pat, Signature, Token, ReturnType, TypeTuple, punctuated::Punctuated};
                 use proc_macro2::Span;
                 let attr = proc_macro2::TokenStream::from(attr);
+
+                let a_short_hash = {
+                    use std::hash::Hasher;
+                    let mut hasher = std::collections::hash_map::DefaultHasher::default();
+                    hash_of_token_stream(&mut hasher, proc_macro2::TokenStream::from(item.clone()));
+                    let long_hash = hasher.finish();
+                    long_hash % 0x1_000_000 // six hex digits
+                };
+
                 let item_fn @ ItemFn { sig, .. } = &parse_macro_input!(item as ItemFn);
                 let Signature { ident, generics, inputs, output , .. } = sig;
 
-
-                let gen_fn_name = generate_identifier(&format!(concat!("{}_", stringify!($name)), ident));
+                let gen_fn_name = generate_identifier(&format!(concat!("{}_", stringify!($name), "_{:x}"), ident, a_short_hash));
                 let attribute = format_ident!("{}", stringify!($name));
                 let kani_attributes = quote!(
                     #[allow(dead_code)]
