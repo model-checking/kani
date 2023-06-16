@@ -1,1 +1,1 @@
-error: Please provide exact harness name. One or more of the harnesses provided don't contain the full name.
+error: Please provide exact harness name. The harnesses `ignore_third_harness` don't contain the full name.

@@ -122,15 +122,34 @@ impl KaniSession {
         };
 
         let total_harnesses = harnesses.len();
+        let all_targets = harnesses.clone();
 
         if harnesses.is_empty() {
             Ok(Vec::from(all_harnesses))
         } else {
             let harnesses_found: Vec<&HarnessMetadata> =
                 find_proof_harnesses(harnesses, all_harnesses, self.args.exact);
+
+            // If even one harness was not found with --exact, return an error to user
             if self.args.exact && harnesses_found.len() < total_harnesses {
+                let mut harness_found_names: BTreeSet<&String> = BTreeSet::new();
+
+                for harness in harnesses_found.clone() {
+                    harness_found_names.insert(&harness.pretty_name);
+                }
+
+                // Check which harnesses are missing from the difference of targets and harnesses_found
+                let harnesses_missing: Vec<&String> =
+                    all_targets.difference(&harness_found_names).cloned().collect();
+                let joined_string = harnesses_missing
+                    .iter()
+                    .map(|&s| (*s).clone())
+                    .collect::<Vec<String>>()
+                    .join("`, `");
+
                 bail!(
-                    "Please provide exact harness name. One or more of the harnesses provided don't contain the full name.",
+                    "Please provide exact harness name. The harnesses `{}` don't contain the full name.",
+                    joined_string
                 );
             }
 

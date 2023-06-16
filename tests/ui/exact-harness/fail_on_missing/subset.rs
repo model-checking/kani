@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: --harness existing --harness check_blah --exact
+// kani-flags: --harness existing --harness check_blah --harness check_foo --exact
 //! Check that we just ignore non-matching filters
 
 mod first {
