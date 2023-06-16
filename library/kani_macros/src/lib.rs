@@ -99,6 +99,11 @@ pub fn ensures(attr: TokenStream, item: TokenStream) -> TokenStream {
     attr_impl::ensures(attr, item)
 }
 
+#[proc_macro_attribute]
+pub fn auto_harness(attr: TokenStream, item: TokenStream) -> TokenStream {
+    attr_impl::auto_harness(attr, item)
+}
+
 /// This module implements Kani attributes in a way that only Kani's compiler can understand.
 /// This code should only be activated when pre-building Kani's sysroot.
 #[cfg(kani_sysroot)]
@@ -216,10 +221,6 @@ mod sysroot {
         }
     }
 
-    fn generate_identifier(s: &str) -> Ident {
-        Ident::new(s, proc_macro2::Span::mixed_site())
-    }
-
     macro_rules! requires_ensures {
         ($name: ident, $append_return:literal) => {
             pub fn $name(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -227,18 +228,12 @@ mod sysroot {
                 use proc_macro2::Span;
                 let attr = proc_macro2::TokenStream::from(attr);
 
-                let a_short_hash = {
-                    use std::hash::Hasher;
-                    let mut hasher = std::collections::hash_map::DefaultHasher::default();
-                    hash_of_token_stream(&mut hasher, proc_macro2::TokenStream::from(item.clone()));
-                    let long_hash = hasher.finish();
-                    long_hash % 0x1_000_000 // six hex digits
-                };
+                let a_short_hash = short_hash_of_token_stream(&item);
 
                 let item_fn @ ItemFn { sig, .. } = &parse_macro_input!(item as ItemFn);
-                let Signature { ident, generics, inputs, output , .. } = sig;
+                let Signature { generics, inputs, output , .. } = sig;
 
-                let gen_fn_name = generate_identifier(&format!(concat!("{}_", stringify!($name), "_{:x}"), ident, a_short_hash));
+                let gen_fn_name = identifier_for_generated_function(item_fn, stringify!($name), a_short_hash);
                 let attribute = format_ident!("{}", stringify!($name));
                 let kani_attributes = quote!(
                     #[allow(dead_code)]
@@ -285,6 +280,62 @@ mod sysroot {
         }
     }
 
+    fn short_hash_of_token_stream(stream: &proc_macro::TokenStream) -> u64 {
+        use std::hash::Hasher;
+        let mut hasher = std::collections::hash_map::DefaultHasher::default();
+        hash_of_token_stream(&mut hasher, proc_macro2::TokenStream::from(stream.clone()));
+        let long_hash = hasher.finish();
+        long_hash % 0x1_000_000 // six hex digits
+    }
+
+    fn identifier_for_generated_function(
+        related_function: &ItemFn,
+        purpose: &str,
+        hash: u64,
+    ) -> Ident {
+        let identifier = format!("{}_{purpose}_{hash:x}", related_function.sig.ident);
+        Ident::new(&identifier, proc_macro2::Span::mixed_site())
+    }
+
+    pub fn auto_harness(attr: TokenStream, item: TokenStream) -> TokenStream {
+        use proc_macro2::Span;
+        use syn::{punctuated::Punctuated, token::Comma, Expr, ExprPath, FnArg};
+        assert!(attr.is_empty(), "#[kani::auto_harness] does not take any arguments currently");
+        let hash = short_hash_of_token_stream(&item);
+        let fn_item @ ItemFn { sig, .. } = &parse_macro_input!(item as ItemFn);
+        let fn_name = &sig.ident;
+
+        let harness_name = identifier_for_generated_function(fn_item, "auto_harness", hash);
+
+        let (decls, actual_arguments): (proc_macro2::TokenStream, Punctuated<Expr, Comma>) = sig
+            .inputs
+            .iter()
+            .enumerate()
+            .map(|(arg_num, a)| {
+                let ty = match a {
+                    FnArg::Receiver(r) => &r.ty,
+                    FnArg::Typed(pat) => &pat.ty,
+                };
+                let name = Ident::new(&format!("a_{arg_num}"), Span::mixed_site());
+                let decl = quote!(
+                    let #name : #ty = kani::any();
+                );
+                (decl, Expr::from(ExprPath { attrs: vec![], qself: None, path: name.into() }))
+            })
+            .unzip();
+        quote!(
+            #[kani::proof]
+            fn #harness_name() {
+                #decls
+                #fn_name(#actual_arguments);
+            }
+
+            #[kanitool::auto_harness = stringify!(#harness_name)]
+            #fn_item
+        )
+        .into()
+    }
+
     requires_ensures!(requires, false);
     requires_ensures!(ensures, true);
 
@@ -327,4 +378,5 @@ mod regular {
     no_op!(unwind);
     no_op!(requires);
     no_op!(ensures);
+    no_op!(auto_harness);
 }
