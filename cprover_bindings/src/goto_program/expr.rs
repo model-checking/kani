@@ -1660,6 +1660,6 @@ impl Expr {
         identifier: InternedString,
         body: Expr,
     ) -> Self {
-        expr!(ExprValue::Quantify { quantifier, typ, identifier, body }, Type::Bool)
+        expr!(ExprValue::Quantify { quantifier, typ, identifier, body }, Type::c_bool())
     }
 }

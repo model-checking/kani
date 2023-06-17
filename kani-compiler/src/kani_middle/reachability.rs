@@ -25,13 +25,14 @@ use rustc_middle::mir::interpret::{AllocId, ConstValue, ErrorHandled, GlobalAllo
 use rustc_middle::mir::mono::MonoItem;
 use rustc_middle::mir::visit::Visitor as MirVisitor;
 use rustc_middle::mir::{
-    Body, CastKind, Constant, ConstantKind, Location, Rvalue, Terminator, TerminatorKind,
+    AggregateKind, Body, CastKind, Constant, ConstantKind, Location, Rvalue, Terminator,
+    TerminatorKind,
 };
 use rustc_middle::span_bug;
 use rustc_middle::ty::adjustment::PointerCast;
 use rustc_middle::ty::{
-    Closure, ClosureKind, ConstKind, Instance, InstanceDef, ParamEnv, Ty, TyCtxt, TyKind,
-    TypeFoldable, VtblEntry,
+    Closure, ClosureKind, ConstKind, GenericArg, Instance, InstanceDef, List, ParamEnv, Ty, TyCtxt,
+    TyKind, TypeFoldable, VtblEntry,
 };
 
 use crate::kani_middle::coercion;
@@ -318,6 +319,17 @@ impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {
         self.collect_instance(instance, false);
     }
 
+    fn collect_closure(
+        &mut self,
+        def_id: DefId,
+        substs: &'tcx List<GenericArg<'tcx>>,
+        kind: ClosureKind,
+    ) {
+        let instance = Instance::resolve_closure(self.tcx, def_id, substs, kind)
+            .expect("failed to normalize and resolve closure during codegen");
+        self.collect_instance(instance, false);
+    }
+
     /// Collect an instance depending on how it is used (invoked directly or via fn_ptr).
     fn collect_instance(&mut self, instance: Instance<'tcx>, is_direct_call: bool) {
         let should_collect = match instance.def {
@@ -420,14 +432,7 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
                 let source_ty = self.monomorphize(source_ty);
                 match *source_ty.kind() {
                     Closure(def_id, substs) => {
-                        let instance = Instance::resolve_closure(
-                            self.tcx,
-                            def_id,
-                            substs,
-                            ClosureKind::FnOnce,
-                        )
-                        .expect("failed to normalize and resolve closure during codegen");
-                        self.collect_instance(instance, false);
+                        self.collect_closure(def_id, substs, ClosureKind::FnOnce)
                     }
                     _ => unreachable!("Unexpected type: {:?}", source_ty),
                 }
@@ -441,6 +446,12 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
                     self.collected.insert(MonoItem::Static(def_id));
                 }
             }
+            Rvalue::Aggregate(ref kind, _) => match kind.as_ref() {
+                AggregateKind::Closure(did, substs) => {
+                    self.collect_closure(*did, substs, substs.as_closure().kind())
+                }
+                _ => (),
+            },
             _ => { /* not interesting */ }
         }
 

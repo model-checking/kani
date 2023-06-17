@@ -388,17 +388,20 @@ impl<'tcx> GotocHook<'tcx> for Forall {
         let unique_var_name = "i".into();
 
         let loc = tcx.codegen_span_option(span);
-        let element_type = match closure_substs
+        let clj_sig = closure_substs
             .as_closure()
             .sig()
             .no_bound_vars()
-            .expect("Bound vars?")
+            .expect("Bound vars?");
+        let element_type = match clj_sig
             .inputs()
         {
-            [_slf, elem] => *elem,
-            all => unreachable!("Wrong number of closure arguments, expected 2, found {all:?}"),
+            [elem] => elem.tuple_fields()[0],
+            all => unreachable!("Wrong number of closure arguments, expected 1, found {all:?}"),
         };
+        println!("{clj_sig:?} . {element_type:?}");
         let goto_elem_type = tcx.codegen_ty(element_type);
+        let (ref_var, ref_decl) = tcx.decl_temp_variable(arg.typ().clone().to_pointer(), Some(arg.address_of()), loc);
         let function_expr = tcx.codegen_func_expr(
             Instance::resolve(tcx.tcx, ParamEnv::reveal_all(), *closure_fn, &closure_substs)
                 .unwrap()
@@ -407,6 +410,7 @@ impl<'tcx> GotocHook<'tcx> for Forall {
         );
         Stmt::block(
             vec![
+                ref_decl,
                 Stmt::assign(
                     unwrap_or_return_codegen_unimplemented_stmt!(
                         tcx,
@@ -418,7 +422,7 @@ impl<'tcx> GotocHook<'tcx> for Forall {
                         goto_elem_type.clone(),
                         unique_var_name,
                         function_expr.call(vec![
-                            arg,
+                            ref_var,
                             Expr::symbol_expression(unique_var_name, goto_elem_type),
                         ]),
                     ),
@@ -450,6 +454,7 @@ pub fn fn_hooks<'tcx>() -> GotocHooks<'tcx> {
             Rc::new(RustAlloc),
             Rc::new(SliceFromRawPart),
             Rc::new(MemCmp),
+            Rc::new(Forall),
         ],
     }
 }
