@@ -11,10 +11,10 @@
 use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
-use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Type};
+use cbmc::goto_program::{BuiltinFn, Expr, Location, Quantifier, Stmt, Type};
 use rustc_middle::mir::{BasicBlock, Place};
 use rustc_middle::ty::print::with_no_trimmed_paths;
-use rustc_middle::ty::{Instance, TyCtxt};
+use rustc_middle::ty::{Instance, ParamEnv, TyCtxt, TyKind};
 use rustc_span::Span;
 use std::rc::Rc;
 use tracing::debug;
@@ -357,6 +357,87 @@ impl<'tcx> GotocHook<'tcx> for MemCmp {
         )
     }
 }
+
+pub struct Forall;
+
+impl<'tcx> GotocHook<'tcx> for Forall {
+    fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
+        matches_function(tcx, instance, "KaniForall")
+    }
+
+    fn handle(
+        &self,
+        tcx: &mut GotocCtx<'tcx>,
+        instance: Instance<'tcx>,
+        mut fargs: Vec<Expr>,
+        assign_to: Place<'tcx>,
+        target: Option<BasicBlock>,
+        span: Option<Span>,
+    ) -> Stmt {
+        let arg = fargs.pop().expect("Expected one argument to `forall`, got none.");
+        assert!(
+            fargs.is_empty(),
+            "Wrong number of arguments to `forall`, expected 1, got {arg:?} and additional {fargs:?}"
+        );
+        let closure_type = instance.substs.type_at(1);
+        let (closure_fn, closure_substs) = match closure_type.kind() {
+            TyKind::Closure(def_id, substs) => (def_id, substs),
+            _ => unreachable!("Only closure type is currently suported (got {closure_type:?})"),
+        };
+
+        let unique_var_name = "i".into();
+
+        let loc = tcx.codegen_span_option(span);
+        let element_type = match closure_substs
+            .as_closure()
+            .sig()
+            .no_bound_vars()
+            .expect("Bound vars?")
+            .inputs()
+        {
+            [_slf, elem] => *elem,
+            all => unreachable!("Wrong number of closure arguments, expected 2, found {all:?}"),
+        };
+        let goto_elem_type = tcx.codegen_ty(element_type);
+        let function_expr = tcx.codegen_func_expr(
+            Instance::resolve(tcx.tcx, ParamEnv::reveal_all(), *closure_fn, &closure_substs)
+                .unwrap()
+                .unwrap(),
+            None,
+        );
+        Stmt::block(
+            vec![
+                Stmt::assign(
+                    unwrap_or_return_codegen_unimplemented_stmt!(
+                        tcx,
+                        tcx.codegen_place(&assign_to)
+                    )
+                    .goto_expr,
+                    Expr::quantified(
+                        Quantifier::Forall,
+                        goto_elem_type.clone(),
+                        unique_var_name,
+                        function_expr.call(vec![
+                            arg,
+                            Expr::symbol_expression(unique_var_name, goto_elem_type),
+                        ]),
+                    ),
+                    loc,
+                ),
+                Stmt::goto(tcx.current_fn().find_label(&target.unwrap()), loc),
+            ],
+            loc,
+        )
+    }
+}
+
+// pub struct Exists;
+
+// impl<'tcx> GotocHook<'tcx> for Exists {
+//     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
+//         matches_function(tcx, instance, "KaniForall")
+//     }
+// }
 
 pub fn fn_hooks<'tcx>() -> GotocHooks<'tcx> {
     GotocHooks {

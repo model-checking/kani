@@ -168,6 +168,18 @@ pub enum ExprValue {
     Vector {
         elems: Vec<Expr>,
     },
+    Quantify {
+        quantifier: Quantifier,
+        typ: Type,
+        identifier: InternedString,
+        body: Expr,
+    },
+}
+
+#[derive(Clone, Debug, Copy, Eq, PartialEq, PartialOrd)]
+pub enum Quantifier {
+    Forall,
+    Exists,
 }
 
 #[derive(Debug, Clone)]
@@ -1638,5 +1650,16 @@ impl Expr {
             }
         }
         exprs
+    }
+}
+
+impl Expr {
+    pub fn quantified(
+        quantifier: Quantifier,
+        typ: Type,
+        identifier: InternedString,
+        body: Expr,
+    ) -> Self {
+        expr!(ExprValue::Quantify { quantifier, typ, identifier, body }, Type::Bool)
     }
 }

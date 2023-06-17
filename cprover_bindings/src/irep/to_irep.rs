@@ -10,7 +10,7 @@ use crate::goto_program::Lambda;
 use crate::linear_map;
 use crate::InternedString;
 use goto_program::{
-    BinaryOperator, CIntType, DatatypeComponent, Expr, ExprValue, Location, Parameter,
+    BinaryOperator, CIntType, DatatypeComponent, Expr, ExprValue, Location, Parameter, Quantifier,
     SelfOperator, Stmt, StmtBody, SwitchCase, SymbolValues, Type, UnaryOperator,
 };
 
@@ -172,11 +172,13 @@ impl ToIrep for Expr {
     }
 }
 
-fn identifier_to_irep(identifier: InternedString) -> Irep {
-    Irep {
-        id: IrepId::Symbol,
-        sub: vec![],
-        named_sub: linear_map![(IrepId::Identifier, Irep::just_string_id(identifier.to_string()),)],
+impl Irep {
+    pub fn symbol(identifier: InternedString) -> Self {
+        Irep {
+            id: IrepId::Symbol,
+            sub: vec![],
+            named_sub: linear_map![(IrepId::Identifier, Irep::just_string_id(identifier))],
+        }
     }
 }
 
@@ -308,7 +310,7 @@ impl ToIrep for ExprValue {
                 sub: values.iter().map(|x| x.to_irep(mm)).collect(),
                 named_sub: linear_map![],
             },
-            ExprValue::Symbol { identifier } => identifier_to_irep(*identifier),
+            ExprValue::Symbol { identifier } => Irep::symbol(*identifier),
             ExprValue::Typecast(e) => {
                 Irep { id: IrepId::Typecast, sub: vec![e.to_irep(mm)], named_sub: linear_map![] }
             }
@@ -351,6 +353,19 @@ impl ToIrep for ExprValue {
                 id: IrepId::Vector,
                 sub: elems.iter().map(|x| x.to_irep(mm)).collect(),
                 named_sub: linear_map![],
+            },
+            ExprValue::Quantify { quantifier, typ, identifier, body } => Irep {
+                id: match quantifier {
+                    Quantifier::Forall => IrepId::Forall,
+                    Quantifier::Exists => IrepId::Exists,
+                },
+                sub: vec![
+                    Irep::tuple(vec![
+                        Irep::symbol(*identifier).with_named_sub(IrepId::Type, typ.to_irep(mm)),
+                    ]),
+                    body.to_irep(mm),
+                ],
+                named_sub: linear_map![(IrepId::Type, Type::Bool.to_irep(mm))],
             },
         }
     }
@@ -510,7 +525,7 @@ impl ToIrep for Lambda {
             .iter()
             .map(|(i, ty)| {
                 let ty_rep = ty.to_irep(mm);
-                (identifier_to_irep(*i).with_named_sub(IrepId::Type, ty_rep.clone()), ty_rep)
+                (Irep::symbol(*i).with_named_sub(IrepId::Type, ty_rep.clone()), ty_rep)
             })
             .unzip();
         let typ = Irep {
@@ -520,14 +535,7 @@ impl ToIrep for Lambda {
         };
         Irep::just_sub(vec![Irep {
             id: IrepId::Lambda,
-            sub: vec![
-                Irep {
-                    id: IrepId::Tuple,
-                    sub: ops_ireps,
-                    named_sub: linear_map!((IrepId::Type, Irep::just_id(IrepId::Tuple))),
-                },
-                self.body.to_irep(mm),
-            ],
+            sub: vec![Irep::tuple(ops_ireps), self.body.to_irep(mm)],
             named_sub: linear_map!((IrepId::Type, typ)),
         }])
     }

@@ -66,6 +66,20 @@ pub fn assume(cond: bool) {
     assert!(cond, "`kani::assume` should always hold");
 }
 
+#[inline(never)]
+#[rustc_diagnostic_item = "KaniForall"]
+pub fn forall<T: Arbitrary, F: Fn(T) -> bool>(f: F) -> bool {
+    let _ = f;
+    todo!("`forall` cannot be used in regular execution")
+}
+
+#[inline(never)]
+#[rustc_diagnostic_item = "KaniExists"]
+pub fn exists<T: Arbitrary, F: Fn(T) -> bool>(f: F) -> bool {
+    let _ = f;
+    todo!("`exists` cannot be used in regular execution")
+}
+
 /// Creates an assertion of the specified condition and message.
 ///
 /// # Example:

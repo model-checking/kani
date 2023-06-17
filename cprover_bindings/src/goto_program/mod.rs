@@ -18,7 +18,7 @@ mod typ;
 pub use builtin::BuiltinFn;
 pub use expr::{
     arithmetic_overflow_result_type, ArithmeticOverflowResult, BinaryOperator, Expr, ExprValue,
-    Lambda, SelfOperator, UnaryOperator, ARITH_OVERFLOW_OVERFLOWED_FIELD,
+    Lambda, Quantifier, SelfOperator, UnaryOperator, ARITH_OVERFLOW_OVERFLOWED_FIELD,
     ARITH_OVERFLOW_RESULT_FIELD,
 };
 pub use location::Location;
