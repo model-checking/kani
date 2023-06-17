@@ -11,7 +11,7 @@
 use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
-use cbmc::goto_program::{BuiltinFn, Expr, Location, Quantifier, Stmt, Type};
+use cbmc::goto_program::{BuiltinFn, Expr, Location, Quantifier, Stmt, Symbol, Type};
 use rustc_middle::mir::{BasicBlock, Place};
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{Instance, ParamEnv, TyCtxt, TyKind};
@@ -385,23 +385,27 @@ impl<'tcx> GotocHook<'tcx> for Forall {
             _ => unreachable!("Only closure type is currently suported (got {closure_type:?})"),
         };
 
-        let unique_var_name = "i".into();
+        let c = tcx.current_fn_mut().get_and_incr_counter();
+        let iteration_variable_base_name = format!("i_{c}");
+        let iteration_variable_name = format!("forall::1::{iteration_variable_base_name}");
 
         let loc = tcx.codegen_span_option(span);
-        let clj_sig = closure_substs
-            .as_closure()
-            .sig()
-            .no_bound_vars()
-            .expect("Bound vars?");
-        let element_type = match clj_sig
-            .inputs()
-        {
+        let clj_sig = closure_substs.as_closure().sig().no_bound_vars().expect("Bound vars?");
+        let element_type = match clj_sig.inputs() {
             [elem] => elem.tuple_fields()[0],
             all => unreachable!("Wrong number of closure arguments, expected 1, found {all:?}"),
         };
-        println!("{clj_sig:?} . {element_type:?}");
         let goto_elem_type = tcx.codegen_ty(element_type);
-        let (ref_var, ref_decl) = tcx.decl_temp_variable(arg.typ().clone().to_pointer(), Some(arg.address_of()), loc);
+        let (ref_var, ref_decl) =
+            tcx.decl_temp_variable(arg.typ().clone().to_pointer(), Some(arg.address_of()), loc);
+
+        let iteration_variable = Symbol::variable(
+            iteration_variable_name,
+            iteration_variable_base_name,
+            goto_elem_type,
+            loc,
+        );
+        tcx.symbol_table.insert(iteration_variable.clone());
         let function_expr = tcx.codegen_func_expr(
             Instance::resolve(tcx.tcx, ParamEnv::reveal_all(), *closure_fn, &closure_substs)
                 .unwrap()
@@ -419,12 +423,9 @@ impl<'tcx> GotocHook<'tcx> for Forall {
                     .goto_expr,
                     Expr::quantified(
                         Quantifier::Forall,
-                        goto_elem_type.clone(),
-                        unique_var_name,
-                        function_expr.call(vec![
-                            ref_var,
-                            Expr::symbol_expression(unique_var_name, goto_elem_type),
-                        ]),
+                        iteration_variable.typ.clone(),
+                        iteration_variable.name,
+                        function_expr.call(vec![ref_var, iteration_variable.to_expr()]),
                     ),
                     loc,
                 ),
