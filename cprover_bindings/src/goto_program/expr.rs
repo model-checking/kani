@@ -174,6 +174,7 @@ pub enum ExprValue {
         identifier: InternedString,
         body: Expr,
     },
+    Old(Expr),
 }
 
 #[derive(Clone, Debug, Copy, Eq, PartialEq, PartialOrd)]
@@ -573,6 +574,10 @@ impl Expr {
     pub fn dereference(self) -> Self {
         assert!(self.typ.is_pointer());
         expr!(Dereference(self), self.typ.base_type().unwrap().clone())
+    }
+
+    pub fn old(self) -> Self {
+        expr!(Old(self), self.typ().clone())
     }
 
     /// `1.0`

@@ -367,6 +367,11 @@ impl ToIrep for ExprValue {
                 ],
                 named_sub: linear_map![(IrepId::Type, Type::Bool.to_irep(mm))],
             },
+            ExprValue::Old(inner) => Irep {
+                id: IrepId::Old,
+                sub: vec![inner.to_irep(mm)],
+                named_sub: linear_map!((IrepId::Type, inner.typ().to_irep(mm))),
+            },
         }
     }
 }

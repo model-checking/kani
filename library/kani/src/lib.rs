@@ -80,6 +80,13 @@ pub fn exists<T: Arbitrary, F: Fn(T) -> bool>(f: F) -> bool {
     todo!("`exists` cannot be used in regular execution")
 }
 
+#[inline(never)]
+#[rustc_diagnostic_item = "KaniOld"]
+pub fn old<T>(t: &T) -> T {
+    let _ = t;
+    unreachable!("`old` cannot be used in regular execution");
+}
+
 /// Creates an assertion of the specified condition and message.
 ///
 /// # Example:

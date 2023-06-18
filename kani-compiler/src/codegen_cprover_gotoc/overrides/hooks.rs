@@ -436,6 +436,43 @@ impl<'tcx> GotocHook<'tcx> for Forall {
     }
 }
 
+pub struct Old;
+
+impl<'tcx> GotocHook<'tcx> for Old {
+    fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
+        matches_function(tcx, instance, "KaniOld")
+    }
+
+    fn handle(
+        &self,
+        tcx: &mut GotocCtx<'tcx>,
+        _instance: Instance<'tcx>,
+        mut fargs: Vec<Expr>,
+        assign_to: Place<'tcx>,
+        target: Option<BasicBlock>,
+        span: Option<Span>,
+    ) -> Stmt {
+        let arg = fargs.pop().expect("Not enough arguments for `old`");
+        let loc = tcx.codegen_span_option(span);
+        assert!(fargs.is_empty(), "Too many arguments to `old`, found an additional {fargs:?}");
+        Stmt::block(
+            vec![
+                Stmt::assign(
+                    unwrap_or_return_codegen_unimplemented_stmt!(
+                        tcx,
+                        tcx.codegen_place(&assign_to)
+                    )
+                    .goto_expr,
+                    Expr::old(arg.dereference()),
+                    loc,
+                ),
+                Stmt::goto(tcx.current_fn().find_label(&target.unwrap()), loc),
+            ],
+            loc,
+        )
+    }
+}
+
 // pub struct Exists;
 
 // impl<'tcx> GotocHook<'tcx> for Exists {
