@@ -132,7 +132,8 @@ impl KaniSession {
 
             // If even one harness was not found with --exact, return an error to user
             if self.args.exact && harnesses_found.len() < total_harnesses {
-                let harness_found_names: BTreeSet<&String> = harnesses_found.iter().map(|&h| &h.pretty_name).collect();
+                let harness_found_names: BTreeSet<&String> =
+                    harnesses_found.iter().map(|&h| &h.pretty_name).collect();
 
                 // Check which harnesses are missing from the difference of targets and harnesses_found
                 let harnesses_missing: Vec<&String> =
@@ -244,17 +245,25 @@ mod tests {
             1
         );
         assert!(
-            find_proof_harnesses(&BTreeSet::from([&"check_two".to_string()]), &ref_harnesses, false)
-                .first()
-                .unwrap()
-                .mangled_name
+            find_proof_harnesses(
+                &BTreeSet::from([&"check_two".to_string()]),
+                &ref_harnesses,
+                false
+            )
+            .first()
+            .unwrap()
+            .mangled_name
                 == "module::check_two"
         );
         assert!(
-            find_proof_harnesses(&BTreeSet::from([&"check_one".to_string()]), &ref_harnesses, false)
-                .first()
-                .unwrap()
-                .mangled_name
+            find_proof_harnesses(
+                &BTreeSet::from([&"check_one".to_string()]),
+                &ref_harnesses,
+                false
+            )
+            .first()
+            .unwrap()
+            .mangled_name
                 == "check_one"
         );
     }
