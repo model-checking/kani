@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: --harness ignore_third_harness --exact
-//! Check that we just ignore non-matching filters
+//! Check that we error out with non-matching filters when --exact is used
 
 mod first {
     #[kani::proof]
