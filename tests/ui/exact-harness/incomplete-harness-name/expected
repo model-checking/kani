@@ -1,1 +1,3 @@
-error: Please provide exact harness name. The harnesses `ignore_third_harness` don't contain the full name.
+error: Failed to match the following harness(es):
+ignore_third_harness
+Please specify the fully-qualified name of a harness.
