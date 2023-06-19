@@ -50,13 +50,15 @@ GLOBAL CONDITIONS:
  - `fail_uncoverable`: SUCCESS (all cover statements were satisfied as expected)
 ```
 
-A `FAILED` status in any enabled global condition will cause verification to fail, pointing out that one or more global conditions were failed as in:
+A `FAILED` status in any enabled global condition will cause verification to fail.
+In that case, the overall verification result will point out that one or more global conditions failed, as in:
 
 ```
 VERIFICATION:- FAILURE (one or more global conditions failed)
 ```
 
 This last UI change will also be implemented for the terse output.
+Finally, checks that cause an enabled global condition to fail will be reported using the same interface we use for failed checks[^failed-checks].
 
 **Global conditions which aren't enabled won't appear in the `GLOBAL CONDITIONS` section**.
 Their status will be computed regardless[^status-computation], and we may consider showing this status when the `--verbose` option is passed.
@@ -96,3 +98,8 @@ A redesign of Kani's output is likely to change the style/architecture to report
 
 [^status-computation]: The results for global conditions would be computed during postprocessing based on the results of other checks.
 Global conditions' checks aren't part of the SAT, therefore this computation won't impact verification time.
+
+[^failed-checks]: We do not discuss the specific interface to report the failed checks because it needs improvements (for both global conditions and standard verification).
+In particular, the description field is the only information printed for properties (such as `cover` statements) without trace locations.
+There are additional improvements we should consider: printing the actual status (for global conditions, this won't always be `FAILED`), avoid the repetition of `Failed Checks: `, etc.
+[This comment](https://github.com/model-checking/kani/pull/2516#issuecomment-1597524184) discusses problems with the current interface on some examples.
