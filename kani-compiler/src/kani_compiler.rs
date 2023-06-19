@@ -18,6 +18,7 @@
 #[cfg(feature = "cprover")]
 use crate::codegen_cprover_gotoc::GotocCodegenBackend;
 use crate::kani_middle::attributes::is_proof_harness;
+use crate::kani_middle::check_crate_items;
 use crate::kani_middle::metadata::gen_proof_metadata;
 use crate::kani_middle::reachability::filter_crate_items;
 use crate::kani_middle::stubbing::{self, harness_stub_map};
@@ -373,8 +374,10 @@ impl Callbacks for KaniCompiler {
         rustc_queries: &'tcx rustc_interface::Queries<'tcx>,
     ) -> Compilation {
         if self.stage.is_init() {
-            self.stage =
-                rustc_queries.global_ctxt().unwrap().enter(|tcx| self.process_harnesses(tcx));
+            self.stage = rustc_queries.global_ctxt().unwrap().enter(|tcx| {
+                check_crate_items(tcx, self.queries.lock().unwrap().ignore_global_asm);
+                self.process_harnesses(tcx)
+            });
         }
 
         self.prepare_codegen()

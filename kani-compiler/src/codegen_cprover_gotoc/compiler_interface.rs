@@ -11,7 +11,7 @@ use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{
     collect_reachable_items, filter_const_crate_items, filter_crate_items,
 };
-use crate::kani_middle::{check_crate_items, check_reachable_items, dump_mir_items};
+use crate::kani_middle::{check_reachable_items, dump_mir_items};
 use crate::kani_queries::{QueryDb, ReachabilityType};
 use cbmc::goto_program::Location;
 use cbmc::irep::goto_binary_serde::write_goto_binary_file;
@@ -217,7 +217,6 @@ impl CodegenBackend for GotocCodegenBackend {
         let queries = self.queries.lock().unwrap().clone();
         check_target(tcx.sess);
         check_options(tcx.sess);
-        check_crate_items(tcx, queries.ignore_global_asm);
 
         // Codegen all items that need to be processed according to the selected reachability mode:
         //

@@ -1,4 +1,4 @@
-warning: duplicate attribute\
+error: only one '#[kani::proof]' attribute is allowed per harness\
 invalid.rs:\
 |\
 | #[kani::proof]\
