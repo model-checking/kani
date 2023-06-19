@@ -88,6 +88,18 @@ impl GlobalCondition {
             },
         }
     }
+
+    pub fn blame_properties<'a>(&self, properties: &'a[Property]) -> Vec<&'a Property> {
+        match &self {
+            Self::ShouldPanic { status, .. } => match *status {
+                FailedProperties::None => properties.iter().filter(|prop| prop.property_class() == "assertion" && prop.status != CheckStatus::Failure).collect(),
+                FailedProperties::Other => properties.iter().filter(|prop| prop.property_class() != "assertion" && prop.status == CheckStatus::Failure).collect(),
+                _ => vec![],
+            },
+            Self::FailUncoverable { .. } =>
+                properties.iter().filter(|prop| prop.property_class() == "cover" && prop.status != CheckStatus::Satisfied).collect(),
+            }
+    }
 }
 
 /// Our (kani-driver) notions of CBMC results.

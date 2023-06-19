@@ -332,11 +332,11 @@ pub fn format_result(
         result_str.push_str("GLOBAL CONDITIONS:\n");
         for cond in global_conditions {
             if cond.enabled() {
-                let cond_status = if cond.passed() {
-                    CheckStatus::Success
+                let (cond_status, blame_properties) = if cond.passed() {
+                    (CheckStatus::Success, None)
                 } else {
                     global_condition_failures = true;
-                    CheckStatus::Failure
+                    (CheckStatus::Failure, Some(cond.blame_properties(&properties)))
                 };
                 result_str.push_str(&format!(
                     " - {}: {} ({})\n",
@@ -344,6 +344,12 @@ pub fn format_result(
                     cond_status,
                     cond.reason()
                 ));
+                if !cond.passed() {
+                    for prop in blame_properties.unwrap() {
+                        let failure_message = build_failure_message(prop.description.clone(), &prop.trace.clone());
+                        result_str.push_str(&failure_message);
+                    }
+                }
             }
         }
     }
