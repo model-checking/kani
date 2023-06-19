@@ -169,6 +169,7 @@ pub struct VerificationArgs {
     pub function: Option<String>,
     /// If specified, only run harnesses that match this filter. This option can be provided
     /// multiple times, which will run all tests matching any of the filters.
+    /// If used with --exact, the harness filter will only match the exact fully qualified name of a harness.
     #[arg(
         long = "harness",
         conflicts_with = "function",
@@ -176,6 +177,10 @@ pub struct VerificationArgs {
         value_name = "HARNESS_FILTER"
     )]
     pub harnesses: Vec<String>,
+
+    /// When specified, the harness filter will only match the exact fully qualified name of a harness
+    #[arg(long, requires("harnesses"))]
+    pub exact: bool,
 
     /// Link external C files referenced by Rust code.
     /// This is an experimental feature and requires `-Z c-ffi` to be used
