@@ -222,16 +222,16 @@ mod sysroot {
     }
 
     macro_rules! requires_ensures {
-        ($name: ident, $append_return:literal) => {
+        ($name: ident) => {
             pub fn $name(attr: TokenStream, item: TokenStream) -> TokenStream {
-                use syn::{FnArg, PatType, PatIdent, Pat, Signature, Token, ReturnType, TypeTuple, punctuated::Punctuated};
+                use syn::{FnArg, PatType, PatIdent, Pat, Signature, Token, ReturnType, TypeTuple, punctuated::Punctuated, Type};
                 use proc_macro2::Span;
                 let attr = proc_macro2::TokenStream::from(attr);
 
                 let a_short_hash = short_hash_of_token_stream(&item);
 
                 let item_fn @ ItemFn { sig, .. } = &parse_macro_input!(item as ItemFn);
-                let Signature { generics, inputs, output , .. } = sig;
+                let Signature { inputs, output , .. } = sig;
 
                 let gen_fn_name = identifier_for_generated_function(item_fn, stringify!($name), a_short_hash);
                 let attribute = format_ident!("{}", stringify!($name));
@@ -261,13 +261,15 @@ mod sysroot {
                     })
                 );
 
-                assert!(
-                    generics.params.is_empty() && generics.where_clause.is_none(),
-                    "Generics are not yet implemented",
-                );
+                assert!(sig.variadic.is_none(), "Varaidic signatures are not supported");
+
+                let mut gen_sig = sig.clone();
+                gen_sig.inputs = gen_fn_inputs;
+                gen_sig.output = ReturnType::Type(Default::default(), Box::new(Type::Verbatim(quote!(bool))));
+                gen_sig.ident = gen_fn_name;
 
                 quote!(
-                    fn #gen_fn_name(#gen_fn_inputs) -> bool {
+                    #gen_sig {
                         #attr
                     }
 
@@ -335,8 +337,8 @@ mod sysroot {
         .into()
     }
 
-    requires_ensures!(requires, false);
-    requires_ensures!(ensures, true);
+    requires_ensures!(requires);
+    requires_ensures!(ensures);
 
     kani_attribute!(should_panic, no_args);
     kani_attribute!(solver);
