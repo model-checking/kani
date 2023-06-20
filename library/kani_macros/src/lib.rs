@@ -246,8 +246,7 @@ mod sysroot {
                 };
 
                 let mut gen_fn_inputs = inputs.clone();
-                gen_fn_inputs.insert(
-                    0,
+                gen_fn_inputs.push(
                     FnArg::Typed(PatType {
                         attrs: vec![],
                         pat: Box::new(Pat::Ident(PatIdent{

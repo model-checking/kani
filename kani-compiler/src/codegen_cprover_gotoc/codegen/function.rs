@@ -223,6 +223,12 @@ impl<'tcx> GotocCtx<'tcx> {
         );
     }
 
+    /// A spec lambda in GOTO receives as its first argument the return value of
+    /// the annotated function. However at the top level we must receive `self`
+    /// as first argument, because rust requires it. As a result the generated
+    /// lambda takes the return value as first argument and then immediately
+    /// calls the generated spec function, but passing the return value as the
+    /// last argument.
     fn as_goto_contract(&mut self, fn_contract: &GFnContract<Instance<'tcx>>) -> Contract {
         use rustc_middle::mir;
         let mut handle_contract_expr = |instance| {
@@ -244,8 +250,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 .collect();
 
             mir_arguments.insert(0, return_arg);
-            arguments.insert(
-                0,
+            arguments.push(
                 Expr::symbol_expression(
                     self.codegen_var_name(&return_arg),
                     goto_argument_types.first().unwrap().clone(),

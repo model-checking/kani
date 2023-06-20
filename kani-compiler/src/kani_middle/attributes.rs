@@ -141,11 +141,26 @@ pub fn extract_harness_attributes(tcx: TyCtxt, def_id: DefId) -> Option<HarnessA
 
 pub fn extract_contract(tcx: TyCtxt, local_def_id: LocalDefId) -> super::contracts::FnContract {
     use rustc_ast::ExprKind;
+    use rustc_hir::{Node, Item, ItemKind, Mod};
     let hir_map = tcx.hir();
-    let enclosing_mod = hir_map
-        .get_module(tcx.parent_module(hir_map.local_def_id_to_hir_id(local_def_id)))
-        .0
-        .item_ids;
+    let hir_id = hir_map.local_def_id_to_hir_id(local_def_id);
+    let find_sibling_by_name = |name| {
+        let find_in_mod = |md: &Mod<'_>| 
+            md.item_ids.iter().find(|it| hir_map.item(**it).ident.name == name).unwrap().hir_id();
+
+        match hir_map.get_parent(hir_id) {
+            Node::Item(Item { kind, .. }) => match kind {
+                ItemKind::Mod(m) => find_in_mod(*m),
+                ItemKind::Impl(imp) => 
+                    imp.items.iter().find(|it| it.ident.name == name).unwrap().id.hir_id(),
+                other => panic!("Odd parent item kind {other:?}"),
+            }
+            Node::Crate(m) => find_in_mod(m),
+            other => panic!("Odd prant node type {other:?}")
+        }.expect_owner().def_id.to_def_id()
+    };
+
+    //println!("Searching in {:?}", hir_map.module_items(enclosing_mod).map(|it| hir_map.item(it).ident.name).collect::<Vec<_>>());
 
     let parse_and_resolve = |attr: &Vec<&Attribute>| match attr.as_slice() {
         [one] => match &one.get_normal_item().args {
@@ -158,18 +173,7 @@ pub fn extract_contract(tcx: TyCtxt, local_def_id: LocalDefId) -> super::contrac
                     AttrArgsEq::Hir(lit) => lit.kind.str(),
                 }
                 .unwrap();
-
-                enclosing_mod
-                    .iter()
-                    .find(|c| {
-                        let item = hir_map.item(**c);
-                        item.ident.name == sym
-                    })
-                    .unwrap()
-                    .hir_id()
-                    .expect_owner()
-                    .def_id
-                    .to_def_id()
+                find_sibling_by_name(sym)
             }
             _ => unreachable!(),
         },
