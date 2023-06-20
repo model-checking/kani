@@ -89,6 +89,10 @@ pub fn old<T>(t: &T) -> T {
     unreachable!("`old` cannot be used in regular execution");
 }
 
+pub fn implies(premise: bool, conclusion: bool) -> bool {
+    !premise || conclusion
+}
+
 /// Creates an assertion of the specified condition and message.
 ///
 /// # Example:
