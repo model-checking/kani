@@ -10,6 +10,7 @@ import subprocess
 import tempfile
 import textwrap
 import unittest
+import uuid
 
 import yaml
 
@@ -733,6 +734,108 @@ class RegressionTests(unittest.TestCase):
                 run_bc.proc.returncode, 0, msg=run_bc.stderr)
 
             with open(run_bc.working_directory / "result.yaml") as handle:
+                result = yaml.safe_load(handle)
+
+            for item in ["benchmarks", "metrics"]:
+                self.assertIn(item, result)
+
+
+    def test_run_command_visualization(self):
+        """Ensure that the run_command visualization can execute a command"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out_file = pathlib.Path(tmp) / str(uuid.uuid4())
+            run_bc = Benchcomp({
+                "variants": {
+                    "v1": {
+                        "config": {
+                            "command_line": "true",
+                            "directory": tmp,
+                        }
+                    },
+                    "v2": {
+                        "config": {
+                            "command_line": "true",
+                            "directory": tmp,
+                        }
+                    }
+                },
+                "run": {
+                    "suites": {
+                        "suite_1": {
+                            "parser": {
+                                "command": """
+                                    echo '{
+                                        "benchmarks": {},
+                                        "metrics": {}
+                                    }'
+                                """
+                            },
+                            "variants": ["v2", "v1"]
+                        }
+                    }
+                },
+                "visualize": [{
+                    "type": "run_command",
+                    "command": f"cat - > {out_file}"
+                }],
+            })
+            run_bc()
+            self.assertEqual(
+                run_bc.proc.returncode, 0, msg=run_bc.stderr)
+
+            with open(out_file) as handle:
+                result = yaml.safe_load(handle)
+
+            for item in ["benchmarks", "metrics"]:
+                self.assertIn(item, result)
+
+
+    def test_run_failing_command_visualization(self):
+        """Ensure that benchcomp terminates normally even when run_command visualization doesn't"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out_file = pathlib.Path(tmp) / str(uuid.uuid4())
+            run_bc = Benchcomp({
+                "variants": {
+                    "v1": {
+                        "config": {
+                            "command_line": "true",
+                            "directory": tmp,
+                        }
+                    },
+                    "v2": {
+                        "config": {
+                            "command_line": "true",
+                            "directory": tmp,
+                        }
+                    }
+                },
+                "run": {
+                    "suites": {
+                        "suite_1": {
+                            "parser": {
+                                "command": """
+                                    echo '{
+                                        "benchmarks": {},
+                                        "metrics": {}
+                                    }'
+                                """
+                            },
+                            "variants": ["v2", "v1"]
+                        }
+                    }
+                },
+                "visualize": [{
+                    "type": "run_command",
+                    "command": f"cat - > {out_file}; false"
+                }],
+            })
+            run_bc()
+            self.assertEqual(
+                run_bc.proc.returncode, 0, msg=run_bc.stderr)
+
+            with open(out_file) as handle:
                 result = yaml.safe_load(handle)
 
             for item in ["benchmarks", "metrics"]:

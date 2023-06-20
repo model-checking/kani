@@ -3,6 +3,8 @@
 
 
 import dataclasses
+import json
+import subprocess
 import textwrap
 
 import jinja2
@@ -12,8 +14,42 @@ import benchcomp
 import benchcomp.visualizers.utils as viz_utils
 
 
-# TODO The doc comment should appear in the help output, which should list all
-# available checks.
+
+@dataclasses.dataclass
+class run_command:
+    """Run an executable command, passing the result as a JSON file on stdin.
+
+    This allows you to write your own visualization, which reads a result file
+    on stdin and does something with it, e.g. writing out a graph or other
+    output file.
+
+    Sample configuration:
+
+    ```
+    visualize:
+    - type: run_command
+      command: ./my_visualization.py
+    ```
+    """
+
+    command: str
+
+
+    def __call__(self, results):
+        results = json.dumps(results, indent=2)
+        try:
+            proc = subprocess.Popen(
+                self.command, shell=True, text=True, stdin=subprocess.PIPE)
+            _, _ = proc.communicate(input=results)
+        except subprocess.CalledProcessError as exc:
+            logging.warning(
+                "visualization command '%s' exited with code %d",
+                self.command, exc.returncode)
+        except (OSError, subprocess.SubprocessError) as exe:
+            logging.error(
+                "visualization command '%s' failed: %s", self.command, str(exe))
+
+
 
 @dataclasses.dataclass
 class error_on_regression:
