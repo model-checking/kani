@@ -13,7 +13,7 @@ pub struct Symbol {
     pub location: Location,
     pub typ: Type,
     pub value: SymbolValues,
-    pub contracts: Vec<Contract>,
+    pub contract: Option<Box<Contract>>,
 
     /// Optional debugging information
 
@@ -47,18 +47,14 @@ pub struct Symbol {
 
 #[derive(Clone, Debug)]
 pub struct Contract {
-    pub(crate) requires: Option<Box<Lambda>>,
-    pub(crate) ensures: Option<Box<Lambda>>,
-    pub(crate) assigns: Option<Box<Lambda>>,
+    pub(crate) requires: Vec<Lambda>,
+    pub(crate) ensures: Vec<Lambda>,
+    pub(crate) assigns: Vec<Lambda>,
 }
 
 impl Contract {
-    pub fn new(requires: Option<Lambda>, ensures: Option<Lambda>, assigns: Option<Lambda>) -> Self {
-        Self {
-            requires: requires.map(Box::new),
-            ensures: ensures.map(Box::new),
-            assigns: assigns.map(Box::new),
-        }
+    pub fn new(requires: Vec<Lambda>, ensures: Vec<Lambda>, assigns: Vec<Lambda>) -> Self {
+        Self { requires, ensures, assigns }
     }
 }
 
@@ -102,7 +98,7 @@ impl Symbol {
             base_name,
             pretty_name,
 
-            contracts: vec![],
+            contract: None,
             module: None,
             mode: SymbolModes::C,
             // global properties
@@ -127,7 +123,14 @@ impl Symbol {
     }
 
     pub fn attach_contract(&mut self, contract: Contract) {
-        self.contracts.push(contract)
+        match self.contract {
+            Some(ref mut prior) => {
+                prior.assigns.extend(contract.assigns);
+                prior.requires.extend(contract.requires);
+                prior.ensures.extend(contract.ensures);
+            }
+            None => self.contract = Some(Box::new(contract)),
+        }
     }
 
     /// The symbol that defines the type of the struct or union.

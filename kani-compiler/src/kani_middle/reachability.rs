@@ -178,14 +178,13 @@ impl<'tcx> MonoItemsCollector<'tcx> {
         while let Some(to_visit) = self.queue.pop() {
             if !self.collected.contains_key(&to_visit) {
                 let opt_contract = to_visit.def_id().as_local().and_then(|local_def_id| {
+                    let substs = match to_visit {
+                        MonoItem::Fn(inst) => inst.substs,
+                        _ => rustc_middle::ty::List::empty(),
+                    };
                     let contract =
                         attributes::extract_contract(self.tcx, local_def_id).map(|def_id| {
-                            Instance::resolve(
-                                self.tcx,
-                                ParamEnv::reveal_all(),
-                                *def_id,
-                                rustc_middle::ty::List::empty(),
-                            )
+                            Instance::resolve(self.tcx, ParamEnv::reveal_all(), *def_id, substs)
                             .unwrap()
                             .expect("No specific instance found")
                         });
@@ -195,7 +194,7 @@ impl<'tcx> MonoItemsCollector<'tcx> {
                 {
                     [contract.requires(), contract.ensures()]
                         .into_iter()
-                        .filter_map(Option::as_ref)
+                        .flat_map(IntoIterator::into_iter)
                         .copied()
                         .map(MonoItem::Fn)
                         .collect()
@@ -321,13 +320,14 @@ impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {
 
     fn collect_closure(
         &mut self,
-        def_id: DefId,
-        substs: &'tcx List<GenericArg<'tcx>>,
-        kind: ClosureKind,
+        _def_id: DefId,
+        _substs: &'tcx List<GenericArg<'tcx>>,
+        _kind: ClosureKind,
     ) {
-        let instance = Instance::resolve_closure(self.tcx, def_id, substs, kind)
-            .expect("failed to normalize and resolve closure during codegen");
-        self.collect_instance(instance, false);
+        // let instance = Instance::resolve(self.tcx, ParamEnv::reveal_all(), def_id, substs)
+        //     .unwrap()
+        //     .expect("failed to normalize and resolve closure during codegen");
+        // self.collect_instance(instance, false);
     }
 
     /// Collect an instance depending on how it is used (invoked directly or via fn_ptr).

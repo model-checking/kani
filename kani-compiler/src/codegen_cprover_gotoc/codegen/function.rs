@@ -266,9 +266,11 @@ impl<'tcx> GotocCtx<'tcx> {
             }
         };
 
-        let requires = fn_contract.requires().map(&mut handle_contract_expr);
-        let ensures = fn_contract.ensures().map(&mut handle_contract_expr);
-        Contract::new(requires, ensures, None)
+        let requires =
+            fn_contract.requires().iter().copied().map(&mut handle_contract_expr).collect();
+        let ensures =
+            fn_contract.ensures().iter().copied().map(&mut handle_contract_expr).collect();
+        Contract::new(requires, ensures, vec![])
     }
 
     pub fn attach_contract(

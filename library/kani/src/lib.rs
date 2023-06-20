@@ -67,16 +67,18 @@ pub fn assume(cond: bool) {
 }
 
 #[inline(never)]
+#[allow(unreachable_code)]
 #[rustc_diagnostic_item = "KaniForall"]
 pub fn forall<T: Arbitrary, F: Fn(T) -> bool>(f: F) -> bool {
-    let _ = f;
+    let _ = f(todo!());
     todo!("`forall` cannot be used in regular execution")
 }
 
 #[inline(never)]
+#[allow(unreachable_code)]
 #[rustc_diagnostic_item = "KaniExists"]
 pub fn exists<T: Arbitrary, F: Fn(T) -> bool>(f: F) -> bool {
-    let _ = f;
+    let _ = f(todo!());
     todo!("`exists` cannot be used in regular execution")
 }
 

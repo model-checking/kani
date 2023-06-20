@@ -5,7 +5,6 @@
 use super::super::goto_program;
 use super::super::MachineModel;
 use super::{Irep, IrepId};
-use crate::goto_program::Contract;
 use crate::goto_program::Lambda;
 use crate::linear_map;
 use crate::InternedString;
@@ -549,14 +548,14 @@ impl ToIrep for Lambda {
 impl goto_program::Symbol {
     pub fn to_irep(&self, mm: &MachineModel) -> super::Symbol {
         let mut typ = self.typ.to_irep(mm);
-        for Contract { requires, ensures, assigns } in &self.contracts {
-            if let Some(requires) = requires {
+        if let Some(contract) = &self.contract {
+            for requires in &contract.requires {
                 typ = typ.with_named_sub(IrepId::CSpecRequires, requires.to_irep(mm));
             }
-            if let Some(ensures) = ensures {
+            for ensures in &contract.ensures {
                 typ = typ.with_named_sub(IrepId::CSpecEnsures, ensures.to_irep(mm));
             }
-            if let Some(assigns) = assigns {
+            for assigns in &contract.assigns {
                 typ = typ.with_named_sub(IrepId::CSpecAssigns, assigns.to_irep(mm));
             }
         }

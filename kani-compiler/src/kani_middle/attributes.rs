@@ -162,8 +162,9 @@ pub fn extract_contract(tcx: TyCtxt, local_def_id: LocalDefId) -> super::contrac
 
     //println!("Searching in {:?}", hir_map.module_items(enclosing_mod).map(|it| hir_map.item(it).ident.name).collect::<Vec<_>>());
 
-    let parse_and_resolve = |attr: &Vec<&Attribute>| match attr.as_slice() {
-        [one] => match &one.get_normal_item().args {
+    let parse_and_resolve = |attr: &Vec<&Attribute>| {
+        attr.iter()
+            .map(|clause| match &clause.get_normal_item().args {
             AttrArgs::Eq(_, it) => {
                 let sym = match it {
                     AttrArgsEq::Ast(expr) => match expr.kind {
@@ -176,13 +177,15 @@ pub fn extract_contract(tcx: TyCtxt, local_def_id: LocalDefId) -> super::contrac
                 find_sibling_by_name(sym)
             }
             _ => unreachable!(),
-        },
-        _ => todo!("Multiple requires/enusres clauses are not yet supported"),
+            })
+            .collect()
     };
     let attributes = extract_kani_attributes(tcx, local_def_id.to_def_id());
-    let requires = attributes.get(&KaniAttributeKind::Requires).map(parse_and_resolve);
-    let ensures = attributes.get(&KaniAttributeKind::Ensures).map(parse_and_resolve);
-    super::contracts::FnContract::new(requires, ensures, None)
+    let requires =
+        attributes.get(&KaniAttributeKind::Requires).map_or_else(Vec::new, parse_and_resolve);
+    let ensures =
+        attributes.get(&KaniAttributeKind::Ensures).map_or_else(Vec::new, parse_and_resolve);
+    super::contracts::FnContract::new(requires, ensures, vec![])
 }
 
 /// Check that any unstable API has been enabled. Otherwise, emit an error.
