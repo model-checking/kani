@@ -149,7 +149,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 "unreachable code",
                 loc,
             ),
-            TerminatorKind::Drop { place, target, unwind: _ } => {
+            TerminatorKind::Drop { place, target, unwind: _, replace: _ } => {
                 self.codegen_drop(place, target, loc)
             }
             TerminatorKind::Call { func, args, destination, target, .. } => {
@@ -161,12 +161,12 @@ impl<'tcx> GotocCtx<'tcx> {
                     if *expected { r } else { Expr::not(r) }
                 };
 
-                let msg = if let AssertKind::BoundsCheck { .. } = msg {
+                let msg = if let AssertKind::BoundsCheck { .. } = &**msg {
                     // For bounds check the following panic message is generated at runtime:
                     // "index out of bounds: the length is {len} but the index is {index}",
                     // but CBMC only accepts static messages so we don't add values to the message.
                     "index out of bounds: the length is less than or equal to the given index"
-                } else if let AssertKind::MisalignedPointerDereference { .. } = msg {
+                } else if let AssertKind::MisalignedPointerDereference { .. } = &**msg {
                     // Misaligned pointer dereference check messages is also a runtime messages.
                     // Generate a generic one here.
                     "misaligned pointer dereference: address must be a multiple of its type's alignment"

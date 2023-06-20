@@ -16,8 +16,8 @@
 use rustc_hir::lang_items::LangItem;
 use rustc_middle::traits::{ImplSource, ImplSourceUserDefinedData};
 use rustc_middle::ty::adjustment::CustomCoerceUnsized;
-use rustc_middle::ty::TypeAndMut;
 use rustc_middle::ty::{self, ParamEnv, Ty, TyCtxt};
+use rustc_middle::ty::{TraitRef, TypeAndMut};
 use rustc_span::symbol::Symbol;
 use tracing::trace;
 
@@ -213,9 +213,11 @@ fn custom_coerce_unsize_info<'tcx>(
 ) -> CustomCoerceUnsized {
     let def_id = tcx.require_lang_item(LangItem::CoerceUnsized, None);
 
-    let trait_ref = ty::Binder::dummy(
-        tcx.mk_trait_ref(def_id, tcx.mk_substs_trait(source_ty, [target_ty.into()])),
-    );
+    let trait_ref = ty::Binder::dummy(TraitRef::new(
+        tcx,
+        def_id,
+        tcx.mk_substs_trait(source_ty, [target_ty.into()]),
+    ));
 
     match tcx.codegen_select_candidate((ParamEnv::reveal_all(), trait_ref)) {
         Ok(ImplSource::UserDefined(ImplSourceUserDefinedData { impl_def_id, .. })) => {

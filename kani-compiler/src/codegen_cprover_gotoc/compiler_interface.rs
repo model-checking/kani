@@ -27,7 +27,7 @@ use rustc_codegen_ssa::back::archive::{
 use rustc_codegen_ssa::back::metadata::create_wrapper_file;
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_codegen_ssa::{CodegenResults, CrateInfo};
-use rustc_data_structures::fx::FxHashMap;
+use rustc_data_structures::fx::{FxHashMap, FxIndexMap};
 use rustc_data_structures::temp_dir::MaybeTempDir;
 use rustc_errors::{ErrorGuaranteed, DEFAULT_LOCALE_RESOURCE};
 use rustc_hir::def_id::LOCAL_CRATE;
@@ -36,8 +36,8 @@ use rustc_metadata::fs::{emit_wrapper_file, METADATA_FILENAME};
 use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
 use rustc_middle::mir::mono::MonoItem;
-use rustc_middle::ty::query::Providers;
-use rustc_middle::ty::{self, TyCtxt};
+use rustc_middle::query::{ExternProviders, Providers};
+use rustc_middle::ty::TyCtxt;
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::cstore::MetadataLoaderDyn;
 use rustc_session::output::out_filename;
@@ -192,7 +192,7 @@ impl CodegenBackend for GotocCodegenBackend {
         provide::provide(providers, &self.queries.lock().unwrap());
     }
 
-    fn provide_extern(&self, providers: &mut ty::query::ExternProviders) {
+    fn provide_extern(&self, providers: &mut ExternProviders) {
         provide::provide_extern(providers);
     }
 
@@ -317,10 +317,12 @@ impl CodegenBackend for GotocCodegenBackend {
         ongoing_codegen: Box<dyn Any>,
         _sess: &Session,
         _filenames: &OutputFilenames,
-    ) -> Result<(CodegenResults, FxHashMap<WorkProductId, WorkProduct>), ErrorGuaranteed> {
-        Ok(*ongoing_codegen
-            .downcast::<(CodegenResults, FxHashMap<WorkProductId, WorkProduct>)>()
-            .unwrap())
+    ) -> Result<(CodegenResults, FxIndexMap<WorkProductId, WorkProduct>), ErrorGuaranteed> {
+        match ongoing_codegen.downcast::<(CodegenResults, FxIndexMap<WorkProductId, WorkProduct>)>()
+        {
+            Ok(val) => Ok(*val),
+            Err(val) => panic!("Oh no: {:?}", val.type_id()),
+        }
     }
 
     /// Emit output files during the link stage if it was requested.
@@ -345,12 +347,13 @@ impl CodegenBackend for GotocCodegenBackend {
     ) -> Result<(), ErrorGuaranteed> {
         let requested_crate_types = sess.crate_types();
         for crate_type in requested_crate_types {
-            let out_path = out_filename(
+            let out_fname = out_filename(
                 sess,
                 *crate_type,
                 outputs,
                 codegen_results.crate_info.local_crate_name,
             );
+            let out_path = out_fname.as_path();
             debug!(?crate_type, ?out_path, "link");
             if *crate_type == CrateType::Rlib {
                 // Emit the `rlib` that contains just one file: `<crate>.rmeta`
@@ -396,7 +399,7 @@ fn check_target(session: &Session) {
             `x86_64-apple-*` or `arm64-apple-*`, but it is {}",
             &session.target.llvm_target
         );
-        session.err(&err_msg);
+        session.err(err_msg);
     }
 
     session.abort_if_errors();
@@ -412,7 +415,7 @@ fn check_options(session: &Session) {
             let err_msg = format!(
                 "Kani requires the target architecture option `min_global_align` to be 1, but it is {align}."
             );
-            session.err(&err_msg);
+            session.err(err_msg);
         }
         _ => (),
     }
@@ -441,7 +444,7 @@ fn codegen_results(
     rustc_metadata: EncodedMetadata,
     machine: &MachineModel,
 ) -> Box<dyn Any> {
-    let work_products = FxHashMap::<WorkProductId, WorkProduct>::default();
+    let work_products = FxIndexMap::<WorkProductId, WorkProduct>::default();
     Box::new((
         CodegenResults {
             modules: vec![],
@@ -482,7 +485,7 @@ fn symbol_table_to_gotoc(tcx: &TyCtxt, base_path: &Path) -> PathBuf {
             "Failed to generate goto model:\n\tsymtab2gb failed on file {}.",
             input_filename.display()
         );
-        tcx.sess.err(&err_msg);
+        tcx.sess.err(err_msg);
         tcx.sess.abort_if_errors();
     };
     output_filename
@@ -591,7 +594,7 @@ impl<'tcx> GotoCodegenResults<'tcx> {
             msg += "\nVerification will fail if one or more of these constructs is reachable.";
             msg += "\nSee https://model-checking.github.io/kani/rust-feature-support.html for more \
             details.";
-            tcx.sess.warn(&msg);
+            tcx.sess.warn(msg);
         }
 
         if !self.concurrent_constructs.is_empty() {
@@ -602,7 +605,7 @@ impl<'tcx> GotoCodegenResults<'tcx> {
             for (construct, locations) in self.concurrent_constructs.iter() {
                 writeln!(&mut msg, "    - {construct} ({})", locations.len()).unwrap();
             }
-            tcx.sess.warn(&msg);
+            tcx.sess.warn(msg);
         }
 
         // Print some compilation stats.

@@ -377,13 +377,13 @@ impl<'tcx> FnAbiOfHelpers<'tcx> for GotocCtx<'tcx> {
                 FnAbiRequest::OfFnPtr { sig, extra_args } => {
                     span_bug!(
                         span,
-                        "Error: {err}\n while running `fn_abi_of_fn_ptr. ({sig}, {extra_args:?})`",
+                        "Error: {err:?}\n while running `fn_abi_of_fn_ptr. ({sig}, {extra_args:?})`",
                     );
                 }
                 FnAbiRequest::OfInstance { instance, extra_args } => {
                     span_bug!(
                         span,
-                        "Error: {err}\n while running `fn_abi_of_instance. ({instance}, {extra_args:?})`",
+                        "Error: {err:?}\n while running `fn_abi_of_instance. ({instance}, {extra_args:?})`",
                     );
                 }
             }
