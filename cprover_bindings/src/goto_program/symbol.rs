@@ -13,7 +13,7 @@ pub struct Symbol {
     pub location: Location,
     pub typ: Type,
     pub value: SymbolValues,
-    pub contract: Option<Contract>,
+    pub contracts: Vec<Contract>,
 
     /// Optional debugging information
 
@@ -102,7 +102,7 @@ impl Symbol {
             base_name,
             pretty_name,
 
-            contract: None,
+            contracts: vec![],
             module: None,
             mode: SymbolModes::C,
             // global properties
@@ -127,7 +127,7 @@ impl Symbol {
     }
 
     pub fn attach_contract(&mut self, contract: Contract) {
-        assert!(self.contract.replace(contract).is_none())
+        self.contracts.push(contract)
     }
 
     /// The symbol that defines the type of the struct or union.

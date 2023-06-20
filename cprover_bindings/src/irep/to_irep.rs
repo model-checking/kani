@@ -549,7 +549,7 @@ impl ToIrep for Lambda {
 impl goto_program::Symbol {
     pub fn to_irep(&self, mm: &MachineModel) -> super::Symbol {
         let mut typ = self.typ.to_irep(mm);
-        if let Some(Contract { requires, ensures, assigns }) = &self.contract {
+        for Contract { requires, ensures, assigns } in &self.contracts {
             if let Some(requires) = requires {
                 typ = typ.with_named_sub(IrepId::CSpecRequires, requires.to_irep(mm));
             }
