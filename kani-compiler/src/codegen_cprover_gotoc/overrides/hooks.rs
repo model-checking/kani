@@ -455,15 +455,18 @@ impl<'tcx> GotocHook<'tcx> for Old {
         let arg = fargs.pop().expect("Not enough arguments for `old`");
         let loc = tcx.codegen_span_option(span);
         assert!(fargs.is_empty(), "Too many arguments to `old`, found an additional {fargs:?}");
+        let arg_deref = arg.dereference();
+        let (arg_deref_var, arg_deref_decl) = tcx.decl_temp_variable(arg_deref.typ().clone(), Some(arg_deref), loc);
         Stmt::block(
             vec![
+                arg_deref_decl,
                 Stmt::assign(
                     unwrap_or_return_codegen_unimplemented_stmt!(
                         tcx,
                         tcx.codegen_place(&assign_to)
                     )
                     .goto_expr,
-                    Expr::old(arg.dereference()),
+                    Expr::old(arg_deref_var),
                     loc,
                 ),
                 Stmt::goto(tcx.current_fn().find_label(&target.unwrap()), loc),
@@ -493,6 +496,7 @@ pub fn fn_hooks<'tcx>() -> GotocHooks<'tcx> {
             Rc::new(SliceFromRawPart),
             Rc::new(MemCmp),
             Rc::new(Forall),
+            Rc::new(Old),
         ],
     }
 }
