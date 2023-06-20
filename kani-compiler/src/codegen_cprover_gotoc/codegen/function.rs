@@ -250,12 +250,10 @@ impl<'tcx> GotocCtx<'tcx> {
                 .collect();
 
             mir_arguments.insert(0, return_arg);
-            arguments.push(
-                Expr::symbol_expression(
-                    self.codegen_var_name(&return_arg),
-                    goto_argument_types.first().unwrap().clone(),
-                ),
-            );
+            arguments.push(Expr::symbol_expression(
+                self.codegen_var_name(&return_arg),
+                goto_argument_types.first().unwrap().clone(),
+            ));
             Lambda {
                 arguments: mir_arguments
                     .into_iter()

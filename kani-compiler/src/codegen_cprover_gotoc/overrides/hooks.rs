@@ -456,7 +456,8 @@ impl<'tcx> GotocHook<'tcx> for Old {
         let loc = tcx.codegen_span_option(span);
         assert!(fargs.is_empty(), "Too many arguments to `old`, found an additional {fargs:?}");
         let arg_deref = arg.dereference();
-        let (arg_deref_var, arg_deref_decl) = tcx.decl_temp_variable(arg_deref.typ().clone(), Some(arg_deref), loc);
+        let (arg_deref_var, arg_deref_decl) =
+            tcx.decl_temp_variable(arg_deref.typ().clone(), Some(arg_deref), loc);
         Stmt::block(
             vec![
                 arg_deref_decl,

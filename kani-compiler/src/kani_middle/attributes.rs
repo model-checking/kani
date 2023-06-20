@@ -141,23 +141,28 @@ pub fn extract_harness_attributes(tcx: TyCtxt, def_id: DefId) -> Option<HarnessA
 
 pub fn extract_contract(tcx: TyCtxt, local_def_id: LocalDefId) -> super::contracts::FnContract {
     use rustc_ast::ExprKind;
-    use rustc_hir::{Node, Item, ItemKind, Mod};
+    use rustc_hir::{Item, ItemKind, Mod, Node};
     let hir_map = tcx.hir();
     let hir_id = hir_map.local_def_id_to_hir_id(local_def_id);
     let find_sibling_by_name = |name| {
-        let find_in_mod = |md: &Mod<'_>| 
-            md.item_ids.iter().find(|it| hir_map.item(**it).ident.name == name).unwrap().hir_id();
+        let find_in_mod = |md: &Mod<'_>| {
+            md.item_ids.iter().find(|it| hir_map.item(**it).ident.name == name).unwrap().hir_id()
+        };
 
         match hir_map.get_parent(hir_id) {
             Node::Item(Item { kind, .. }) => match kind {
                 ItemKind::Mod(m) => find_in_mod(*m),
-                ItemKind::Impl(imp) => 
-                    imp.items.iter().find(|it| it.ident.name == name).unwrap().id.hir_id(),
+                ItemKind::Impl(imp) => {
+                    imp.items.iter().find(|it| it.ident.name == name).unwrap().id.hir_id()
+                }
                 other => panic!("Odd parent item kind {other:?}"),
-            }
+            },
             Node::Crate(m) => find_in_mod(m),
-            other => panic!("Odd prant node type {other:?}")
-        }.expect_owner().def_id.to_def_id()
+            other => panic!("Odd prant node type {other:?}"),
+        }
+        .expect_owner()
+        .def_id
+        .to_def_id()
     };
 
     //println!("Searching in {:?}", hir_map.module_items(enclosing_mod).map(|it| hir_map.item(it).ident.name).collect::<Vec<_>>());
@@ -165,18 +170,18 @@ pub fn extract_contract(tcx: TyCtxt, local_def_id: LocalDefId) -> super::contrac
     let parse_and_resolve = |attr: &Vec<&Attribute>| {
         attr.iter()
             .map(|clause| match &clause.get_normal_item().args {
-            AttrArgs::Eq(_, it) => {
-                let sym = match it {
-                    AttrArgsEq::Ast(expr) => match expr.kind {
-                        ExprKind::Lit(tok) => LitKind::from_token_lit(tok).unwrap().str(),
-                        _ => unreachable!(),
-                    },
-                    AttrArgsEq::Hir(lit) => lit.kind.str(),
+                AttrArgs::Eq(_, it) => {
+                    let sym = match it {
+                        AttrArgsEq::Ast(expr) => match expr.kind {
+                            ExprKind::Lit(tok) => LitKind::from_token_lit(tok).unwrap().str(),
+                            _ => unreachable!(),
+                        },
+                        AttrArgsEq::Hir(lit) => lit.kind.str(),
+                    }
+                    .unwrap();
+                    find_sibling_by_name(sym)
                 }
-                .unwrap();
-                find_sibling_by_name(sym)
-            }
-            _ => unreachable!(),
+                _ => unreachable!(),
             })
             .collect()
     };
