@@ -346,7 +346,8 @@ pub fn format_result(
                 ));
                 if !cond.passed() {
                     for prop in blame_properties.unwrap() {
-                        let failure_message = build_failure_message(prop.description.clone(), &prop.trace.clone());
+                        let failure_message =
+                            build_failure_message(prop.description.clone(), &prop.trace.clone());
                         result_str.push_str(&failure_message);
                     }
                 }
