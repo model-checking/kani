@@ -2,7 +2,7 @@
 
 extern crate kani;
 
-use kani::{ensures as post};
+use kani::ensures as post;
 use std::{
     iter::FromIterator,
     ops::{Index, IndexMut},
@@ -51,10 +51,7 @@ impl<K, V> VecMap<K, V> {
     where
         K: PartialEq,
     {
-        VecMap {
-            keys: Vec::with_capacity(capacity),
-            values: Vec::with_capacity(capacity),
-        }
+        VecMap { keys: Vec::with_capacity(capacity), values: Vec::with_capacity(capacity) }
     }
 
     pub fn len(&self) -> usize {
@@ -113,9 +110,7 @@ impl<K, V> VecMap<K, V> {
     }
 
     pub fn drain(&mut self) -> Drain<K, V> {
-        Drain {
-            iter: self.keys.drain(..).zip(self.values.drain(..)),
-        }
+        Drain { iter: self.keys.drain(..).zip(self.values.drain(..)) }
     }
 
     pub fn reserve(&mut self, additional: usize) {
@@ -130,7 +125,10 @@ impl<K, V> VecMap<K, V> {
 
     #[post(implies(!self.contains_key(key), result.is_none()))]
     #[post(implies(self.contains_key(key), result.is_some()))]
-    pub fn get_key_value<'l, Q: PartialEq<K> + ?Sized>(&'l self, key: &Q) -> Option<(&'l K, &'l V)> {
+    pub fn get_key_value<'l, Q: PartialEq<K> + ?Sized>(
+        &'l self,
+        key: &Q,
+    ) -> Option<(&'l K, &'l V)> {
         self.position(key).map(|p| (&self.keys[p], &self.values[p]))
     }
 
@@ -148,16 +146,12 @@ impl<K, V> VecMap<K, V> {
 
     pub fn entry(&mut self, key: K) -> Entry<K, V>
     where
-        K: PartialEq
+        K: PartialEq,
     {
-        match self
-            .keys()
-            .enumerate()
-            .find(|(_, k)|  &&key == k)
-            .map(|(n, _)| n) {
-                Some(index) => Entry::Occupied(OccupiedEntry{ map: self, index }),
-                None => Entry::Vacant(VacantEntry{ map: self, key }),
-            }
+        match self.keys().enumerate().find(|(_, k)| &&key == k).map(|(n, _)| n) {
+            Some(index) => Entry::Occupied(OccupiedEntry { map: self, index }),
+            None => Entry::Vacant(VacantEntry { map: self, key }),
+        }
     }
 
     //#[post(implies(!old(self.contains_key(key)), result.is_none()))]
@@ -181,15 +175,11 @@ impl<K, V> VecMap<K, V> {
     }
 
     pub fn iter(&self) -> Iter<K, V> {
-        Iter {
-            iter: self.keys.iter().zip(self.values.iter()),
-        }
+        Iter { iter: self.keys.iter().zip(self.values.iter()) }
     }
 
     pub fn iter_mut(&mut self) -> IterMut<K, V> {
-        IterMut {
-            iter: self.keys.iter().zip(self.values.iter_mut()),
-        }
+        IterMut { iter: self.keys.iter().zip(self.values.iter_mut()) }
     }
 
     pub fn sort(&mut self)
@@ -215,17 +205,11 @@ impl<K, V> VecMap<K, V> {
     }
 
     pub fn keys(&self) -> Keys<K, V> {
-        Keys {
-            iter: self.keys.iter(),
-            _phantom: Default::default(),
-        }
+        Keys { iter: self.keys.iter(), _phantom: Default::default() }
     }
 
     pub fn values(&self) -> Values<K, V> {
-        Values {
-            iter: self.values.iter(),
-            _phantom: Default::default(),
-        }
+        Values { iter: self.values.iter(), _phantom: Default::default() }
     }
 }
 
@@ -320,9 +304,7 @@ impl<K, V> IntoIterator for VecMap<K, V> {
     type Item = (K, V);
     type IntoIter = IntoIter<K, V>;
     fn into_iter(self) -> Self::IntoIter {
-        IntoIter {
-            iter: self.keys.into_iter().zip(self.values.into_iter()),
-        }
+        IntoIter { iter: self.keys.into_iter().zip(self.values.into_iter()) }
     }
 }
 
@@ -477,10 +459,7 @@ pub struct Keys<'a, K: 'a, V> {
 
 impl<'a, K, V> Clone for Keys<'a, K, V> {
     fn clone(&self) -> Self {
-        Keys {
-            iter: self.iter.clone(),
-            _phantom: Default::default(),
-        }
+        Keys { iter: self.iter.clone(), _phantom: Default::default() }
     }
 }
 
@@ -494,10 +473,7 @@ pub struct Values<'a, K, V: 'a> {
 
 impl<'a, K, V> Clone for Values<'a, K, V> {
     fn clone(&self) -> Self {
-        Values {
-            iter: self.iter.clone(),
-            _phantom: Default::default(),
-        }
+        Values { iter: self.iter.clone(), _phantom: Default::default() }
     }
 }
 
@@ -535,6 +511,7 @@ impl_iter! {Keys<'a,K,V>,  &'a K}
 impl_iter! {Values<'a,K,V>,  &'a V}
 
 #[kani::proof]
+#[kani::stub(core::fmt::Arguments::new_const, ArgumentsProxy::new_consts)]
 fn reorder() {
     let n = 128;
     let m = 128;
@@ -557,24 +534,48 @@ fn reorder() {
         map.sort();
         let mut map_iter = map.iter();
         let first = *map_iter.by_ref().take(1).next().unwrap().0;
-        assert!(map_iter
-            .fold(Some(first), |acc, (k, _v)| {
-                let k = *k;
-                match acc {
-                    Some(v) if v < k => Some(k),
-                    _ => None,
-                }
-            })
-            .is_some());
+        assert!(
+            map_iter
+                .fold(Some(first), |acc, (k, _v)| {
+                    let k = *k;
+                    match acc {
+                        Some(v) if v < k => Some(k),
+                        _ => None,
+                    }
+                })
+                .is_some()
+        );
         assert_eq!(map, clone);
     }
 }
 
 #[kani::proof]
+#[kani::stub(core::fmt::Arguments::new_const, ArgumentsProxy::new_consts)]
 fn unsized_key_queries() {
     let mut map = VecMap::<String, u8>::new();
     map.insert("foo".to_owned(), 1);
     map.insert("bar".to_owned(), 2);
 
     assert_eq!(&map["bar"], &2);
+}
+
+struct ArgumentProxy {
+    position: usize,
+    // Eliding format spec, we just need this to take up *some* space
+}
+
+struct ArgumentV1Proxy<'a> {
+    value: &'a (usize, usize), // hopefully this is ensures the reference is the correct size
+                               // Eliding other fields
+}
+struct ArgumentsProxy<'a> {
+    pieces: &'a [&'static str],
+    fmt: Option<&'a [ArgumentProxy]>,
+    args: &'a [ArgumentV1Proxy<'a>],
+}
+
+impl<'a> ArgumentsProxy<'a> {
+    fn new_consts(pieces: &'a [&'static str]) -> std::fmt::Arguments<'a> {
+        unsafe { std::mem::transmute(ArgumentsProxy { pieces, fmt: None, args: &[] }) }
+    }
 }
