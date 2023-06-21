@@ -10,5 +10,6 @@
 fn main() {
     let a: i32 = i32::MIN;
     let b: i32 = -1;
-    unsafe { std::intrinsics::unchecked_div(a, b) };
+    // Black box this so it doesn't get pruned by the compiler.
+    std::hint::black_box(unsafe { std::intrinsics::unchecked_div(a, b) });
 }
