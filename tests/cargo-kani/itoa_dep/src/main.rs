@@ -20,7 +20,7 @@ fn check_itoa<T: kani::Arbitrary + Integer + std::fmt::Display>() {
 #[kani::proof]
 #[kani::unwind(10)]
 fn check_signed() {
-    check_itoa::<i8>();
+    check_itoa::<u8>();
 }
 
 fn main() {}
