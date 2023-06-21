@@ -231,7 +231,7 @@ impl TestRunner {
         test: impl Fn(S::Value) -> TestCaseResult,
     ) -> TestRunResult<S> {
         let tree = strategy.new_tree(self).unwrap();
-        test(tree.current()).unwrap();
+        assert!(matches!(test(tree.current()), Ok(_) | Err(TestCaseError::Reject(_))));
         Ok(())
     }
 
