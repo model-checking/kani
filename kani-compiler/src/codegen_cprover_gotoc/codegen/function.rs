@@ -251,7 +251,7 @@ impl<'tcx> GotocCtx<'tcx> {
         use rustc_middle::mir;
         let mut handle_contract_expr = |instance| {
             let mir = self.current_fn().mir();
-            assert!(!mir.spread_arg.is_some());
+            assert!(mir.spread_arg.is_none());
             let func_expr = self.codegen_func_expr(instance, None);
             let mut mir_arguments: Vec<_> =
                 std::iter::successors(Some(mir::RETURN_PLACE + 1), |i| Some(*i + 1))

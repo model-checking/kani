@@ -15,6 +15,8 @@
 //! We have kept this module agnostic of any Kani code in case we can contribute this back to rustc.
 use tracing::{debug, debug_span, trace, warn};
 
+use std::collections::hash_map::Entry;
+
 use rustc_data_structures::fingerprint::Fingerprint;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_data_structures::stable_hasher::{HashStable, StableHasher};
@@ -175,7 +177,7 @@ impl<'tcx> MonoItemsCollector<'tcx> {
     /// instruction looking for the items that should be included in the compilation.
     fn reachable_items(&mut self) {
         while let Some(to_visit) = self.queue.pop() {
-            if !self.collected.contains_key(&to_visit) {
+            if let Entry::Vacant(e) = self.collected.entry(to_visit) {
                 let opt_contract = to_visit.def_id().as_local().and_then(|local_def_id| {
                     let substs = match to_visit {
                         MonoItem::Fn(inst) => inst.substs,
@@ -200,7 +202,7 @@ impl<'tcx> MonoItemsCollector<'tcx> {
                 } else {
                     vec![]
                 };
-                self.collected.insert(to_visit, opt_contract);
+                e.insert(opt_contract);
                 let next_items = match to_visit {
                     MonoItem::Fn(instance) => self.visit_fn(instance),
                     MonoItem::Static(def_id) => self.visit_static(def_id),

@@ -70,6 +70,8 @@ pub struct GotocCodegenBackend {
     queries: Arc<Mutex<QueryDb>>,
 }
 
+type MonoContract<'tcx> = GFnContract<ty::Instance<'tcx>>;
+
 impl GotocCodegenBackend {
     pub fn new(queries: Arc<Mutex<QueryDb>>) -> Self {
         GotocCodegenBackend { queries }
@@ -82,7 +84,7 @@ impl GotocCodegenBackend {
         starting_items: &[MonoItem<'tcx>],
         symtab_goto: &Path,
         machine_model: &MachineModel,
-    ) -> (GotocCtx<'tcx>, Vec<(MonoItem<'tcx>, Option<GFnContract<ty::Instance<'tcx>>>)>) {
+    ) -> (GotocCtx<'tcx>, Vec<(MonoItem<'tcx>, Option<MonoContract<'tcx>>)>) {
         let items_with_contracts = with_timer(
             || collect_reachable_items(tcx, starting_items),
             "codegen reachability analysis",
@@ -282,7 +284,7 @@ impl CodegenBackend for GotocCodegenBackend {
                 let items = items_with_contracts
                     .into_iter()
                     .map(|(i, contract)| {
-                        if let Some(_) = contract {
+                        if contract.is_some() {
                             let instance = match i {
                                 MonoItem::Fn(f) => f,
                                 _ => unreachable!(),

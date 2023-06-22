@@ -175,7 +175,7 @@ pub fn extract_contract(tcx: TyCtxt, local_def_id: LocalDefId) -> super::contrac
 
         match hir_map.get_parent(hir_id) {
             Node::Item(Item { kind, .. }) => match kind {
-                ItemKind::Mod(m) => find_in_mod(*m),
+                ItemKind::Mod(m) => find_in_mod(m),
                 ItemKind::Impl(imp) => {
                     imp.items.iter().find(|it| it.ident.name == name).unwrap().id.hir_id()
                 }
