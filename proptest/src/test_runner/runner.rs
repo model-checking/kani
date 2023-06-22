@@ -231,7 +231,13 @@ impl TestRunner {
         test: impl Fn(S::Value) -> TestCaseResult,
     ) -> TestRunResult<S> {
         let tree = strategy.new_tree(self).unwrap();
-        test(tree.current()).unwrap();
+
+        // run harness and assert that (1) it succeeds or (2) the
+        // input was invalid.
+        assert!(matches!(
+            test(tree.current()),
+            Ok(_) | Err(TestCaseError::Reject(_))
+        ));
         Ok(())
     }
 
@@ -293,6 +299,13 @@ mod test {
                 256,
                 "Default .cases should be 256. Check: src/test_runner/config.rs"
             );
+        }
+
+        #[test]
+        fn reject_input(nil in &Just(()) ) {
+            if nil == () {
+                return Err(TestCaseError::reject("input rejected."))
+            }
         }
     }
 
