@@ -4,6 +4,7 @@
 //! and transformations.
 
 use std::collections::HashSet;
+use std::path::Path;
 
 use crate::kani_queries::QueryDb;
 use rustc_hir::{def::DefKind, def_id::DefId, def_id::LOCAL_CRATE};
@@ -79,7 +80,7 @@ pub fn check_reachable_items(tcx: TyCtxt, queries: &QueryDb, items: &[MonoItem])
 }
 
 /// Print MIR for the reachable items if the `--emit mir` option was provided to rustc.
-pub fn dump_mir_items(tcx: TyCtxt, items: &[MonoItem]) {
+pub fn dump_mir_items(tcx: TyCtxt, items: &[MonoItem], output: &Path) {
     /// Convert MonoItem into a DefId.
     /// Skip stuff that we cannot generate the MIR items.
     fn visible_item<'tcx>(item: &MonoItem<'tcx>) -> Option<(MonoItem<'tcx>, DefId)> {
@@ -96,9 +97,7 @@ pub fn dump_mir_items(tcx: TyCtxt, items: &[MonoItem]) {
 
     if tcx.sess.opts.output_types.contains_key(&OutputType::Mir) {
         // Create output buffer.
-        let outputs = tcx.output_filenames(());
-        let path = outputs.output_path(OutputType::Mir).with_extension("kani.mir");
-        let out_file = File::create(&path).unwrap();
+        let out_file = File::create(output).unwrap();
         let mut writer = BufWriter::new(out_file);
 
         // For each def_id, dump their MIR
