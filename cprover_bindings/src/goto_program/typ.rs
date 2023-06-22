@@ -27,7 +27,7 @@ pub enum Type {
     Bool,
     /// `typ x : width`. e.g. `unsigned int x: 3`.
     CBitField { typ: Box<Type>, width: u64 },
-    /// Machine dependent integers: `bool`, `char`, `int`, `size_t`, etc.
+    /// Machine dependent integers: `bool`, `char`, `int`, `long int`, `size_t`, etc.
     CInteger(CIntType),
     /// `return_type x(parameters)`
     Code { parameters: Vec<Parameter>, return_type: Box<Type> },
@@ -83,6 +83,8 @@ pub enum CIntType {
     Char,
     /// `int`
     Int,
+    /// `long int`
+    LongInt,
     /// `size_t`
     SizeT,
     /// `ssize_t`
@@ -232,6 +234,7 @@ impl CIntType {
             CIntType::Bool => st.machine_model().bool_width,
             CIntType::Char => st.machine_model().char_width,
             CIntType::Int => st.machine_model().int_width,
+            CIntType::LongInt => st.machine_model().long_int_width,
             CIntType::SizeT => st.machine_model().pointer_width,
             CIntType::SSizeT => st.machine_model().pointer_width,
         }
@@ -287,6 +290,7 @@ impl Type {
             CInteger(CIntType::Bool) => Some(mm.bool_width),
             CInteger(CIntType::Char) => Some(mm.char_width),
             CInteger(CIntType::Int) => Some(mm.int_width),
+            CInteger(CIntType::LongInt) => Some(mm.long_int_width),
             Signedbv { width } | Unsignedbv { width } => Some(*width),
             _ => None,
         }
@@ -446,6 +450,14 @@ impl Type {
         let concrete = self.unwrap_typedef();
         match concrete {
             Type::CInteger(CIntType::Bool) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_long_int(&self) -> bool {
+        let concrete = self.unwrap_typedef();
+        match concrete {
+            Type::CInteger(CIntType::LongInt) => true,
             _ => false,
         }
     }
@@ -637,7 +649,7 @@ impl Type {
     pub fn is_signed(&self, mm: &MachineModel) -> bool {
         let concrete = self.unwrap_typedef();
         match concrete {
-            CInteger(CIntType::Int) | CInteger(CIntType::SSizeT) | Signedbv { .. } => true,
+            CInteger(CIntType::Int) | CInteger(CIntType::LongInt) | CInteger(CIntType::SSizeT) | Signedbv { .. } => true,
             CInteger(CIntType::Char) => !mm.char_is_unsigned,
             _ => false,
         }
@@ -961,6 +973,10 @@ impl Type {
 
     pub fn c_int() -> Self {
         CInteger(CIntType::Int)
+    }
+
+    pub fn c_long_int() -> Self {
+        CInteger(CIntType::LongInt)
     }
 
     pub fn c_size_t() -> Self {
@@ -1471,6 +1487,7 @@ mod type_tests {
         assert_eq!(type_def.is_empty(), src_type.is_empty());
         assert_eq!(type_def.is_double(), src_type.is_double());
         assert_eq!(type_def.is_bool(), src_type.is_bool());
+        assert_eq!(type_def.is_long_int(), src_type.is_long_int());
         assert_eq!(type_def.is_array(), src_type.is_array());
         assert_eq!(type_def.is_array_like(), src_type.is_array_like());
         assert_eq!(type_def.is_union(), src_type.is_union());
