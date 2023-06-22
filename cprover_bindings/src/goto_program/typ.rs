@@ -649,7 +649,10 @@ impl Type {
     pub fn is_signed(&self, mm: &MachineModel) -> bool {
         let concrete = self.unwrap_typedef();
         match concrete {
-            CInteger(CIntType::Int) | CInteger(CIntType::LongInt) | CInteger(CIntType::SSizeT) | Signedbv { .. } => true,
+            CInteger(CIntType::Int)
+            | CInteger(CIntType::LongInt)
+            | CInteger(CIntType::SSizeT)
+            | Signedbv { .. } => true,
             CInteger(CIntType::Char) => !mm.char_is_unsigned,
             _ => false,
         }
