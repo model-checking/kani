@@ -297,6 +297,13 @@ mod test {
                 "Default .cases should be 256. Check: src/test_runner/config.rs"
             );
         }
+
+        #[test]
+        fn reject_input(nil in &Just(()) ) {
+            if nil == () {
+                return Err(TestCaseError::reject("input rejected."))
+            }
+        }
     }
 
     proptest! {
