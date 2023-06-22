@@ -231,6 +231,9 @@ impl TestRunner {
         test: impl Fn(S::Value) -> TestCaseResult,
     ) -> TestRunResult<S> {
         let tree = strategy.new_tree(self).unwrap();
+
+        // run harness and assert that (1) it succeeds or (2) the
+        // input was invalid.
         assert!(matches!(
             test(tree.current()),
             Ok(_) | Err(TestCaseError::Reject(_))
