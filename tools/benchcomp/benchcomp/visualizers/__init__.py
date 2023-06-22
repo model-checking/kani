@@ -17,7 +17,7 @@ import benchcomp.visualizers.utils as viz_utils
 
 @dataclasses.dataclass
 class run_command:
-    """Run an executable command, passing the result as a JSON file on stdin.
+    """Run an executable command, passing the performance metrics as JSON on stdin.
 
     This allows you to write your own visualization, which reads a result file
     on stdin and does something with it, e.g. writing out a graph or other
