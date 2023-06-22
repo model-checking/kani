@@ -164,6 +164,7 @@ impl KaniSession {
         self.call_goto_instrument(args)
     }
 
+    /// Make CBMC enforce a function contract.
     pub fn enforce_contract(&self, file: &Path, function: &str) -> Result<()> {
         println!("enforcing {function} contract");
         self.call_goto_instrument(vec![

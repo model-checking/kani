@@ -89,11 +89,28 @@ pub fn derive_arbitrary(item: TokenStream) -> TokenStream {
     derive::expand_derive_arbitrary(item)
 }
 
+/// Add a precondition to this function.
+///
+/// This is part of the function contract API, together with [`ensures`].
+///
+/// The contents of the attribute is a condtition over the input values to the
+/// annotated function. All Rust syntax is supported, even calling other
+/// functions, but the computations must be side effect free, e.g. it cannot
+/// perform I/O or use mutable memory.
 #[proc_macro_attribute]
 pub fn requires(attr: TokenStream, item: TokenStream) -> TokenStream {
     attr_impl::requires(attr, item)
 }
 
+/// Add a postcondition to this function.
+///
+/// This is part of the function contract API, together with [`requires`].
+///
+/// The contents of the attribute is a condtition over the input values to the
+/// annotated function *and* its return value, accessible as a variable called
+/// `result`. All Rust syntax is supported, even calling other functions, but
+/// the computations must be side effect free, e.g. it cannot perform I/O or use
+/// mutable memory.
 #[proc_macro_attribute]
 pub fn ensures(attr: TokenStream, item: TokenStream) -> TokenStream {
     attr_impl::ensures(attr, item)
@@ -112,6 +129,8 @@ mod sysroot {
 
     use proc_macro2::Ident;
 
+    /// Create a unique hash for a token stream (basically a [`std::hash::Hash`]
+    /// impl for `proc_macro2::TokenStream`).
     fn hash_of_token_stream<H: std::hash::Hasher>(
         hasher: &mut H,
         stream: proc_macro2::TokenStream,
@@ -215,6 +234,30 @@ mod sysroot {
         }
     }
 
+    /// Rewrites function contract annotations (`requires`, `ensures`) by lifing
+    /// the condition into a separate function. As an example: (using `ensures`)
+    ///
+    /// ```rs
+    /// #[kani::ensures(x < result)]
+    /// fn foo(x: u32) -> u32 { .. }
+    /// ```
+    ///
+    /// Is rewritten to
+    ///
+    /// ```rs
+    /// fn foo_enusres_<hash of foo>(x: u32, result: u32) {
+    ///     x < result
+    /// }
+    ///
+    /// #[kanitook::ensures = "foo_ensures_<hash of foo>"]
+    /// fn foo(x: u32) -> u32 { .. }
+    /// ```
+    ///
+    /// Note that CBMC's contracts always pass the return value (even for
+    /// `requires`) and so we also append it here.
+    ///
+    /// This macro is supposed to be called with the name of the procedural
+    /// macro it should generate, e.g. `requires_ensures(requires)`
     macro_rules! requires_ensures {
         ($name: ident) => {
             pub fn $name(attr: TokenStream, item: TokenStream) -> TokenStream {

@@ -322,6 +322,7 @@ impl KaniCompiler {
     }
 }
 
+/// Find all functions reachable from this harness that have a contract attached to them.
 fn contracts_for_harness<'tcx>(tcx: TyCtxt<'tcx>, harness: MonoItem<'tcx>) -> Vec<String> {
     collect_reachable_items(tcx, &[harness])
         .into_iter()

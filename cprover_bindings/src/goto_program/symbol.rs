@@ -13,6 +13,7 @@ pub struct Symbol {
     pub location: Location,
     pub typ: Type,
     pub value: SymbolValues,
+    /// Contracts to be enforced (only supported for functions)
     pub contract: Option<Box<Contract>>,
 
     /// Optional debugging information
@@ -45,6 +46,9 @@ pub struct Symbol {
     pub is_weak: bool,
 }
 
+/// The CBMC representation of a function contract with three types of clauses.
+/// See https://diffblue.github.io/cbmc/contracts-user.html for the meaning of
+/// each type of clause.
 #[derive(Clone, Debug)]
 pub struct Contract {
     pub(crate) requires: Vec<Lambda>,
@@ -122,7 +126,10 @@ impl Symbol {
         }
     }
 
+    /// Add this contract to the symbol (symbol must be a function) or fold the
+    /// conditions into an existing contract.
     pub fn attach_contract(&mut self, contract: Contract) {
+        assert!(self.typ.is_code());
         match self.contract {
             Some(ref mut prior) => {
                 prior.assigns.extend(contract.assigns);

@@ -156,6 +156,13 @@ pub fn extract_harness_attributes(tcx: TyCtxt, def_id: DefId) -> HarnessAttribut
     })
 }
 
+/// Extract function contracts on this item.
+///
+/// This parses the annotation and resolves the mentioned implementation
+/// functions for the contract.
+///
+/// If no contract annotations are found the return value of this function will
+/// simply not be [`enforceable()`](super::contracts::GFnContract::enforceable) and can be ignored.
 pub fn extract_contract(tcx: TyCtxt, local_def_id: LocalDefId) -> super::contracts::FnContract {
     use rustc_ast::ExprKind;
     use rustc_hir::{Item, ItemKind, Mod, Node};

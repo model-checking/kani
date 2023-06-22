@@ -87,6 +87,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 }
 
+/// The actual function name used in the symbol table
 pub fn symbol_name_for_instance<'tcx>(tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> String {
     let llvm_mangled = tcx.symbol_name(instance).name.to_string();
     debug!(
@@ -104,6 +105,7 @@ pub fn symbol_name_for_instance<'tcx>(tcx: TyCtxt<'tcx>, instance: Instance<'tcx
     if pretty == "main" { pretty } else { llvm_mangled }
 }
 
+/// A human readable name in Rust for reference, should not be used as a key.
 pub fn readable_name_of_instance<'tcx>(tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> String {
     with_no_trimmed_paths!(tcx.def_path_str_with_substs(instance.def_id(), instance.substs))
 }

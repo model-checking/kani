@@ -170,6 +170,9 @@ pub enum ExprValue {
     },
 }
 
+/// The equivalent of a "mathematical function" in CBMC but spiritually it is more like a function object.
+///
+/// This is only used to implement function contracts and values of this sort are otherwise not constructible.
 #[derive(Debug, Clone)]
 pub struct Lambda {
     pub arguments: Vec<(InternedString, Type)>,
