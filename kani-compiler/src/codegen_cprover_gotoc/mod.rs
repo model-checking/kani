@@ -9,3 +9,5 @@ mod utils;
 pub use compiler_interface::{GotocCodegenBackend, UnsupportedConstructs};
 pub use context::GotocCtx;
 pub use context::VtableCtx;
+
+pub use utils::symbol_name_for_instance;

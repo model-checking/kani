@@ -5,7 +5,9 @@
 use super::super::goto_program;
 use super::super::MachineModel;
 use super::{Irep, IrepId};
+use crate::goto_program::Lambda;
 use crate::linear_map;
+use crate::InternedString;
 use goto_program::{
     BinaryOperator, CIntType, DatatypeComponent, Expr, ExprValue, Location, Parameter,
     SelfOperator, Stmt, StmtBody, SwitchCase, SymbolValues, Type, UnaryOperator,
@@ -169,6 +171,16 @@ impl ToIrep for Expr {
     }
 }
 
+impl Irep {
+    pub fn symbol(identifier: InternedString) -> Self {
+        Irep {
+            id: IrepId::Symbol,
+            sub: vec![],
+            named_sub: linear_map![(IrepId::Identifier, Irep::just_string_id(identifier))],
+        }
+    }
+}
+
 impl ToIrep for ExprValue {
     fn to_irep(&self, mm: &MachineModel) -> Irep {
         match self {
@@ -297,14 +309,7 @@ impl ToIrep for ExprValue {
                 sub: values.iter().map(|x| x.to_irep(mm)).collect(),
                 named_sub: linear_map![],
             },
-            ExprValue::Symbol { identifier } => Irep {
-                id: IrepId::Symbol,
-                sub: vec![],
-                named_sub: linear_map![(
-                    IrepId::Identifier,
-                    Irep::just_string_id(identifier.to_string()),
-                )],
-            },
+            ExprValue::Symbol { identifier } => Irep::symbol(*identifier),
             ExprValue::Typecast(e) => {
                 Irep { id: IrepId::Typecast, sub: vec![e.to_irep(mm)], named_sub: linear_map![] }
             }
@@ -499,10 +504,45 @@ impl ToIrep for SwitchCase {
     }
 }
 
+impl ToIrep for Lambda {
+    fn to_irep(&self, mm: &MachineModel) -> Irep {
+        let (ops_ireps, types) = self
+            .arguments
+            .iter()
+            .map(|(i, ty)| {
+                let ty_rep = ty.to_irep(mm);
+                (Irep::symbol(*i).with_named_sub(IrepId::Type, ty_rep.clone()), ty_rep)
+            })
+            .unzip();
+        let typ = Irep {
+            id: IrepId::MathematicalFunction,
+            sub: vec![Irep::just_sub(types), self.body.typ().to_irep(mm)],
+            named_sub: Default::default(),
+        };
+        Irep::just_sub(vec![Irep {
+            id: IrepId::Lambda,
+            sub: vec![Irep::tuple(ops_ireps), self.body.to_irep(mm)],
+            named_sub: linear_map!((IrepId::Type, typ)),
+        }])
+    }
+}
+
 impl goto_program::Symbol {
     pub fn to_irep(&self, mm: &MachineModel) -> super::Symbol {
+        let mut typ = self.typ.to_irep(mm);
+        if let Some(contract) = &self.contract {
+            for requires in &contract.requires {
+                typ = typ.with_named_sub(IrepId::CSpecRequires, requires.to_irep(mm));
+            }
+            for ensures in &contract.ensures {
+                typ = typ.with_named_sub(IrepId::CSpecEnsures, ensures.to_irep(mm));
+            }
+            for assigns in &contract.assigns {
+                typ = typ.with_named_sub(IrepId::CSpecAssigns, assigns.to_irep(mm));
+            }
+        }
         super::Symbol {
-            typ: self.typ.to_irep(mm),
+            typ,
             value: match &self.value {
                 SymbolValues::Expr(e) => e.to_irep(mm),
                 SymbolValues::Stmt(s) => s.to_irep(mm),

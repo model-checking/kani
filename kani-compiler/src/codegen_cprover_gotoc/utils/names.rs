@@ -54,27 +54,12 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// A human readable name in Rust for reference, should not be used as a key.
     pub fn readable_instance_name(&self, instance: Instance<'tcx>) -> String {
-        with_no_trimmed_paths!(
-            self.tcx.def_path_str_with_substs(instance.def_id(), instance.substs)
-        )
+        readable_name_of_instance(self.tcx, instance)
     }
 
     /// The actual function name used in the symbol table
     pub fn symbol_name(&self, instance: Instance<'tcx>) -> String {
-        let llvm_mangled = self.tcx.symbol_name(instance).name.to_string();
-        debug!(
-            "finding function name for instance: {}, debug: {:?}, name: {}, symbol: {}",
-            instance,
-            instance,
-            self.readable_instance_name(instance),
-            llvm_mangled,
-        );
-
-        let pretty = self.readable_instance_name(instance);
-
-        // Make main function a special case in order to support `--function main`
-        // TODO: Get rid of this: https://github.com/model-checking/kani/issues/2129
-        if pretty == "main" { pretty } else { llvm_mangled }
+        symbol_name_for_instance(self.tcx, instance)
     }
 
     /// The name for a tuple field
@@ -100,6 +85,27 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn add_prefix_to_msg(msg: &str, prefix: &str) -> String {
         format!("[{prefix}] {msg}")
     }
+}
+
+pub fn symbol_name_for_instance<'tcx>(tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> String {
+    let llvm_mangled = tcx.symbol_name(instance).name.to_string();
+    debug!(
+        "finding function name for instance: {}, debug: {:?}, name: {}, symbol: {}",
+        instance,
+        instance,
+        readable_name_of_instance(tcx, instance),
+        llvm_mangled,
+    );
+
+    let pretty = readable_name_of_instance(tcx, instance);
+
+    // Make main function a special case in order to support `--function main`
+    // TODO: Get rid of this: https://github.com/model-checking/kani/issues/2129
+    if pretty == "main" { pretty } else { llvm_mangled }
+}
+
+pub fn readable_name_of_instance<'tcx>(tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> String {
+    with_no_trimmed_paths!(tcx.def_path_str_with_substs(instance.def_id(), instance.substs))
 }
 
 /// The full crate name should use the Codegen Unit builder to include full name resolution,

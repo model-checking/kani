@@ -170,6 +170,12 @@ pub enum ExprValue {
     },
 }
 
+#[derive(Debug, Clone)]
+pub struct Lambda {
+    pub arguments: Vec<(InternedString, Type)>,
+    pub body: Expr,
+}
+
 /// Binary operators. The names are the same as in the Irep representation.
 #[derive(Debug, Clone, Copy)]
 pub enum BinaryOperator {

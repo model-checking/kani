@@ -14,3 +14,4 @@ pub use names::*;
 pub use utils::*;
 
 pub use debug::init;
+pub use names::{readable_name_of_instance, symbol_name_for_instance};

@@ -16,11 +16,11 @@
 //! `-C llvm-args`.
 
 #[cfg(feature = "cprover")]
-use crate::codegen_cprover_gotoc::GotocCodegenBackend;
+use crate::codegen_cprover_gotoc::{symbol_name_for_instance, GotocCodegenBackend};
 use crate::kani_middle::attributes::is_proof_harness;
 use crate::kani_middle::check_crate_items;
 use crate::kani_middle::metadata::gen_proof_metadata;
-use crate::kani_middle::reachability::filter_crate_items;
+use crate::kani_middle::reachability::{collect_reachable_items, filter_crate_items};
 use crate::kani_middle::stubbing::{self, harness_stub_map};
 use crate::kani_queries::{QueryDb, ReachabilityType};
 use crate::parser::{self, KaniCompilerParser};
@@ -31,6 +31,7 @@ use rustc_driver::{Callbacks, Compilation, RunCompiler};
 use rustc_hir::def_id::LOCAL_CRATE;
 use rustc_hir::definitions::DefPathHash;
 use rustc_interface::Config;
+use rustc_middle::mir::mono::MonoItem;
 use rustc_middle::ty::TyCtxt;
 use rustc_session::config::{ErrorOutputType, OutputType};
 use rustc_span::ErrorGuaranteed;
@@ -232,7 +233,8 @@ impl KaniCompiler {
                 .map(|harness| {
                     let def_id = harness.def_id();
                     let def_path = tcx.def_path_hash(def_id);
-                    let metadata = gen_proof_metadata(tcx, def_id, &base_filename);
+                    let contracts = contracts_for_harness(tcx, harness);
+                    let metadata = gen_proof_metadata(tcx, def_id, &base_filename, contracts);
                     let stub_map = harness_stub_map(tcx, def_id, &metadata);
                     (def_path, HarnessInfo { metadata, stub_map })
                 })
@@ -318,6 +320,20 @@ impl KaniCompiler {
             serde_json::to_writer(writer, &metadata).unwrap();
         }
     }
+}
+
+fn contracts_for_harness<'tcx>(tcx: TyCtxt<'tcx>, harness: MonoItem<'tcx>) -> Vec<String> {
+    collect_reachable_items(tcx, &[harness])
+        .into_iter()
+        .filter_map(|(i, contract)| {
+            let _ = contract?;
+            let instance = match i {
+                MonoItem::Fn(f) => f,
+                _ => unreachable!("Cannot add contracts to non-functions"),
+            };
+            Some(symbol_name_for_instance(tcx, instance))
+        })
+        .collect()
 }
 
 /// Group the harnesses by their stubs.
@@ -410,6 +426,7 @@ mod tests {
             original_end_line: 20,
             goto_file: None,
             attributes: HarnessAttributes::default(),
+            contracts: vec![],
         }
     }
 

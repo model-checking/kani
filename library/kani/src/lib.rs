@@ -65,6 +65,10 @@ pub fn assume(cond: bool) {
     assert!(cond, "`kani::assume` should always hold");
 }
 
+pub fn implies(premise: bool, conclusion: bool) -> bool {
+    !premise || conclusion
+}
+
 /// Creates an assertion of the specified condition and message.
 ///
 /// # Example:

@@ -5,9 +5,15 @@
 use std::collections::BTreeMap;
 
 use kani_metadata::{CbmcSolver, HarnessAttributes, Stub};
-use rustc_ast::{attr, AttrKind, Attribute, LitKind, MetaItem, MetaItemKind, NestedMetaItem};
+use rustc_ast::{
+    attr, AttrArgs, AttrArgsEq, AttrKind, Attribute, LitKind, MetaItem, MetaItemKind,
+    NestedMetaItem,
+};
 use rustc_errors::ErrorGuaranteed;
-use rustc_hir::{def::DefKind, def_id::DefId};
+use rustc_hir::{
+    def::DefKind,
+    def_id::{DefId, LocalDefId},
+};
 use rustc_middle::ty::{Instance, TyCtxt, TyKind};
 use rustc_span::Span;
 use std::str::FromStr;
@@ -27,6 +33,8 @@ enum KaniAttributeKind {
     /// Attribute used to mark unstable APIs.
     Unstable,
     Unwind,
+    Requires,
+    Ensures,
 }
 
 impl KaniAttributeKind {
@@ -38,7 +46,9 @@ impl KaniAttributeKind {
             | KaniAttributeKind::Solver
             | KaniAttributeKind::Stub
             | KaniAttributeKind::Unwind => true,
-            KaniAttributeKind::Unstable => false,
+            KaniAttributeKind::Unstable
+            | KaniAttributeKind::Ensures
+            | KaniAttributeKind::Requires => false,
         }
     }
 }
@@ -90,6 +100,7 @@ pub(super) fn check_attributes(tcx: TyCtxt, def_id: DefId) {
             KaniAttributeKind::Unstable => attrs.iter().for_each(|attr| {
                 let _ = UnstableAttribute::try_from(*attr).map_err(|err| err.report(tcx));
             }),
+            KaniAttributeKind::Ensures | KaniAttributeKind::Requires => (),
         };
     }
 }
@@ -137,9 +148,66 @@ pub fn extract_harness_attributes(tcx: TyCtxt, def_id: DefId) -> HarnessAttribut
                 // Internal attribute which shouldn't exist here.
                 unreachable!()
             }
+            KaniAttributeKind::Ensures | KaniAttributeKind::Requires => {
+                todo!("Contract attributes are not supported on proofs (yet)")
+            }
         };
         harness
     })
+}
+
+pub fn extract_contract(tcx: TyCtxt, local_def_id: LocalDefId) -> super::contracts::FnContract {
+    use rustc_ast::ExprKind;
+    use rustc_hir::{Item, ItemKind, Mod, Node};
+    let hir_map = tcx.hir();
+    let hir_id = hir_map.local_def_id_to_hir_id(local_def_id);
+    let find_sibling_by_name = |name| {
+        let find_in_mod = |md: &Mod<'_>| {
+            md.item_ids.iter().find(|it| hir_map.item(**it).ident.name == name).unwrap().hir_id()
+        };
+
+        match hir_map.get_parent(hir_id) {
+            Node::Item(Item { kind, .. }) => match kind {
+                ItemKind::Mod(m) => find_in_mod(*m),
+                ItemKind::Impl(imp) => {
+                    imp.items.iter().find(|it| it.ident.name == name).unwrap().id.hir_id()
+                }
+                other => panic!("Odd parent item kind {other:?}"),
+            },
+            Node::Crate(m) => find_in_mod(m),
+            other => panic!("Odd prant node type {other:?}"),
+        }
+        .expect_owner()
+        .def_id
+        .to_def_id()
+    };
+
+    //println!("Searching in {:?}", hir_map.module_items(enclosing_mod).map(|it| hir_map.item(it).ident.name).collect::<Vec<_>>());
+
+    let parse_and_resolve = |attr: &Vec<&Attribute>| {
+        attr.iter()
+            .map(|clause| match &clause.get_normal_item().args {
+                AttrArgs::Eq(_, it) => {
+                    let sym = match it {
+                        AttrArgsEq::Ast(expr) => match expr.kind {
+                            ExprKind::Lit(tok) => LitKind::from_token_lit(tok).unwrap().str(),
+                            _ => unreachable!(),
+                        },
+                        AttrArgsEq::Hir(lit) => lit.kind.str(),
+                    }
+                    .unwrap();
+                    find_sibling_by_name(sym)
+                }
+                _ => unreachable!(),
+            })
+            .collect()
+    };
+    let attributes = extract_kani_attributes(tcx, local_def_id.to_def_id());
+    let requires =
+        attributes.get(&KaniAttributeKind::Requires).map_or_else(Vec::new, parse_and_resolve);
+    let ensures =
+        attributes.get(&KaniAttributeKind::Ensures).map_or_else(Vec::new, parse_and_resolve);
+    super::contracts::FnContract::new(requires, ensures, vec![])
 }
 
 /// Check that any unstable API has been enabled. Otherwise, emit an error.

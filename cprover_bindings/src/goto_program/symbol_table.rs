@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use super::super::{env, MachineModel};
-use super::{BuiltinFn, Stmt, Symbol};
+use super::{BuiltinFn, Contract, Stmt, Symbol};
 use crate::InternedString;
 use std::collections::BTreeMap;
 /// This is a typesafe implementation of the CBMC symbol table, based on the CBMC code at:
@@ -78,6 +78,11 @@ impl SymbolTable {
     ) {
         let name = name.into();
         self.symbol_table.get_mut(&name).unwrap().update_fn_declaration_with_definition(body);
+    }
+
+    pub fn attach_contract<T: Into<InternedString>>(&mut self, name: T, contract: Contract) {
+        let sym = self.symbol_table.get_mut(&name.into()).unwrap();
+        sym.attach_contract(contract);
     }
 }
 

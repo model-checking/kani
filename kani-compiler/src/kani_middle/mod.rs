@@ -30,6 +30,7 @@ use self::attributes::{check_attributes, check_unstable_features};
 pub mod analysis;
 pub mod attributes;
 pub mod coercion;
+pub mod contracts;
 pub mod metadata;
 pub mod provide;
 pub mod reachability;

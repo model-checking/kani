@@ -37,6 +37,10 @@ impl KaniSession {
             self.goto_sanity_check(output)?;
         }
 
+        for function in &harness.contracts {
+            self.enforce_contract(output, &function)?;
+        }
+
         if self.args.checks.undefined_function_on() {
             self.add_library(output)?;
             self.undefined_functions(output)?;
@@ -158,6 +162,16 @@ impl KaniSession {
         ];
 
         self.call_goto_instrument(args)
+    }
+
+    pub fn enforce_contract(&self, file: &Path, function: &str) -> Result<()> {
+        println!("enforcing {function} contract");
+        self.call_goto_instrument(vec![
+            "--enforce-contract".into(),
+            function.into(),
+            file.into(),
+            file.into(),
+        ])
     }
 
     /// Generate a .demangled.c file from the .c file using the `prettyName`s from the symbol table
