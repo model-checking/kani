@@ -25,7 +25,7 @@ This will help users to understand better options that are enabled through globa
 ## User Experience
 
 **The output will refer to properties that depend on other properties as "global conditions"**, which is a simpler term.
-The options to enable different global conditions will depend on a case-by-case basis.
+The options to enable different global conditions will depend on a case-by-case basis[^enable-options].
 
 The main UI change in this proposal is a new `GLOBAL CONDITIONS` section that **won't be printed if no global conditions have been enabled**.
 This section will only appear in Kani's default output after the `RESULTS` section (used for individual checks) and have the format:
@@ -103,3 +103,7 @@ Global conditions' checks aren't part of the SAT, therefore this computation won
 In particular, the description field is the only information printed for properties (such as `cover` statements) without trace locations.
 There are additional improvements we should consider: printing the actual status (for global conditions, this won't always be `FAILED`), avoid the repetition of `Failed Checks: `, etc.
 [This comment](https://github.com/model-checking/kani/pull/2516#issuecomment-1597524184) discusses problems with the current interface on some examples.
+
+[^enable-options]: In other words, global conditions won't force a specific mechanism to be enabled.
+For example, if the `#[kani::should_panic]` attribute is converted into a global condition, it will continue to be enabled through the attribute itself.
+Other global conditions may be enabled through CLI flags only (e.g., `--fail-uncoverable`), or a combination of options in general.
