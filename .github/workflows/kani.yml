@@ -127,6 +127,9 @@ jobs:
       - name: Detect unexpected book runner failures
         run: ./scripts/ci/detect_bookrunner_failures.sh build/output/latest/html/bookrunner.txt
 
+      - name: Install book dependencies
+        run: ./scripts/setup/install_doc_deps.sh
+
       # On one OS only, build the documentation, too.
       - name: Build Documentation
         run: ./scripts/build-docs.sh
