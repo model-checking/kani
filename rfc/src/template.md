@@ -6,6 +6,8 @@
   Start with 0.*
 - **Proof-of-concept:** *Optional field. If you have implemented a proof of concept, add a link here*
 
+-------------------
+
 ## Summary
 
 Short description of the feature, i.e.: the elevator pitch. What is this feature about?

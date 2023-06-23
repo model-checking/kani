@@ -1,7 +1,7 @@
 - **Feature Name:** Unstable APIs (`unstable-api`)
 - **RFC Tracking Issue**: <https://github.com/model-checking/kani/issues/2279>
 - **RFC PR:** <https://github.com/model-checking/kani/pull/2281>
-- **Status:** Under Review
+- **Status:** Unstable
 - **Version:** 0
 
 -------------------
