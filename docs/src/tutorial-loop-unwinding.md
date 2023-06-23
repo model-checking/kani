@@ -13,7 +13,7 @@ We can try to find this bug with a proof harness like this:
 {{#include tutorial/loops-unwinding/src/lib.rs:kani}}
 ```
 
-But we've just used a new feature (`#[kani::unwind(1)]`) that requires some explanation.
+But we've just used a [new attribute](reference/attributes.md#kaniunwindnumber) (`#[kani::unwind(1)]`) that requires some explanation.
 When we run `cargo kani` on this code as we have written it, we see an odd verification failure:
 
 ```

@@ -3,12 +3,27 @@
 
 //! This module introduces the Arbitrary trait as well as implementation for primitive types and
 //! other std containers.
-use std::num::*;
+
+use std::{
+    marker::{PhantomData, PhantomPinned},
+    num::*,
+};
 
 /// This trait should be used to generate symbolic variables that represent any valid value of
 /// its type.
-pub trait Arbitrary {
+pub trait Arbitrary
+where
+    Self: Sized,
+{
     fn any() -> Self;
+    fn any_array<const MAX_ARRAY_LENGTH: usize>() -> [Self; MAX_ARRAY_LENGTH]
+    // the requirement defined in the where clause must appear on the `impl`'s method `any_array`
+    // but also on the corresponding trait's method
+    where
+        [(); std::mem::size_of::<[Self; MAX_ARRAY_LENGTH]>()]:,
+    {
+        [(); MAX_ARRAY_LENGTH].map(|_| Self::any())
+    }
 }
 
 /// The given type can be represented by an unconstrained symbolic value of size_of::<T>.
@@ -17,8 +32,21 @@ macro_rules! trivial_arbitrary {
         impl Arbitrary for $type {
             #[inline(always)]
             fn any() -> Self {
-                // This size_of call does not use generic_const_exprs feature. It's inside a macro, and $type isn't generic.
-                unsafe { crate::any_raw_internal::<$type, { std::mem::size_of::<$type>() }>() }
+                // This size_of call does not use generic_const_exprs feature. It's inside a macro, and Self isn't generic.
+                unsafe { crate::any_raw_internal::<Self, { std::mem::size_of::<Self>() }>() }
+            }
+            fn any_array<const MAX_ARRAY_LENGTH: usize>() -> [Self; MAX_ARRAY_LENGTH]
+            where
+                // `generic_const_exprs` requires all potential errors to be reflected in the signature/header.
+                // We must repeat the expression in the header, to make sure that if the body can fail the header will also fail.
+                [(); { std::mem::size_of::<[$type; MAX_ARRAY_LENGTH]>() }]:,
+            {
+                unsafe {
+                    crate::any_raw_internal::<
+                        [Self; MAX_ARRAY_LENGTH],
+                        { std::mem::size_of::<[Self; MAX_ARRAY_LENGTH]>() },
+                    >()
+                }
             }
         }
     };
@@ -96,9 +124,10 @@ nonzero_arbitrary!(NonZeroIsize, isize);
 impl<T, const N: usize> Arbitrary for [T; N]
 where
     T: Arbitrary,
+    [(); std::mem::size_of::<[T; N]>()]:,
 {
     fn any() -> Self {
-        [(); N].map(|_| T::any())
+        T::any_array()
     }
 }
 
@@ -118,5 +147,26 @@ where
 {
     fn any() -> Self {
         if bool::any() { Ok(T::any()) } else { Err(E::any()) }
+    }
+}
+
+impl<T: ?Sized> Arbitrary for std::marker::PhantomData<T> {
+    fn any() -> Self {
+        PhantomData
+    }
+}
+
+impl Arbitrary for std::marker::PhantomPinned {
+    fn any() -> Self {
+        PhantomPinned
+    }
+}
+
+impl<T> Arbitrary for std::boxed::Box<T>
+where
+    T: Arbitrary,
+{
+    fn any() -> Self {
+        Box::new(T::any())
     }
 }

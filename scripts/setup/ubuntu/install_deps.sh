@@ -14,6 +14,7 @@ DEPS=(
   gcc
   git
   gpg-agent
+  jq
   libssl-dev
   lsb-release
   make
@@ -30,7 +31,7 @@ DEPS=(
 
 # Version specific dependencies.
 declare -A VERSION_DEPS
-VERSION_DEPS["20.04"]="universal-ctags python-is-python3"
+VERSION_DEPS["20.04"]="universal-ctags python-is-python3 python3-autopep8"
 VERSION_DEPS["18.04"]="exuberant-ctags"
 
 UBUNTU_VERSION=$(lsb_release -rs)
@@ -47,11 +48,9 @@ sudo apt-get --yes update
 sudo DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends --yes "${DEPS[@]}" ${OTHER_DEPS[@]}
 
 # Add Python package dependencies
-PYTHON_DEPS=(
-  autopep8
-)
-
-python3 -m pip install "${PYTHON_DEPS[@]}"
+if [[ "x$UBUNTU_VERSION" == "x18.04" ]] ; then
+  python3 -m pip install autopep8
+fi
 
 # Get the directory containing this script
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"

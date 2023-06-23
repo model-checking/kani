@@ -21,7 +21,6 @@
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{Expr, Location, Stmt, Type};
 use cbmc::InternedString;
-use kani_queries::UserInput;
 use rustc_span::Span;
 use std::convert::AsRef;
 use strum_macros::{AsRefStr, EnumString};
@@ -151,14 +150,14 @@ impl<'tcx> GotocCtx<'tcx> {
         span: Option<Span>,
     ) -> (String, Stmt) {
         let loc = self.codegen_caller_span(&span);
-        if self.queries.get_check_assertion_reachability() {
+        if self.queries.check_assertion_reachability {
             // Generate a unique ID for the assert
             let assert_id = self.next_check_id();
-            // Generate a message for the reachability check that includes the unique ID
-            let reach_msg = assert_id.clone();
             // Also add the unique ID as a prefix to the assert message so that it can be
             // easily paired with the reachability check
             let msg = GotocCtx::add_prefix_to_msg(&msg, &assert_id);
+            // Generate a message for the reachability check that includes the unique ID
+            let reach_msg = assert_id;
             // inject a reachability check, which is a (non-blocking)
             // assert(false) whose failure indicates that this line is reachable.
             // The property class (`PropertyClass:ReachabilityCheck`) is used by

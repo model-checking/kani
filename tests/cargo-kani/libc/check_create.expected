@@ -1,0 +1,3 @@
+warning: Found the following unsupported constructs:\
+- foreign function
+Failed Checks: call to foreign "C" function `pthread_key_create` is not currently supported by Kani. Please post your example at https://github.com/model-checking/kani/issues/2423

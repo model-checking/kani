@@ -14,6 +14,84 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+pub mod tempfile {
+    use std::{
+        env,
+        fs::{self, rename, File},
+        io::{BufWriter, Error, Write},
+        path::PathBuf,
+    };
+
+    use crate::util;
+    use ::rand;
+    use anyhow::Context;
+    use rand::Rng;
+
+    /// Handle a writable temporary file which will be deleted when the object is dropped.
+    /// To save the contents of the file, users can invoke `rename` which will move the file to
+    /// its new location and no further deletion will be performed.
+    pub struct TempFile {
+        pub file: File,
+        pub temp_path: PathBuf,
+        pub writer: Option<BufWriter<File>>,
+        renamed: bool,
+    }
+
+    impl TempFile {
+        /// Create a temp file
+        pub fn try_new(suffix_name: &str) -> Result<Self, Error> {
+            let mut temp_path = env::temp_dir();
+
+            // Generate a unique name for the temporary directory
+            let hash: u32 = rand::thread_rng().gen();
+            let file_name: &str = &format!("kani_tmp_{hash}_{suffix_name}");
+
+            temp_path.push(file_name);
+            let temp_file = File::create(&temp_path)?;
+            let writer = BufWriter::new(temp_file.try_clone()?);
+
+            Ok(Self { file: temp_file, temp_path, writer: Some(writer), renamed: false })
+        }
+
+        /// Rename the temporary file to the new path, replacing the original file if the path points to a file that already exists.
+        pub fn rename(mut self, source_path: &str) -> Result<(), String> {
+            // flush here
+            self.writer.as_mut().unwrap().flush().unwrap();
+            self.writer = None;
+            // Renames are usually automic, so we won't corrupt the user's source file during a crash.
+            rename(&self.temp_path, source_path)
+                .with_context(|| format!("Error renaming file {}", self.temp_path.display()))
+                .unwrap();
+            self.renamed = true;
+            Ok(())
+        }
+    }
+
+    /// Ensure that the bufwriter is flushed and temp variables are dropped
+    /// everytime the tempfile is out of scope
+    /// note: the fields for the struct are dropped automatically by destructor
+    impl Drop for TempFile {
+        fn drop(&mut self) {
+            // if writer is not flushed, flush it
+            if self.writer.as_ref().is_some() {
+                // couldn't use ? as drop does not handle returns
+                if let Err(e) = self.writer.as_mut().unwrap().flush() {
+                    util::warning(
+                        format!("failed to flush {}: {e}", self.temp_path.display()).as_str(),
+                    );
+                }
+                self.writer = None;
+            }
+
+            if !self.renamed {
+                if let Err(_e) = fs::remove_file(&self.temp_path.clone()) {
+                    util::warning(&format!("Error removing file {}", self.temp_path.display()));
+                }
+            }
+        }
+    }
+}
+
 /// Replace an extension with another one, in a new PathBuf. (See tests for examples)
 pub fn alter_extension(path: &Path, ext: &str) -> PathBuf {
     path.with_extension(ext)
@@ -79,11 +157,6 @@ pub fn render_command(cmd: &Command) -> OsString {
     str
 }
 
-/// Generate the filename for a specialized harness from the base linked object
-pub fn specialized_harness_name(linked_obj: &Path, harness_filename: &str) -> PathBuf {
-    alter_extension(linked_obj, &format!("for-{harness_filename}.out"))
-}
-
 /// Print a warning message. This will add a "warning:" tag before the message and style accordingly.
 pub fn warning(msg: &str) {
     let warning = console::style("warning:").bold().yellow();
@@ -96,6 +169,13 @@ pub fn error(msg: &str) {
     let error = console::style("error:").bold().red();
     let msg_fmt = console::style(msg).bold();
     println!("{error} {msg_fmt}")
+}
+
+/// Print an info message. This will print the stage in bold green and the rest in regular style.
+pub fn info_operation(op: &str, msg: &str) {
+    let op_fmt = console::style(op).bold().green();
+    let msg_fmt = console::style(msg);
+    println!("{op_fmt} {msg_fmt}")
 }
 
 #[cfg(test)]
@@ -143,22 +223,5 @@ mod tests {
         assert_eq!(render_command(&c1), OsString::from("a b \"/c d/\""));
         c1.env("PARAM", "VALUE");
         assert_eq!(render_command(&c1), OsString::from("PARAM=\"VALUE\" a b \"/c d/\""));
-    }
-
-    #[test]
-    fn check_specialized_harness_name() {
-        // It's important that the filenames produced end in `.out` as we produce
-        // `--gen-c` filenames with `alter_extension` and we previously had a bug where
-        // `for-harness` was the "extension" being removed, and all filenames collided.
-
-        // cargo kani typically produced a file name like this
-        let h1 = PathBuf::from("./cbmc-linked.out");
-        assert_eq!(specialized_harness_name(&h1, "main"), Path::new("./cbmc-linked.for-main.out"));
-        assert_eq!(specialized_harness_name(&h1, "hs_n"), Path::new("./cbmc-linked.for-hs_n.out"));
-
-        // kani typically produces a file name like this
-        let h2 = PathBuf::from("./rs-file.out");
-        assert_eq!(specialized_harness_name(&h2, "main"), Path::new("./rs-file.for-main.out"));
-        assert_eq!(specialized_harness_name(&h2, "hs_n"), Path::new("./rs-file.for-hs_n.out"));
     }
 }

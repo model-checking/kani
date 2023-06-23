@@ -11,10 +11,11 @@ use crate::codegen_cprover_gotoc::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::unwrap_or_return_codegen_unimplemented;
 use cbmc::goto_program::{Expr, Location, Type};
+use rustc_abi::FieldIdx;
 use rustc_hir::Mutability;
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::{
-    mir::{Field, Local, Place, ProjectionElem},
+    mir::{Local, Place, ProjectionElem},
     ty::{self, Ty, TypeAndMut, VariantDef},
 };
 use rustc_target::abi::{TagEncoding, VariantIdx, Variants};
@@ -238,12 +239,13 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         res: Expr,
         t: TypeOrVariant<'tcx>,
-        f: &Field,
+        f: &FieldIdx,
     ) -> Result<Expr, UnimplementedData> {
         match t {
             TypeOrVariant::Type(t) => {
                 match t.kind() {
-                    ty::Bool
+                    ty::Alias(..)
+                    | ty::Bool
                     | ty::Char
                     | ty::Int(_)
                     | ty::Uint(_)
@@ -254,10 +256,8 @@ impl<'tcx> GotocCtx<'tcx> {
                     | ty::GeneratorWitness(..)
                     | ty::Foreign(..)
                     | ty::Dynamic(..)
-                    | ty::Projection(_)
                     | ty::Bound(..)
                     | ty::Placeholder(..)
-                    | ty::Opaque(..)
                     | ty::Param(_)
                     | ty::Infer(_)
                     | ty::Error(_) => unreachable!("type {:?} does not have a field", t),
@@ -279,12 +279,12 @@ impl<'tcx> GotocCtx<'tcx> {
                     }
                     // if we fall here, then we are handling either a struct or a union
                     ty::Adt(def, _) => {
-                        let field = &def.variants().raw[0].fields[f.index()];
+                        let field = &def.variants().raw[0].fields[*f];
                         Ok(res.member(&field.name.to_string(), &self.symbol_table))
                     }
                     ty::Closure(..) => Ok(res.member(&f.index().to_string(), &self.symbol_table)),
                     ty::Generator(..) => {
-                        let field_name = self.generator_field_name(f.index());
+                        let field_name = self.generator_field_name(f.as_usize());
                         Ok(res
                             .member("direct_fields", &self.symbol_table)
                             .member(field_name, &self.symbol_table))
@@ -294,7 +294,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             // if we fall here, then we are handling an enum
             TypeOrVariant::Variant(v) => {
-                let field = &v.fields[f.index()];
+                let field = &v.fields[*f];
                 Ok(res.member(&field.name.to_string(), &self.symbol_table))
             }
             TypeOrVariant::GeneratorVariant(_var_idx) => {
@@ -463,7 +463,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // https://rust-lang.github.io/rfcs/2359-subslice-pattern-syntax.html
                 match before.mir_typ().kind() {
                     ty::Array(ty, len) => {
-                        let len = len.kind().try_to_machine_usize(self.tcx).unwrap();
+                        let len = len.kind().try_to_target_usize(self.tcx).unwrap();
                         let subarray_len = if from_end {
                             // `to` counts from the end of the array
                             len - to - from
@@ -625,6 +625,17 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
+    /// Given a projection, generate an lvalue that represents the given variant index.
+    pub fn codegen_variant_lvalue(
+        &mut self,
+        initial_projection: ProjectedPlace<'tcx>,
+        variant_idx: VariantIdx,
+    ) -> ProjectedPlace<'tcx> {
+        debug!(?initial_projection, ?variant_idx, "codegen_variant_lvalue");
+        let downcast = ProjectionElem::Downcast(None, variant_idx);
+        self.codegen_projection(Ok(initial_projection), downcast).unwrap()
+    }
+
     // https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/enum.ProjectionElem.html
     // ConstantIndex
     // [−]
@@ -643,7 +654,7 @@ impl<'tcx> GotocCtx<'tcx> {
         match before.mir_typ().kind() {
             //TODO, ask on zulip if we can ever have from_end here?
             ty::Array(elemt, length) => {
-                let length = length.kind().try_to_machine_usize(self.tcx).unwrap();
+                let length = length.kind().try_to_target_usize(self.tcx).unwrap();
                 assert!(length >= min_length);
                 let idx = if from_end { length - offset } else { offset };
                 let idxe = Expr::int_constant(idx, Type::ssize_t());
@@ -685,7 +696,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     pub fn codegen_idx_array(&mut self, arr: Expr, idx: Expr) -> Expr {
-        arr.member("0", &self.symbol_table).index_array(idx)
+        arr.index_array(idx)
     }
 }
 

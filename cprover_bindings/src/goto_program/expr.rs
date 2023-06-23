@@ -19,7 +19,17 @@ use std::fmt::Debug;
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 /// An `Expr` represents an expression type: i.e. a computation that returns a value.
-/// Every expression has a type, a value, and a location (which may be `None`).
+/// Every expression has a type, a value, and a location (which may be `None`). An expression may
+/// also include a type annotation (`size_of_annotation`), which states that the expression is the
+/// result of computing `size_of(type)`.
+///
+/// The `size_of_annotation` is eventually picked up by CBMC's symbolic execution when simulating
+/// heap allocations: for a requested allocation of N bytes, CBMC can either create a byte array of
+/// size N, or, when a type T is annotated and N is a multiple of the size of T, an array of
+/// N/size_of(T) elements. The latter will facilitate updates using member operations (when T is an
+/// aggregate type), and pointer-typed members can be tracked more precisely. Note that this is
+/// merely a hint: failing to provide such an annotation may hamper performance, but will never
+/// affect correctness.
 ///
 /// The fields of `Expr` are kept private, and there are no getters that return mutable references.
 /// This means that the only way to create and update `Expr`s is using the constructors and setters.
@@ -41,6 +51,7 @@ pub struct Expr {
     value: Box<ExprValue>,
     typ: Type,
     location: Location,
+    size_of_annotation: Option<Type>,
 }
 
 /// The different kinds of values an expression can have.
@@ -131,7 +142,7 @@ pub enum ExprValue {
     StringConstant {
         s: InternedString,
     },
-    /// Struct initializer  
+    /// Struct initializer
     /// `struct foo the_foo = >>> {field1, field2, ... } <<<`
     Struct {
         values: Vec<Expr>,
@@ -142,7 +153,7 @@ pub enum ExprValue {
     },
     /// `(typ) self`. Target type is in the outer `Expr` struct.
     Typecast(Expr),
-    /// Union initializer  
+    /// Union initializer
     /// `union foo the_foo = >>> {.field = value } <<<`
     Union {
         value: Expr,
@@ -293,6 +304,10 @@ impl Expr {
         &self.value
     }
 
+    pub fn size_of_annotation(&self) -> Option<&Type> {
+        self.size_of_annotation.as_ref()
+    }
+
     /// If the expression is an Int constant type, return its value
     pub fn int_constant_value(&self) -> Option<BigInt> {
         match &*self.value {
@@ -404,12 +419,19 @@ impl Expr {
     }
 }
 
+impl Expr {
+    pub fn with_size_of_annotation(mut self, ty: Type) -> Self {
+        self.size_of_annotation = Some(ty);
+        self
+    }
+}
+
 /// Private constructor. Making this a macro allows multiple reference to self in the same call.
 macro_rules! expr {
     ( $value:expr,  $typ:expr) => {{
         let typ = $typ;
         let value = Box::new($value);
-        Expr { value, typ, location: Location::none() }
+        Expr { value, typ, location: Location::none(), size_of_annotation: None }
     }};
 }
 
@@ -498,8 +520,8 @@ impl Expr {
     }
 
     /// Casts value to new_typ, only when the current type of value
-    /// is equivalent to new_typ on the given machine (e.g. i32 -> c_int)
-    pub fn cast_to_machine_equivalent_type(self, new_typ: &Type, mm: &MachineModel) -> Expr {
+    /// is equivalent to new_typ on the given target (e.g. i32 -> c_int)
+    pub fn cast_to_target_equivalent_type(self, new_typ: &Type, mm: &MachineModel) -> Expr {
         if self.typ() == new_typ {
             self
         } else {
@@ -509,8 +531,8 @@ impl Expr {
     }
 
     /// Casts arguments to type of function parameters when the corresponding types
-    /// are equivalent on the given machine (e.g. i32 -> c_int)
-    pub fn cast_arguments_to_machine_equivalent_function_parameter_types(
+    /// are equivalent on the given target (e.g. i32 -> c_int)
+    pub fn cast_arguments_to_target_equivalent_function_parameter_types(
         function: &Expr,
         mut arguments: Vec<Expr>,
         mm: &MachineModel,
@@ -520,7 +542,7 @@ impl Expr {
         let mut rval: Vec<_> = parameters
             .iter()
             .map(|parameter| {
-                arguments.remove(0).cast_to_machine_equivalent_type(parameter.typ(), mm)
+                arguments.remove(0).cast_to_target_equivalent_type(parameter.typ(), mm)
             })
             .collect();
 
@@ -681,7 +703,7 @@ impl Expr {
         expr!(StatementExpression { statements: ops }, typ)
     }
 
-    /// Internal helper function for Struct initalizer  
+    /// Internal helper function for Struct initalizer
     /// `struct foo the_foo = >>> {.field1 = val1, .field2 = val2, ... } <<<`
     /// ALL fields must be given, including padding
     fn struct_expr_with_explicit_padding(
@@ -698,7 +720,7 @@ impl Expr {
         expr!(Struct { values }, typ)
     }
 
-    /// Struct initializer  
+    /// Struct initializer
     /// `struct foo the_foo = >>> {.field1 = val1, .field2 = val2, ... } <<<`
     /// Note that only the NON padding fields should be explicitly given.
     /// Padding fields are automatically inserted using the type from the `SymbolTable`
@@ -764,7 +786,7 @@ impl Expr {
         Expr::struct_expr_from_values(typ, values, symbol_table)
     }
 
-    /// Struct initializer  
+    /// Struct initializer
     /// `struct foo the_foo = >>> {field1, field2, ... } <<<`
     /// Note that only the NON padding fields should be explicitly given.
     /// Padding fields are automatically inserted using the type from the `SymbolTable`
@@ -800,7 +822,7 @@ impl Expr {
         Expr::struct_expr_with_explicit_padding(typ, fields, values)
     }
 
-    /// Struct initializer  
+    /// Struct initializer
     /// `struct foo the_foo = >>> {field1, padding2, field3, ... } <<<`
     /// Note that padding fields should be explicitly given.
     /// This would be used when the values and padding have already been combined,
@@ -827,6 +849,13 @@ impl Expr {
         );
 
         Expr::struct_expr_with_explicit_padding(typ, fields, values)
+    }
+
+    /// Initializer for a zero sized type (ZST).
+    /// Since this is a ZST, we call nondet to simplify everything.
+    pub fn init_unit(typ: Type, symbol_table: &SymbolTable) -> Self {
+        assert_eq!(typ.sizeof_in_bits(symbol_table), 0);
+        Expr::nondet(typ)
     }
 
     /// `identifier`
@@ -859,7 +888,7 @@ impl Expr {
         self.transmute_to(t, st)
     }
 
-    /// Union initializer  
+    /// Union initializer
     /// `union foo the_foo = >>> {.field = value } <<<`
     pub fn union_expr<T: Into<InternedString>>(
         typ: Type,
@@ -1381,9 +1410,9 @@ impl Expr {
         ArithmeticOverflowResult { result, overflowed }
     }
 
-    /// Uses CBMC's add-with-overflow operation that performs a single addition
+    /// Uses CBMC's [binop]-with-overflow operation that performs a single arithmetic
     /// operation
-    /// `struct (T, bool) overflow(+, self, e)` where `T` is the type of `self`
+    /// `struct (T, bool) overflow(binop, self, e)` where `T` is the type of `self`
     /// Pseudocode:
     /// ```
     /// struct overflow_result_t {
@@ -1395,6 +1424,14 @@ impl Expr {
     /// overflow_result.overflowed = raw_result > maximum value of T;
     /// return overflow_result;
     /// ```
+    pub fn overflow_op(self, op: BinaryOperator, e: Expr) -> Expr {
+        assert!(
+            matches!(op, OverflowResultMinus | OverflowResultMult | OverflowResultPlus),
+            "Expected an overflow operation, but found: `{op:?}`"
+        );
+        self.binop(op, e)
+    }
+
     pub fn add_overflow_result(self, e: Expr) -> Expr {
         self.binop(OverflowResultPlus, e)
     }
@@ -1426,6 +1463,8 @@ impl Expr {
 
     /// `ArithmeticOverflowResult r; >>>r.overflowed = builtin_sub_overflow(self, e, &r.result)<<<`
     pub fn mul_overflow(self, e: Expr) -> ArithmeticOverflowResult {
+        // TODO: We should replace these calls by *overflow_result.
+        // https://github.com/model-checking/kani/issues/1483
         let result = self.clone().mul(e.clone());
         let overflowed = self.mul_overflow_p(e);
         ArithmeticOverflowResult { result, overflowed }

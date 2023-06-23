@@ -9,17 +9,29 @@ use std::path::Path;
 use std::process::Command;
 use std::time::{Duration, Instant};
 
-use crate::args::{KaniArgs, OutputFormat};
+use crate::args::{OutputFormat, VerificationArgs};
 use crate::cbmc_output_parser::{
     extract_results, process_cbmc_output, CheckStatus, ParserItem, Property, VerificationOutput,
 };
 use crate::cbmc_property_renderer::{format_result, kani_cbmc_output_filter};
 use crate::session::KaniSession;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VerificationStatus {
     Success,
     Failure,
+}
+
+/// Represents failed properties in three different categories.
+/// This simplifies the process to determine and format verification results.
+#[derive(Clone, Copy, Debug)]
+pub enum FailedProperties {
+    // No failures
+    None,
+    // One or more panic-related failures
+    PanicsOnly,
+    // One or more failures that aren't panic-related
+    Other,
 }
 
 /// Our (kani-driver) notions of CBMC results.
@@ -27,15 +39,16 @@ pub enum VerificationStatus {
 pub struct VerificationResult {
     /// Whether verification should be considered to have succeeded, or have failed.
     pub status: VerificationStatus,
+    /// The compact representation for failed properties
+    pub failed_properties: FailedProperties,
     /// The parsed output, message by message, of CBMC. However, the `Result` message has been
     /// removed and is available in `results` instead.
     pub messages: Option<Vec<ParserItem>>,
-    /// The `Result` properties in detail.
-    pub results: Option<Vec<Property>>,
-    /// CBMC process exit status. NOTE: Only potentially useful if `status` is `Failure`.
+    /// The `Result` properties in detail or the exit_status of CBMC.
+    /// Note: CBMC process exit status is only potentially useful if `status` is `Failure`.
     /// Kani will see CBMC report "failure" that's actually success (interpreting "failed"
     /// checks like coverage as expected and desirable.)
-    pub exit_status: i32,
+    pub results: Result<Vec<Property>, i32>,
     /// The runtime duration of this CBMC invocation.
     pub runtime: Duration,
     /// Whether concrete playback generated a test
@@ -53,8 +66,7 @@ impl KaniSession {
 
         let start_time = Instant::now();
 
-        let mut verification_results = if self.args.output_format == crate::args::OutputFormat::Old
-        {
+        let verification_results = if self.args.output_format == crate::args::OutputFormat::Old {
             if self.run_terminal(cmd).is_err() {
                 VerificationResult::mock_failure()
             } else {
@@ -67,24 +79,19 @@ impl KaniSession {
 
             // Spawn the CBMC process and process its output below
             let cbmc_process_opt = self.run_piped(cmd)?;
-            if let Some(cbmc_process) = cbmc_process_opt {
-                let output = process_cbmc_output(cbmc_process, |i| {
-                    kani_cbmc_output_filter(
-                        i,
-                        self.args.extra_pointer_checks,
-                        self.args.quiet,
-                        &self.args.output_format,
-                    )
-                })?;
+            let cbmc_process = cbmc_process_opt.ok_or(anyhow::Error::msg("Failed to run cbmc"))?;
+            let output = process_cbmc_output(cbmc_process, |i| {
+                kani_cbmc_output_filter(
+                    i,
+                    self.args.extra_pointer_checks,
+                    self.args.common_args.quiet,
+                    &self.args.output_format,
+                )
+            })?;
 
-                VerificationResult::from(output, start_time)
-            } else {
-                // None is only ever returned when it's a dry run
-                VerificationResult::mock_success()
-            }
+            VerificationResult::from(output, harness.attributes.should_panic, start_time)
         };
 
-        self.gen_and_add_concrete_playback(harness, &mut verification_results)?;
         Ok(verification_results)
     }
 
@@ -123,7 +130,7 @@ impl KaniSession {
             args.push(unwind_value.to_string().into());
         }
 
-        self.handle_solver_args(&harness_metadata.solver, &mut args)?;
+        self.handle_solver_args(&harness_metadata.attributes.solver, &mut args)?;
 
         if self.args.run_sanity_checks {
             args.push("--validate-goto-model".into());
@@ -189,7 +196,7 @@ impl KaniSession {
         args
     }
 
-    fn handle_solver_args(
+    pub fn handle_solver_args(
         &self,
         harness_solver: &Option<CbmcSolver>,
         args: &mut Vec<OsString>,
@@ -205,6 +212,10 @@ impl KaniSession {
         };
 
         match solver {
+            CbmcSolver::Cadical => {
+                args.push("--sat-solver".into());
+                args.push("cadical".into());
+            }
             CbmcSolver::Kissat => {
                 args.push("--external-sat-solver".into());
                 args.push("kissat".into());
@@ -235,16 +246,22 @@ impl VerificationResult {
     ///       (CBMC will regularly report "failure" but that's just our cover checks.)
     ///   2. Positively checking for the presence of results.
     ///       (Do not mistake lack of results for success: report it as failure.)
-    fn from(output: VerificationOutput, start_time: Instant) -> VerificationResult {
+    fn from(
+        output: VerificationOutput,
+        should_panic: bool,
+        start_time: Instant,
+    ) -> VerificationResult {
         let runtime = start_time.elapsed();
         let (items, results) = extract_results(output.processed_items);
 
         if let Some(results) = results {
+            let (status, failed_properties) =
+                verification_outcome_from_properties(&results, should_panic);
             VerificationResult {
-                status: determine_status_from_properties(&results),
+                status,
+                failed_properties,
                 messages: Some(items),
-                results: Some(results),
-                exit_status: output.process_status,
+                results: Ok(results),
                 runtime,
                 generated_concrete_test: false,
             }
@@ -252,9 +269,9 @@ impl VerificationResult {
             // We never got results from CBMC - something went wrong (e.g. crash) so it's failure
             VerificationResult {
                 status: VerificationStatus::Failure,
+                failed_properties: FailedProperties::Other,
                 messages: Some(items),
-                results: None,
-                exit_status: output.process_status,
+                results: Err(output.process_status),
                 runtime,
                 generated_concrete_test: false,
             }
@@ -264,9 +281,9 @@ impl VerificationResult {
     pub fn mock_success() -> VerificationResult {
         VerificationResult {
             status: VerificationStatus::Success,
+            failed_properties: FailedProperties::None,
             messages: None,
-            results: None,
-            exit_status: 42, // on success, exit code is ignored, so put something weird here
+            results: Ok(vec![]),
             runtime: Duration::from_secs(0),
             generated_concrete_test: false,
         }
@@ -275,58 +292,96 @@ impl VerificationResult {
     fn mock_failure() -> VerificationResult {
         VerificationResult {
             status: VerificationStatus::Failure,
+            failed_properties: FailedProperties::Other,
             messages: None,
-            results: None,
             // on failure, exit codes in theory might be used,
             // but `mock_failure` should never be used in a context where they will,
             // so again use something weird:
-            exit_status: 42,
+            results: Err(42),
             runtime: Duration::from_secs(0),
             generated_concrete_test: false,
         }
     }
 
-    pub fn render(&self, output_format: &OutputFormat) -> String {
-        if let Some(results) = &self.results {
-            let show_checks = matches!(output_format, OutputFormat::Regular);
-            let mut result = format_result(results, show_checks);
-            writeln!(result, "Verification Time: {}s", self.runtime.as_secs_f32()).unwrap();
-            result
-        } else {
-            let verification_result = console::style("FAILED").red();
-            format!(
-                "\nCBMC failed with status {}\nVERIFICATION:- {verification_result}\n",
-                self.exit_status
-            )
+    pub fn render(&self, output_format: &OutputFormat, should_panic: bool) -> String {
+        match &self.results {
+            Ok(results) => {
+                let status = self.status;
+                let failed_properties = self.failed_properties;
+                let show_checks = matches!(output_format, OutputFormat::Regular);
+                let mut result =
+                    format_result(results, status, should_panic, failed_properties, show_checks);
+                writeln!(result, "Verification Time: {}s", self.runtime.as_secs_f32()).unwrap();
+                result
+            }
+            Err(exit_status) => {
+                let verification_result = console::style("FAILED").red();
+                format!(
+                    "\nCBMC failed with status {exit_status}\nVERIFICATION:- {verification_result}\n",
+                )
+            }
         }
     }
 
     /// Find the failed properties from this verification run
     pub fn failed_properties(&self) -> Vec<&Property> {
-        if let Some(properties) = &self.results {
+        if let Ok(properties) = &self.results {
             properties.iter().filter(|prop| prop.status == CheckStatus::Failure).collect()
         } else {
+            debug_assert!(false, "expected error to be handled before invoking this function");
             vec![]
         }
     }
 }
 
 /// We decide if verification succeeded based on properties, not (typically) on exit code
-fn determine_status_from_properties(properties: &[Property]) -> VerificationStatus {
-    let number_failed_properties =
-        properties.iter().filter(|prop| prop.status == CheckStatus::Failure).count();
-    if number_failed_properties == 0 {
-        VerificationStatus::Success
+fn verification_outcome_from_properties(
+    properties: &[Property],
+    should_panic: bool,
+) -> (VerificationStatus, FailedProperties) {
+    let failed_properties = determine_failed_properties(properties);
+    let status = if should_panic {
+        match failed_properties {
+            FailedProperties::None | FailedProperties::Other => VerificationStatus::Failure,
+            FailedProperties::PanicsOnly => VerificationStatus::Success,
+        }
     } else {
-        VerificationStatus::Failure
+        match failed_properties {
+            FailedProperties::None => VerificationStatus::Success,
+            FailedProperties::PanicsOnly | FailedProperties::Other => VerificationStatus::Failure,
+        }
+    };
+    (status, failed_properties)
+}
+
+/// Determines the `FailedProperties` variant that corresponds to an array of properties
+fn determine_failed_properties(properties: &[Property]) -> FailedProperties {
+    let failed_properties: Vec<&Property> =
+        properties.iter().filter(|prop| prop.status == CheckStatus::Failure).collect();
+    // Return `FAILURE` if there isn't at least one failed property
+    if failed_properties.is_empty() {
+        FailedProperties::None
+    } else {
+        // Check if all failed properties correspond to the `assertion` class.
+        // Note: Panics caused by `panic!` and `assert!` fall into this class.
+        let all_failed_checks_are_panics =
+            failed_properties.iter().all(|prop| prop.property_class() == "assertion");
+        if all_failed_checks_are_panics {
+            FailedProperties::PanicsOnly
+        } else {
+            FailedProperties::Other
+        }
     }
 }
 
 /// Solve Unwind Value from conflicting inputs of unwind values. (--default-unwind, annotation-unwind, --unwind)
-pub fn resolve_unwind_value(args: &KaniArgs, harness_metadata: &HarnessMetadata) -> Option<u32> {
+pub fn resolve_unwind_value(
+    args: &VerificationArgs,
+    harness_metadata: &HarnessMetadata,
+) -> Option<u32> {
     // Check for which flag is being passed and prioritize extracting unwind from the
     // respective flag/annotation.
-    args.unwind.or(harness_metadata.unwind_value).or(args.default_unwind)
+    args.unwind.or(harness_metadata.attributes.unwind_value).or(args.default_unwind)
 }
 
 #[cfg(test)]
@@ -346,12 +401,12 @@ mod tests {
         let args_both =
             ["kani", "x.rs", "--default-unwind", "2", "--unwind", "1", "--harness", "check_one"];
 
-        let harness_none = mock_proof_harness("check_one", None, None);
-        let harness_some = mock_proof_harness("check_one", Some(3), None);
+        let harness_none = mock_proof_harness("check_one", None, None, None);
+        let harness_some = mock_proof_harness("check_one", Some(3), None, None);
 
         fn resolve(args: &[&str], harness: &HarnessMetadata) -> Option<u32> {
             resolve_unwind_value(
-                &args::StandaloneArgs::try_parse_from(args).unwrap().common_opts,
+                &args::StandaloneArgs::try_parse_from(args).unwrap().verify_opts,
                 harness,
             )
         }

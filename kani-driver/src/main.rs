@@ -2,15 +2,16 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 #![feature(let_chains)]
 #![feature(array_methods)]
-
 use std::ffi::OsString;
 use std::process::ExitCode;
 
 use anyhow::Result;
 
-use args::CargoKaniSubcommand;
+use args::{check_is_valid, CargoKaniSubcommand};
 use args_toml::join_args;
 
+use crate::args::StandaloneSubcommand;
+use crate::concrete_playback::playback::{playback_cargo, playback_standalone};
 use crate::project::Project;
 use crate::session::KaniSession;
 use clap::Parser;
@@ -24,6 +25,7 @@ mod call_cbmc;
 mod call_cbmc_viewer;
 mod call_goto_cc;
 mod call_goto_instrument;
+mod call_goto_synthesizer;
 mod call_single_file;
 mod cbmc_output_parser;
 mod cbmc_property_renderer;
@@ -33,9 +35,6 @@ mod metadata;
 mod project;
 mod session;
 mod util;
-
-#[cfg(feature = "unsound_experiments")]
-mod unsound_experiments;
 
 /// The main function for the `kani-driver`.
 /// The driver can be invoked via `cargo kani` and `kani` commands, which determines what kind of
@@ -61,26 +60,38 @@ fn main() -> ExitCode {
 fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     let input_args = join_args(input_args)?;
     let args = args::CargoKaniArgs::parse_from(input_args);
-    args.validate();
-    let session = session::KaniSession::new(args.common_opts)?;
+    check_is_valid(&args);
+    let session = session::KaniSession::new(args.verify_opts)?;
 
-    if let Some(CargoKaniSubcommand::Assess(args)) = args.command {
-        return assess::run_assess(session, args);
-    } else if session.args.assess {
+    match args.command {
+        Some(CargoKaniSubcommand::Assess(args)) => {
+            return assess::run_assess(session, *args);
+        }
+        Some(CargoKaniSubcommand::Playback(args)) => {
+            return playback_cargo(*args);
+        }
+        None => {}
+    }
+
+    if session.args.assess {
         return assess::run_assess(session, assess::AssessArgs::default());
     }
 
-    let project = project::cargo_project(&session)?;
+    let project = project::cargo_project(&session, false)?;
     if session.args.only_codegen { Ok(()) } else { verify_project(project, session) }
 }
 
 /// The main function for the `kani` command.
 fn standalone_main() -> Result<()> {
     let args = args::StandaloneArgs::parse();
-    args.validate();
-    let session = session::KaniSession::new(args.common_opts)?;
+    check_is_valid(&args);
 
-    let project = project::standalone_project(&args.input, &session)?;
+    if let Some(StandaloneSubcommand::Playback(args)) = args.command {
+        return playback_standalone(*args);
+    }
+
+    let session = session::KaniSession::new(args.verify_opts)?;
+    let project = project::standalone_project(&args.input.unwrap(), &session)?;
     if session.args.only_codegen { Ok(()) } else { verify_project(project, session) }
 }
 
@@ -91,7 +102,7 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
     debug!(n = harnesses.len(), ?harnesses, "verify_project");
 
     // Verification
-    let runner = harness_runner::HarnessRunner { sess: &session, project };
+    let runner = harness_runner::HarnessRunner { sess: &session, project: &project };
     let results = runner.check_all_harnesses(&harnesses)?;
 
     session.print_final_summary(&results)

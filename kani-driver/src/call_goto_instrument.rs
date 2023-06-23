@@ -52,14 +52,15 @@ impl KaniSession {
 
             self.gen_c(output, &c_outfile)?;
 
-            if !self.args.quiet {
+            if !self.args.common_args.quiet {
                 println!("Generated C code written to {}", c_outfile.to_string_lossy());
             }
 
             let c_demangled = alter_extension(output, "demangled.c");
-            let symtab = project.get_harness_artifact(&harness, ArtifactType::SymTab).unwrap();
-            self.demangle_c(symtab, &c_outfile, &c_demangled)?;
-            if !self.args.quiet {
+            let prett_name_map =
+                project.get_harness_artifact(&harness, ArtifactType::PrettyNameMap).unwrap();
+            self.demangle_c(prett_name_map, &c_outfile, &c_demangled)?;
+            if !self.args.common_args.quiet {
                 println!("Demangled GotoC code written to {}", c_demangled.to_string_lossy())
             }
         }
@@ -70,7 +71,7 @@ impl KaniSession {
     /// Apply --restrict-vtable to a goto binary.
     pub fn apply_vtable_restrictions(&self, goto_file: &Path, restrictions: &Path) -> Result<()> {
         let linked_restrictions = alter_extension(goto_file, "linked-restrictions.json");
-        self.record_temporary_files(&[&linked_restrictions]);
+        self.record_temporary_file(&linked_restrictions);
         collect_and_link_function_pointer_restrictions(restrictions, &linked_restrictions)?;
 
         let args: Vec<OsString> = vec![
@@ -165,22 +166,21 @@ impl KaniSession {
     /// For local variables, it would be more complicated than a simple search and replace to obtain the demangled name.
     pub fn demangle_c(
         &self,
-        symtab_file: &impl AsRef<Path>,
+        pretty_name_map_file: &impl AsRef<Path>,
         c_file: &Path,
         demangled_file: &Path,
     ) -> Result<()> {
         let mut c_code = std::fs::read_to_string(c_file)?;
-        let reader = BufReader::new(File::open(symtab_file)?);
-        let symtab: serde_json::Value = serde_json::from_reader(reader)?;
-        for (_, symbol) in symtab["symbolTable"].as_object().unwrap() {
-            if let Some(serde_json::Value::String(name)) = symbol.get("name") {
-                if let Some(serde_json::Value::String(pretty)) = symbol.get("prettyName") {
-                    // Struct names start with "tag-", but this prefix is not used in the GotoC files, so we strip it.
-                    // If there is no such prefix, we leave the name unchanged.
-                    let name = name.strip_prefix("tag-").unwrap_or(name);
-                    if !pretty.is_empty() && pretty != name {
-                        c_code = c_code.replace(name, pretty);
-                    }
+        let reader = BufReader::new(File::open(pretty_name_map_file)?);
+        let value: serde_json::Value = serde_json::from_reader(reader)?;
+        let pretty_name_map = value.as_object().unwrap();
+        for (name, pretty_name) in pretty_name_map {
+            if let Some(pretty_name) = pretty_name.as_str() {
+                // Struct names start with "tag-", but this prefix is not used in the GotoC files, so we strip it.
+                // If there is no such prefix, we leave the name unchanged.
+                let name = name.strip_prefix("tag-").unwrap_or(name);
+                if !pretty_name.is_empty() && pretty_name != name {
+                    c_code = c_code.replace(name, pretty_name);
                 }
             }
         }

@@ -1,0 +1,32 @@
+error: failed to parse `#[kani::unstable]`: missing `feature` field\
+lib.rs
+  |\
+9 | #[kani::unstable(reason = "just checking", issue = "<link>")]\
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\
+  |\
+  = note: expected format: #[kani::unstable(feature="<IDENTIFIER>", issue="<ISSUE>", reason="<DESCRIPTION>")]\
+  = note: this error originates in the attribute macro `kani::unstable` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error: failed to parse `#[kani::unstable]`: expected "key = value" pair, but found `feature("invalid_args")`\
+lib.rs\
+|\
+| #[kani::unstable(feature("invalid_args"))]\
+| ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\
+|\
+   = note: expected format: #[kani::unstable(feature="<IDENTIFIER>", issue="<ISSUE>", reason="<DESCRIPTION>")]
+
+error: failed to parse `#[kani::unstable]`: expected "key = value" pair, but found `feature`\
+lib.rs\
+|\
+| #[kani::unstable(feature, issue)]\
+| ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\
+|\
+   = note: expected format: #[kani::unstable(feature="<IDENTIFIER>", issue="<ISSUE>", reason="<DESCRIPTION>")]
+
+error: failed to parse `#[kani::unstable]`: expected "key = value" pair, but found `1010`\
+lib.rs\
+|\
+| #[kani::unstable(1010)]\
+| ^^^^^^^^^^^^^^^^^^^^^^^\
+|\
+   = note: expected format: #[kani::unstable(feature="<IDENTIFIER>", issue="<ISSUE>", reason="<DESCRIPTION>")]

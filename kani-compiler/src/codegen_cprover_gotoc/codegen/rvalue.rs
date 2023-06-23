@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use super::typ::pointee_type;
+use crate::codegen_cprover_gotoc::codegen::place::{ProjectedPlace, TypeOrVariant};
 use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::codegen_cprover_gotoc::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
@@ -9,17 +10,22 @@ use crate::kani_middle::coercion::{
     extract_unsize_casting, CoerceUnsizedInfo, CoerceUnsizedIterator, CoercionBase,
 };
 use crate::unwrap_or_return_codegen_unimplemented;
-use cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
+use cbmc::goto_program::{
+    arithmetic_overflow_result_type, BinaryOperator, Expr, Location, Stmt, Symbol, Type,
+    ARITH_OVERFLOW_OVERFLOWED_FIELD, ARITH_OVERFLOW_RESULT_FIELD,
+};
 use cbmc::MachineModel;
 use cbmc::{btree_string_map, InternString, InternedString};
 use num::bigint::BigInt;
+use rustc_abi::FieldIdx;
+use rustc_index::IndexVec;
 use rustc_middle::mir::{AggregateKind, BinOp, CastKind, NullOp, Operand, Place, Rvalue, UnOp};
 use rustc_middle::ty::adjustment::PointerCast;
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{self, Instance, IntTy, Ty, TyCtxt, UintTy, VtblEntry};
-use rustc_target::abi::{FieldsShape, Size, TagEncoding, Variants};
+use rustc_target::abi::{FieldsShape, Size, TagEncoding, VariantIdx, Variants};
 use std::collections::BTreeMap;
-use tracing::{debug, warn};
+use tracing::{debug, trace, warn};
 
 impl<'tcx> GotocCtx<'tcx> {
     fn codegen_comparison(&mut self, op: &BinOp, e1: &Operand<'tcx>, e2: &Operand<'tcx>) -> Expr {
@@ -138,18 +144,11 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         op: &Operand<'tcx>,
         sz: ty::Const<'tcx>,
-        res_ty: Ty<'tcx>,
         loc: Location,
     ) -> Expr {
-        let res_t = self.codegen_ty(res_ty);
         let op_expr = self.codegen_operand(op);
-        let width = sz.try_eval_usize(self.tcx, ty::ParamEnv::reveal_all()).unwrap();
-        Expr::struct_expr(
-            res_t,
-            btree_string_map![("0", op_expr.array_constant(width))],
-            &self.symbol_table,
-        )
-        .with_location(loc)
+        let width = sz.try_eval_target_usize(self.tcx, ty::ParamEnv::reveal_all()).unwrap();
+        op_expr.array_constant(width).with_location(loc)
     }
 
     fn codegen_rvalue_len(&mut self, p: &Place<'tcx>) -> Expr {
@@ -164,6 +163,37 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
+    /// Generate code for a binary operation with an overflow and returns a tuple (res, overflow).
+    pub fn codegen_binop_with_overflow(
+        &mut self,
+        bin_op: BinaryOperator,
+        left: Expr,
+        right: Expr,
+        expected_typ: Type,
+        loc: Location,
+    ) -> Expr {
+        // Create CBMC result type and add to the symbol table.
+        let res_type = arithmetic_overflow_result_type(left.typ().clone());
+        let tag = res_type.tag().unwrap();
+        let struct_tag =
+            self.ensure_struct(tag, tag, |_, _| res_type.components().unwrap().clone());
+        let res = left.overflow_op(bin_op, right);
+        // store the result in a temporary variable
+        let (var, decl) = self.decl_temp_variable(struct_tag, Some(res), loc);
+        // cast into result type
+        let cast = Expr::struct_expr_from_values(
+            expected_typ.clone(),
+            vec![
+                var.clone().member(ARITH_OVERFLOW_RESULT_FIELD, &self.symbol_table),
+                var.member(ARITH_OVERFLOW_OVERFLOWED_FIELD, &self.symbol_table)
+                    .cast_to(Type::c_bool()),
+            ],
+            &self.symbol_table,
+        );
+        Expr::statement_expression(vec![decl, cast.as_stmt(loc)], expected_typ)
+    }
+
+    /// Generate code for a binary arithmetic operation with UB / overflow checks in place.
     fn codegen_rvalue_checked_binary_op(
         &mut self,
         op: &BinOp,
@@ -198,27 +228,33 @@ impl<'tcx> GotocCtx<'tcx> {
 
         match op {
             BinOp::Add => {
-                let res = ce1.add_overflow(ce2);
-                Expr::struct_expr_from_values(
-                    self.codegen_ty(res_ty),
-                    vec![res.result, res.overflowed.cast_to(Type::c_bool())],
-                    &self.symbol_table,
+                let res_type = self.codegen_ty(res_ty);
+                self.codegen_binop_with_overflow(
+                    BinaryOperator::OverflowResultPlus,
+                    ce1,
+                    ce2,
+                    res_type,
+                    Location::None,
                 )
             }
             BinOp::Sub => {
-                let res = ce1.sub_overflow(ce2);
-                Expr::struct_expr_from_values(
-                    self.codegen_ty(res_ty),
-                    vec![res.result, res.overflowed.cast_to(Type::c_bool())],
-                    &self.symbol_table,
+                let res_type = self.codegen_ty(res_ty);
+                self.codegen_binop_with_overflow(
+                    BinaryOperator::OverflowResultMinus,
+                    ce1,
+                    ce2,
+                    res_type,
+                    Location::None,
                 )
             }
             BinOp::Mul => {
-                let res = ce1.mul_overflow(ce2);
-                Expr::struct_expr_from_values(
-                    self.codegen_ty(res_ty),
-                    vec![res.result, res.overflowed.cast_to(Type::c_bool())],
-                    &self.symbol_table,
+                let res_type = self.codegen_ty(res_ty);
+                self.codegen_binop_with_overflow(
+                    BinaryOperator::OverflowResultMult,
+                    ce1,
+                    ce2,
+                    res_type,
+                    Location::None,
                 )
             }
             BinOp::Shl => {
@@ -251,6 +287,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     fn codegen_rvalue_binary_op(
         &mut self,
+        ty: Ty<'tcx>,
         op: &BinOp,
         e1: &Operand<'tcx>,
         e2: &Operand<'tcx>,
@@ -274,50 +311,199 @@ impl<'tcx> GotocCtx<'tcx> {
             BinOp::Offset => {
                 let ce1 = self.codegen_operand(e1);
                 let ce2 = self.codegen_operand(e2);
-                ce1.plus(ce2)
+
+                // Check that computing `offset` in bytes would not overflow
+                let (offset_bytes, bytes_overflow_check) = self.count_in_bytes(
+                    ce2.clone().cast_to(Type::ssize_t()),
+                    ty,
+                    Type::ssize_t(),
+                    "offset",
+                    loc,
+                );
+
+                // Check that the computation would not overflow an `isize` which is UB:
+                // https://doc.rust-lang.org/std/primitive.pointer.html#method.offset
+                // These checks may allow a wrapping-around behavior in CBMC:
+                // https://github.com/model-checking/kani/issues/1150
+                let overflow_res = ce1.clone().cast_to(Type::ssize_t()).add_overflow(offset_bytes);
+                let overflow_check = self.codegen_assert_assume(
+                    overflow_res.overflowed.not(),
+                    PropertyClass::ArithmeticOverflow,
+                    "attempt to compute offset which would overflow",
+                    loc,
+                );
+                let res = ce1.clone().plus(ce2);
+                Expr::statement_expression(
+                    vec![bytes_overflow_check, overflow_check, res.as_stmt(loc)],
+                    ce1.typ().clone(),
+                )
             }
         }
     }
 
-    fn codegen_rvalue_aggregate(
+    /// Create an initializer for a generator struct.
+    fn codegen_rvalue_generator(
         &mut self,
-        k: &AggregateKind<'tcx>,
-        operands: &[Operand<'tcx>],
-        res_ty: Ty<'tcx>,
+        operands: &IndexVec<FieldIdx, Operand<'tcx>>,
+        ty: Ty<'tcx>,
     ) -> Expr {
-        match *k {
-            AggregateKind::Array(et) => {
-                if et.is_unit() {
-                    Expr::struct_expr_from_values(
-                        self.codegen_ty(res_ty),
-                        vec![],
-                        &self.symbol_table,
-                    )
-                } else {
-                    Expr::struct_expr_from_values(
-                        self.codegen_ty(res_ty),
-                        vec![Expr::array_expr(
-                            self.codegen_ty_raw_array(res_ty),
-                            operands.iter().map(|o| self.codegen_operand(o)).collect(),
-                        )],
-                        &self.symbol_table,
-                    )
+        let layout = self.layout_of(ty);
+        let discriminant_field = match &layout.variants {
+            Variants::Multiple { tag_encoding: TagEncoding::Direct, tag_field, .. } => tag_field,
+            _ => unreachable!(
+                "Expected generators to have multiple variants and direct encoding, but found: {layout:?}"
+            ),
+        };
+        let overall_t = self.codegen_ty(ty);
+        let direct_fields = overall_t.lookup_field("direct_fields", &self.symbol_table).unwrap();
+        let direct_fields_expr = Expr::struct_expr_from_values(
+            direct_fields.typ(),
+            layout
+                .fields
+                .index_by_increasing_offset()
+                .map(|idx| {
+                    let field_ty = layout.field(self, idx).ty;
+                    if idx == *discriminant_field {
+                        Expr::int_constant(0, self.codegen_ty(field_ty))
+                    } else {
+                        self.codegen_operand(&operands[idx.into()])
+                    }
+                })
+                .collect(),
+            &self.symbol_table,
+        );
+        Expr::union_expr(overall_t, "direct_fields", direct_fields_expr, &self.symbol_table)
+    }
+
+    /// This code will generate an expression that initializes an enumeration.
+    ///
+    /// It will first create a temporary variant with the same enum type.
+    /// Initialize the case structure and set its discriminant.
+    /// Finally, it will return the temporary value.
+    fn codegen_rvalue_enum_aggregate(
+        &mut self,
+        variant_index: VariantIdx,
+        operands: &IndexVec<FieldIdx, Operand<'tcx>>,
+        res_ty: Ty<'tcx>,
+        loc: Location,
+    ) -> Expr {
+        let mut stmts = vec![];
+        let typ = self.codegen_ty(res_ty);
+        // 1- Create a temporary value of the enum type.
+        tracing::debug!(?typ, ?res_ty, "aggregate_enum");
+        let (temp_var, decl) = self.decl_temp_variable(typ.clone(), None, loc);
+        stmts.push(decl);
+        if !operands.is_empty() {
+            // 2- Initialize the members of the temporary variant.
+            let initial_projection = ProjectedPlace::try_new(
+                temp_var.clone(),
+                TypeOrVariant::Type(res_ty),
+                None,
+                None,
+                self,
+            )
+            .unwrap();
+            let variant_proj = self.codegen_variant_lvalue(initial_projection, variant_index);
+            let variant_expr = variant_proj.goto_expr.clone();
+            let layout = self.layout_of(res_ty);
+            let fields = match &layout.variants {
+                Variants::Single { index } => {
+                    if *index != variant_index {
+                        // This may occur if all variants except for the one pointed by
+                        // index can never be constructed. Generic code might still try
+                        // to initialize the non-existing invariant.
+                        trace!(?res_ty, ?variant_index, "Unreachable invariant");
+                        return Expr::nondet(typ);
+                    }
+                    &layout.fields
                 }
-            }
-            AggregateKind::Tuple => Expr::struct_expr_from_values(
-                self.codegen_ty(res_ty),
-                operands
-                    .iter()
-                    .filter_map(|o| {
-                        let oty = self.operand_ty(o);
-                        if oty.is_unit() { None } else { Some(self.codegen_operand(o)) }
-                    })
+                Variants::Multiple { variants, .. } => &variants[variant_index].fields,
+            };
+
+            trace!(?variant_expr, ?fields, ?operands, "codegen_aggregate enum");
+            let init_struct = Expr::struct_expr_from_values(
+                variant_expr.typ().clone(),
+                fields
+                    .index_by_increasing_offset()
+                    .map(|idx| self.codegen_operand(&operands[idx.into()]))
                     .collect(),
                 &self.symbol_table,
-            ),
-            AggregateKind::Adt(_, _, _, _, _) => unimplemented!(),
-            AggregateKind::Closure(_, _) => unimplemented!(),
-            AggregateKind::Generator(_, _, _) => unimplemented!(),
+            );
+            let assign_case = variant_proj.goto_expr.assign(init_struct, loc);
+            stmts.push(assign_case);
+        }
+        // 3- Set discriminant.
+        let set_discriminant =
+            self.codegen_set_discriminant(res_ty, temp_var.clone(), variant_index, loc);
+        stmts.push(set_discriminant);
+        // 4- Return temporary variable.
+        stmts.push(temp_var.as_stmt(loc));
+        Expr::statement_expression(stmts, typ)
+    }
+
+    fn codegen_rvalue_aggregate(
+        &mut self,
+        aggregate: &AggregateKind<'tcx>,
+        operands: &IndexVec<FieldIdx, Operand<'tcx>>,
+        res_ty: Ty<'tcx>,
+        loc: Location,
+    ) -> Expr {
+        match *aggregate {
+            AggregateKind::Array(_et) => {
+                let typ = self.codegen_ty(res_ty);
+                Expr::array_expr(typ, operands.iter().map(|o| self.codegen_operand(o)).collect())
+            }
+            AggregateKind::Adt(_, _, _, _, Some(active_field_index)) => {
+                assert!(res_ty.is_union());
+                assert_eq!(operands.len(), 1);
+                let typ = self.codegen_ty(res_ty);
+                let components = typ.lookup_components(&self.symbol_table).unwrap();
+                Expr::union_expr(
+                    typ,
+                    components[active_field_index.as_usize()].name(),
+                    self.codegen_operand(&operands[0usize.into()]),
+                    &self.symbol_table,
+                )
+            }
+            AggregateKind::Adt(_, _, _, _, _) if res_ty.is_simd() => {
+                let typ = self.codegen_ty(res_ty);
+                let layout = self.layout_of(res_ty);
+                let vector_element_type = typ.base_type().unwrap().clone();
+                Expr::vector_expr(
+                    typ,
+                    layout
+                        .fields
+                        .index_by_increasing_offset()
+                        .map(|idx| {
+                            let cgo = self.codegen_operand(&operands[idx.into()]);
+                            // The input operand might actually be a one-element array, as seen
+                            // when running assess on firecracker.
+                            if *cgo.typ() == vector_element_type {
+                                cgo
+                            } else {
+                                cgo.transmute_to(vector_element_type.clone(), &self.symbol_table)
+                            }
+                        })
+                        .collect(),
+                )
+            }
+            AggregateKind::Adt(_, variant_index, ..) if res_ty.is_enum() => {
+                self.codegen_rvalue_enum_aggregate(variant_index, operands, res_ty, loc)
+            }
+            AggregateKind::Adt(..) | AggregateKind::Closure(..) | AggregateKind::Tuple => {
+                let typ = self.codegen_ty(res_ty);
+                let layout = self.layout_of(res_ty);
+                Expr::struct_expr_from_values(
+                    typ,
+                    layout
+                        .fields
+                        .index_by_increasing_offset()
+                        .map(|idx| self.codegen_operand(&operands[idx.into()]))
+                        .collect(),
+                    &self.symbol_table,
+                )
+            }
+            AggregateKind::Generator(_, _, _) => self.codegen_rvalue_generator(&operands, res_ty),
         }
     }
 
@@ -328,7 +514,7 @@ impl<'tcx> GotocCtx<'tcx> {
             Rvalue::Use(p) => self.codegen_operand(p),
             Rvalue::Repeat(op, sz) => {
                 let sz = self.monomorphize(*sz);
-                self.codegen_rvalue_repeat(op, sz, res_ty, loc)
+                self.codegen_rvalue_repeat(op, sz, loc)
             }
             Rvalue::Ref(_, _, p) | Rvalue::AddressOf(_, p) => self.codegen_place_ref(p),
             Rvalue::Len(p) => self.codegen_rvalue_len(p),
@@ -362,8 +548,12 @@ impl<'tcx> GotocCtx<'tcx> {
                 let t = self.monomorphize(*t);
                 self.codegen_pointer_cast(k, e, t, loc)
             }
+            Rvalue::Cast(CastKind::Transmute, operand, ty) => {
+                let goto_typ = self.codegen_ty(self.monomorphize(*ty));
+                self.codegen_operand(operand).transmute_to(goto_typ, &self.symbol_table)
+            }
             Rvalue::BinaryOp(op, box (ref e1, ref e2)) => {
-                self.codegen_rvalue_binary_op(op, e1, e2, loc)
+                self.codegen_rvalue_binary_op(res_ty, op, e1, e2, loc)
             }
             Rvalue::CheckedBinaryOp(op, box (ref e1, ref e2)) => {
                 self.codegen_rvalue_checked_binary_op(op, e1, e2, res_ty)
@@ -372,8 +562,13 @@ impl<'tcx> GotocCtx<'tcx> {
                 let t = self.monomorphize(*t);
                 let layout = self.layout_of(t);
                 match k {
-                    NullOp::SizeOf => Expr::int_constant(layout.size.bytes_usize(), Type::size_t()),
+                    NullOp::SizeOf => Expr::int_constant(layout.size.bytes_usize(), Type::size_t())
+                        .with_size_of_annotation(self.codegen_ty(t)),
                     NullOp::AlignOf => Expr::int_constant(layout.align.abi.bytes(), Type::size_t()),
+                    NullOp::OffsetOf(fields) => Expr::int_constant(
+                        layout.offset_of_subfield(self, fields.iter().map(|f| f.index())).bytes(),
+                        Type::size_t(),
+                    ),
                 }
             }
             Rvalue::ShallowInitBox(ref operand, content_ty) => {
@@ -404,7 +599,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 self.codegen_get_discriminant(place, pt, res_ty)
             }
             Rvalue::Aggregate(ref k, operands) => {
-                self.codegen_rvalue_aggregate(k, operands, res_ty)
+                self.codegen_rvalue_aggregate(k, operands, res_ty, loc)
             }
             Rvalue::ThreadLocalRef(def_id) => {
                 // Since Kani is single-threaded, we treat a thread local like a static variable:
@@ -460,7 +655,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     // See also the cranelift backend:
                     // https://github.com/rust-lang/rust/blob/05d22212e89588e7c443cc6b9bc0e4e02fdfbc8d/compiler/rustc_codegen_cranelift/src/discriminant.rs#L116
                     let offset = match &layout.fields {
-                        FieldsShape::Arbitrary { offsets, .. } => offsets[0],
+                        FieldsShape::Arbitrary { offsets, .. } => offsets[0usize.into()],
                         _ => unreachable!("niche encoding must have arbitrary fields"),
                     };
 
@@ -689,7 +884,6 @@ impl<'tcx> GotocCtx<'tcx> {
                         if let ty::Array(_, _) = ty.kind() {
                             let oe = self.codegen_operand(operand);
                             oe.dereference() // : struct [T; n]
-                                .member("0", &self.symbol_table) // : T[n]
                                 .array_to_ptr() // : T*
                         } else {
                             unreachable!()
@@ -916,11 +1110,12 @@ impl<'tcx> GotocCtx<'tcx> {
     /// When we get the size and align of a ty::Ref, the TyCtxt::layout_of
     /// returns the correct size to match rustc vtable values. Checked via
     /// Kani-compile-time and CBMC assertions in check_vtable_size.
-    fn codegen_vtable_size_and_align(&self, operand_type: Ty<'tcx>) -> (Expr, Expr) {
+    fn codegen_vtable_size_and_align(&mut self, operand_type: Ty<'tcx>) -> (Expr, Expr) {
         debug!("vtable_size_and_align {:?}", operand_type.kind());
         let vtable_layout = self.layout_of(operand_type);
         assert!(!vtable_layout.is_unsized(), "Can't create a vtable for an unsized type");
-        let vt_size = Expr::int_constant(vtable_layout.size.bytes(), Type::size_t());
+        let vt_size = Expr::int_constant(vtable_layout.size.bytes(), Type::size_t())
+            .with_size_of_annotation(self.codegen_ty(operand_type));
         let vt_align = Expr::int_constant(vtable_layout.align.abi.bytes(), Type::size_t());
 
         (vt_size, vt_align)

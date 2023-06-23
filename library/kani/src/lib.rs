@@ -1,8 +1,14 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+// Required so we can use kani_macros attributes.
+#![feature(register_tool)]
+#![register_tool(kanitool)]
 // Used for rustc_diagnostic_item.
 #![feature(rustc_attrs)]
+// This is required for the optimized version of `any_array()`
+#![feature(generic_const_exprs)]
+#![allow(incomplete_features)]
 
 pub mod arbitrary;
 #[cfg(feature = "concrete_playback")]
@@ -15,6 +21,11 @@ pub mod vec;
 pub use arbitrary::Arbitrary;
 #[cfg(feature = "concrete_playback")]
 pub use concrete_playback::concrete_playback_run;
+#[cfg(not(feature = "concrete_playback"))]
+/// NOP `concrete_playback` for type checking during verification mode.
+pub fn concrete_playback_run<F: Fn()>(_: Vec<Vec<u8>>, _: F) {
+    unreachable!("Concrete playback does not work during verification")
+}
 pub use futures::{block_on, block_on_with_spawn, spawn, yield_now, RoundRobin};
 
 /// Creates an assumption that will be valid after this statement run. Note that the assumption
@@ -42,10 +53,16 @@ pub use futures::{block_on, block_on_with_spawn, spawn, yield_now, RoundRobin};
 /// ```
 #[inline(never)]
 #[rustc_diagnostic_item = "KaniAssume"]
-pub fn assume(_cond: bool) {
-    if cfg!(feature = "concrete_playback") {
-        assert!(_cond, "kani::assume should always hold");
-    }
+#[cfg(not(feature = "concrete_playback"))]
+pub fn assume(cond: bool) {
+    let _ = cond;
+}
+
+#[inline(never)]
+#[rustc_diagnostic_item = "KaniAssume"]
+#[cfg(feature = "concrete_playback")]
+pub fn assume(cond: bool) {
+    assert!(cond, "`kani::assume` should always hold");
 }
 
 /// Creates an assertion of the specified condition and message.
@@ -57,12 +74,19 @@ pub fn assume(_cond: bool) {
 /// let y = !x;
 /// kani::assert(x || y, "ORing a boolean variable with its negation must be true")
 /// ```
+#[cfg(not(feature = "concrete_playback"))]
 #[inline(never)]
 #[rustc_diagnostic_item = "KaniAssert"]
-pub const fn assert(_cond: bool, _msg: &'static str) {
-    if cfg!(feature = "concrete_playback") {
-        assert!(_cond, "{}", _msg);
-    }
+pub const fn assert(cond: bool, msg: &'static str) {
+    let _ = cond;
+    let _ = msg;
+}
+
+#[cfg(feature = "concrete_playback")]
+#[inline(never)]
+#[rustc_diagnostic_item = "KaniAssert"]
+pub const fn assert(cond: bool, msg: &'static str) {
+    assert!(cond, "{}", msg);
 }
 
 /// Creates a cover property with the specified condition and message.
@@ -112,15 +136,14 @@ pub fn any<T: Arbitrary>() -> T {
 /// This creates a symbolic *valid* value of type `T`.
 /// The value is constrained to be a value accepted by the predicate passed to the filter.
 /// You can assign the return value of this function to a variable that you want to make symbolic.
-/// The explanation field gives a mechanism to explain why the assumption is required for the proof.
 ///
 /// # Example:
 ///
 /// In the snippet below, we are verifying the behavior of the function `fn_under_verification`
-/// under all possible `NonZeroU8` input values between 0 and 12.
+/// under all possible `u8` input values between 0 and 12.
 ///
 /// ```rust
-/// let inputA = kani::any_where::<std::num::NonZeroU8>(|x| *x < 12, "explanation");
+/// let inputA: u8 = kani::any_where(|x| *x < 12);
 /// fn_under_verification(inputA);
 /// ```
 ///
@@ -128,7 +151,7 @@ pub fn any<T: Arbitrary>() -> T {
 /// trait. The Arbitrary trait is used to build a symbolic value that represents all possible
 /// valid values for type `T`.
 #[inline(always)]
-pub fn any_where<T: Arbitrary, F: FnOnce(&T) -> bool>(f: F, _msg: &'static str) -> T {
+pub fn any_where<T: Arbitrary, F: FnOnce(&T) -> bool>(f: F) -> T {
     let result = T::any();
     assume(f(&result));
     result
@@ -148,13 +171,15 @@ pub fn any_where<T: Arbitrary, F: FnOnce(&T) -> bool>(f: F, _msg: &'static str) 
 ///
 /// Note that SIZE_T must be equal the size of type T in bytes.
 #[inline(never)]
+#[cfg(not(feature = "concrete_playback"))]
 pub(crate) unsafe fn any_raw_internal<T, const SIZE_T: usize>() -> T {
-    #[cfg(feature = "concrete_playback")]
-    return concrete_playback::any_raw_internal::<T, SIZE_T>();
-
-    #[cfg(not(feature = "concrete_playback"))]
-    #[allow(unreachable_code)]
     any_raw_inner::<T>()
+}
+
+#[inline(never)]
+#[cfg(feature = "concrete_playback")]
+pub(crate) unsafe fn any_raw_internal<T, const SIZE_T: usize>() -> T {
+    concrete_playback::any_raw_internal::<T, SIZE_T>()
 }
 
 /// This low-level function returns nondet bytes of size T.

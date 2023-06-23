@@ -180,21 +180,17 @@ pub fn make_test_description<R: Read>(
     path: &Path,
     src: R,
 ) -> test::TestDesc {
-    let mut ignore = false;
     let mut should_fail = false;
-    let mut ignore_message = None;
 
-    if config.mode == Mode::Kani || config.mode == Mode::Stub {
-        // If the path to the test contains "fixme" or "ignore", skip it.
-        let file_path = path.to_str().unwrap();
-        (ignore, ignore_message) = if file_path.contains("fixme") {
-            (true, Some("fixme test"))
-        } else if file_path.contains("ignore") {
-            (true, Some("ignore test"))
-        } else {
-            (false, None)
-        };
-    }
+    // If the path to the test contains "fixme" or "ignore", skip it.
+    let file_path = path.to_str().unwrap();
+    let (mut ignore, mut ignore_message) = if file_path.contains("fixme") {
+        (true, Some("fixme test"))
+    } else if file_path.contains("ignore") {
+        (true, Some("ignore test"))
+    } else {
+        (false, None)
+    };
 
     // The `KaniFixme` mode runs tests that are ignored in the `kani` suite
     if config.mode == Mode::KaniFixme {
@@ -207,8 +203,10 @@ pub fn make_test_description<R: Read>(
 
         // If the base name does NOT contain "fixme" or "ignore", we skip it.
         // All "fixme" tests are expected to fail
-        (ignore, ignore_message) = if base_name.contains("fixme") || base_name.contains("ignore") {
+        (ignore, ignore_message) = if base_name.contains("fixme") {
             (false, None)
+        } else if base_name.contains("ignore") {
+            (true, Some("ignore test"))
         } else {
             (true, Some("regular test"))
         };
@@ -235,5 +233,11 @@ pub fn make_test_description<R: Read>(
         compile_fail: false,
         no_run: false,
         test_type: test::TestType::Unknown,
+        // Enter dummy values since the test doesn't have a line per-se.
+        source_file: "unknown_file",
+        start_line: 0,
+        start_col: 0,
+        end_line: 0,
+        end_col: 0,
     }
 }

@@ -1,16 +1,20 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use crate::args::KaniArgs;
+use crate::args::VerificationArgs;
 use crate::call_single_file::to_rustc_arg;
+use crate::project::Artifact;
 use crate::session::KaniSession;
+use crate::util;
 use anyhow::{bail, Context, Result};
 use cargo_metadata::diagnostic::{Diagnostic, DiagnosticLevel};
-use cargo_metadata::{Message, Metadata, MetadataCommand, Package};
+use cargo_metadata::{Message, Metadata, MetadataCommand, Package, Target};
+use kani_metadata::{ArtifactType, CompilerArtifactStub};
 use std::ffi::{OsStr, OsString};
-use std::fs;
+use std::fmt::{self, Display};
+use std::fs::{self, File};
 use std::io::BufReader;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
 use tracing::{debug, trace};
 
@@ -29,19 +33,17 @@ pub struct CargoOutputs {
     /// The directory where compiler outputs should be directed.
     /// Usually 'target/BUILD_TRIPLE/debug/deps/'
     pub outdir: PathBuf,
-    /// The collection of *.symtab.json files written.
-    pub symtabs: Vec<PathBuf>,
-    /// The location of vtable restrictions files (a directory of *.restrictions.json)
-    pub restrictions: Option<PathBuf>,
     /// The kani-metadata.json files written by kani-compiler.
-    pub metadata: Vec<PathBuf>,
+    pub metadata: Vec<Artifact>,
     /// Recording the cargo metadata from the build
     pub cargo_metadata: Metadata,
+    /// For build `keep_going` mode, we collect the targets that we failed to compile.
+    pub failed_targets: Option<Vec<String>>,
 }
 
 impl KaniSession {
     /// Calls `cargo_build` to generate `*.symtab.json` files in `target_dir`
-    pub fn cargo_build(&self) -> Result<CargoOutputs> {
+    pub fn cargo_build(&self, keep_going: bool) -> Result<CargoOutputs> {
         let build_target = env!("TARGET"); // see build.rs
         let metadata = self.cargo_metadata(build_target)?;
         let target_dir = self
@@ -53,9 +55,7 @@ impl KaniSession {
             .join("kani");
         let outdir = target_dir.join(build_target).join("debug/deps");
 
-        // Clean directory before building since we are unable to handle cache today.
-        // TODO: https://github.com/model-checking/kani/issues/1736
-        if target_dir.exists() {
+        if self.args.force_build && target_dir.exists() {
             fs::remove_dir_all(&target_dir)?;
         }
 
@@ -95,7 +95,7 @@ impl KaniSession {
             cargo_args.push("test".into());
         }
 
-        if self.args.verbose {
+        if self.args.common_args.verbose {
             cargo_args.push("-v".into());
         }
 
@@ -104,13 +104,15 @@ impl KaniSession {
         pkg_args.extend(["--".to_string(), self.reachability_arg()]);
 
         let mut found_target = false;
-        let packages = packages_to_verify(&self.args, &metadata);
+        let packages = packages_to_verify(&self.args, &metadata)?;
+        let mut artifacts = vec![];
+        let mut failed_targets = vec![];
         for package in packages {
-            for target in package_targets(&self.args, package) {
+            for verification_target in package_targets(&self.args, package) {
                 let mut cmd = Command::new("cargo");
                 cmd.args(&cargo_args)
                     .args(vec!["-p", &package.name])
-                    .args(&target.to_args())
+                    .args(&verification_target.to_args())
                     .args(&pkg_args)
                     .env("RUSTC", &self.kani_compiler)
                     // Use CARGO_ENCODED_RUSTFLAGS instead of RUSTFLAGS is preferred. See
@@ -118,7 +120,19 @@ impl KaniSession {
                     .env("CARGO_ENCODED_RUSTFLAGS", rustc_args.join(OsStr::new("\x1f")))
                     .env("CARGO_TERM_PROGRESS_WHEN", "never");
 
-                self.run_cargo(cmd)?;
+                match self.run_cargo(cmd, verification_target.target()) {
+                    Err(err) => {
+                        if keep_going {
+                            let target_str = format!("{verification_target}");
+                            util::error(&format!("Failed to compile {target_str}"));
+                            failed_targets.push(target_str);
+                        } else {
+                            return Err(err);
+                        }
+                    }
+                    Ok(Some(artifact)) => artifacts.push(artifact),
+                    Ok(None) => {}
+                }
                 found_target = true;
             }
         }
@@ -128,11 +142,10 @@ impl KaniSession {
         }
 
         Ok(CargoOutputs {
-            outdir: outdir.clone(),
-            symtabs: glob(&outdir.join("*.symtab.json"))?,
-            metadata: glob(&outdir.join("*.kani-metadata.json"))?,
-            restrictions: self.args.restrict_vtable().then_some(outdir),
+            outdir,
+            metadata: artifacts,
             cargo_metadata: metadata,
+            failed_targets: keep_going.then_some(failed_targets),
         })
     }
 
@@ -165,9 +178,10 @@ impl KaniSession {
     }
 
     /// Run cargo and collect any error found.
-    /// TODO: We should also use this to collect the artifacts generated by cargo.
-    fn run_cargo(&self, cargo_cmd: Command) -> Result<()> {
+    /// We also collect the metadata file generated during compilation if any.
+    fn run_cargo(&self, cargo_cmd: Command, target: &Target) -> Result<Option<Artifact>> {
         let support_color = atty::is(atty::Stream::Stdout);
+        let mut artifact = None;
         if let Some(mut cargo_process) = self.run_piped(cargo_cmd)? {
             let reader = BufReader::new(cargo_process.stdout.take().unwrap());
             let mut error_count = 0;
@@ -191,25 +205,32 @@ impl KaniSession {
                             )));
                         }
                         _ => {
-                            if !self.args.quiet {
+                            if !self.args.common_args.quiet {
                                 print_msg(&msg.message, support_color)?;
                             }
                         }
                     },
-                    Message::CompilerArtifact(_)
-                    | Message::BuildScriptExecuted(_)
-                    | Message::BuildFinished(_) => {
+                    Message::CompilerArtifact(rustc_artifact) => {
+                        if rustc_artifact.target == *target {
+                            debug_assert!(
+                                artifact.is_none(),
+                                "expected only one artifact for `{target:?}`",
+                            );
+                            artifact = Some(rustc_artifact);
+                        }
+                    }
+                    Message::BuildScriptExecuted(_) | Message::BuildFinished(_) => {
                         // do nothing
                     }
                     Message::TextLine(msg) => {
-                        if !self.args.quiet {
+                        if !self.args.common_args.quiet {
                             println!("{msg}");
                         }
                     }
 
                     // Non-exhaustive enum.
                     _ => {
-                        if !self.args.quiet {
+                        if !self.args.common_args.quiet {
                             println!("{message:?}");
                         }
                     }
@@ -222,7 +243,11 @@ impl KaniSession {
                 );
             }
         }
-        Ok(())
+        // We generate kani specific artifacts only for the build target. The build target is
+        // always the last artifact generated in a build, and all the other artifacts are related
+        // to dependencies or build scripts. Hence, we need to invoke `map_kani_artifact` only
+        // for the last compiler artifact.
+        Ok(artifact.and_then(map_kani_artifact))
     }
 }
 
@@ -236,36 +261,52 @@ fn print_msg(diagnostic: &Diagnostic, use_rendered: bool) -> Result<()> {
     Ok(())
 }
 
-/// Given a `path` with glob characters in it (e.g. `*.json`), return a vector of matching files
-fn glob(path: &Path) -> Result<Vec<PathBuf>> {
-    let results = glob::glob(path.to_str().context("Non-UTF-8 path enountered")?)?;
-    // the logic to turn "Iter<Result<T, E>>" into "Result<Vec<T>, E>" doesn't play well
-    // with anyhow, so a type annotation is required
-    let v: core::result::Result<Vec<PathBuf>, glob::GlobError> = results.collect();
-    Ok(v?)
+/// Check that all package names are present in the workspace, otherwise return which aren't.
+fn validate_package_names(package_names: &[String], packages: &[Package]) -> Result<()> {
+    let package_list: Vec<String> = packages.iter().map(|pkg| pkg.name.clone()).collect();
+    let unknown_packages: Vec<&String> =
+        package_names.iter().filter(|pkg_name| !package_list.contains(pkg_name)).collect();
+
+    // Some packages aren't in the workspace. Return an error which includes their names.
+    if !unknown_packages.is_empty() {
+        let fmt_packages: Vec<String> =
+            unknown_packages.iter().map(|pkg| format!("`{pkg}`")).collect();
+        let error_msg = if unknown_packages.len() == 1 {
+            format!("couldn't find package {}", fmt_packages[0])
+        } else {
+            format!("couldn't find packages {}", fmt_packages.join(", "))
+        };
+        bail!(error_msg);
+    };
+    Ok(())
 }
 
 /// Extract the packages that should be verified.
 /// If `--package <pkg>` is given, return the list of packages selected.
+/// If `--exclude <pkg>` is given, return the list of packages not excluded.
 /// If `--workspace` is given, return the list of workspace members.
 /// If no argument provided, return the root package if there's one or all members.
 ///   - I.e.: Do whatever cargo does when there's no `default_members`.
 ///   - This is because `default_members` is not available in cargo metadata.
 ///     See <https://github.com/rust-lang/cargo/issues/8033>.
-fn packages_to_verify<'b>(args: &KaniArgs, metadata: &'b Metadata) -> Vec<&'b Package> {
-    debug!(package_selection=?args.cargo.package, workspace=args.cargo.workspace, "packages_to_verify args");
+/// In addition, if either `--package <pkg>` or `--exclude <pkg>` is given,
+/// validate that `<pkg>` is a package name in the workspace, or return an error
+/// otherwise.
+fn packages_to_verify<'b>(
+    args: &VerificationArgs,
+    metadata: &'b Metadata,
+) -> Result<Vec<&'b Package>> {
+    debug!(package_selection=?args.cargo.package, package_exclusion=?args.cargo.exclude, workspace=args.cargo.workspace, "packages_to_verify args");
     let packages = if !args.cargo.package.is_empty() {
+        validate_package_names(&args.cargo.package, &metadata.packages)?;
         args.cargo
             .package
             .iter()
-            .map(|pkg_name| {
-                metadata
-                    .packages
-                    .iter()
-                    .find(|pkg| pkg.name == *pkg_name)
-                    .expect(&format!("Cannot find package '{pkg_name}'"))
-            })
+            .map(|pkg_name| metadata.packages.iter().find(|pkg| pkg.name == *pkg_name).unwrap())
             .collect()
+    } else if !args.cargo.exclude.is_empty() {
+        validate_package_names(&args.cargo.exclude, &metadata.packages)?;
+        metadata.packages.iter().filter(|pkg| !args.cargo.exclude.contains(&pkg.name)).collect()
     } else {
         match (args.cargo.workspace, metadata.root_package()) {
             (true, _) | (_, None) => metadata.workspace_packages(),
@@ -273,23 +314,83 @@ fn packages_to_verify<'b>(args: &KaniArgs, metadata: &'b Metadata) -> Vec<&'b Pa
         }
     };
     trace!(?packages, "packages_to_verify result");
-    packages
+    Ok(packages)
+}
+
+/// Extract Kani artifact that might've been generated from a given rustc artifact.
+/// Not every rustc artifact will map to a kani artifact, hence the `Option<>`.
+///
+/// Unfortunately, we cannot always rely on the messages to get the path for the original artifact
+/// that `rustc` produces. So we hack the content of the output path to point to the original
+/// metadata file. See <https://github.com/model-checking/kani/issues/2234> for more details.
+fn map_kani_artifact(rustc_artifact: cargo_metadata::Artifact) -> Option<Artifact> {
+    debug!(?rustc_artifact, "map_kani_artifact");
+    if rustc_artifact.target.is_custom_build() {
+        // We don't verify custom builds.
+        return None;
+    }
+    let result = rustc_artifact.filenames.iter().find_map(|path| {
+        if path.extension() == Some("rmeta") {
+            let file_stem = path.file_stem()?.strip_prefix("lib")?;
+            let parent =
+                path.parent().map(|p| p.as_std_path().to_path_buf()).unwrap_or(PathBuf::new());
+            let mut meta_path = parent.join(file_stem);
+            meta_path.set_extension(ArtifactType::Metadata);
+            trace!(rmeta=?path, kani_meta=?meta_path.display(), "map_kani_artifact");
+
+            // This will check if the file exists and we just skip if it doesn't.
+            Artifact::try_new(&meta_path, ArtifactType::Metadata).ok()
+        } else if path.extension() == Some("rlib") {
+            // We skip `rlib` files since we should also generate a `rmeta`.
+            trace!(rlib=?path, "map_kani_artifact");
+            None
+        } else {
+            // For all the other cases we write the path of the metadata into the output file.
+            // The compiler should always write a valid stub into the artifact file, however the
+            // kani-metadata file only exists if there were valid targets.
+            trace!(artifact=?path, "map_kani_artifact");
+            let input_file = File::open(path).ok()?;
+            let stub: CompilerArtifactStub = serde_json::from_reader(input_file).unwrap();
+            Artifact::try_new(&stub.metadata_path, ArtifactType::Metadata).ok()
+        }
+    });
+    debug!(?result, "map_kani_artifact");
+    result
 }
 
 /// Possible verification targets.
+#[derive(Debug)]
 enum VerificationTarget {
-    Bin(String),
-    Lib,
-    Test(String),
+    Bin(Target),
+    Lib(Target),
+    Test(Target),
 }
 
 impl VerificationTarget {
     /// Convert to cargo argument that select the specific target.
     fn to_args(&self) -> Vec<String> {
         match self {
-            VerificationTarget::Test(name) => vec![String::from("--test"), name.clone()],
-            VerificationTarget::Bin(name) => vec![String::from("--bin"), name.clone()],
-            VerificationTarget::Lib => vec![String::from("--lib")],
+            VerificationTarget::Test(target) => vec![String::from("--test"), target.name.clone()],
+            VerificationTarget::Bin(target) => vec![String::from("--bin"), target.name.clone()],
+            VerificationTarget::Lib(_) => vec![String::from("--lib")],
+        }
+    }
+
+    fn target(&self) -> &Target {
+        match self {
+            VerificationTarget::Test(target)
+            | VerificationTarget::Bin(target)
+            | VerificationTarget::Lib(target) => target,
+        }
+    }
+}
+
+impl Display for VerificationTarget {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            VerificationTarget::Test(target) => write!(f, "test `{}`", target.name),
+            VerificationTarget::Bin(target) => write!(f, "binary `{}`", target.name),
+            VerificationTarget::Lib(target) => write!(f, "lib `{}`", target.name),
         }
     }
 }
@@ -305,7 +406,7 @@ impl VerificationTarget {
 /// The documentation for `crate-type` explicitly states that the only time `kind` and
 /// `crate-type` differs is for examples.
 /// <https://docs.rs/cargo_metadata/0.15.0/cargo_metadata/struct.Target.html#structfield.crate_types>
-fn package_targets(args: &KaniArgs, package: &Package) -> Vec<VerificationTarget> {
+fn package_targets(args: &VerificationArgs, package: &Package) -> Vec<VerificationTarget> {
     let mut ignored_tests = vec![];
     let mut ignored_unsupported = vec![];
     let mut verification_targets = vec![];
@@ -317,23 +418,31 @@ fn package_targets(args: &KaniArgs, package: &Package) -> Vec<VerificationTarget
         for kind in &target.kind {
             match kind.as_str() {
                 CRATE_TYPE_BIN => {
-                    // Binary targets.
-                    verification_targets.push(VerificationTarget::Bin(target.name.clone()));
+                    if args.target.include_bin(&target.name) {
+                        // Binary targets.
+                        verification_targets.push(VerificationTarget::Bin(target.clone()));
+                    }
                 }
                 CRATE_TYPE_LIB | CRATE_TYPE_RLIB | CRATE_TYPE_CDYLIB | CRATE_TYPE_DYLIB
                 | CRATE_TYPE_STATICLIB => {
-                    supported_lib = true;
+                    if args.target.include_lib() {
+                        supported_lib = true;
+                    }
                 }
                 CRATE_TYPE_PROC_MACRO => {
-                    unsupported_lib = true;
-                    ignored_unsupported.push(target.name.as_str());
+                    if args.target.include_lib() {
+                        unsupported_lib = true;
+                        ignored_unsupported.push(target.name.as_str());
+                    }
                 }
                 CRATE_TYPE_TEST => {
                     // Test target.
-                    if args.tests {
-                        verification_targets.push(VerificationTarget::Test(target.name.clone()));
-                    } else {
-                        ignored_tests.push(target.name.as_str());
+                    if args.target.include_tests() {
+                        if args.tests {
+                            verification_targets.push(VerificationTarget::Test(target.clone()));
+                        } else {
+                            ignored_tests.push(target.name.as_str());
+                        }
                     }
                 }
                 _ => {
@@ -347,12 +456,12 @@ fn package_targets(args: &KaniArgs, package: &Package) -> Vec<VerificationTarget
                         `proc-macro`.",
                 target.name,
             ),
-            (true, false) => verification_targets.push(VerificationTarget::Lib),
+            (true, false) => verification_targets.push(VerificationTarget::Lib(target.clone())),
             (_, _) => {}
         }
     }
 
-    if args.verbose {
+    if args.common_args.verbose {
         // Print targets that were skipped only on verbose mode.
         if !ignored_tests.is_empty() {
             println!("Skipped the following test targets: '{}'.", ignored_tests.join("', '"));

@@ -2,9 +2,6 @@
 # Copyright Kani Contributors
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
-# To enable "unsound_experimental features, run as follows:
-# `KANI_ENABLE_UNSOUND_EXPERIMENTS=1 scripts/kani-regression.sh`
-
 if [[ -z $KANI_REGRESSION_KEEP_GOING ]]; then
   set -o errexit
 fi
@@ -22,19 +19,15 @@ KANI_DIR=$SCRIPT_DIR/..
 export KANI_FAIL_ON_UNEXPECTED_DESCRIPTION="true"
 
 # Required dependencies
-check-cbmc-version.py --major 5 --minor 75
-check-cbmc-viewer-version.py --major 3 --minor 5
+check-cbmc-version.py --major 5 --minor 85
+check-cbmc-viewer-version.py --major 3 --minor 8
 check_kissat_version.sh
 
 # Formatting check
 ${SCRIPT_DIR}/kani-fmt.sh --check
 
 # Build all packages in the workspace
-if [[ "" != "${KANI_ENABLE_UNSOUND_EXPERIMENTS-}" ]]; then
-  cargo build-dev -- --features unsound_experiments
-else
-  cargo build-dev
-fi
+cargo build-dev
 
 # Unit tests
 cargo test -p cprover_bindings
@@ -56,12 +49,6 @@ TESTS=(
     "kani-docs cargo-kani"
     "kani-fixme kani-fixme"
 )
-
-if [[ "" != "${KANI_ENABLE_UNSOUND_EXPERIMENTS-}" ]]; then
-  TESTS+=("unsound_experiments kani")
-else
-  TESTS+=("no_unsound_experiments expected")
-fi
 
 # Build compiletest and print configuration. We pick suite / mode combo so there's no test.
 echo "--- Compiletest configuration"

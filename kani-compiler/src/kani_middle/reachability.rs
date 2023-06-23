@@ -31,7 +31,7 @@ use rustc_middle::span_bug;
 use rustc_middle::ty::adjustment::PointerCast;
 use rustc_middle::ty::{
     Closure, ClosureKind, ConstKind, Instance, InstanceDef, ParamEnv, Ty, TyCtxt, TyKind,
-    TypeFoldable, VtblEntry, WithOptConstParam,
+    TypeFoldable, VtblEntry,
 };
 
 use crate::kani_middle::coercion;
@@ -44,10 +44,17 @@ pub fn collect_reachable_items<'tcx>(
 ) -> Vec<MonoItem<'tcx>> {
     // For each harness, collect items using the same collector.
     // I.e.: This will return any item that is reachable from one or more of the starting points.
-    let mut collector = MonoItemsCollector { tcx, collected: FxHashSet::default(), queue: vec![] };
+    let mut collector = MonoItemsCollector::new(tcx);
     for item in starting_points {
         collector.collect(*item);
     }
+
+    #[cfg(debug_assertions)]
+    collector
+        .call_graph
+        .dump_dot(tcx)
+        .unwrap_or_else(|e| tracing::error!("Failed to dump call graph: {e}"));
+
     tcx.sess.abort_if_errors();
 
     // Sort the result so code generation follows deterministic order.
@@ -90,26 +97,26 @@ where
     root_items.chain(impl_items).collect()
 }
 
-/// Use a predicate to find `const` declarations, then extract all closures from those declarations
+/// Use a predicate to find `const` declarations, then extract all items reachable from them.
 ///
 /// Probably only specifically useful with a predicate to find `TestDescAndFn` const declarations from
 /// tests and extract the closures from them.
-pub fn filter_closures_in_const_crate_items<F>(tcx: TyCtxt, mut predicate: F) -> Vec<MonoItem>
+pub fn filter_const_crate_items<F>(tcx: TyCtxt, mut predicate: F) -> Vec<MonoItem>
 where
     F: FnMut(TyCtxt, DefId) -> bool,
 {
     let mut roots = Vec::new();
     for hir_id in tcx.hir_crate_items(()).items() {
         let def_id = hir_id.owner_id.def_id.to_def_id();
-        if predicate(tcx, def_id) {
-            // The predicate should only ever apply to monomorphic items
+        let def_kind = tcx.def_kind(def_id);
+        if matches!(def_kind, DefKind::Const) && predicate(tcx, def_id) {
             let instance = Instance::mono(tcx, def_id);
-            let body = tcx.instance_mir(InstanceDef::Item(WithOptConstParam::unknown(def_id)));
-            let mut extrator =
-                ConstMonoItemExtractor { tcx, body, instance, collected: FxHashSet::default() };
-            extrator.visit_body(body);
+            let body = tcx.instance_mir(InstanceDef::Item(def_id));
+            let mut collector =
+                MonoItemsFnCollector { tcx, body, instance, collected: FxHashSet::default() };
+            collector.visit_body(body);
 
-            roots.extend(extrator.collected);
+            roots.extend(collector.collected);
         }
     }
     roots
@@ -140,9 +147,20 @@ struct MonoItemsCollector<'tcx> {
     collected: FxHashSet<MonoItem<'tcx>>,
     /// Items enqueued for visiting.
     queue: Vec<MonoItem<'tcx>>,
+    #[cfg(debug_assertions)]
+    call_graph: debug::CallGraph<'tcx>,
 }
 
 impl<'tcx> MonoItemsCollector<'tcx> {
+    pub fn new(tcx: TyCtxt<'tcx>) -> Self {
+        MonoItemsCollector {
+            tcx,
+            collected: FxHashSet::default(),
+            queue: vec![],
+            #[cfg(debug_assertions)]
+            call_graph: debug::CallGraph::default(),
+        }
+    }
     /// Collects all reachable items starting from the given root.
     pub fn collect(&mut self, root: MonoItem<'tcx>) {
         debug!(?root, "collect");
@@ -156,52 +174,56 @@ impl<'tcx> MonoItemsCollector<'tcx> {
         while let Some(to_visit) = self.queue.pop() {
             if !self.collected.contains(&to_visit) {
                 self.collected.insert(to_visit);
-                match to_visit {
-                    MonoItem::Fn(instance) => {
-                        self.visit_fn(instance);
-                    }
-                    MonoItem::Static(def_id) => {
-                        self.visit_static(def_id);
-                    }
+                let next_items = match to_visit {
+                    MonoItem::Fn(instance) => self.visit_fn(instance),
+                    MonoItem::Static(def_id) => self.visit_static(def_id),
                     MonoItem::GlobalAsm(_) => {
                         self.visit_asm(to_visit);
+                        vec![]
                     }
-                }
+                };
+                #[cfg(debug_assertions)]
+                self.call_graph.add_edges(to_visit, &next_items);
+
+                self.queue
+                    .extend(next_items.into_iter().filter(|item| !self.collected.contains(item)));
             }
         }
     }
 
     /// Visit a function and collect all mono-items reachable from its instructions.
-    fn visit_fn(&mut self, instance: Instance<'tcx>) {
+    fn visit_fn(&mut self, instance: Instance<'tcx>) -> Vec<MonoItem<'tcx>> {
         let _guard = debug_span!("visit_fn", function=?instance).entered();
         let body = self.tcx.instance_mir(instance.def);
         let mut collector =
             MonoItemsFnCollector { tcx: self.tcx, collected: FxHashSet::default(), instance, body };
         collector.visit_body(body);
-        self.queue.extend(collector.collected.iter().filter(|item| !self.collected.contains(item)));
+        collector.collected.into_iter().collect()
     }
 
     /// Visit a static object and collect drop / initialization functions.
-    fn visit_static(&mut self, def_id: DefId) {
+    fn visit_static(&mut self, def_id: DefId) -> Vec<MonoItem<'tcx>> {
         let _guard = debug_span!("visit_static", ?def_id).entered();
         let instance = Instance::mono(self.tcx, def_id);
+        let mut next_items = vec![];
 
         // Collect drop function.
         let static_ty = instance.ty(self.tcx, ParamEnv::reveal_all());
         let instance = Instance::resolve_drop_in_place(self.tcx, static_ty);
-        self.queue.push(MonoItem::Fn(instance.polymorphize(self.tcx)));
+        next_items.push(MonoItem::Fn(instance.polymorphize(self.tcx)));
 
         // Collect initialization.
         let alloc = self.tcx.eval_static_initializer(def_id).unwrap();
         for id in alloc.inner().provenance().provenances() {
-            self.queue.extend(collect_alloc_items(self.tcx, id).iter());
+            next_items.extend(collect_alloc_items(self.tcx, id).iter());
         }
+
+        next_items
     }
 
     /// Visit global assembly and collect its item.
     fn visit_asm(&mut self, item: MonoItem<'tcx>) {
         debug!(?item, "visit_asm");
-        self.collected.insert(item);
     }
 }
 
@@ -215,7 +237,7 @@ struct MonoItemsFnCollector<'a, 'tcx> {
 impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {
     fn monomorphize<T>(&self, value: T) -> T
     where
-        T: TypeFoldable<'tcx>,
+        T: TypeFoldable<TyCtxt<'tcx>>,
     {
         trace!(instance=?self.instance, ?value, "monomorphize");
         self.instance.subst_mir_and_normalize_erasing_regions(
@@ -283,6 +305,7 @@ impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {
             | InstanceDef::Item(..)
             | InstanceDef::ReifyShim(..)
             | InstanceDef::VTableShim(..) => true,
+            InstanceDef::ThreadLocalShim(_) | InstanceDef::FnPtrAddrShim(_, _) => true,
         };
         if should_collect && should_codegen_locally(self.tcx, &instance) {
             trace!(?instance, "collect_instance");
@@ -487,8 +510,7 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
                     );
                 }
             }
-            TerminatorKind::Drop { ref place, .. }
-            | TerminatorKind::DropAndReplace { ref place, .. } => {
+            TerminatorKind::Drop { ref place, .. } => {
                 let place_ty = place.ty(self.body, self.tcx).ty;
                 let place_mono_ty = self.monomorphize(place_ty);
                 let instance = Instance::resolve_drop_in_place(self.tcx, place_mono_ty);
@@ -498,7 +520,7 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
                 // We don't support inline assembly. This shall be replaced by an unsupported
                 // construct during codegen.
             }
-            TerminatorKind::Abort { .. } | TerminatorKind::Assert { .. } => {
+            TerminatorKind::Terminate { .. } | TerminatorKind::Assert { .. } => {
                 // We generate code for this without invoking any lang item.
             }
             TerminatorKind::Goto { .. }
@@ -580,49 +602,112 @@ fn collect_alloc_items(tcx: TyCtxt, alloc_id: AllocId) -> Vec<MonoItem> {
     items
 }
 
-/// This MIR Visitor is intended for one specific purpose:
-/// Find the closure that exist inside a top-level const declaration generated by
-/// test declarations. This allows us to treat this closure instance as a root for
-/// the reachability analysis.
-///
-/// Entry into this visitor will be via `visit_body`
-struct ConstMonoItemExtractor<'a, 'tcx> {
-    tcx: TyCtxt<'tcx>,
-    collected: FxHashSet<MonoItem<'tcx>>,
-    instance: Instance<'tcx>,
-    body: &'a Body<'tcx>,
-}
+#[cfg(debug_assertions)]
+mod debug {
+    #![allow(dead_code)]
 
-impl<'a, 'tcx> MirVisitor<'tcx> for ConstMonoItemExtractor<'a, 'tcx> {
-    #[allow(clippy::single_match)]
-    fn visit_rvalue(&mut self, rvalue: &Rvalue<'tcx>, location: Location) {
-        trace!(rvalue=?*rvalue, "visit_rvalue");
+    use std::{
+        collections::{HashMap, HashSet},
+        fs::File,
+        io::{BufWriter, Write},
+    };
 
-        match *rvalue {
-            Rvalue::Cast(CastKind::Pointer(PointerCast::ClosureFnPointer(_)), ref operand, _) => {
-                let source_ty = operand.ty(self.body, self.tcx);
-                let source_ty = self.instance.subst_mir_and_normalize_erasing_regions(
-                    self.tcx,
-                    ParamEnv::reveal_all(),
-                    source_ty,
-                );
-                match *source_ty.kind() {
-                    Closure(def_id, substs) => {
-                        let instance = Instance::resolve_closure(
-                            self.tcx,
-                            def_id,
-                            substs,
-                            ClosureKind::FnOnce,
-                        )
-                        .expect("failed to normalize and resolve closure during codegen");
-                        self.collected.insert(MonoItem::Fn(instance.polymorphize(self.tcx)));
-                    }
-                    _ => unreachable!("Unexpected type: {:?}", source_ty),
-                }
-            }
-            _ => { /* not interesting */ }
+    use rustc_session::config::OutputType;
+
+    use super::*;
+
+    #[derive(Debug, Default)]
+    pub struct CallGraph<'tcx> {
+        // Nodes of the graph.
+        nodes: HashSet<Node<'tcx>>,
+        edges: HashMap<Node<'tcx>, Vec<Node<'tcx>>>,
+        back_edges: HashMap<Node<'tcx>, Vec<Node<'tcx>>>,
+    }
+
+    type Node<'tcx> = MonoItem<'tcx>;
+
+    impl<'tcx> CallGraph<'tcx> {
+        pub fn add_node(&mut self, item: Node<'tcx>) {
+            self.nodes.insert(item);
+            self.edges.entry(item).or_default();
+            self.back_edges.entry(item).or_default();
         }
 
-        self.super_rvalue(rvalue, location);
+        /// Add a new edge "from" -> "to".
+        pub fn add_edge(&mut self, from: Node<'tcx>, to: Node<'tcx>) {
+            self.add_node(from);
+            self.add_node(to);
+            self.edges.get_mut(&from).unwrap().push(to);
+            self.back_edges.get_mut(&to).unwrap().push(from);
+        }
+
+        /// Add multiple new edges for the "from" node.
+        pub fn add_edges(&mut self, from: Node<'tcx>, to: &[Node<'tcx>]) {
+            self.add_node(from);
+            for item in to {
+                self.add_edge(from, *item);
+            }
+        }
+
+        /// Print the graph in DOT format to a file.
+        /// See <https://graphviz.org/doc/info/lang.html> for more information.
+        pub fn dump_dot(&self, tcx: TyCtxt) -> std::io::Result<()> {
+            if let Ok(target) = std::env::var("KANI_REACH_DEBUG") {
+                debug!(?target, "dump_dot");
+                let outputs = tcx.output_filenames(());
+                let path = outputs.output_path(OutputType::Metadata).with_extension("dot");
+                let out_file = File::create(&path)?;
+                let mut writer = BufWriter::new(out_file);
+                writeln!(writer, "digraph ReachabilityGraph {{")?;
+                if target.is_empty() {
+                    self.dump_all(&mut writer)?;
+                } else {
+                    // Only dump nodes that led the reachability analysis to the target node.
+                    self.dump_reason(&mut writer, &target)?;
+                }
+                writeln!(writer, "}}")?;
+            }
+
+            Ok(())
+        }
+
+        /// Write all notes to the given writer.
+        fn dump_all<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
+            tracing::info!(nodes=?self.nodes.len(), edges=?self.edges.len(), "dump_all");
+            for node in &self.nodes {
+                writeln!(writer, r#""{node}""#)?;
+                for succ in self.edges.get(node).unwrap() {
+                    writeln!(writer, r#""{node}" -> "{succ}" "#)?;
+                }
+            }
+            Ok(())
+        }
+
+        /// Write all notes that may have led to the discovery of the given target.
+        fn dump_reason<W: Write>(&self, writer: &mut W, target: &str) -> std::io::Result<()> {
+            let mut queue = self
+                .nodes
+                .iter()
+                .filter(|item| item.to_string().contains(target))
+                .collect::<Vec<_>>();
+            let mut visited: HashSet<&MonoItem> = HashSet::default();
+            tracing::info!(target=?queue, nodes=?self.nodes.len(), edges=?self.edges.len(), "dump_reason");
+            while let Some(to_visit) = queue.pop() {
+                if !visited.contains(to_visit) {
+                    visited.insert(to_visit);
+                    queue.extend(self.back_edges.get(to_visit).unwrap());
+                }
+            }
+
+            for node in &visited {
+                writeln!(writer, r#""{node}""#)?;
+                for succ in
+                    self.edges.get(node).unwrap().iter().filter(|item| visited.contains(item))
+                {
+                    writeln!(writer, r#""{node}" -> "{succ}" "#)?;
+                }
+            }
+            Ok(())
+        }
     }
 }

@@ -1,1 +1,1 @@
-error: Exactly one Unwind Argument as Integer accepted
+error: invalid argument for `unwind` attribute, expected an integer

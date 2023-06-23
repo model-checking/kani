@@ -10,7 +10,7 @@
 mod parser;
 mod sysroot;
 
-use crate::sysroot::{build_bin, build_lib, kani_sysroot_lib};
+use crate::sysroot::{build_bin, build_lib, kani_playback_lib, kani_sysroot_lib};
 use anyhow::{bail, Result};
 use clap::Parser;
 use std::{ffi::OsString, path::Path, process::Command};
@@ -19,10 +19,7 @@ fn main() -> Result<()> {
     let args = parser::ArgParser::parse();
 
     match args.subcommand {
-        parser::Commands::BuildDev(build_parser) => {
-            build_lib();
-            build_bin(&build_parser.args);
-        }
+        parser::Commands::BuildDev(build_parser) => build_lib(&build_bin(&build_parser.args)?),
         parser::Commands::Bundle(bundle_parser) => {
             let version_string = bundle_parser.version;
             let kani_string = format!("kani-{version_string}");
@@ -45,10 +42,10 @@ fn main() -> Result<()> {
             std::fs::remove_dir_all(dir)?;
 
             println!("\nSuccessfully built release bundle: {bundle_name}");
+
+            Ok(())
         }
     }
-
-    Ok(())
 }
 
 /// Ensures everything is good to go before we begin to build the release bundle.
@@ -70,10 +67,8 @@ fn prebundle(dir: &Path) -> Result<()> {
     }
 
     // Before we begin, ensure Kani is built successfully in release mode.
-    build_bin(&["--release"]);
     // And that libraries have been built too.
-    build_lib();
-    Ok(())
+    build_lib(&build_bin(&["--release"])?)
 }
 
 /// Copy Kani files into `dir`
@@ -100,11 +95,12 @@ fn bundle_kani(dir: &Path) -> Result<()> {
 
     // 4. Pre-compiled library files
     cp_dir(&kani_sysroot_lib(), dir)?;
+    cp_dir(&kani_playback_lib().parent().unwrap(), dir)?;
 
     // 5. Record the exact toolchain we use
     std::fs::write(dir.join("rust-toolchain-version"), env!("RUSTUP_TOOLCHAIN"))?;
 
-    // 5. Include a licensing note
+    // 6. Include a licensing note
     cp(Path::new("tools/build-kani/license-notes.txt"), dir)?;
 
     Ok(())

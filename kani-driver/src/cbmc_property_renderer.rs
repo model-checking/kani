@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use crate::args::OutputFormat;
+use crate::call_cbmc::{FailedProperties, VerificationStatus};
 use crate::cbmc_output_parser::{CheckStatus, ParserItem, Property, TraceItem};
 use console::style;
 use once_cell::sync::Lazy;
@@ -241,7 +242,13 @@ fn format_item_terse(_item: &ParserItem) -> Option<String> {
 ///
 /// TODO: We could `write!` to `result_str` instead
 /// <https://github.com/model-checking/kani/issues/1480>
-pub fn format_result(properties: &Vec<Property>, show_checks: bool) -> String {
+pub fn format_result(
+    properties: &Vec<Property>,
+    status: VerificationStatus,
+    should_panic: bool,
+    failed_properties: FailedProperties,
+    show_checks: bool,
+) -> String {
     let mut result_str = String::new();
     let mut number_checks_failed = 0;
     let mut number_checks_unreachable = 0;
@@ -376,9 +383,23 @@ pub fn format_result(properties: &Vec<Property>, show_checks: bool) -> String {
         result_str.push_str(&failure_message);
     }
 
-    let verification_result =
-        if number_checks_failed == 0 { style("SUCCESSFUL").green() } else { style("FAILED").red() };
-    let overall_result = format!("\nVERIFICATION:- {verification_result}\n");
+    let verification_result = if status == VerificationStatus::Success {
+        style("SUCCESSFUL").green()
+    } else {
+        style("FAILED").red()
+    };
+    let should_panic_info = if should_panic {
+        match failed_properties {
+            FailedProperties::None => " (encountered no panics, but at least one was expected)",
+            FailedProperties::PanicsOnly => " (encountered one or more panics as expected)",
+            FailedProperties::Other => {
+                " (encountered failures other than panics, which were unexpected)"
+            }
+        }
+    } else {
+        ""
+    };
+    let overall_result = format!("\nVERIFICATION:- {verification_result}{should_panic_info}\n");
     result_str.push_str(&overall_result);
 
     // Ideally, we should generate two `ParserItem::Message` and push them
@@ -389,7 +410,7 @@ pub fn format_result(properties: &Vec<Property>, show_checks: bool) -> String {
         result_str.push_str(
             "** WARNING: A Rust construct that is not currently supported \
         by Kani was found to be reachable. Check the results for \
-        more details.",
+        more details.\n",
         );
     }
     if has_unwinding_assertion_failures(properties) {
@@ -514,7 +535,7 @@ fn has_unwinding_assertion_failures(properties: &Vec<Property>) -> bool {
 /// definition.
 fn modify_undefined_function_checks(mut properties: Vec<Property>) -> (Vec<Property>, bool) {
     let mut has_unknown_location_checks = false;
-    for mut prop in &mut properties {
+    for prop in &mut properties {
         if let Some(function) = &prop.source_location.function
             && prop.description == DEFAULT_ASSERTION
             && prop.source_location.file.is_none()

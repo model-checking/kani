@@ -5,11 +5,11 @@ use super::typ::{self, pointee_type};
 use super::PropertyClass;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{
-    arithmetic_overflow_result_type, ArithmeticOverflowResult, BuiltinFn, Expr, Location, Stmt,
-    Type, ARITH_OVERFLOW_OVERFLOWED_FIELD, ARITH_OVERFLOW_RESULT_FIELD,
+    arithmetic_overflow_result_type, ArithmeticOverflowResult, BinaryOperator, BuiltinFn, Expr,
+    Location, Stmt, Type, ARITH_OVERFLOW_OVERFLOWED_FIELD, ARITH_OVERFLOW_RESULT_FIELD,
 };
 use rustc_middle::mir::{BasicBlock, Operand, Place};
-use rustc_middle::ty::layout::LayoutOf;
+use rustc_middle::ty::layout::{LayoutOf, ValidityRequirement};
 use rustc_middle::ty::{self, Ty};
 use rustc_middle::ty::{Instance, InstanceDef};
 use rustc_span::Span;
@@ -162,45 +162,13 @@ impl<'tcx> GotocCtx<'tcx> {
             ($f:ident) => {{
                 let mm = self.symbol_table.machine_model();
                 let casted_fargs =
-                    Expr::cast_arguments_to_machine_equivalent_function_parameter_types(
+                    Expr::cast_arguments_to_target_equivalent_function_parameter_types(
                         &BuiltinFn::$f.as_expr(),
                         fargs,
                         mm,
                     );
                 let e = BuiltinFn::$f.call(casted_fargs, loc);
                 self.codegen_expr_to_place(p, e)
-            }};
-        }
-
-        // Intrinsics of the form *_with_overflow
-        macro_rules! codegen_op_with_overflow {
-            ($f:ident) => {{
-                let pt = self.place_ty(p);
-                let t = self.codegen_ty(pt);
-                let a = fargs.remove(0);
-                let b = fargs.remove(0);
-                let op_type = a.typ().clone();
-                let res = a.$f(b);
-                // add to symbol table
-                let struct_tag = self.codegen_arithmetic_overflow_result_type(op_type.clone());
-                assert_eq!(*res.typ(), struct_tag);
-
-                // store the result in a temporary variable
-                let (var, decl) = self.decl_temp_variable(struct_tag, Some(res), loc);
-                // cast into result type
-                let e = Expr::struct_expr_from_values(
-                    t.clone(),
-                    vec![
-                        var.clone().member(ARITH_OVERFLOW_RESULT_FIELD, &self.symbol_table),
-                        var.member(ARITH_OVERFLOW_OVERFLOWED_FIELD, &self.symbol_table)
-                            .cast_to(Type::c_bool()),
-                    ],
-                    &self.symbol_table,
-                );
-                self.codegen_expr_to_place(
-                    p,
-                    Expr::statement_expression(vec![decl, e.as_stmt(loc)], t),
-                )
             }};
         }
 
@@ -288,7 +256,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }};
         }
 
-        // Intrinsics which encode a value known during compilation (e.g., `size_of`)
+        // Intrinsics which encode a value known during compilation
         macro_rules! codegen_intrinsic_const {
             () => {{
                 let value = self
@@ -362,10 +330,14 @@ impl<'tcx> GotocCtx<'tcx> {
         }
 
         match intrinsic {
-            "add_with_overflow" => codegen_op_with_overflow!(add_overflow_result),
+            "add_with_overflow" => {
+                self.codegen_op_with_overflow(BinaryOperator::OverflowResultPlus, fargs, p, loc)
+            }
             "arith_offset" => self.codegen_offset(intrinsic, instance, fargs, p, loc),
             "assert_inhabited" => self.codegen_assert_intrinsic(instance, intrinsic, span),
-            "assert_uninit_valid" => self.codegen_assert_intrinsic(instance, intrinsic, span),
+            "assert_mem_uninitialized_valid" => {
+                self.codegen_assert_intrinsic(instance, intrinsic, span)
+            }
             "assert_zero_valid" => self.codegen_assert_intrinsic(instance, intrinsic, span),
             // https://doc.rust-lang.org/core/intrinsics/fn.assume.html
             // Informs the optimizer that a condition is always true.
@@ -526,11 +498,16 @@ impl<'tcx> GotocCtx<'tcx> {
             "min_align_of_val" => codegen_size_align!(align),
             "minnumf32" => codegen_simple_intrinsic!(Fminf),
             "minnumf64" => codegen_simple_intrinsic!(Fmin),
-            "mul_with_overflow" => codegen_op_with_overflow!(mul_overflow_result),
+            "mul_with_overflow" => {
+                self.codegen_op_with_overflow(BinaryOperator::OverflowResultMult, fargs, p, loc)
+            }
             "nearbyintf32" => codegen_simple_intrinsic!(Nearbyintf),
             "nearbyintf64" => codegen_simple_intrinsic!(Nearbyint),
             "needs_drop" => codegen_intrinsic_const!(),
-            "offset" => self.codegen_offset(intrinsic, instance, fargs, p, loc),
+            // As of https://github.com/rust-lang/rust/pull/110822 the `offset` intrinsic is lowered to `mir::BinOp::Offset`
+            "offset" => unreachable!(
+                "Expected `core::intrinsics::unreachable` to be handled by `BinOp::OffSet`"
+            ),
             "powf32" => unstable_codegen!(codegen_simple_intrinsic!(Powf)),
             "powf64" => unstable_codegen!(codegen_simple_intrinsic!(Pow)),
             "powif32" => unstable_codegen!(codegen_simple_intrinsic!(Powif)),
@@ -609,11 +586,13 @@ impl<'tcx> GotocCtx<'tcx> {
                 loc,
             ),
             "simd_xor" => codegen_intrinsic_binop!(bitxor),
-            "size_of" => codegen_intrinsic_const!(),
+            "size_of" => unreachable!(),
             "size_of_val" => codegen_size_align!(size),
             "sqrtf32" => unstable_codegen!(codegen_simple_intrinsic!(Sqrtf)),
             "sqrtf64" => unstable_codegen!(codegen_simple_intrinsic!(Sqrt)),
-            "sub_with_overflow" => codegen_op_with_overflow!(sub_overflow_result),
+            "sub_with_overflow" => {
+                self.codegen_op_with_overflow(BinaryOperator::OverflowResultMinus, fargs, p, loc)
+            }
             "transmute" => self.codegen_intrinsic_transmute(fargs, ret_ty, p),
             "truncf32" => codegen_simple_intrinsic!(Truncf),
             "truncf64" => codegen_simple_intrinsic!(Trunc),
@@ -717,6 +696,25 @@ impl<'tcx> GotocCtx<'tcx> {
         dividend_is_int_min.and(divisor_is_minus_one).not()
     }
 
+    /// Intrinsics of the form *_with_overflow
+    fn codegen_op_with_overflow(
+        &mut self,
+        binop: BinaryOperator,
+        mut fargs: Vec<Expr>,
+        place: &Place<'tcx>,
+        loc: Location,
+    ) -> Stmt {
+        let place_ty = self.place_ty(place);
+        let result_type = self.codegen_ty(place_ty);
+        let left = fargs.remove(0);
+        let right = fargs.remove(0);
+        let res = self.codegen_binop_with_overflow(binop, left, right, result_type.clone(), loc);
+        self.codegen_expr_to_place(
+            place,
+            Expr::statement_expression(vec![res.as_stmt(loc)], result_type),
+        )
+    }
+
     fn codegen_exact_div(&mut self, mut fargs: Vec<Expr>, p: &Place<'tcx>, loc: Location) -> Stmt {
         // Check for undefined behavior conditions defined in
         // https://doc.rust-lang.org/std/intrinsics/fn.exact_div.html
@@ -758,7 +756,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// layout is invalid so we get a message that mentions the offending type.
     ///
     /// <https://doc.rust-lang.org/std/intrinsics/fn.assert_inhabited.html>
-    /// <https://doc.rust-lang.org/std/intrinsics/fn.assert_uninit_valid.html>
+    /// <https://doc.rust-lang.org/std/intrinsics/fn.assert_mem_uninitialized_valid.html>
     /// <https://doc.rust-lang.org/std/intrinsics/fn.assert_zero_valid.html>
     fn codegen_assert_intrinsic(
         &mut self,
@@ -781,9 +779,16 @@ impl<'tcx> GotocCtx<'tcx> {
             );
         }
 
+        let param_env_and_type = ty::ParamEnv::reveal_all().and(ty);
+
         // Then we check if the type allows "raw" initialization for the cases
         // where memory is zero-initialized or entirely uninitialized
-        if intrinsic == "assert_zero_valid" && !self.tcx.permits_zero_init(layout) {
+        if intrinsic == "assert_zero_valid"
+            && !self
+                .tcx
+                .check_validity_requirement((ValidityRequirement::Zero, param_env_and_type))
+                .unwrap()
+        {
             return self.codegen_fatal_error(
                 PropertyClass::SafetyCheck,
                 &format!("attempted to zero-initialize type `{ty}`, which is invalid"),
@@ -791,7 +796,15 @@ impl<'tcx> GotocCtx<'tcx> {
             );
         }
 
-        if intrinsic == "assert_uninit_valid" && !self.tcx.permits_uninit_init(layout) {
+        if intrinsic == "assert_mem_uninitialized_valid"
+            && !self
+                .tcx
+                .check_validity_requirement((
+                    ValidityRequirement::UninitMitigated0x01Fill,
+                    param_env_and_type,
+                ))
+                .unwrap()
+        {
             return self.codegen_fatal_error(
                 PropertyClass::SafetyCheck,
                 &format!("attempted to leave type `{ty}` uninitialized, which is invalid"),
@@ -1175,7 +1188,8 @@ impl<'tcx> GotocCtx<'tcx> {
         let dst = fargs.remove(0).cast_to(Type::void_pointer());
         let val = fargs.remove(0).cast_to(Type::void_pointer());
         let layout = self.layout_of(ty);
-        let sz = Expr::int_constant(layout.size.bytes(), Type::size_t());
+        let sz = Expr::int_constant(layout.size.bytes(), Type::size_t())
+            .with_size_of_annotation(self.codegen_ty(ty));
         let e = BuiltinFn::Memcmp
             .call(vec![dst, val, sz], loc)
             .eq(Type::c_int().zero())
@@ -1221,14 +1235,16 @@ impl<'tcx> GotocCtx<'tcx> {
             // `simd_shuffle4`) is type-checked
             match farg_types[2].kind() {
                 ty::Array(ty, len) if matches!(ty.kind(), ty::Uint(ty::UintTy::U32)) => {
-                    len.try_eval_usize(self.tcx, ty::ParamEnv::reveal_all()).unwrap_or_else(|| {
-                        self.tcx.sess.span_err(
-                            span.unwrap(),
-                            "could not evaluate shuffle index array length",
-                        );
-                        // Return a dummy value
-                        u64::MIN
-                    })
+                    len.try_eval_target_usize(self.tcx, ty::ParamEnv::reveal_all()).unwrap_or_else(
+                        || {
+                            self.tcx.sess.span_err(
+                                span.unwrap(),
+                                "could not evaluate shuffle index array length",
+                            );
+                            // Return a dummy value
+                            u64::MIN
+                        },
+                    )
                 }
                 _ => {
                     let err_msg = format!(
@@ -1257,11 +1273,12 @@ impl<'tcx> GotocCtx<'tcx> {
     /// This function computes the size and alignment of a dynamically-sized type.
     /// The implementations follows closely the SSA implementation found in
     /// `rustc_codegen_ssa::glue::size_and_align_of_dst`.
-    fn size_and_align_of_dst(&self, t: Ty<'tcx>, arg: Expr) -> SizeAlign {
+    fn size_and_align_of_dst(&mut self, t: Ty<'tcx>, arg: Expr) -> SizeAlign {
         let layout = self.layout_of(t);
         let usizet = Type::size_t();
         if !layout.is_unsized() {
-            let size = Expr::int_constant(layout.size.bytes_usize(), Type::size_t());
+            let size = Expr::int_constant(layout.size.bytes_usize(), Type::size_t())
+                .with_size_of_annotation(self.codegen_ty(t));
             let align = Expr::int_constant(layout.align.abi.bytes(), usizet);
             return SizeAlign { size, align };
         }
@@ -1284,6 +1301,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // The info in this case is the length of the str, so the size is that
                 // times the unit size.
                 let size = Expr::int_constant(unit.size.bytes_usize(), Type::size_t())
+                    .with_size_of_annotation(self.codegen_ty(*unit_t))
                     .mul(arg.member("len", &self.symbol_table));
                 let align = Expr::int_constant(layout.align.abi.bytes(), usizet);
                 SizeAlign { size, align }
@@ -1306,7 +1324,8 @@ impl<'tcx> GotocCtx<'tcx> {
                 // FIXME: We assume they are aligned according to the machine-preferred alignment given by layout abi.
                 let n = layout.fields.count() - 1;
                 let sized_size =
-                    Expr::int_constant(layout.fields.offset(n).bytes(), Type::size_t());
+                    Expr::int_constant(layout.fields.offset(n).bytes(), Type::size_t())
+                        .with_size_of_annotation(self.codegen_ty(t));
                 let sized_align = Expr::int_constant(layout.align.abi.bytes(), Type::size_t());
 
                 // Call this function recursively to compute the size and align for the last field.
@@ -1713,8 +1732,8 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Returns a tuple with:
     ///  * The result expression of the computation.
     ///  * An assertion statement to ensure the operation has not overflowed.
-    fn count_in_bytes(
-        &self,
+    pub fn count_in_bytes(
+        &mut self,
         count: Expr,
         ty: Ty<'tcx>,
         res_ty: Type,
@@ -1723,7 +1742,8 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> (Expr, Stmt) {
         assert!(res_ty.is_integer());
         let layout = self.layout_of(ty);
-        let size_of_elem = Expr::int_constant(layout.size.bytes(), res_ty);
+        let size_of_elem = Expr::int_constant(layout.size.bytes(), res_ty)
+            .with_size_of_annotation(self.codegen_ty(ty));
         let size_of_count_elems = count.mul_overflow(size_of_elem);
         let message =
             format!("{intrinsic}: attempt to compute number in bytes which would overflow");

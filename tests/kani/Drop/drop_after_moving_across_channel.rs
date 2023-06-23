@@ -3,8 +3,6 @@
 
 //! This test checks whether dropping objects passed through
 //! std::sync::mpsc::channel is handled.
-//! This test only passes on MacOS today, so we duplicate the test for now.
-#![cfg(target_os = "macos")]
 
 use std::sync::mpsc::*;
 
@@ -20,7 +18,6 @@ impl Drop for DropSetCELLToOne {
     }
 }
 
-#[kani::unwind(1)]
 #[kani::proof]
 fn main() {
     {

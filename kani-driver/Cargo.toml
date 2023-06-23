@@ -3,17 +3,13 @@
 
 [package]
 name = "kani-driver"
-version = "0.21.0"
+version = "0.30.0"
 edition = "2021"
 description = "Build a project with Kani and run all proof harnesses"
 license = "MIT OR Apache-2.0"
 homepage = "https://github.com/model-checking/kani"
 repository = "https://github.com/model-checking/kani"
 publish = false
-
-[features]
-unsound_experiments = []
-
 
 [dependencies]
 kani_metadata = { path = "../kani_metadata" }
@@ -37,6 +33,7 @@ strum_macros = {version = "0.24.0"}
 tracing = {version = "0.1", features = ["max_level_trace", "release_max_level_debug"]}
 tracing-subscriber = {version = "0.3.8", features = ["env-filter", "json", "fmt"]}
 tracing-tree = "0.2.2"
+rand = "0.8"
 which = "4.4.0"
 
 # A good set of suggested dependencies can be found in rustup:

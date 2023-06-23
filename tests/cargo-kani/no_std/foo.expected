@@ -1,1 +1,1 @@
-VERIFICATION:- SUCCESSFUL
+error: cannot find macro `__kani__workaround_core_assert` in this scope

@@ -1,0 +1,4 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+script: playback_with_cfg_kani.sh
+expected: playback_with_cfg_kani.expected

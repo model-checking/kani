@@ -1,10 +1,11 @@
 ![](./kani-logo.png)
-![Kani regression](https://github.com/model-checking/kani/actions/workflows/kani.yml/badge.svg)
-![Nightly: CBMC Latest](https://github.com/model-checking/kani/actions/workflows/cbmc-latest.yml/badge.svg)
+[![Kani regression](https://github.com/model-checking/kani/actions/workflows/kani.yml/badge.svg)](https://github.com/model-checking/kani/actions/workflows/kani.yml)
+[![Nightly: CBMC Latest](https://github.com/model-checking/kani/actions/workflows/cbmc-latest.yml/badge.svg)](https://github.com/model-checking/kani/actions/workflows/cbmc-latest.yml)
 
 The Kani Rust Verifier is a bit-precise model checker for Rust.
 
-Kani is particularly useful for verifying unsafe code in Rust, where many of the language's usual guarantees are no longer checked by the compiler.
+Kani is particularly useful for verifying unsafe code blocks in Rust, where the "[unsafe superpowers](https://doc.rust-lang.org/stable/book/ch19-01-unsafe-rust.html#unsafe-superpowers)" are unchecked by the compiler.
+___
 Kani verifies:
  * Memory safety (e.g., null pointer dereferences)
  * User-specified assertions (i.e., `assert!(...)`)

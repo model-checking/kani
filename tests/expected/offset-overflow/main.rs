@@ -12,6 +12,6 @@ fn test_offset_overflow() {
     let ptr: *const u8 = s.as_ptr();
 
     unsafe {
-        let _ = offset(ptr, isize::MAX);
+        let _d = offset(ptr, isize::MAX / 8);
     }
 }

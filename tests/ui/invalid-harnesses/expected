@@ -1,16 +1,16 @@
-warning: Duplicate attribute\
+error: only one '#[kani::proof]' attribute is allowed per harness\
 invalid.rs:\
 |\
 | #[kani::proof]\
 | ^^^^^^^^^^^^^^
 
-error: Functions used as harnesses can not have any arguments.\
+error: functions used as harnesses cannot have any arguments\
 invalid.rs:\
 |\
 | #[kani::proof]
 | ^^^^^^^^^^^^^^
 
-error: The proof attribute cannot be applied to generic functions.\
+error: the `proof` attribute cannot be applied to generic functions\
 invalid.rs:\
 |\
 | #[kani::proof]\

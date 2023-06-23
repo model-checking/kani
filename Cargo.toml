@@ -3,7 +3,7 @@
 
 [package]
 name = "kani-verifier"
-version = "0.21.0"
+version = "0.30.0"
 edition = "2021"
 description = "A bit-precise model checker for Rust."
 readme = "README.md"
@@ -14,7 +14,7 @@ repository = "https://github.com/model-checking/kani"
 documentation = "https://model-checking.github.io/kani/"
 homepage = "https://github.com/model-checking/kani"
 # N.B. Cargo.* is included automatically:
-include = ["/src", "/build.rs", "/rust-toolchain.toml", "/LICENSE-*", "/README.md"]
+include = ["/src", "/build.rs", "/rust-toolchain.toml", "/LICENSE-*", "/README.md", "/CHANGELOG.md"]
 
 [dependencies]
 anyhow = "1"
@@ -66,4 +66,5 @@ exclude = [
   "tests/cargo-ui",
   "tests/slow",
   "tests/assess-scan-test-scaffold",
+  "tests/script-based-pre",
 ]

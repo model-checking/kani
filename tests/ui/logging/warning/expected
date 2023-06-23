@@ -1,1 +1,4 @@
-warning: Duplicate attribute
+warning: Found the following unsupported constructs:
+- TerminatorKind::InlineAsm (1)
+Verification will fail if one or more of these constructs is reachable.
+

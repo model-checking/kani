@@ -4,22 +4,13 @@
 //! This file contains functions related to codegenning MIR functions into gotoc
 
 use crate::codegen_cprover_gotoc::GotocCtx;
-use crate::kani_middle::attributes::{extract_integer_argument, partition_kanitool_attributes};
 use cbmc::goto_program::{Expr, Stmt, Symbol};
 use cbmc::InternString;
-use kani_metadata::{CbmcSolver, HarnessMetadata};
-use kani_queries::UserInput;
-use rustc_ast::{Attribute, MetaItemKind};
-use rustc_hir::def::DefKind;
-use rustc_hir::def_id::DefId;
 use rustc_middle::mir::traversal::reverse_postorder;
 use rustc_middle::mir::{Body, HasLocalDecls, Local};
-use rustc_middle::ty::layout::FnAbiOf;
 use rustc_middle::ty::{self, Instance};
 use std::collections::BTreeMap;
-use std::convert::TryInto;
 use std::iter::FromIterator;
-use std::str::FromStr;
 use tracing::{debug, debug_span};
 
 /// Codegen MIR functions into gotoc
@@ -60,7 +51,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 var_type,
                 self.codegen_span(&ldata.source_info.span),
             )
-            .with_is_hidden(!ldata.is_user_variable())
+            .with_is_hidden(!self.is_user_variable(&lc))
             .with_is_parameter((idx > 0 && idx <= num_args) && !self.is_zst(var_ty));
             let sym_e = sym.to_expr();
             self.symbol_table.insert(sym);
@@ -96,9 +87,6 @@ impl<'tcx> GotocCtx<'tcx> {
             let stmts = self.current_fn_mut().extract_block();
             let body = Stmt::block(stmts, loc);
             self.symbol_table.update_fn_declaration_with_definition(&name, body);
-
-            self.handle_kanitool_attributes();
-            self.record_test_harness_metadata();
         }
         self.reset_current_fn();
     }
@@ -250,267 +238,5 @@ impl<'tcx> GotocCtx<'tcx> {
             )
         });
         self.reset_current_fn();
-    }
-
-    /// Check that if an item is tagged with a proof_attribute, it is a valid harness.
-    fn check_proof_attribute(&self, def_id: DefId, proof_attributes: Vec<&Attribute>) {
-        assert!(!proof_attributes.is_empty());
-        let span = proof_attributes.first().unwrap().span;
-        if proof_attributes.len() > 1 {
-            self.tcx.sess.span_warn(proof_attributes[0].span, "Duplicate attribute");
-        }
-
-        if self.tcx.def_kind(def_id) != DefKind::Fn {
-            self.tcx
-                .sess
-                .span_err(span, "The kani::proof attribute can only be applied to functions.");
-        } else if self.tcx.generics_of(def_id).requires_monomorphization(self.tcx) {
-            self.tcx
-                .sess
-                .span_err(span, "The proof attribute cannot be applied to generic functions.");
-        } else {
-            let instance = Instance::mono(self.tcx, def_id);
-            if !self.fn_abi_of_instance(instance, ty::List::empty()).args.is_empty() {
-                self.tcx
-                    .sess
-                    .span_err(span, "Functions used as harnesses can not have any arguments.");
-            }
-        }
-    }
-
-    pub fn is_proof_harness(&self, def_id: DefId) -> bool {
-        let all_attributes = self.tcx.get_attrs_unchecked(def_id);
-        let (proof_attributes, _) = partition_kanitool_attributes(all_attributes);
-        !proof_attributes.is_empty()
-    }
-
-    /// Check that all attributes assigned to an item is valid.
-    /// Errors will be added to the session. Invoke self.tcx.sess.abort_if_errors() to terminate
-    /// the session in case of an error.
-    pub fn check_attributes(&self, def_id: DefId) {
-        let all_attributes = self.tcx.get_attrs_unchecked(def_id);
-        let (proof_attributes, other_attributes) = partition_kanitool_attributes(all_attributes);
-        if !proof_attributes.is_empty() {
-            self.check_proof_attribute(def_id, proof_attributes);
-        } else if !other_attributes.is_empty() {
-            self.tcx.sess.span_err(
-                other_attributes[0].1.span,
-                format!(
-                    "The {} attribute also requires the '#[kani::proof]' attribute",
-                    other_attributes[0].0
-                )
-                .as_str(),
-            );
-        }
-    }
-
-    /// Does this `def_id` have `#[rustc_test_marker]`?
-    pub fn is_test_harness_description(&self, def_id: DefId) -> bool {
-        let attrs = self.tcx.get_attrs_unchecked(def_id);
-
-        self.tcx.sess.contains_name(attrs, rustc_span::symbol::sym::rustc_test_marker)
-    }
-    /// Is this the closure inside of a test description const (i.e. macro expanded from a `#[test]`)?
-    ///
-    /// We're trying to detect the closure (`||`) inside code like:
-    ///
-    /// ```ignore
-    /// #[rustc_test_marker]
-    /// pub const check_2: test::TestDescAndFn = test::TestDescAndFn {
-    ///     desc: ...,
-    ///     testfn: test::StaticTestFn(|| test::assert_test_result(check_2())),
-    /// };
-    /// ```
-    pub fn is_test_harness_closure(&self, def_id: DefId) -> bool {
-        if !def_id.is_local() {
-            return false;
-        }
-
-        let local_def_id = def_id.expect_local();
-        let hir_id = self.tcx.hir().local_def_id_to_hir_id(local_def_id);
-
-        // The parent item of the closure appears to reliably be the `const` declaration item.
-        let parent_id = self.tcx.hir().get_parent_item(hir_id);
-        let parent_def_id = parent_id.to_def_id();
-
-        self.is_test_harness_description(parent_def_id)
-    }
-
-    /// We record test harness information in kani-metadata, just like we record
-    /// proof harness information. This is used to support e.g. cargo-kani assess.
-    ///
-    /// Note that we do not actually spot the function that was annotated by `#[test]`
-    /// but instead the closure that gets put into the "test description" that macro
-    /// expands into. (See comment below) This ends up being preferrable, actually,
-    /// as it add asserts for tests that return `Result` types.
-    fn record_test_harness_metadata(&mut self) {
-        let def_id = self.current_fn().instance().def_id();
-        if self.is_test_harness_closure(def_id) {
-            let loc = self.codegen_span(&self.current_fn().mir().span);
-            self.test_harnesses.push(HarnessMetadata {
-                pretty_name: self.current_fn().readable_name().to_owned(),
-                mangled_name: self.current_fn().name(),
-                crate_name: self.current_fn().krate(),
-                original_file: loc.filename().unwrap(),
-                original_start_line: loc.start_line().unwrap() as usize,
-                original_end_line: loc.end_line().unwrap() as usize,
-                solver: None,
-                unwind_value: None,
-                // We record the actual path after codegen before we dump the metadata into a file.
-                goto_file: None,
-            })
-        }
-    }
-
-    /// This updates the goto context with any information that should be accumulated from a function's
-    /// attributes.
-    ///
-    /// Handle all attributes i.e. `#[kani::x]` (which kani_macros translates to `#[kanitool::x]` for us to handle here)
-    fn handle_kanitool_attributes(&mut self) {
-        let def_id = self.current_fn().instance().def_id();
-        let all_attributes = self.tcx.get_attrs_unchecked(def_id);
-        let (proof_attributes, other_attributes) = partition_kanitool_attributes(all_attributes);
-        if !proof_attributes.is_empty() {
-            self.create_proof_harness(other_attributes);
-        }
-    }
-
-    /// Create the proof harness struct using the handler methods for various attributes
-    fn create_proof_harness(&mut self, other_attributes: Vec<(String, &Attribute)>) {
-        let mut harness = self.default_kanitool_proof();
-        for attr in other_attributes.iter() {
-            match attr.0.as_str() {
-                "solver" => self.handle_kanitool_solver(attr.1, &mut harness),
-                "stub" => {
-                    if !self.queries.get_stubbing_enabled() {
-                        self.tcx.sess.span_warn(
-                            attr.1.span,
-                            "Stubbing is not enabled; attribute `kani::stub` will be ignored",
-                        )
-                    }
-                }
-                "unwind" => self.handle_kanitool_unwind(attr.1, &mut harness),
-                _ => {
-                    self.tcx.sess.span_err(
-                        attr.1.span,
-                        format!("Unsupported Annotation -> {}", attr.0.as_str()).as_str(),
-                    );
-                }
-            }
-        }
-        self.proof_harnesses.push(harness);
-    }
-
-    /// Create the default proof harness for the current function
-    fn default_kanitool_proof(&mut self) -> HarnessMetadata {
-        let current_fn = self.current_fn();
-        let pretty_name = current_fn.readable_name().to_owned();
-        let mangled_name = current_fn.name();
-        let loc = self.codegen_span(&current_fn.mir().span);
-
-        HarnessMetadata {
-            pretty_name,
-            mangled_name,
-            crate_name: current_fn.krate(),
-            original_file: loc.filename().unwrap(),
-            original_start_line: loc.start_line().unwrap() as usize,
-            original_end_line: loc.end_line().unwrap() as usize,
-            solver: None,
-            unwind_value: None,
-            // We record the actual path after codegen before we dump the metadata into a file.
-            goto_file: None,
-        }
-    }
-
-    /// Updates the proof harness with new unwind value
-    fn handle_kanitool_unwind(&mut self, attr: &Attribute, harness: &mut HarnessMetadata) {
-        // If some unwind value already exists, then the current unwind being handled is a duplicate
-        if harness.unwind_value.is_some() {
-            self.tcx.sess.span_err(attr.span, "Only one '#[kani::unwind]' allowed");
-            return;
-        }
-        // Get Attribute value and if it's not none, assign it to the metadata
-        match extract_integer_argument(attr) {
-            None => {
-                // There are no integers or too many arguments given to the attribute
-                self.tcx
-                    .sess
-                    .span_err(attr.span, "Exactly one Unwind Argument as Integer accepted");
-            }
-            Some(unwind_integer_value) => {
-                let val: Result<u32, _> = unwind_integer_value.try_into();
-                if val.is_err() {
-                    self.tcx
-                        .sess
-                        .span_err(attr.span, "Value above maximum permitted value - u32::MAX");
-                    return;
-                }
-                harness.unwind_value = Some(val.unwrap());
-            }
-        }
-    }
-
-    /// Set the solver for this proof harness
-    fn handle_kanitool_solver(&mut self, attr: &Attribute, harness: &mut HarnessMetadata) {
-        // Make sure the solver is not already set
-        if harness.solver.is_some() {
-            self.tcx
-                .sess
-                .span_err(attr.span, "only one '#[kani::solver]' attribute is allowed per harness");
-            return;
-        }
-        harness.solver = self.extract_solver_argument(attr);
-    }
-
-    fn extract_solver_argument(&mut self, attr: &Attribute) -> Option<CbmcSolver> {
-        // TODO: Argument validation should be done as part of the `kani_macros` crate
-        // <https://github.com/model-checking/kani/issues/2192>
-        const ATTRIBUTE: &str = "#[kani::solver]";
-        let invalid_arg_err = |attr: &Attribute| {
-            self.tcx.sess.span_err(
-                attr.span,
-                format!("invalid argument for `{ATTRIBUTE}` attribute, expected one of the supported solvers (e.g. `kissat`) or a SAT solver binary (e.g. `bin=\"<SAT_SOLVER_BINARY>\"`)")
-            )
-        };
-
-        let attr_args = attr.meta_item_list().unwrap();
-        if attr_args.len() != 1 {
-            self.tcx.sess.span_err(
-                attr.span,
-                format!(
-                    "the `{ATTRIBUTE}` attribute expects a single argument. Got {} arguments.",
-                    attr_args.len()
-                ),
-            );
-            return None;
-        }
-        let attr_arg = &attr_args[0];
-        let meta_item = attr_arg.meta_item();
-        if meta_item.is_none() {
-            invalid_arg_err(attr);
-            return None;
-        }
-        let meta_item = meta_item.unwrap();
-        let ident = meta_item.ident().unwrap();
-        let ident_str = ident.as_str();
-        match &meta_item.kind {
-            MetaItemKind::Word => {
-                let solver = CbmcSolver::from_str(ident_str);
-                match solver {
-                    Ok(solver) => Some(solver),
-                    Err(_) => {
-                        self.tcx.sess.span_err(attr.span, format!("unknown solver `{ident_str}`"));
-                        None
-                    }
-                }
-            }
-            MetaItemKind::NameValue(lit) if ident_str == "bin" && lit.kind.is_str() => {
-                Some(CbmcSolver::Binary(lit.token_lit.symbol.to_string()))
-            }
-            _ => {
-                invalid_arg_err(attr);
-                None
-            }
-        }
     }
 }

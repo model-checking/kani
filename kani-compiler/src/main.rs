@@ -10,10 +10,13 @@
 #![feature(extern_types)]
 #![recursion_limit = "256"]
 #![feature(box_patterns)]
-#![feature(once_cell)]
 #![feature(rustc_private)]
+#![feature(lazy_cell)]
 #![feature(more_qualified_paths)]
+#![feature(iter_intersperse)]
+extern crate rustc_abi;
 extern crate rustc_ast;
+extern crate rustc_ast_pretty;
 extern crate rustc_codegen_ssa;
 extern crate rustc_data_structures;
 extern crate rustc_driver;
@@ -33,9 +36,9 @@ extern crate tempfile;
 mod codegen_cprover_gotoc;
 mod kani_compiler;
 mod kani_middle;
+mod kani_queries;
 mod parser;
 mod session;
-mod unsound_experiments;
 
 use rustc_driver::{RunCompiler, TimePassesCallbacks};
 use std::env;

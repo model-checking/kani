@@ -1,2 +1,1 @@
 error: Crate crate_with_global_asm contains global ASM, which is not supported by Kani. Rerun with `--enable-unstable --ignore-global-asm` to suppress this error (**Verification results may be impacted**).
-error: could not compile `crate_with_global_asm` due to 2 previous errors

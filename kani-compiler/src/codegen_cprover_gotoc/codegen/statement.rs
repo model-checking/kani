@@ -16,6 +16,7 @@ use rustc_middle::ty;
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{Instance, InstanceDef, Ty};
 use rustc_span::Span;
+use rustc_target::abi::VariantIdx;
 use rustc_target::abi::{FieldsShape, Primitive, TagEncoding, Variants};
 use tracing::{debug, debug_span, trace};
 
@@ -55,67 +56,11 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             StatementKind::Deinit(place) => self.codegen_deinit(place, location),
             StatementKind::SetDiscriminant { place, variant_index } => {
-                // this requires place points to an enum type.
-                let pt = self.place_ty(place);
-                let layout = self.layout_of(pt);
-                match &layout.variants {
-                    Variants::Single { .. } => Stmt::skip(location),
-                    Variants::Multiple { tag, tag_encoding, .. } => match tag_encoding {
-                        TagEncoding::Direct => {
-                            let discr =
-                                pt.discriminant_for_variant(self.tcx, *variant_index).unwrap();
-                            let discr_t = self.codegen_enum_discr_typ(pt);
-                            // The constant created below may not fit into the type.
-                            // https://github.com/model-checking/kani/issues/996
-                            //
-                            // It doesn't matter if the type comes from `self.codegen_enum_discr_typ(pt)`
-                            // or `discr.ty`. It looks like something is wrong with `discriminat_for_variant`
-                            // because when it tries to codegen `std::cmp::Ordering` (which should produce
-                            // discriminant values -1, 0 and 1) it produces values 255, 0 and 1 with i8 types:
-                            //
-                            // debug!("DISCRIMINANT - val:{:?} ty:{:?}", discr.val, discr.ty);
-                            // DISCRIMINANT - val:255 ty:i8
-                            // DISCRIMINANT - val:0 ty:i8
-                            // DISCRIMINANT - val:1 ty:i8
-                            let discr = Expr::int_constant(discr.val, self.codegen_ty(discr_t));
-                            let place_goto_expr = unwrap_or_return_codegen_unimplemented_stmt!(
-                                self,
-                                self.codegen_place(place)
-                            )
-                            .goto_expr;
-                            self.codegen_discriminant_field(place_goto_expr, pt)
-                                .assign(discr, location)
-                        }
-                        TagEncoding::Niche { untagged_variant, niche_variants, niche_start } => {
-                            if untagged_variant != variant_index {
-                                let offset = match &layout.fields {
-                                    FieldsShape::Arbitrary { offsets, .. } => offsets[0],
-                                    _ => unreachable!("niche encoding must have arbitrary fields"),
-                                };
-                                let discr_ty = self.codegen_enum_discr_typ(pt);
-                                let discr_ty = self.codegen_ty(discr_ty);
-                                let niche_value =
-                                    variant_index.as_u32() - niche_variants.start().as_u32();
-                                let niche_value = (niche_value as u128).wrapping_add(*niche_start);
-                                let value =
-                                    if niche_value == 0 && tag.primitive() == Primitive::Pointer {
-                                        discr_ty.null()
-                                    } else {
-                                        Expr::int_constant(niche_value, discr_ty.clone())
-                                    };
-                                let place = unwrap_or_return_codegen_unimplemented_stmt!(
-                                    self,
-                                    self.codegen_place(place)
-                                )
-                                .goto_expr;
-                                self.codegen_get_niche(place, offset, discr_ty)
-                                    .assign(value, location)
-                            } else {
-                                Stmt::skip(location)
-                            }
-                        }
-                    },
-                }
+                let dest_ty = self.place_ty(place);
+                let dest_expr =
+                    unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place(place))
+                        .goto_expr;
+                self.codegen_set_discriminant(dest_ty, dest_expr, *variant_index, location)
             }
             StatementKind::StorageLive(_) => Stmt::skip(location), // TODO: fix me
             StatementKind::StorageDead(_) => Stmt::skip(location), // TODO: fix me
@@ -141,11 +86,13 @@ impl<'tcx> GotocCtx<'tcx> {
                     location,
                 )
             }
+            StatementKind::PlaceMention(_) => todo!(),
             StatementKind::FakeRead(_)
             | StatementKind::Retag(_, _)
             | StatementKind::AscribeUserType(_, _)
             | StatementKind::Nop
-            | StatementKind::Coverage { .. } => Stmt::skip(location),
+            | StatementKind::Coverage { .. }
+            | StatementKind::ConstEvalCounter => Stmt::skip(location),
         }
         .with_location(location)
     }
@@ -176,8 +123,8 @@ impl<'tcx> GotocCtx<'tcx> {
                 loc,
                 "https://github.com/model-checking/kani/issues/692",
             ),
-            TerminatorKind::Abort => self.codegen_mimic_unimplemented(
-                "TerminatorKind::Abort",
+            TerminatorKind::Terminate => self.codegen_mimic_unimplemented(
+                "TerminatorKind::Terminate",
                 loc,
                 "https://github.com/model-checking/kani/issues/692",
             ),
@@ -219,6 +166,10 @@ impl<'tcx> GotocCtx<'tcx> {
                     // "index out of bounds: the length is {len} but the index is {index}",
                     // but CBMC only accepts static messages so we don't add values to the message.
                     "index out of bounds: the length is less than or equal to the given index"
+                } else if let AssertKind::MisalignedPointerDereference { .. } = msg {
+                    // Misaligned pointer dereference check messages is also a runtime messages.
+                    // Generate a generic one here.
+                    "misaligned pointer dereference: address must be a multiple of its type's alignment"
                 } else {
                     // For all other assert kind we can get the static message.
                     msg.description()
@@ -241,9 +192,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     loc,
                 )
             }
-            TerminatorKind::DropAndReplace { .. }
-            | TerminatorKind::FalseEdge { .. }
-            | TerminatorKind::FalseUnwind { .. } => {
+            TerminatorKind::FalseEdge { .. } | TerminatorKind::FalseUnwind { .. } => {
                 unreachable!("drop elaboration removes these TerminatorKind")
             }
             TerminatorKind::Yield { .. } | TerminatorKind::GeneratorDrop => {
@@ -257,11 +206,72 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
+    /// Create a statement that sets the variable discriminant to the value that corresponds to the
+    /// variant index.
+    pub fn codegen_set_discriminant(
+        &mut self,
+        dest_ty: Ty<'tcx>,
+        dest_expr: Expr,
+        variant_index: VariantIdx,
+        location: Location,
+    ) -> Stmt {
+        // this requires place points to an enum type.
+        let layout = self.layout_of(dest_ty);
+        match &layout.variants {
+            Variants::Single { .. } => Stmt::skip(location),
+            Variants::Multiple { tag, tag_encoding, .. } => match tag_encoding {
+                TagEncoding::Direct => {
+                    let discr = dest_ty.discriminant_for_variant(self.tcx, variant_index).unwrap();
+                    let discr_t = self.codegen_enum_discr_typ(dest_ty);
+                    // The constant created below may not fit into the type.
+                    // https://github.com/model-checking/kani/issues/996
+                    //
+                    // It doesn't matter if the type comes from `self.codegen_enum_discr_typ(pt)`
+                    // or `discr.ty`. It looks like something is wrong with `discriminat_for_variant`
+                    // because when it tries to codegen `std::cmp::Ordering` (which should produce
+                    // discriminant values -1, 0 and 1) it produces values 255, 0 and 1 with i8 types:
+                    //
+                    // debug!("DISCRIMINANT - val:{:?} ty:{:?}", discr.val, discr.ty);
+                    // DISCRIMINANT - val:255 ty:i8
+                    // DISCRIMINANT - val:0 ty:i8
+                    // DISCRIMINANT - val:1 ty:i8
+                    trace!(?discr, ?discr_t, ?dest_ty, "codegen_set_discriminant direct");
+                    // The discr.ty doesn't always match the tag type. Explicitly cast if needed.
+                    let discr_expr = Expr::int_constant(discr.val, self.codegen_ty(discr.ty))
+                        .cast_to(self.codegen_ty(discr_t));
+                    self.codegen_discriminant_field(dest_expr, dest_ty).assign(discr_expr, location)
+                }
+                TagEncoding::Niche { untagged_variant, niche_variants, niche_start } => {
+                    if *untagged_variant != variant_index {
+                        let offset = match &layout.fields {
+                            FieldsShape::Arbitrary { offsets, .. } => offsets[0usize.into()],
+                            _ => unreachable!("niche encoding must have arbitrary fields"),
+                        };
+                        let discr_ty = self.codegen_enum_discr_typ(dest_ty);
+                        let discr_ty = self.codegen_ty(discr_ty);
+                        let niche_value = variant_index.as_u32() - niche_variants.start().as_u32();
+                        let niche_value = (niche_value as u128).wrapping_add(*niche_start);
+                        trace!(val=?niche_value, typ=?discr_ty, "codegen_set_discriminant niche");
+                        let value = if niche_value == 0
+                            && matches!(tag.primitive(), Primitive::Pointer(_))
+                        {
+                            discr_ty.null()
+                        } else {
+                            Expr::int_constant(niche_value, discr_ty.clone())
+                        };
+                        self.codegen_get_niche(dest_expr, offset, discr_ty).assign(value, location)
+                    } else {
+                        Stmt::skip(location)
+                    }
+                }
+            },
+        }
+    }
+
     /// From rustc doc: "This writes `uninit` bytes to the entire place."
     /// Our model of GotoC has a similar statement, which is later lowered
     /// to assigning a Nondet in CBMC, with a comment specifying that it
     /// corresponds to a Deinit.
-    #[cfg(not(feature = "unsound_experiments"))]
     fn codegen_deinit(&mut self, place: &Place<'tcx>, loc: Location) -> Stmt {
         let dst_mir_ty = self.place_ty(place);
         let dst_type = self.codegen_ty(dst_mir_ty);
@@ -545,6 +555,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     // Normal, non-virtual function calls
                     InstanceDef::Item(..)
                     | InstanceDef::DropGlue(_, Some(_))
+                    | InstanceDef::FnPtrAddrShim(_, _)
                     | InstanceDef::Intrinsic(..)
                     | InstanceDef::FnPtrShim(..)
                     | InstanceDef::VTableShim(..)
@@ -559,6 +570,7 @@ impl<'tcx> GotocCtx<'tcx> {
                                 .with_location(loc),
                         ]
                     }
+                    InstanceDef::ThreadLocalShim(_) => todo!(),
                 };
                 stmts.push(self.codegen_end_call(target.as_ref(), loc));
                 Stmt::block(stmts, loc)

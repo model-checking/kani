@@ -1,0 +1,64 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+name: Attempt toolchain update
+
+on:
+  schedule:
+    - cron: "30 2 * * *" # Run this every day at 02:30 UTC
+  workflow_dispatch:     # Allow manual dispatching for a custom branch / tag.
+
+jobs:
+  create-toolchain-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Kani
+        uses: actions/checkout@v3
+
+      - name: Update toolchain config
+        run: |
+          current_toolchain_date=$(grep ^channel rust-toolchain.toml | sed 's/.*nightly-\(.*\)"/\1/')
+          echo "current_toolchain_date=$current_toolchain_date" >> $GITHUB_ENV
+          current_toolchain_epoch=$(date --date $current_toolchain_date +%s)
+          next_toolchain_date=$(date --date "@$(($current_toolchain_epoch + 86400))" +%Y-%m-%d)
+          echo "next_toolchain_date=$next_toolchain_date" >> $GITHUB_ENV
+          if ! git ls-remote --exit-code origin toolchain-$next_toolchain_date ; then
+            echo "branch_exists=false" >> $GITHUB_ENV
+            sed -i "/^channel/ s/$current_toolchain_date/$next_toolchain_date/" rust-toolchain.toml
+            git diff
+            git clone --filter=tree:0 https://github.com/rust-lang/rust rust.git
+            cd rust.git
+            current_toolchain_hash=$(curl https://static.rust-lang.org/dist/$current_toolchain_date/channel-rust-nightly-git-commit-hash.txt)
+            echo "current_toolchain_hash=$current_toolchain_hash" >> $GITHUB_ENV
+            next_toolchain_hash=$(curl https://static.rust-lang.org/dist/$next_toolchain_date/channel-rust-nightly-git-commit-hash.txt)
+            echo "next_toolchain_hash=$next_toolchain_hash" >> $GITHUB_ENV
+            EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+            echo "git_log<<$EOF" >> $GITHUB_ENV
+            git log --oneline $current_toolchain_hash..$next_toolchain_hash | \
+              sed 's#^#https://github.com/rust-lang/rust/commit/#' >> $GITHUB_ENV
+            echo "$EOF" >> $GITHUB_ENV
+            cd ..
+            rm -rf rust.git
+          else
+            echo "branch_exists=true" >> $GITHUB_ENV
+          fi
+      - name: Create Pull Request
+        if: ${{ env.branch_exists == 'false' }}
+        uses: peter-evans/create-pull-request@v5
+        with:
+          commit-message: Upgrade Rust toolchain to nightly-${{ env.next_toolchain_date }}
+          branch: toolchain-${{ env.next_toolchain_date }}
+          delete-branch: true
+          title: 'Automatic toolchain upgrade to nightly-${{ env.next_toolchain_date }}'
+          body: >
+            Update Rust toolchain from nightly-${{ env.current_toolchain_date }} to
+            nightly-${{ env.next_toolchain_date }} without any other source changes.
+
+            This is an automatically generated pull request. If any of the CI checks fail,
+            manual intervention is required. In such a case, review the changes at
+            https://github.com/rust-lang/rust from
+            https://github.com/rust-lang/rust/commit/${{ env.current_toolchain_hash }} up to
+            https://github.com/rust-lang/rust/commit/${{ env.next_toolchain_hash }}. The log
+            for this commit range is:
+
+            ${{ env.git_log }}

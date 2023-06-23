@@ -22,7 +22,8 @@ impl KaniSession {
         let results_filename = alter_extension(file, "results.xml");
         let property_filename = alter_extension(file, "property.xml");
 
-        self.record_temporary_files(&[&results_filename, &property_filename]);
+        self.record_temporary_file(&results_filename);
+        self.record_temporary_file(&property_filename);
 
         self.cbmc_variant(file, &["--xml-ui", "--trace"], &results_filename, harness_metadata)?;
         self.cbmc_variant(
@@ -54,7 +55,7 @@ impl KaniSession {
         self.run_suppress(cmd)?;
 
         // Let the user know
-        if !self.args.quiet {
+        if !self.args.common_args.quiet {
             println!("Report written to: {}/html/index.html", report_dir.to_string_lossy());
             warning("coverage information has been disabled for `--visualize` reports");
             // If using VS Code with Remote-SSH, suggest an option for remote viewing:

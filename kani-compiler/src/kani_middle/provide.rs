@@ -6,10 +6,10 @@
 
 use crate::kani_middle::reachability::{collect_reachable_items, filter_crate_items};
 use crate::kani_middle::stubbing;
-use kani_queries::{QueryDb, UserInput};
-use rustc_hir::def_id::DefId;
+use crate::kani_middle::ty::query::query_provided::collect_and_partition_mono_items;
+use crate::kani_queries::QueryDb;
+use rustc_hir::def_id::{DefId, LocalDefId};
 use rustc_interface;
-use rustc_middle::ty::query::query_stored::collect_and_partition_mono_items;
 use rustc_middle::{
     mir::Body,
     ty::{query::ExternProviders, query::Providers, TyCtxt},
@@ -18,8 +18,8 @@ use rustc_middle::{
 /// Sets up rustc's query mechanism to apply Kani's custom queries to code from
 /// the present crate.
 pub fn provide(providers: &mut Providers, queries: &QueryDb) {
-    providers.optimized_mir = run_mir_passes::<false>;
-    if queries.get_stubbing_enabled() {
+    providers.optimized_mir = run_mir_passes;
+    if queries.stubbing_enabled {
         providers.collect_and_partition_mono_items = collect_and_partition_mono_items;
     }
 }
@@ -27,21 +27,23 @@ pub fn provide(providers: &mut Providers, queries: &QueryDb) {
 /// Sets up rustc's query mechanism to apply Kani's custom queries to code from
 /// external crates.
 pub fn provide_extern(providers: &mut ExternProviders) {
-    providers.optimized_mir = run_mir_passes::<true>;
+    providers.optimized_mir = run_mir_passes_extern;
 }
 
-/// Returns the optimized code for the function associated with `def_id` by
+/// Returns the optimized code for the external function associated with `def_id` by
 /// running rustc's optimization passes followed by Kani-specific passes.
-fn run_mir_passes<const EXTERN: bool>(tcx: TyCtxt, def_id: DefId) -> &Body {
-    tracing::debug!(?def_id, "Run rustc transformation passes");
-    let optimized_mir = if EXTERN {
-        rustc_interface::DEFAULT_EXTERN_QUERY_PROVIDERS.optimized_mir
-    } else {
-        rustc_interface::DEFAULT_QUERY_PROVIDERS.optimized_mir
-    };
-    let body = optimized_mir(tcx, def_id);
-
+fn run_mir_passes_extern(tcx: TyCtxt, def_id: DefId) -> &Body {
+    tracing::debug!(?def_id, "run_mir_passes_extern");
+    let body = (rustc_interface::DEFAULT_EXTERN_QUERY_PROVIDERS.optimized_mir)(tcx, def_id);
     run_kani_mir_passes(tcx, def_id, body)
+}
+
+/// Returns the optimized code for the local function associated with `def_id` by
+/// running rustc's optimization passes followed by Kani-specific passes.
+fn run_mir_passes(tcx: TyCtxt, def_id: LocalDefId) -> &Body {
+    tracing::debug!(?def_id, "run_mir_passes");
+    let body = (rustc_interface::DEFAULT_QUERY_PROVIDERS.optimized_mir)(tcx, def_id);
+    run_kani_mir_passes(tcx, def_id.to_def_id(), body)
 }
 
 /// Returns the optimized code for the function associated with `def_id` by

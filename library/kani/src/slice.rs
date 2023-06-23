@@ -71,7 +71,7 @@ impl<T, const MAX_SLICE_LENGTH: usize> AnySlice<T, MAX_SLICE_LENGTH> {
             //         *(ptr as *mut T).add(i) = any();
             //     }
             while i < any_slice.slice_len && i < MAX_SLICE_LENGTH {
-                *any_slice.ptr.add(i) = any();
+                std::ptr::write(any_slice.ptr.add(i), any());
                 i += 1;
             }
         }

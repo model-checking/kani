@@ -1,5 +1,2 @@
-Failed Checks: dereference failure: pointer NULL
-Failed Checks: dereference failure: deallocated dynamic object
-Failed Checks: dereference failure: dead object
-Failed Checks: dereference failure: pointer outside object bounds
-Failed Checks: dereference failure: invalid integer address
+Failed Checks: misaligned pointer dereference: address must be a multiple of its type's alignment
+Failed Checks: assertion failed: unsafe { *p1 != 0 }

@@ -1,4 +1,4 @@
-error: unable to resolve function/method: crate::other_crate2::mock
-error: unable to resolve function/method: super::other_crate2::mock
-error: unable to resolve function/method: self::other_crate2::mock
-error: unable to resolve function/method: other_crate1::mock
+error: failed to resolve `crate::other_crate2::mock`: unable to find `other_crate2` inside module `stubbing_do_not_resolve`
+error: failed to resolve `super::other_crate2::mock`: unable to find `other_crate2` inside module `stubbing_do_not_resolve`
+error: failed to resolve `self::other_crate2::mock`: unable to find `other_crate2` inside module `my_mod`
+error: failed to resolve `other_crate1::mock`: unable to find `mock` inside module `my_mod::other_crate1`

@@ -1,1 +1,1 @@
-error: A proof harness named main was not found
+error: no harnesses matched the harness filter: `main`

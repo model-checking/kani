@@ -5,6 +5,7 @@
 .png
 .props
 .public.key
+CHANGELOG
 Cargo.lock
 LICENSE-APACHE
 LICENSE-MIT
@@ -15,6 +16,7 @@ gitignore
 gitmodules
 ignore
 kani-dependencies
+requirements.txt
 scripts/ci/copyright-exclude
 tests/remote-target-lists/.*
 tools/build-kani/license-notes.txt
