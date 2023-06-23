@@ -5,6 +5,8 @@
 - **Version:** 0
 - **Proof-of-concept:** <https://github.com/model-checking/kani/pull/2532>
 
+-------------------
+
 ## Summary
 
 A new section in Kani's output to summarize the status of properties that depend on other properties. We use the term *global conditions* to refer to such properties. 
