@@ -792,7 +792,7 @@ class RegressionTests(unittest.TestCase):
 
 
     def test_run_failing_command_visualization(self):
-        """Ensure that benchcomp terminates normally even when run_command visualization doesn't"""
+        """Ensure that benchcomp terminates with a non-zero return code when run_command visualization fails"""
 
         with tempfile.TemporaryDirectory() as tmp:
             out_file = pathlib.Path(tmp) / str(uuid.uuid4())
@@ -832,11 +832,5 @@ class RegressionTests(unittest.TestCase):
                 }],
             })
             run_bc()
-            self.assertEqual(
+            self.assertNotEqual(
                 run_bc.proc.returncode, 0, msg=run_bc.stderr)
-
-            with open(out_file) as handle:
-                result = yaml.safe_load(handle)
-
-            for item in ["benchmarks", "metrics"]:
-                self.assertIn(item, result)

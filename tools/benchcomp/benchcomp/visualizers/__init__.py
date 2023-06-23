@@ -41,13 +41,15 @@ class run_command:
             proc = subprocess.Popen(
                 self.command, shell=True, text=True, stdin=subprocess.PIPE)
             _, _ = proc.communicate(input=results)
-        except subprocess.CalledProcessError as exc:
-            logging.warning(
-                "visualization command '%s' exited with code %d",
-                self.command, exc.returncode)
         except (OSError, subprocess.SubprocessError) as exe:
             logging.error(
                 "visualization command '%s' failed: %s", self.command, str(exe))
+            viz_utils.EXIT_CODE = 1
+        if proc.returncode:
+            logging.error(
+                "visualization command '%s' exited with code %d",
+                self.command, proc.returncode)
+            viz_utils.EXIT_CODE = 1
 
 
 
