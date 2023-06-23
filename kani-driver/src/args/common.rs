@@ -42,6 +42,8 @@ pub enum UnstableFeatures {
     CFfi,
     /// Enable concrete playback flow.
     ConcretePlayback,
+    /// Enable Kani's unstable async library.
+    AsyncLib,
 }
 
 impl ValidateArgs for CommonArgs {
