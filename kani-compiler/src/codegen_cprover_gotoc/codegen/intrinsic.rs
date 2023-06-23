@@ -133,7 +133,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// the specific code gen/backend. In such cases we handle the type checking
     /// here. The type constraints enforced here must be at least as strict as
     /// the assertions made in in the builder functions in
-    /// [`cprover_bindings::goto_program::expr`].
+    /// [`Expr`].
     fn codegen_intrinsic(
         &mut self,
         instance: Instance<'tcx>,
