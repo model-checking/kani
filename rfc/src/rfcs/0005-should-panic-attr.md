@@ -1,9 +1,11 @@
-- **Feature Name:** The `kani::should_panic` attribute (`should-panic-attr`)*
+- **Feature Name:** The `kani::should_panic` attribute (`should-panic-attr`)
 - **Feature Request Issue:** <https://github.com/model-checking/kani/issues/600>
 - **RFC PR:** <https://github.com/model-checking/kani/pull/2272>
-- **Status:** Under Review
+- **Status:** Unstable
 - **Version:** 0
 - **Proof-of-concept:** <https://github.com/model-checking/kani/pull/2315>
+
+-------------------
 
 ## Summary
 

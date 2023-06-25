@@ -1,9 +1,11 @@
-- **Feature Name:** Loop-contract synthesis
+- **Feature Name:** Loop-contract synthesis (`loop-contract-synthesis`)
 - **Feature Request Issue:** <https://github.com/model-checking/kani/issues/2214>
 - **RFC PR:** <https://github.com/model-checking/kani/pull/2215>
 - **Status:** Under Review
 - **Version:** 0
 - **Proof-of-concept:** <https://github.com/qinheping/kani/tree/kani-synthesizer>
+
+-------------------
 
 ## Summary
 
