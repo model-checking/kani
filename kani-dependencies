@@ -1,4 +1,4 @@
-CBMC_VERSION="5.85.0"
+CBMC_VERSION="5.86.0"
 # If you update this version number, remember to bump it in `src/setup.rs` too
 CBMC_VIEWER_VERSION="3.8"
 KISSAT_VERSION="3.0.0"
