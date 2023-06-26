@@ -36,7 +36,7 @@ pub fn gen_proof_metadata(tcx: TyCtxt, def_id: DefId, base_name: &Path) -> Harne
         original_file: loc.filename,
         original_start_line: loc.start_line,
         original_end_line: loc.end_line,
-        attributes: attributes.unwrap_or_default(),
+        attributes,
         // TODO: This no longer needs to be an Option.
         goto_file: Some(model_file),
     }

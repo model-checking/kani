@@ -18,6 +18,7 @@
 #[cfg(feature = "cprover")]
 use crate::codegen_cprover_gotoc::GotocCodegenBackend;
 use crate::kani_middle::attributes::is_proof_harness;
+use crate::kani_middle::check_crate_items;
 use crate::kani_middle::metadata::gen_proof_metadata;
 use crate::kani_middle::reachability::filter_crate_items;
 use crate::kani_middle::stubbing::{self, harness_stub_map};
@@ -33,7 +34,7 @@ use rustc_interface::Config;
 use rustc_middle::ty::TyCtxt;
 use rustc_session::config::{ErrorOutputType, OutputType};
 use rustc_span::ErrorGuaranteed;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
 use std::io::BufWriter;
 use std::mem;
@@ -67,7 +68,7 @@ fn backend(queries: Arc<Mutex<QueryDb>>) -> Box<CodegenBackend> {
 type HarnessId = DefPathHash;
 
 /// A set of stubs.
-type Stubs = HashMap<DefPathHash, DefPathHash>;
+type Stubs = BTreeMap<DefPathHash, DefPathHash>;
 
 #[derive(Debug)]
 struct HarnessInfo {
@@ -109,14 +110,15 @@ enum CompilationStage {
     /// Stage where the compiler will perform codegen of all harnesses that don't use stub.
     CodegenNoStubs {
         target_harnesses: Vec<HarnessId>,
-        next_harnesses: Vec<HarnessId>,
+        next_harnesses: Vec<Vec<HarnessId>>,
         all_harnesses: HashMap<HarnessId, HarnessInfo>,
     },
-    /// Stage where the compiler will codegen harnesses that use stub, one at a time.
-    /// Note: We could potentially codegen all harnesses that have the same list of stubs.
+    /// Stage where the compiler will codegen harnesses that use stub, one group at a time.
+    /// The harnesses at this stage are grouped according to the stubs they are using. For now,
+    /// we ensure they have the exact same set of stubs.
     CodegenWithStubs {
-        target_harness: HarnessId,
-        next_harnesses: Vec<HarnessId>,
+        target_harnesses: Vec<HarnessId>,
+        next_harnesses: Vec<Vec<HarnessId>>,
         all_harnesses: HashMap<HarnessId, HarnessInfo>,
     },
     Done,
@@ -166,7 +168,9 @@ impl KaniCompiler {
                 CompilationStage::CodegenNoStubs { .. } => {
                     unreachable!("This stage should always run in the same session as Init");
                 }
-                CompilationStage::CodegenWithStubs { target_harness, all_harnesses, .. } => {
+                CompilationStage::CodegenWithStubs { target_harnesses, all_harnesses, .. } => {
+                    assert!(!target_harnesses.is_empty(), "expected at least one target harness");
+                    let target_harness = &target_harnesses[0];
                     let extra_arg =
                         stubbing::mk_rustc_arg(&all_harnesses[&target_harness].stub_map);
                     let mut args = orig_args.clone();
@@ -192,9 +196,10 @@ impl KaniCompiler {
             }
             CompilationStage::CodegenNoStubs { next_harnesses, all_harnesses, .. }
             | CompilationStage::CodegenWithStubs { next_harnesses, all_harnesses, .. } => {
-                if let Some(target_harness) = next_harnesses.pop() {
+                if let Some(target_harnesses) = next_harnesses.pop() {
+                    assert!(!target_harnesses.is_empty(), "expected at least one target harness");
                     CompilationStage::CodegenWithStubs {
-                        target_harness,
+                        target_harnesses,
                         next_harnesses: mem::take(next_harnesses),
                         all_harnesses: mem::take(all_harnesses),
                     }
@@ -210,6 +215,7 @@ impl KaniCompiler {
 
     /// Run the Rust compiler with the given arguments and pass `&mut self` to handle callbacks.
     fn run_compilation_session(&mut self, args: &[String]) -> Result<(), ErrorGuaranteed> {
+        debug!(?args, "run_compilation_session");
         let queries = self.queries.clone();
         let mut compiler = RunCompiler::new(args, self);
         compiler.set_make_codegen_backend(Some(Box::new(move |_cfg| backend(queries))));
@@ -249,7 +255,7 @@ impl KaniCompiler {
             // Even if no_stubs is empty we still need to store metadata.
             CompilationStage::CodegenNoStubs {
                 target_harnesses: no_stubs,
-                next_harnesses: with_stubs,
+                next_harnesses: group_by_stubs(with_stubs, &all_harnesses),
                 all_harnesses,
             }
         } else {
@@ -266,7 +272,15 @@ impl KaniCompiler {
     fn prepare_codegen(&mut self) -> Compilation {
         debug!(stage=?self.stage, "prepare_codegen");
         match &self.stage {
-            CompilationStage::CodegenNoStubs { target_harnesses, all_harnesses, .. } => {
+            CompilationStage::CodegenNoStubs { target_harnesses, all_harnesses, .. }
+            | CompilationStage::CodegenWithStubs { target_harnesses, all_harnesses, .. } => {
+                debug!(
+                    harnesses=?target_harnesses
+                        .iter()
+                        .map(|h| &all_harnesses[h].metadata.pretty_name)
+                        .collect::<Vec<_>>(),
+                        "prepare_codegen"
+                );
                 let queries = &mut (*self.queries.lock().unwrap());
                 queries.harnesses_info = target_harnesses
                     .iter()
@@ -274,14 +288,6 @@ impl KaniCompiler {
                         (*harness, all_harnesses[harness].metadata.goto_file.clone().unwrap())
                     })
                     .collect();
-                Compilation::Continue
-            }
-            CompilationStage::CodegenWithStubs { target_harness, all_harnesses, .. } => {
-                let queries = &mut (*self.queries.lock().unwrap());
-                queries.harnesses_info = HashMap::from([(
-                    *target_harness,
-                    all_harnesses[&target_harness].metadata.goto_file.clone().unwrap(),
-                )]);
                 Compilation::Continue
             }
             CompilationStage::Init | CompilationStage::Done => unreachable!(),
@@ -314,6 +320,18 @@ impl KaniCompiler {
     }
 }
 
+/// Group the harnesses by their stubs.
+fn group_by_stubs(
+    harnesses: Vec<HarnessId>,
+    all_harnesses: &HashMap<HarnessId, HarnessInfo>,
+) -> Vec<Vec<HarnessId>> {
+    let mut per_stubs: BTreeMap<&Stubs, Vec<HarnessId>> = BTreeMap::default();
+    for harness in harnesses {
+        per_stubs.entry(&all_harnesses[&harness].stub_map).or_default().push(harness)
+    }
+    per_stubs.into_values().collect()
+}
+
 /// Use default function implementations.
 impl Callbacks for KaniCompiler {
     /// Configure the [KaniCompiler] `self` object during the [CompilationStage::Init].
@@ -326,7 +344,6 @@ impl Callbacks for KaniCompiler {
                 &matches,
                 matches!(config.opts.error_format, ErrorOutputType::Json { .. }),
             );
-
             // Configure queries.
             let queries = &mut (*self.queries.lock().unwrap());
             queries.emit_vtable_restrictions = matches.get_flag(parser::RESTRICT_FN_PTRS);
@@ -357,10 +374,84 @@ impl Callbacks for KaniCompiler {
         rustc_queries: &'tcx rustc_interface::Queries<'tcx>,
     ) -> Compilation {
         if self.stage.is_init() {
-            self.stage =
-                rustc_queries.global_ctxt().unwrap().enter(|tcx| self.process_harnesses(tcx));
+            self.stage = rustc_queries.global_ctxt().unwrap().enter(|tcx| {
+                check_crate_items(tcx, self.queries.lock().unwrap().ignore_global_asm);
+                self.process_harnesses(tcx)
+            });
         }
 
         self.prepare_codegen()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{HarnessInfo, Stubs};
+    use crate::kani_compiler::{group_by_stubs, HarnessId};
+    use kani_metadata::{HarnessAttributes, HarnessMetadata};
+    use rustc_data_structures::fingerprint::Fingerprint;
+    use rustc_hir::definitions::DefPathHash;
+    use std::collections::HashMap;
+
+    fn mock_next_id() -> HarnessId {
+        static mut COUNTER: u64 = 0;
+        unsafe { COUNTER += 1 };
+        let id = unsafe { COUNTER };
+        DefPathHash(Fingerprint::new(id, 0))
+    }
+
+    fn mock_metadata() -> HarnessMetadata {
+        HarnessMetadata {
+            pretty_name: String::from("dummy"),
+            mangled_name: String::from("dummy"),
+            crate_name: String::from("dummy"),
+            original_file: String::from("dummy"),
+            original_start_line: 10,
+            original_end_line: 20,
+            goto_file: None,
+            attributes: HarnessAttributes::default(),
+        }
+    }
+
+    fn mock_info_with_stubs(stub_map: Stubs) -> HarnessInfo {
+        HarnessInfo { metadata: mock_metadata(), stub_map }
+    }
+
+    #[test]
+    fn test_group_by_stubs_works() {
+        // Set up the inputs
+        let harness_1 = mock_next_id();
+        let harness_2 = mock_next_id();
+        let harness_3 = mock_next_id();
+        let harnesses = vec![harness_1, harness_2, harness_3];
+
+        let stub_1 = (mock_next_id(), mock_next_id());
+        let stub_2 = (mock_next_id(), mock_next_id());
+        let stub_3 = (mock_next_id(), mock_next_id());
+        let stub_4 = (stub_3.0, mock_next_id());
+
+        let set_1 = Stubs::from([stub_1, stub_2, stub_3]);
+        let set_2 = Stubs::from([stub_1, stub_2, stub_4]);
+        let set_3 = Stubs::from([stub_1, stub_3, stub_2]);
+        assert_eq!(set_1, set_3);
+        assert_ne!(set_1, set_2);
+
+        let harnesses_info = HashMap::from([
+            (harness_1, mock_info_with_stubs(set_1)),
+            (harness_2, mock_info_with_stubs(set_2)),
+            (harness_3, mock_info_with_stubs(set_3)),
+        ]);
+        assert_eq!(harnesses_info.len(), 3);
+
+        // Run the function under test.
+        let grouped = group_by_stubs(harnesses, &harnesses_info);
+
+        // Verify output.
+        assert_eq!(grouped.len(), 2);
+        assert!(
+            grouped.contains(&vec![harness_1, harness_3])
+                || grouped.contains(&vec![harness_3, harness_1])
+        );
+        assert!(grouped.contains(&vec![harness_2]));
     }
 }

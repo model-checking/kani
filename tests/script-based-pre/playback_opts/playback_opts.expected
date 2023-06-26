@@ -6,7 +6,7 @@ Building modified.rs
 playback_opts/kani_concrete_playback
 
 [TEST] Run test...
-test result: ok. 1 passed; 0 failed;
+test result: ok. 2 passed; 0 failed;
 
 [TEST] Json format...
 {"artifact":

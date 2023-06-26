@@ -1,9 +1,10 @@
-- **Feature Name:** Cover statement `cover_statement`
+- **Feature Name:** Cover statement (`cover-statement`)
 - **Feature Request Issue:** <https://github.com/model-checking/kani/issues/696>
 - **RFC PR:** <https://github.com/model-checking/kani/pull/1906>
-- **Status:** Under Review
+- **Status:** Unstable
 - **Version:** 0
-- **Proof-of-concept:** *Optional field. If you have implemented a proof of concept, add a link here*
+
+-------------------
 
 ## Summary
 

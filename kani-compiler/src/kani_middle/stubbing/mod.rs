@@ -5,7 +5,7 @@
 mod annotations;
 mod transform;
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use kani_metadata::HarnessMetadata;
 use rustc_hir::def_id::DefId;
@@ -20,9 +20,9 @@ pub fn harness_stub_map(
     tcx: TyCtxt,
     harness: DefId,
     metadata: &HarnessMetadata,
-) -> HashMap<DefPathHash, DefPathHash> {
+) -> BTreeMap<DefPathHash, DefPathHash> {
     let attrs = &metadata.attributes;
-    let mut stub_pairs = HashMap::default();
+    let mut stub_pairs = BTreeMap::default();
     for stubs in &attrs.stubs {
         update_stub_mapping(tcx, harness.expect_local(), stubs, &mut stub_pairs);
     }

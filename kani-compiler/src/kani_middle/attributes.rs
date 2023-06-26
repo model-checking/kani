@@ -49,21 +49,49 @@ impl KaniAttributeKind {
 pub(super) fn check_attributes(tcx: TyCtxt, def_id: DefId) {
     let attributes = extract_kani_attributes(tcx, def_id);
 
-    // Check proof attribute correctness.
-    if let Some(proof_attributes) = attributes.get(&KaniAttributeKind::Proof) {
-        check_proof_attribute(tcx, def_id, proof_attributes);
-    } else {
-        // Emit an error if a harness only attribute is used outside of a harness.
-        for (attr, attrs) in attributes.iter().filter(|(attr, _)| attr.is_harness_only()) {
+    // Check that all attributes are correctly used and well formed.
+    let is_harness = attributes.contains_key(&KaniAttributeKind::Proof);
+    for (kind, attrs) in attributes {
+        if !is_harness && kind.is_harness_only() {
             tcx.sess.span_err(
                 attrs[0].span,
                 format!(
                     "the `{}` attribute also requires the `#[kani::proof]` attribute",
-                    attr.as_ref()
+                    kind.as_ref()
                 )
                 .as_str(),
             );
         }
+        match kind {
+            KaniAttributeKind::ShouldPanic => {
+                expect_single(tcx, kind, &attrs);
+                attrs.iter().for_each(|attr| {
+                    expect_no_args(tcx, kind, attr);
+                })
+            }
+            KaniAttributeKind::Solver => {
+                expect_single(tcx, kind, &attrs);
+                attrs.iter().for_each(|attr| {
+                    parse_solver(tcx, attr);
+                })
+            }
+            KaniAttributeKind::Stub => {
+                parse_stubs(tcx, def_id, attrs);
+            }
+            KaniAttributeKind::Unwind => {
+                expect_single(tcx, kind, &attrs);
+                attrs.iter().for_each(|attr| {
+                    parse_unwind(tcx, attr);
+                })
+            }
+            KaniAttributeKind::Proof => {
+                expect_single(tcx, kind, &attrs);
+                attrs.iter().for_each(|attr| check_proof_attribute(tcx, def_id, attr))
+            }
+            KaniAttributeKind::Unstable => attrs.iter().for_each(|attr| {
+                let _ = UnstableAttribute::try_from(*attr).map_err(|err| err.report(tcx));
+            }),
+        };
     }
 }
 
@@ -85,53 +113,39 @@ pub fn test_harness_name(tcx: TyCtxt, def_id: DefId) -> String {
     parse_str_value(&marker).unwrap()
 }
 
-/// Extract all Kani attributes for a given `def_id` if any exists.
+/// Extract harness attributes for a given `def_id`.
+///
 /// We only extract attributes for harnesses that are local to the current crate.
-pub fn extract_harness_attributes(tcx: TyCtxt, def_id: DefId) -> Option<HarnessAttributes> {
+/// Note that all attributes should be valid by now.
+pub fn extract_harness_attributes(tcx: TyCtxt, def_id: DefId) -> HarnessAttributes {
     // Abort if not local.
-    def_id.as_local()?;
+    assert!(def_id.is_local(), "Expected a local item, but got: {def_id:?}");
     let attributes = extract_kani_attributes(tcx, def_id);
     trace!(?def_id, ?attributes, "extract_harness_attributes");
-    if attributes.contains_key(&KaniAttributeKind::Proof) {
-        Some(attributes.into_iter().fold(
-            HarnessAttributes::default(),
-            |mut harness, (kind, attributes)| {
-                match kind {
-                    KaniAttributeKind::ShouldPanic => {
-                        expect_single(tcx, kind, &attributes);
-                        harness.should_panic = true
-                    }
-                    KaniAttributeKind::Solver => {
-                        // Make sure the solver is not already set
-                        harness.solver = parse_solver(tcx, expect_single(tcx, kind, &attributes));
-                    }
-                    KaniAttributeKind::Stub => {
-                        harness.stubs = parse_stubs(tcx, def_id, attributes);
-                    }
-                    KaniAttributeKind::Unwind => {
-                        harness.unwind_value =
-                            parse_unwind(tcx, expect_single(tcx, kind, &attributes))
-                    }
-                    KaniAttributeKind::Proof => harness.proof = true,
-                    KaniAttributeKind::Unstable => {
-                        // Internal attribute which shouldn't exist here.
-                        unreachable!()
-                    }
-                };
-                harness
-            },
-        ))
-    } else {
-        None
-    }
+    assert!(attributes.contains_key(&KaniAttributeKind::Proof));
+    attributes.into_iter().fold(HarnessAttributes::default(), |mut harness, (kind, attributes)| {
+        match kind {
+            KaniAttributeKind::ShouldPanic => harness.should_panic = true,
+            KaniAttributeKind::Solver => {
+                harness.solver = parse_solver(tcx, attributes[0]);
+            }
+            KaniAttributeKind::Stub => {
+                harness.stubs = parse_stubs(tcx, def_id, attributes);
+            }
+            KaniAttributeKind::Unwind => harness.unwind_value = parse_unwind(tcx, attributes[0]),
+            KaniAttributeKind::Proof => harness.proof = true,
+            KaniAttributeKind::Unstable => {
+                // Internal attribute which shouldn't exist here.
+                unreachable!()
+            }
+        };
+        harness
+    })
 }
 
 /// Check that any unstable API has been enabled. Otherwise, emit an error.
 ///
-/// For now, this function will also validate whether the attribute usage is valid, and emit an
-/// error if not.
-///
-/// TODO: Improve error message by printing the span of the callee instead of the definition.
+/// TODO: Improve error message by printing the span of the harness instead of the definition.
 pub fn check_unstable_features(tcx: TyCtxt, enabled_features: &[String], def_id: DefId) {
     if !matches!(tcx.type_of(def_id).0.kind(), TyKind::FnDef(..)) {
         // skip closures due to an issue with rustc.
@@ -141,21 +155,12 @@ pub fn check_unstable_features(tcx: TyCtxt, enabled_features: &[String], def_id:
     let attributes = extract_kani_attributes(tcx, def_id);
     if let Some(unstable_attrs) = attributes.get(&KaniAttributeKind::Unstable) {
         for attr in unstable_attrs {
-            match UnstableAttribute::try_from(*attr) {
-                Ok(unstable_attr) if !enabled_features.contains(&unstable_attr.feature) => {
-                    // Reached an unstable attribute that was not enabled.
-                    report_unstable_forbidden(tcx, def_id, &unstable_attr);
-                }
-                Ok(attr) => debug!(enabled=?attr, ?def_id, "check_unstable_features"),
-                Err(error) => {
-                    // Ideally this check should happen when compiling the crate with the attribute,
-                    // not the crate under verification.
-                    error.report(tcx);
-                    debug_assert!(
-                        false,
-                        "expected well formed unstable attribute, but found: {error:?}"
-                    );
-                }
+            let unstable_attr = UnstableAttribute::try_from(*attr).unwrap();
+            if !enabled_features.contains(&unstable_attr.feature) {
+                // Reached an unstable attribute that was not enabled.
+                report_unstable_forbidden(tcx, def_id, &unstable_attr);
+            } else {
+                debug!(enabled=?attr, ?def_id, "check_unstable_features");
             }
         }
     }
@@ -197,13 +202,9 @@ fn expect_single<'a>(
 }
 
 /// Check that if an item is tagged with a proof_attribute, it is a valid harness.
-fn check_proof_attribute(tcx: TyCtxt, def_id: DefId, proof_attributes: &Vec<&Attribute>) {
-    assert!(!proof_attributes.is_empty());
-    let span = proof_attributes.first().unwrap().span;
-    if proof_attributes.len() > 1 {
-        tcx.sess.span_warn(proof_attributes[0].span, "duplicate attribute");
-    }
-
+fn check_proof_attribute(tcx: TyCtxt, def_id: DefId, proof_attribute: &Attribute) {
+    let span = proof_attribute.span;
+    expect_no_args(tcx, KaniAttributeKind::Proof, proof_attribute);
     if tcx.def_kind(def_id) != DefKind::Fn {
         tcx.sess.span_err(span, "the `proof` attribute can only be applied to functions");
     } else if tcx.generics_of(def_id).requires_monomorphization(tcx) {
@@ -293,6 +294,15 @@ impl<'a> TryFrom<&'a Attribute> for UnstableAttribute {
                 reason: get_val("reason")?,
             })
         }
+    }
+}
+
+fn expect_no_args(tcx: TyCtxt, kind: KaniAttributeKind, attr: &Attribute) {
+    if !attr.is_word() {
+        tcx.sess
+            .struct_span_err(attr.span, format!("unexpected argument for `{}`", kind.as_ref()))
+            .help("remove the extra argument")
+            .emit();
     }
 }
 
@@ -494,12 +504,15 @@ fn attr_kind(tcx: TyCtxt, attr: &Attribute) -> Option<KaniAttributeKind> {
         AttrKind::Normal(normal) => {
             let segments = &normal.item.path.segments;
             if (!segments.is_empty()) && segments[0].ident.as_str() == "kanitool" {
-                assert_eq!(segments.len(), 2, "Unexpected kani attribute {segments:?}");
-                let ident_str = segments[1].ident.as_str();
-                KaniAttributeKind::try_from(ident_str)
+                let ident_str = segments[1..]
+                    .iter()
+                    .map(|segment| segment.ident.as_str())
+                    .intersperse("::")
+                    .collect::<String>();
+                KaniAttributeKind::try_from(ident_str.as_str())
                     .map_err(|err| {
                         debug!(?err, "attr_kind_failed");
-                        tcx.sess.span_err(attr.span, format!("unknown solver `{ident_str}`"));
+                        tcx.sess.span_err(attr.span, format!("unknown attribute `{ident_str}`"));
                         err
                     })
                     .ok()

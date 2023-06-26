@@ -1,0 +1,3 @@
+error: Failed to match the following harness(es):
+check_blah`, `check_foo
+Please specify the fully-qualified name of a harness.

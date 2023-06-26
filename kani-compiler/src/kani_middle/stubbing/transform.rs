@@ -6,7 +6,7 @@
 //! body of its stub, if appropriate. The stub mapping it uses is set via rustc
 //! arguments.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use lazy_static::lazy_static;
 use regex::Regex;
@@ -115,7 +115,7 @@ fn check_compatibility<'a, 'tcx>(
 const RUSTC_ARG_PREFIX: &str = "kani_stubs=";
 
 /// Serializes the stub mapping into a rustc argument.
-pub fn mk_rustc_arg(stub_mapping: &HashMap<DefPathHash, DefPathHash>) -> String {
+pub fn mk_rustc_arg(stub_mapping: &BTreeMap<DefPathHash, DefPathHash>) -> String {
     // Serialize each `DefPathHash` as a pair of `u64`s, and the whole mapping
     // as an association list.
     let mut pairs = Vec::new();

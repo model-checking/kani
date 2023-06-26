@@ -1,0 +1,27 @@
+error: the `stub` attribute also requires the `#[kani::proof]` attribute\
+attrs.rs
+|\
+| #[kani::stub(invalid=opt)]\
+| ^^^^^^^^^^^^^^^^^^^^^^^^^^\
+|
+
+error: attribute `kani::stub` takes two path arguments; found 0\
+attrs.rs
+|\
+| #[kani::stub(invalid=opt)]\
+| ^^^^^^^^^^^^^^^^^^^^^^^^^^\
+|
+
+error: unknown attribute `invalid::attribute`\
+attrs.rs\
+|\
+| #[kanitool::invalid::attribute]\
+| ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: unexpected argument for `proof`\
+attrs.rs\
+|\
+| #[kanitool::proof(invalid_argument)]\
+| ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\
+|
+
