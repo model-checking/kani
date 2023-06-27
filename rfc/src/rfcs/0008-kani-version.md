@@ -1,4 +1,4 @@
-- **Feature Name:** Print Kani version (`kani-version`)*
+- **Feature Name:** Print Kani version (`kani-version`)
 - **Feature Request Issue:** <https://github.com/model-checking/kani/issues/2570>
 - **RFC PR:** <https://github.com/model-checking/kani/issues/2571>
 - **Status:** Under Review
