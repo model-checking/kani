@@ -1,7 +1,7 @@
 # `benchcomp` configuration file
 
 `benchcomp`'s operation is controlled through a YAML file---`benchcomp.yaml` by default or a file passed to the `-c/--config` option.
-This page describes the file's schema and lists the different parsers and visualizations that are available.
+This page lists the different visualizations that are available.
 
 
 ## Built-in visualizations

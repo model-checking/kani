@@ -35,7 +35,6 @@
   - [Performance comparisons](./performance-comparisons.md)
     - [`benchcomp` command line](./benchcomp-cli.md)
     - [`benchcomp` configuration file](./benchcomp-conf.md)
-    - [Custom visualizations](./benchcomp-viz.md)
     - [Custom parsers](./benchcomp-parse.md)
 
 - [Limitations](./limitations.md)
