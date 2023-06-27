@@ -4,6 +4,17 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
+## [0.31.0]
+
+## What's Changed
+* Add `--exact` flag by @jaisnan in https://github.com/model-checking/kani/pull/2527
+* Build the verification libraries using Kani compiler by @celinval in https://github.com/model-checking/kani/pull/2534
+* Verify all Kani attributes in all crate items upfront by @celinval in https://github.com/model-checking/kani/pull/2536
+* Update README.md - fix link locations for badge images in markdown by @phayes in https://github.com/model-checking/kani/pull/2537
+* Bump CBMC version to 5.86.0 by @zhassan-aws in https://github.com/model-checking/kani/pull/2561
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.30.0...kani-0.31.0
+
 ## [0.30.0]
 
 ## What's Changed
@@ -92,7 +103,7 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 
 ### Breaking Changes
 
-- Remove the second parameter in the `kani::any_where` function by @zhassan-aws in #2257  
+- Remove the second parameter in the `kani::any_where` function by @zhassan-aws in #2257
 We removed the second parameter in the `kani::any_where` function (`_msg: &'static str`) to make the function more ergonomic to use.
 We suggest moving the explanation for why the assumption is introduced into a comment.
 For example, the following code:
@@ -107,4 +118,4 @@ should be replaced by:
 
 ### Major Changes
 
-- Enable the build cache to avoid recompiling crates that haven't changed, and introduce `--force-build` option to compile all crates from scratch by @celinval in #2232. 
+- Enable the build cache to avoid recompiling crates that haven't changed, and introduce `--force-build` option to compile all crates from scratch by @celinval in #2232.
