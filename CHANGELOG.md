@@ -7,7 +7,6 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 ## [0.31.0]
 
 ## What's Changed
-* Add `run_command` benchcomp visualization by @karkhaz in https://github.com/model-checking/kani/pull/2542
 * Add `--exact` flag by @jaisnan in https://github.com/model-checking/kani/pull/2527
 * Build the verification libraries using Kani compiler by @celinval in https://github.com/model-checking/kani/pull/2534
 * Verify all Kani attributes in all crate items upfront by @celinval in https://github.com/model-checking/kani/pull/2536
