@@ -7,17 +7,14 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 ## [0.31.0]
 
 ## What's Changed
-* Add run_command benchcomp visualization by @karkhaz in https://github.com/model-checking/kani/pull/2542
+* Add `run_command` benchcomp visualization by @karkhaz in https://github.com/model-checking/kani/pull/2542
 * Add `--exact` flag by @jaisnan in https://github.com/model-checking/kani/pull/2527
 * Build the verification libraries using Kani compiler by @celinval in https://github.com/model-checking/kani/pull/2534
 * Verify all Kani attributes in all crate items upfront by @celinval in https://github.com/model-checking/kani/pull/2536
-* Install doc dependencies before building by @karkhaz in https://github.com/model-checking/kani/pull/2564
+* Update README.md - fix link locations for badge images in markdown by @phayes in https://github.com/model-checking/kani/pull/2537
 * Bump CBMC version to 5.86.0 by @zhassan-aws in https://github.com/model-checking/kani/pull/2561
 
-## New Contributors
-* @phayes made their first contribution in https://github.com/model-checking/kani/pull/2537
-
-**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.30.0...test
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.30.0...kani-0.31.0
 
 ## [0.30.0]
 
