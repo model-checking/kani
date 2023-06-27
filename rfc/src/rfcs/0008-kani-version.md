@@ -104,3 +104,6 @@ I'm hoping that we can answer the following questions during the RFC:
 ## Future possibilities
 
 No future possibilities are under consideration.
+
+[^cbmc-version]: The CBMC version is printed once for each harness.
+That'd be the main difference between outputs from different versions, but only if the CBMC version was bumped in between.
