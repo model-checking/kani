@@ -1,7 +1,7 @@
 - **Feature Name:** Global Conditions (`global-conditions`)
 - **Feature Request Issue:** <https://github.com/model-checking/kani/issues/2525>
 - **RFC PR:** <https://github.com/model-checking/kani/pull/2516>
-- **Status:** *Under Review*
+- **Status:** *Unstable*
 - **Version:** 0
 - **Proof-of-concept:** <https://github.com/model-checking/kani/pull/2532>
 
