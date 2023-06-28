@@ -375,7 +375,12 @@ impl<'test> TestCx<'test> {
     /// the expected output in `expected` file.
     fn run_expected_test(&self) {
         let proc_res = self.run_kani();
-        let expected_path = self.testpaths.file.parent().unwrap().join("expected");
+        let dot_expected_path = self.testpaths.file.with_extension("expected");
+        let expected_path = if dot_expected_path.exists() {
+            dot_expected_path
+        } else {
+            self.testpaths.file.parent().unwrap().join("expected")
+        };
         self.verify_output(&proc_res, &expected_path);
     }
 
