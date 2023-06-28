@@ -93,7 +93,7 @@ pub fn derive_arbitrary(item: TokenStream) -> TokenStream {
 ///
 /// This is part of the function contract API, together with [`ensures`].
 ///
-/// The contents of the attribute is a condtition over the input values to the
+/// The contents of the attribute is a condition over the input values to the
 /// annotated function. All Rust syntax is supported, even calling other
 /// functions, but the computations must be side effect free, e.g. it cannot
 /// perform I/O or use mutable memory.
@@ -245,11 +245,11 @@ mod sysroot {
     /// Is rewritten to
     ///
     /// ```rs
-    /// fn foo_enusres_<hash of foo>(x: u32, result: u32) {
+    /// fn foo_ensures_<hash of foo>(x: u32, result: u32) {
     ///     x < result
     /// }
     ///
-    /// #[kanitook::ensures = "foo_ensures_<hash of foo>"]
+    /// #[kanitool::ensures = "foo_ensures_<hash of foo>"]
     /// fn foo(x: u32) -> u32 { .. }
     /// ```
     ///
