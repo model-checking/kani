@@ -123,8 +123,9 @@ impl GotocCodegenBackend {
                     }
                 }
 
-                // Gets its own loop, because the functions used in the contract
-                // expressions must have been declared before
+                // Attaching the contrcts gets its own loop, because the
+                // functions used in the contract expressions must have been
+                // declared before
                 for (item, contract) in &items_with_contracts {
                     if let Some(contract) = contract {
                         let instance = match item {

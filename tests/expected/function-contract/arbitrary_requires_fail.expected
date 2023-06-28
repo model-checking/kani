@@ -1,0 +1,10 @@
+RESULTS:
+Check 1: div.assertion.1
+	 - Status: FAILURE
+	 - Description: "attempt to divide by zero"
+	 - Location: arbitrary_requires_fail.rs:6:5 in function div
+
+Check 2: div.division-by-zero.1
+	 - Status: SUCCESS
+	 - Description: "division by zero"
+	 - Location: arbitrary_requires_fail.rs:6:5 in function div

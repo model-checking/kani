@@ -23,6 +23,6 @@ pub use expr::{
 };
 pub use location::Location;
 pub use stmt::{Stmt, StmtBody, SwitchCase};
-pub use symbol::{Contract, Symbol, SymbolValues};
+pub use symbol::{FunctionContract, Symbol, SymbolValues};
 pub use symbol_table::SymbolTable;
 pub use typ::{CIntType, DatatypeComponent, Parameter, Type};

@@ -1,0 +1,5 @@
+RESULTS:
+Check 1: simple_ensures_fail::max.missing_definition.1
+	 - Status: FAILURE
+	 - Description: "Function `simple_ensures_fail::max` with missing definition is unreachable"
+	 - Location: Unknown file in function simple_ensures_fail::max

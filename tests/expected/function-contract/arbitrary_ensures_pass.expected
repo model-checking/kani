@@ -1,0 +1,5 @@
+RESULTS:
+Check 1: arbitrary_ensures_pass::max.missing_definition.1
+	 - Status: SUCCESS
+	 - Description: "Function `arbitrary_ensures_pass::max` with missing definition is unreachable"
+	 - Location: Unknown file in function arbitrary_ensures_pass::max

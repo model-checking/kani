@@ -237,14 +237,14 @@ mod sysroot {
     /// Rewrites function contract annotations (`requires`, `ensures`) by lifing
     /// the condition into a separate function. As an example: (using `ensures`)
     ///
-    /// ```rs
+    /// ```ignore
     /// #[kani::ensures(x < result)]
     /// fn foo(x: u32) -> u32 { .. }
     /// ```
     ///
     /// Is rewritten to
     ///
-    /// ```rs
+    /// ```ignore
     /// fn foo_ensures_<hash of foo>(x: u32, result: u32) {
     ///     x < result
     /// }
@@ -258,66 +258,68 @@ mod sysroot {
     ///
     /// This macro is supposed to be called with the name of the procedural
     /// macro it should generate, e.g. `requires_ensures(requires)`
-    macro_rules! requires_ensures {
-        ($name: ident) => {
-            pub fn $name(attr: TokenStream, item: TokenStream) -> TokenStream {
-                use syn::{FnArg, PatType, PatIdent, Pat, Signature, Token, ReturnType, TypeTuple, punctuated::Punctuated, Type};
-                use proc_macro2::Span;
-                let attr = proc_macro2::TokenStream::from(attr);
+    fn handle_requires_ensures(name: &str, attr: TokenStream, item: TokenStream) -> TokenStream {
+        use proc_macro2::Span;
+        use syn::{
+            punctuated::Punctuated, FnArg, Pat, PatIdent, PatType, ReturnType, Signature, Token,
+            Type, TypeTuple,
+        };
+        let attr = proc_macro2::TokenStream::from(attr);
 
-                let a_short_hash = short_hash_of_token_stream(&item);
+        let a_short_hash = short_hash_of_token_stream(&item);
 
-                let item_fn @ ItemFn { sig, .. } = &parse_macro_input!(item as ItemFn);
-                let Signature { inputs, output , .. } = sig;
+        let item_fn @ ItemFn { sig, .. } = &parse_macro_input!(item as ItemFn);
+        let Signature { inputs, output, .. } = sig;
 
-                let gen_fn_name = identifier_for_generated_function(item_fn, stringify!($name), a_short_hash);
-                let attribute = format_ident!("{}", stringify!($name));
-                let kani_attributes = quote!(
-                    #[allow(dead_code)]
-                    #[kanitool::#attribute = stringify!(#gen_fn_name)]
-                );
+        let gen_fn_name = identifier_for_generated_function(item_fn, name, a_short_hash);
+        let attribute = format_ident!("{name}");
+        let kani_attributes = quote!(
+            #[allow(dead_code)]
+            #[kanitool::#attribute = stringify!(#gen_fn_name)]
+        );
 
-                let typ = match output {
-                    ReturnType::Type(_, t) => t.clone(),
-                    _ => Box::new(TypeTuple { paren_token: Default::default(), elems: Punctuated::new() }.into()),
-                };
+        let typ = match output {
+            ReturnType::Type(_, t) => t.clone(),
+            _ => Box::new(
+                TypeTuple { paren_token: Default::default(), elems: Punctuated::new() }.into(),
+            ),
+        };
 
-                let mut gen_fn_inputs = inputs.clone();
-                gen_fn_inputs.push(
-                    FnArg::Typed(PatType {
-                        attrs: vec![],
-                        pat: Box::new(Pat::Ident(PatIdent{
-                            attrs: vec![],
-                            by_ref: None,
-                            mutability: None,
-                            ident: Ident::new("result", Span::call_site()),
-                            subpat: None,
-                        })),
-                        colon_token: Token![:](Span::call_site()),
-                        ty: typ,
-                    })
-                );
+        let mut gen_fn_inputs = inputs.clone();
+        gen_fn_inputs.push(FnArg::Typed(PatType {
+            attrs: vec![],
+            pat: Box::new(Pat::Ident(PatIdent {
+                attrs: vec![],
+                by_ref: None,
+                mutability: None,
+                ident: Ident::new("result", Span::call_site()),
+                subpat: None,
+            })),
+            colon_token: Token![:](Span::call_site()),
+            ty: typ,
+        }));
 
-                assert!(sig.variadic.is_none(), "Varaidic signatures are not supported");
+        assert!(sig.variadic.is_none(), "Variadic signatures are not supported");
 
-                let mut gen_sig = sig.clone();
-                gen_sig.inputs = gen_fn_inputs;
-                gen_sig.output = ReturnType::Type(Default::default(), Box::new(Type::Verbatim(quote!(bool))));
-                gen_sig.ident = gen_fn_name;
+        let mut gen_sig = sig.clone();
+        gen_sig.inputs = gen_fn_inputs;
+        gen_sig.output =
+            ReturnType::Type(Default::default(), Box::new(Type::Verbatim(quote!(bool))));
+        gen_sig.ident = gen_fn_name;
 
-                quote!(
-                    #gen_sig {
-                        #attr
-                    }
-
-                    #kani_attributes
-                    #item_fn
-                )
-                .into()
+        quote!(
+            #gen_sig {
+                #attr
             }
-        }
+
+            #kani_attributes
+            #item_fn
+        )
+        .into()
     }
 
+    /// Hash this `TokenStream` and return an integer that is at most digits
+    /// long when hex formatted.
     fn short_hash_of_token_stream(stream: &proc_macro::TokenStream) -> u64 {
         use std::hash::Hasher;
         let mut hasher = std::collections::hash_map::DefaultHasher::default();
@@ -326,6 +328,9 @@ mod sysroot {
         long_hash % 0x1_000_000 // six hex digits
     }
 
+    /// Makes consistent names for a generated function which was created for
+    /// `purpose`, from an attribute that decorates `related_function` with the
+    /// hash `hash`.
     fn identifier_for_generated_function(
         related_function: &ItemFn,
         purpose: &str,
@@ -335,8 +340,13 @@ mod sysroot {
         Ident::new(&identifier, proc_macro2::Span::mixed_site())
     }
 
-    requires_ensures!(requires);
-    requires_ensures!(ensures);
+    pub fn requires(attr: TokenStream, item: TokenStream) -> TokenStream {
+        handle_requires_ensures("requires", attr, item)
+    }
+
+    pub fn ensures(attr: TokenStream, item: TokenStream) -> TokenStream {
+        handle_requires_ensures("ensures", attr, item)
+    }
 
     kani_attribute!(should_panic, no_args);
     kani_attribute!(solver);

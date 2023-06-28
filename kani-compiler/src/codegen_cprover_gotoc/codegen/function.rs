@@ -5,7 +5,7 @@
 
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::contracts::GFnContract;
-use cbmc::goto_program::{Contract, Expr, Lambda, Stmt, Symbol, Type};
+use cbmc::goto_program::{Expr, FunctionContract, Lambda, Stmt, Symbol, Type};
 use cbmc::InternString;
 use rustc_middle::mir::traversal::reverse_postorder;
 use rustc_middle::mir::{Body, HasLocalDecls, Local};
@@ -247,7 +247,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// lambda takes the return value as first argument and then immediately
     /// calls the generated spec function, but passing the return value as the
     /// last argument.
-    fn as_goto_contract(&mut self, fn_contract: &GFnContract<Instance<'tcx>>) -> Contract {
+    fn as_goto_contract(&mut self, fn_contract: &GFnContract<Instance<'tcx>>) -> FunctionContract {
         use rustc_middle::mir;
         let mut handle_contract_expr = |instance| {
             let mir = self.current_fn().mir();
@@ -286,7 +286,7 @@ impl<'tcx> GotocCtx<'tcx> {
             fn_contract.requires().iter().copied().map(&mut handle_contract_expr).collect();
         let ensures =
             fn_contract.ensures().iter().copied().map(&mut handle_contract_expr).collect();
-        Contract::new(requires, ensures, vec![])
+        FunctionContract::new(requires, ensures, vec![])
     }
 
     /// Convert the contract to a CBMC contract, then attach it to `instance`.

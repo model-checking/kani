@@ -14,7 +14,7 @@ pub struct Symbol {
     pub typ: Type,
     pub value: SymbolValues,
     /// Contracts to be enforced (only supported for functions)
-    pub contract: Option<Box<Contract>>,
+    pub contract: Option<Box<FunctionContract>>,
 
     /// Optional debugging information
 
@@ -50,13 +50,13 @@ pub struct Symbol {
 /// See https://diffblue.github.io/cbmc/contracts-user.html for the meaning of
 /// each type of clause.
 #[derive(Clone, Debug)]
-pub struct Contract {
+pub struct FunctionContract {
     pub(crate) requires: Vec<Lambda>,
     pub(crate) ensures: Vec<Lambda>,
     pub(crate) assigns: Vec<Lambda>,
 }
 
-impl Contract {
+impl FunctionContract {
     pub fn new(requires: Vec<Lambda>, ensures: Vec<Lambda>, assigns: Vec<Lambda>) -> Self {
         Self { requires, ensures, assigns }
     }
@@ -128,7 +128,7 @@ impl Symbol {
 
     /// Add this contract to the symbol (symbol must be a function) or fold the
     /// conditions into an existing contract.
-    pub fn attach_contract(&mut self, contract: Contract) {
+    pub fn attach_contract(&mut self, contract: FunctionContract) {
         assert!(self.typ.is_code());
         match self.contract {
             Some(ref mut prior) => {
