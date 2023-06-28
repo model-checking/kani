@@ -106,7 +106,7 @@ pub fn requires(attr: TokenStream, item: TokenStream) -> TokenStream {
 ///
 /// This is part of the function contract API, together with [`requires`].
 ///
-/// The contents of the attribute is a condtition over the input values to the
+/// The contents of the attribute is a condition over the input values to the
 /// annotated function *and* its return value, accessible as a variable called
 /// `result`. All Rust syntax is supported, even calling other functions, but
 /// the computations must be side effect free, e.g. it cannot perform I/O or use
