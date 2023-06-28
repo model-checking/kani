@@ -120,9 +120,20 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    /// c.f. `rustc_codegen_llvm::intrinsic` `impl IntrinsicCallMethods<'tcx> for Builder<'a, 'll, 'tcx>`
-    /// `fn codegen_intrinsic_call`
-    /// c.f. <https://doc.rust-lang.org/std/intrinsics/index.html>
+    /// c.f. `rustc_codegen_llvm::intrinsic` `impl IntrinsicCallMethods<'tcx>
+    /// for Builder<'a, 'll, 'tcx>` `fn codegen_intrinsic_call` c.f.
+    /// <https://doc.rust-lang.org/std/intrinsics/index.html>
+    ///
+    /// ### A note on type checking
+    ///
+    /// The backend/codegen generally assumes that at this point arguments have
+    /// been type checked and that the given intrinsic is safe to call with the
+    /// provided arguments. However in rare cases the intrinsics type signature
+    /// is too permissive or has to be liberal because the types are enforced by
+    /// the specific code gen/backend. In such cases we handle the type checking
+    /// here. The type constraints enforced here must be at least as strict as
+    /// the assertions made in in the builder functions in
+    /// [`Expr`].
     fn codegen_intrinsic(
         &mut self,
         instance: Instance<'tcx>,
@@ -445,7 +456,7 @@ impl<'tcx> GotocCtx<'tcx> {
             "cosf64" => codegen_simple_intrinsic!(Cos),
             "ctlz" => codegen_count_intrinsic!(ctlz, true),
             "ctlz_nonzero" => codegen_count_intrinsic!(ctlz, false),
-            "ctpop" => self.codegen_expr_to_place(p, fargs.remove(0).popcount()),
+            "ctpop" => self.codegen_ctpop(*p, span, fargs.remove(0), farg_types[0]),
             "cttz" => codegen_count_intrinsic!(cttz, true),
             "cttz_nonzero" => codegen_count_intrinsic!(cttz, false),
             "discriminant_value" => {
@@ -648,6 +659,48 @@ impl<'tcx> GotocCtx<'tcx> {
                 "https://github.com/model-checking/kani/issues/new/choose",
             ),
         }
+    }
+
+    /// Perform type checking and code generation for the `ctpop` rust intrinsic.
+    fn codegen_ctpop(
+        &mut self,
+        target_place: Place<'tcx>,
+        span: Option<Span>,
+        arg: Expr,
+        arg_rust_ty: Ty<'tcx>,
+    ) -> Stmt {
+        if !arg.typ().is_integer() {
+            self.intrinsics_typecheck_fail(span, "ctpop", "integer type", arg_rust_ty)
+        } else {
+            self.codegen_expr_to_place(&target_place, arg.popcount())
+        }
+    }
+
+    /// Report that a delayed type check on an intrinsic failed.
+    ///
+    /// The idea is to blame one of the arguments on the failed type check and
+    /// report the type that was found for that argument in `actual`. The
+    /// `expected` type for that argument can be very permissive (e.g. "some
+    /// integer type") and as a result it allows a permissive string as
+    /// description.
+    ///
+    /// Calling this function will abort the compilation though that is not
+    /// obvious by the type.
+    fn intrinsics_typecheck_fail(
+        &self,
+        span: Option<Span>,
+        name: &str,
+        expected: &str,
+        actual: Ty,
+    ) -> ! {
+        self.tcx.sess.span_err(
+            span.into_iter().collect::<Vec<_>>(),
+            format!(
+                "Type check failed for intrinsic `{name}`: Expected {expected}, found {actual}"
+            ),
+        );
+        self.tcx.sess.abort_if_errors();
+        unreachable!("Rustc should have aborted already")
     }
 
     // Fast math intrinsics for floating point operations like `fadd_fast`
