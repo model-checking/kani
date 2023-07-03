@@ -354,7 +354,8 @@ impl<'tcx> GotocCtx<'tcx> {
             BinOp::Div | BinOp::Rem => {
                 let result = self.codegen_unchecked_scalar_binop(op, e1, e2);
                 if self.operand_ty(e1).is_integral() {
-                    let check = self.check_div_overflow(e1, e2, loc);
+                    let is_rem = matches!(op, BinOp::Rem);
+                    let check = self.check_div_overflow(e1, e2, is_rem, loc);
                     Expr::statement_expression(
                         vec![check, result.clone().as_stmt(loc)],
                         result.typ().clone(),
@@ -416,17 +417,28 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         dividend: &Operand<'tcx>,
         divisor: &Operand<'tcx>,
+        is_remainder: bool,
         loc: Location,
     ) -> Stmt {
         let divisor_expr = self.codegen_operand(divisor);
+        let msg = if is_remainder {
+            "attempt to calculate the remainder with a divisor of zero"
+        } else {
+            "attempt to divide by zero"
+        };
         let div_by_zero_check = self.codegen_assert_assume(
             divisor_expr.clone().is_zero().not(),
             PropertyClass::ArithmeticOverflow,
-            "attempt to divide by 0",
+            msg,
             loc,
         );
         if self.operand_ty(dividend).is_signed() {
             let dividend_expr = self.codegen_operand(dividend);
+            let overflow_msg = if is_remainder {
+                "attempt to calculate the remainder with overflow"
+            } else {
+                "attempt to divide with overflow"
+            };
             let overflow_expr = dividend_expr
                 .clone()
                 .eq(dividend_expr.typ().min_int_expr(self.symbol_table.machine_model()))
@@ -434,7 +446,7 @@ impl<'tcx> GotocCtx<'tcx> {
             let overflow_check = self.codegen_assert_assume(
                 overflow_expr.not(),
                 PropertyClass::ArithmeticOverflow,
-                "attempt to compute `MIN / -1` which would overflow",
+                overflow_msg,
                 loc,
             );
             Stmt::block(vec![overflow_check, div_by_zero_check], loc)

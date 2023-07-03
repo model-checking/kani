@@ -321,7 +321,7 @@ impl CodegenBackend for GotocCodegenBackend {
         match ongoing_codegen.downcast::<(CodegenResults, FxIndexMap<WorkProductId, WorkProduct>)>()
         {
             Ok(val) => Ok(*val),
-            Err(val) => panic!("Oh no: {:?}", val.type_id()),
+            Err(val) => panic!("unexpected error: {:?}", val.type_id()),
         }
     }
 
