@@ -163,7 +163,7 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    /// Generate code for a binary operation with an overflow and returns a tuple (res, overflow).
+    /// Generate code for a binary operation with an overflow check.
     fn codegen_binop_with_overflow_check(
         &mut self,
         op: &BinOp,
@@ -411,7 +411,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// For integer types, division by zero is UB, as is MIN / -1 for signed.
     /// Note that the compiler already inserts these checks for regular division.
     /// However, since <https://github.com/rust-lang/rust/pull/112168>, unchecked divisions are
-    /// lowered to BinOp::Div. Prefer adding duplicated checks for now.
+    /// lowered to `BinOp::Div`. Prefer adding duplicated checks for now.
     fn check_div_overflow(
         &mut self,
         dividend: &Operand<'tcx>,
@@ -422,7 +422,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let div_by_zero_check = self.codegen_assert_assume(
             divisor_expr.clone().is_zero().not(),
             PropertyClass::ArithmeticOverflow,
-            "Attempt to divide by 0",
+            "attempt to divide by 0",
             loc,
         );
         if self.operand_ty(dividend).is_signed() {
@@ -434,7 +434,7 @@ impl<'tcx> GotocCtx<'tcx> {
             let overflow_check = self.codegen_assert_assume(
                 overflow_expr.not(),
                 PropertyClass::ArithmeticOverflow,
-                "Attempt to compute `MIN / -1` which would overflow",
+                "attempt to compute `MIN / -1` which would overflow",
                 loc,
             );
             Stmt::block(vec![overflow_check, div_by_zero_check], loc)

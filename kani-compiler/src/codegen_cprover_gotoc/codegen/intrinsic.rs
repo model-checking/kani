@@ -581,7 +581,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             "unchecked_add" | "unchecked_mul" | "unchecked_shl" | "unchecked_shr"
             | "unchecked_sub" => {
-                unreachable!("Expect intrinsic {intrinsic} to be lowered before codegen")
+                unreachable!("Expected intrinsic `{intrinsic}` to be lowered before codegen")
             }
             "unchecked_div" => codegen_op_with_div_overflow_check!(div),
             "unchecked_rem" => codegen_op_with_div_overflow_check!(rem),
