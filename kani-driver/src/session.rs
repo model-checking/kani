@@ -1,10 +1,11 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use crate::args::common::Verbosity;
-use crate::args::VerificationArgs;
-use crate::util::render_command;
 use anyhow::{bail, Context, Result};
+use crate::args::VerificationArgs;
+use crate::args::common::Verbosity;
+use crate::util::render_command;
+use std::io::IsTerminal;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
@@ -368,7 +369,7 @@ fn init_logger(args: &VerificationArgs) {
     };
 
     // Use a hierarchical view for now.
-    let use_colors = atty::is(atty::Stream::Stdout);
+    let use_colors = std::io::stdout().is_terminal();
     let subscriber = Registry::default().with(filter);
     let subscriber = subscriber.with(
         HierarchicalLayer::default()

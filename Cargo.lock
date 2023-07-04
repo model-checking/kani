@@ -88,17 +88,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9c7d0618f0e0b7e8ff11427422b64564d5fb0be1940354bfe2e0529b18a9d9b8"
 
 [[package]]
-name = "atty"
-version = "0.2.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d9b39be18770d11421cdb1b9947a45dd3f37e93092cbf377614828a319d5fee8"
-dependencies = [
- "hermit-abi 0.1.19",
- "libc",
- "winapi",
-]
-
-[[package]]
 name = "autocfg"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -529,7 +518,6 @@ dependencies = [
 name = "kani-compiler"
 version = "0.31.0"
 dependencies = [
- "atty",
  "clap",
  "cprover_bindings",
  "home",
@@ -553,7 +541,6 @@ name = "kani-driver"
 version = "0.31.0"
 dependencies = [
  "anyhow",
- "atty",
  "cargo_metadata",
  "clap",
  "comfy-table",
@@ -1384,7 +1371,6 @@ version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4f9742d8df709837409dbb22aa25dd7769c260406f20ff48a2320b80a4a6aed0"
 dependencies = [
- "atty",
  "nu-ansi-term",
  "tracing-core",
  "tracing-log",

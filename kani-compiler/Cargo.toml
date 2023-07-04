@@ -9,7 +9,6 @@ license = "MIT OR Apache-2.0"
 publish = false
 
 [dependencies]
-atty = "0.2.14"
 cbmc = { path = "../cprover_bindings", package = "cprover_bindings", optional = true }
 clap = { version = "4.1.3", features = ["cargo"] }
 home = "0.5"

@@ -9,6 +9,7 @@ use rustc_errors::{
     emitter::Emitter, emitter::HumanReadableErrorType, fallback_fluent_bundle, json::JsonEmitter,
     ColorConfig, Diagnostic, TerminalUrl,
 };
+use std::io::IsTerminal;
 use std::panic;
 use std::str::FromStr;
 use std::sync::LazyLock;
@@ -107,7 +108,7 @@ fn json_logs(filter: EnvFilter) {
 
 /// Configure global logger to use a hierarchical view.
 fn hier_logs(args: &ArgMatches, filter: EnvFilter) {
-    let use_colors = atty::is(atty::Stream::Stdout) || args.get_flag(parser::COLOR_OUTPUT);
+    let use_colors = std::io::stdout().is_terminal() || args.get_flag(parser::COLOR_OUTPUT);
     let subscriber = Registry::default().with(filter);
     let subscriber = subscriber.with(
         HierarchicalLayer::default()

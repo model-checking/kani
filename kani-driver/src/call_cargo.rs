@@ -1,19 +1,20 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+use anyhow::{bail, Context, Result};
+use cargo_metadata::diagnostic::{Diagnostic, DiagnosticLevel};
+use cargo_metadata::{Message, Metadata, MetadataCommand, Package, Target};
 use crate::args::VerificationArgs;
 use crate::call_single_file::to_rustc_arg;
 use crate::project::Artifact;
 use crate::session::KaniSession;
 use crate::util;
-use anyhow::{bail, Context, Result};
-use cargo_metadata::diagnostic::{Diagnostic, DiagnosticLevel};
-use cargo_metadata::{Message, Metadata, MetadataCommand, Package, Target};
 use kani_metadata::{ArtifactType, CompilerArtifactStub};
 use std::ffi::{OsStr, OsString};
 use std::fmt::{self, Display};
 use std::fs::{self, File};
 use std::io::BufReader;
+use std::io::IsTerminal;
 use std::path::PathBuf;
 use std::process::Command;
 use tracing::{debug, trace};
@@ -180,7 +181,7 @@ impl KaniSession {
     /// Run cargo and collect any error found.
     /// We also collect the metadata file generated during compilation if any.
     fn run_cargo(&self, cargo_cmd: Command, target: &Target) -> Result<Option<Artifact>> {
-        let support_color = atty::is(atty::Stream::Stdout);
+        let support_color = std::io::stdout().is_terminal();
         let mut artifact = None;
         if let Some(mut cargo_process) = self.run_piped(cargo_cmd)? {
             let reader = BufReader::new(cargo_process.stdout.take().unwrap());
