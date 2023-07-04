@@ -1,14 +1,14 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use anyhow::{bail, Context, Result};
-use cargo_metadata::diagnostic::{Diagnostic, DiagnosticLevel};
-use cargo_metadata::{Message, Metadata, MetadataCommand, Package, Target};
 use crate::args::VerificationArgs;
 use crate::call_single_file::to_rustc_arg;
 use crate::project::Artifact;
 use crate::session::KaniSession;
 use crate::util;
+use anyhow::{bail, Context, Result};
+use cargo_metadata::diagnostic::{Diagnostic, DiagnosticLevel};
+use cargo_metadata::{Message, Metadata, MetadataCommand, Package, Target};
 use kani_metadata::{ArtifactType, CompilerArtifactStub};
 use std::ffi::{OsStr, OsString};
 use std::fmt::{self, Display};

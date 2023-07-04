@@ -1,10 +1,10 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use anyhow::{bail, Context, Result};
-use crate::args::VerificationArgs;
 use crate::args::common::Verbosity;
+use crate::args::VerificationArgs;
 use crate::util::render_command;
+use anyhow::{bail, Context, Result};
 use std::io::IsTerminal;
 use std::io::Write;
 use std::path::{Path, PathBuf};
