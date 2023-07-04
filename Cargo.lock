@@ -533,7 +533,6 @@ dependencies = [
  "strum_macros",
  "tracing",
  "tracing-subscriber",
- "tracing-tree",
 ]
 
 [[package]]
@@ -560,7 +559,6 @@ dependencies = [
  "toml",
  "tracing",
  "tracing-subscriber",
- "tracing-tree",
  "which",
 ]
 
@@ -1363,18 +1361,6 @@ dependencies = [
  "tracing-core",
  "tracing-log",
  "tracing-serde",
-]
-
-[[package]]
-name = "tracing-tree"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f9742d8df709837409dbb22aa25dd7769c260406f20ff48a2320b80a4a6aed0"
-dependencies = [
- "nu-ansi-term",
- "tracing-core",
- "tracing-log",
- "tracing-subscriber",
 ]
 
 [[package]]

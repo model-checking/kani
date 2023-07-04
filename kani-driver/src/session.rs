@@ -14,7 +14,6 @@ use std::time::Instant;
 use strum_macros::Display;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Registry};
-use tracing_tree::HierarchicalLayer;
 
 /// Environment variable used to control this session log tracing.
 /// This is the same variable used to control `kani-compiler` logs. Note that you can still control
@@ -372,13 +371,10 @@ fn init_logger(args: &VerificationArgs) {
     let use_colors = std::io::stdout().is_terminal();
     let subscriber = Registry::default().with(filter);
     let subscriber = subscriber.with(
-        HierarchicalLayer::default()
+        tracing_subscriber::fmt::layer()
             .with_writer(std::io::stderr)
-            .with_indent_lines(true)
             .with_ansi(use_colors)
-            .with_targets(true)
-            .with_verbose_exit(true)
-            .with_indent_amount(4),
+            .with_target(true),
     );
     tracing::subscriber::set_global_default(subscriber).unwrap();
 }
