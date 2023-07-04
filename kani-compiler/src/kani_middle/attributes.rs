@@ -58,8 +58,7 @@ pub(super) fn check_attributes(tcx: TyCtxt, def_id: DefId) {
                 format!(
                     "the `{}` attribute also requires the `#[kani::proof]` attribute",
                     kind.as_ref()
-                )
-                .as_str(),
+                ),
             );
         }
         match kind {
@@ -147,7 +146,7 @@ pub fn extract_harness_attributes(tcx: TyCtxt, def_id: DefId) -> HarnessAttribut
 ///
 /// TODO: Improve error message by printing the span of the harness instead of the definition.
 pub fn check_unstable_features(tcx: TyCtxt, enabled_features: &[String], def_id: DefId) {
-    if !matches!(tcx.type_of(def_id).0.kind(), TyKind::FnDef(..)) {
+    if !matches!(tcx.type_of(def_id).skip_binder().kind(), TyKind::FnDef(..)) {
         // skip closures due to an issue with rustc.
         // https://github.com/model-checking/kani/pull/2406#issuecomment-1534333862
         return;
@@ -195,7 +194,7 @@ fn expect_single<'a>(
     if attributes.len() > 1 {
         tcx.sess.span_err(
             attr.span,
-            &format!("only one '#[kani::{}]' attribute is allowed per harness", kind.as_ref()),
+            format!("only one '#[kani::{}]' attribute is allowed per harness", kind.as_ref()),
         );
     }
     attr

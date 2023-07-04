@@ -5,8 +5,7 @@ use super::typ::{self, pointee_type};
 use super::PropertyClass;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{
-    arithmetic_overflow_result_type, ArithmeticOverflowResult, BinaryOperator, BuiltinFn, Expr,
-    Location, Stmt, Type, ARITH_OVERFLOW_OVERFLOWED_FIELD, ARITH_OVERFLOW_RESULT_FIELD,
+    ArithmeticOverflowResult, BinaryOperator, BuiltinFn, Expr, Location, Stmt, Type,
 };
 use rustc_middle::mir::{BasicBlock, Operand, Place};
 use rustc_middle::ty::layout::{LayoutOf, ValidityRequirement};
@@ -180,43 +179,6 @@ impl<'tcx> GotocCtx<'tcx> {
                     );
                 let e = BuiltinFn::$f.call(casted_fargs, loc);
                 self.codegen_expr_to_place(p, e)
-            }};
-        }
-
-        // Intrinsics which encode a simple arithmetic operation with overflow check
-        macro_rules! codegen_op_with_overflow_check {
-            ($f:ident) => {{
-                let a = fargs.remove(0);
-                let b = fargs.remove(0);
-                let op_type = a.typ().clone();
-                let res = a.$f(b);
-                // add to symbol table
-                let struct_tag = self.codegen_arithmetic_overflow_result_type(op_type.clone());
-                assert_eq!(*res.typ(), struct_tag);
-
-                // store the result in a temporary variable
-                let (var, decl) = self.decl_temp_variable(struct_tag, Some(res), loc);
-                let check = self.codegen_assert(
-                    var.clone()
-                        .member(ARITH_OVERFLOW_OVERFLOWED_FIELD, &self.symbol_table)
-                        .cast_to(Type::c_bool())
-                        .not(),
-                    PropertyClass::ArithmeticOverflow,
-                    format!("attempt to compute {} which would overflow", intrinsic).as_str(),
-                    loc,
-                );
-                self.codegen_expr_to_place(
-                    p,
-                    Expr::statement_expression(
-                        vec![
-                            decl,
-                            check,
-                            var.member(ARITH_OVERFLOW_RESULT_FIELD, &self.symbol_table)
-                                .as_stmt(loc),
-                        ],
-                        op_type,
-                    ),
-                )
             }};
         }
 
@@ -617,19 +579,12 @@ impl<'tcx> GotocCtx<'tcx> {
             "unaligned_volatile_load" => {
                 unstable_codegen!(self.codegen_expr_to_place(p, fargs.remove(0).dereference()))
             }
-            "unchecked_add" => codegen_op_with_overflow_check!(add_overflow_result),
-            "unchecked_div" => codegen_op_with_div_overflow_check!(div),
-            "unchecked_mul" => codegen_op_with_overflow_check!(mul_overflow_result),
-            "unchecked_rem" => codegen_op_with_div_overflow_check!(rem),
-            "unchecked_shl" => codegen_intrinsic_binop!(shl),
-            "unchecked_shr" => {
-                if fargs[0].typ().is_signed(self.symbol_table.machine_model()) {
-                    codegen_intrinsic_binop!(ashr)
-                } else {
-                    codegen_intrinsic_binop!(lshr)
-                }
+            "unchecked_add" | "unchecked_mul" | "unchecked_shl" | "unchecked_shr"
+            | "unchecked_sub" => {
+                unreachable!("Expected intrinsic `{intrinsic}` to be lowered before codegen")
             }
-            "unchecked_sub" => codegen_op_with_overflow_check!(sub_overflow_result),
+            "unchecked_div" => codegen_op_with_div_overflow_check!(div),
+            "unchecked_rem" => codegen_op_with_div_overflow_check!(rem),
             "unlikely" => self.codegen_expr_to_place(p, fargs.remove(0)),
             "unreachable" => unreachable!(
                 "Expected `std::intrinsics::unreachable` to be handled by `TerminatorKind::Unreachable`"
@@ -1807,20 +1762,5 @@ impl<'tcx> GotocCtx<'tcx> {
             loc,
         );
         (size_of_count_elems.result, assert_stmt)
-    }
-
-    /// Codegens the struct type that CBMC produces for its arithmetic with overflow operators:
-    /// ```
-    /// struct overflow_result_<operand_type> {
-    ///     operand_type result;     // the result of the operation
-    ///     bool         overflowed; // whether the operation overflowed
-    /// }
-    /// ```
-    /// and adds the type to the symbol table
-    fn codegen_arithmetic_overflow_result_type(&mut self, operand_type: Type) -> Type {
-        let res_type = arithmetic_overflow_result_type(operand_type);
-        self.ensure_struct(res_type.tag().unwrap(), res_type.tag().unwrap(), |_, _| {
-            res_type.components().unwrap().clone()
-        })
     }
 }

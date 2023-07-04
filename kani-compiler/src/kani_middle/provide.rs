@@ -6,13 +6,13 @@
 
 use crate::kani_middle::reachability::{collect_reachable_items, filter_crate_items};
 use crate::kani_middle::stubbing;
-use crate::kani_middle::ty::query::query_provided::collect_and_partition_mono_items;
 use crate::kani_queries::QueryDb;
 use rustc_hir::def_id::{DefId, LocalDefId};
 use rustc_interface;
 use rustc_middle::{
     mir::Body,
-    ty::{query::ExternProviders, query::Providers, TyCtxt},
+    query::{queries, ExternProviders, Providers},
+    ty::TyCtxt,
 };
 
 /// Sets up rustc's query mechanism to apply Kani's custom queries to code from
@@ -65,7 +65,10 @@ fn run_kani_mir_passes<'tcx>(
 /// This is an issue when compiling a library, since the crate metadata is
 /// generated (using this query) before code generation begins (which is
 /// when we normally run the reachability analysis).
-fn collect_and_partition_mono_items(tcx: TyCtxt, key: ()) -> collect_and_partition_mono_items {
+fn collect_and_partition_mono_items(
+    tcx: TyCtxt,
+    key: (),
+) -> queries::collect_and_partition_mono_items::ProvidedValue {
     let entry_fn = tcx.entry_fn(()).map(|(id, _)| id);
     let local_reachable = filter_crate_items(tcx, |_, def_id| {
         tcx.is_reachable_non_generic(def_id) || entry_fn == Some(def_id)

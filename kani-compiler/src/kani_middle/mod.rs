@@ -51,7 +51,7 @@ pub fn check_crate_items(tcx: TyCtxt, ignore_asm: bool) {
                     `--enable-unstable --ignore-global-asm` to suppress this error \
                     (**Verification results may be impacted**).",
                 );
-                tcx.sess.err(&error_msg);
+                tcx.sess.err(error_msg);
             } else {
                 tcx.sess.warn(format!(
                     "Ignoring global ASM in crate {krate}. Verification results may be impacted.",
@@ -192,13 +192,13 @@ impl<'tcx> FnAbiOfHelpers<'tcx> for CompilerHelpers<'tcx> {
                 FnAbiRequest::OfFnPtr { sig, extra_args } => {
                     span_bug!(
                         span,
-                        "Error: {err}\n while running `fn_abi_of_fn_ptr. ({sig}, {extra_args:?})`",
+                        "Error: {err:?}\n while running `fn_abi_of_fn_ptr. ({sig}, {extra_args:?})`",
                     );
                 }
                 FnAbiRequest::OfInstance { instance, extra_args } => {
                     span_bug!(
                         span,
-                        "Error: {err}\n while running `fn_abi_of_instance. ({instance}, {extra_args:?})`",
+                        "Error: {err:?}\n while running `fn_abi_of_instance. ({instance}, {extra_args:?})`",
                     );
                 }
             }

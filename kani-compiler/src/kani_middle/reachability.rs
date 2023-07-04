@@ -30,8 +30,8 @@ use rustc_middle::mir::{
 use rustc_middle::span_bug;
 use rustc_middle::ty::adjustment::PointerCast;
 use rustc_middle::ty::{
-    Closure, ClosureKind, ConstKind, Instance, InstanceDef, ParamEnv, Ty, TyCtxt, TyKind,
-    TypeFoldable, VtblEntry,
+    Closure, ClosureKind, ConstKind, EarlyBinder, Instance, InstanceDef, ParamEnv, Ty, TyCtxt,
+    TyKind, TypeFoldable, VtblEntry,
 };
 
 use crate::kani_middle::coercion;
@@ -243,7 +243,7 @@ impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {
         self.instance.subst_mir_and_normalize_erasing_regions(
             self.tcx,
             ParamEnv::reveal_all(),
-            value,
+            EarlyBinder::bind(value),
         )
     }
 
@@ -483,7 +483,7 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
                                 let receiver_ty = tcx.subst_and_normalize_erasing_regions(
                                     substs,
                                     ParamEnv::reveal_all(),
-                                    generic_ty,
+                                    EarlyBinder::bind(generic_ty),
                                 );
                                 let sep = callee.rfind("::").unwrap();
                                 let trait_ = &callee[..sep];
