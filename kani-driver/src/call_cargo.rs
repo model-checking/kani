@@ -5,7 +5,7 @@ use crate::args::VerificationArgs;
 use crate::call_single_file::to_rustc_arg;
 use crate::project::Artifact;
 use crate::session::KaniSession;
-use crate::util;
+use crate::{session, util};
 use anyhow::{bail, Context, Result};
 use cargo_metadata::diagnostic::{Diagnostic, DiagnosticLevel};
 use cargo_metadata::{Message, Metadata, MetadataCommand, Package, Target};
@@ -78,8 +78,7 @@ impl KaniSession {
             cargo_args.push(format!("--features={}", features.join(",")).into());
         }
 
-        cargo_args.push("--target".into());
-        cargo_args.push(build_target.into());
+        cargo_args.append(&mut cargo_config_args());
 
         cargo_args.push("--target-dir".into());
         cargo_args.push(target_dir.into());
@@ -99,11 +98,6 @@ impl KaniSession {
             cargo_args.push("-v".into());
         }
 
-        // Propagate `--cfg=kani` to build scripts.
-        cargo_args.push("-Zhost-config".into());
-        cargo_args.push("-Ztarget-applies-to-host".into());
-        cargo_args.push("--config=host.rustflags=[\"--cfg=kani\"]".into());
-
         // Arguments that will only be passed to the target package.
         let mut pkg_args: Vec<String> = vec![];
         pkg_args.extend(["--".to_string(), self.reachability_arg()]);
@@ -115,7 +109,8 @@ impl KaniSession {
         for package in packages {
             for verification_target in package_targets(&self.args, package) {
                 let mut cmd = Command::new("cargo");
-                cmd.args(&cargo_args)
+                cmd.arg(session::toolchain_shorthand())
+                    .args(&cargo_args)
                     .args(vec!["-p", &package.name])
                     .args(&verification_target.to_args())
                     .args(&pkg_args)
@@ -254,6 +249,19 @@ impl KaniSession {
         // for the last compiler artifact.
         Ok(artifact.and_then(map_kani_artifact))
     }
+}
+
+pub fn cargo_config_args() -> Vec<OsString> {
+    [
+        "--target",
+        env!("TARGET"),
+        // Propagate `--cfg=kani` to build scripts.
+        "-Zhost-config",
+        "-Ztarget-applies-to-host",
+        "--config=host.rustflags=[\"--cfg=kani\"]",
+    ]
+    .map(OsString::from)
+    .to_vec()
 }
 
 /// Print the compiler message following the coloring schema.
