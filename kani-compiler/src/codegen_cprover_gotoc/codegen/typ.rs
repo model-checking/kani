@@ -303,7 +303,7 @@ impl<'tcx> GotocCtx<'tcx> {
             var: ty::BoundVar::from_usize(bound_vars.len() - 1),
             kind: ty::BoundRegionKind::BrEnv,
         };
-        let env_region = self.tcx.mk_re_late_bound(ty::INNERMOST, br);
+        let env_region = ty::Region::new_late_bound(self.tcx, ty::INNERMOST, br);
         let env_ty = self.tcx.closure_env_ty(def_id, substs, env_region).unwrap();
 
         let sig = sig.skip_binder();
@@ -345,7 +345,7 @@ impl<'tcx> GotocCtx<'tcx> {
             kind: ty::BoundRegionKind::BrEnv,
         };
         let env_region = ty::ReLateBound(ty::INNERMOST, br);
-        let env_ty = self.tcx.mk_mut_ref(self.tcx.mk_region_from_kind(env_region), ty);
+        let env_ty = self.tcx.mk_mut_ref(ty::Region::new_from_kind(self.tcx, env_region), ty);
 
         let pin_did = self.tcx.require_lang_item(LangItem::Pin, None);
         let pin_adt_ref = self.tcx.adt_def(pin_did);
@@ -429,7 +429,7 @@ impl<'tcx> GotocCtx<'tcx> {
             current_fn.instance().subst_mir_and_normalize_erasing_regions(
                 self.tcx,
                 ty::ParamEnv::reveal_all(),
-                value,
+                ty::EarlyBinder::bind(value),
             )
         } else {
             // TODO: confirm with rust team there is no way to monomorphize
@@ -665,8 +665,8 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             _ => {
                 // This hash is documented to be the same no matter the crate context
-                let id_u64 = self.tcx.type_id_hash(t).as_u64();
-                format!("_{id_u64}").intern()
+                let id = self.tcx.type_id_hash(t).as_u128();
+                format!("_{id}").intern()
             }
         }
     }

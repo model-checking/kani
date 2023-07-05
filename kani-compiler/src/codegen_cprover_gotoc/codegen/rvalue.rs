@@ -163,6 +163,52 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
+    /// Generate code for a binary operation with an overflow check.
+    fn codegen_binop_with_overflow_check(
+        &mut self,
+        op: &BinOp,
+        left_op: &Operand<'tcx>,
+        right_op: &Operand<'tcx>,
+        loc: Location,
+    ) -> Expr {
+        debug!(?op, "codegen_binop_with_overflow_check");
+        let left = self.codegen_operand(left_op);
+        let right = self.codegen_operand(right_op);
+        let ret_type = left.typ().clone();
+        let (bin_op, op_name) = match op {
+            BinOp::AddUnchecked => (BinaryOperator::OverflowResultPlus, "unchecked_add"),
+            BinOp::SubUnchecked => (BinaryOperator::OverflowResultMinus, "unchecked_sub"),
+            BinOp::MulUnchecked => (BinaryOperator::OverflowResultMult, "unchecked_mul"),
+            _ => unreachable!("Expected Add/Sub/Mul but got {op:?}"),
+        };
+        // Create CBMC result type and add to the symbol table.
+        let res_type = arithmetic_overflow_result_type(left.typ().clone());
+        let tag = res_type.tag().unwrap();
+        let struct_tag =
+            self.ensure_struct(tag, tag, |_, _| res_type.components().unwrap().clone());
+        let res = left.overflow_op(bin_op, right);
+        // store the result in a temporary variable
+        let (var, decl) = self.decl_temp_variable(struct_tag, Some(res), loc);
+        // cast into result type
+        let check = self.codegen_assert(
+            var.clone()
+                .member(ARITH_OVERFLOW_OVERFLOWED_FIELD, &self.symbol_table)
+                .cast_to(Type::c_bool())
+                .not(),
+            PropertyClass::ArithmeticOverflow,
+            format!("attempt to compute `{op_name}` which would overflow").as_str(),
+            loc,
+        );
+        Expr::statement_expression(
+            vec![
+                decl,
+                check,
+                var.member(ARITH_OVERFLOW_RESULT_FIELD, &self.symbol_table).as_stmt(loc),
+            ],
+            ret_type,
+        )
+    }
+
     /// Generate code for a binary operation with an overflow and returns a tuple (res, overflow).
     pub fn codegen_binop_with_overflow(
         &mut self,
@@ -297,7 +343,28 @@ impl<'tcx> GotocCtx<'tcx> {
             BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Shl | BinOp::Shr => {
                 self.codegen_scalar_binop(op, e1, e2)
             }
-            BinOp::Div | BinOp::Rem | BinOp::BitXor | BinOp::BitAnd | BinOp::BitOr => {
+            // We currently rely on CBMC's UB checks for shift which isn't always accurate.
+            // We should implement the checks ourselves.
+            // See https://github.com/model-checking/kani/issues/2374
+            BinOp::ShlUnchecked => self.codegen_scalar_binop(&BinOp::Shl, e1, e2),
+            BinOp::ShrUnchecked => self.codegen_scalar_binop(&BinOp::Shr, e1, e2),
+            BinOp::AddUnchecked | BinOp::MulUnchecked | BinOp::SubUnchecked => {
+                self.codegen_binop_with_overflow_check(op, e1, e2, loc)
+            }
+            BinOp::Div | BinOp::Rem => {
+                let result = self.codegen_unchecked_scalar_binop(op, e1, e2);
+                if self.operand_ty(e1).is_integral() {
+                    let is_rem = matches!(op, BinOp::Rem);
+                    let check = self.check_div_overflow(e1, e2, is_rem, loc);
+                    Expr::statement_expression(
+                        vec![check, result.clone().as_stmt(loc)],
+                        result.typ().clone(),
+                    )
+                } else {
+                    result
+                }
+            }
+            BinOp::BitXor | BinOp::BitAnd | BinOp::BitOr => {
                 self.codegen_unchecked_scalar_binop(op, e1, e2)
             }
             BinOp::Eq | BinOp::Lt | BinOp::Le | BinOp::Ne | BinOp::Ge | BinOp::Gt => {
@@ -338,6 +405,53 @@ impl<'tcx> GotocCtx<'tcx> {
                     ce1.typ().clone(),
                 )
             }
+        }
+    }
+
+    /// Check that a division does not overflow.
+    /// For integer types, division by zero is UB, as is MIN / -1 for signed.
+    /// Note that the compiler already inserts these checks for regular division.
+    /// However, since <https://github.com/rust-lang/rust/pull/112168>, unchecked divisions are
+    /// lowered to `BinOp::Div`. Prefer adding duplicated checks for now.
+    fn check_div_overflow(
+        &mut self,
+        dividend: &Operand<'tcx>,
+        divisor: &Operand<'tcx>,
+        is_remainder: bool,
+        loc: Location,
+    ) -> Stmt {
+        let divisor_expr = self.codegen_operand(divisor);
+        let msg = if is_remainder {
+            "attempt to calculate the remainder with a divisor of zero"
+        } else {
+            "attempt to divide by zero"
+        };
+        let div_by_zero_check = self.codegen_assert_assume(
+            divisor_expr.clone().is_zero().not(),
+            PropertyClass::ArithmeticOverflow,
+            msg,
+            loc,
+        );
+        if self.operand_ty(dividend).is_signed() {
+            let dividend_expr = self.codegen_operand(dividend);
+            let overflow_msg = if is_remainder {
+                "attempt to calculate the remainder with overflow"
+            } else {
+                "attempt to divide with overflow"
+            };
+            let overflow_expr = dividend_expr
+                .clone()
+                .eq(dividend_expr.typ().min_int_expr(self.symbol_table.machine_model()))
+                .and(divisor_expr.clone().eq(Expr::int_constant(-1, divisor_expr.typ().clone())));
+            let overflow_check = self.codegen_assert_assume(
+                overflow_expr.not(),
+                PropertyClass::ArithmeticOverflow,
+                overflow_msg,
+                loc,
+            );
+            Stmt::block(vec![overflow_check, div_by_zero_check], loc)
+        } else {
+            div_by_zero_check
         }
     }
 

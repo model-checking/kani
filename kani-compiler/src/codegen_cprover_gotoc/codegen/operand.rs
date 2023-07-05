@@ -227,6 +227,19 @@ impl<'tcx> GotocCtx<'tcx> {
                         );
                     }
                 }
+                ty::Adt(def, _) if Some(def.did()) == self.tcx.lang_items().c_str() => {
+                    // TODO: Handle CString
+                    // <https://github.com/model-checking/kani/issues/2549>
+                    let loc = self.codegen_span_option(span.cloned());
+                    let typ = self.codegen_ty(lit_ty);
+                    let operation_name = "C string literal";
+                    return self.codegen_unimplemented_expr(
+                        &operation_name,
+                        typ,
+                        loc,
+                        "https://github.com/model-checking/kani/issues/2549",
+                    );
+                }
                 _ => {}
             }
         }

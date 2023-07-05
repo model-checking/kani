@@ -3,13 +3,12 @@
 
 [package]
 name = "kani-compiler"
-version = "0.30.0"
+version = "0.31.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 publish = false
 
 [dependencies]
-atty = "0.2.14"
 cbmc = { path = "../cprover_bindings", package = "cprover_bindings", optional = true }
 clap = { version = "4.1.3", features = ["cargo"] }
 home = "0.5"
@@ -25,7 +24,6 @@ strum_macros = "0.24.0"
 shell-words = "1.0.0"
 tracing = {version = "0.1", features = ["max_level_trace", "release_max_level_debug"]}
 tracing-subscriber = {version = "0.3.8", features = ["env-filter", "json", "fmt"]}
-tracing-tree = "0.2.2"
 
 # Future proofing: enable backend dependencies using feature.
 [features]

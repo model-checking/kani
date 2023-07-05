@@ -5,8 +5,7 @@ use super::typ::{self, pointee_type};
 use super::PropertyClass;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{
-    arithmetic_overflow_result_type, ArithmeticOverflowResult, BinaryOperator, BuiltinFn, Expr,
-    Location, Stmt, Type, ARITH_OVERFLOW_OVERFLOWED_FIELD, ARITH_OVERFLOW_RESULT_FIELD,
+    ArithmeticOverflowResult, BinaryOperator, BuiltinFn, Expr, Location, Stmt, Type,
 };
 use rustc_middle::mir::{BasicBlock, Operand, Place};
 use rustc_middle::ty::layout::{LayoutOf, ValidityRequirement};
@@ -120,9 +119,20 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    /// c.f. `rustc_codegen_llvm::intrinsic` `impl IntrinsicCallMethods<'tcx> for Builder<'a, 'll, 'tcx>`
-    /// `fn codegen_intrinsic_call`
-    /// c.f. <https://doc.rust-lang.org/std/intrinsics/index.html>
+    /// c.f. `rustc_codegen_llvm::intrinsic` `impl IntrinsicCallMethods<'tcx>
+    /// for Builder<'a, 'll, 'tcx>` `fn codegen_intrinsic_call` c.f.
+    /// <https://doc.rust-lang.org/std/intrinsics/index.html>
+    ///
+    /// ### A note on type checking
+    ///
+    /// The backend/codegen generally assumes that at this point arguments have
+    /// been type checked and that the given intrinsic is safe to call with the
+    /// provided arguments. However in rare cases the intrinsics type signature
+    /// is too permissive or has to be liberal because the types are enforced by
+    /// the specific code gen/backend. In such cases we handle the type checking
+    /// here. The type constraints enforced here must be at least as strict as
+    /// the assertions made in in the builder functions in
+    /// [`Expr`].
     fn codegen_intrinsic(
         &mut self,
         instance: Instance<'tcx>,
@@ -169,43 +179,6 @@ impl<'tcx> GotocCtx<'tcx> {
                     );
                 let e = BuiltinFn::$f.call(casted_fargs, loc);
                 self.codegen_expr_to_place(p, e)
-            }};
-        }
-
-        // Intrinsics which encode a simple arithmetic operation with overflow check
-        macro_rules! codegen_op_with_overflow_check {
-            ($f:ident) => {{
-                let a = fargs.remove(0);
-                let b = fargs.remove(0);
-                let op_type = a.typ().clone();
-                let res = a.$f(b);
-                // add to symbol table
-                let struct_tag = self.codegen_arithmetic_overflow_result_type(op_type.clone());
-                assert_eq!(*res.typ(), struct_tag);
-
-                // store the result in a temporary variable
-                let (var, decl) = self.decl_temp_variable(struct_tag, Some(res), loc);
-                let check = self.codegen_assert(
-                    var.clone()
-                        .member(ARITH_OVERFLOW_OVERFLOWED_FIELD, &self.symbol_table)
-                        .cast_to(Type::c_bool())
-                        .not(),
-                    PropertyClass::ArithmeticOverflow,
-                    format!("attempt to compute {} which would overflow", intrinsic).as_str(),
-                    loc,
-                );
-                self.codegen_expr_to_place(
-                    p,
-                    Expr::statement_expression(
-                        vec![
-                            decl,
-                            check,
-                            var.member(ARITH_OVERFLOW_RESULT_FIELD, &self.symbol_table)
-                                .as_stmt(loc),
-                        ],
-                        op_type,
-                    ),
-                )
             }};
         }
 
@@ -445,7 +418,7 @@ impl<'tcx> GotocCtx<'tcx> {
             "cosf64" => codegen_simple_intrinsic!(Cos),
             "ctlz" => codegen_count_intrinsic!(ctlz, true),
             "ctlz_nonzero" => codegen_count_intrinsic!(ctlz, false),
-            "ctpop" => self.codegen_expr_to_place(p, fargs.remove(0).popcount()),
+            "ctpop" => self.codegen_ctpop(*p, span, fargs.remove(0), farg_types[0]),
             "cttz" => codegen_count_intrinsic!(cttz, true),
             "cttz_nonzero" => codegen_count_intrinsic!(cttz, false),
             "discriminant_value" => {
@@ -606,19 +579,12 @@ impl<'tcx> GotocCtx<'tcx> {
             "unaligned_volatile_load" => {
                 unstable_codegen!(self.codegen_expr_to_place(p, fargs.remove(0).dereference()))
             }
-            "unchecked_add" => codegen_op_with_overflow_check!(add_overflow_result),
-            "unchecked_div" => codegen_op_with_div_overflow_check!(div),
-            "unchecked_mul" => codegen_op_with_overflow_check!(mul_overflow_result),
-            "unchecked_rem" => codegen_op_with_div_overflow_check!(rem),
-            "unchecked_shl" => codegen_intrinsic_binop!(shl),
-            "unchecked_shr" => {
-                if fargs[0].typ().is_signed(self.symbol_table.machine_model()) {
-                    codegen_intrinsic_binop!(ashr)
-                } else {
-                    codegen_intrinsic_binop!(lshr)
-                }
+            "unchecked_add" | "unchecked_mul" | "unchecked_shl" | "unchecked_shr"
+            | "unchecked_sub" => {
+                unreachable!("Expected intrinsic `{intrinsic}` to be lowered before codegen")
             }
-            "unchecked_sub" => codegen_op_with_overflow_check!(sub_overflow_result),
+            "unchecked_div" => codegen_op_with_div_overflow_check!(div),
+            "unchecked_rem" => codegen_op_with_div_overflow_check!(rem),
             "unlikely" => self.codegen_expr_to_place(p, fargs.remove(0)),
             "unreachable" => unreachable!(
                 "Expected `std::intrinsics::unreachable` to be handled by `TerminatorKind::Unreachable`"
@@ -648,6 +614,48 @@ impl<'tcx> GotocCtx<'tcx> {
                 "https://github.com/model-checking/kani/issues/new/choose",
             ),
         }
+    }
+
+    /// Perform type checking and code generation for the `ctpop` rust intrinsic.
+    fn codegen_ctpop(
+        &mut self,
+        target_place: Place<'tcx>,
+        span: Option<Span>,
+        arg: Expr,
+        arg_rust_ty: Ty<'tcx>,
+    ) -> Stmt {
+        if !arg.typ().is_integer() {
+            self.intrinsics_typecheck_fail(span, "ctpop", "integer type", arg_rust_ty)
+        } else {
+            self.codegen_expr_to_place(&target_place, arg.popcount())
+        }
+    }
+
+    /// Report that a delayed type check on an intrinsic failed.
+    ///
+    /// The idea is to blame one of the arguments on the failed type check and
+    /// report the type that was found for that argument in `actual`. The
+    /// `expected` type for that argument can be very permissive (e.g. "some
+    /// integer type") and as a result it allows a permissive string as
+    /// description.
+    ///
+    /// Calling this function will abort the compilation though that is not
+    /// obvious by the type.
+    fn intrinsics_typecheck_fail(
+        &self,
+        span: Option<Span>,
+        name: &str,
+        expected: &str,
+        actual: Ty,
+    ) -> ! {
+        self.tcx.sess.span_err(
+            span.into_iter().collect::<Vec<_>>(),
+            format!(
+                "Type check failed for intrinsic `{name}`: Expected {expected}, found {actual}"
+            ),
+        );
+        self.tcx.sess.abort_if_errors();
+        unreachable!("Rustc should have aborted already")
     }
 
     // Fast math intrinsics for floating point operations like `fadd_fast`
@@ -1754,20 +1762,5 @@ impl<'tcx> GotocCtx<'tcx> {
             loc,
         );
         (size_of_count_elems.result, assert_stmt)
-    }
-
-    /// Codegens the struct type that CBMC produces for its arithmetic with overflow operators:
-    /// ```
-    /// struct overflow_result_<operand_type> {
-    ///     operand_type result;     // the result of the operation
-    ///     bool         overflowed; // whether the operation overflowed
-    /// }
-    /// ```
-    /// and adds the type to the symbol table
-    fn codegen_arithmetic_overflow_result_type(&mut self, operand_type: Type) -> Type {
-        let res_type = arithmetic_overflow_result_type(operand_type);
-        self.ensure_struct(res_type.tag().unwrap(), res_type.tag().unwrap(), |_, _| {
-            res_type.components().unwrap().clone()
-        })
     }
 }
