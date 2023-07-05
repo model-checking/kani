@@ -138,6 +138,13 @@ def _get_args_dict():
                         "help":
                             "do not make a fresh copy of the benchmark "
                             "directories before running each variant",
+                    }, {
+                        "flags": ["--no-cleanup-run-dirs"],
+                        "action": "store_false",
+                        "dest": "cleanup_directory",
+                        "help":
+                            "do not delete fresh copies of benchmark "
+                            "directories after running each variant",
                     }],
                 },
                 "collate": {

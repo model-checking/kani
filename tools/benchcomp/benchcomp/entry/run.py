@@ -39,6 +39,7 @@ class _SingleInvocation:
     command_line: str
     directory: pathlib.Path
 
+    cleanup_directory: bool
     env: dict = dataclasses.field(default_factory=dict)
     timeout: int = None
     memout: int = None
@@ -85,6 +86,9 @@ class _SingleInvocation:
                 encoding="utf-8") as handle:
             yaml.dump(suite, handle, default_flow_style=False)
 
+        if self.cleanup_directory and self.copy_benchmarks_dir:
+            shutil.rmtree(self.working_copy)
+
 
 @dataclasses.dataclass
 class _Run:
@@ -95,6 +99,7 @@ class _Run:
     out_dir: str
     out_symlink: str
     copy_benchmarks_dir: bool
+    cleanup_directory: bool
     result: dict = None
 
     def __call__(self):
@@ -110,6 +115,7 @@ class _Run:
                     suite_id, variant_id,
                     parse, suite_yaml_out_dir=out_path,
                     copy_benchmarks_dir=self.copy_benchmarks_dir,
+                    cleanup_directory=self.cleanup_directory,
                     **config)
                 invoke()
 
@@ -137,6 +143,6 @@ def get_default_out_prefix():
 def main(args):
     run = _Run(
         args.config, args.out_prefix, args.out_dir, args.out_symlink,
-        args.copy_benchmarks_dir)
+        args.copy_benchmarks_dir, args.cleanup_directory)
     run()
     return run
