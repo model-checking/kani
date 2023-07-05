@@ -15,7 +15,6 @@ publish = false
 kani_metadata = { path = "../kani_metadata" }
 cargo_metadata = "0.15.0"
 anyhow = "1"
-atty = "0.2.14"
 console = "0.15.1"
 once_cell = "1.13.0"
 serde = { version = "1", features = ["derive"] }
@@ -32,7 +31,6 @@ strum = {version = "0.24.0"}
 strum_macros = {version = "0.24.0"}
 tracing = {version = "0.1", features = ["max_level_trace", "release_max_level_debug"]}
 tracing-subscriber = {version = "0.3.8", features = ["env-filter", "json", "fmt"]}
-tracing-tree = "0.2.2"
 rand = "0.8"
 which = "4.4.0"
 

@@ -9,11 +9,11 @@ use rustc_errors::{
     emitter::Emitter, emitter::HumanReadableErrorType, fallback_fluent_bundle, json::JsonEmitter,
     ColorConfig, Diagnostic, TerminalUrl,
 };
+use std::io::IsTerminal;
 use std::panic;
 use std::str::FromStr;
 use std::sync::LazyLock;
 use tracing_subscriber::{filter::Directive, layer::SubscriberExt, EnvFilter, Registry};
-use tracing_tree::HierarchicalLayer;
 
 /// Environment variable used to control this session log tracing.
 const LOG_ENV_VAR: &str = "KANI_LOG";
@@ -107,16 +107,13 @@ fn json_logs(filter: EnvFilter) {
 
 /// Configure global logger to use a hierarchical view.
 fn hier_logs(args: &ArgMatches, filter: EnvFilter) {
-    let use_colors = atty::is(atty::Stream::Stdout) || args.get_flag(parser::COLOR_OUTPUT);
+    let use_colors = std::io::stdout().is_terminal() || args.get_flag(parser::COLOR_OUTPUT);
     let subscriber = Registry::default().with(filter);
     let subscriber = subscriber.with(
-        HierarchicalLayer::default()
+        tracing_subscriber::fmt::layer()
             .with_writer(std::io::stderr)
-            .with_indent_lines(true)
             .with_ansi(use_colors)
-            .with_targets(true)
-            .with_verbose_exit(true)
-            .with_indent_amount(4),
+            .with_target(true),
     );
     tracing::subscriber::set_global_default(subscriber).unwrap();
 }
