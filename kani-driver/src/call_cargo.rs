@@ -14,6 +14,7 @@ use std::ffi::{OsStr, OsString};
 use std::fmt::{self, Display};
 use std::fs::{self, File};
 use std::io::BufReader;
+use std::io::IsTerminal;
 use std::path::PathBuf;
 use std::process::Command;
 use tracing::{debug, trace};
@@ -180,7 +181,7 @@ impl KaniSession {
     /// Run cargo and collect any error found.
     /// We also collect the metadata file generated during compilation if any.
     fn run_cargo(&self, cargo_cmd: Command, target: &Target) -> Result<Option<Artifact>> {
-        let support_color = atty::is(atty::Stream::Stdout);
+        let support_color = std::io::stdout().is_terminal();
         let mut artifact = None;
         if let Some(mut cargo_process) = self.run_piped(cargo_cmd)? {
             let reader = BufReader::new(cargo_process.stdout.take().unwrap());

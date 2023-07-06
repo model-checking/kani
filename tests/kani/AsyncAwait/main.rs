@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
 // compile-flags: --edition 2018
+// kani-flags: -Z async-lib
 
 // Tests that the language constructs `async { ... }` blocks, `async fn`, and `.await` work correctly.
 

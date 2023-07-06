@@ -26,8 +26,7 @@ pub use concrete_playback::concrete_playback_run;
 pub fn concrete_playback_run<F: Fn()>(_: Vec<Vec<u8>>, _: F) {
     unreachable!("Concrete playback does not work during verification")
 }
-
-pub use futures::block_on;
+pub use futures::{block_on, block_on_with_spawn, spawn, yield_now, RoundRobin};
 
 /// Creates an assumption that will be valid after this statement run. Note that the assumption
 /// will only be applied for paths that follow the assumption. If the assumption doesn't hold, the
