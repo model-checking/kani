@@ -116,11 +116,6 @@ fn cargo_test(install: &InstallType, args: CargoPlaybackArgs) -> Result<()> {
     cargo_args.append(&mut args.cargo.to_cargo_args());
     cargo_args.append(&mut cargo_config_args());
 
-    // Propagate `--cfg=kani` to build scripts.
-    cargo_args.push("-Zhost-config".into());
-    cargo_args.push("-Ztarget-applies-to-host".into());
-    cargo_args.push("--config=host.rustflags=[\"--cfg=kani\"]".into());
-
     // These have to be the last arguments to cargo test.
     if !args.playback.test_args.is_empty() {
         cargo_args.push("--".into());
