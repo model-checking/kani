@@ -17,7 +17,7 @@ use std::{
 /// As a consequence, this function completely ignores the waker infrastructure and just polls the given future in a busy loop.
 ///
 /// Note that [`spawn`] is not supported with this function. Use [`block_on_with_spawn`] if you need it.
-#[crate::unstable(feature = "async-lib", issue = 2559, reason = "")]
+#[crate::unstable(feature = "async-lib", issue = 2559, reason = "experimental async support")]
 pub fn block_on<T>(mut fut: impl Future<Output = T>) -> T {
     let waker = unsafe { Waker::from_raw(NOOP_RAW_WAKER) };
     let cx = &mut Context::from_waker(&waker);
@@ -179,7 +179,7 @@ impl Future for JoinHandle {
 /// Spawns a task on the current global executor (which is set by [`block_on_with_spawn`])
 ///
 /// This function can only be called inside a future passed to [`block_on_with_spawn`].
-#[crate::unstable(feature = "async-lib", issue = 2559, reason = "")]
+#[crate::unstable(feature = "async-lib", issue = 2559, reason = "experimental async support")]
 pub fn spawn<F: Future<Output = ()> + Sync + 'static>(fut: F) -> JoinHandle {
     unsafe {
         GLOBAL_EXECUTOR
@@ -192,7 +192,7 @@ pub fn spawn<F: Future<Output = ()> + Sync + 'static>(fut: F) -> JoinHandle {
 /// Polls the given future and the tasks it may spawn until all of them complete
 ///
 /// Contrary to [`block_on`], this allows `spawn`ing other futures
-#[crate::unstable(feature = "async-lib", issue = 2559, reason = "")]
+#[crate::unstable(feature = "async-lib", issue = 2559, reason = "experimental async support")]
 pub fn block_on_with_spawn<F: Future<Output = ()> + Sync + 'static>(
     fut: F,
     scheduling_plan: impl SchedulingStrategy,
@@ -208,7 +208,7 @@ pub fn block_on_with_spawn<F: Future<Output = ()> + Sync + 'static>(
 /// Suspends execution of the current future, to allow the scheduler to poll another future
 ///
 /// Specifically, it returns a future that isn't ready until the second time it is polled.
-#[crate::unstable(feature = "async-lib", issue = 2559, reason = "")]
+#[crate::unstable(feature = "async-lib", issue = 2559, reason = "experimental async support")]
 pub fn yield_now() -> impl Future<Output = ()> {
     struct YieldNow {
         yielded: bool,
