@@ -12,6 +12,7 @@ multilingual = false
 site-url = "/kani/"
 git-repository-url = "https://github.com/model-checking/kani"
 edit-url-template = "https://github.com/model-checking/kani/edit/main/docs/{path}"
+additional-css = ["src/schema.css"]
 
 [output.html.playground]
 runnable = false

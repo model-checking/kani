@@ -63,6 +63,7 @@ echo "Building user documentation..."
 # Generate benchcomp documentation from source code
 mkdir -p gen_src
 "${SCRIPT_DIR}/gen_visualization_schemas.py" gen_src
+"${SCRIPT_DIR}/gen_format_schemas.py" gen_src
 
 # Build the book into ./book/
 mkdir -p book
@@ -73,6 +74,7 @@ touch book/.nojekyll
 echo "Building RFC book..."
 cd $RFC_DIR
 ${MDBOOK} build -d $KANI_DIR/docs/book/rfc
+
 
 # Testing of the code in the documentation is done via the usual
 # ./scripts/kani-regression.sh script. A note on running just the

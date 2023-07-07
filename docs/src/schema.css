@@ -1,0 +1,28 @@
+/* Copyright Kani Contributors
+ * SPDX-License-Identifier: Apache-2.0 OR MIT
+ */
+
+.schema_key {
+  font-weight: bold !important;
+  color: #d00 !important;
+}
+.schema_type {
+  color: #0a0 !important;
+  text-decoration: underline !important;
+}
+.schema_desc {
+  opacity: 35% !important;
+  margin-left: 1em !important;
+  font-style: italic !important;
+}
+.schema_comb {
+  color: #06d !important;
+}
+ul.schema li {
+  list-style: none !important;
+}
+ul.schema {
+  padding-left: 2em !important;
+  background-color: #00000005 !important;
+  border-left: solid 2px #00000005 !important;
+}
