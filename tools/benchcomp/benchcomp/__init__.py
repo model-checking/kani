@@ -16,56 +16,34 @@ import textwrap
 import yaml
 
 
-class ConfigFile(collections.UserDict):
-    _schema: str = textwrap.dedent("""\
-variants:
-  type: dict
-  keysrules:
-    type: string
-  valuesrules:
-    schema:
-      config:
-        type: dict
-        keysrules:
-          type: string
-        valuesrules:
-          allow_unknown: true
-          schema:
-            command_line:
-              type: string
-            directory:
-              type: string
-            env:
-              type: dict
-              keysrules:
-                type: string
-              valuesrules:
-                type: string
-run:
-  type: dict
-  keysrules:
-    type: string
-  schema:
-    suites:
-      type: dict
-      keysrules:
-        type: string
-      valuesrules:
-        schema:
-          variants:
-            type: list
-          parser:
-            type: dict
-            keysrules:
-              type: string
-            valuesrules:
-              anyof:
-                - schema:
-                    type: {}
-filter: {}
-visualize: {}
-""")
+class _SchemaValidator:
+    """Validate data structures with a schema
 
+    Objects of this class are callable, with a single `data` argument. The data
+    is validated and returned if the `schema` packages is installed, or returned
+    if not.
+    """
+
+
+    def __init__(self, schema_name):
+        """
+        schema_name: the name of a class in benchcomp.schemas
+        """
+
+        try:
+            import benchcomp.schemas
+            klass = getattr(benchcomp.schemas, schema_name)
+            self.validate = klass()().validate
+        except ImportError:
+            self.validate = (lambda data: data)
+
+
+    def __call__(self, data):
+        return self.validate(data)
+
+
+
+class ConfigFile(collections.UserDict):
     def __init__(self, path):
         super().__init__()
 
@@ -76,27 +54,11 @@ visualize: {}
             raise argparse.ArgumentTypeError(
                 f"{path}: file not found") from exc
 
-        schema = yaml.safe_load(self._schema)
+        validate = _SchemaValidator("BenchcompYaml")
         try:
-            import cerberus
-            validate = cerberus.Validator(schema)
-            if not validate(data):
-                for error in validate._errors:
-                    doc_path = "/".join(error.document_path)
-                    msg = (
-                        f"config file '{path}': key "
-                        f"'{doc_path}': expected "
-                        f"{error.constraint}, got '{error.value}'")
-                    if error.rule:
-                        msg += f" (rule {error.rule})"
-                    msg += f" while traversing {error.schema_path}"
-                    logging.error(msg)
-                logging.error(validate.document_error_tree["variants"])
-                raise argparse.ArgumentTypeError(
-                    "failed to validate configuration file")
-        except ImportError:
-            pass
-        self.data = data
+            self.data = validate(data)
+        except BaseException as exc:
+            sys.exit(exc.code)
 
 
 @dataclasses.dataclass
