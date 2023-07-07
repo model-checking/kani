@@ -193,7 +193,7 @@ impl CodegenBackend for GotocCodegenBackend {
     }
 
     fn provide_extern(&self, providers: &mut ExternProviders) {
-        provide::provide_extern(providers);
+        provide::provide_extern(providers, &self.queries.lock().unwrap());
     }
 
     fn print_version(&self) {
