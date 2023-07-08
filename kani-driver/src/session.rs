@@ -291,6 +291,14 @@ pub fn base_folder() -> Result<PathBuf> {
         .to_path_buf())
 }
 
+/// Return the shorthand for the toolchain used by this Kani version.
+///
+/// This shorthand can be used to select the exact toolchain version that matches the one used to
+/// build the current Kani version.
+pub fn toolchain_shorthand() -> String {
+    format!("+{}", env!("RUSTUP_TOOLCHAIN"))
+}
+
 impl InstallType {
     pub fn new() -> Result<Self> {
         // Case 1: We've checked out the development repo and we're built under `target/kani`
