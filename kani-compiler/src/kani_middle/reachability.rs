@@ -173,36 +173,51 @@ impl<'tcx> MonoItemsCollector<'tcx> {
         self.reachable_items();
     }
 
+    pub fn add_to_queue<I: IntoIterator<Item = MonoItem<'tcx>>>(&mut self, i: I) {
+        self.queue.extend(i.into_iter().filter(|it| !self.collected.contains_key(it)))
+    }
+
+    /// Check if there are contracts attached to this visitable item and insert
+    /// them in the map if so. Returns whether the item was not yet present in
+    /// the map before (e.g. whether the reachability analysis should continue).
+    fn handle_contract(&mut self, to_visit: MonoItem<'tcx>) -> bool {
+        let (is_hit, visit_obligations) = if let Entry::Vacant(entry) =
+            self.collected.entry(to_visit)
+        {
+            let opt_contract = entry.key().def_id().as_local().and_then(|local_def_id| {
+                let substs = match entry.key() {
+                    MonoItem::Fn(inst) => inst.substs,
+                    _ => rustc_middle::ty::List::empty(),
+                };
+                let contract = attributes::extract_contract(self.tcx, local_def_id).map(|def_id| {
+                    Instance::resolve(self.tcx, ParamEnv::reveal_all(), *def_id, substs)
+                        .unwrap()
+                        .expect("No specific instance found")
+                });
+                contract.enforceable().then_some(contract)
+            });
+            let obligations = opt_contract.as_ref().map_or_else(Vec::new, |contract| {
+                [contract.requires(), contract.ensures()]
+                    .into_iter()
+                    .flat_map(IntoIterator::into_iter)
+                    .copied()
+                    .map(MonoItem::Fn)
+                    .collect()
+            });
+            entry.insert(opt_contract);
+            (true, obligations)
+        } else {
+            (false, vec![])
+        };
+        self.add_to_queue(visit_obligations);
+        is_hit
+    }
+
     /// Traverses the call graph starting from the given root. For every function, we visit all
     /// instruction looking for the items that should be included in the compilation.
     fn reachable_items(&mut self) {
         while let Some(to_visit) = self.queue.pop() {
-            if let Entry::Vacant(e) = self.collected.entry(to_visit) {
-                let opt_contract = to_visit.def_id().as_local().and_then(|local_def_id| {
-                    let substs = match to_visit {
-                        MonoItem::Fn(inst) => inst.substs,
-                        _ => rustc_middle::ty::List::empty(),
-                    };
-                    let contract =
-                        attributes::extract_contract(self.tcx, local_def_id).map(|def_id| {
-                            Instance::resolve(self.tcx, ParamEnv::reveal_all(), *def_id, substs)
-                                .unwrap()
-                                .expect("No specific instance found")
-                        });
-                    contract.enforceable().then_some(contract)
-                });
-                let visit_obligations_from_contract = if let Some(contract) = opt_contract.as_ref()
-                {
-                    [contract.requires(), contract.ensures()]
-                        .into_iter()
-                        .flat_map(IntoIterator::into_iter)
-                        .copied()
-                        .map(MonoItem::Fn)
-                        .collect()
-                } else {
-                    vec![]
-                };
-                e.insert(opt_contract);
+            if self.handle_contract(to_visit) {
                 let next_items = match to_visit {
                     MonoItem::Fn(instance) => self.visit_fn(instance),
                     MonoItem::Static(def_id) => self.visit_static(def_id),
@@ -214,12 +229,7 @@ impl<'tcx> MonoItemsCollector<'tcx> {
                 #[cfg(debug_assertions)]
                 self.call_graph.add_edges(to_visit, &next_items);
 
-                self.queue.extend(
-                    next_items
-                        .into_iter()
-                        .chain(visit_obligations_from_contract)
-                        .filter(|item| !self.collected.contains_key(item)),
-                );
+                self.add_to_queue(next_items);
             }
         }
     }
