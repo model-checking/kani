@@ -75,7 +75,6 @@ echo "Building RFC book..."
 cd $RFC_DIR
 ${MDBOOK} build -d $KANI_DIR/docs/book/rfc
 
-
 # Testing of the code in the documentation is done via the usual
 # ./scripts/kani-regression.sh script. A note on running just the
 # doc tests is in README.md. We don't run them here because
