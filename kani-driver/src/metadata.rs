@@ -184,7 +184,7 @@ pub fn mock_proof_harness(
         original_end_line: 0,
         attributes: HarnessAttributes { unwind_value, proof: true, ..Default::default() },
         goto_file: model_file,
-        contract: None,
+        contract_to_enforce: None,
     }
 }
 

@@ -44,7 +44,7 @@ pub fn gen_proof_metadata(
         attributes,
         // TODO: This no longer needs to be an Option.
         goto_file: Some(model_file),
-        contract,
+        contract_to_enforce: contract,
     }
 }
 
@@ -73,6 +73,6 @@ pub fn gen_test_metadata<'tcx>(
         attributes: HarnessAttributes::default(),
         // TODO: This no longer needs to be an Option.
         goto_file: Some(model_file),
-        contract: None,
+        contract_to_enforce: None,
     }
 }

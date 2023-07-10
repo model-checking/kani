@@ -148,9 +148,11 @@ pub fn extract_harness_attributes(tcx: TyCtxt, def_id: DefId) -> HarnessAttribut
                 // Internal attribute which shouldn't exist here.
                 unreachable!()
             }
-            KaniAttributeKind::Ensures | KaniAttributeKind::Requires => {
-                todo!("Contract attributes are not supported on proofs (yet)")
-            }
+            KaniAttributeKind::Ensures | KaniAttributeKind::Requires => tcx.sess.fatal(format!(
+                "Contracts on harnesses are not supported (found {} on {})",
+                kind,
+                tcx.def_path_debug_str(def_id)
+            )),
         };
         harness
     })
@@ -188,8 +190,6 @@ pub fn extract_contract(tcx: TyCtxt, local_def_id: LocalDefId) -> super::contrac
         .def_id
         .to_def_id()
     };
-
-    //println!("Searching in {:?}", hir_map.module_items(enclosing_mod).map(|it| hir_map.item(it).ident.name).collect::<Vec<_>>());
 
     let parse_and_resolve = |attr: &Vec<&Attribute>| {
         attr.iter()

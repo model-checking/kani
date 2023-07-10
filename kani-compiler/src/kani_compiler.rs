@@ -432,7 +432,7 @@ mod tests {
             original_end_line: 20,
             goto_file: None,
             attributes: HarnessAttributes::default(),
-            contract: None,
+            contract_to_enforce: None,
         }
     }
 
