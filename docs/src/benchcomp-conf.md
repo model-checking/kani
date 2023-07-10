@@ -21,12 +21,6 @@ run:
       variants:
         - suite_1_old
         - suite_1_new
-    suite_2:
-      parser:
-        module: kani_perf
-      variants:
-        - suite_2_env
-        - suite_2_noenv
 variants:
   suite_1_old:
     config:
@@ -37,17 +31,6 @@ variants:
     config:
       command: ./scripts/run_benchmarks.sh
       directory: suites/suite_1_new
-      env: {}
-  suite_2_env:
-    config:
-      command: make benchmarks
-      directory: suites/suite_2
-      env:
-        RUN_FAST: "true"
-  suite_2_noenv:
-    config:
-      command: make benchmarks
-      directory: suites/suite_2
       env: {}
 visualize:
 - type: run_command
