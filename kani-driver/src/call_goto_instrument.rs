@@ -37,7 +37,7 @@ impl KaniSession {
             self.goto_sanity_check(output)?;
         }
 
-        for function in &harness.contracts {
+        if let Some(function) = &harness.contract {
             self.enforce_contract(output, &function)?;
         }
 

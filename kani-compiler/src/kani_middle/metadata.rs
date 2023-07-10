@@ -17,7 +17,7 @@ pub fn gen_proof_metadata(
     tcx: TyCtxt,
     def_id: DefId,
     base_name: &Path,
-    contracts: Vec<String>,
+    contract: Option<String>,
 ) -> HarnessMetadata {
     let attributes = extract_harness_attributes(tcx, def_id);
     let pretty_name = tcx.def_path_str(def_id);
@@ -44,7 +44,7 @@ pub fn gen_proof_metadata(
         attributes,
         // TODO: This no longer needs to be an Option.
         goto_file: Some(model_file),
-        contracts,
+        contract,
     }
 }
 
@@ -73,6 +73,6 @@ pub fn gen_test_metadata<'tcx>(
         attributes: HarnessAttributes::default(),
         // TODO: This no longer needs to be an Option.
         goto_file: Some(model_file),
-        contracts: vec![],
+        contract: None,
     }
 }

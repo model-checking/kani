@@ -233,8 +233,13 @@ impl KaniCompiler {
                 .map(|harness| {
                     let def_id = harness.def_id();
                     let def_path = tcx.def_path_hash(def_id);
-                    let contracts = contracts_for_harness(tcx, harness);
-                    let metadata = gen_proof_metadata(tcx, def_id, &base_filename, contracts);
+                    let mut contracts = contracts_for_harness(tcx, harness);
+                    let contract = contracts.pop();
+                    assert!(
+                        contracts.is_empty(),
+                        "Only one function contract may be enforced at a time."
+                    );
+                    let metadata = gen_proof_metadata(tcx, def_id, &base_filename, contract);
                     let stub_map = harness_stub_map(tcx, def_id, &metadata);
                     (def_path, HarnessInfo { metadata, stub_map })
                 })
@@ -427,7 +432,7 @@ mod tests {
             original_end_line: 20,
             goto_file: None,
             attributes: HarnessAttributes::default(),
-            contracts: vec![],
+            contract: None,
         }
     }
 

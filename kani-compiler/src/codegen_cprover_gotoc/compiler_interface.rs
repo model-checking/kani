@@ -281,7 +281,7 @@ impl CodegenBackend for GotocCodegenBackend {
                 let model_path = base_filename.with_extension(ArtifactType::SymTabGoto);
                 let (gcx, items_with_contracts) =
                     self.codegen_items(tcx, &harnesses, &model_path, &results.machine_model);
-                let mut functions_with_contracts = vec![];
+                let mut contract_function = None;
                 let items = items_with_contracts
                     .into_iter()
                     .map(|(i, contract)| {
@@ -290,7 +290,10 @@ impl CodegenBackend for GotocCodegenBackend {
                                 MonoItem::Fn(f) => f,
                                 _ => unreachable!(),
                             };
-                            functions_with_contracts.push(gcx.symbol_name(instance))
+                            assert!(
+                                contract_function.replace(gcx.symbol_name(instance)).is_none(),
+                                "Only one function contract can be enforced at a time"
+                            );
                         }
                         i
                     })
@@ -302,7 +305,7 @@ impl CodegenBackend for GotocCodegenBackend {
                         if let MonoItem::Fn(instance) = test_fn { instance } else { continue };
                     let mut metadata =
                         gen_test_metadata(tcx, *test_desc, *instance, &base_filename);
-                    metadata.contracts = functions_with_contracts.clone();
+                    metadata.contract = contract_function.clone();
                     let test_model_path = &metadata.goto_file.as_ref().unwrap();
                     std::fs::copy(&model_path, &test_model_path).expect(&format!(
                         "Failed to copy {} to {}",
