@@ -14,6 +14,7 @@ use crate::args::StandaloneSubcommand;
 use crate::concrete_playback::playback::{playback_cargo, playback_standalone};
 use crate::project::Project;
 use crate::session::KaniSession;
+use crate::version::print_kani_version;
 use clap::Parser;
 use tracing::debug;
 
@@ -35,12 +36,15 @@ mod metadata;
 mod project;
 mod session;
 mod util;
+mod version;
 
 /// The main function for the `kani-driver`.
 /// The driver can be invoked via `cargo kani` and `kani` commands, which determines what kind of
 /// project should be verified.
 fn main() -> ExitCode {
-    let result = match determine_invocation_type(Vec::from_iter(std::env::args_os())) {
+    let invocation_type = determine_invocation_type(Vec::from_iter(std::env::args_os()));
+
+    let result = match invocation_type {
         InvocationType::CargoKani(args) => cargokani_main(args),
         InvocationType::Standalone => standalone_main(),
     };
@@ -61,6 +65,10 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     let input_args = join_args(input_args)?;
     let args = args::CargoKaniArgs::parse_from(input_args);
     check_is_valid(&args);
+
+    let kani_version = print_kani_version();
+    println!("{kani_version}");
+
     let session = session::KaniSession::new(args.verify_opts)?;
 
     match args.command {
@@ -85,6 +93,9 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
 fn standalone_main() -> Result<()> {
     let args = args::StandaloneArgs::parse();
     check_is_valid(&args);
+
+    let kani_version = print_kani_version();
+    println!("{kani_version}");
 
     if let Some(StandaloneSubcommand::Playback(args)) = args.command {
         return playback_standalone(*args);
