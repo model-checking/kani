@@ -537,9 +537,6 @@ impl goto_program::Symbol {
             for ensures in &contract.ensures {
                 typ = typ.with_named_sub(IrepId::CSpecEnsures, ensures.to_irep(mm));
             }
-            for assigns in &contract.assigns {
-                typ = typ.with_named_sub(IrepId::CSpecAssigns, assigns.to_irep(mm));
-            }
         }
         super::Symbol {
             typ,

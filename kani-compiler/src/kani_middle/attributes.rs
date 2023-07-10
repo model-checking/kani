@@ -150,7 +150,7 @@ pub fn extract_harness_attributes(tcx: TyCtxt, def_id: DefId) -> HarnessAttribut
             }
             KaniAttributeKind::Ensures | KaniAttributeKind::Requires => tcx.sess.fatal(format!(
                 "Contracts on harnesses are not supported (found {} on {})",
-                kind,
+                kind.as_ref(),
                 tcx.def_path_debug_str(def_id)
             )),
         };
@@ -214,7 +214,7 @@ pub fn extract_contract(tcx: TyCtxt, local_def_id: LocalDefId) -> super::contrac
         attributes.get(&KaniAttributeKind::Requires).map_or_else(Vec::new, parse_and_resolve);
     let ensures =
         attributes.get(&KaniAttributeKind::Ensures).map_or_else(Vec::new, parse_and_resolve);
-    super::contracts::FnContract::new(requires, ensures, vec![])
+    super::contracts::FnContract::new(requires, ensures)
 }
 
 /// Check that any unstable API has been enabled. Otherwise, emit an error.

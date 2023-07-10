@@ -10,7 +10,6 @@ use rustc_hir::def_id::DefId;
 pub struct GFnContract<C> {
     requires: Vec<C>,
     ensures: Vec<C>,
-    assigns: Vec<C>,
 }
 
 pub type FnContract = GFnContract<DefId>;
@@ -26,8 +25,8 @@ impl<C> GFnContract<C> {
         &self.ensures
     }
 
-    pub fn new(requires: Vec<C>, ensures: Vec<C>, assigns: Vec<C>) -> Self {
-        Self { requires, ensures, assigns }
+    pub fn new(requires: Vec<C>, ensures: Vec<C>) -> Self {
+        Self { requires, ensures }
     }
 
     /// Perform a transformation on each implementation item. Usually these are
@@ -36,7 +35,6 @@ impl<C> GFnContract<C> {
         GFnContract {
             requires: self.requires.iter().map(&mut f).collect(),
             ensures: self.ensures.iter().map(&mut f).collect(),
-            assigns: self.assigns.iter().map(&mut f).collect(),
         }
     }
 
