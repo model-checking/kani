@@ -4,10 +4,10 @@
 
 .schema_key {
   font-weight: bold !important;
-  color: #d00 !important;
+  color: #dc322f !important;
 }
 .schema_type {
-  color: #0a0 !important;
+  color: #6c71c4 !important;
   text-decoration: underline !important;
 }
 .schema_desc {
@@ -16,7 +16,7 @@
   font-style: italic !important;
 }
 .schema_comb {
-  color: #06d !important;
+  color: #268bd2 !important;
 }
 ul.schema li {
   list-style: none !important;
