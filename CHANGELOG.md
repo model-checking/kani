@@ -4,6 +4,20 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
+## [0.32.0]
+
+## What's Changed
+
+* Add kani::spawn and an executor to the Kani library by @fzaiser in https://github.com/model-checking/kani/pull/1659
+* Add "kani" configuration key to enable conditional compilation in build scripts by @celinval in https://github.com/model-checking/kani/pull/2297
+* Adds posix_memalign to the list of supported builtins by @feliperodri in https://github.com/model-checking/kani/pull/2601
+* Upgrade rust toolchain to nightly-2023-06-20 by @celinval in https://github.com/model-checking/kani/pull/2551
+* Update rust toolchain to 2023-06-22 by @celinval in https://github.com/model-checking/kani/pull/2588
+* Automatic toolchain upgrade to nightly-2023-06-24 by @github-actions in https://github.com/model-checking/kani/pull/2600
+* Bump CBMC version to 5.87.0 by @adpaco-aws in https://github.com/model-checking/kani/pull/2598
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.31.0...kani-0.32.0
+
 ## [0.31.0]
 
 ## What's Changed
