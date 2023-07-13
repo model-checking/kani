@@ -23,8 +23,8 @@ impl<'tcx> GotocCtx<'tcx> {
             0 => {
                 let term = bbd.terminator();
                 let tcode = self.codegen_terminator(term);
-                // let new_tcode = self.add_cover_term(tcode, term);
-                self.current_fn_mut().push_onto_block(tcode.with_label(label));
+                let new_tcode = self.add_cover_term(tcode, term);
+                self.current_fn_mut().push_onto_block(new_tcode.with_label(label));
             }
             _ => {
                 let stmt = &bbd.statements[0];
@@ -43,7 +43,6 @@ impl<'tcx> GotocCtx<'tcx> {
         }
         self.current_fn_mut().reset_current_bb();
     }
-    #[allow(dead_code)]
     fn add_cover_term(&mut self, stmt: Stmt, term: &Terminator<'tcx>) -> Stmt {
             let span = &term.source_info.span;
             let loc = self.codegen_span(&span);
