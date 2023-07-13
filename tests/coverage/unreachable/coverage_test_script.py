@@ -228,10 +228,14 @@ def run_commands(file_path):
             if len(statuses) != 0:
                 if "failed" in statuses:
                     found_match = True
+                    print("This line has UNREACHABLE with and without --cover: match")
                     print(file_path, line_number, statuses)
+                    print("\n")
                     files_with_matches.append(file_path)
                 else:
+                    print("This line has UNREACHABLE without --cover and REACHABLE with --cover : discrepancy")
                     print(file_path, line_number, statuses)
+                    print("\n")
                     files_with_discrepencies.append(file_path)
             else:
                 files_with_discrepencies.append(file_path)
