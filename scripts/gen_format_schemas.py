@@ -1,6 +1,16 @@
 #!/usr/bin/env python3
 # Copyright Kani Contributors
 # SPDX-License-Identifier: Apache-2.0 OR MIT
+#
+# Generate documentation for every public class in the `benchcomp.schemas`
+# module. This script generates one Markdown file for each class; these Markdown
+# files can then be included in the Kani book.
+#
+# The script first dumps the schema into JSON Draft-07 [1] format, and then used
+# the json_schema_for_humans package to render that into Markdown.
+#
+# [1] https://json-schema.org/draft-07/json-schema-release-notes.html
+
 
 import inspect
 import json
@@ -44,8 +54,6 @@ def main():
                 f"https://github.com/model-checking/kani/benchcomp/{name}")
 
             with open(tmpdir / f"{name}.json", "w") as handle:
-                print(json.dumps(schema_docs, indent=2), file=handle)
-            with open(f"/tmp/{name}.json", "w") as handle:
                 print(json.dumps(schema_docs, indent=2), file=handle)
 
             jsfh.generate.generate_from_filename(

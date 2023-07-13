@@ -20,7 +20,7 @@ class _SchemaValidator:
     """Validate data structures with a schema
 
     Objects of this class are callable, with a single `data` argument. The data
-    is validated and returned if the `schema` packages is installed, or returned
+    is validated and returned if the `schema` package is installed, or returned
     if not.
     """
 

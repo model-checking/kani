@@ -46,9 +46,8 @@ class _Schema:
 
     def __call__(self):
         s = self.get_raw_schema()
-        name, description = s["name"], s["description"]
         ret = self._replace_types(s["schema"])
-        return schema.Schema(ret, name=name, description=description)
+        return schema.Schema(ret, name=s["name"], description=s["description]")
 
 
 
