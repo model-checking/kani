@@ -275,6 +275,7 @@ mod sysroot {
         let attribute = format_ident!("{name}");
         let kani_attributes = quote!(
             #[allow(dead_code)]
+            #[allow(unused_variables)]
             #[kanitool::#attribute = stringify!(#gen_fn_name)]
         );
 
