@@ -182,10 +182,12 @@ impl Future for JoinHandle {
 #[crate::unstable(feature = "async-lib", issue = 2559, reason = "experimental async support")]
 pub fn spawn<F: Future<Output = ()> + Sync + 'static>(fut: F) -> JoinHandle {
     unsafe {
-        GLOBAL_EXECUTOR
-            .as_mut()
-            .expect("`spawn` should only be called within `block_on_with_spawn`")
-            .spawn(fut)
+        if let Some(executor) = GLOBAL_EXECUTOR.as_mut() {
+            executor.spawn(fut)
+        } else {
+            // An explicit panic instead of `.expect(...)` has better location information in Kani's output
+            panic!("`spawn` should only be called within `block_on_with_spawn`")
+        }
     }
 }
 
