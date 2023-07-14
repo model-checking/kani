@@ -145,7 +145,7 @@ impl<'tcx> GotocCtx<'tcx> {
             // unless it is run with '--cover cover' (see
             // https://github.com/diffblue/cbmc/issues/6613). So for now use
             // `assert(false)`.
-            self.codegen_assert(Expr::c_false(), PropertyClass::Coverage, "cover_experiment", loc)
+            self.codegen_assert(Expr::bool_false(), PropertyClass::Coverage, "cover_experiment", loc)
         }
 
     // The above represent the basic operations we can perform w.r.t. assert/assume/cover

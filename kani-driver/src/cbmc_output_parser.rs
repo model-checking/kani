@@ -96,6 +96,7 @@ pub struct PropertyId {
 
 impl Property {
     const COVER_PROPERTY_CLASS: &str = "cover";
+    const COVERAGE_PROPERTY_CLASS: &str = "coverage";
 
     pub fn property_class(&self) -> String {
         self.property_id.class.clone()
@@ -103,7 +104,7 @@ impl Property {
 
     /// Returns true if this is a cover property
     pub fn is_cover_property(&self) -> bool {
-        self.property_id.class == Self::COVER_PROPERTY_CLASS
+        self.property_id.class == Self::COVERAGE_PROPERTY_CLASS || self.property_id.class == Self::COVER_PROPERTY_CLASS
     }
 
     pub fn property_name(&self) -> String {
