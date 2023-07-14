@@ -152,6 +152,7 @@ pub struct Config {
 
     /// Extra arguments to be passed to Kani in this regression.
     /// Note that there is no validation done whether these flags conflict with existing flags.
+    /// For example, one could add `--kani-flag=--only-codegen` to only compile all tests.
     pub extra_args: Vec<String>,
 }
 
