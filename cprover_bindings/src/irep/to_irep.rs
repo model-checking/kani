@@ -519,11 +519,11 @@ impl ToIrep for Lambda {
             sub: vec![Irep::just_sub(types), self.body.typ().to_irep(mm)],
             named_sub: Default::default(),
         };
-        Irep::just_sub(vec![Irep {
+        Irep {
             id: IrepId::Lambda,
             sub: vec![Irep::tuple(ops_ireps), self.body.to_irep(mm)],
             named_sub: linear_map!((IrepId::Type, typ)),
-        }])
+        }
     }
 }
 
@@ -531,12 +531,14 @@ impl goto_program::Symbol {
     pub fn to_irep(&self, mm: &MachineModel) -> super::Symbol {
         let mut typ = self.typ.to_irep(mm);
         if let Some(contract) = &self.contract {
-            for requires in &contract.requires {
-                typ = typ.with_named_sub(IrepId::CSpecRequires, requires.to_irep(mm));
-            }
-            for ensures in &contract.ensures {
-                typ = typ.with_named_sub(IrepId::CSpecEnsures, ensures.to_irep(mm));
-            }
+            typ = typ.with_named_sub(
+                IrepId::CSpecRequires,
+                Irep::just_sub(contract.requires.iter().map(|c| c.to_irep(mm)).collect()),
+            );
+            typ = typ.with_named_sub(
+                IrepId::CSpecEnsures,
+                Irep::just_sub(contract.ensures.iter().map(|c| c.to_irep(mm)).collect()),
+            );
         }
         super::Symbol {
             typ,
