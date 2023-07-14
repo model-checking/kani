@@ -1,1 +1,1 @@
-Only option `schedule` is allowed for #[kani::proof] on `async` functions.
+`some` is not a valid option for `#[kani::proof]`.

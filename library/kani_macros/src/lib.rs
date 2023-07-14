@@ -27,6 +27,7 @@ use regular as attr_impl;
 /// If you want to spawn tasks in an async harness, you have to pass a schedule to the `#[kani::proof]` attribute,
 /// e.g. `#[kani::proof(schedule = kani::RoundRobin::default())]`.
 /// This will wrap the async function in a call to [`block_on_with_spawn`] (see its documentation for more information).
+#[proc_macro_error]
 #[proc_macro_attribute]
 pub fn proof(attr: TokenStream, item: TokenStream) -> TokenStream {
     attr_impl::proof(attr, item)
@@ -97,6 +98,8 @@ pub fn derive_arbitrary(item: TokenStream) -> TokenStream {
 /// This code should only be activated when pre-building Kani's sysroot.
 #[cfg(kani_sysroot)]
 mod sysroot {
+    use proc_macro_error::{abort, abort_call_site};
+
     use super::*;
 
     use {
@@ -141,10 +144,12 @@ mod sysroot {
                 Ok(ProofOptions { schedule: None })
             } else {
                 let ident = input.parse::<syn::Ident>()?;
-                assert_eq!(
-                    ident, "schedule",
-                    "Only option `schedule` is allowed for #[kani::proof] on `async` functions."
-                );
+                if ident != "schedule" {
+                    abort_call_site!("`{}` is not a valid option for `#[kani::proof]`.", ident;
+                        help = "did you mean `schedule`?";
+                        note = "for now, `schedule` is the only option for `#[kani::proof]`.";
+                    );
+                }
                 let _ = input.parse::<syn::Token![=]>()?;
                 let schedule = Some(input.parse::<syn::Expr>()?);
                 Ok(ProofOptions { schedule })
@@ -166,10 +171,12 @@ mod sysroot {
         );
 
         if sig.asyncness.is_none() {
-            assert!(
-                proof_options.schedule.is_none(),
-                "#[kani::proof] only takes arguments for async functions for now"
-            );
+            if proof_options.schedule.is_some() {
+                abort_call_site!(
+                    "`#[kani::proof(schedule = ...)]` can only be used with `async` functions.";
+                    help = "did you mean to make this function `async`?";
+                );
+            }
             // Adds `#[kanitool::proof]` and other attributes
             quote!(
                 #kani_attributes
@@ -197,10 +204,13 @@ mod sysroot {
             //   // where `schedule` was provided as an argument to `#[kani::proof]`.
             // }
             // ```
-            assert!(
-                sig.inputs.is_empty(),
-                "#[kani::proof] cannot be applied to async functions that take inputs for now"
-            );
+            if !sig.inputs.is_empty() {
+                abort!(
+                    sig.inputs,
+                    "`#[kani::proof]` cannot be applied to async functions that take arguments for now";
+                    help = "try removing the arguments";
+                );
+            }
             let mut modified_sig = sig.clone();
             modified_sig.asyncness = None;
             let fn_name = &sig.ident;
