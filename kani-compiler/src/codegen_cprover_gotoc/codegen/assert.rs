@@ -45,6 +45,10 @@ pub enum PropertyClass {
     ///
     /// SPECIAL BEHAVIOR: "Errors" for this type of assertion just mean "reachable" not failure.
     Cover,
+    /// See [GotocCtx::codegen_coverage] below. Always an `assert(false)` that's not an error.
+    ///
+    /// SPECIAL BEHAVIOR: "Errors" for this type of assertion just mean "reachable" not failure.
+    Coverage,
     /// Ordinary (Rust) assertions and panics.
     ///
     /// SPECIAL BEHAVIOR: These assertion failures should be observable during normal execution of Rust code.
@@ -133,6 +137,16 @@ impl<'tcx> GotocCtx<'tcx> {
         // assert(!cond).
         self.codegen_assert(cond.not(), PropertyClass::Cover, msg, loc)
     }
+
+        /// Generate code for coverage reports
+        pub fn codegen_coverage(&self, span: Span) -> Stmt {
+            let loc = self.codegen_caller_span(&Some(span));
+            // Should use Stmt::cover, but currently this doesn't work with CBMC
+            // unless it is run with '--cover cover' (see
+            // https://github.com/diffblue/cbmc/issues/6613). So for now use
+            // `assert(false)`.
+            self.codegen_assert(Expr::c_false(), PropertyClass::Coverage, "cover_experiment", loc)
+        }
 
     // The above represent the basic operations we can perform w.r.t. assert/assume/cover
     // Below are various helper functions for constructing the above more easily.
