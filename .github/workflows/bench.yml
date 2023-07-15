@@ -1,0 +1,89 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+name: Kani Performance Benchmarks
+on:
+  push:
+    tags:
+      - kani-*
+    branches:
+      - 'main'
+  pull_request:
+    types:
+      - labeled
+
+jobs:
+  perf-benchcomp:
+    if: ${{ github.event_name == 'push' 
+      || (github.event_name == 'pull_request' 
+         && github.event.action == 'labeled'
+         && github.event.label.name == 'Z-BenchCI')
+      }}
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Save push event HEAD and HEAD~ to environment variables
+        if: ${{ github.event_name == 'push' }}
+        run: |
+          echo "NEW_REF=${{ github.event.after}}" | tee -a "$GITHUB_ENV"
+          echo "OLD_REF=${{ github.event.before }}" | tee -a "$GITHUB_ENV"
+
+      - name: Save pull request HEAD and base to environment variables
+        if: ${{ github.event_name == 'pull_request' }}
+        run: |
+          echo "OLD_REF=${{ github.event.pull_request.base.sha }}" | tee -a "$GITHUB_ENV"
+          echo "NEW_REF=${{ github.event.pull_request.head.sha }}" | tee -a "$GITHUB_ENV"
+
+      - name: Check out Kani (old variant)
+        uses: actions/checkout@v3
+        with:
+          path: ./old
+          ref: ${{ env.OLD_REF }}
+          fetch-depth: 2
+
+      - name: Check out Kani (new variant)
+        uses: actions/checkout@v3
+        with:
+          path: ./new
+          ref: ${{ env.NEW_REF }}
+          fetch-depth: 1
+
+      - name: Set up Kani Dependencies (old variant)
+        uses: ./old/.github/actions/setup
+        with:
+          os: ubuntu-20.04
+          kani_dir: old
+
+      - name: Set up Kani Dependencies (new variant)
+        uses: ./new/.github/actions/setup
+        with:
+          os: ubuntu-20.04
+          kani_dir: new
+
+      - name: Build Kani (new variant)
+        run: pushd new && cargo build-dev
+
+      - name: Build Kani (old variant)
+        run: pushd old && cargo build-dev
+
+      - name: Copy benchmarks from new to old
+        run: rm -rf ./old/tests/perf ; cp -r ./new/tests/perf ./old/tests/
+
+      - name: Run benchcomp
+        run: |
+          new/tools/benchcomp/bin/benchcomp \
+            --config new/tools/benchcomp/configs/perf-regression.yaml \
+            run
+          new/tools/benchcomp/bin/benchcomp \
+            --config new/tools/benchcomp/configs/perf-regression.yaml \
+            collate
+
+      - name: Perf Regression Results Table
+        run: |
+          new/tools/benchcomp/bin/benchcomp \
+            --config new/tools/benchcomp/configs/perf-regression.yaml \
+            visualize --only dump_markdown_results_table >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run other visualizations
+        run: |
+          new/tools/benchcomp/bin/benchcomp \
+            --config new/tools/benchcomp/configs/perf-regression.yaml \
+            visualize --except dump_markdown_results_table

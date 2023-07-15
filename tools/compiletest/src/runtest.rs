@@ -270,7 +270,8 @@ impl<'test> TestCx<'test> {
             .arg("kani")
             .arg("--target-dir")
             .arg(self.output_base_dir().join("target"))
-            .current_dir(&parent_dir);
+            .current_dir(&parent_dir)
+            .args(&self.config.extra_args);
         if test {
             cargo.arg("--tests");
         }

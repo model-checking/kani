@@ -37,7 +37,7 @@ impl TestProps {
     pub fn from_file(testfile: &Path, config: &Config) -> Self {
         let mut props = TestProps::new();
         props.load_from(testfile, config);
-
+        props.kani_flags.extend(config.extra_args.iter().cloned());
         props
     }
 
