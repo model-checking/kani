@@ -3,6 +3,6 @@ Check 1: div.assertion.1
 	 - Status: SUCCESS
 	 - Description: "attempt to divide by zero"
 
-Check 2: div.division-by-zero.1
+Check 3: div.division-by-zero.1
 	 - Status: SUCCESS
 	 - Description: "division by zero"
