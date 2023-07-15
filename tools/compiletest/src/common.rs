@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use std::time::Duration;
+use test::test::TestTimeOptions;
 use test::ColorConfig;
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
@@ -145,6 +146,14 @@ pub struct Config {
     /// updating multiple tests. Users should still manually edit the files after to only keep
     /// relevant expectations.
     pub fix_expected: bool,
+
+    /// Whether we should measure and limit the time of a test.
+    pub time_opts: Option<TestTimeOptions>,
+
+    /// Extra arguments to be passed to Kani in this regression.
+    /// Note that there is no validation done whether these flags conflict with existing flags.
+    /// For example, one could add `--kani-flag=--only-codegen` to only compile all tests.
+    pub extra_args: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
