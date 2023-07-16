@@ -1,0 +1,4 @@
+Check 1: rem.assertion.1
+         - Status: UNREACHABLE
+         - Description: "attempt to calculate the remainder with a divisor of zero"
+         - Location: tests/coverage/unreachable/rem-zero/unreachable/test.rs:9:17 in function rem
