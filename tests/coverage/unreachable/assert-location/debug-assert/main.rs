@@ -6,7 +6,6 @@
 // line numbers https://github.com/model-checking/kani/issues/918
 // Also disable reachability checks because they add annotations to each
 // assert's description which would be visible with the old output format
-// kani-flags: --output-format old --no-assertion-reach-checks
 #[kani::proof]
 fn main() {
     for i in 0..4 {

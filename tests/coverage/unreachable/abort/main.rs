@@ -9,10 +9,12 @@ use std::process;
 fn main() {
     for i in 0..4 {
         if i == 1 {
+            kani::cover!();
             // This comes first and it should be reachable.
             process::abort();
         }
         if i == 2 {
+            kani::cover!();
             // This should never happen.
             process::exit(1);
         }

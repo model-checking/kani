@@ -7,6 +7,7 @@
 // as FAILURE
 
 fn get(s: &[i16], index: usize) -> i16 {
+    kani::cover!();
     s[index]
 }
 

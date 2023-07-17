@@ -5,6 +5,7 @@
 fn main() {
     let x = 5;
     if kani::any() {
+        kani::cover!();
         assert!(x != 5);
     }
 }

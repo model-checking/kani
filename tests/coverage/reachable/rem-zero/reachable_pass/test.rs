@@ -6,7 +6,12 @@
 // The check in this test is reachable, so should be reported as SUCCESS
 
 fn rem(x: u16, y: u16) -> u16 {
-    if y != 0 { x % y } else { 0 }
+    if y != 0 {
+        kani::cover!();
+        x % y
+    } else {
+        0
+    }
 }
 
 #[kani::proof]

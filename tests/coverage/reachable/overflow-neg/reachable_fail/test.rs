@@ -7,6 +7,7 @@
 // should be reported as FAILURE
 
 fn negate(x: i32) -> i32 {
+    kani::cover!();
     -x
 }
 

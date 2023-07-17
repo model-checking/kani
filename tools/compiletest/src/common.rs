@@ -19,6 +19,7 @@ pub enum Mode {
     KaniFixme,
     CargoKani,
     CargoKaniTest, // `cargo kani --tests`. This is temporary and should be removed when s2n-quic moves --tests to `Cargo.toml`.
+    CoverageBased,
     Exec,
     Expected,
     Stub,
@@ -32,6 +33,7 @@ impl FromStr for Mode {
             "kani-fixme" => Ok(KaniFixme),
             "cargo-kani" => Ok(CargoKani),
             "cargo-kani-test" => Ok(CargoKaniTest),
+            "coverage-based" => Ok(CoverageBased),
             "exec" => Ok(Exec),
             "expected" => Ok(Expected),
             "stub-tests" => Ok(Stub),
@@ -47,6 +49,7 @@ impl fmt::Display for Mode {
             KaniFixme => "kani-fixme",
             CargoKani => "cargo-kani",
             CargoKaniTest => "cargo-kani-test",
+            CoverageBased => "coverage-based",
             Exec => "exec",
             Expected => "expected",
             Stub => "stub-tests",

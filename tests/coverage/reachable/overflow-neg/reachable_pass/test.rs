@@ -7,7 +7,12 @@
 // reported as SUCCESS
 
 fn negate(x: i32) -> i32 {
-    if x != std::i32::MIN { -x } else { std::i32::MAX }
+    if x != std::i32::MIN {
+        kani::cover!();
+        -x
+    } else {
+        std::i32::MAX
+    }
 }
 
 #[kani::proof]

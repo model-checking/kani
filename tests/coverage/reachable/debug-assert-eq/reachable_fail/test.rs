@@ -8,6 +8,7 @@
 
 fn check(x: i32) {
     if x > 5 {
+        kani::cover!();
         debug_assert_eq!(x, 10);
     }
 }
