@@ -18,41 +18,52 @@ impl<'tcx> GotocCtx<'tcx> {
         let label: String = self.current_fn().find_label(&bb);
         // the first statement should be labelled. if there is no statements, then the
         // terminator should be labelled.
+        let check_coverage = self.queries.check_coverage;
         match bbd.statements.len() {
             0 => {
                 let term = bbd.terminator();
-                let span = term.source_info.span;
-                // TODO: Push cover statement based on some TBD condition
-                let cover = self.codegen_coverage(span);
-                self.current_fn_mut().push_onto_block(cover.with_label(label));
-                let tcode = self.codegen_terminator(term);
-                self.current_fn_mut().push_onto_block(tcode);
+                if check_coverage {
+                    let span = term.source_info.span;
+                    let cover = self.codegen_coverage(span);
+                    self.current_fn_mut().push_onto_block(cover.with_label(label));
+                    let tcode = self.codegen_terminator(term);
+                    self.current_fn_mut().push_onto_block(tcode);
+                } else {
+                    let tcode = self.codegen_terminator(term);
+                    self.current_fn_mut().push_onto_block(tcode.with_label(label));
+                }
             }
             _ => {
                 let stmt = &bbd.statements[0];
-                // TODO: Push cover statement based on some TBD condition
-                let span = stmt.source_info.span;
-                let cover = self.codegen_coverage(span);
-                self.current_fn_mut().push_onto_block(cover.with_label(label));
-                let scode = self.codegen_statement(stmt);
-                self.current_fn_mut().push_onto_block(scode);
+                if check_coverage {
+                    let span = stmt.source_info.span;
+                    let cover = self.codegen_coverage(span);
+                    self.current_fn_mut().push_onto_block(cover.with_label(label));
+                    let scode = self.codegen_statement(stmt);
+                    self.current_fn_mut().push_onto_block(scode);
+                } else {
+                    let scode = self.codegen_statement(stmt);
+                    self.current_fn_mut().push_onto_block(scode.with_label(label));
+                }
 
                 for s in &bbd.statements[1..] {
-                    let span = s.source_info.span;
-                    // TODO: Push cover statement based on some TBD condition
-                    let cover = self.codegen_coverage(span);
-                    self.current_fn_mut().push_onto_block(cover);
+                    if check_coverage {
+                        let span = s.source_info.span;
+                        // TODO: Push cover statement based on some TBD condition
+                        let cover = self.codegen_coverage(span);
+                        self.current_fn_mut().push_onto_block(cover);
+                    }
                     let stmt = self.codegen_statement(s);
                     self.current_fn_mut().push_onto_block(stmt);
                 }
-                // TODO: Push cover statement based on some TBD condition
                 // TODO: test with division by zero or overflow that false
                 // assumption will be in the middle of the basic block
                 let term = bbd.terminator();
-                let span = term.source_info.span;
-                // TODO: Push cover statement based on some TBD condition
-                let cover = self.codegen_coverage(span);
-                self.current_fn_mut().push_onto_block(cover);
+                if check_coverage {
+                    let span = term.source_info.span;
+                    let cover = self.codegen_coverage(span);
+                    self.current_fn_mut().push_onto_block(cover);
+                }
                 let tcode = self.codegen_terminator(term);
                 self.current_fn_mut().push_onto_block(tcode);
             }

@@ -300,6 +300,13 @@ pub struct VerificationArgs {
     )]
     pub enable_stubbing: bool,
 
+    #[arg(
+        long,
+        hide_short_help = true,
+        requires("enable_unstable")
+    )]
+    pub coverage: bool,
+
     /// Arguments to pass down to Cargo
     #[command(flatten)]
     pub cargo: CargoCommonArgs,
