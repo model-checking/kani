@@ -39,6 +39,7 @@ class Check:
     def __str__(self):
         return f"Check ID: {self.check_number}\nStatus: {self.status}\nDescription: {self.description}\nLocation: {self.file}:{self.line}"
 
+
 check_regex = re.compile(r"Check (\d+):")
 status_regex = re.compile(r"Status: (\w+)")
 description_regex = re.compile(r'Description: "([^"]+)"')
