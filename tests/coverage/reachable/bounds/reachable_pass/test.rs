@@ -6,12 +6,7 @@
 // The check in this test is reachable, so should be reported as SUCCESS
 
 fn get(s: &[i16], index: usize) -> i16 {
-    if index < s.len() {
-        kani::cover!();
-        s[index]
-    } else {
-        -1
-    }
+    if index < s.len() { s[index] } else { -1 }
 }
 
 #[kani::proof]

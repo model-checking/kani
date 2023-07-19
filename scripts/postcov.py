@@ -21,7 +21,7 @@ def postprocess(checks):
             covered_status = "COVERED" if all(satisfiable_statuses) else "UNCOVERED"
             line_results.append((line, covered_status))
         coverage_results[file] = sorted(line_results)
-    
+
     return coverage_results
 
 

@@ -7,7 +7,6 @@
 // reported as UNREACHABLE
 
 fn negate(x: i32) -> i32 {
-    kani::cover!();
     if x != std::i32::MIN { -x } else { std::i32::MAX }
 }
 

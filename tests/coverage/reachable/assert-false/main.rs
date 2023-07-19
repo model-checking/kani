@@ -19,12 +19,10 @@ fn main() {
 
     if any_bool() {
         let s = "Fail with custom runtime message";
-        kani::cover!();
         assert!(false, "{}", s);
     }
 
     if any_bool() {
-        kani::cover!();
         assert!(false, "Fail with custom static message");
     }
 }

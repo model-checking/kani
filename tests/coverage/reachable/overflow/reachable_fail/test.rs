@@ -7,12 +7,7 @@
 // should be reported as FAILURE
 
 fn cond_reduce(thresh: u32, x: u32) -> u32 {
-    if x > thresh {
-        kani::cover!();
-        x - 50
-    } else {
-        x
-    }
+    if x > thresh { x - 50 } else { x }
 }
 
 #[kani::proof]

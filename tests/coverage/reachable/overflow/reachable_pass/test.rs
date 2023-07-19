@@ -7,12 +7,7 @@
 // reported as SUCCESS
 
 fn reduce(x: u32) -> u32 {
-    if x > 1000 {
-        kani::cover!();
-        x - 1000
-    } else {
-        x
-    }
+    if x > 1000 { x - 1000 } else { x }
 }
 
 #[kani::proof]

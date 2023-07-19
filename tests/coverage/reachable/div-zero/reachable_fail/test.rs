@@ -7,7 +7,6 @@
 // as FAILURE
 
 fn div(x: u16, y: u16) -> u16 {
-    kani::cover!();
     x / y
 }
 
