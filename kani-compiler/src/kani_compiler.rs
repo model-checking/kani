@@ -348,6 +348,7 @@ impl Callbacks for KaniCompiler {
             let queries = &mut (*self.queries.lock().unwrap());
             queries.emit_vtable_restrictions = matches.get_flag(parser::RESTRICT_FN_PTRS);
             queries.check_assertion_reachability = matches.get_flag(parser::ASSERTION_REACH_CHECKS);
+            queries.check_coverage = matches.get_flag(parser::COVERAGE_CHECKS);
             queries.output_pretty_json = matches.get_flag(parser::PRETTY_OUTPUT_FILES);
             queries.ignore_global_asm = matches.get_flag(parser::IGNORE_GLOBAL_ASM);
             queries.write_json_symtab =
@@ -363,6 +364,7 @@ impl Callbacks for KaniCompiler {
             {
                 queries.stubbing_enabled = true;
             }
+
             debug!(?queries, "config end");
         }
     }
