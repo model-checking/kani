@@ -11,4 +11,3 @@ tests/coverage/unreachable/wrong_coverage_1/main.rs, 5, COVERED
 tests/coverage/unreachable/wrong_coverage_1/main.rs, 6, COVERED
 tests/coverage/unreachable/wrong_coverage_1/main.rs, 7, UNCOVERED
 tests/coverage/unreachable/wrong_coverage_1/main.rs, 8, UNCOVERED
-

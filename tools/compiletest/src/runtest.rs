@@ -327,7 +327,16 @@ impl<'test> TestCx<'test> {
             kani.arg("--enable-unstable").arg("--cbmc-args").args(&self.props.cbmc_flags);
         }
 
-        self.compose_and_run(kani)
+        let mut proc_result = self.compose_and_run(kani);
+
+        proc_result.stdout = self
+            .get_post_process_results(
+                "scripts/postcov.py",
+                self.make_out_name("out").to_str().unwrap(),
+            )
+            .unwrap();
+
+        proc_result
     }
 
     /// Runs an executable file and:
@@ -404,11 +413,8 @@ impl<'test> TestCx<'test> {
     /// the expected output in `expected` file.
     fn run_expected_coverage_test(&self) {
         let proc_res = self.run_kani_with_coverage();
-        let x = self
-            .run_python_script("scripts/postcov.py", self.make_out_name("out").to_str().unwrap())
-            .unwrap();
         let expected_path = self.testpaths.file.parent().unwrap().join("expected");
-        self.verify_output_coverage(&x, &expected_path, &proc_res);
+        self.verify_output(&proc_res, &expected_path);
     }
 
     /// Runs Kani with stub implementations of various data structures.
@@ -426,7 +432,7 @@ impl<'test> TestCx<'test> {
     }
 
     // Run the postcov script
-    fn run_python_script(
+    fn get_post_process_results(
         &self,
         path_to_python_script: &str,
         rust_file_path: &str,
@@ -443,45 +449,6 @@ impl<'test> TestCx<'test> {
         } else {
             // If there was an error, return the stderr as an error message.
             None
-        }
-    }
-
-    /// Print an error if the verification output does not contain the expected
-    /// lines.
-    fn verify_output_coverage(
-        &self,
-        post_process_input: &str,
-        expected_path: &Path,
-        proc_res: &ProcRes,
-    ) {
-        // Include the output from stderr here for cases where there are exceptions
-        let expected = fs::read_to_string(expected_path).unwrap();
-        let output = post_process_input.to_string();
-        let diff = TestCx::missing_elements(
-            &expected.split('\n').collect::<Vec<_>>(),
-            output.split('\n').collect(),
-        );
-        match (diff, self.config.fix_expected) {
-            (None, _) => { /* Test passed. Do nothing*/ }
-            (Some(_), true) => {
-                // Fix output but still fail the test so users know which ones were updated
-                fs::write(expected_path, output)
-                    .expect(&format!("Failed to update file {}", expected_path.display()));
-                self.fatal_proc_rec(
-                    &format!("updated `{}` file, please review", expected_path.display()),
-                    proc_res,
-                )
-            }
-            (Some(lines), false) => {
-                // Throw an error
-                self.fatal_proc_rec(
-                    &format!(
-                        "test failed: expected output to contain the line(s):\n{}",
-                        lines.join("\n")
-                    ),
-                    proc_res,
-                );
-            }
         }
     }
 
@@ -517,16 +484,6 @@ impl<'test> TestCx<'test> {
                 );
             }
         }
-    }
-
-    /// Looks for each line or set of lines in `str`. Returns `None` if all
-    /// lines are in `str`.  Otherwise, it returns the first line not found in
-    /// `str`.
-    fn missing_elements<'a>(expected: &[&'a str], output: Vec<&'a str>) -> Option<Vec<&'a str>> {
-        let missing: Vec<&str> =
-            expected.iter().filter(|&elem| !output.contains(elem)).cloned().collect();
-
-        if missing.is_empty() { None } else { Some(missing) }
     }
 
     /// Looks for each line or set of lines in `str`. Returns `None` if all
