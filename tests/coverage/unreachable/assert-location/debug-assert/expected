@@ -1,1 +1,27 @@
-13, UNREACHABLE
+../.rustup/toolchains/nightly-2023-06-24-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs, 1411, COVERED
+
+../.rustup/toolchains/nightly-2023-06-24-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/fmt/mod.rs, 298, UNCOVERED
+../.rustup/toolchains/nightly-2023-06-24-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/fmt/mod.rs, 299, UNCOVERED
+../.rustup/toolchains/nightly-2023-06-24-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/fmt/mod.rs, 301, UNCOVERED
+../.rustup/toolchains/nightly-2023-06-24-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/fmt/mod.rs, 302, UNCOVERED
+
+../.rustup/toolchains/nightly-2023-06-24-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/range.rs, 391, COVERED
+../.rustup/toolchains/nightly-2023-06-24-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/range.rs, 621, UNCOVERED
+../.rustup/toolchains/nightly-2023-06-24-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/range.rs, 622, COVERED
+../.rustup/toolchains/nightly-2023-06-24-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/range.rs, 624, COVERED
+../.rustup/toolchains/nightly-2023-06-24-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/range.rs, 625, COVERED
+../.rustup/toolchains/nightly-2023-06-24-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/range.rs, 627, UNCOVERED
+../.rustup/toolchains/nightly-2023-06-24-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/range.rs, 629, COVERED
+../.rustup/toolchains/nightly-2023-06-24-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/range.rs, 712, COVERED
+../.rustup/toolchains/nightly-2023-06-24-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/range.rs, 713, COVERED
+
+../.rustup/toolchains/nightly-2023-06-24-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/collect.rs, 282, COVERED
+../.rustup/toolchains/nightly-2023-06-24-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/collect.rs, 283, COVERED
+
+../.rustup/toolchains/nightly-2023-06-24-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/num/mod.rs, 336, COVERED
+
+tests/coverage/unreachable/assert-location/debug-assert/main.rs, 11, UNCOVERED
+tests/coverage/unreachable/assert-location/debug-assert/main.rs, 12, UNCOVERED
+tests/coverage/unreachable/assert-location/debug-assert/main.rs, 13, UNCOVERED
+tests/coverage/unreachable/assert-location/debug-assert/main.rs, 15, UNCOVERED
+

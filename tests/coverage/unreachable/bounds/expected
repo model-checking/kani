@@ -1,1 +1,5 @@
-9, UNREACHABLE
+tests/coverage/unreachable/bounds/test.rs, 10, COVERED
+tests/coverage/unreachable/bounds/test.rs, 15, COVERED
+tests/coverage/unreachable/bounds/test.rs, 16, COVERED
+tests/coverage/unreachable/bounds/test.rs, 9, UNCOVERED
+

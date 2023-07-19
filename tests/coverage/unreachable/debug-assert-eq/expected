@@ -1,1 +1,5 @@
-10, UNREACHABLE
+tests/coverage/unreachable/debug-assert-eq/test.rs, 10, UNCOVERED
+tests/coverage/unreachable/debug-assert-eq/test.rs, 16, COVERED
+tests/coverage/unreachable/debug-assert-eq/test.rs, 17, COVERED
+tests/coverage/unreachable/debug-assert-eq/test.rs, 9, COVERED
+

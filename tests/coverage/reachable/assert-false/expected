@@ -1,2 +1,27 @@
-22, SATISFIED
-27, SATISFIED
+../.rustup/toolchains/nightly-2023-06-24-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/fmt/mod.rs, 298, UNCOVERED
+../.rustup/toolchains/nightly-2023-06-24-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/fmt/mod.rs, 299, UNCOVERED
+../.rustup/toolchains/nightly-2023-06-24-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/fmt/mod.rs, 301, UNCOVERED
+../.rustup/toolchains/nightly-2023-06-24-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/fmt/mod.rs, 302, UNCOVERED
+
+library/kani/src/arbitrary.rs, 55, COVERED
+library/kani/src/arbitrary.rs, 79, COVERED
+library/kani/src/arbitrary.rs, 80, COVERED
+library/kani/src/arbitrary.rs, 81, COVERED
+library/kani/src/arbitrary.rs, 82, COVERED
+
+library/kani/src/lib.rs, 133, COVERED
+library/kani/src/lib.rs, 134, COVERED
+library/kani/src/lib.rs, 176, COVERED
+library/kani/src/lib.rs, 177, COVERED
+
+tests/coverage/reachable/assert-false/main.rs, 11, COVERED
+tests/coverage/reachable/assert-false/main.rs, 12, COVERED
+tests/coverage/reachable/assert-false/main.rs, 16, COVERED
+tests/coverage/reachable/assert-false/main.rs, 17, COVERED
+tests/coverage/reachable/assert-false/main.rs, 20, COVERED
+tests/coverage/reachable/assert-false/main.rs, 21, COVERED
+tests/coverage/reachable/assert-false/main.rs, 22, UNCOVERED
+tests/coverage/reachable/assert-false/main.rs, 25, COVERED
+tests/coverage/reachable/assert-false/main.rs, 26, UNCOVERED
+tests/coverage/reachable/assert-false/main.rs, 28, COVERED
+

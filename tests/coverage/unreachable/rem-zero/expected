@@ -1,1 +1,5 @@
-9, UNREACHABLE
+tests/coverage/unreachable/rem-zero/test.rs, 10, COVERED
+tests/coverage/unreachable/rem-zero/test.rs, 14, COVERED
+tests/coverage/unreachable/rem-zero/test.rs, 15, COVERED
+tests/coverage/unreachable/rem-zero/test.rs, 9, UNCOVERED
+

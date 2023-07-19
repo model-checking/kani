@@ -1,1 +1,5 @@
-10, SATISFIED
+tests/coverage/reachable/div-zero/reachable_fail/test.rs, 10, UNCOVERED
+tests/coverage/reachable/div-zero/reachable_fail/test.rs, 11, UNCOVERED
+tests/coverage/reachable/div-zero/reachable_fail/test.rs, 15, COVERED
+tests/coverage/reachable/div-zero/reachable_fail/test.rs, 16, UNCOVERED
+

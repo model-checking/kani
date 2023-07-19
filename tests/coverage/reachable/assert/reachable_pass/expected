@@ -1,1 +1,4 @@
-8, SATISFIED
+tests/coverage/reachable/assert/reachable_pass/test.rs, 6, COVERED
+tests/coverage/reachable/assert/reachable_pass/test.rs, 7, COVERED
+tests/coverage/reachable/assert/reachable_pass/test.rs, 8, COVERED
+

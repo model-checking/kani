@@ -1,1 +1,14 @@
-5, UNREACHABLE
+library/kani/src/arbitrary.rs, 56, COVERED
+
+library/kani/src/lib.rs, 133, COVERED
+library/kani/src/lib.rs, 176, COVERED
+library/kani/src/lib.rs, 177, COVERED
+
+tests/coverage/unreachable/compare/main.rs, 10, COVERED
+tests/coverage/unreachable/compare/main.rs, 12, COVERED
+tests/coverage/unreachable/compare/main.rs, 2, UNCOVERED
+tests/coverage/unreachable/compare/main.rs, 3, COVERED
+tests/coverage/unreachable/compare/main.rs, 7, COVERED
+tests/coverage/unreachable/compare/main.rs, 8, COVERED
+tests/coverage/unreachable/compare/main.rs, 9, COVERED
+

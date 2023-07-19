@@ -1,1 +1,5 @@
-11, SATISFIED
+tests/coverage/reachable/debug-assert-ne/reachable_fail/test.rs, 10, COVERED
+tests/coverage/reachable/debug-assert-ne/reachable_fail/test.rs, 11, COVERED
+tests/coverage/reachable/debug-assert-ne/reachable_fail/test.rs, 17, COVERED
+tests/coverage/reachable/debug-assert-ne/reachable_fail/test.rs, 18, UNCOVERED
+

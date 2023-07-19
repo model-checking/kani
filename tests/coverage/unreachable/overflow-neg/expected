@@ -1,2 +1,4 @@
-10, SATISFIED
-11, UNREACHABLE
+tests/coverage/unreachable/overflow-neg/test.rs, 10, UNCOVERED
+tests/coverage/unreachable/overflow-neg/test.rs, 15, COVERED
+tests/coverage/unreachable/overflow-neg/test.rs, 16, COVERED
+

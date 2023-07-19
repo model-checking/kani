@@ -1,1 +1,5 @@
-8, UNREACHABLE
+tests/coverage/unreachable/tutorial_unreachable/main.rs, 5, COVERED
+tests/coverage/unreachable/tutorial_unreachable/main.rs, 6, UNCOVERED
+tests/coverage/unreachable/tutorial_unreachable/main.rs, 7, UNCOVERED
+tests/coverage/unreachable/tutorial_unreachable/main.rs, 8, UNCOVERED
+

@@ -1,1 +1,5 @@
-10, SATISFIED
+tests/coverage/reachable/rem-zero/reachable_pass/test.rs, 10, UNCOVERED
+tests/coverage/reachable/rem-zero/reachable_pass/test.rs, 14, COVERED
+tests/coverage/reachable/rem-zero/reachable_pass/test.rs, 15, UNCOVERED
+tests/coverage/reachable/rem-zero/reachable_pass/test.rs, 9, UNCOVERED
+
