@@ -314,6 +314,22 @@ impl<'test> TestCx<'test> {
         self.compose_and_run(kani)
     }
 
+    /// Common method used to run Kani on a single file test.
+    fn run_kani_with_coverage(&self) -> ProcRes {
+        let mut kani = Command::new("kani");
+        if !self.props.compile_flags.is_empty() {
+            kani.env("RUSTFLAGS", self.props.compile_flags.join(" "));
+        }
+        kani.arg(&self.testpaths.file).args(&self.props.kani_flags);
+        kani.arg("--enable-unstable").arg("--coverage");
+
+        if !self.props.cbmc_flags.is_empty() {
+            kani.arg("--enable-unstable").arg("--cbmc-args").args(&self.props.cbmc_flags);
+        }
+
+        self.compose_and_run(kani)
+    }
+
     /// Runs an executable file and:
     ///  * Checks the expected output if an expected file is specified
     ///  * Checks the exit code (assumed to be 0 by default)
@@ -387,9 +403,13 @@ impl<'test> TestCx<'test> {
     /// message is printed to stdout if verification output does not contain
     /// the expected output in `expected` file.
     fn run_expected_coverage_test(&self) {
-        let proc_res = self.run_kani();
+        let proc_res = self.run_kani_with_coverage();
+        let x = self
+            .run_python_script("scripts/postcov.py", self.make_out_name("out").to_str().unwrap())
+            .unwrap();
+        // self.fatal_proc_rec(&format!("The python output is {:?}", x), &proc_res);
         let expected_path = self.testpaths.file.parent().unwrap().join("expected");
-        self.verify_output_coverage(&proc_res, &expected_path);
+        self.verify_output_coverage(&x, &expected_path, &proc_res);
     }
 
     /// Runs Kani with stub implementations of various data structures.
@@ -406,62 +426,62 @@ impl<'test> TestCx<'test> {
         }
     }
 
+    // Run the postcov script
+    fn run_python_script(
+        &self,
+        path_to_python_script: &str,
+        rust_file_path: &str,
+    ) -> Option<String> {
+        // Execute the Python script as a child process with the provided argument.
+        let output =
+            Command::new("python").arg(path_to_python_script).arg(rust_file_path).output().unwrap();
+
+        // Check if the Python script was executed successfully.
+        if output.status.success() {
+            // Convert the output bytes to a String and return it.
+            let output_string = String::from_utf8_lossy(&output.stdout).to_string();
+            Some(output_string)
+        } else {
+            // If there was an error, return the stderr as an error message.
+            None
+        }
+    }
+
     /// Print an error if the verification output does not contain the expected
     /// lines.
-    fn verify_output_coverage(&self, proc_res: &ProcRes, expected_path: &Path) {
+    fn verify_output_coverage(
+        &self,
+        post_process_input: &str,
+        expected_path: &Path,
+        proc_res: &ProcRes,
+    ) {
         // Include the output from stderr here for cases where there are exceptions
         let expected = fs::read_to_string(expected_path).unwrap();
-        let output = proc_res.stdout.to_string() + &proc_res.stderr;
-        let blocks: Option<_> = TestCx::find_coverage_check_blocks(&output);
-        match blocks {
-            None => {
+        let output = post_process_input.to_string();
+        let diff = TestCx::contains_lines(
+            &output.split('\n').collect::<Vec<_>>(),
+            expected.split('\n').collect(),
+        );
+        match (diff, self.config.fix_expected) {
+            (None, _) => { /* Test passed. Do nothing*/ }
+            (Some(_), true) => {
+                // Fix output but still fail the test so users know which ones were updated
+                fs::write(expected_path, output)
+                    .expect(&format!("Failed to update file {}", expected_path.display()));
+                self.fatal_proc_rec(
+                    &format!("updated `{}` file, please review", expected_path.display()),
+                    proc_res,
+                )
+            }
+            (Some(lines), false) => {
                 // Throw an error
                 self.fatal_proc_rec(
-                    &format!("test failed: no coverage property checks found\n",),
+                    &format!(
+                        "test failed: expected output to contain the line(s):\n{}",
+                        lines.join("\n")
+                    ),
                     proc_res,
-                ); /* Test failed. Do nothing*/
-            }
-            Some(blocks_unwrapped) => {
-                let parsed_checks = self.extract_location_details(blocks_unwrapped.clone());
-                let expected_tuples = TestCx::parse_content_to_tuples(&expected);
-                let diff = TestCx::find_mismatches(&parsed_checks, &expected_tuples);
-                self.error(&format!(
-                    "kani output is {:?}, and expected is {:?} ",
-                    parsed_checks, expected_tuples
-                ));
-                match (diff, self.config.fix_expected) {
-                    (None, _) => { /* Test passed. Do nothing*/ }
-                    (Some(lines), true) => {
-                        // Fix output but still fail the test so users know which ones were updated
-                        fs::write(
-                            expected_path,
-                            lines
-                                .iter()
-                                .map(|(line, status)| format!("{}, {}", line, status))
-                                .collect::<Vec<String>>()
-                                .join("\n"),
-                        )
-                        .expect(&format!("Failed to update file {}", expected_path.display()));
-                        self.fatal_proc_rec(
-                            &format!("updated `{}` file, please review", expected_path.display()),
-                            proc_res,
-                        )
-                    }
-                    (Some(lines), false) => {
-                        // Throw an error
-                        self.fatal_proc_rec(
-                            &format!(
-                                "test failed: expected output:\n{}",
-                                lines
-                                    .iter()
-                                    .map(|(line, status)| format!("{}, {}", line, status))
-                                    .collect::<Vec<String>>()
-                                    .join("\n")
-                            ),
-                            proc_res,
-                        );
-                    }
-                }
+                );
             }
         }
     }
@@ -500,59 +520,6 @@ impl<'test> TestCx<'test> {
         }
     }
 
-    /// Extract the location details such as (line number, status) in the form of a vector of tuples
-    /// from the coverage checks
-    fn extract_location_details(&self, blocks: Vec<&str>) -> Vec<(u32, String)> {
-        let mut location_details = Vec::new();
-
-        for block in blocks {
-            let mut line_number = 0;
-            let mut result = String::new();
-
-            if let Some(start_index) = block.find("Location:") {
-                // Extract the line and column numbers from the Location field
-                let block_str = &block[start_index + 1..];
-                if let Some(first_index) = block_str.find(':') {
-                    let location_string = block_str[first_index + 1..].trim();
-                    if let Some(number) = TestCx::extract_line_number_from_string(location_string) {
-                        line_number = number;
-                    }
-                }
-            }
-            if block.contains("UNREACHABLE") {
-                result = "UNREACHABLE".to_string();
-            } else if block.contains("SATISFIED") {
-                result = "SATISFIED".to_string();
-            }
-
-            if !result.is_empty() && line_number != 0 {
-                location_details.push((line_number, result));
-            }
-        }
-
-        location_details
-    }
-
-    // Given the location field, extract the line number from the string
-    fn extract_line_number_from_string(input: &str) -> Option<u32> {
-        // Find the first ':' character in the string
-        if let Some(first_colon_index) = input.find(':') {
-            // Find the second ':' character after the first one
-            if let Some(second_colon_index) = input[first_colon_index + 1..].find(':') {
-                // Extract the substring between the two ':' characters
-                let number_info =
-                    &input[first_colon_index + 1..first_colon_index + 1 + second_colon_index];
-
-                // Parse the substring into a u32 integer
-                if let Ok(number) = number_info.parse::<u32>() {
-                    return Some(number);
-                }
-            }
-        }
-
-        None
-    }
-
     /// Looks for each line or set of lines in `str`. Returns `None` if all
     /// lines are in `str`.  Otherwise, it returns the first line not found in
     /// `str`.
@@ -575,71 +542,6 @@ impl<'test> TestCx<'test> {
             }
         }
         None
-    }
-
-    // Search for the coverage related outputs
-    fn find_coverage_check_blocks(input: &str) -> Option<Vec<&str>> {
-        let mut blocks_with_unreachable_or_satisfied = Vec::new();
-
-        // Split the input text into blocks separated by empty lines
-        let blocks: Vec<&str> = input.split("\n\n").collect();
-
-        // Iterate through the blocks and find the ones containing "UNREACHABLE" or "SATISFIED"
-        for block in blocks {
-            if block.contains("UNREACHABLE") || block.contains("SATISFIED") {
-                blocks_with_unreachable_or_satisfied.push(block);
-            }
-        }
-
-        if blocks_with_unreachable_or_satisfied.is_empty() {
-            None
-        } else {
-            Some(blocks_with_unreachable_or_satisfied)
-        }
-    }
-
-    // Reads the file content of "expected" and converts into a vector of tuples to be compared
-    // with a similar vector parsed from Kani's output
-    fn parse_content_to_tuples(content: &str) -> Vec<(u32, String)> {
-        let mut result = Vec::new();
-
-        for line in content.lines() {
-            if let Some((line_number, status)) = TestCx::parse_line(line) {
-                result.push((line_number, status.to_string()));
-            }
-        }
-
-        result
-    }
-
-    // Parses the line in the format "line_number, status"
-    // If successful, it returns Some((line_number, status)), otherwise, it returns None.
-    fn parse_line(line: &str) -> Option<(u32, &str)> {
-        let mut parts = line.split(", ");
-        if let (Some(line_number_str), Some(status)) = (parts.next(), parts.next()) {
-            if let Ok(line_number) = line_number_str.trim().parse::<u32>() {
-                return Some((line_number, status));
-            }
-        }
-        None
-    }
-
-    // Find mismatches between Kani's output and expected file's parsed vector
-    // files. Returns None if there is no mismatch (the test has passed) or
-    // a vector of mismatches.
-    fn find_mismatches(
-        parsed_checks: &[(u32, String)],
-        expected_pairs: &[(u32, String)],
-    ) -> Option<Vec<(u32, String)>> {
-        let mut mismatches = Vec::new();
-
-        for tuple in parsed_checks {
-            if !expected_pairs.contains(&tuple) {
-                mismatches.push(tuple.clone());
-            }
-        }
-
-        if mismatches.is_empty() { None } else { Some(mismatches) }
     }
 
     /// Check if there is a set of consecutive lines in `str` where each line
