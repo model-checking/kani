@@ -407,7 +407,6 @@ impl<'test> TestCx<'test> {
         let x = self
             .run_python_script("scripts/postcov.py", self.make_out_name("out").to_str().unwrap())
             .unwrap();
-        // self.fatal_proc_rec(&format!("The python output is {:?}", x), &proc_res);
         let expected_path = self.testpaths.file.parent().unwrap().join("expected");
         self.verify_output_coverage(&x, &expected_path, &proc_res);
     }
@@ -458,9 +457,9 @@ impl<'test> TestCx<'test> {
         // Include the output from stderr here for cases where there are exceptions
         let expected = fs::read_to_string(expected_path).unwrap();
         let output = post_process_input.to_string();
-        let diff = TestCx::contains_lines(
-            &output.split('\n').collect::<Vec<_>>(),
-            expected.split('\n').collect(),
+        let diff = TestCx::missing_elements(
+            &expected.split('\n').collect::<Vec<_>>(),
+            output.split('\n').collect(),
         );
         match (diff, self.config.fix_expected) {
             (None, _) => { /* Test passed. Do nothing*/ }
@@ -518,6 +517,16 @@ impl<'test> TestCx<'test> {
                 );
             }
         }
+    }
+
+    /// Looks for each line or set of lines in `str`. Returns `None` if all
+    /// lines are in `str`.  Otherwise, it returns the first line not found in
+    /// `str`.
+    fn missing_elements<'a>(expected: &[&'a str], output: Vec<&'a str>) -> Option<Vec<&'a str>> {
+        let missing: Vec<&str> =
+            expected.iter().filter(|&elem| !output.contains(elem)).cloned().collect();
+
+        if missing.is_empty() { None } else { Some(missing) }
     }
 
     /// Looks for each line or set of lines in `str`. Returns `None` if all
