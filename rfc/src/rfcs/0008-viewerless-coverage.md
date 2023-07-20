@@ -45,7 +45,7 @@ We will need to change our documentation (including the tutorial) to use this op
 ## Detailed Design
 
 We will add a new unstable `--coverage` verification option to Kani.
-This will prevent `kani-driver` from reporting verification results as usual and instead output the coverage information described above.
+This will prevent `kani-driver` from reporting verification results as usual and instead output the coverage information described above[^coverage-assertions].
 It's likely that this will be done through a new output format that's not exposed to users.
 
 We will also add a new `--coverage-checks` option to `kani-compiler`, which will result in the injection of coverage checks before each Rust statement and terminator[^coverage-experiments].
@@ -77,10 +77,15 @@ Open questions:
 ## Future possibilities
 
 We expect many incremental improvements in the coverage area in subsequent versions:
- * Delivering region-based coverage information similar to [Rust's instrument-based code coverage](https://doc.rust-lang.org/rustc/instrument-coverage.html), which enables one to get coverage metrics for more granular parts of code (e.g., subconditions hit in a disjunctive condition).
- * Adding new user-requested coverage formats such as GCOV [#1706](https://github.com/model-checking/kani/issues/1706) or LCOV [#1777](https://github.com/model-checking/kani/issues/1777).
- * Enabling an option to run verification and coverage at the same time, so users can obtain both results at the same time.
- * Performing optimization improvements to `kani-compiler` and its engines to speed up the data collected for coverage information.
+ 1. Replacing the injection mechanism proposed in this RFC with the Rust compiler APIs for coverage (e.g., [CodeRegion](https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/coverage/struct.CodeRegion.html) and/or a MIR pass similar to [InstrumentCoverage](https://doc.rust-lang.org/stable/nightly-rustc/rustc_mir_transform/coverage/struct.InstrumentCoverage.html)) so we can retrieve region-based coverage information. Note that this is a requirement for items (2) and (3) below.
+ 2. Displaying region-based coverage information similar to [Rust's instrument-based code coverage](https://doc.rust-lang.org/rustc/instrument-coverage.html), which allows users to see coverage information for more granular parts of code (e.g., subconditions hit in a disjunctive condition).
+ 3. Adding new user-requested coverage formats such as GCOV [#1706](https://github.com/model-checking/kani/issues/1706) or LCOV [#1777](https://github.com/model-checking/kani/issues/1777).
+ 4. Enabling an option to run verification and coverage at the same time, so users can obtain both results at the same time.
+ 5. Performing optimization improvements to `kani-compiler` and its engines to speed up the data collected for coverage information.
+
+
+[^coverage-assertions]: Currently, we replace non-coverage assertions with assumptions so the execution is blocked instead of reporting a failure.
+Because of that, we cannot report coverage runs as verification results.
 
 [^coverage-experiments]: We have experimented with different options for injecting coverage checks.
 For example, we have tried injecting one before each basic block, or one before each statement, etc.
