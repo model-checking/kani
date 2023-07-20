@@ -421,6 +421,10 @@ pub fn format_result(
     result_str
 }
 
+/// Formats a coverage result item (i.e., the subset of verification checks with coverage property class).
+/// To be used when the user requests coverage information with --coverage. The output is tested through the coverage-based testing suite, not the regular expected suite.
+/// Loops through each of the check with a coverage property class and gives a status of COVERED if all checks pertaining
+/// to a line number are SATISFIED. Otherwise, it gives a status of UNCOVERED.
 pub fn format_result_coverage(properties: &[Property]) -> String {
     let mut formatted_output = String::new();
     formatted_output.push_str("\nCoverage Results:\n");
@@ -450,6 +454,8 @@ pub fn format_result_coverage(properties: &[Property]) -> String {
     }
 
     let mut coverage_results: HashMap<String, Vec<(usize, String)>> = HashMap::new();
+
+    // loop through the files list and create a list of lines accessible in that file
     for file in files.keys() {
         let mut lines: HashSet<usize> = HashSet::new();
         let mut line_results: Vec<(usize, String)> = Vec::new();
@@ -457,21 +463,25 @@ pub fn format_result_coverage(properties: &[Property]) -> String {
             lines.insert(check.0);
         }
 
+        // for each of these lines, create a map from line -> status
+        // example - {3 -> ["SAT", "UNSAT"], 4 -> ["UNSAT"] ...}
         for line in lines.iter() {
-            let satisfiable_statuses: Vec<bool> = files
+            let is_line_satisfied: Vec<_> = files
                 .get(file)
                 .unwrap()
                 .iter()
                 .filter(|(line_number_accumulated, _)| *line == *line_number_accumulated)
-                .map(|(_, status)| status.contains("SATISFIED"))
                 .collect();
 
-            let covered_status: String =
-                if satisfiable_statuses.iter().all(|&is_satisfiable| is_satisfiable) {
-                    "COVERED".to_string()
-                } else {
-                    "UNCOVERED".to_string()
-                };
+            // If any of the statuses is UNSAT, we report that line as UNCOVERED
+            let covered_status: String = if is_line_satisfied
+                .iter()
+                .all(|&is_satisfiable| is_satisfiable.1.contains("SATISFIED"))
+            {
+                "COVERED".to_string()
+            } else {
+                "UNCOVERED".to_string()
+            };
 
             line_results.push((*line, covered_status));
         }
@@ -480,6 +490,7 @@ pub fn format_result_coverage(properties: &[Property]) -> String {
         coverage_results.insert(file.clone(), line_results);
     }
 
+    // Create formatted string that is returned to the user as output
     for (file, checks) in coverage_results.iter() {
         for (line_number, coverage_status) in checks {
             formatted_output.push_str(&format!("{}, {}, {}\n", file, line_number, coverage_status));

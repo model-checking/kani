@@ -314,7 +314,7 @@ impl<'test> TestCx<'test> {
         self.compose_and_run(kani)
     }
 
-    /// Common method used to run Kani on a single file test.
+    /// Run coverage based output for kani on a single file
     fn run_kani_with_coverage(&self) -> ProcRes {
         let mut kani = Command::new("kani");
         if !self.props.compile_flags.is_empty() {
@@ -399,9 +399,7 @@ impl<'test> TestCx<'test> {
         self.verify_output(&proc_res, &expected_path);
     }
 
-    /// Runs Kani on the test file specified by `self.testpaths.file`. An error
-    /// message is printed to stdout if verification output does not contain
-    /// the expected output in `expected` file.
+    /// Runs Kani in coverage mode on the test file specified by `self.testpaths.file`. An error
     fn run_expected_coverage_test(&self) {
         let proc_res = self.run_kani_with_coverage();
         let expected_path = self.testpaths.file.parent().unwrap().join("expected");
