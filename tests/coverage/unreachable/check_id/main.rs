@@ -1,11 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// This test has more than 10 asserts to satisfy the condition that two check
-// IDs are a prefix of each other, e.g.:
-//     KANI_CHECK_ID_reach_check.225019a5::reach_check_1
-//     KANI_CHECK_ID_reach_check.225019a5::reach_check_10
-
 fn foo(x: i32) {
     assert!(1 + 1 == 2);
     if x < 9 {

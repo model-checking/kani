@@ -399,7 +399,7 @@ impl<'test> TestCx<'test> {
         self.verify_output(&proc_res, &expected_path);
     }
 
-    /// Runs Kani in coverage mode on the test file specified by `self.testpaths.file`. An error
+    /// Runs Kani in coverage mode on the test file specified by `self.testpaths.file`.
     fn run_expected_coverage_test(&self) {
         let proc_res = self.run_kani_with_coverage();
         let expected_path = self.testpaths.file.parent().unwrap().join("expected");

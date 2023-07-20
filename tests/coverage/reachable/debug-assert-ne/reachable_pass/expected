@@ -1,5 +1,5 @@
-tests/coverage/reachable/debug-assert-ne/reachable_pass/test.rs, 10, COVERED
-tests/coverage/reachable/debug-assert-ne/reachable_pass/test.rs, 16, COVERED
-tests/coverage/reachable/debug-assert-ne/reachable_pass/test.rs, 17, UNCOVERED
-tests/coverage/reachable/debug-assert-ne/reachable_pass/test.rs, 9, COVERED
-
+/home/ubuntu/kani/tests/coverage/reachable/debug-assert-ne/reachable_pass/test.rs, 5, COVERED
+/home/ubuntu/kani/tests/coverage/reachable/debug-assert-ne/reachable_pass/test.rs, 6, COVERED
+/home/ubuntu/kani/tests/coverage/reachable/debug-assert-ne/reachable_pass/test.rs, 8, UNCOVERED
+/home/ubuntu/kani/tests/coverage/reachable/debug-assert-ne/reachable_pass/test.rs, 12, COVERED
+/home/ubuntu/kani/tests/coverage/reachable/debug-assert-ne/reachable_pass/test.rs, 13, UNCOVERED

@@ -1,5 +1,5 @@
-tests/coverage/unreachable/debug-assert-ne/test.rs, 10, UNCOVERED
-tests/coverage/unreachable/debug-assert-ne/test.rs, 16, COVERED
-tests/coverage/unreachable/debug-assert-ne/test.rs, 17, COVERED
-tests/coverage/unreachable/debug-assert-ne/test.rs, 9, COVERED
-
+/home/ubuntu/kani/tests/coverage/unreachable/debug-assert-ne/test.rs, 5, COVERED
+/home/ubuntu/kani/tests/coverage/unreachable/debug-assert-ne/test.rs, 6, UNCOVERED
+/home/ubuntu/kani/tests/coverage/unreachable/debug-assert-ne/test.rs, 8, COVERED
+/home/ubuntu/kani/tests/coverage/unreachable/debug-assert-ne/test.rs, 12, COVERED
+/home/ubuntu/kani/tests/coverage/unreachable/debug-assert-ne/test.rs, 13, COVERED

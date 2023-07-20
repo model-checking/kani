@@ -1,5 +1,4 @@
-tests/coverage/unreachable/bounds/test.rs, 10, COVERED
-tests/coverage/unreachable/bounds/test.rs, 15, COVERED
-tests/coverage/unreachable/bounds/test.rs, 16, COVERED
-tests/coverage/unreachable/bounds/test.rs, 9, UNCOVERED
-
+/home/ubuntu/kani/tests/coverage/unreachable/bounds/test.rs, 5, UNCOVERED
+/home/ubuntu/kani/tests/coverage/unreachable/bounds/test.rs, 6, COVERED
+/home/ubuntu/kani/tests/coverage/unreachable/bounds/test.rs, 11, COVERED
+/home/ubuntu/kani/tests/coverage/unreachable/bounds/test.rs, 12, COVERED

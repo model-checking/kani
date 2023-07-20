@@ -1,5 +1,4 @@
-tests/coverage/reachable/div-zero/reachable_pass/test.rs, 10, UNCOVERED
-tests/coverage/reachable/div-zero/reachable_pass/test.rs, 14, COVERED
-tests/coverage/reachable/div-zero/reachable_pass/test.rs, 15, UNCOVERED
-tests/coverage/reachable/div-zero/reachable_pass/test.rs, 9, UNCOVERED
-
+/home/ubuntu/kani/tests/coverage/reachable/div-zero/reachable_pass/test.rs, 5, UNCOVERED
+/home/ubuntu/kani/tests/coverage/reachable/div-zero/reachable_pass/test.rs, 6, UNCOVERED
+/home/ubuntu/kani/tests/coverage/reachable/div-zero/reachable_pass/test.rs, 10, COVERED
+/home/ubuntu/kani/tests/coverage/reachable/div-zero/reachable_pass/test.rs, 11, UNCOVERED
