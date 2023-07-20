@@ -2,7 +2,6 @@ library/kani/src/arbitrary.rs, 55, UNCOVERED
 library/kani/src/arbitrary.rs, 79, UNCOVERED
 library/kani/src/arbitrary.rs, 80, UNCOVERED
 library/kani/src/arbitrary.rs, 81, UNCOVERED
-library/kani/src/arbitrary.rs, 82, UNCOVERED
 
 library/kani/src/lib.rs, 133, UNCOVERED
 library/kani/src/lib.rs, 134, UNCOVERED
@@ -25,4 +24,3 @@ tests/coverage/unreachable/check_id/main.rs, 27, UNCOVERED
 tests/coverage/unreachable/check_id/main.rs, 28, UNCOVERED
 tests/coverage/unreachable/check_id/main.rs, 29, UNCOVERED
 tests/coverage/unreachable/check_id/main.rs, 30, UNCOVERED
-

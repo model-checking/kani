@@ -6,6 +6,7 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use crate::args::OutputFormat;
 use crate::session::{lib_folder, KaniSession};
 
 impl KaniSession {
@@ -96,7 +97,7 @@ impl KaniSession {
             flags.push("--enable-stubbing".into());
         }
 
-        if self.args.coverage {
+        if self.args.output_format == OutputFormat::Coverage {
             flags.push("--coverage-checks".into());
         }
 

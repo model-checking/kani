@@ -1,7 +1,6 @@
 library/kani/src/arbitrary.rs, 57, COVERED
 
 library/kani/src/lib.rs, 133, COVERED
-library/kani/src/lib.rs, 134, COVERED
 library/kani/src/lib.rs, 176, COVERED
 
 tests/coverage/unreachable/assert_ne/test.rs, 10, COVERED
@@ -10,4 +9,3 @@ tests/coverage/unreachable/assert_ne/test.rs, 13, UNCOVERED
 tests/coverage/unreachable/assert_ne/test.rs, 14, UNCOVERED
 tests/coverage/unreachable/assert_ne/test.rs, 17, COVERED
 tests/coverage/unreachable/assert_ne/test.rs, 9, COVERED
-

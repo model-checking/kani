@@ -13,7 +13,9 @@ use crate::args::{OutputFormat, VerificationArgs};
 use crate::cbmc_output_parser::{
     extract_results, process_cbmc_output, CheckStatus, ParserItem, Property, VerificationOutput,
 };
-use crate::cbmc_property_renderer::{format_result, kani_cbmc_output_filter};
+use crate::cbmc_property_renderer::{
+    format_result, format_result_coverage, kani_cbmc_output_filter,
+};
 use crate::session::KaniSession;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -308,11 +310,28 @@ impl VerificationResult {
             Ok(results) => {
                 let status = self.status;
                 let failed_properties = self.failed_properties;
-                let show_checks = matches!(output_format, OutputFormat::Regular);
-                let mut result =
-                    format_result(results, status, should_panic, failed_properties, show_checks);
-                writeln!(result, "Verification Time: {}s", self.runtime.as_secs_f32()).unwrap();
-                result
+                let show_checks =
+                    matches!(output_format, OutputFormat::Regular | OutputFormat::Coverage);
+                // Insert design here
+                match output_format {
+                    OutputFormat::Regular | OutputFormat::Terse => {
+                        let mut result = format_result(
+                            results,
+                            status,
+                            should_panic,
+                            failed_properties,
+                            show_checks,
+                        );
+                        writeln!(result, "Verification Time: {}s", self.runtime.as_secs_f32())
+                            .unwrap();
+                        result
+                    }
+                    OutputFormat::Old => todo!(),
+                    OutputFormat::Coverage => {
+                        let result = format_result_coverage(results);
+                        result
+                    }
+                }
             }
             Err(exit_status) => {
                 let verification_result = console::style("FAILED").red();

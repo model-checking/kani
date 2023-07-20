@@ -321,22 +321,13 @@ impl<'test> TestCx<'test> {
             kani.env("RUSTFLAGS", self.props.compile_flags.join(" "));
         }
         kani.arg(&self.testpaths.file).args(&self.props.kani_flags);
-        kani.arg("--enable-unstable").arg("--coverage");
+        kani.arg("--output-format=coverage");
 
         if !self.props.cbmc_flags.is_empty() {
             kani.arg("--enable-unstable").arg("--cbmc-args").args(&self.props.cbmc_flags);
         }
 
-        let mut proc_result = self.compose_and_run(kani);
-
-        proc_result.stdout = self
-            .get_post_process_results(
-                "scripts/postcov.py",
-                self.make_out_name("out").to_str().unwrap(),
-            )
-            .unwrap();
-
-        proc_result
+        self.compose_and_run(kani)
     }
 
     /// Runs an executable file and:
@@ -428,27 +419,6 @@ impl<'test> TestCx<'test> {
                 "test failed: expected verification success, got failure",
                 &proc_res,
             );
-        }
-    }
-
-    // Run the postcov script
-    fn get_post_process_results(
-        &self,
-        path_to_python_script: &str,
-        rust_file_path: &str,
-    ) -> Option<String> {
-        // Execute the Python script as a child process with the provided argument.
-        let output =
-            Command::new("python").arg(path_to_python_script).arg(rust_file_path).output().unwrap();
-
-        // Check if the Python script was executed successfully.
-        if output.status.success() {
-            // Convert the output bytes to a String and return it.
-            let output_string = String::from_utf8_lossy(&output.stdout).to_string();
-            Some(output_string)
-        } else {
-            // If there was an error, return the stderr as an error message.
-            None
         }
     }
 

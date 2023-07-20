@@ -8,7 +8,7 @@ use console::style;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use rustc_demangle::demangle;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 type CbmcAltDescriptions = HashMap<&'static str, Vec<(&'static str, Option<&'static str>)>>;
 
@@ -161,6 +161,21 @@ impl ParserItem {
     }
 }
 
+#[derive(Debug, Eq, PartialEq, Clone)]
+struct CoverageCheck {
+    file: String,
+    line: usize,
+    description: String,
+    status: String,
+}
+
+impl CoverageCheck {
+    // Associated function as a constructor
+    fn new(file: String, line: usize, description: String, status: String) -> CoverageCheck {
+        CoverageCheck { file, line, description, status }
+    }
+}
+
 /// This is called "live" as CBMC output is streamed in, and we
 /// filter and transform it into the format we expect.
 ///
@@ -180,7 +195,7 @@ pub fn kani_cbmc_output_filter(
     let processed_item = process_item(item, extra_ptr_checks);
     // Both formatting and printing could be handled by objects which
     // implement a trait `Printer`.
-    if !quiet {
+    if !quiet && *output_format != OutputFormat::Coverage {
         let formatted_item = format_item(&processed_item, output_format);
         if let Some(fmt_item) = formatted_item {
             println!("{fmt_item}");
@@ -214,6 +229,7 @@ fn format_item(item: &ParserItem, output_format: &OutputFormat) -> Option<String
         OutputFormat::Old => todo!(),
         OutputFormat::Regular => format_item_regular(item),
         OutputFormat::Terse => format_item_terse(item),
+        OutputFormat::Coverage => format_item_regular(item),
     }
 }
 
@@ -419,6 +435,99 @@ pub fn format_result(
     }
 
     result_str
+}
+
+pub fn format_result_coverage(properties: &Vec<Property>) -> String {
+    let mut coverage_checks: Vec<CoverageCheck> = Vec::new();
+
+    for prop in properties {
+        let status = &prop.status;
+        let description = &prop.description;
+        let location = &prop.source_location;
+
+        let mut check =
+            CoverageCheck::new("".to_string(), 0, description.to_string(), status.to_string());
+
+        let location_regex = Regex::new(r"(.+):(\d+):").unwrap();
+        let location_msg = format!("{location}\n");
+
+        // Performing the regex match
+        if let Some(captures) = location_regex.captures(&location_msg) {
+            // Accessing the captured groups
+            if let Some(file) = captures.get(1) {
+                let file_name = file.as_str();
+                check.file = file_name.to_string();
+            }
+            if let Some(line_num) = captures.get(2) {
+                let line_number = line_num.as_str().parse::<usize>().unwrap();
+                check.line = line_number;
+            }
+
+            coverage_checks.push(check);
+        } else {
+            println!("No match found.");
+        }
+    }
+
+    post_process_coverage_checks(coverage_checks)
+}
+
+fn post_process_coverage_checks(input: Vec<CoverageCheck>) -> String {
+    let mut formatted_output = String::new();
+
+    let mut sorted_checks: Vec<&CoverageCheck> = input.iter().collect();
+    sorted_checks.sort_by_key(|check| (&check.file, &check.line));
+
+    let filter_checks: Vec<&CoverageCheck> =
+        sorted_checks.iter().filter(|x| x.description == "cover_experiment").cloned().collect();
+
+    let mut files: HashMap<String, Vec<(usize, String)>> = HashMap::new();
+    for check in filter_checks {
+        if !files.contains_key(&check.file) {
+            files.insert(check.file.clone(), vec![(check.line, check.status.clone())]);
+        } else {
+            files.get_mut(&check.file).unwrap().push((check.line, check.status.clone()));
+        }
+    }
+
+    let mut coverage_results: HashMap<String, Vec<(usize, String)>> = HashMap::new();
+    for file in files.keys() {
+        let mut lines: HashSet<usize> = HashSet::new();
+        let mut line_results: Vec<(usize, String)> = Vec::new();
+        for check in files.get(file).unwrap() {
+            lines.insert(check.0);
+        }
+
+        for line in lines.iter() {
+            let satisfiable_statuses: Vec<bool> = files
+                .get(file)
+                .unwrap()
+                .iter()
+                .filter(|(x, _)| *line == *x)
+                .map(|(_, s)| s.contains("SATISFIED"))
+                .collect();
+
+            let covered_status = if satisfiable_statuses.iter().all(|&x| x) {
+                "COVERED".to_string()
+            } else {
+                "UNCOVERED".to_string()
+            };
+
+            line_results.push((*line, covered_status));
+        }
+
+        line_results.sort_by_key(|&(line, _)| line);
+        coverage_results.insert(file.clone(), line_results);
+    }
+
+    for (file, checks) in coverage_results.iter() {
+        for (x, s) in checks {
+            formatted_output.push_str(&format!("{}, {}, {}\n", file, x, s));
+        }
+        formatted_output.push('\n');
+    }
+
+    formatted_output
 }
 
 /// Attempts to build a message for a failed property with as much detailed

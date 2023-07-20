@@ -1,7 +1,6 @@
 library/kani/src/arbitrary.rs, 55, COVERED
 
 library/kani/src/lib.rs, 133, COVERED
-library/kani/src/lib.rs, 134, COVERED
 library/kani/src/lib.rs, 176, COVERED
 library/kani/src/lib.rs, 177, COVERED
 
