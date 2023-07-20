@@ -195,7 +195,7 @@ pub fn kani_cbmc_output_filter(
     let processed_item = process_item(item, extra_ptr_checks);
     // Both formatting and printing could be handled by objects which
     // implement a trait `Printer`.
-    if !quiet && *output_format != OutputFormat::Coverage {
+    if !quiet {
         let formatted_item = format_item(&processed_item, output_format);
         if let Some(fmt_item) = formatted_item {
             println!("{fmt_item}");
@@ -229,7 +229,6 @@ fn format_item(item: &ParserItem, output_format: &OutputFormat) -> Option<String
         OutputFormat::Old => todo!(),
         OutputFormat::Regular => format_item_regular(item),
         OutputFormat::Terse => format_item_terse(item),
-        OutputFormat::Coverage => format_item_regular(item),
     }
 }
 
@@ -474,6 +473,8 @@ pub fn format_result_coverage(properties: &Vec<Property>) -> String {
 
 fn post_process_coverage_checks(input: Vec<CoverageCheck>) -> String {
     let mut formatted_output = String::new();
+
+    formatted_output.push_str("\nCoverage Results:\n\n");
 
     let mut sorted_checks: Vec<&CoverageCheck> = input.iter().collect();
     sorted_checks.sort_by_key(|check| (&check.file, &check.line));

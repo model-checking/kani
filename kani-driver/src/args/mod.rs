@@ -358,7 +358,6 @@ pub enum OutputFormat {
     Regular,
     Terse,
     Old,
-    Coverage,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, ValueEnum)]

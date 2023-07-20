@@ -1,3 +1,0 @@
-tests/coverage/unreachable/wrong_coverage_2/main.rs, 5, COVERED
-tests/coverage/unreachable/wrong_coverage_2/main.rs, 6, COVERED
-tests/coverage/unreachable/wrong_coverage_2/main.rs, 7, UNCOVERED

@@ -86,7 +86,7 @@ impl KaniSession {
                 kani_cbmc_output_filter(
                     i,
                     self.args.extra_pointer_checks,
-                    self.args.common_args.quiet,
+                    self.args.common_args.quiet || self.args.coverage,
                     &self.args.output_format,
                 )
             })?;
@@ -305,14 +305,23 @@ impl VerificationResult {
         }
     }
 
-    pub fn render(&self, output_format: &OutputFormat, should_panic: bool) -> String {
+    pub fn render(
+        &self,
+        output_format: &OutputFormat,
+        should_panic: bool,
+        coverage_mode: bool,
+    ) -> String {
         match &self.results {
             Ok(results) => {
                 let status = self.status;
                 let failed_properties = self.failed_properties;
-                let show_checks =
-                    matches!(output_format, OutputFormat::Regular | OutputFormat::Coverage);
-                // Insert design here
+                let show_checks = matches!(output_format, OutputFormat::Regular);
+
+                // If --coverage is on, return the post-processed results
+                if coverage_mode {
+                    return format_result_coverage(results);
+                }
+
                 match output_format {
                     OutputFormat::Regular | OutputFormat::Terse => {
                         let mut result = format_result(
@@ -327,7 +336,6 @@ impl VerificationResult {
                         result
                     }
                     OutputFormat::Old => todo!(),
-                    OutputFormat::Coverage => format_result_coverage(results),
                 }
             }
             Err(exit_status) => {

@@ -1,0 +1,3 @@
+tests/coverage/unreachable/assume_assert/main.rs, 5, COVERED
+tests/coverage/unreachable/assume_assert/main.rs, 6, COVERED
+tests/coverage/unreachable/assume_assert/main.rs, 7, UNCOVERED

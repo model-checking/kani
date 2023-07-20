@@ -321,10 +321,10 @@ impl<'test> TestCx<'test> {
             kani.env("RUSTFLAGS", self.props.compile_flags.join(" "));
         }
         kani.arg(&self.testpaths.file).args(&self.props.kani_flags);
-        kani.arg("--output-format=coverage");
+        kani.arg("--enable-unstable").arg("--coverage");
 
         if !self.props.cbmc_flags.is_empty() {
-            kani.arg("--enable-unstable").arg("--cbmc-args").args(&self.props.cbmc_flags);
+            kani.arg("--cbmc-args").args(&self.props.cbmc_flags);
         }
 
         self.compose_and_run(kani)
