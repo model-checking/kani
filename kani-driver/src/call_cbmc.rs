@@ -327,10 +327,7 @@ impl VerificationResult {
                         result
                     }
                     OutputFormat::Old => todo!(),
-                    OutputFormat::Coverage => {
-                        let result = format_result_coverage(results);
-                        result
-                    }
+                    OutputFormat::Coverage => format_result_coverage(results),
                 }
             }
             Err(exit_status) => {
