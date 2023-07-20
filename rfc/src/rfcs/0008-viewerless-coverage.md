@@ -74,8 +74,6 @@ That's because, some months ago, we noticed incorrect coverage results were bein
 Open questions:
  * Do we want a `--coverage` option or a `coverage` subcommand? Coverage can be seen as a different workflow but also a verification option.
 
-We expect to remove the `--visualize` before stabilizing this feature.
-
 ## Future possibilities
 
 We expect many incremental improvements in the coverage area in subsequent versions:
