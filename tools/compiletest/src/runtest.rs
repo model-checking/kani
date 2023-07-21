@@ -463,12 +463,11 @@ impl<'test> TestCx<'test> {
     /// Check if there is a set of consecutive lines in `str` where each line
     /// contains a line from `lines`
     fn contains(str: &[&str], lines: &[&str]) -> bool {
-        let slice_len = lines.len();
         // Does *any* subslice of length `lines.len()` satisfy the containment of
         // *all* `lines`
         // `trim()` added to ignore trailing and preceding whitespace
-        (0..(str.len() - slice_len)).any(|i| {
-            str[i..i + slice_len]
+        str.windows(lines.len()).any(|subslice| {
+            subslice
                 .into_iter()
                 .zip(lines)
                 .all(|(output, expected)| output.contains(expected.trim()))
