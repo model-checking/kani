@@ -436,47 +436,44 @@ pub fn format_result_coverage(properties: &[Property]) -> String {
 
     sorted_checks.sort_by_key(|check| (&check.source_location.file, &check.source_location.line));
 
-    let mut files: HashMap<String, Vec<(usize, String)>> = HashMap::new();
-    for check in sorted_checks {
+    let mut files: HashMap<String, Vec<(usize, CheckStatus)>> = HashMap::new();
+    for check in coverage_checks {
+        // println!("\n{:?}\n", check);
         // Get line number and filename
         let line_number: usize = check.source_location.line.as_ref().unwrap().parse().unwrap();
         let file_name: String = check.source_location.file.as_ref().unwrap().to_string();
 
         // Add to the files lookup map
-        if !files.contains_key(&file_name) {
-            files.insert(file_name.clone(), vec![(line_number, check.status.clone().to_string())]);
-        } else {
-            files
-                .get_mut(&file_name)
-                .unwrap()
-                .push((line_number, check.status.clone().to_string()));
-        }
+        files
+            .entry(file_name.clone())
+            .or_insert_with(Vec::new)
+            .push((line_number, check.status.clone()));
     }
 
     let mut coverage_results: HashMap<String, Vec<(usize, String)>> = HashMap::new();
 
     // loop through the files list and create a list of lines accessible in that file
-    for file in files.keys() {
+    for (file, val) in files {
         let mut lines: HashSet<usize> = HashSet::new();
         let mut line_results: Vec<(usize, String)> = Vec::new();
-        for check in files.get(file).unwrap() {
+        for check in val.clone() {
             lines.insert(check.0);
         }
 
         // for each of these lines, create a map from line -> status
         // example - {3 -> ["SAT", "UNSAT"], 4 -> ["UNSAT"] ...}
         for line in lines.iter() {
-            let is_line_satisfied: Vec<_> = files
-                .get(file)
-                .unwrap()
+            let is_line_satisfied: Vec<_> = val
                 .iter()
                 .filter(|(line_number_accumulated, _)| *line == *line_number_accumulated)
                 .collect();
 
+            // println!("sorted checks\n {:?}", is_line_satisfied);
+
             // If any of the statuses is UNSAT, we report that line as UNCOVERED
             let covered_status: String = if is_line_satisfied
                 .iter()
-                .all(|&is_satisfiable| is_satisfiable.1.contains("SATISFIED"))
+                .all(|&is_satisfiable| is_satisfiable.1.to_string().contains("SATISFIED"))
             {
                 "COVERED".to_string()
             } else {

@@ -322,21 +322,10 @@ impl VerificationResult {
                     return format_result_coverage(results);
                 }
 
-                match output_format {
-                    OutputFormat::Regular | OutputFormat::Terse => {
-                        let mut result = format_result(
-                            results,
-                            status,
-                            should_panic,
-                            failed_properties,
-                            show_checks,
-                        );
-                        writeln!(result, "Verification Time: {}s", self.runtime.as_secs_f32())
-                            .unwrap();
-                        result
-                    }
-                    OutputFormat::Old => todo!(),
-                }
+                let mut result =
+                    format_result(results, status, should_panic, failed_properties, show_checks);
+                writeln!(result, "Verification Time: {}s", self.runtime.as_secs_f32()).unwrap();
+                result
             }
             Err(exit_status) => {
                 let verification_result = console::style("FAILED").red();
