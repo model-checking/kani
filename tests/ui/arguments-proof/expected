@@ -1,1 +1,3 @@
 `some` is not a valid option for `#[kani::proof]`.
+
+the trait bound `NotASchedule: kani::futures::SchedulingStrategy` is not satisfied
