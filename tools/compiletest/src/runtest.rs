@@ -468,7 +468,7 @@ impl<'test> TestCx<'test> {
         // `trim()` added to ignore trailing and preceding whitespace
         str.windows(lines.len()).any(|subslice| {
             subslice
-                .into_iter()
+                .iter()
                 .zip(lines)
                 .all(|(output, expected)| output.contains(expected.trim()))
         })
