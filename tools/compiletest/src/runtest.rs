@@ -453,35 +453,26 @@ impl<'test> TestCx<'test> {
                 consecutive_lines.clear();
             }
         }
-        None
+        // Someone may add a `\` to the last line (probably by accident) but
+        // that would mean this test would succeed without actually testing so
+        // we add a check here again.
+        (!consecutive_lines.is_empty() && !TestCx::contains(str, &consecutive_lines))
+            .then_some(consecutive_lines)
     }
 
     /// Check if there is a set of consecutive lines in `str` where each line
     /// contains a line from `lines`
     fn contains(str: &[&str], lines: &[&str]) -> bool {
-        let mut i = str.iter();
-        while let Some(output_line) = i.next() {
-            if output_line.contains(&lines[0]) {
-                // Check if the rest of the lines in `lines` are contained in
-                // the subsequent lines in `str`
-                let mut matches = true;
-                // Clone the iterator so that we keep i unchanged
-                let mut j = i.clone();
-                for line in lines.iter().skip(1) {
-                    if let Some(output_line) = j.next() {
-                        if output_line.contains(line) {
-                            continue;
-                        }
-                    }
-                    matches = false;
-                    break;
-                }
-                if matches {
-                    return true;
-                }
-            }
-        }
-        false
+        let slice_len = lines.len();
+        // Does *any* subslice of length `lines.len()` satisfy the containment of
+        // *all* `lines`
+        // `trim()` added to ignore trailing and preceding whitespace
+        (0..(str.len() - slice_len)).any(|i| {
+            str[i..i + slice_len]
+                .into_iter()
+                .zip(lines)
+                .all(|(output, expected)| output.contains(expected.trim()))
+        })
     }
 
     fn create_stamp(&self) {
