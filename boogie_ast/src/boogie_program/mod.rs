@@ -1,7 +1,12 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+//! A module that defines the AST of a Boogie program and provides methods for
+//! creating nodes of the AST.
+
 mod writer;
+
+use num_bigint::{BigInt, BigUint};
 
 struct TypeDeclaration {}
 struct ConstDeclaration {}
@@ -35,13 +40,10 @@ pub enum Literal {
     Bool(bool),
 
     /// Bit-vector values, e.g. `5bv8`
-    Bv {
-        width: usize,
-        value: String, // TODO: use bigint
-    },
+    Bv { width: usize, value: BigUint },
 
-    /// Unbounded integer values, e.g. `1000`
-    Int(String), // TODO: use bigint
+    /// Unbounded integer values, e.g. `1000` or `-456789`
+    Int(BigInt),
 }
 
 /// Unary operators
@@ -149,7 +151,7 @@ pub enum Stmt {
     While { condition: Expr, body: Box<Stmt> },
 }
 
-/// Procedure specification
+/// Contract specification
 pub struct Contract {
     /// Pre-conditions
     requires: Vec<Expr>,
@@ -161,6 +163,8 @@ pub struct Contract {
 }
 
 /// Procedure definition
+/// A procedure is a function that has a contract specification and that can
+/// have side effects
 pub struct Procedure {
     name: String,
     parameters: Vec<Parameter>,
@@ -182,6 +186,7 @@ impl Procedure {
 }
 
 /// Function definition
+/// A function in Boogie is a mathematical function
 struct Function {}
 
 /// A boogie program
@@ -236,24 +241,24 @@ impl BoogieProgram {
                         Stmt::Decl { name: "y".to_string(), typ: Type::Int },
                         Stmt::Assignment {
                             target: "x".to_string(),
-                            value: Expr::Literal(Literal::Int("1".to_string())),
+                            value: Expr::Literal(Literal::Int(1.into())),
                         },
                         Stmt::Assignment {
                             target: "y".to_string(),
-                            value: Expr::Literal(Literal::Int("2".to_string())),
+                            value: Expr::Literal(Literal::Int(2.into())),
                         },
                         Stmt::Assert {
                             condition: Expr::BinaryOp {
                                 op: BinaryOp::Eq,
                                 left: Box::new(Expr::Symbol { name: "x".to_string() }),
-                                right: Box::new(Expr::Literal(Literal::Int("1".to_string()))),
+                                right: Box::new(Expr::Literal(Literal::Int(1.into()))),
                             },
                         },
                         Stmt::Assert {
                             condition: Expr::BinaryOp {
                                 op: BinaryOp::Eq,
                                 left: Box::new(Expr::Symbol { name: "y".to_string() }),
-                                right: Box::new(Expr::Literal(Literal::Int("2".to_string()))),
+                                right: Box::new(Expr::Literal(Literal::Int(2.into()))),
                             },
                         },
                         Stmt::If {

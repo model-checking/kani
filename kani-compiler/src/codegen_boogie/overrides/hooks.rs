@@ -5,8 +5,6 @@
 //!
 //! E.g.: Functions in the Kani library that generate assumptions or symbolic variables.
 //!
-//! It would be too nasty if we spread around these sort of undocumented hooks in place, so
-//! this module addresses this issue.
 
 use crate::codegen_boogie::BoogieCtx;
 use boogie_ast::boogie_program::{Expr, Stmt};

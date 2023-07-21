@@ -108,6 +108,9 @@ checksum = "630be753d4e58660abd17930c71b647fe46c27ea6b63cc59e1e3851406972e42"
 [[package]]
 name = "boogie_ast"
 version = "0.30.0"
+dependencies = [
+ "num-bigint",
+]
 
 [[package]]
 name = "bookrunner"

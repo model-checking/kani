@@ -2,7 +2,50 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 //! A writer for Boogie programs.
-
+//! Generates a text Boogie program with the following format:
+//! ```
+//! // Type declarations:
+//! <Type declaration 1>
+//! <Type declaration 2>
+//! ...
+//!
+//! // Constant declarations:
+//! <Const declaration 1>
+//! <Const declaration 2>
+//! ...
+//!
+//! // Variable declarations:
+//! var <var-name1>: <type1>;
+//! var <var-name2>: <type2>;
+//! ...
+//!
+//! // Axioms
+//! axiom <expr1>;
+//! axiom <expr2>;
+//! ...
+//!
+//! // Functions:
+//! function <function1-name>(<arg1>: <type1>, ...) returns (return-var-name: <return-type>)
+//! {
+//!   <body>
+//! }
+//! ...
+//!
+//! // Procedures:
+//! procedure <procedure1-name>(<arg1>: <type1>, ...) returns (return-var-name: <return-type>)
+//! requires <pre-condition1>;
+//! requires <pre-condition2>;
+//! ...
+//! ensures <post-condition1>;
+//! ensures <post-condition2>;
+//! ...
+//! modifies <var1>, <var2>, ...;
+//! {
+//!   <body>
+//! }
+//! ...
+//!
+///! ```
 use crate::boogie_program::*;
 
 use std::io::Write;
@@ -55,13 +98,41 @@ impl BoogieProgram {
 
 impl Writable for BoogieProgram {
     fn write_to<T: Write>(&self, writer: &mut Writer<T>) -> std::io::Result<()> {
-        for _td in &self.type_declarations {}
-        for _const_decl in &self.const_declarations {}
-        for _var_decl in &self.var_declarations {}
-        for _a in &self.axioms {}
-        for _f in &self.functions {}
-        for p in &self.procedures {
-            writer.write(p)?;
+        if !self.type_declarations.is_empty() {
+            writeln!(writer.writer, "// Type declarations:")?;
+            for _td in &self.type_declarations {
+                todo!()
+            }
+        }
+        if !self.const_declarations.is_empty() {
+            writeln!(writer.writer, "// Constant declarations:")?;
+            for _const_decl in &self.const_declarations {
+                todo!()
+            }
+        }
+        if !self.var_declarations.is_empty() {
+            writeln!(writer.writer, "// Variable declarations:")?;
+            for _var_decl in &self.var_declarations {
+                todo!()
+            }
+        }
+        if !self.axioms.is_empty() {
+            writeln!(writer.writer, "// Axioms:")?;
+            for _a in &self.axioms {
+                todo!()
+            }
+        }
+        if !self.functions.is_empty() {
+            writeln!(writer.writer, "// Functions:")?;
+            for _f in &self.functions {
+                todo!()
+            }
+        }
+        if !self.procedures.is_empty() {
+            writeln!(writer.writer, "// Procedures:")?;
+            for p in &self.procedures {
+                writer.write(p)?;
+            }
         }
         Ok(())
     }

@@ -16,7 +16,7 @@ use rustc_middle::span_bug;
 use rustc_middle::ty::layout::{
     HasParamEnv, HasTyCtxt, LayoutError, LayoutOf, LayoutOfHelpers, TyAndLayout,
 };
-use rustc_middle::ty::{self, Instance, Ty, TyCtxt};
+use rustc_middle::ty::{self, Instance, IntTy, Ty, TyCtxt, UintTy};
 use rustc_span::Span;
 use rustc_target::abi::{HasDataLayout, TargetDataLayout};
 use tracing::{debug, debug_span, trace};
@@ -281,8 +281,26 @@ impl<'tcx> BoogieCtx<'tcx> {
     pub fn codegen_scalar(&self, s: Scalar, ty: Ty<'tcx>) -> Expr {
         match (s, ty.kind()) {
             (Scalar::Int(_), ty::Bool) => Expr::Literal(Literal::Bool(s.to_bool().unwrap())),
-            (Scalar::Int(i), ty::Int(_)) => Expr::Literal(Literal::Int(i.to_string())),
-            (Scalar::Int(i), ty::Uint(_)) => Expr::Literal(Literal::Int(i.to_string())),
+            (Scalar::Int(_), ty::Int(it)) => match it {
+                IntTy::I8 => Expr::Literal(Literal::Int(s.to_i8().unwrap().into())),
+                IntTy::I16 => Expr::Literal(Literal::Int(s.to_i16().unwrap().into())),
+                IntTy::I32 => Expr::Literal(Literal::Int(s.to_i32().unwrap().into())),
+                IntTy::I64 => Expr::Literal(Literal::Int(s.to_i64().unwrap().into())),
+                IntTy::I128 => Expr::Literal(Literal::Int(s.to_i128().unwrap().into())),
+                IntTy::Isize => {
+                    Expr::Literal(Literal::Int(s.to_target_isize(self).unwrap().into()))
+                }
+            },
+            (Scalar::Int(_), ty::Uint(it)) => match it {
+                UintTy::U8 => Expr::Literal(Literal::Int(s.to_u8().unwrap().into())),
+                UintTy::U16 => Expr::Literal(Literal::Int(s.to_u16().unwrap().into())),
+                UintTy::U32 => Expr::Literal(Literal::Int(s.to_u32().unwrap().into())),
+                UintTy::U64 => Expr::Literal(Literal::Int(s.to_u64().unwrap().into())),
+                UintTy::U128 => Expr::Literal(Literal::Int(s.to_u128().unwrap().into())),
+                UintTy::Usize => {
+                    Expr::Literal(Literal::Int(s.to_target_isize(self).unwrap().into()))
+                }
+            },
             _ => todo!(),
         }
     }
