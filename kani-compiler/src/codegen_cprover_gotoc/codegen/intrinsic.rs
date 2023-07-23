@@ -538,16 +538,8 @@ impl<'tcx> GotocCtx<'tcx> {
             // TODO: `simd_div` and `simd_rem` don't check for overflow cases.
             // <https://github.com/model-checking/kani/issues/1970>
             "simd_rem" => codegen_intrinsic_binop!(rem),
-            // TODO: `simd_shl` and `simd_shr` don't check overflow cases.
-            // <https://github.com/model-checking/kani/issues/1963>
-            "simd_shl" => codegen_intrinsic_binop!(shl),
-            "simd_shr" => {
-                if fargs[0].typ().base_type().unwrap().is_signed(self.symbol_table.machine_model())
-                {
-                    codegen_intrinsic_binop!(ashr)
-                } else {
-                    codegen_intrinsic_binop!(lshr)
-                }
+            "simd_shl" | "simd_shr" => {
+                self.codegen_simd_shift_with_distance_check(fargs, intrinsic, p, loc)
             }
             // "simd_shuffle#" => handled in an `if` preceding this match
             "simd_sub" => self.codegen_simd_op_with_overflow(
@@ -1558,6 +1550,75 @@ impl<'tcx> GotocCtx<'tcx> {
         let res = op_fun(a, b);
         let expr_place = self.codegen_expr_to_place(p, res);
         Stmt::block(vec![expr_place, check_stmt], loc)
+    }
+
+    /// Intrinsics which encode a SIMD bitshift.
+    /// Also checks for valid shift distance. Shifts on an integer of type T are UB if shift
+    /// distance < 0 or >= T::BITS.
+    fn codegen_simd_shift_with_distance_check(
+        &mut self,
+        mut fargs: Vec<Expr>,
+        intrinsic: &str,
+        p: &Place<'tcx>,
+        loc: Location,
+    ) -> Stmt {
+        let values = fargs.remove(0);
+        let distances = fargs.remove(0);
+
+        let values_len = values.typ().len().unwrap();
+        let distances_len = distances.typ().len().unwrap();
+        assert_eq!(values_len, distances_len, "expected same length vectors");
+
+        let value_type = values.typ().base_type().unwrap();
+        let distance_type = distances.typ().base_type().unwrap();
+        let value_width = value_type.sizeof_in_bits(&self.symbol_table);
+        let value_width_expr = Expr::int_constant(value_width, distance_type.clone());
+        let value_is_signed = value_type.is_signed(self.symbol_table.machine_model());
+
+        let mut excessive_check = Expr::bool_false();
+        let mut negative_check = Expr::bool_false();
+        for i in 0..distances_len {
+            let index = Expr::int_constant(i, Type::ssize_t());
+            let distance = distances.clone().index_array(index);
+            let excessive_distance_cond = distance.clone().ge(value_width_expr.clone());
+            excessive_check = excessive_check.or(excessive_distance_cond);
+            if value_is_signed {
+                let negative_distance_cond = distance.is_negative();
+                negative_check = negative_check.or(negative_distance_cond);
+            }
+        }
+        let excessive_check_stmt = self.codegen_assert_assume(
+            excessive_check.not(),
+            PropertyClass::ArithmeticOverflow,
+            format!("attempt {intrinsic} with excessive shift distance").as_str(),
+            loc,
+        );
+
+        let op_fun = match intrinsic {
+            "simd_shl" => Expr::shl,
+            "simd_shr" => {
+                if value_is_signed {
+                    Expr::ashr
+                } else {
+                    Expr::lshr
+                }
+            }
+            _ => unreachable!("expected a simd shift intrinsic"),
+        };
+        let res = op_fun(values, distances);
+        let expr_place = self.codegen_expr_to_place(p, res);
+
+        if value_is_signed {
+            let negative_check_stmt = self.codegen_assert_assume(
+                negative_check.not(),
+                PropertyClass::ArithmeticOverflow,
+                format!("attempt {intrinsic} with negative shift distance").as_str(),
+                loc,
+            );
+            Stmt::block(vec![expr_place, excessive_check_stmt, negative_check_stmt], loc)
+        } else {
+            Stmt::block(vec![expr_place, excessive_check_stmt], loc)
+        }
     }
 
     /// `simd_shuffle` constructs a new vector from the elements of two input
