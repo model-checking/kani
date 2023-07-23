@@ -1,3 +1,6 @@
+// Copyright Kani Contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
 use crate::{determine_invocation_type, InvocationType};
 
 const KANI_RUST_VERIFIER: &str = "Kani Rust Verifier";
