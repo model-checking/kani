@@ -5,11 +5,9 @@ const KANI_VERIFIER_VERSION: &str = env!("KANI_VERIFIER_VERSION");
 
 /// Print Kani version. At present, this is only release version information.
 pub(crate) fn print_kani_version() -> String {
-    let version_str = kani_version_release();
-
     // TODO: Print development version information.
     // <https://github.com/model-checking/kani/issues/2617>
-    version_str
+    kani_version_release()
 }
 
 /// Print Kani release version as `Kani Rust Verifier <version> (<invocation>)`
