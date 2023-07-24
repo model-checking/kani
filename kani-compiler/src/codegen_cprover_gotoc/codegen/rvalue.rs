@@ -486,8 +486,7 @@ impl<'tcx> GotocCtx<'tcx> {
             loc,
         );
 
-        // The first argument to the shift intrinsics determines the types of both arguments
-        if value_expr.typ().is_signed(self.symbol_table.machine_model()) {
+        if distance_expr.typ().is_signed(self.symbol_table.machine_model()) {
             let negative_distance_check = self.codegen_assert_assume(
                 distance_expr.is_non_negative(),
                 PropertyClass::ArithmeticOverflow,

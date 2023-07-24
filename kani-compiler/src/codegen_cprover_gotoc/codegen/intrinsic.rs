@@ -1573,7 +1573,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let distance_type = distances.typ().base_type().unwrap();
         let value_width = value_type.sizeof_in_bits(&self.symbol_table);
         let value_width_expr = Expr::int_constant(value_width, distance_type.clone());
-        let value_is_signed = value_type.is_signed(self.symbol_table.machine_model());
+        let distance_is_signed = distance_type.is_signed(self.symbol_table.machine_model());
 
         let mut excessive_check = Expr::bool_false();
         let mut negative_check = Expr::bool_false();
@@ -1582,7 +1582,7 @@ impl<'tcx> GotocCtx<'tcx> {
             let distance = distances.clone().index_array(index);
             let excessive_distance_cond = distance.clone().ge(value_width_expr.clone());
             excessive_check = excessive_check.or(excessive_distance_cond);
-            if value_is_signed {
+            if distance_is_signed {
                 let negative_distance_cond = distance.is_negative();
                 negative_check = negative_check.or(negative_distance_cond);
             }
@@ -1597,7 +1597,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let op_fun = match intrinsic {
             "simd_shl" => Expr::shl,
             "simd_shr" => {
-                if value_is_signed {
+                if distance_is_signed {
                     Expr::ashr
                 } else {
                     Expr::lshr
@@ -1608,7 +1608,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let res = op_fun(values, distances);
         let expr_place = self.codegen_expr_to_place(p, res);
 
-        if value_is_signed {
+        if distance_is_signed {
             let negative_check_stmt = self.codegen_assert_assume(
                 negative_check.not(),
                 PropertyClass::ArithmeticOverflow,
