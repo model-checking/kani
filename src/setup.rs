@@ -14,7 +14,7 @@ use crate::cmd::AutoRun;
 use crate::os_hacks;
 
 /// Comes from our Cargo.toml manifest file. Must correspond to our release verion.
-pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Set by our `build.rs`, reflects the Rust target triple we're building for
 const TARGET: &str = env!("TARGET");
 
