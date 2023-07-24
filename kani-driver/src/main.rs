@@ -66,9 +66,6 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     let args = args::CargoKaniArgs::parse_from(input_args);
     check_is_valid(&args);
 
-    let kani_version = print_kani_version();
-    println!("{kani_version}");
-
     let session = session::KaniSession::new(args.verify_opts)?;
 
     match args.command {
@@ -85,6 +82,11 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
         return assess::run_assess(session, assess::AssessArgs::default());
     }
 
+    if !session.args.common_args.quiet {
+        let kani_version = print_kani_version();
+        println!("{kani_version}");
+    }
+
     let project = project::cargo_project(&session, false)?;
     if session.args.only_codegen { Ok(()) } else { verify_project(project, session) }
 }
@@ -94,14 +96,17 @@ fn standalone_main() -> Result<()> {
     let args = args::StandaloneArgs::parse();
     check_is_valid(&args);
 
-    let kani_version = print_kani_version();
-    println!("{kani_version}");
-
     if let Some(StandaloneSubcommand::Playback(args)) = args.command {
         return playback_standalone(*args);
     }
 
     let session = session::KaniSession::new(args.verify_opts)?;
+
+    if !session.args.common_args.quiet {
+        let kani_version = print_kani_version();
+        println!("{kani_version}");
+    }
+
     let project = project::standalone_project(&args.input.unwrap(), &session)?;
     if session.args.only_codegen { Ok(()) } else { verify_project(project, session) }
 }

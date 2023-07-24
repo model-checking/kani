@@ -94,10 +94,7 @@ pub enum StandaloneSubcommand {
     version,
     name = "cargo-kani",
     about = "Verify a Rust crate. For more information, see https://github.com/model-checking/kani",
-    args_override_self = true,
-    subcommand_negates_reqs = true,
-    subcommand_precedence_over_arg = true,
-    args_conflicts_with_subcommands = true
+    args_override_self = true
 )]
 pub struct CargoKaniArgs {
     #[command(subcommand)]

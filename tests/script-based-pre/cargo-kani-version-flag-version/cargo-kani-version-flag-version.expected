@@ -1,2 +1,2 @@
 success: version printed agrees
-success: `(standalone)` appears in version line
+success: `(cargo plugin)` appears in version line
