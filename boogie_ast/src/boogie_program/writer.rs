@@ -3,7 +3,7 @@
 
 //! A writer for Boogie programs.
 //! Generates a text Boogie program with the following format:
-//! ```
+//! ```ignore
 //! // Type declarations:
 //! <Type declaration 1>
 //! <Type declaration 2>
@@ -33,19 +33,19 @@
 //!
 //! // Procedures:
 //! procedure <procedure1-name>(<arg1>: <type1>, ...) returns (return-var-name: <return-type>)
-//! requires <pre-condition1>;
-//! requires <pre-condition2>;
-//! ...
-//! ensures <post-condition1>;
-//! ensures <post-condition2>;
-//! ...
-//! modifies <var1>, <var2>, ...;
+//!   requires <pre-condition1>;
+//!   requires <pre-condition2>;
+//!   ...
+//!   ensures <post-condition1>;
+//!   ensures <post-condition2>;
+//!   ...
+//!   modifies <var1>, <var2>, ...;
 //! {
 //!   <body>
 //! }
 //! ...
 //!
-///! ```
+//! ```
 use crate::boogie_program::*;
 
 use std::io::Write;
@@ -56,20 +56,9 @@ struct Writer<'a, T: Write> {
     indentation: usize,
 }
 
-/// A trait for objects (Boogie program constructs) that can be converted to
-/// text (Boogie format)
-trait Writable {
-    fn write_to<T: Write>(&self, writer: &mut Writer<T>) -> std::io::Result<()>;
-}
-
 impl<'a, T: Write> Writer<'a, T> {
     fn new(writer: &'a mut T) -> Self {
         Self { writer, indentation: 0 }
-    }
-
-    /// forward to the `write_to` method of a Writable object
-    fn write(&mut self, w: &impl Writable) -> std::io::Result<()> {
-        w.write_to(self)
     }
 
     fn newline(&mut self) -> std::io::Result<()> {
@@ -92,12 +81,7 @@ impl<'a, T: Write> Writer<'a, T> {
 impl BoogieProgram {
     pub fn write_to<T: Write>(&self, writer: &mut T) -> std::io::Result<()> {
         let mut writer = Writer::new(writer);
-        writer.write(self)
-    }
-}
 
-impl Writable for BoogieProgram {
-    fn write_to<T: Write>(&self, writer: &mut Writer<T>) -> std::io::Result<()> {
         if !self.type_declarations.is_empty() {
             writeln!(writer.writer, "// Type declarations:")?;
             for _td in &self.type_declarations {
@@ -131,14 +115,14 @@ impl Writable for BoogieProgram {
         if !self.procedures.is_empty() {
             writeln!(writer.writer, "// Procedures:")?;
             for p in &self.procedures {
-                writer.write(p)?;
+                p.write_to(&mut writer)?;
             }
         }
         Ok(())
     }
 }
 
-impl Writable for Procedure {
+impl Procedure {
     fn write_to<T: Write>(&self, writer: &mut Writer<T>) -> std::io::Result<()> {
         // signature
         write!(writer.writer, "procedure {}(", self.name)?;
@@ -147,7 +131,7 @@ impl Writable for Procedure {
                 write!(writer.writer, ",")?;
             }
             write!(writer.writer, "{}: ", param.name)?;
-            writer.write(&param.typ)?;
+            param.typ.write_to(writer)?;
         }
         write!(writer.writer, ") ")?;
         if !self.return_type.is_empty() {
@@ -157,7 +141,7 @@ impl Writable for Procedure {
                     write!(writer.writer, ",")?;
                 }
                 write!(writer.writer, "{name}: ")?;
-                writer.write(typ)?;
+                typ.write_to(writer)?;
             }
             write!(writer.writer, ")")?;
         }
@@ -166,40 +150,40 @@ impl Writable for Procedure {
         // contract
         if let Some(contract) = &self.contract {
             writer.increase_indent();
-            writer.write(contract)?;
+            contract.write_to(writer)?;
             writer.decrease_indent();
         }
         writeln!(writer.writer, "{{")?;
         writer.increase_indent();
-        writer.write(&self.body)?;
+        self.body.write_to(writer)?;
         writer.decrease_indent();
         writeln!(writer.writer, "}}")?;
         Ok(())
     }
 }
 
-impl Writable for Expr {
+impl Expr {
     fn write_to<T: Write>(&self, writer: &mut Writer<T>) -> std::io::Result<()> {
         match self {
             Expr::Literal(value) => {
-                writer.write(value)?;
+                value.write_to(writer)?;
             }
             Expr::Symbol { name } => {
                 write!(writer.writer, "{name}")?;
             }
             Expr::UnaryOp { op, operand } => {
-                writer.write(op)?;
+                op.write_to(writer)?;
                 write!(writer.writer, "(")?;
-                writer.write(operand.as_ref())?;
+                operand.write_to(writer)?;
                 write!(writer.writer, ")")?;
             }
             Expr::BinaryOp { op, left, right } => {
                 write!(writer.writer, "(")?;
-                writer.write(left.as_ref())?;
+                left.write_to(writer)?;
                 write!(writer.writer, " ")?;
-                writer.write(op)?;
+                op.write_to(writer)?;
                 write!(writer.writer, " ")?;
-                writer.write(right.as_ref())?;
+                right.write_to(writer)?;
                 write!(writer.writer, ")")?;
             }
         }
@@ -207,30 +191,30 @@ impl Writable for Expr {
     }
 }
 
-impl Writable for Stmt {
+impl Stmt {
     fn write_to<T: Write>(&self, writer: &mut Writer<T>) -> std::io::Result<()> {
         match self {
             Stmt::Assignment { target, value } => {
                 writer.indent()?;
                 write!(writer.writer, "{} := ", target)?;
-                writer.write(value)?;
+                value.write_to(writer)?;
                 writeln!(writer.writer, ";")?;
             }
             Stmt::Assert { condition } => {
                 writer.indent()?;
                 write!(writer.writer, "assert ")?;
-                writer.write(condition)?;
+                condition.write_to(writer)?;
                 writeln!(writer.writer, ";")?;
             }
             Stmt::Assume { condition } => {
                 writer.indent()?;
                 write!(writer.writer, "assume ")?;
-                writer.write(condition)?;
+                condition.write_to(writer)?;
                 writeln!(writer.writer, ";")?;
             }
             Stmt::Block { statements } => {
                 for s in statements {
-                    writer.write(s)?;
+                    s.write_to(writer)?;
                 }
             }
             Stmt::Break => {
@@ -244,30 +228,30 @@ impl Writable for Stmt {
                     if i > 0 {
                         write!(writer.writer, ", ")?;
                     }
-                    writer.write(a)?;
+                    a.write_to(writer)?;
                 }
                 writeln!(writer.writer, ");")?;
             }
             Stmt::Decl { name, typ } => {
                 writer.indent()?;
                 write!(writer.writer, "var {}: ", name)?;
-                writer.write(typ)?;
+                typ.write_to(writer)?;
                 writeln!(writer.writer, ";")?;
             }
             Stmt::If { condition, body, else_body } => {
                 writer.indent()?;
                 write!(writer.writer, "if (")?;
-                writer.write(condition)?;
+                condition.write_to(writer)?;
                 writeln!(writer.writer, ") {{")?;
                 writer.increase_indent();
-                writer.write(body.as_ref())?;
+                body.write_to(writer)?;
                 writer.decrease_indent();
                 writer.indent()?;
                 write!(writer.writer, "}}")?;
                 if let Some(else_body) = else_body {
                     writeln!(writer.writer, " else {{")?;
                     writer.increase_indent();
-                    writer.write(else_body.as_ref())?;
+                    else_body.write_to(writer)?;
                     writer.decrease_indent();
                     writer.indent()?;
                     write!(writer.writer, "}}")?;
@@ -289,10 +273,10 @@ impl Writable for Stmt {
             Stmt::While { condition, body } => {
                 writer.indent()?;
                 write!(writer.writer, "while (")?;
-                writer.write(condition)?;
+                condition.write_to(writer)?;
                 writeln!(writer.writer, ") {{")?;
                 writer.increase_indent();
-                writer.write(body.as_ref())?;
+                body.write_to(writer)?;
                 writer.decrease_indent();
                 writeln!(writer.writer, "}}")?;
             }
@@ -301,31 +285,31 @@ impl Writable for Stmt {
     }
 }
 
-impl Writable for Contract {
+impl Contract {
     fn write_to<T: Write>(&self, writer: &mut Writer<T>) -> std::io::Result<()> {
         for r in &self.requires {
             writer.indent()?;
             write!(writer.writer, "requires ")?;
-            writer.write(r)?;
+            r.write_to(writer)?;
             writeln!(writer.writer, ";")?;
         }
         for e in &self.ensures {
             writer.indent()?;
             write!(writer.writer, "ensures ")?;
-            writer.write(e)?;
+            e.write_to(writer)?;
             writeln!(writer.writer, ";")?;
         }
         for m in &self.modifies {
             writer.indent()?;
             write!(writer.writer, "modifies ")?;
-            writer.write(m)?;
+            m.write_to(writer)?;
             writeln!(writer.writer, ";")?;
         }
         Ok(())
     }
 }
 
-impl Writable for Type {
+impl Type {
     fn write_to<T: Write>(&self, writer: &mut Writer<T>) -> std::io::Result<()> {
         match self {
             Type::Bool => write!(writer.writer, "bool")?,
@@ -333,16 +317,16 @@ impl Writable for Type {
             Type::Int => write!(writer.writer, "int")?,
             Type::Map { key, value } => {
                 write!(writer.writer, "[")?;
-                writer.write(key.as_ref())?;
+                key.write_to(writer)?;
                 write!(writer.writer, "]")?;
-                writer.write(value.as_ref())?;
+                value.write_to(writer)?;
             }
         }
         Ok(())
     }
 }
 
-impl Writable for Literal {
+impl Literal {
     fn write_to<T: Write>(&self, writer: &mut Writer<T>) -> std::io::Result<()> {
         match self {
             Literal::Bool(value) => {
@@ -359,7 +343,7 @@ impl Writable for Literal {
     }
 }
 
-impl Writable for UnaryOp {
+impl UnaryOp {
     fn write_to<T: Write>(&self, writer: &mut Writer<T>) -> std::io::Result<()> {
         match self {
             UnaryOp::Not => write!(writer.writer, "!")?,
@@ -369,7 +353,7 @@ impl Writable for UnaryOp {
     }
 }
 
-impl Writable for BinaryOp {
+impl BinaryOp {
     fn write_to<T: Write>(&self, writer: &mut Writer<T>) -> std::io::Result<()> {
         match self {
             BinaryOp::Add => write!(writer.writer, "+")?,
@@ -387,5 +371,104 @@ impl Writable for BinaryOp {
             BinaryOp::Gte => write!(writer.writer, ">=")?,
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sample_program() {
+        let program = BoogieProgram {
+            type_declarations: Vec::new(),
+            const_declarations: Vec::new(),
+            var_declarations: Vec::new(),
+            axioms: Vec::new(),
+            functions: Vec::new(),
+            procedures: vec![Procedure {
+                name: "main".to_string(),
+                parameters: Vec::new(),
+                return_type: vec![("z".to_string(), Type::Bool)],
+                contract: Some(Contract {
+                    requires: Vec::new(),
+                    ensures: vec![Expr::BinaryOp {
+                        op: BinaryOp::Eq,
+                        left: Box::new(Expr::Symbol { name: "z".to_string() }),
+                        right: Box::new(Expr::Literal(Literal::Bool(true))),
+                    }],
+                    modifies: Vec::new(),
+                }),
+                body: Stmt::Block {
+                    statements: vec![
+                        Stmt::Decl { name: "x".to_string(), typ: Type::Int },
+                        Stmt::Decl { name: "y".to_string(), typ: Type::Int },
+                        Stmt::Assignment {
+                            target: "x".to_string(),
+                            value: Expr::Literal(Literal::Int(1.into())),
+                        },
+                        Stmt::Assignment {
+                            target: "y".to_string(),
+                            value: Expr::Literal(Literal::Int(2.into())),
+                        },
+                        Stmt::Assert {
+                            condition: Expr::BinaryOp {
+                                op: BinaryOp::Eq,
+                                left: Box::new(Expr::Symbol { name: "x".to_string() }),
+                                right: Box::new(Expr::Literal(Literal::Int(1.into()))),
+                            },
+                        },
+                        Stmt::Assert {
+                            condition: Expr::BinaryOp {
+                                op: BinaryOp::Eq,
+                                left: Box::new(Expr::Symbol { name: "y".to_string() }),
+                                right: Box::new(Expr::Literal(Literal::Int(2.into()))),
+                            },
+                        },
+                        Stmt::If {
+                            condition: Expr::BinaryOp {
+                                op: BinaryOp::Lt,
+                                left: Box::new(Expr::Symbol { name: "x".to_string() }),
+                                right: Box::new(Expr::Symbol { name: "y".to_string() }),
+                            },
+                            body: Box::new(Stmt::Assignment {
+                                target: "z".to_string(),
+                                value: Expr::Literal(Literal::Bool(true)),
+                            }),
+                            else_body: Some(Box::new(Stmt::Assignment {
+                                target: "z".to_string(),
+                                value: Expr::Literal(Literal::Bool(false)),
+                            })),
+                        },
+                    ],
+                },
+            }],
+        };
+
+        let mut v = Vec::new();
+        program.write_to(&mut v).unwrap();
+        let program_text = String::from_utf8(v).unwrap().to_string();
+
+        let expected = String::from(
+            "\
+// Procedures:
+procedure main() returns (z: bool)
+  ensures (z == true);
+{
+  var x: int;
+  var y: int;
+  x := 1;
+  y := 2;
+  assert (x == 1);
+  assert (y == 2);
+  if ((x < y)) {
+    z := true;
+  } else {
+    z := false;
+  }
+}
+",
+        );
+        assert_eq!(program_text, expected);
     }
 }

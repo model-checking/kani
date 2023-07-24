@@ -37,7 +37,6 @@ pub struct BoogieCtx<'tcx> {
 impl<'tcx> BoogieCtx<'tcx> {
     pub fn new(tcx: TyCtxt<'tcx>, queries: QueryDb) -> BoogieCtx<'tcx> {
         BoogieCtx { tcx, queries, program: BoogieProgram::new(), hooks: fn_hooks() }
-        //BoogieCtx { tcx, queries, program: BoogieProgram::sample_program(), hooks: fn_hooks() }
     }
 
     /// Codegen a function into a Boogie procedure.

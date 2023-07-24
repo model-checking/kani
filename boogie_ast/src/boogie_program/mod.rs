@@ -186,7 +186,8 @@ impl Procedure {
 }
 
 /// Function definition
-/// A function in Boogie is a mathematical function
+/// A function in Boogie is a mathematical function (deterministic, has no side
+/// effects, and whose body is an expression)
 struct Function {}
 
 /// A boogie program
@@ -213,72 +214,5 @@ impl BoogieProgram {
 
     pub fn add_procedure(&mut self, procedure: Procedure) {
         self.procedures.push(procedure);
-    }
-
-    pub fn sample_program() -> Self {
-        BoogieProgram {
-            type_declarations: Vec::new(),
-            const_declarations: Vec::new(),
-            var_declarations: Vec::new(),
-            axioms: Vec::new(),
-            functions: Vec::new(),
-            procedures: vec![Procedure {
-                name: "main".to_string(),
-                parameters: Vec::new(),
-                return_type: vec![("z".to_string(), Type::Bool)],
-                contract: Some(Contract {
-                    requires: Vec::new(),
-                    ensures: vec![Expr::BinaryOp {
-                        op: BinaryOp::Eq,
-                        left: Box::new(Expr::Symbol { name: "z".to_string() }),
-                        right: Box::new(Expr::Literal(Literal::Bool(true))),
-                    }],
-                    modifies: Vec::new(),
-                }),
-                body: Stmt::Block {
-                    statements: vec![
-                        Stmt::Decl { name: "x".to_string(), typ: Type::Int },
-                        Stmt::Decl { name: "y".to_string(), typ: Type::Int },
-                        Stmt::Assignment {
-                            target: "x".to_string(),
-                            value: Expr::Literal(Literal::Int(1.into())),
-                        },
-                        Stmt::Assignment {
-                            target: "y".to_string(),
-                            value: Expr::Literal(Literal::Int(2.into())),
-                        },
-                        Stmt::Assert {
-                            condition: Expr::BinaryOp {
-                                op: BinaryOp::Eq,
-                                left: Box::new(Expr::Symbol { name: "x".to_string() }),
-                                right: Box::new(Expr::Literal(Literal::Int(1.into()))),
-                            },
-                        },
-                        Stmt::Assert {
-                            condition: Expr::BinaryOp {
-                                op: BinaryOp::Eq,
-                                left: Box::new(Expr::Symbol { name: "y".to_string() }),
-                                right: Box::new(Expr::Literal(Literal::Int(2.into()))),
-                            },
-                        },
-                        Stmt::If {
-                            condition: Expr::BinaryOp {
-                                op: BinaryOp::Lt,
-                                left: Box::new(Expr::Symbol { name: "x".to_string() }),
-                                right: Box::new(Expr::Symbol { name: "y".to_string() }),
-                            },
-                            body: Box::new(Stmt::Assignment {
-                                target: "z".to_string(),
-                                value: Expr::Literal(Literal::Bool(true)),
-                            }),
-                            else_body: Some(Box::new(Stmt::Assignment {
-                                target: "z".to_string(),
-                                value: Expr::Literal(Literal::Bool(false)),
-                            })),
-                        },
-                    ],
-                },
-            }],
-        }
     }
 }

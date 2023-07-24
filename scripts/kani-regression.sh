@@ -30,6 +30,7 @@ ${SCRIPT_DIR}/kani-fmt.sh --check
 cargo build-dev
 
 # Unit tests
+cargo test -p boogie_ast
 cargo test -p cprover_bindings
 cargo test -p kani-compiler
 cargo test -p kani-driver
