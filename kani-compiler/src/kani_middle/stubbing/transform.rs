@@ -12,7 +12,10 @@ use lazy_static::lazy_static;
 use regex::Regex;
 use rustc_data_structures::fingerprint::Fingerprint;
 use rustc_hir::{def_id::DefId, definitions::DefPathHash};
-use rustc_middle::{mir::Body, ty::TyCtxt};
+use rustc_middle::mir::{
+    interpret::ConstValue, visit::MutVisitor, Body, ConstantKind, Location, Operand,
+};
+use rustc_middle::ty::{self, TyCtxt};
 
 /// Returns the `DefId` of the stub for the function/method identified by the
 /// parameter `def_id`, and `None` if the function/method is not stubbed.
@@ -23,18 +26,43 @@ pub fn get_stub(tcx: TyCtxt, def_id: DefId) -> Option<DefId> {
 
 /// Returns the new body of a function/method if it has been stubbed out;
 /// otherwise, returns the old body.
-pub fn transform<'tcx>(
-    tcx: TyCtxt<'tcx>,
-    def_id: DefId,
-    old_body: &'tcx Body<'tcx>,
-) -> &'tcx Body<'tcx> {
+pub fn transform<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId, old_body: &'tcx Body<'tcx>) -> Body<'tcx> {
     if let Some(replacement) = get_stub(tcx, def_id) {
         let new_body = tcx.optimized_mir(replacement).clone();
         if check_compatibility(tcx, def_id, old_body, replacement, &new_body) {
-            return tcx.arena.alloc(new_body);
+            return new_body;
         }
     }
-    old_body
+    old_body.clone()
+}
+
+struct ExternFunctionTransformer<'tcx> {
+    tcx: TyCtxt<'tcx>,
+    body: Body<'tcx>,
+}
+
+impl<'tcx> MutVisitor<'tcx> for ExternFunctionTransformer<'tcx> {
+    fn tcx(&self) -> TyCtxt<'tcx> {
+        self.tcx
+    }
+
+    fn visit_operand(&mut self, operand: &mut Operand<'tcx>, _location: Location) {
+        let func_ty = operand.ty(&self.body, self.tcx);
+        if let ty::FnDef(reachable_function, generics) = *func_ty.kind() {
+            if let Some(stub) = get_stub(self.tcx, reachable_function) {
+                let Operand::Constant(fn_def) = operand else { unreachable!() };
+                fn_def.literal = ConstantKind::from_value(
+                    ConstValue::ZeroSized,
+                    self.tcx.type_of(stub).subst(self.tcx, generics),
+                );
+            }
+        }
+    }
+}
+
+pub fn transform_extern_functions<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
+    let mut visitor = ExternFunctionTransformer { tcx, body: body.clone() };
+    visitor.visit_body(body);
 }
 
 /// Checks whether the stub is compatible with the original function/method: do
