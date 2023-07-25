@@ -480,7 +480,7 @@ pub fn format_result_coverage(properties: &[Property]) -> String {
 
     let mut coverage_results: HashMap<String, Vec<(usize, String)>> = HashMap::new();
 
-    // loop through the files list and create a list of lines accessible in that file
+    // Loop through the files list and create a list of lines accessible in that file
     for (file, val) in files {
         let mut lines: HashSet<usize> = HashSet::new();
         let mut line_results: Vec<(usize, String)> = Vec::new();
@@ -488,7 +488,7 @@ pub fn format_result_coverage(properties: &[Property]) -> String {
             lines.insert(check.0);
         }
 
-        // for each of these lines, create a map from line -> status
+        // For each of these lines, create a map from line -> status
         // example - {3 -> ["SAT", "UNSAT"], 4 -> ["UNSAT"] ...}
         for line in lines.iter() {
             let is_line_satisfied: Vec<_> = val
@@ -496,7 +496,8 @@ pub fn format_result_coverage(properties: &[Property]) -> String {
                 .filter(|(line_number_accumulated, _)| *line == *line_number_accumulated)
                 .collect();
 
-            // If any of the statuses is UNSAT, we report that line as UNCOVERED
+            // Report lines as FULL if all of the coverage checks say SATISFIED, NONE if all of the coverage checks say UNSATISFIABLE,
+            // and PARTIAL if there is a mix of the two
             let covered_status: String = if is_line_satisfied
                 .iter()
                 .all(|&is_satisfiable| is_satisfiable.1.to_string().contains("SATISFIED"))
