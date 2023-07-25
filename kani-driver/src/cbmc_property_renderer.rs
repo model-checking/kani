@@ -458,18 +458,15 @@ pub fn format_result_coverage(properties: &[Property]) -> String {
     let mut formatted_output = String::new();
     formatted_output.push_str("\nCoverage Results:\n");
 
-    let coverage_checks: Vec<Property> = properties
+    let mut coverage_checks: Vec<&Property> = properties
         .iter()
         .filter(|&x| {
             x.property_class() == "coverage"
                 && !contains_library_path(x.source_location.file.as_ref().unwrap())
         })
-        .cloned()
         .collect();
 
-    let mut sorted_checks: Vec<&Property> = coverage_checks.iter().collect();
-
-    sorted_checks.sort_by_key(|check| (&check.source_location.file, &check.source_location.line));
+    coverage_checks.sort_by_key(|check| (&check.source_location.file, &check.source_location.line));
 
     let mut files: HashMap<String, Vec<(usize, CheckStatus)>> = HashMap::new();
     for check in coverage_checks {
