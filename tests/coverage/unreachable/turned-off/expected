@@ -1,4 +1,4 @@
-/home/ubuntu/kani/tests/coverage/unreachable/turned-off/test.rs, 6, COVERED
-/home/ubuntu/kani/tests/coverage/unreachable/turned-off/test.rs, 7, COVERED
-/home/ubuntu/kani/tests/coverage/unreachable/turned-off/test.rs, 8, UNCOVERED
-/home/ubuntu/kani/tests/coverage/unreachable/turned-off/test.rs, 10, COVERED
+/home/ubuntu/kani/tests/coverage/unreachable/turned-off/test.rs, 6, FULL
+/home/ubuntu/kani/tests/coverage/unreachable/turned-off/test.rs, 7, FULL
+/home/ubuntu/kani/tests/coverage/unreachable/turned-off/test.rs, 8, NONE
+/home/ubuntu/kani/tests/coverage/unreachable/turned-off/test.rs, 10, FULL

@@ -1,4 +1,4 @@
-/home/ubuntu/kani/tests/coverage/reachable/div-zero/reachable_pass/test.rs, 5, UNCOVERED
-/home/ubuntu/kani/tests/coverage/reachable/div-zero/reachable_pass/test.rs, 6, COVERED
-/home/ubuntu/kani/tests/coverage/reachable/div-zero/reachable_pass/test.rs, 10, COVERED
-/home/ubuntu/kani/tests/coverage/reachable/div-zero/reachable_pass/test.rs, 11, COVERED
+/home/ubuntu/kani/tests/coverage/reachable/div-zero/reachable_pass/test.rs, 5, PARTIAL
+/home/ubuntu/kani/tests/coverage/reachable/div-zero/reachable_pass/test.rs, 6, FULL
+/home/ubuntu/kani/tests/coverage/reachable/div-zero/reachable_pass/test.rs, 10, FULL
+/home/ubuntu/kani/tests/coverage/reachable/div-zero/reachable_pass/test.rs, 11, FULL

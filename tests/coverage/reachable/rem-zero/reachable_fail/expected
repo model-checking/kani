@@ -1,4 +1,4 @@
-/home/ubuntu/kani/tests/coverage/reachable/rem-zero/reachable_fail/test.rs, 5, UNCOVERED
-/home/ubuntu/kani/tests/coverage/reachable/rem-zero/reachable_fail/test.rs, 6, UNCOVERED
-/home/ubuntu/kani/tests/coverage/reachable/rem-zero/reachable_fail/test.rs, 10, COVERED
-/home/ubuntu/kani/tests/coverage/reachable/rem-zero/reachable_fail/test.rs, 11, UNCOVERED
+/home/ubuntu/kani/tests/coverage/reachable/rem-zero/reachable_fail/test.rs, 5, PARTIAL
+/home/ubuntu/kani/tests/coverage/reachable/rem-zero/reachable_fail/test.rs, 6, NONE
+/home/ubuntu/kani/tests/coverage/reachable/rem-zero/reachable_fail/test.rs, 10, FULL
+/home/ubuntu/kani/tests/coverage/reachable/rem-zero/reachable_fail/test.rs, 11, NONE

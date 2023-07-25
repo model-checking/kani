@@ -1,7 +1,6 @@
-/home/ubuntu/kani/tests/coverage/unreachable/contradiction/main.rs, 5, COVERED
-/home/ubuntu/kani/tests/coverage/unreachable/contradiction/main.rs, 6, COVERED
-/home/ubuntu/kani/tests/coverage/unreachable/contradiction/main.rs, 7, UNCOVERED
-/home/ubuntu/kani/tests/coverage/unreachable/contradiction/main.rs, 8, UNCOVERED
-/home/ubuntu/kani/tests/coverage/unreachable/contradiction/main.rs, 11, COVERED
-/home/ubuntu/kani/tests/coverage/unreachable/contradiction/main.rs, 13, COVERED
-
+/home/ubuntu/kani/tests/coverage/unreachable/contradiction/main.rs, 5, FULL
+/home/ubuntu/kani/tests/coverage/unreachable/contradiction/main.rs, 6, FULL
+/home/ubuntu/kani/tests/coverage/unreachable/contradiction/main.rs, 7, PARTIAL
+/home/ubuntu/kani/tests/coverage/unreachable/contradiction/main.rs, 8, NONE
+/home/ubuntu/kani/tests/coverage/unreachable/contradiction/main.rs, 11, FULL
+/home/ubuntu/kani/tests/coverage/unreachable/contradiction/main.rs, 13, FULL

@@ -1,14 +1,4 @@
-/home/ubuntu/kani/tests/coverage/unreachable/debug-assert/main.rs, 6, UNCOVERED
-/home/ubuntu/kani/tests/coverage/unreachable/debug-assert/main.rs, 7, UNCOVERED
-/home/ubuntu/kani/tests/coverage/unreachable/debug-assert/main.rs, 8, UNCOVERED
-/home/ubuntu/kani/tests/coverage/unreachable/debug-assert/main.rs, 10, UNCOVERED
-
-
-warning: Found the following unsupported constructs:
-             - caller_location (1)
-             - foreign function (1)
-
-         Verification will fail if one or more of these constructs is reachable.
-         See https://model-checking.github.io/kani/rust-feature-support.html for more details.
-
-warning: 1 warning emitted
+/home/ubuntu/kani/tests/coverage/unreachable/debug-assert/main.rs, 6, PARTIAL
+/home/ubuntu/kani/tests/coverage/unreachable/debug-assert/main.rs, 7, PARTIAL
+/home/ubuntu/kani/tests/coverage/unreachable/debug-assert/main.rs, 8, NONE
+/home/ubuntu/kani/tests/coverage/unreachable/debug-assert/main.rs, 10, NONE

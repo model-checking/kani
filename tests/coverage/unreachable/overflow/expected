@@ -1,6 +1,6 @@
-/home/ubuntu/kani/tests/coverage/unreachable/overflow/test.rs, 5, UNCOVERED
-/home/ubuntu/kani/tests/coverage/unreachable/overflow/test.rs, 6, COVERED
-/home/ubuntu/kani/tests/coverage/unreachable/overflow/test.rs, 10, COVERED
-/home/ubuntu/kani/tests/coverage/unreachable/overflow/test.rs, 11, COVERED
-/home/ubuntu/kani/tests/coverage/unreachable/overflow/test.rs, 12, COVERED
-/home/ubuntu/kani/tests/coverage/unreachable/overflow/test.rs, 13, COVERED
+/home/ubuntu/kani/tests/coverage/unreachable/overflow/test.rs, 5, PARTIAL
+/home/ubuntu/kani/tests/coverage/unreachable/overflow/test.rs, 6, FULL
+/home/ubuntu/kani/tests/coverage/unreachable/overflow/test.rs, 10, FULL
+/home/ubuntu/kani/tests/coverage/unreachable/overflow/test.rs, 11, FULL
+/home/ubuntu/kani/tests/coverage/unreachable/overflow/test.rs, 12, FULL
+/home/ubuntu/kani/tests/coverage/unreachable/overflow/test.rs, 13, FULL

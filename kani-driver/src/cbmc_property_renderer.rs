@@ -423,7 +423,7 @@ pub fn format_result(
 }
 
 pub fn formatter_coverage(
-    properties: &Vec<Property>,
+    properties: &[Property],
     status: VerificationStatus,
     should_panic: bool,
     failed_properties: FailedProperties,
@@ -478,7 +478,7 @@ pub fn format_result_coverage(properties: &[Property]) -> String {
         files
             .entry(file_name.clone())
             .or_insert_with(Vec::new)
-            .push((line_number, check.status.clone()));
+            .push((line_number, check.status));
     }
 
     let mut coverage_results: HashMap<String, Vec<(usize, String)>> = HashMap::new();
@@ -506,10 +506,10 @@ pub fn format_result_coverage(properties: &[Property]) -> String {
                 .all(|&is_satisfiable| is_satisfiable.1.to_string().contains("SATISFIED"))
             {
                 "FULL".to_string()
-            }
-            else if is_line_satisfied
-            .iter()
-            .all(|&is_satisfiable| is_satisfiable.1.to_string().contains("UNSATISFIABLE")) {
+            } else if is_line_satisfied
+                .iter()
+                .all(|&is_satisfiable| is_satisfiable.1.to_string().contains("UNSATISFIABLE"))
+            {
                 "NONE".to_string()
             } else {
                 "PARTIAL".to_string()
