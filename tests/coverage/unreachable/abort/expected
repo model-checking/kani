@@ -1,7 +1,7 @@
-/home/ubuntu/kani/tests/coverage/unreachable/abort/main.rs, 10, PARTIAL
-/home/ubuntu/kani/tests/coverage/unreachable/abort/main.rs, 11, FULL
-/home/ubuntu/kani/tests/coverage/unreachable/abort/main.rs, 13, FULL
-/home/ubuntu/kani/tests/coverage/unreachable/abort/main.rs, 15, FULL
-/home/ubuntu/kani/tests/coverage/unreachable/abort/main.rs, 17, NONE
-/home/ubuntu/kani/tests/coverage/unreachable/abort/main.rs, 20, NONE
-/home/ubuntu/kani/tests/coverage/unreachable/abort/main.rs, 21, NONE
+coverage/unreachable/abort/main.rs, 10, PARTIAL
+coverage/unreachable/abort/main.rs, 11, FULL
+coverage/unreachable/abort/main.rs, 13, FULL
+coverage/unreachable/abort/main.rs, 15, FULL
+coverage/unreachable/abort/main.rs, 17, NONE
+coverage/unreachable/abort/main.rs, 20, NONE
+coverage/unreachable/abort/main.rs, 21, NONE

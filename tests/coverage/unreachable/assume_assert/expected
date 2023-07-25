@@ -1,4 +1,4 @@
-/home/ubuntu/kani/tests/coverage/unreachable/assume_assert/main.rs, 5, FULL
-/home/ubuntu/kani/tests/coverage/unreachable/assume_assert/main.rs, 6, FULL
-/home/ubuntu/kani/tests/coverage/unreachable/assume_assert/main.rs, 7, NONE
-/home/ubuntu/kani/tests/coverage/unreachable/assume_assert/main.rs, 8, NONE
+coverage/unreachable/assume_assert/main.rs, 5, FULL
+coverage/unreachable/assume_assert/main.rs, 6, FULL
+coverage/unreachable/assume_assert/main.rs, 7, NONE
+coverage/unreachable/assume_assert/main.rs, 8, NONE

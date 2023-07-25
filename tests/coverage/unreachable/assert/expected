@@ -1,7 +1,7 @@
-/home/ubuntu/kani/tests/coverage/unreachable/assert/test.rs, 6, FULL
-/home/ubuntu/kani/tests/coverage/unreachable/assert/test.rs, 7, FULL
-/home/ubuntu/kani/tests/coverage/unreachable/assert/test.rs, 9, FULL
-/home/ubuntu/kani/tests/coverage/unreachable/assert/test.rs, 10, NONE
-/home/ubuntu/kani/tests/coverage/unreachable/assert/test.rs, 12, NONE
-/home/ubuntu/kani/tests/coverage/unreachable/assert/test.rs, 16, FULL
-/home/ubuntu/kani/tests/coverage/unreachable/assert/test.rs, 18, FULL
+coverage/unreachable/assert/test.rs, 6, FULL
+coverage/unreachable/assert/test.rs, 7, FULL
+coverage/unreachable/assert/test.rs, 9, FULL
+coverage/unreachable/assert/test.rs, 10, NONE
+coverage/unreachable/assert/test.rs, 12, NONE
+coverage/unreachable/assert/test.rs, 16, FULL
+coverage/unreachable/assert/test.rs, 18, FULL

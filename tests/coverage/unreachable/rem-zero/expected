@@ -1,4 +1,4 @@
-/home/ubuntu/kani/tests/coverage/unreachable/rem-zero/test.rs, 5, PARTIAL
-/home/ubuntu/kani/tests/coverage/unreachable/rem-zero/test.rs, 6, FULL
-/home/ubuntu/kani/tests/coverage/unreachable/rem-zero/test.rs, 10, FULL
-/home/ubuntu/kani/tests/coverage/unreachable/rem-zero/test.rs, 11, FULL
+coverage/unreachable/rem-zero/test.rs, 5, PARTIAL
+coverage/unreachable/rem-zero/test.rs, 6, FULL
+coverage/unreachable/rem-zero/test.rs, 10, FULL
+coverage/unreachable/rem-zero/test.rs, 11, FULL

@@ -1,4 +1,4 @@
-/home/ubuntu/kani/tests/coverage/reachable/overflow-neg/reachable_fail/test.rs, 10, PARTIAL
-/home/ubuntu/kani/tests/coverage/reachable/overflow-neg/reachable_fail/test.rs, 11, NONE
-/home/ubuntu/kani/tests/coverage/reachable/overflow-neg/reachable_fail/test.rs, 15, FULL
-/home/ubuntu/kani/tests/coverage/reachable/overflow-neg/reachable_fail/test.rs, 16, NONE
+coverage/reachable/overflow-neg/reachable_fail/test.rs, 10, PARTIAL
+coverage/reachable/overflow-neg/reachable_fail/test.rs, 11, NONE
+coverage/reachable/overflow-neg/reachable_fail/test.rs, 15, FULL
+coverage/reachable/overflow-neg/reachable_fail/test.rs, 16, NONE

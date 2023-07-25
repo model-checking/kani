@@ -1,7 +1,7 @@
-/home/ubuntu/kani/tests/coverage/unreachable/compare/main.rs, 5, PARTIAL
-/home/ubuntu/kani/tests/coverage/unreachable/compare/main.rs, 6, FULL
-/home/ubuntu/kani/tests/coverage/unreachable/compare/main.rs, 10, FULL
-/home/ubuntu/kani/tests/coverage/unreachable/compare/main.rs, 11, FULL
-/home/ubuntu/kani/tests/coverage/unreachable/compare/main.rs, 12, FULL
-/home/ubuntu/kani/tests/coverage/unreachable/compare/main.rs, 13, FULL
-/home/ubuntu/kani/tests/coverage/unreachable/compare/main.rs, 15, FULL
+coverage/unreachable/compare/main.rs, 5, PARTIAL
+coverage/unreachable/compare/main.rs, 6, FULL
+coverage/unreachable/compare/main.rs, 10, FULL
+coverage/unreachable/compare/main.rs, 11, FULL
+coverage/unreachable/compare/main.rs, 12, FULL
+coverage/unreachable/compare/main.rs, 13, FULL
+coverage/unreachable/compare/main.rs, 15, FULL
