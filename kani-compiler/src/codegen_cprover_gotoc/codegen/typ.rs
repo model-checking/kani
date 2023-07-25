@@ -157,6 +157,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         cbmc::goto_program::CIntType::Bool => "bool",
                         cbmc::goto_program::CIntType::Char => "char",
                         cbmc::goto_program::CIntType::Int => "int",
+                        cbmc::goto_program::CIntType::LongInt => "long int",
                         cbmc::goto_program::CIntType::SizeT => "size_t",
                         cbmc::goto_program::CIntType::SSizeT => "ssize_t",
                     };
