@@ -14,6 +14,6 @@ ignore = [
     # Do not format submodules
     # For some reason, this is not working without the directory wildcard.
     "**/firecracker",
-    "**/tests/perf/s2n-quic/",
+    "**/tests/benchmarks/s2n-quic/",
     "**/tools/bookrunner/rust-doc/",
 ]

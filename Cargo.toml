@@ -58,13 +58,5 @@ default-members = [
 exclude = [
   "build",
   "target",
-  # dependency tests have their own workspace
-  "tests/kani-dependency-test/dependency3",
-  # cargo kani tests should also have their own workspace
-  "tests/cargo-kani",
-  "tests/perf",
-  "tests/cargo-ui",
-  "tests/slow",
-  "tests/assess-scan-test-scaffold",
-  "tests/script-based-pre",
+  "tests/*",
 ]
