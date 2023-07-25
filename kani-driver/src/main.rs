@@ -63,10 +63,14 @@ fn main() -> ExitCode {
 /// The main function for the `cargo kani` command.
 fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     let input_args = join_args(input_args)?;
-    let args = args::CargoKaniArgs::parse_from(input_args);
+    let args = args::CargoKaniArgs::parse_from(&input_args);
     check_is_valid(&args);
 
     let session = session::KaniSession::new(args.verify_opts)?;
+
+    if !session.args.common_args.quiet {
+        print_kani_version(InvocationType::CargoKani(input_args));
+    }
 
     match args.command {
         Some(CargoKaniSubcommand::Assess(args)) => {
@@ -80,11 +84,6 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
 
     if session.args.assess {
         return assess::run_assess(session, assess::AssessArgs::default());
-    }
-
-    if !session.args.common_args.quiet {
-        let kani_version = print_kani_version();
-        println!("{kani_version}");
     }
 
     let project = project::cargo_project(&session, false)?;
@@ -103,8 +102,7 @@ fn standalone_main() -> Result<()> {
     let session = session::KaniSession::new(args.verify_opts)?;
 
     if !session.args.common_args.quiet {
-        let kani_version = print_kani_version();
-        println!("{kani_version}");
+        print_kani_version(InvocationType::Standalone);
     }
 
     let project = project::standalone_project(&args.input.unwrap(), &session)?;

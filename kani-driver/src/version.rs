@@ -1,16 +1,20 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use crate::{determine_invocation_type, InvocationType};
+use crate::InvocationType;
 
 const KANI_RUST_VERIFIER: &str = "Kani Rust Verifier";
-const KANI_VERIFIER_VERSION: &str = env!("KANI_VERIFIER_VERSION");
+/// We assume this is the same as the `kani-verifier` version, but we should
+/// make sure it's enforced through CI:
+/// <https://github.com/model-checking/kani/issues/2626>
+const KANI_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Print Kani version. At present, this is only release version information.
-pub(crate) fn print_kani_version() -> String {
+pub(crate) fn print_kani_version(invocation_type: InvocationType) {
+    let kani_version = kani_version_release(invocation_type);
     // TODO: Print development version information.
     // <https://github.com/model-checking/kani/issues/2617>
-    kani_version_release()
+    println!("{kani_version}");
 }
 
 /// Print Kani release version as `Kani Rust Verifier <version> (<invocation>)`
@@ -18,13 +22,13 @@ pub(crate) fn print_kani_version() -> String {
 ///  - `<version>` is the `kani-verifier` version
 ///  - `<invocation>` is `cargo plugin` if Kani was invoked with `cargo kani` or
 ///    `standalone` if it was invoked with `kani`.
-fn kani_version_release() -> String {
+fn kani_version_release(invocation_type: InvocationType) -> String {
     let mut version_str = "Kani Rust Verifier ".to_string();
-    version_str.push_str(KANI_VERIFIER_VERSION);
+    version_str.push_str(KANI_VERSION);
 
-    let invocation_str = match determine_invocation_type(Vec::from_iter(std::env::args_os())) {
+    let invocation_str = match invocation_type {
         InvocationType::CargoKani(_) => "cargo plugin",
         InvocationType::Standalone => "standalone",
     };
-    format!("{KANI_RUST_VERIFIER} {KANI_VERIFIER_VERSION} ({invocation_str})")
+    format!("{KANI_RUST_VERIFIER} {KANI_VERSION} ({invocation_str})")
 }
