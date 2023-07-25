@@ -105,11 +105,7 @@ impl<'tcx> GotocCtx<'tcx> {
         loc: Location,
     ) -> Stmt {
         let property_name = property_class.as_str();
-        if self.queries.check_coverage && property_class != PropertyClass::Coverage {
-            Stmt::assume(cond, loc)
-        } else {
-            Stmt::assert(cond, property_name, message, loc)
-        }
+        Stmt::assert(cond, property_name, message, loc)
     }
 
     /// Generates a CBMC assumption.
