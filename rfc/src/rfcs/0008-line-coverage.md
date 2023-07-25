@@ -151,7 +151,7 @@ Open questions:
 
 Feedback to gather before stabilization:
  * Compare the injection-based approach in this RFC with [Rust's instrument-based code coverage](https://doc.rust-lang.org/rustc/instrument-coverage.html)?
- * Determine if there are cases for which coverage information is confusing for users (due to, e.g., compiler optimizations).
+ * Determine if there are cases for which coverage information is confusing for users (due to, e.g., constant propagation or other compiler optimizations).
 
 ## Future possibilities
 
