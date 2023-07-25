@@ -54,18 +54,19 @@ class RegressionTests(unittest.TestCase):
     def test_kani_perf_fail(self):
         cmd = (
             "rm -rf build target &&"
-            "mkdir -p build/tests/perf/Unwind-Attribute/expected &&"
+            "mkdir -p build/tests/bench_verification/Unwind-Attribute"
+            "/expected &&"
             "kani tests/kani/Unwind-Attribute/fixme_lib.rs > "
-            "build/tests/perf/Unwind-Attribute/expected/expected.out"
+            "build/tests/bench_verification/Unwind-Attribute/expected/expected.out"
         )
         self._run_kani_perf_test(cmd, False)
 
     def test_kani_perf_success(self):
         cmd = (
             "rm -rf build target &&"
-            "mkdir -p build/tests/perf/Arbitrary/expected &&"
+            "mkdir -p build/tests/bench_verification/Arbitrary/expected &&"
             "kani tests/kani/Arbitrary/arbitrary_impls.rs > "
-            "build/tests/perf/Arbitrary/expected/expected.out"
+            "build/tests/bench_verification/Arbitrary/expected/expected.out"
         )
         self._run_kani_perf_test(cmd, True)
 
