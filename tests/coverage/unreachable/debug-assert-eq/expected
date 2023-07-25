@@ -1,5 +1,5 @@
-/home/ubuntu/kani/tests/coverage/unreachable/debug-assert-eq/test.rs, 5, COVERED
-/home/ubuntu/kani/tests/coverage/unreachable/debug-assert-eq/test.rs, 6, UNCOVERED
-/home/ubuntu/kani/tests/coverage/unreachable/debug-assert-eq/test.rs, 8, COVERED
-/home/ubuntu/kani/tests/coverage/unreachable/debug-assert-eq/test.rs, 12, COVERED
-/home/ubuntu/kani/tests/coverage/unreachable/debug-assert-eq/test.rs, 13, COVERED
+/home/ubuntu/kani/tests/coverage/unreachable/debug-assert-eq/test.rs, 5, FULL
+/home/ubuntu/kani/tests/coverage/unreachable/debug-assert-eq/test.rs, 6, NONE
+/home/ubuntu/kani/tests/coverage/unreachable/debug-assert-eq/test.rs, 8, FULL
+/home/ubuntu/kani/tests/coverage/unreachable/debug-assert-eq/test.rs, 12, FULL
+/home/ubuntu/kani/tests/coverage/unreachable/debug-assert-eq/test.rs, 13, FULL

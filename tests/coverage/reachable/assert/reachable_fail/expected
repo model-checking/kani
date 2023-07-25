@@ -1,1 +1,4 @@
-tests/coverage/reachable/assert/reachable_fail/test.rs, 8, COVERED
+/home/ubuntu/kani/tests/coverage/reachable/assert/reachable_fail/test.rs, 6, FULL
+/home/ubuntu/kani/tests/coverage/reachable/assert/reachable_fail/test.rs, 7, FULL
+/home/ubuntu/kani/tests/coverage/reachable/assert/reachable_fail/test.rs, 8, FULL
+/home/ubuntu/kani/tests/coverage/reachable/assert/reachable_fail/test.rs, 10, FULL

@@ -1,10 +1,7 @@
-library/std/src/process.rs, 11, COVERED
-library/std/src/process.rs, 16, UNCOVERED
-
-tests/coverage/unreachable/abort/main.rs, 10, UNCOVERED
-tests/coverage/unreachable/abort/main.rs, 11, COVERED
-tests/coverage/unreachable/abort/main.rs, 13, COVERED
-tests/coverage/unreachable/abort/main.rs, 15, COVERED
-tests/coverage/unreachable/abort/main.rs, 17, UNCOVERED
-tests/coverage/unreachable/abort/main.rs, 20, UNCOVERED
-tests/coverage/unreachable/abort/main.rs, 21, UNCOVERED
+/home/ubuntu/kani/tests/coverage/unreachable/abort/main.rs, 10, PARTIAL
+/home/ubuntu/kani/tests/coverage/unreachable/abort/main.rs, 11, FULL
+/home/ubuntu/kani/tests/coverage/unreachable/abort/main.rs, 13, FULL
+/home/ubuntu/kani/tests/coverage/unreachable/abort/main.rs, 15, FULL
+/home/ubuntu/kani/tests/coverage/unreachable/abort/main.rs, 17, NONE
+/home/ubuntu/kani/tests/coverage/unreachable/abort/main.rs, 20, NONE
+/home/ubuntu/kani/tests/coverage/unreachable/abort/main.rs, 21, NONE
