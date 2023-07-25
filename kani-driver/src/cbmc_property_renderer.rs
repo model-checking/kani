@@ -470,7 +470,6 @@ pub fn format_result_coverage(properties: &[Property]) -> String {
 
     let mut files: HashMap<String, Vec<(usize, CheckStatus)>> = HashMap::new();
     for check in coverage_checks {
-        // println!("\n{:?}\n", check);
         // Get line number and filename
         let line_number: usize = check.source_location.line.as_ref().unwrap().parse().unwrap();
         let file_name: String = check.source_location.file.as_ref().unwrap().to_string();
@@ -500,16 +499,20 @@ pub fn format_result_coverage(properties: &[Property]) -> String {
                 .filter(|(line_number_accumulated, _)| *line == *line_number_accumulated)
                 .collect();
 
-            // println!("sorted checks\n {:?}", is_line_satisfied);
 
             // If any of the statuses is UNSAT, we report that line as UNCOVERED
             let covered_status: String = if is_line_satisfied
                 .iter()
                 .all(|&is_satisfiable| is_satisfiable.1.to_string().contains("SATISFIED"))
             {
-                "COVERED".to_string()
+                "FULL".to_string()
+            }
+            else if is_line_satisfied
+            .iter()
+            .all(|&is_satisfiable| is_satisfiable.1.to_string().contains("UNSATISFIABLE")) {
+                "NONE".to_string()
             } else {
-                "UNCOVERED".to_string()
+                "PARTIAL".to_string()
             };
 
             line_results.push((*line, covered_status));
