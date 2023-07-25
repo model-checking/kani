@@ -422,6 +422,8 @@ pub fn format_result(
     result_str
 }
 
+/// Seperate checks into coverage and non-coverage based on property class and format them seperately for --coverage. We report both verification and processed coverage
+/// results
 pub fn formatter_coverage(
     properties: &[Property],
     status: VerificationStatus,
@@ -440,17 +442,18 @@ pub fn formatter_coverage(
         .cloned()
         .collect();
 
-    let s1 =
+    let verification_output =
         format_result(&non_coverage_checks, status, should_panic, failed_properties, show_checks);
-    let s2 = format_result_coverage(&coverage_checks);
+    let coverage_output = format_result_coverage(&coverage_checks);
+    let result = format!("{}\n{}", verification_output, coverage_output);
 
-    format!("{}\n{}", s1, s2)
+    result
 }
 
 /// Formats a coverage result item (i.e., the subset of verification checks with coverage property class).
 /// To be used when the user requests coverage information with --coverage. The output is tested through the coverage-based testing suite, not the regular expected suite.
-/// Loops through each of the check with a coverage property class and gives a status of COVERED if all checks pertaining
-/// to a line number are SATISFIED. Otherwise, it gives a status of UNCOVERED.
+/// Loops through each of the check with a coverage property class and gives a status of FULL if all checks pertaining
+/// to a line number are SATISFIED. Similarly, it gives a status of NONE if all checks related to a line are UNSAT. If a line has both, it reports PARTIAL coverage.
 pub fn format_result_coverage(properties: &[Property]) -> String {
     let mut formatted_output = String::new();
     formatted_output.push_str("\nCoverage Results:\n");
