@@ -158,7 +158,7 @@ impl KaniSession {
         }
 
         // We currently omit a summary if there was just 1 harness
-        if !self.args.common_args.quiet && !self.args.visualize && !self.args.coverage {
+        if !self.args.common_args.quiet && !self.args.visualize {
             if failing > 0 {
                 println!("Summary:");
             }

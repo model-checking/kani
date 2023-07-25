@@ -3,19 +3,12 @@
 /home/ubuntu/kani/tests/coverage/unreachable/debug-assert/main.rs, 8, UNCOVERED
 /home/ubuntu/kani/tests/coverage/unreachable/debug-assert/main.rs, 10, UNCOVERED
 
-/home/ubuntu/.rustup/toolchains/nightly-2023-06-24-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/num/mod.rs, 336, COVERED
 
-/home/ubuntu/.rustup/toolchains/nightly-2023-06-24-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs, 1411, COVERED
+warning: Found the following unsupported constructs:
+             - caller_location (1)
+             - foreign function (1)
 
-/home/ubuntu/.rustup/toolchains/nightly-2023-06-24-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/collect.rs, 282, COVERED
-/home/ubuntu/.rustup/toolchains/nightly-2023-06-24-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/collect.rs, 283, COVERED
+         Verification will fail if one or more of these constructs is reachable.
+         See https://model-checking.github.io/kani/rust-feature-support.html for more details.
 
-/home/ubuntu/.rustup/toolchains/nightly-2023-06-24-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/range.rs, 391, COVERED
-/home/ubuntu/.rustup/toolchains/nightly-2023-06-24-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/range.rs, 621, UNCOVERED
-/home/ubuntu/.rustup/toolchains/nightly-2023-06-24-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/range.rs, 622, COVERED
-/home/ubuntu/.rustup/toolchains/nightly-2023-06-24-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/range.rs, 624, COVERED
-/home/ubuntu/.rustup/toolchains/nightly-2023-06-24-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/range.rs, 625, COVERED
-/home/ubuntu/.rustup/toolchains/nightly-2023-06-24-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/range.rs, 627, UNCOVERED
-/home/ubuntu/.rustup/toolchains/nightly-2023-06-24-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/range.rs, 629, COVERED
-/home/ubuntu/.rustup/toolchains/nightly-2023-06-24-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/range.rs, 712, COVERED
-/home/ubuntu/.rustup/toolchains/nightly-2023-06-24-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/range.rs, 713, COVERED
+warning: 1 warning emitted

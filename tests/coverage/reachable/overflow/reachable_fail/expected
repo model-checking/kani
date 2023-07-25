@@ -1,5 +1,5 @@
-tests/coverage/reachable/overflow/reachable_fail/test.rs, 10, UNCOVERED
-tests/coverage/reachable/overflow/reachable_fail/test.rs, 15, COVERED
-tests/coverage/reachable/overflow/reachable_fail/test.rs, 16, UNCOVERED
-tests/coverage/reachable/overflow/reachable_fail/test.rs, 17, UNCOVERED
-
+/home/ubuntu/kani/tests/coverage/reachable/overflow/reachable_fail/test.rs, 10, UNCOVERED
+/home/ubuntu/kani/tests/coverage/reachable/overflow/reachable_fail/test.rs, 11, COVERED
+/home/ubuntu/kani/tests/coverage/reachable/overflow/reachable_fail/test.rs, 15, COVERED
+/home/ubuntu/kani/tests/coverage/reachable/overflow/reachable_fail/test.rs, 16, COVERED
+/home/ubuntu/kani/tests/coverage/reachable/overflow/reachable_fail/test.rs, 17, UNCOVERED

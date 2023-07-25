@@ -1,13 +1,7 @@
-library/kani/src/arbitrary.rs, 55, COVERED
+/home/ubuntu/kani/tests/coverage/unreachable/contradiction/main.rs, 5, COVERED
+/home/ubuntu/kani/tests/coverage/unreachable/contradiction/main.rs, 6, COVERED
+/home/ubuntu/kani/tests/coverage/unreachable/contradiction/main.rs, 7, UNCOVERED
+/home/ubuntu/kani/tests/coverage/unreachable/contradiction/main.rs, 8, UNCOVERED
+/home/ubuntu/kani/tests/coverage/unreachable/contradiction/main.rs, 11, COVERED
+/home/ubuntu/kani/tests/coverage/unreachable/contradiction/main.rs, 13, COVERED
 
-tests/coverage/unreachable/contradiction/main.rs, 5, COVERED
-tests/coverage/unreachable/contradiction/main.rs, 6, COVERED
-tests/coverage/unreachable/contradiction/main.rs, 7, UNCOVERED
-tests/coverage/unreachable/contradiction/main.rs, 8, UNCOVERED
-tests/coverage/unreachable/contradiction/main.rs, 11, COVERED
-tests/coverage/unreachable/contradiction/main.rs, 13, COVERED
-
-library/kani/src/lib.rs, 133, COVERED
-library/kani/src/lib.rs, 134, COVERED
-library/kani/src/lib.rs, 176, COVERED
-library/kani/src/lib.rs, 177, COVERED

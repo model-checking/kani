@@ -1,4 +1,4 @@
-tests/coverage/reachable/overflow-neg/reachable_pass/test.rs, 10, UNCOVERED
-tests/coverage/reachable/overflow-neg/reachable_pass/test.rs, 15, COVERED
-tests/coverage/reachable/overflow-neg/reachable_pass/test.rs, 16, UNCOVERED
-
+/home/ubuntu/kani/tests/coverage/reachable/overflow-neg/reachable_pass/test.rs, 10, UNCOVERED
+/home/ubuntu/kani/tests/coverage/reachable/overflow-neg/reachable_pass/test.rs, 11, COVERED
+/home/ubuntu/kani/tests/coverage/reachable/overflow-neg/reachable_pass/test.rs, 15, COVERED
+/home/ubuntu/kani/tests/coverage/reachable/overflow-neg/reachable_pass/test.rs, 16, COVERED

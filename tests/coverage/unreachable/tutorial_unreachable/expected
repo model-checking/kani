@@ -1,5 +1,5 @@
 /home/ubuntu/kani/tests/coverage/unreachable/tutorial_unreachable/main.rs, 6, COVERED
-/home/ubuntu/kani/tests/coverage/unreachable/tutorial_unreachable/main.rs, 7, UNCOVERED
-/home/ubuntu/kani/tests/coverage/unreachable/tutorial_unreachable/main.rs, 8, UNCOVERED
+/home/ubuntu/kani/tests/coverage/unreachable/tutorial_unreachable/main.rs, 7, COVERED
+/home/ubuntu/kani/tests/coverage/unreachable/tutorial_unreachable/main.rs, 8, COVERED
 /home/ubuntu/kani/tests/coverage/unreachable/tutorial_unreachable/main.rs, 9, UNCOVERED
-/home/ubuntu/kani/tests/coverage/unreachable/tutorial_unreachable/main.rs, 11, UNCOVERED
+/home/ubuntu/kani/tests/coverage/unreachable/tutorial_unreachable/main.rs, 11, COVERED

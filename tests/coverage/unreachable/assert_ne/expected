@@ -1,13 +1,6 @@
 /home/ubuntu/kani/tests/coverage/unreachable/assert_ne/test.rs, 6, COVERED
 /home/ubuntu/kani/tests/coverage/unreachable/assert_ne/test.rs, 7, COVERED
-/home/ubuntu/kani/tests/coverage/unreachable/assert_ne/test.rs, 8, UNCOVERED
-/home/ubuntu/kani/tests/coverage/unreachable/assert_ne/test.rs, 10, UNCOVERED
+/home/ubuntu/kani/tests/coverage/unreachable/assert_ne/test.rs, 8, COVERED
+/home/ubuntu/kani/tests/coverage/unreachable/assert_ne/test.rs, 10, COVERED
 /home/ubuntu/kani/tests/coverage/unreachable/assert_ne/test.rs, 11, UNCOVERED
 /home/ubuntu/kani/tests/coverage/unreachable/assert_ne/test.rs, 14, COVERED
-
-/home/ubuntu/kani/library/kani/src/arbitrary.rs, 57, COVERED
-
-/home/ubuntu/kani/library/kani/src/lib.rs, 133, COVERED
-/home/ubuntu/kani/library/kani/src/lib.rs, 134, COVERED
-/home/ubuntu/kani/library/kani/src/lib.rs, 176, COVERED
-/home/ubuntu/kani/library/kani/src/lib.rs, 177, COVERED

@@ -422,6 +422,31 @@ pub fn format_result(
     result_str
 }
 
+pub fn formatter_coverage(
+    properties: &Vec<Property>,
+    status: VerificationStatus,
+    should_panic: bool,
+    failed_properties: FailedProperties,
+    show_checks: bool,
+) -> String {
+    let non_coverage_checks: Vec<Property> =
+        properties.iter().filter(|&x| x.property_class() != "coverage").cloned().collect();
+    let coverage_checks: Vec<Property> = properties
+        .iter()
+        .filter(|&x| {
+            x.property_class() == "coverage"
+                && !contains_library_path(x.source_location.file.as_ref().unwrap())
+        })
+        .cloned()
+        .collect();
+
+    let s1 =
+        format_result(&non_coverage_checks, status, should_panic, failed_properties, show_checks);
+    let s2 = format_result_coverage(&coverage_checks);
+
+    format!("{}\n{}", s1, s2)
+}
+
 /// Formats a coverage result item (i.e., the subset of verification checks with coverage property class).
 /// To be used when the user requests coverage information with --coverage. The output is tested through the coverage-based testing suite, not the regular expected suite.
 /// Loops through each of the check with a coverage property class and gives a status of COVERED if all checks pertaining

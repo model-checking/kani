@@ -1,8 +1,3 @@
-/home/ubuntu/kani/library/kani/src/lib.rs, 133, COVERED
-/home/ubuntu/kani/library/kani/src/lib.rs, 134, COVERED
-/home/ubuntu/kani/library/kani/src/lib.rs, 176, COVERED
-/home/ubuntu/kani/library/kani/src/lib.rs, 177, COVERED
-
 /home/ubuntu/kani/tests/coverage/reachable/assert-false/main.rs, 5, COVERED
 /home/ubuntu/kani/tests/coverage/reachable/assert-false/main.rs, 6, COVERED
 /home/ubuntu/kani/tests/coverage/reachable/assert-false/main.rs, 10, COVERED
@@ -13,10 +8,3 @@
 /home/ubuntu/kani/tests/coverage/reachable/assert-false/main.rs, 19, COVERED
 /home/ubuntu/kani/tests/coverage/reachable/assert-false/main.rs, 20, UNCOVERED
 /home/ubuntu/kani/tests/coverage/reachable/assert-false/main.rs, 22, COVERED
-
-/home/ubuntu/kani/library/kani/src/arbitrary.rs, 55, COVERED
-/home/ubuntu/kani/library/kani/src/arbitrary.rs, 79, COVERED
-/home/ubuntu/kani/library/kani/src/arbitrary.rs, 80, COVERED
-/home/ubuntu/kani/library/kani/src/arbitrary.rs, 81, COVERED
-/home/ubuntu/kani/library/kani/src/arbitrary.rs, 82, COVERED
-
