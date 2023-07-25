@@ -24,6 +24,7 @@ This RFC proposes adding a new option for verification-based line coverage repor
 As mentioned earlier, we expect users to employ this coverage-related option on several stages of a verification effort:
  * **Learning:** New users are more familiar with coverage reports than property-based results.
  * **Development:** Some users prefer coverage results to property-based results since they are easier to interpret.
+ * **CI Integration**: Users may want to enforce a minimum percentage of code coverage for new contributions.
  * **Debugging:** Users may find coverage reports particularly helpful when inputs are over-constrained (missing some corner cases).
  * **Evaluation:** Users can easily evaluate where and when more verification work is needed (some projects aim for 100% coverage).
 
@@ -34,20 +35,26 @@ Which translates into faster and more reliable coverage options for users.
 
 ## User Experience
 
+The goal is for Kani to generate code coverage report per harness in a well established format, such as [LCOV](https://github.com/linux-test-project/lcov), and possibly a summary in the output.
+For now, we will focus on an interim solution that will enable us to assess the results of [our instrumentation](#injection-of-coverage-checks) and enable integration with the Kani VS Code extension.
+
 ### High-level changes
 
 For the first version, this experimental feature will report verification results along coverage reports.
 Because of that, we'll add a new section `Coverage results` that shows coverage results for each individual harness.
 
-In the following, we describe the output format.
+In the following, we describe an experimental output format.
+Note that the final output format and overall UX is to be determined.
 
-### Output format for coverage results
+### Experimental output format for coverage results
 
 The `Coverage results` section for each harness will produce coverage information in a CSV format as follows:
 ```
 <file>, <line>, <status>
 ```
 where `<status>` is either `FULL`, `PARTIAL` or `NONE`.
+
+As mentioned, this format is designed for evaluating the [native instrumentation-based design](#detailed-design) and is likely to be substituted with another well-established format as soon as possible.
 
 **Users are not expected to consume this output directly.**
 Instead, coverage data is to be consumed by the [Kani VS Code extension](https://github.com/model-checking/kani-vscode-extension) and displayed as in the following picture:
@@ -67,7 +74,7 @@ These options will cause Kani to inject coverage checks during compilation and p
 
 ### Coverage Checks
 
-Coverage checks are a new class of checks similar to `cover` checks.
+Coverage checks are a new class of checks similar to [`cover` checks](https://model-checking.github.io/kani/rfc/rfcs/0003-cover-statement.html).
 The main difference is that users cannot directly interact with coverage checks (i.e., they cannot add or remove them manually).
 Coverage checks are encoded as an `assert(false)` statement (to test reachability) with a fixed description.
 In addition, coverage checks are:
@@ -122,6 +129,9 @@ In contrast, (2) and (3) can be considered the main problems for Kani contributo
 It's not clear how much effort this would involve, but (3) is likely to require substantial documentation contributions.
 But (4) shouldn't be an issue if we decided to invest in `cbmc-viewer`.
 
+Finally, the following downside must be considered:
+`cbmc-viewer` can report line coverage but **the path to report region-based coverage may involve a complete rewrite**.
+
 #### Other output formats
 
 One of the long-term goals for this feature is to provide a UX that is familiar for users.
@@ -135,7 +145,9 @@ But other output formats will be considered in the future.
 
 Open questions:
  * Do we want to report line coverage as `COVERED`/`UNCOVERED` or `FULL`/`PARTIAL`/`NONE`?
- * Should we report coverage results and verification results or not? Doing both is likely to result in worse performance.
+ * Should we report coverage results and verification results or not? Doing both is likely to result in worse performance. We have to perform an experimental evaluation with hard benchmarks.
+ * What should be the final UX for this feature? For instance, we could print a coverage summary and generate a report file per harness. But it's not clear if individual results are relevant to users, so another possibility is to automatically combine results.
+ * What's the most appropriate and well-established output format we can emit?
 
 Feedback to gather before stabilization:
  * Compare the injection-based approach in this RFC with [Rust's instrument-based code coverage](https://doc.rust-lang.org/rustc/instrument-coverage.html)?
