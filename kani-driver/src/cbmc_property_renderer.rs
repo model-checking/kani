@@ -475,10 +475,7 @@ pub fn format_result_coverage(properties: &[Property]) -> String {
         let file_name: String = check.source_location.file.as_ref().unwrap().to_string();
 
         // Add to the files lookup map
-        files
-            .entry(file_name.clone())
-            .or_insert_with(Vec::new)
-            .push((line_number, check.status));
+        files.entry(file_name.clone()).or_insert_with(Vec::new).push((line_number, check.status));
     }
 
     let mut coverage_results: HashMap<String, Vec<(usize, String)>> = HashMap::new();
@@ -498,7 +495,6 @@ pub fn format_result_coverage(properties: &[Property]) -> String {
                 .iter()
                 .filter(|(line_number_accumulated, _)| *line == *line_number_accumulated)
                 .collect();
-
 
             // If any of the statuses is UNSAT, we report that line as UNCOVERED
             let covered_status: String = if is_line_satisfied

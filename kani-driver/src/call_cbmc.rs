@@ -13,9 +13,7 @@ use crate::args::{OutputFormat, VerificationArgs};
 use crate::cbmc_output_parser::{
     extract_results, process_cbmc_output, CheckStatus, ParserItem, Property, VerificationOutput,
 };
-use crate::cbmc_property_renderer::{
-    format_result, kani_cbmc_output_filter, formatter_coverage,
-};
+use crate::cbmc_property_renderer::{format_result, formatter_coverage, kani_cbmc_output_filter};
 use crate::session::KaniSession;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -319,7 +317,13 @@ impl VerificationResult {
 
                 // If --coverage is on, return the post-processed results
                 if coverage_mode {
-                    let mut result = formatter_coverage(results, status, should_panic, failed_properties, show_checks);
+                    let mut result = formatter_coverage(
+                        results,
+                        status,
+                        should_panic,
+                        failed_properties,
+                        show_checks,
+                    );
                     writeln!(result, "Verification Time: {}s", self.runtime.as_secs_f32()).unwrap();
                     return result;
                 }
