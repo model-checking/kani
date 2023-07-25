@@ -157,7 +157,8 @@ function behavior when called with the same arguments.
 The complete code generated for the example is shown below and followed by an explanation of each component.
 
 ```rs
-fn my_div_copy_965916(dividend: u32, divisor: u32) -> u32 { dividend / divisor }
+fn my_div_check_copy_965916(dividend: u32, divisor: u32) -> u32 { dividend / divisor }
+fn my_div_replace_copy_965916(dividend: u32, divisor: u32) -> u32 { kani::any() }
 
 #[kanitool::checked_with = "my_div_check_5e3713"]
 #[kanitool::replaced_with = "my_div_replace_5e3713"]
@@ -186,7 +187,7 @@ fn my_div_check_965916(dividend: u32, divisor: u32) -> u32 {
 
 fn my_div_replace_965916(dividend: u32, divisor: u32) -> u32 {
     kani::assert(divisor != 0, "divisor != 0");
-    kani::any()
+    my_div_replace_copy_965916(dividend, divisor)
 }
 ```
 
@@ -200,16 +201,20 @@ reemitted from the clause macro, the  `kanitool` annotation is placed last in
 the attribute sequence, so that clauses expanded later can see it. Those
 subsequently expanded clauses use the `kanittol` annotations to determine which
 function to call inside them next. If no prior `kanitool` annotation is present
-the original `my_div` or a copy of it is called instead. The copy is called in case
-of the `check` function, since the compiler will later substitute all
-occurrences of `my_div` with the `check` function which would also apply here and
-cause an infinite recursion and make the original `my_div` body inaccessible.
+then the check function calls a copy of `my_div`instead. The copy is called in
+case of the `check` function, since the compiler will later substitute all
+occurrences of `my_div` with the `check` function which would also apply here
+and cause an infinite recursion and make the original `my_div` body
+inaccessible. The replace function also makes a copy, the body of which is a
+`kani::any()` non-determinstic value and this copy carries any memory predicates
+which will be havoced by CBMC.
 
-Each generated function is named `<original_name>_{replace,check,copy}_<hash>`, where
-`hash` is a hash of the original "function item" ast, in this case `my_div`,
-including any attributes, such as `#[kanitool::checked_with =
-"my_div_check_5e3713"]` from clauses expanded earlier, which guarantees the hash is
-unique for each clause expansion.
+Each generated function is named
+`<original_name>_{replace,check,reaplace_copy,check_copy}_<hash>`, where `hash`
+is a hash of the original "function item" ast, in this case `my_div`, including
+any attributes, such as `#[kanitool::checked_with = "my_div_check_5e3713"]` from
+clauses expanded earlier, which guarantees the hash is unique for each clause
+expansion.
 
 Type signatures of the generated functions are always identical to the type
 signature of the contracted function, including type parameters and lifetimes.
@@ -267,7 +272,7 @@ modifications of memory they point to.
 
 Shadowing.
 
-### `old`
+### History Variables
 
 The special `old` builtin function is implemented as an AST rewrite. Consider the below example:
 
@@ -284,10 +289,11 @@ impl<T> Vec<T> {
 to compare it to `self.len()` after `pop` mutates `self`.
 
 While `old` might appear like a function it is not. The implementation lifts the
-argument expression to old via AST rewrite to before the call to `pop` and binds
-it to a temporary variable. This makes `old` syntax rather than a function, but
-also makes it very powerful as any expression is allowed in `old` including
-calculations, function calls etc. Our example would generate the code below:
+argument expression to old via AST rewrite in the `ensures` macro to before the
+call to `pop` and binds it to a temporary variable. This makes `old` syntax
+rather than a function, but also makes it very powerful as any expression is
+allowed in `old` including calculations, function calls etc. Our example would
+generate the code below:
 
 ```rs
 impl<T> Vec<T> {
@@ -310,7 +316,8 @@ in e.g. `pop`. To use e.g. `old(self)` in such a case the user can create copies
 with the usual mechanism, such as `clone`, e.g. `old(self.clone())`.
 
 [^old-safety]: For unsafe rust we need additional protections which are not part
-    of this proposal.
+    of this proposal but are similar to the side effect freedom checks discussed
+    in the [future section](#future-possibilities)
 
 ### Substitution with `kani_compiler` 
 
@@ -339,9 +346,11 @@ invokes `goto-instrument`) via the `HarnessAttributes` struct, using an `Option`
 to represent a possible contract to enforce and a `Vec` as the contracts which
 are used as abstractions.
 
-This is the technical portion of the RFC. Please provide high level details of the implementation you have in mind:
+We call `goto-instrument --enforce-contract <for_contract fn> --replace-call-with-contract <use_contract fns>`
 
 <!-- 
+This is the technical portion of the RFC. Please provide high level details of the implementation you have in mind:
+
 - What are the main components that will be modified? (E.g.: changes to `kani-compiler`, `kani-driver`, metadata,
   installation...)
 - How will they be modified? Any changes to how these components communicate?
@@ -410,7 +419,9 @@ This is the technical portion of the RFC. Please provide high level details of t
   arguments, e.g. a `mut i: u32`? I think that even in other tools (e.g. CBMC)
   the actual value of arguments is copied into the function and therefore
   changes to it are not reflected.
-- Traits
+- Trait contracts
+- Is it really correct to return `kani::any()` from the replacement copy, even
+  if it can be a pointer?
 - Our handling of `impl` in `reuqires` and `ensures` macros is brittle, though
   probably can't be improved. If the contracted function is an `impl` item, then
   the call to the next onion layer has to be `Self::<next fn>()` instead of
