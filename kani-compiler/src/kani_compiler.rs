@@ -33,6 +33,7 @@ use rustc_hir::definitions::DefPathHash;
 use rustc_interface::Config;
 use rustc_middle::ty::TyCtxt;
 use rustc_session::config::{ErrorOutputType, OutputType};
+use rustc_session::EarlyErrorHandler;
 use rustc_span::ErrorGuaranteed;
 use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
@@ -372,6 +373,7 @@ impl Callbacks for KaniCompiler {
     /// During the initialization state, we collect the crate harnesses and prepare for codegen.
     fn after_analysis<'tcx>(
         &mut self,
+        _handler: &EarlyErrorHandler,
         _compiler: &rustc_interface::interface::Compiler,
         rustc_queries: &'tcx rustc_interface::Queries<'tcx>,
     ) -> Compilation {
