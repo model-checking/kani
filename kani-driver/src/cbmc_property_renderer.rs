@@ -4,6 +4,7 @@
 use crate::args::OutputFormat;
 use crate::call_cbmc::{FailedProperties, VerificationStatus};
 use crate::cbmc_output_parser::{CheckStatus, ParserItem, Property, TraceItem};
+use crate::util::contains_library_path;
 use console::style;
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -429,8 +430,14 @@ pub fn format_result_coverage(properties: &[Property]) -> String {
     let mut formatted_output = String::new();
     formatted_output.push_str("\nCoverage Results:\n");
 
-    let coverage_checks: Vec<Property> =
-        properties.iter().filter(|&x| x.property_class() == "coverage").cloned().collect();
+    let coverage_checks: Vec<Property> = properties
+        .iter()
+        .filter(|&x| {
+            x.property_class() == "coverage"
+                && !contains_library_path(x.source_location.file.as_ref().unwrap())
+        })
+        .cloned()
+        .collect();
 
     let mut sorted_checks: Vec<&Property> = coverage_checks.iter().collect();
 

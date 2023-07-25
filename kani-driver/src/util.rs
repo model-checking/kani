@@ -92,6 +92,12 @@ pub mod tempfile {
     }
 }
 
+// Function to check if a Kani coverage check contains a path from kani library
+// or the rust toolchain
+pub fn contains_library_path(element: &str) -> bool {
+    element.contains("library/kani") || element.contains("rustup/toolchains")
+}
+
 /// Replace an extension with another one, in a new PathBuf. (See tests for examples)
 pub fn alter_extension(path: &Path, ext: &str) -> PathBuf {
     path.with_extension(ext)
