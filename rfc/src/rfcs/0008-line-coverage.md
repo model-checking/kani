@@ -58,9 +58,7 @@ where `<status>` is either `FULL`, `PARTIAL` or `NONE`.
 As mentioned, this format is designed for evaluating the [native instrumentation-based design](#detailed-design) and is likely to be substituted with another well-established format as soon as possible.
 
 **Users are not expected to consume this output directly.**
-Instead, coverage data is to be consumed by the [Kani VS Code extension](https://github.com/model-checking/kani-vscode-extension) and displayed as in the following picture:
-
-![Coverage reported on the Kani VS Code Extension](../images/0008/coverage-kani-vscode.png)
+Instead, coverage data is to be consumed by the [Kani VS Code extension](https://github.com/model-checking/kani-vscode-extension) and displayed as in [the VS Code Extension prototype](https://github.com/model-checking/kani-vscode-extension/pull/122).
 
 How to activate and display coverage information in the extension is out of scope for this RFC.
 That said, a proof-of-concept implementation is available [here](https://github.com/model-checking/kani-vscode-extension/pull/122).
