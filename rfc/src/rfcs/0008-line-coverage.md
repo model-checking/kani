@@ -31,6 +31,7 @@ As mentioned earlier, we expect users to employ this coverage-related option on 
 Moreover, adding this option directly to Kani, instead of relying on another tools, is likely to:
  1. Increase the speed of development
  2. Improve testing for coverage features
+
 Which translates into faster and more reliable coverage options for users.
 
 ## User Experience
@@ -147,12 +148,14 @@ But other output formats will be considered in the future.
 Open questions:
  * Do we want to report line coverage as `COVERED`/`UNCOVERED` or `FULL`/`PARTIAL`/`NONE`?
  * Should we report coverage results and verification results or not? Doing both is likely to result in worse performance. We have to perform an experimental evaluation with hard benchmarks.
+ * Should we instrument dependencies or not? Doing so is likely to result in worse performance. We have to perform an experimental evaluation.
  * What should be the final UX for this feature? For instance, we could print a coverage summary and generate a report file per harness. But it's not clear if individual results are relevant to users, so another possibility is to automatically combine results.
  * What's the most appropriate and well-established output format we can emit?
+ * Determine if there are cases in which coverage information is confusing for users (due to, e.g., constant propagation or other compiler optimizations). How can work around such cases?
 
 Feedback to gather before stabilization:
  * Compare the injection-based approach in this RFC with [Rust's instrument-based code coverage](https://doc.rust-lang.org/rustc/instrument-coverage.html)?
- * Determine if there are cases for which coverage information is confusing for users (due to, e.g., constant propagation or other compiler optimizations).
+
 
 ## Future possibilities
 
