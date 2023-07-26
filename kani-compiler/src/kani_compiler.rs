@@ -39,6 +39,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
 use std::io::BufWriter;
 use std::mem;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::{Arc, Mutex};
 use tracing::debug;
@@ -77,6 +78,12 @@ struct HarnessInfo {
     pub stub_map: Stubs,
 }
 
+#[derive(Clone, Debug)]
+struct CrateInfo {
+    pub name: String,
+    pub output_path: PathBuf,
+}
+
 /// Represents the current compilation stage.
 ///
 /// The Kani compiler may run the Rust compiler multiple times since stubbing has to be applied
@@ -113,6 +120,7 @@ enum CompilationStage {
         target_harnesses: Vec<HarnessId>,
         next_harnesses: Vec<Vec<HarnessId>>,
         all_harnesses: HashMap<HarnessId, HarnessInfo>,
+        crate_info: CrateInfo,
     },
     /// Stage where the compiler will codegen harnesses that use stub, one group at a time.
     /// The harnesses at this stage are grouped according to the stubs they are using. For now,
@@ -121,17 +129,16 @@ enum CompilationStage {
         target_harnesses: Vec<HarnessId>,
         next_harnesses: Vec<Vec<HarnessId>>,
         all_harnesses: HashMap<HarnessId, HarnessInfo>,
+        crate_info: CrateInfo,
     },
-    Done,
+    Done {
+        metadata: Option<(KaniMetadata, CrateInfo)>,
+    },
 }
 
 impl CompilationStage {
     pub fn is_init(&self) -> bool {
         matches!(self, CompilationStage::Init)
-    }
-
-    pub fn is_done(&self) -> bool {
-        matches!(self, CompilationStage::Done)
     }
 }
 
@@ -160,7 +167,7 @@ impl KaniCompiler {
     /// Since harnesses may have different attributes that affect compilation, Kani compiler can
     /// actually invoke the rust compiler multiple times.
     pub fn run(&mut self, orig_args: Vec<String>) -> Result<(), ErrorGuaranteed> {
-        while !self.stage.is_done() {
+        loop {
             debug!(next=?self.stage, "run");
             match &self.stage {
                 CompilationStage::Init => {
@@ -178,14 +185,27 @@ impl KaniCompiler {
                     args.push(extra_arg);
                     self.run_compilation_session(&args)?;
                 }
-                CompilationStage::Done => {
-                    unreachable!("There's nothing to be done here.")
+                CompilationStage::Done { metadata: Some((kani_metadata, crate_info)) } => {
+                    // Only store metadata for harnesses for now.
+                    // TODO: This should only skip None.
+                    // https://github.com/model-checking/kani/issues/2493
+                    if self.queries.lock().unwrap().reachability_analysis
+                        == ReachabilityType::Harnesses
+                    {
+                        // Store metadata file.
+                        // We delay storing the metadata so we can include information collected
+                        // during codegen.
+                        self.store_metadata(&kani_metadata, &crate_info.output_path);
+                    }
+                    return Ok(());
+                }
+                CompilationStage::Done { metadata: None } => {
+                    return Ok(());
                 }
             };
 
             self.next_stage();
         }
-        Ok(())
     }
 
     /// Set up the next compilation stage after a `rustc` run.
@@ -193,22 +213,35 @@ impl KaniCompiler {
         self.stage = match &mut self.stage {
             CompilationStage::Init => {
                 // This may occur when user passes arguments like --version or --help.
-                CompilationStage::Done
+                CompilationStage::Done { metadata: None }
             }
-            CompilationStage::CodegenNoStubs { next_harnesses, all_harnesses, .. }
-            | CompilationStage::CodegenWithStubs { next_harnesses, all_harnesses, .. } => {
+            CompilationStage::CodegenNoStubs {
+                next_harnesses, all_harnesses, crate_info, ..
+            }
+            | CompilationStage::CodegenWithStubs {
+                next_harnesses,
+                all_harnesses,
+                crate_info,
+                ..
+            } => {
                 if let Some(target_harnesses) = next_harnesses.pop() {
                     assert!(!target_harnesses.is_empty(), "expected at least one target harness");
                     CompilationStage::CodegenWithStubs {
                         target_harnesses,
                         next_harnesses: mem::take(next_harnesses),
                         all_harnesses: mem::take(all_harnesses),
+                        crate_info: crate_info.clone(),
                     }
                 } else {
-                    CompilationStage::Done
+                    CompilationStage::Done {
+                        metadata: Some((
+                            generate_metadata(&crate_info, all_harnesses),
+                            crate_info.clone(),
+                        )),
+                    }
                 }
             }
-            CompilationStage::Done => {
+            CompilationStage::Done { .. } => {
                 unreachable!()
             }
         };
@@ -225,6 +258,10 @@ impl KaniCompiler {
 
     /// Gather and process all harnesses from this crate that shall be compiled.
     fn process_harnesses(&self, tcx: TyCtxt) -> CompilationStage {
+        let crate_info = CrateInfo {
+            name: tcx.crate_name(LOCAL_CRATE).as_str().into(),
+            output_path: metadata_output_path(tcx),
+        };
         if self.queries.lock().unwrap().reachability_analysis == ReachabilityType::Harnesses {
             let base_filename = tcx.output_filenames(()).output_path(OutputType::Object);
             let harnesses = filter_crate_items(tcx, |_, def_id| is_proof_harness(tcx, def_id));
@@ -250,14 +287,13 @@ impl KaniCompiler {
                     // Generate code without stubs.
                     (all_harnesses.keys().cloned().collect(), vec![])
                 };
-            // Store metadata file.
-            self.store_metadata(tcx, &all_harnesses);
 
-            // Even if no_stubs is empty we still need to store metadata.
+            // Even if no_stubs is empty we still need to store rustc metadata.
             CompilationStage::CodegenNoStubs {
                 target_harnesses: no_stubs,
                 next_harnesses: group_by_stubs(with_stubs, &all_harnesses),
                 all_harnesses,
+                crate_info,
             }
         } else {
             // Leave other reachability type handling as is for now.
@@ -265,6 +301,7 @@ impl KaniCompiler {
                 target_harnesses: vec![],
                 next_harnesses: vec![],
                 all_harnesses: HashMap::default(),
+                crate_info,
             }
         }
     }
@@ -291,25 +328,12 @@ impl KaniCompiler {
                     .collect();
                 Compilation::Continue
             }
-            CompilationStage::Init | CompilationStage::Done => unreachable!(),
+            CompilationStage::Init | CompilationStage::Done { .. } => unreachable!(),
         }
     }
 
     /// Write the metadata to a file
-    fn store_metadata(&self, tcx: TyCtxt, all_harnesses: &HashMap<HarnessId, HarnessInfo>) {
-        let (proof_harnesses, test_harnesses) = all_harnesses
-            .values()
-            .map(|info| &info.metadata)
-            .cloned()
-            .partition(|md| md.attributes.proof);
-        let metadata = KaniMetadata {
-            crate_name: tcx.crate_name(LOCAL_CRATE).as_str().into(),
-            proof_harnesses,
-            unsupported_features: vec![],
-            test_harnesses,
-        };
-        let mut filename = tcx.output_filenames(()).output_path(OutputType::Object);
-        filename.set_extension(ArtifactType::Metadata);
+    fn store_metadata(&self, metadata: &KaniMetadata, filename: &Path) {
         debug!(?filename, "write_metadata");
         let out_file = File::create(&filename).unwrap();
         let writer = BufWriter::new(out_file);
@@ -384,6 +408,31 @@ impl Callbacks for KaniCompiler {
 
         self.prepare_codegen()
     }
+}
+
+/// Generate [KaniMetadata] for the target crate.
+fn generate_metadata(
+    crate_info: &CrateInfo,
+    all_harnesses: &HashMap<HarnessId, HarnessInfo>,
+) -> KaniMetadata {
+    let (proof_harnesses, test_harnesses) = all_harnesses
+        .values()
+        .map(|info| &info.metadata)
+        .cloned()
+        .partition(|md| md.attributes.proof);
+    KaniMetadata {
+        crate_name: crate_info.name.clone(),
+        proof_harnesses,
+        unsupported_features: vec![],
+        test_harnesses,
+    }
+}
+
+/// Extract the filename for the metadata file.
+fn metadata_output_path(tcx: TyCtxt) -> PathBuf {
+    let mut filename = tcx.output_filenames(()).output_path(OutputType::Object);
+    filename.set_extension(ArtifactType::Metadata);
+    filename
 }
 
 #[cfg(test)]
