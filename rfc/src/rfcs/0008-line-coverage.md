@@ -3,7 +3,7 @@
 - **RFC PR:** <https://github.com/model-checking/kani/pull/2609>
 - **Status:** Under Review
 - **Version:** 0
-- **Proof-of-concept:** <https://github.com/model-checking/kani/pull/2609>
+- **Proof-of-concept:** <https://github.com/model-checking/kani/pull/2609> (Kani) + <https://github.com/model-checking/kani-vscode-extension/pull/122> (Kani VS Code Extension)
 
 -------------------
 
@@ -62,6 +62,7 @@ Instead, coverage data is to be consumed by the [Kani VS Code extension](https:/
 ![Coverage reported on the Kani VS Code Extension](../images/0008/coverage-kani-vscode.png)
 
 How to activate and display coverage information in the extension is out of scope for this RFC.
+That said, a proof-of-concept implementation is available [here](https://github.com/model-checking/kani-vscode-extension/pull/122).
 
 ## Detailed Design
 
