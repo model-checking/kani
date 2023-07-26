@@ -23,9 +23,6 @@ pub(crate) fn print_kani_version(invocation_type: InvocationType) {
 ///  - `<invocation>` is `cargo plugin` if Kani was invoked with `cargo kani` or
 ///    `standalone` if it was invoked with `kani`.
 fn kani_version_release(invocation_type: InvocationType) -> String {
-    let mut version_str = "Kani Rust Verifier ".to_string();
-    version_str.push_str(KANI_VERSION);
-
     let invocation_str = match invocation_type {
         InvocationType::CargoKani(_) => "cargo plugin",
         InvocationType::Standalone => "standalone",
