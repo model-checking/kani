@@ -4,6 +4,16 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
+## [0.33.0]
+
+## What's Changed
+* Add support for sysconf by @feliperodri in https://github.com/model-checking/kani/pull/2557
+* Print Kani version by @adpaco-aws in https://github.com/model-checking/kani/pull/2619
+* Upgrade Rust toolchain to nightly-2023-07-01 by @qinheping in https://github.com/model-checking/kani/pull/2616
+* Bump CBMC version to 5.88.1 by @zhassan-aws in https://github.com/model-checking/kani/pull/2623
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.32.0...kani-0.33.0
+
 ## [0.32.0]
 
 ## What's Changed
