@@ -67,7 +67,7 @@ That said, a proof-of-concept implementation is available [here](https://github.
 
 ## Detailed Design
 
-### Arquitecture
+### Architecture
 
 We will add a new unstable `--coverage` verification option to Kani which will require `-Z line-coverage` until this feature is stabilized.
 We will also add a new `--coverage-checks` option to `kani-compiler`, which will result in the injection of coverage checks before each Rust statement and terminator[^coverage-experiments].
@@ -152,6 +152,7 @@ Open questions:
  * What should be the final UX for this feature? For instance, we could print a coverage summary and generate a report file per harness. But it's not clear if individual results are relevant to users, so another possibility is to automatically combine results.
  * What's the most appropriate and well-established output format we can emit?
  * Determine if there are cases in which coverage information is confusing for users (due to, e.g., constant propagation or other compiler optimizations). How can work around such cases?
+ * Do we want to report coverage information for dependencies? For CI, most users may be only interested in their code. Most coverage frameworks have an aggregation tool with [an option to exclude dependencies](https://doc.rust-lang.org/rustc/instrument-coverage.html#compiling-with-coverage-enabled) from coverage metrics.
 
 Feedback to gather before stabilization:
  * Compare the injection-based approach in this RFC with [Rust's instrument-based code coverage](https://doc.rust-lang.org/rustc/instrument-coverage.html)?
