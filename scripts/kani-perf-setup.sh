@@ -68,7 +68,7 @@ benchmark_build() {
   done
 
   SUITE="${KANI_DIR}/tests/bench_build"
-  rm "${SUITE}"
+  rm -f "${SUITE}"
   ln -s "${RUN_DIR}" "${SUITE}"
 
   # Delay execution errors since we need to cleanup.
@@ -86,7 +86,7 @@ benchmark_verification() {
   prep_bench_files
   # Need to use "perf" here, or this change won't be backward compatible.
   SUITE="${KANI_DIR}/tests/perf"
-  rm "${SUITE}"
+  rm -f "${SUITE}"
   ln -s "${RUN_DIR}" "${SUITE}"
 
   # Delay execution errors since we need to cleanup.

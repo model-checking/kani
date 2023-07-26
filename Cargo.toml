@@ -58,5 +58,5 @@ default-members = [
 exclude = [
   "build",
   "target",
-  "tests/*",
+  "tests",
 ]

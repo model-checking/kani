@@ -65,7 +65,11 @@ jobs:
         run: pushd old && cargo build-dev
 
       - name: Copy benchmarks from new to old
-        run: rm -rf ./old/tests/perf ; cp -r ./new/tests/perf ./old/tests/
+        run: |
+          rm -rf ./old/tests/perf
+          rm -rf ./old/tests/benchmarks
+          cp -r ./new/tests/benchmarks ./old/tests/
+          ln -sr ./old/tests/benchmarks ./old/tests/perf
 
       - name: Run benchcomp
         run: |

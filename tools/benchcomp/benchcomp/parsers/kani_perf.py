@@ -69,7 +69,7 @@ def get_metrics():
 
 def main(root_dir):
     benchmarks = {}
-    test_out_dir = root_dir / "build" / "tests" / "bench_verification"
+    test_out_dir = root_dir / "build" / "tests" / "perf"
     harness_pat = re.compile(r"Checking harness (?P<name>.+)\.\.\.")
 
     metrics = _get_metrics()
