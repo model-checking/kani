@@ -41,7 +41,7 @@ achieve them.
 
 ## User Experience
 
-This proposal introduces 4 new annotations.
+This proposal introduces 6 new annotations.
 
 - `#[kani::requires(CONDITION)]` and `#[kani::ensures(CONDITION)]` are
   annotations for non-harness functions (lets use `f` for an example) and encode
@@ -95,45 +95,132 @@ This proposal introduces 4 new annotations.
 
   Multiple `use_contract` annotations are permitted for a single harness.
 
-[^side-effects]: Contract conditions are required to be side effect free, e.g. perform no I/O perform no memory mutation and allocate/free no heap memory. See also the side effect discussion in [Open Questions](#open-questions).
+- The memory predicate family `#[kani::assigns(CONDITION, ASSIGN_RANGE...)]`,
+  `#[kani::frees(CONDITION, LVALUE...)]`  expresses manual contraints on which
+  parts of an object the annotated function may assigned/freed.
 
+  In both cases the `CONDITION`s limit the applicability of the clause, may
+  reference the arguments of the function and can be omitted in which case they
+  default to `true`.
 
-For correct functionality contracts further require reasoning about memory. To
-keep the burden on users user lower we propose to leverage the rust type
-information to overapproximate the memory a function may modify. This allows
-correct havocing without additional user interaction. Inference of memory
-clauses considers any `mut` reachable memory to be potentially freed,
-reallocated or reassigned. In addition any reachable `static` variables are
-considered modified. See [future possibilities](#future-possibilities) for a
-discussion on explicit assigns clauses.
+  `LVALUE` are simple expressions permissible on the left hand side of an
+  assignment. They compose of the name of one function argument and zero or more
+  projections (dereference `*`, field access `.x`, slice indexing `[1]`).
 
-This proposal also introduces a new hidden builtin `kani::unchecked_deref`. The necessity for this builtin is explained [later](#dealing-with-mutable-borrows).
+  The `ASSIGN_RANGE` permits any `LVALUE` but additionally permits more complex
+  slice expressions as the last projection and applies to pointer values. `[..]`
+  denotes the entirety of an allocation, `[i..]`, `[..j]` and `[i..j]` are
+  ranges of pointer offsets. A slicing syntax `p[i..j]` only applies if `p` is a
+  `*mut T` and points to an array allocation. The slice indices are offsets with
+  sizing `T`, e.g. in Rust `p[i..j]` would be equivalent to
+  `std::slice::from_raw_parts(p.offset(i), i - j)`. `i` must be smaller or equal
+  than `j`.
 
----
+  Because lvalues are restricted to using fields we break encapsulation here.
+  You may, if need be, reference fields that are usually hidden without an error
+  from the compiler.
 
+  See also discussion on conditions in assigns clauses in
+  [Rationale](#rationale-and-alternatives)
+
+- To reduce developer burden we additionally propose to leverage the rust type
+  information to overapproximate the memory a function may modify. This allows
+  sound havocing in the absence of an `assigns` or `frees`. Inference of memory
+  clauses considers any `mut` reachable memory to be potentially freed,
+  reallocated or reassigned for any execution of the function. In addition any
+  reachable `static` variables are considered modified.
+
+[^side-effects]: Contract conditions are required to be side effect free, e.g.
+    perform no I/O perform no memory mutation and allocate/free no heap memory.
+    See also the side effect discussion in [Open Questions](#open-questions).
+
+This proposal also introduces a new hidden builtin `kani::unchecked_deref`. The
+necessity for this builtin is explained [later](#dealing-with-mutable-borrows).
+
+<!-- 
 What is the scope of this RFC? Which use cases do you have in mind? Explain how users will interact with it. Also
 please include:
 
 - How would you teach this feature to users? What changes will be required to the user documentation?
-- If the RFC is related to architectural changes and there are no visible changes to UX, please state so.
+- If the RFC is related to architectural changes and there are no visible changes to UX, please state so. 
+-->
 
 
 ## Detailed Design
 
-Let us consider a complete example:
+The lifecycle of a contract is split roughly into three phases. Let us consider
+as an example this function:
 
 ```rs
-#[kani::requires(divisor != 0)]
-#[kani::ensures(result < dividend)]
 fn my_div(dividend: u32, divisor: u32) -> u32 {
   dividend / divisor
 }
+```
 
-#[kani::proof]
-#[kani::for_contract(my_div)]
-fn my_div_harness() {
-  my_div(kani::any(), kani::any())
-}
+1. Specifying the contract
+
+   The user provides a specification (some combination of `requires`, `ensures`,
+   `assigns`, ...). In our case this may look like so:
+
+   ```rs
+   #[kani::requires(divisor != 0)]
+   #[kani::ensures(result <= dividend)]
+   fn my_div(dividend: u32, divisor: u32) -> u32 {
+     dividend / divisor
+   }
+   ```
+
+  Any absent clause defaults to `true` (no constraints on input, output or
+  memory). 
+  
+
+2. Checking the contract
+
+   It is important that the combination of clauses is an
+   overapproximation of the function's behavior. This means the domain of the
+   function described (by the `requires`) clause is *at most* as large as the
+   actual function domain (the input space for which it's behavior is well
+   defined) and the codomain (described by `ensures`, `assigns` and `frees`) is
+   *at least* as large as the actual space of outputs a function may produce.
+
+   For example in this case it would be permissible to use
+   `#[kani::requires(divisor > 100)]` (smaller permissible input domain) or
+   `#[kani::ensures(result < dividend + divisor)]` (larger possible output
+   domain), but e.g. `#[kani::ensures(result < dividend)]` is not allowed.
+
+   The verifyer must check that this overapproximation property holds. To do so
+   it requires a suitably generic environment in which to test pre and
+   postconditions. The choice of environment has implications on soundness and
+   ideally the verifier can create an environment automatically. This is a
+   difficult problem due to heaps and part of [future
+   possibilities](#future-possibilities). For the purposes of this proposal the
+   user must provide a suitable harness as checking environment. This is done
+   with the `for_contract` annotation (below).
+
+   ```rs
+   #[kani::proof]
+   #[kani::for_contract(my_div)]
+   fn my_div_harness() {
+     my_div(kani::any(), kani::any())
+   }
+   ```
+
+   To facilitate contract checking against the implementation of `my_div` the
+   verifier performs code generation which turns preconditions (`requires`) into
+   `kani::assume` calls before function execution. This restricts the arbitrary
+   (`kani::any`) input domain from the harness to the one claimed by the
+   precondition. We also turn postconditions (`ensures`, `assigns`...) into
+   `kani::assert` calls *after* the function execution verifying the integrity
+   of the codomain.
+
+   ... Done like stubbing
+
+- Substituting the contract
+
+Let us consider a complete example:
+
+```rs
+
 
 #[kani::proof]
 #[kani::use_contract]
@@ -319,6 +406,13 @@ with the usual mechanism, such as `clone`, e.g. `old(self.clone())`.
     of this proposal but are similar to the side effect freedom checks discussed
     in the [future section](#future-possibilities)
 
+### Assigns Clauses
+
+- Inference
+- Lvalue tracking
+- Code generation for conditions
+- Code generation for slice patterns
+
 ### Substitution with `kani_compiler` 
 
 Harnesses annotated with `for_contract` or `use_contract` are subject to
@@ -440,7 +534,10 @@ This is the technical portion of the RFC. Please provide high level details of t
 
 - Enforcing contract checking before substitution
 - Quantifiers
-- Side effect freedom is currently enforced by CBMC. This means that the error originates there and is likely not legible. Intead Kani should perform a reachability analysis from the contract expressions and determine whether side effects are possible, throwing a graceful error.
+- Side effect freedom is currently enforced by CBMC. This means that the error
+  originates there and is likely not legible. Intead Kani should perform a
+  reachability analysis from the contract expressions and determine whether side
+  effects are possible, throwing a graceful error.
 
 What are natural extensions and possible improvements that you predict for this feature that is out of the
 scope of this RFC? Feel free to brainstorm here.
