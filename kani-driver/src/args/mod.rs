@@ -300,7 +300,7 @@ pub struct VerificationArgs {
     )]
     pub enable_stubbing: bool,
 
-    #[arg(long, hide_short_help = true, requires("enable_unstable"))]
+    #[arg(long, hide_short_help = true)]
     pub coverage: bool,
 
     /// Arguments to pass down to Cargo
@@ -641,6 +641,16 @@ impl ValidateArgs for VerificationArgs {
                 unstable C-FFI support.",
                 ));
             }
+        }
+
+        if self.coverage
+            && !self.common_args.unstable_features.contains(&UnstableFeatures::LineCoverage)
+        {
+            return Err(Error::raw(
+                ErrorKind::MissingRequiredArgument,
+                "The `--coverage` argument is unstable and requires `-Z \
+            line-coverage` to be used.",
+            ));
         }
 
         Ok(())
