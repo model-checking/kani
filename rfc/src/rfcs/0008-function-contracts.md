@@ -9,21 +9,26 @@
 
 ## Summary
 
-Contracts are a powerful tool for verification. They are both a convenient way
-to write specifications as well as allowing users to soundly approximate the
-behavior of units of code. The verification tool then leverages these
-approximations for modular verification which affords both scalability, but also
-allows for verifying unbounded loops and recursion.
+Function contracts are a mechanism for a stubbing-like abstraction of concrete
+implementations but with a significantly reduced threat to soundness[^simple-unsoundness].
 
+Lays the ground work for modular verification.
 <!-- Shorter? -->
 
 ## User Impact
 
 <!-- Is basically the pitch and addressing the user. -->
 
-Function contracts are a mechanism for a stubbing-like abstraction of concrete
-implementations but with a significantly reduced threat to soundness. It also
-lays the ground work for the following two ambitious goals.
+Function contracts provide an interface for verified abstraction, a mechanism
+similar to stubbing, but sound[^simple-unsoundness]. It also paves the way for
+the following two ambitious goals.
+
+[^simple-unsoundness]: The main remaining threat to soundness in the use of
+    contracts, as defined in this proposal, is the reliance on user-supplied
+    harnesses for contract checking (explained in bulled 2 of [user
+    experience](#user-experience)). A more thorough discussion on the dangers
+    and potential remedies can be found in the [future](#future-possibilities)
+    section.
 
 - **Scalability:** Function contracts are sound (over)abstractions of function
   behavior. By verifiying the contract against its implemetation and
@@ -45,7 +50,7 @@ This proposal focuses on scalability benefits within a single verification sessi
 caching strategies for cross-session speedup are left to future work.
 
 We add function contract functionality, but do not add the inductive reasoning
-support needed for many unbounded problems, such as "deacreases" measures and
+support needed for many unbounded problems, such as "decreases" measures and
 inductive lemmas.
 
 ## User Experience
@@ -302,10 +307,49 @@ encapsulation here. If need be we can reference fields that are usually hidden,
 without an error from the compiler.
 
 [^side-effects]: Code used in contracts is required to be side effect free which
-    means it must not perform I/O, mutate memory (`&mut` vars and such) and
+    means it must not perform I/O, mutate memory (`&mut` vars and such) or
     (de)allocate heap memory. This is enforced by the verifier, see the
     discussion in the [future](#future-possibilities) section.
 
+
+### Detailed Attribute Contraints Overview
+
+Any violation of the following constraints constitutes a compile-time error.
+
+- A function may have any number of `requires`, `ensures`, `assigns` and `frees`
+  attributes. Any function with at least one such annotation is considered as
+  "having a contract".
+
+  Harnesses (general or for contract checking) may not have any such annotation.
+
+- A function may have one `proof_for_contract(TARGET)` annotation. `TARGET` must
+  "have a contract". Multiple functions may have `proof_for_contract`
+  annotations with the same `TARGET`. All such harnesses must pass verification,
+  before `TARGET` may be used as a verified stub.
+
+  A `proof_for_contract` harness may use both `stub` and `stub_verified`, though
+  the `TARGET` may not appear in either. 
+
+  Kani checks that `TARGET` is reachable from the `proof_for_contract` harness,
+  but it does not warn if stubbed functions use `TARGET`[^stubcheck].
+
+  A `proof_for_contract` function may not have the `kani::proof` attribute (it
+  is already implied by `proof_for_contract`).
+
+- A harness may have multiple `stub_verified(TARGET)` attributes. Each `TARGET`
+  must "have a contract". No `TARGET` may appear twice.
+
+- Harnesses may combine `stub(S_TARGET, ..)` and `stub_verified(V_TARGET)`
+  annotations, though no target may occur in `S_TARGET`s and `V_TARGET`s
+  simultaneously.
+
+- For mutually recursive functions using `stub_verified` kani will check their
+  contracts in non-deterministic order and assume each time the respective other
+  check succeeded.
+
+[^stubcheck]: Kani cannot report the occurrence of a contract function to check
+    in stubbed functions as errors, because the mechanism is needed to verify
+    mutually recursive functions.
 
 ## Detailed Design
 
@@ -401,7 +445,7 @@ variables and their occurrence in the postcondition is renamed.
 ### Changes to Other Components
 
 Contract enforcement and replacement (`kani::proof_for_contract(f)`,
-`kani::verified_stub(f)`) both dispatch to the stubbing logic, stubbing `f` with
+`kani::stub_verified(f)`) both dispatch to the stubbing logic, stubbing `f` with
 the generated check and replace function respectively. If `f` has no contract,
 an error is thrown.
 
