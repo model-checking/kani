@@ -16,13 +16,15 @@ impl<'tcx> GotocCtx<'tcx> {
         debug!(?bb, "Codegen basicblock");
         self.current_fn_mut().set_current_bb(bb);
         let label: String = self.current_fn().find_label(&bb);
+        let check_coverage = self.queries.check_coverage;
         // the first statement should be labelled. if there is no statements, then the
         // terminator should be labelled.
-        let check_coverage = self.queries.check_coverage;
         match bbd.statements.len() {
             0 => {
                 let term = bbd.terminator();
                 let tcode = self.codegen_terminator(term);
+                // When checking coverage, the `coverage` check should be
+                // labelled instead.
                 if check_coverage {
                     let span = term.source_info.span;
                     let cover = self.codegen_coverage(span);
@@ -35,6 +37,8 @@ impl<'tcx> GotocCtx<'tcx> {
             _ => {
                 let stmt = &bbd.statements[0];
                 let scode = self.codegen_statement(stmt);
+                // When checking coverage, the `coverage` check should be
+                // labelled instead.
                 if check_coverage {
                     let span = stmt.source_info.span;
                     let cover = self.codegen_coverage(span);
@@ -53,8 +57,6 @@ impl<'tcx> GotocCtx<'tcx> {
                     let stmt = self.codegen_statement(s);
                     self.current_fn_mut().push_onto_block(stmt);
                 }
-                // TODO: test with division by zero or overflow that false
-                // assumption will be in the middle of the basic block
                 let term = bbd.terminator();
                 if check_coverage {
                     let span = term.source_info.span;
