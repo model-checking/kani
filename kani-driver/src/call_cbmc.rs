@@ -315,21 +315,17 @@ impl VerificationResult {
                 let failed_properties = self.failed_properties;
                 let show_checks = matches!(output_format, OutputFormat::Regular);
 
-                // If --coverage is on, return the post-processed results
-                if coverage_mode {
-                    let mut result = formatter_coverage(
+                let mut result = if coverage_mode {
+                    formatter_coverage(
                         results,
                         status,
                         should_panic,
                         failed_properties,
                         show_checks,
-                    );
-                    writeln!(result, "Verification Time: {}s", self.runtime.as_secs_f32()).unwrap();
-                    return result;
-                }
-
-                let mut result =
-                    format_result(results, status, should_panic, failed_properties, show_checks);
+                    )
+                } else {
+                    format_result(results, status, should_panic, failed_properties, show_checks)
+                };
                 writeln!(result, "Verification Time: {}s", self.runtime.as_secs_f32()).unwrap();
                 result
             }
