@@ -8,7 +8,9 @@ use console::style;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use rustc_demangle::demangle;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
+use std::fmt;
+use strum_macros::AsRefStr;
 
 type CbmcAltDescriptions = HashMap<&'static str, Vec<(&'static str, Option<&'static str>)>>;
 
@@ -148,6 +150,25 @@ static CBMC_ALT_DESCRIPTIONS: Lazy<CbmcAltDescriptions> = Lazy::new(|| {
     // map.insert("precondition_instance": vec![]);
     map
 });
+
+#[derive(PartialEq, Eq, AsRefStr, Clone, Copy)]
+#[strum(serialize_all = "UPPERCASE")]
+// The status of coverage reported by Kani
+enum CoverStatus {
+    Full,
+    Partial,
+    None,
+}
+
+impl fmt::Display for CoverStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CoverStatus::Full => write!(f, "FULL"),
+            CoverStatus::Partial => write!(f, "PARTIAL"),
+            CoverStatus::None => write!(f, "NONE"),
+        }
+    }
+}
 
 const UNSUPPORTED_CONSTRUCT_DESC: &str = "is not currently supported by Kani";
 const UNWINDING_ASSERT_DESC: &str = "unwinding assertion loop";
@@ -430,15 +451,12 @@ pub fn format_coverage(
     failed_properties: FailedProperties,
     show_checks: bool,
 ) -> String {
-    let non_coverage_checks: Vec<Property> =
-        properties.iter().filter(|&x| x.property_class() != "code_coverage").cloned().collect();
-    let coverage_checks: Vec<Property> =
-        properties.iter().filter(|&x| x.property_class() == "code_coverage").cloned().collect();
+    let (coverage_checks, non_coverage_checks): (Vec<Property>, Vec<Property>) =
+        properties.iter().cloned().partition(|x| x.property_class() == "code_coverage");
 
     let verification_output =
         format_result(&non_coverage_checks, status, should_panic, failed_properties, show_checks);
     let coverage_output = format_result_coverage(&coverage_checks);
-    print!("printing coverage output = {}", coverage_output);
     let result = format!("{}\n{}", verification_output, coverage_output);
 
     result
@@ -447,63 +465,27 @@ pub fn format_coverage(
 /// Generate coverage result from all coverage properties (i.e., the checks with "coverage" property class).
 /// To be used when the user requests coverage information with --coverage. The output is tested through the coverage-based testing suite, not the regular expected suite.
 /// Loops through each of the check with a coverage property class and gives a status of FULL if all checks pertaining
-/// to a line number are SATISFIED. Similarly, it gives a status of NONE if all checks related to a line are UNSAT. If a line has both, it reports PARTIAL coverage.
+/// to a line number are FAILURE (SATISFIED). Similarly, it gives a status of NONE if all checks related to a line are SUCCESS (UNSAT). If a line has both, it reports PARTIAL coverage.
 fn format_result_coverage(properties: &[Property]) -> String {
     let mut formatted_output = String::new();
     formatted_output.push_str("\nCoverage Results:\n");
 
-    let mut coverage_checks: Vec<&Property> = properties.iter().collect();
-
-    coverage_checks.sort_by_key(|check| (&check.source_location.file, &check.source_location.line));
-
-    let mut files: HashMap<String, Vec<(usize, CheckStatus)>> = HashMap::new();
-    for check in coverage_checks {
-        // Get line number and filename
-        let line_number: usize = check.source_location.line.as_ref().unwrap().parse().unwrap();
-        let file_name: String = check.source_location.file.as_ref().unwrap().to_string();
-
-        // Add to the files lookup map
-        files.entry(file_name.clone()).or_insert_with(Vec::new).push((line_number, check.status));
-    }
-
-    let mut coverage_results: HashMap<String, Vec<(usize, String)>> = HashMap::new();
-
-    for (file, val) in files {
-        let mut lines: HashSet<usize> = HashSet::new();
-        let mut line_results: Vec<(usize, String)> = Vec::new();
-        for check in val.clone() {
-            lines.insert(check.0);
-        }
-
-        // For each of these lines, create a map from line -> status
-        // example - {3 -> ["SAT", "UNSAT"], 4 -> ["UNSAT"] ...}
-        for line in lines.iter() {
-            let is_line_satisfied: Vec<_> = val
-                .iter()
-                .filter(|(line_number_accumulated, _)| *line == *line_number_accumulated)
-                .collect();
-
-            // Report lines as FULL if all of the coverage checks (property class = code_coverage) say FAILURE, NONE if all of the coverage checks say SUCCESS,
-            // and PARTIAL if there is a mix of the two
-            let covered_status: String = if is_line_satisfied
-                .iter()
-                .all(|&is_satisfiable| is_satisfiable.1.to_string().contains("FAILURE"))
-            {
-                "FULL".to_string()
-            } else if is_line_satisfied
-                .iter()
-                .all(|&is_satisfiable| is_satisfiable.1.to_string().contains("SUCCESS"))
-            {
-                "NONE".to_string()
-            } else {
-                "PARTIAL".to_string()
-            };
-
-            line_results.push((*line, covered_status));
-        }
-
-        line_results.sort_by_key(|&(line, _)| line);
-        coverage_results.insert(file.clone(), line_results);
+    let mut coverage_results: BTreeMap<String, BTreeMap<usize, CoverStatus>> = BTreeMap::default();
+    for prop in properties {
+        let src = prop.source_location.clone();
+        let file_entries = coverage_results.entry(src.file.unwrap()).or_default();
+        let check_status =
+            if prop.status == CheckStatus::Failure { CoverStatus::Full } else { CoverStatus::None };
+        file_entries
+            .entry(src.line.unwrap().parse().unwrap())
+            .and_modify(|line_status| {
+                if *line_status == check_status.clone() {
+                    *line_status = check_status
+                } else {
+                    *line_status = CoverStatus::Partial
+                }
+            })
+            .or_insert(check_status);
     }
 
     // Create formatted string that is returned to the user as output
