@@ -483,16 +483,16 @@ fn format_result_coverage(properties: &[Property]) -> String {
                 .filter(|(line_number_accumulated, _)| *line == *line_number_accumulated)
                 .collect();
 
-            // Report lines as FULL if all of the coverage checks say SATISFIED, NONE if all of the coverage checks say UNSATISFIABLE,
+            // Report lines as FULL if all of the coverage checks (property class = code_coverage) say FAILURE, NONE if all of the coverage checks say SUCCESS,
             // and PARTIAL if there is a mix of the two
             let covered_status: String = if is_line_satisfied
                 .iter()
-                .all(|&is_satisfiable| is_satisfiable.1.to_string().contains("SATISFIED"))
+                .all(|&is_satisfiable| is_satisfiable.1.to_string().contains("FAILURE"))
             {
                 "FULL".to_string()
             } else if is_line_satisfied
                 .iter()
-                .all(|&is_satisfiable| is_satisfiable.1.to_string().contains("UNSATISFIABLE"))
+                .all(|&is_satisfiable| is_satisfiable.1.to_string().contains("SUCCESS"))
             {
                 "NONE".to_string()
             } else {
