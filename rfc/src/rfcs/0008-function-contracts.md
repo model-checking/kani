@@ -84,7 +84,8 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
    function arguments and, in case of `ensures`, the `result`[^result-naming]
    result of the function. Syntactically Kani supports any Rust expression,
    including function calls, defining types etc, however they must be
-   side-effect free[^side-effects].
+   side-effect free[^side-effects]. Multiple `requires` and `ensrues` clauses
+   are allowed on the same function, they are implicitly logically conjoined.
 
    [^result-naming]: See [open questions](#open-questions) for a discussion
        about naming of the result variable.
@@ -328,9 +329,10 @@ The `requires` and `ensures` macros perform code generation in the macro,
 creating a `check` and a `replace` function which use `assert` and `assume` as
 described in the [user expersection](#user-experience) section. Both are
 attached via a `kanitool` attribute to the function which they are checking and
-replacing respectively.
+replacing respectively. See also the [discussion](#rationale-and-alternatives)
+about why we decided to generate check and replace functions like this.
 
-The code generation in the macros is straightforward, save two features: `old`
+The code generation in the macros is straightforward, save two aspects: `old`
 and the borrow checker.
 
 The special `old` builtin function is implemented as an AST rewrite. Consider
@@ -359,89 +361,23 @@ impl<T> Vec<T> {
 }
 ```
 
-The expression inse
+Nested invocations of `old` are prohibited (Kani throws an error) and the
+expression inside may only refer to the function arguments and not other local
+variables in the contract (Rust will report those variables as not being in
+scope). 
 
-(see also discussion in [alternatives](#rationale-and-alternatives)). One
-function is generated which corresponds to checking the contract holds for the
-implementation. One function is generated which corresponds to approximating the
-function behavior when called with the same arguments.
+The borrow checker also ensures for us that none of the temporary variables
+borrow in a way that would be able to observe the moditication in `pop` which
+would occur for instance if the user wrote `old(self)`. Instead of borrowing
+copies should be created (e.g. `old(self.clone())`). This is only enforced for
+safe rust though.
 
-The complete code generated for the example is shown below and followed by an explanation of each component.
-
-```rs
-fn my_div_check_copy_965916(dividend: u32, divisor: u32) -> u32 { dividend / divisor }
-fn my_div_replace_copy_965916(dividend: u32, divisor: u32) -> u32 { kani::any() }
-
-#[kanitool::checked_with = "my_div_check_5e3713"]
-#[kanitool::replaced_with = "my_div_replace_5e3713"]
-fn my_div(dividend: u32, divisor: u32) -> u32 { dividend / divisor }
-
-fn my_div_check_5e3713(dividend: u32, divisor: u32) -> u32 {
-    let dividend_renamed = kani::untracked_deref(&dividend);
-    let divisor_renamed = kani::untracked_deref(&divisor);
-    let result = my_div_check_965916(dividend, divisor);
-    kani::assert(result <= dividend_renamed, "result <= dividend");
-    result
-}
-
-fn my_div_replace_5e3713(dividend: u32, divisor: u32) -> u32 {
-    let dividend_renamed = kani::untracked_deref(&dividend);
-    let divisor_renamed = kani::untracked_deref(&divisor);
-    let result = my_div_replace_965916(dividend, divisor);
-    kani::assume(result <= dividend_renamed);
-    result
-}
-
-fn my_div_check_965916(dividend: u32, divisor: u32) -> u32 {
-    kani::assume(divisor != 0);
-    my_div_copy_965916(dividend, divisor)
-}
-
-fn my_div_replace_965916(dividend: u32, divisor: u32) -> u32 {
-    kani::assert(divisor != 0, "divisor != 0");
-    my_div_replace_copy_965916(dividend, divisor)
-}
-```
-
-
-To support mutiple clauses while performing all code generation at macro
-expansion time each clause separately generates both a checking and a
-replacement function, wrapping like onion layers around any prior checks. Both
-the generated check and replace function is attached to the annotated function
-using `kanitool::{checked,replaced}_with` annotations. When the item is
-reemitted from the clause macro, the  `kanitool` annotation is placed last in
-the attribute sequence, so that clauses expanded later can see it. Those
-subsequently expanded clauses use the `kanittol` annotations to determine which
-function to call inside them next. If no prior `kanitool` annotation is present
-then the check function calls a copy of `my_div`instead. The copy is called in
-case of the `check` function, since the compiler will later substitute all
-occurrences of `my_div` with the `check` function which would also apply here
-and cause an infinite recursion and make the original `my_div` body
-inaccessible. The replace function also makes a copy, the body of which is a
-`kani::any()` non-determinstic value and this copy carries any memory predicates
-which will be havoced by CBMC.
-
-Each generated function is named
-`<original_name>_{replace,check,reaplace_copy,check_copy}_<hash>`, where `hash`
-is a hash of the original "function item" ast, in this case `my_div`, including
-any attributes, such as `#[kanitool::checked_with = "my_div_check_5e3713"]` from
-clauses expanded earlier, which guarantees the hash is unique for each clause
-expansion.
-
-Type signatures of the generated functions are always identical to the type
-signature of the contracted function, including type parameters and lifetimes.
-
-
-### Dealing with mutable borrows
-
-Preconditions (`requires`) are emitted as-is into the generated function,
-providing access to the function arguments directly. This is safe because they
-are required to be side-effect free[^side-effects]. 
-
-Postconditions (`ensures`) have to be handled specially. They can reference the
-arguments of the function, though not modify them. However this is problematic
-even without modification if part of an input is borrowed mutably as would be
-the case in the following example of the `Vec::split_at_mut` function.
+The second part relevant for the implementation is how we deal with the borrow
+checker. Postconditions (`ensures`) reference the arguments of the function,
+though don't modify them. However this is problematic even without modification
+if part of an input is borrowed mutably in the return value. For instance the
+`Vec::split_at_mut` function does this and a sensible contract for it might look
+as follows:
 
 ```rs
 impl<T> Vec<T> {
@@ -452,123 +388,33 @@ impl<T> Vec<T> {
 }
 ```
 
-This contract refers simultaneously to `self` and the result. Since the method however borrows `self` mutably, the borrow checker would not allow the following simplistic code generation:
-
-```rs
-impl<T> Vec<T> {
-  fn split_at_mut_check_<hash>(&mut self, i: usize) -> (&mut [T], &mut [T]) {
-    let result = self.split_at_mut(i);
-    kani::assert(self.len() == result.0.len() + result.1.len());
-    result
-  }
-}
-```
-This proposal also introduces a new hidden builtin `kani::unchecked_deref`. The
-necessity for this builtin is explained [later](#dealing-with-mutable-borrows).
-
-
-`self` would not be permitted to be used here until `result` goes out of scope
-and releasese the borrow. To avoid this issue we break the borrowchecker
-guarantee with a new biltin `fn kani::unsafe_deref<T>(t: &T) -> T`. The
-implementation of this function is simply a CBMC level `*` (deref). In Rust this
-implementation would be illegal without the `Copy` trait (which generates a
-copy) but in CBMC this is acceptable. Breaking the borrow checker this way is safe for 2 reasons:
+This contract refers simultaneously to `self` and the result. Since the method
+however borrows `self` mutably, the borrow checker would complain about a simple
+`assert` of the postcondition. To work around this we strategically break the
+borrowing rules using a new hidden builtin `kani::unckecked_deref` with the type
+signature `for <T> fn (&T) -> T` which is essentially a C-style dereference
+operation. Breaking the borrow checker like this is safe for 2 reasons:
 
 1. Postconditions are not allowed perform mutation[^side-effects] and
 2. Post conditions are of type `bool`, meaning they cannot leak references to
    the arguments and cause race conditions.
 
-Circumventing the borrow checker is facilitated with a visit over the initial
-postcondition expression that renames every occurrence of the arguments to a
-fresh identifier and then generates a call `let i = unsafe_deref(&a)` for each
-argument `a` and fresh identifier `i` **before** the call to the contracted
-function. Because `unsafe_deref` creates shallow copies, they will witness any
-modifications of memory they point to.
+The "copies" of arguments created by by `unsafe_deref` are stored as fresh local
+variables and their occurrence in the postcondition is renamed.
 
-Shadowing.
+### Changes to Other Components
 
-### History Variables
+Contract enforcement and replacement (`kani::proof_for_contract(f)`,
+`kani::verified_stub(f)`) both dispats to the stubbing logic, replacing `f` with
+the generated check and replace function respectively. If `f` has no contract,
+an error is thrown.
 
-The special `old` builtin function is implemented as an AST rewrite. Consider the below example:
-
-```rs
-impl<T> Vec<T> {
-  #[kani::ensures(self.is_empty() || self.len() == old(self.len()) - 1)]
-  fn pop(&mut self) -> Option<T> {
-    ...
-  }
-}
-```
-
-`old` gives the user access to `self.len()`, evaluated before `pop` to be able
-to compare it to `self.len()` after `pop` mutates `self`.
-
-While `old` might appear like a function it is not. The implementation lifts the
-argument expression to old via AST rewrite in the `ensures` macro to before the
-call to `pop` and binds it to a temporary variable. This makes `old` syntax
-rather than a function, but also makes it very powerful as any expression is
-allowed in `old` including calculations, function calls etc. Our example would
-generate the code below:
-
-```rs
-impl<T> Vec<T> {
-  fn pop_check_<hash>(&mut self) -> Option<T> {
-    let old_1 = self.len();
-    let result = Self::pop_copy_<hash>(self);
-    kani::assert(self.is_empty() || self.len() == old_1 - 1)
-  }
-}
-```
-
-Note that unlike for arguments for postconditions, we do not use `unsafe_deref`
-to break the borrowing rules. Unlike for those arguments, which must witness
-mutations, the expression in `old` is supposed to reflect the state *before* the
-function call and must therefore not observe mutations performed by e.g. `pop`.
-We can use the borrowchecker to enforce this for safe Rust[^old-safety]. The
-borrow checker will ensure that none of the temporary variables created borrow
-from any mutable arguments and thus guarantee that they cannot witness mutations
-in e.g. `pop`. To use e.g. `old(self)` in such a case the user can create copies
-with the usual mechanism, such as `clone`, e.g. `old(self.clone())`.
-
-[^old-safety]: For unsafe rust we need additional protections which are not part
-    of this proposal but are similar to the side effect freedom checks discussed
-    in the [future section](#future-possibilities)
-
-### Assigns Clauses
-
-- Inference
-- Lvalue tracking
-- Code generation for conditions
-- Code generation for slice patterns
-
-### Substitution with `kani_compiler` 
-
-Harnesses annotated with `for_contract` or `use_contract` are subject to
-substitution. Only one `for_contract(f)` annotation is allowed per harness and
-it triggers substitution of the target function `f` with the check function in
-the `#[kanitool::checked_with = ...]` annotation on `f`. Multiple
-`use_contract(g)` annotations are allowed on each harness, including on
-`for_contract` harnesses, though the simultaneous presence of `for_contract` and
-`use_contract` for the same target function is not permissible.
-
-If the target function (`f` or `g`) does not have a `checked_with` or
-`replaced_with` attribute (respectively) an error is thrown.
-
-### Invoking `goto-instrument` from `kani-driver`
-
-In addition to the Kani side substitiution we also perform instrumentation on
-the CBMC because we rely on it's support for memory predicates. The
-generated memory predicates are emitted from the compiler as CBMC contracts. To
-enforce the memory contract `goto-instrument` has to be invoked with the correct
-functions name. Since this is after lowering into GOTO-C the name provided has
-to be the mangled name of the monomorphized instances. The compiler determines
-which monomorphized version of the contracted functions are used in a
-reachability pass. Those names are passed to the driver (as the component that
-invokes `goto-instrument`) via the `HarnessAttributes` struct, using an `Option`
-to represent a possible contract to enforce and a `Vec` as the contracts which
-are used as abstractions.
-
-We call `goto-instrument --enforce-contract <for_contract fn> --replace-call-with-contract <use_contract fns>`
+For memory predicates Kani relies on CBMC. Generated memory predicates (whether
+derived from types of from explicit clauses) are emitted from the compiler as
+GOTO contracts in the artifact. Then the driver invokes `goto-instrument` with
+the name of the GOTO-level function names to enforce or replace the memory
+contracts. The compiler communicates the names of the function via harness
+metadata.
 
 <!-- 
 This is the technical portion of the RFC. Please provide high level details of the implementation you have in mind:
