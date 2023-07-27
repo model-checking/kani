@@ -468,7 +468,6 @@ fn format_result_coverage(properties: &[Property]) -> String {
 
     let mut coverage_results: HashMap<String, Vec<(usize, String)>> = HashMap::new();
 
-    // Loop through the files list and create a list of lines accessible in that file
     for (file, val) in files {
         let mut lines: HashSet<usize> = HashSet::new();
         let mut line_results: Vec<(usize, String)> = Vec::new();
