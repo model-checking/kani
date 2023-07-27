@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// kani-flags: --no-unwinding-checks
+// kani-flags: --no-unwinding-checks -Z async-lib
 
 // This test is to check Kani's error handling for harnesses that have proof attributes
 // with arguments when the expected declaration takes no arguments.
@@ -18,4 +18,13 @@ fn harness() {
         counter += 1;
         assert!(counter < 10);
     }
+}
+
+// Test what happens if the schedule option is incorrect:
+
+struct NotASchedule;
+
+#[kani::proof(schedule = NotASchedule)]
+async fn test() {
+    assert!(true);
 }
