@@ -45,19 +45,19 @@ pub enum PropertyClass {
     ///
     /// SPECIAL BEHAVIOR: "Errors" for this type of assertion just mean "reachable" not failure.
     Cover,
-    /// A specialization of the `Cover` class used for collecting coverage information.
-    /// The main differences are:
-    ///  - `Coverage` checks have a fixed condition (`false`) and description.
-    ///  - `Coverage` checks are filtered out from verification results and
+    /// The class of checks used for code coverage instrumentation. Only needed
+    /// when working on coverage-related features.
+    ///
+    /// Do not mistake with `Cover`, they are different:
+    ///  - `CodeCoverage` checks have a fixed condition (`false`) and description.
+    ///  - `CodeCoverage` checks are filtered out from verification results and
     ///    postprocessed to build coverage reports.
     ///  - `Cover` checks can be added by users (using the `kani::cover` macro),
-    ///    while `Coverage` checks are not exposed to users (i.e., they are
+    ///    while `CodeCoverage` checks are not exposed to users (i.e., they are
     ///    automatically added if running with the coverage option).
     ///
-    /// You should only need `Coverage` when working on coverage-related features.
-    ///
     /// SPECIAL BEHAVIOR: "Errors" for this type of assertion just mean "reachable" not failure.
-    Coverage,
+    CodeCoverage,
     /// Ordinary (Rust) assertions and panics.
     ///
     /// SPECIAL BEHAVIOR: These assertion failures should be observable during normal execution of Rust code.
@@ -154,7 +154,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // unless it is run with '--cover cover' (see
         // https://github.com/diffblue/cbmc/issues/6613). So for now use
         // `assert(false)`.
-        self.codegen_assert(Expr::bool_false(), PropertyClass::Coverage, "cover_experiment", loc)
+        self.codegen_assert(Expr::bool_false(), PropertyClass::CodeCoverage, "cover_experiment", loc)
     }
 
     // The above represent the basic operations we can perform w.r.t. assert/assume/cover
