@@ -28,7 +28,7 @@ pub const RESTRICT_FN_PTRS: &str = "restrict-vtable-fn-ptrs";
 /// Option name used to enable assertion reachability checks.
 pub const ASSERTION_REACH_CHECKS: &str = "assertion-reach-checks";
 
-/// Option name used to enable assertion reachability checks.
+/// Option name used to enable coverage checks.
 pub const COVERAGE_CHECKS: &str = "coverage-checks";
 
 /// Option name used to use json pretty-print for output files.
