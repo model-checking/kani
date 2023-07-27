@@ -22,34 +22,31 @@ impl<'tcx> GotocCtx<'tcx> {
         match bbd.statements.len() {
             0 => {
                 let term = bbd.terminator();
+                let tcode = self.codegen_terminator(term);
                 if check_coverage {
                     let span = term.source_info.span;
                     let cover = self.codegen_coverage(span);
                     self.current_fn_mut().push_onto_block(cover.with_label(label));
-                    let tcode = self.codegen_terminator(term);
                     self.current_fn_mut().push_onto_block(tcode);
                 } else {
-                    let tcode = self.codegen_terminator(term);
                     self.current_fn_mut().push_onto_block(tcode.with_label(label));
                 }
             }
             _ => {
                 let stmt = &bbd.statements[0];
+                let scode = self.codegen_statement(stmt);
                 if check_coverage {
                     let span = stmt.source_info.span;
                     let cover = self.codegen_coverage(span);
                     self.current_fn_mut().push_onto_block(cover.with_label(label));
-                    let scode = self.codegen_statement(stmt);
                     self.current_fn_mut().push_onto_block(scode);
                 } else {
-                    let scode = self.codegen_statement(stmt);
                     self.current_fn_mut().push_onto_block(scode.with_label(label));
                 }
 
                 for s in &bbd.statements[1..] {
                     if check_coverage {
                         let span = s.source_info.span;
-                        // TODO: Push cover statement based on some TBD condition
                         let cover = self.codegen_coverage(span);
                         self.current_fn_mut().push_onto_block(cover);
                     }
