@@ -476,6 +476,8 @@ fn format_result_coverage(properties: &[Property]) -> String {
         let file_entries = coverage_results.entry(src.file.unwrap()).or_default();
         let check_status =
             if prop.status == CheckStatus::Failure { CoverStatus::Full } else { CoverStatus::None };
+
+        // Create Map<file, Map<line, status>>
         file_entries
             .entry(src.line.unwrap().parse().unwrap())
             .and_modify(|line_status| {
