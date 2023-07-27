@@ -314,10 +314,53 @@ please include:
 
 <!-- For the implementors or the hackers -->
 
+Kani implements the functionality of function contracts in two places.
+
+1. Code generation in the `requires` and `ensures` macros.
+2. GOTO level contracts using CBMC's contract language generated in
+   `kani-compiler` for handling memory predicates.
+
+With some additional plumbing in the compiler and the driver.
 
 ### Code generation in `kani_macros`
 
-The `requires` and `ensures` macros generate new sibling functions to e.g. `my_div`
+The `requires` and `ensures` macros perform code generation in the macro,
+creating a `check` and a `replace` function which use `assert` and `assume` as
+described in the [user expersection](#user-experience) section. Both are
+attached via a `kanitool` attribute to the function which they are checking and
+replacing respectively.
+
+The code generation in the macros is straightforward, save two features: `old`
+and the borrow checker.
+
+The special `old` builtin function is implemented as an AST rewrite. Consider
+the below example:
+
+```rs
+impl<T> Vec<T> {
+  #[kani::ensures(self.is_empty() || self.len() == old(self.len()) - 1)]
+  fn pop(&mut self) -> Option<T> {
+    ...
+  }
+}
+```
+
+The `ensures` macro performs an AST rewrite constiting of an extraction of the
+expressions in `old` and a replacement with a fresh local variable, creating the
+following:
+
+```rs
+impl<T> Vec<T> {
+  fn check_pop(&mut self) -> Option<T> {
+    let old_1 = self.len();
+    let result = Self::pop(self);
+    kani::assert(self.is_empty() || self.len() == old_1 - 1)
+  }
+}
+```
+
+The expression inse
+
 (see also discussion in [alternatives](#rationale-and-alternatives)). One
 function is generated which corresponds to checking the contract holds for the
 implementation. One function is generated which corresponds to approximating the
