@@ -4,7 +4,6 @@
 use crate::args::OutputFormat;
 use crate::call_cbmc::{FailedProperties, VerificationStatus};
 use crate::cbmc_output_parser::{CheckStatus, ParserItem, Property, TraceItem};
-use crate::util::contains_library_path;
 use console::style;
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -433,14 +432,8 @@ pub fn formatter_coverage(
 ) -> String {
     let non_coverage_checks: Vec<Property> =
         properties.iter().filter(|&x| x.property_class() != "coverage").cloned().collect();
-    let coverage_checks: Vec<Property> = properties
-        .iter()
-        .filter(|&x| {
-            x.property_class() == "coverage"
-                && !contains_library_path(x.source_location.file.as_ref().unwrap())
-        })
-        .cloned()
-        .collect();
+    let coverage_checks: Vec<Property> =
+        properties.iter().filter(|&x| x.property_class() == "coverage").cloned().collect();
 
     let verification_output =
         format_result(&non_coverage_checks, status, should_panic, failed_properties, show_checks);
@@ -458,13 +451,8 @@ pub fn format_result_coverage(properties: &[Property]) -> String {
     let mut formatted_output = String::new();
     formatted_output.push_str("\nCoverage Results:\n");
 
-    let mut coverage_checks: Vec<&Property> = properties
-        .iter()
-        .filter(|&x| {
-            x.property_class() == "coverage"
-                && !contains_library_path(x.source_location.file.as_ref().unwrap())
-        })
-        .collect();
+    let mut coverage_checks: Vec<&Property> =
+        properties.iter().filter(|&x| x.property_class() == "coverage").collect();
 
     coverage_checks.sort_by_key(|check| (&check.source_location.file, &check.source_location.line));
 
