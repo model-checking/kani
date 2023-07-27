@@ -45,7 +45,16 @@ pub enum PropertyClass {
     ///
     /// SPECIAL BEHAVIOR: "Errors" for this type of assertion just mean "reachable" not failure.
     Cover,
-    /// See [GotocCtx::codegen_coverage] below. Always an `assert(false)` that's not an error.
+    /// A specialization of the `Cover` class used for collecting coverage information.
+    /// The main differences are:
+    ///  - `Coverage` checks have a fixed condition (`false`) and description.
+    ///  - `Coverage` checks are filtered out from verification results and
+    ///    postprocessed to build coverage reports.
+    ///  - `Cover` checks can be added by users (using the `kani::cover` macro),
+    ///    while `Coverage` checks are not exposed to users (i.e., they are
+    ///    automatically added if running with the coverage option).
+    ///
+    /// You should only need `Coverage` when working on coverage-related features.
     ///
     /// SPECIAL BEHAVIOR: "Errors" for this type of assertion just mean "reachable" not failure.
     Coverage,
@@ -138,7 +147,7 @@ impl<'tcx> GotocCtx<'tcx> {
         self.codegen_assert(cond.not(), PropertyClass::Cover, msg, loc)
     }
 
-    /// Generate code for coverage reports
+    /// Generate a cover statement for code coverage reports.
     pub fn codegen_coverage(&self, span: Span) -> Stmt {
         let loc = self.codegen_caller_span(&Some(span));
         // Should use Stmt::cover, but currently this doesn't work with CBMC
