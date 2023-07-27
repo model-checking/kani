@@ -423,7 +423,7 @@ pub fn format_result(
 
 /// Seperate checks into coverage and non-coverage based on property class and format them seperately for --coverage. We report both verification and processed coverage
 /// results
-pub fn formatter_coverage(
+pub fn format_coverage(
     properties: &[Property],
     status: VerificationStatus,
     should_panic: bool,

@@ -13,7 +13,7 @@ use crate::args::{OutputFormat, VerificationArgs};
 use crate::cbmc_output_parser::{
     extract_results, process_cbmc_output, CheckStatus, ParserItem, Property, VerificationOutput,
 };
-use crate::cbmc_property_renderer::{format_result, formatter_coverage, kani_cbmc_output_filter};
+use crate::cbmc_property_renderer::{format_result, format_coverage, kani_cbmc_output_filter};
 use crate::session::KaniSession;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -316,7 +316,7 @@ impl VerificationResult {
                 let show_checks = matches!(output_format, OutputFormat::Regular);
 
                 let mut result = if coverage_mode {
-                    formatter_coverage(
+                    format_coverage(
                         results,
                         status,
                         should_panic,
