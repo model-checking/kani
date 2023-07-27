@@ -1,9 +1,8 @@
 - **Feature Name:** Function Contracts
-- **Feature Request Issue:** *Link to issue*
-- **RFC PR:** *Link to original PR*
+- **Feature Request Issue:** -
+- **RFC PR:** [#2620](https://github.com/model-checking/kani/pull/2620)
 - **Status:** Under Review 
-- **Version:** 0 [0-9]\* *Increment this version whenever you open a new PR to update the RFC (not at every revision).
-  Start with 0.*
+- **Version:** 0
 - **Proof-of-concept:** [features/contracts](https://github.com/model-checking/kani/tree/features/contracts)
 
 -------------------
@@ -36,8 +35,8 @@ lays the ground work for the following two ambitious goals.
 Enabling function contracts is a non-invasive change. While it contains a new
 API, that API is strictly additive for users. All prior operations are unchanged.
 
-A `-Zcontracts` guard will be added wich is necessary to access any of the
-contract functionality (attributes) described below. Any use of such attributes
+A `-Zcontracts` guard will be added which is necessary to access any of the
+contract functionality described below. Any use of the contracts API, such as attributes,
 without `-Zcontracts` is a compile time error.
 
 ### Caveats
@@ -45,7 +44,7 @@ without `-Zcontracts` is a compile time error.
 This proposal focuses on scalability benefits within a single verification session,
 caching strategies for cross-session speedup are left to future work.
 
-We add function contract functionality, but do not add the indictive reasoning
+We add function contract functionality, but do not add the inductive reasoning
 support needed for many unbounded problems, such as "deacreases" measures and
 inductive lemmas.
 
@@ -81,11 +80,12 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
    `ensures` puts a bound on the output, relative to the `dividend` input.
 
    Conditions in contracts are plain Rust expressions which can reference the
-   function arguments and, in case of `ensures`, the `result`[^result-naming]
-   result of the function. Syntactically Kani supports any Rust expression,
-   including function calls, defining types etc, however they must be
-   side-effect free[^side-effects]. Multiple `requires` and `ensrues` clauses
-   are allowed on the same function, they are implicitly logically conjoined.
+   function arguments and, in case of `ensures`, the result of the function as a
+   special `result`[^result-naming] varaible. Syntactically Kani supports any
+   Rust expression, including function calls, defining types etc, however they
+   must be side-effect free[^side-effects]. Multiple `requires` and `ensures`
+   clauses are allowed on the same function, they are implicitly logically
+   conjoined.
 
    [^result-naming]: See [open questions](#open-questions) for a discussion
        about naming of the result variable.
@@ -96,20 +96,20 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
    This is in opposition to the related "stubbing" mechanism, where the
    approximation is not checked but always trusted.
 
-   Kani must check that contract overapproximates the function to guarantee
-   soundness. Specifically the domain (inputs) of the function described (by the
-   `requires` clause) must be *at most* as large as the input space for which
-   the function's behavior is well defined, and the codomain (outputs, described
-   by `ensures`) must be *at least* as large as the actual space of outputs the
+   The contract must always overapproximate the function to guarantee soundness.
+   Specifically the domain (inputs) of the function described (by the `requires`
+   clause) must be *at most* as large as the input space for which the
+   function's behavior is well defined, and the codomain (outputs, described by
+   `ensures`) must be *at least* as large as the actual space of outputs the
    function may produce.
 
    For example in our case it would be permissible to use
    `#[kani::requires(divisor > 100)]` (smaller permissible input domain) or
    `#[kani::ensures(result < dividend + divisor)]` (larger possible output
-   domain), but e.g. `#[kani::ensures(result < dividend)]` (small output) is not
+   domain), but `#[kani::ensures(result < dividend)]` (small output) is not
    allowed.
 
-   To facilitate the check Kani needs a suitable environment to verify our
+   To facilitate the check Kani needs a suitable environment to verify the
    function in. For this proposal the environment must be provided by us (the
    users). See [future possibilities](#future-possibilities) for a discussion
    about the arising soundness issues and their remedies.
@@ -124,7 +124,7 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
    }
    ```
 
-   Similar to a unit-test harness for any other function we are supposed to
+   Similar to a unit-test harness for any other function, we are supposed to
    create inputs for the function that are as generic/abstract as possible to
    make sure we catch all edge cases, then call the function at least once with
    those abstract inputs. If we forget to call `my_div` Kani would report an
@@ -132,10 +132,10 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
    
    Unlike a unit-test we can however elide any checks of the output and
    post-call state. Instead Kani uses the conditions we specified in the
-   contract as checks. It inserts the preconditions (`requires`) of `my_div` as
-   `kani::assume` *before* the call to `my_div`, to ensure it only tests the
-   function on inputs it is actually defined for. Postconditions (`ensures`) are
-   inserted as `kani::assert` checks *after* the call to `my_div`. 
+   contract as checks. Preconditions (`requires`) are inserted as `kani::assume`
+   *before* the call to `my_div`, limiting the generic inputs to those the
+   function is actually defined for. Postconditions (`ensures`) are inserted as
+   `kani::assert` checks *after* the call to `my_div`.
 
    The expanded version of our harness and function is equivalent to the following:
 
@@ -154,7 +154,7 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
    the green light for the next step: verified stubbing.
 
 3. In the last phase the **verified** contract is ready for us to use to
-   **stub** in other harnesses.
+   **stub** other harnesses.
 
    Unlike in regular stubbing Kani there to be at least one associated
    `proof_for_contract` harness for each function to stub *and* it requires all
@@ -174,13 +174,15 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
    ```
 
    To use the contract as a stub Kani must first ensure the calling context is
-   safe. It a `kani::assert` for the preconditions (`requires`) of `my_div`
-   before the call. Then it replaces the result of `my_div` with a
-   non-deterministic value (see [havocing](#memory-predicates-and-havocing) for
-   the equivalent for mutable memory), constrained by a `kani::assume` of
-   `'my_div`'s postconditions (`ensures`).
+   safe. It inserts a `kani::assert` for the preconditions (`requires`) before
+   the call; then it replaces the result of `my_div` with a non-deterministic
+   value. Finally the non-deterministic result is constrained by a
+   `kani::assume` of the postconditions (`ensures`).
+   
+   Mutable memory is similarly made non-deterministic, discussed later in
+   [havociing](#memory-predicates-and-havocing).
 
-   And the expanded version is equivalent to this:
+   The expanded version is equivalent to this:
   
    ```rs
    #[kani::proof]
@@ -201,10 +203,10 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
    conditions) which allows us to avoid something potentially costly.
 
 Also notice that Kani was able to express both contract checking and stubbing
-with existing capabilities, the important feature is the enforcement. The
+with existing capabilities; the important feature is the enforcement. The
 checking is, by construction, performed **against the same condition** that is
 later used as stub, which ensures soundness (see discussion on lingering threats
-to soundness in the [future](#future-possibilities) section) and guards against
+to soundness in the [future](#future-possibilities) section) and guarding against
 stubs diverging from their checks.
 
 ### History Variables
@@ -228,7 +230,7 @@ impl<T> Vec<T> {
 If we want to describe in which case the result is `Some`, we need to know
 whether `self` is empty *before* `pop` is called. To do this Kani provides the
 `old(EXPR)` pseudo function, which evaluates `EXPR` before the call (e.g. to
-`pop`) and makes the result available to `ensures`. it would be used like so
+`pop`) and makes the result available to `ensures`. It is used like so:
 
 ```rs
 impl<T> Vec<T> {
@@ -239,16 +241,16 @@ impl<T> Vec<T> {
 }
 ```
 
-`old` allows evaluating any (side-effect free[^side-effects]) Rust expression
-but Rust enforces that it does not borrow so as to observe the mutations from
-e.g. `pop`, as that would defeat the purpose. Instead Kani encourages us to make
-copies (using e.g. `clone()`) if necessary.
+`old` allows evaluating any (side-effect free[^side-effects]) Rust expression.
+The bowwor checker enforces the result of `old` cannot observe the mutations
+from e.g. `pop`, as that would defeat the purpose. If `your` expression in `old`
+returns borrowed content, make a copy instead (using e.g. `clone()`).
 
 Note also that `old` is syntax, not a function and implemented as an extraction
 and lifting during code generation. It can reference e.g. `pop`'s arguments but
 not local variables. Compare the following
 
-**Invalid ❌:** `#[kani::ensures({ let x = self.is_empty(); old(x) } || result.is_some())]`
+**Invalid ❌:** `#[kani::ensures({ let x = self.is_empty(); old(x) } || result.is_some())]`</br>
 **Valid ✅:** `#[kani::ensures(old({ let x = self.is_empty(); x }) || result.is_some())]`
 
 And it will only be recognized as `old(...)`, not as `let old1 = old; old1(...)` etc.
@@ -279,17 +281,15 @@ ASSIGN_RANGE...)]` and `#[kani::frees(CONDITION, LVALUE...)]` attributes. When
 these attributes are provided Kani will only havoc the location mentioned in
 `ASSIGN_RANGE` and `LVALUE` instead of the inferred footprint. Additionally Kani
 verifies during checking that only the mentioned memory regions are touched and
-only under the mentioned conditions.
-
-`CONDITION`s limit when the clause applies, may reference the arguments of the
-function and can be omitted.
+only under the specified `CONDITION`. The `CONDITION` is optional and defaults
+to `true`.
 
 `LVALUE` are simple expressions permissible on the left hand side of an
 assignment. They compose of the name of one function argument and zero or more
 projections (dereference `*`, field access `.x`, slice indexing `[1]`).
 
 The `ASSIGN_RANGE` permits any `LVALUE` but additionally permits more complex
-slice expressions as the last projection and applies to pointer values. `[..]`
+slice expressions as the last projection that applies to pointer values. `[..]`
 denotes the entirety of an allocation, `[i..]`, `[..j]` and `[i..j]` are
 ranges of pointer offsets. A slicing syntax `p[i..j]` only applies if `p` is a
 `*mut T` and points to an array allocation. The slice indices are offsets with
@@ -297,19 +297,15 @@ sizing `T`, e.g. in Rust `p[i..j]` would be equivalent to
 `std::slice::from_raw_parts(p.offset(i), i - j)`. `i` must be smaller or equal
 than `j`.
 
-Because lvalues are restricted to using projections only Kani must break
-encapsulation here. If need be we may reference fields that are usually hidden,
+Because lvalues are restricted to using projections only, Kani must break
+encapsulation here. If need be we can reference fields that are usually hidden,
 without an error from the compiler.
-
-See also discussion on conditions in assigns clauses in
 
 [^side-effects]: Code used in contracts is required to be side effect free which
     means it must not perform I/O, mutate memory (`&mut` vars and such) and
     (de)allocate heap memory. This is enforced by the verifier, see the
     discussion in the [future](#future-possibilities) section.
 
-What is the scope of this RFC? Which use cases do you have in mind? Explain how users will interact with it. Also
-please include:
 
 ## Detailed Design
 
@@ -317,7 +313,7 @@ please include:
 
 Kani implements the functionality of function contracts in two places.
 
-1. Code generation in the `requires` and `ensures` macros.
+1. Code generation in the `requires` and `ensures` macros (`kani_macros`).
 2. GOTO level contracts using CBMC's contract language generated in
    `kani-compiler` for handling memory predicates.
 
@@ -327,10 +323,11 @@ With some additional plumbing in the compiler and the driver.
 
 The `requires` and `ensures` macros perform code generation in the macro,
 creating a `check` and a `replace` function which use `assert` and `assume` as
-described in the [user expersection](#user-experience) section. Both are
-attached via a `kanitool` attribute to the function which they are checking and
-replacing respectively. See also the [discussion](#rationale-and-alternatives)
-about why we decided to generate check and replace functions like this.
+described in the [user experience](#user-experience) section. Both are attached
+to the function they are checking/replacing by  `kanitool::checked_with` and
+`kanitool::replaced_with` attributes respectively. See also the
+[discussion](#rationale-and-alternatives) about why we decided to generate check
+and replace functions like this.
 
 The code generation in the macros is straightforward, save two aspects: `old`
 and the borrow checker.
@@ -373,11 +370,10 @@ copies should be created (e.g. `old(self.clone())`). This is only enforced for
 safe rust though.
 
 The second part relevant for the implementation is how we deal with the borrow
-checker. Postconditions (`ensures`) reference the arguments of the function,
-though don't modify them. However this is problematic even without modification
-if part of an input is borrowed mutably in the return value. For instance the
-`Vec::split_at_mut` function does this and a sensible contract for it might look
-as follows:
+checker for postconditions. They reference the arguments of the function after
+the call which is problematic if part of an input is borrowed mutably in the
+return value. For instance the `Vec::split_at_mut` function does this and a
+sensible contract for it might look as follows:
 
 ```rs
 impl<T> Vec<T> {
@@ -389,11 +385,11 @@ impl<T> Vec<T> {
 ```
 
 This contract refers simultaneously to `self` and the result. Since the method
-however borrows `self` mutably, the borrow checker would complain about a simple
-`assert` of the postcondition. To work around this we strategically break the
-borrowing rules using a new hidden builtin `kani::unckecked_deref` with the type
-signature `for <T> fn (&T) -> T` which is essentially a C-style dereference
-operation. Breaking the borrow checker like this is safe for 2 reasons:
+however borrows `self` mutably, it would no longer be accessible in the
+postcondition. To work around this we strategically break the borrowing rules
+using a new hidden builtin `kani::unckecked_deref` with the type signature `for
+<T> fn (&T) -> T` which is essentially a C-style dereference operation. Breaking
+the borrow checker like this is safe for 2 reasons:
 
 1. Postconditions are not allowed perform mutation[^side-effects] and
 2. Post conditions are of type `bool`, meaning they cannot leak references to
@@ -405,7 +401,7 @@ variables and their occurrence in the postcondition is renamed.
 ### Changes to Other Components
 
 Contract enforcement and replacement (`kani::proof_for_contract(f)`,
-`kani::verified_stub(f)`) both dispats to the stubbing logic, replacing `f` with
+`kani::verified_stub(f)`) both dispatch to the stubbing logic, stubbing `f` with
 the generated check and replace function respectively. If `f` has no contract,
 an error is thrown.
 
@@ -487,12 +483,6 @@ This is the technical portion of the RFC. Please provide high level details of t
 
 <!-- For Developers -->
 
-- We assume here entirely derived assigns clauses, instead of explicit one's.
-- Semantics of arguments in postconditions: Shold they reflect changes to `mut`
-  arguments, e.g. a `mut i: u32`? I think that even in other tools (e.g. CBMC)
-  the actual value of arguments is copied into the function and therefore
-  changes to it are not reflected.
-- Trait contracts
 - Is it really correct to return `kani::any()` from the replacement copy, even
   if it can be a pointer?
 - Our handling of `impl` in `reuqires` and `ensures` macros is brittle, though
@@ -518,14 +508,29 @@ This is the technical portion of the RFC. Please provide high level details of t
 
 <!-- For Developers -->
 
-- Enforcing contract checking before substitution
-- Quantifiers
-- Side effect freedom is currently enforced by CBMC. This means that the error
+- **Quantifiers:** Quantifiers are like logic-level loops and a powerful
+  reasoning helper. CBMC has support for both `exists` and `forall`, but the
+  code generation is difficult. The most ergonomic and easy way to implement
+  quantifiers on the Rust side is as higher-order functions taking `Fn(T) ->
+  bool`, where `T` is some arbitrary type that can be quantified over. This
+  interface is familiar to developers, but the code generation is tricky, as
+  CBMC level quantifiers only allow certain kinds of expressions. This
+  necessiates a rewrite of the `Fn` closure to a compliant expression.
+- **Side effect** freedom is currently enforced by CBMC. This means that the error
   originates there and is likely not legible. Intead Kani should perform a
   reachability analysis from the contract expressions and determine whether side
   effects are possible, throwing a graceful error.
-- Soundness issues with harnesses and remedies that are in the works
+- Letting the user supply the **harnesses for checking contracts** is a source of
+  unsoundness, if corner cases are not adequately covered. Ideally Kani would
+  generate the check harness automatically, but this is difficult both because
+  heap datastructures are potentially infinite, and also because it must observe
+  user-level invariants.
 - What about mutable trait inputs (wrt memory access patters), e.g. a `mut impl AccessMe`
-
-What are natural extensions and possible improvements that you predict for this feature that is out of the
-scope of this RFC? Feel free to brainstorm here.
+- **Trait contracts:** Ous proposal could be extended easily to handle simple
+  trait contracts. The macros would generate new trait methods with default
+  implementation, similar to the functions it generates today. Using sealed
+  types we can prevent the user from overwriting the generated contract methods.
+  Contracts for the trait and contracts on it's impls are combined by stubbing
+  the original method depending on context. The occurrence inside the contract
+  generated from the trait method is replaced by the impl contract. Any other
+  occurrence is replaced by the just altered trait method contract.
