@@ -431,13 +431,14 @@ pub fn format_coverage(
     show_checks: bool,
 ) -> String {
     let non_coverage_checks: Vec<Property> =
-        properties.iter().filter(|&x| x.property_class() != "coverage").cloned().collect();
+        properties.iter().filter(|&x| x.property_class() != "code_coverage").cloned().collect();
     let coverage_checks: Vec<Property> =
-        properties.iter().filter(|&x| x.property_class() == "coverage").cloned().collect();
+        properties.iter().filter(|&x| x.property_class() == "code_coverage").cloned().collect();
 
     let verification_output =
         format_result(&non_coverage_checks, status, should_panic, failed_properties, show_checks);
     let coverage_output = format_result_coverage(&coverage_checks);
+    print!("printing coverage output = {}", coverage_output);
     let result = format!("{}\n{}", verification_output, coverage_output);
 
     result
@@ -451,8 +452,7 @@ fn format_result_coverage(properties: &[Property]) -> String {
     let mut formatted_output = String::new();
     formatted_output.push_str("\nCoverage Results:\n");
 
-    let mut coverage_checks: Vec<&Property> =
-        properties.iter().filter(|&x| x.property_class() == "coverage").collect();
+    let mut coverage_checks: Vec<&Property> = properties.iter().collect();
 
     coverage_checks.sort_by_key(|check| (&check.source_location.file, &check.source_location.line));
 
