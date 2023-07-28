@@ -1,6 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+//! Checks coverage results in an example with a guarded out-of-bounds access.
+
 #[kani::proof]
 fn main() {
     let numbers = vec![1, 2, 3, 4, 5];

@@ -1,6 +1,9 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+//! Checks coverage results in an example with a `while` loop that returns before
+//! running the last iteration.
+
 fn find_first_negative(nums: &[i32]) -> Option<i32> {
     let mut index = 0;
     while index < nums.len() {

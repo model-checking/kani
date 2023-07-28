@@ -1,6 +1,9 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+//! Checks coverage results in an example with a `match` statement matching on
+//! all enum variants.
+
 enum Direction {
     Up,
     Down,

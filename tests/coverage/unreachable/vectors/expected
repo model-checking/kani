@@ -1,6 +1,6 @@
-coverage/unreachable/vectors/main.rs, 6, FULL
-coverage/unreachable/vectors/main.rs, 9, FULL
-coverage/unreachable/vectors/main.rs, 11, PARTIAL
-coverage/unreachable/vectors/main.rs, 13, NONE
-coverage/unreachable/vectors/main.rs, 15, FULL
+coverage/unreachable/vectors/main.rs, 8, FULL
+coverage/unreachable/vectors/main.rs, 11, FULL
+coverage/unreachable/vectors/main.rs, 13, PARTIAL
+coverage/unreachable/vectors/main.rs, 15, NONE
 coverage/unreachable/vectors/main.rs, 17, FULL
+coverage/unreachable/vectors/main.rs, 19, FULL
