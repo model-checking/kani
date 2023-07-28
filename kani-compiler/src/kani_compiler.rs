@@ -72,15 +72,18 @@ type HarnessId = DefPathHash;
 /// A set of stubs.
 type Stubs = BTreeMap<DefPathHash, DefPathHash>;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct HarnessInfo {
     pub metadata: HarnessMetadata,
     pub stub_map: Stubs,
 }
 
+/// Store some relevant information about the crate compilation.
 #[derive(Clone, Debug)]
 struct CrateInfo {
+    /// The name of the crate being compiled.
     pub name: String,
+    /// The metadata output path that shall be generated as part of the crate compilation.
     pub output_path: PathBuf,
 }
 
@@ -437,8 +440,7 @@ fn metadata_output_path(tcx: TyCtxt) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
-    use super::{HarnessInfo, Stubs};
-    use crate::kani_compiler::{group_by_stubs, HarnessId};
+    use super::*;
     use kani_metadata::{HarnessAttributes, HarnessMetadata};
     use rustc_data_structures::fingerprint::Fingerprint;
     use rustc_hir::definitions::DefPathHash;
@@ -451,12 +453,12 @@ mod tests {
         DefPathHash(Fingerprint::new(id, 0))
     }
 
-    fn mock_metadata() -> HarnessMetadata {
+    fn mock_metadata(name: String, krate: String) -> HarnessMetadata {
         HarnessMetadata {
-            pretty_name: String::from("dummy"),
-            mangled_name: String::from("dummy"),
-            crate_name: String::from("dummy"),
-            original_file: String::from("dummy"),
+            pretty_name: name.clone(),
+            mangled_name: name.clone(),
+            original_file: format!("{}.rs", krate),
+            crate_name: krate,
             original_start_line: 10,
             original_end_line: 20,
             goto_file: None,
@@ -465,7 +467,7 @@ mod tests {
     }
 
     fn mock_info_with_stubs(stub_map: Stubs) -> HarnessInfo {
-        HarnessInfo { metadata: mock_metadata(), stub_map }
+        HarnessInfo { metadata: mock_metadata("dummy".to_string(), "crate".to_string()), stub_map }
     }
 
     #[test]
@@ -504,5 +506,68 @@ mod tests {
                 || grouped.contains(&vec![harness_3, harness_1])
         );
         assert!(grouped.contains(&vec![harness_2]));
+    }
+
+    #[test]
+    fn test_generate_metadata() {
+        // Mock inputs.
+        let name = "my_crate".to_string();
+        let crate_info = CrateInfo { name: name.clone(), output_path: PathBuf::default() };
+
+        let mut info = mock_info_with_stubs(Stubs::default());
+        info.metadata.attributes.proof = true;
+        let id = mock_next_id();
+        let all_harnesses = HashMap::from([(id, info.clone())]);
+
+        // Call generate metadata.
+        let metadata = generate_metadata(&crate_info, &all_harnesses);
+
+        // Check output.
+        assert_eq!(metadata.crate_name, name);
+        assert_eq!(metadata.proof_harnesses.len(), 1);
+        assert_eq!(*metadata.proof_harnesses.first().unwrap(), info.metadata);
+    }
+
+    #[test]
+    fn test_generate_empty_metadata() {
+        // Mock inputs.
+        let name = "my_crate".to_string();
+        let crate_info = CrateInfo { name: name.clone(), output_path: PathBuf::default() };
+        let all_harnesses = HashMap::new();
+
+        // Call generate metadata.
+        let metadata = generate_metadata(&crate_info, &all_harnesses);
+
+        // Check output.
+        assert_eq!(metadata.crate_name, name);
+        assert_eq!(metadata.proof_harnesses.len(), 0);
+    }
+
+    #[test]
+    fn test_generate_metadata_with_multiple_harness() {
+        // Mock inputs.
+        let krate = "my_crate".to_string();
+        let crate_info = CrateInfo { name: krate.clone(), output_path: PathBuf::default() };
+
+        let harnesses = ["h1", "h2", "h3"];
+        let infos = harnesses.map(|harness| {
+            let mut metadata = mock_metadata(harness.to_string(), krate.clone());
+            metadata.attributes.proof = true;
+            (mock_next_id(), HarnessInfo { stub_map: Stubs::default(), metadata })
+        });
+        let all_harnesses = HashMap::from(infos.clone());
+
+        // Call generate metadata.
+        let metadata = generate_metadata(&crate_info, &all_harnesses);
+
+        // Check output.
+        assert_eq!(metadata.crate_name, krate);
+        assert_eq!(metadata.proof_harnesses.len(), infos.len());
+        assert!(
+            metadata
+                .proof_harnesses
+                .iter()
+                .all(|harness| harnesses.contains(&&*harness.pretty_name))
+        );
     }
 }
