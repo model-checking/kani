@@ -1615,9 +1615,9 @@ impl<'tcx> GotocCtx<'tcx> {
                 format!("attempt {intrinsic} with negative shift distance").as_str(),
                 loc,
             );
-            Stmt::block(vec![expr_place, excessive_check_stmt, negative_check_stmt], loc)
+            Stmt::block(vec![excessive_check_stmt, negative_check_stmt, expr_place], loc)
         } else {
-            Stmt::block(vec![expr_place, excessive_check_stmt], loc)
+            Stmt::block(vec![excessive_check_stmt, expr_place], loc)
         }
     }
 
