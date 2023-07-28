@@ -456,7 +456,7 @@ pub fn format_coverage(
 ///  - A status `FULL` if all checks pertaining to a line number are `COVERED`
 ///  - A status `NONE` if all checks related to a line are `UNCOVERED`
 ///  - Otherwise (i.e., if the line contains both) it reports `PARTIAL`.
-/// 
+///
 /// Used when the user requests coverage information with `--coverage`.
 /// Output is tested through the `coverage-based` testing suite, not the regular
 /// `expected` suite.
