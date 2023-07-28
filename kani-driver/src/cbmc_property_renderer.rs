@@ -688,11 +688,12 @@ fn update_properties_with_reach_status(
     properties
 }
 
-/// Update the results of code coverage (NOT cover) properties.
-/// - SUCCESS -> UNCOVERED
-/// - FAILURE -> COVERED
-/// Note that these statuses are intermediate statuses that aren't reported to users but rather internally consumed
-/// and reported finally as PARTIAL, FULL or NONE based on aggregated line coverage results.
+/// Update the results of `code_coverage` (NOT `cover`) properties.
+/// - `SUCCESS` -> `UNCOVERED`
+/// - `FAILURE` -> `COVERED`
+/// Note that these statuses are intermediate statuses that aren't reported to
+/// users but rather internally consumed and reported finally as `PARTIAL`, `FULL`
+/// or `NONE` based on aggregated line coverage results.
 fn update_results_of_code_covererage_checks(mut properties: Vec<Property>) -> Vec<Property> {
     for prop in properties.iter_mut() {
         if prop.is_code_coverage_property() {
