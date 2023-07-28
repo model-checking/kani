@@ -343,7 +343,7 @@ impl std::fmt::Display for CheckStatus {
             CheckStatus::Satisfied => style("SATISFIED").green(),
             CheckStatus::Success => style("SUCCESS").green(),
             CheckStatus::Covered => style("COVERED").green(),
-            CheckStatus::Uncovered => style("UNCOVERED").yellow(),
+            CheckStatus::Uncovered => style("UNCOVERED").red(),
             CheckStatus::Failure => style("FAILURE").red(),
             CheckStatus::Unreachable => style("UNREACHABLE").yellow(),
             CheckStatus::Undetermined => style("UNDETERMINED").yellow(),
