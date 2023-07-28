@@ -464,12 +464,16 @@ fn format_result_coverage(properties: &[Property]) -> String {
     let mut formatted_output = String::new();
     formatted_output.push_str("\nCoverage Results:\n");
 
-    let mut coverage_results: BTreeMap<String, BTreeMap<usize, CoverageStatus>> = BTreeMap::default();
+    let mut coverage_results: BTreeMap<String, BTreeMap<usize, CoverageStatus>> =
+        BTreeMap::default();
     for prop in properties {
         let src = prop.source_location.clone();
         let file_entries = coverage_results.entry(src.file.unwrap()).or_default();
-        let check_status =
-            if prop.status == CheckStatus::Covered { CoverageStatus::Full } else { CoverageStatus::None };
+        let check_status = if prop.status == CheckStatus::Covered {
+            CoverageStatus::Full
+        } else {
+            CoverageStatus::None
+        };
 
         // Create Map<file, Map<line, status>>
         file_entries
@@ -695,11 +699,13 @@ fn update_properties_with_reach_status(
 fn update_results_of_code_covererage_checks(mut properties: Vec<Property>) -> Vec<Property> {
     for prop in properties.iter_mut() {
         if prop.is_code_coverage_property() {
-            if prop.status == CheckStatus::Success {
-                prop.status = CheckStatus::Uncovered;
-            } else if prop.status == CheckStatus::Failure {
-                prop.status = CheckStatus::Covered;
-            }
+            prop.status = match prop.status {
+                CheckStatus::Success => CheckStatus::Uncovered,
+                CheckStatus::Failure => CheckStatus::Covered,
+                _ => unreachable!(
+                    "status for coverage checks should be either `SUCCESS` or `FAILURE` prior to postprocessing"
+                ),
+            };
         }
     }
     properties
