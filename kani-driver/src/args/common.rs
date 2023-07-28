@@ -44,6 +44,8 @@ pub enum UnstableFeatures {
     ConcretePlayback,
     /// Enable Kani's unstable async library.
     AsyncLib,
+    /// Enable line coverage instrumentation/reports
+    LineCoverage,
 }
 
 impl ValidateArgs for CommonArgs {

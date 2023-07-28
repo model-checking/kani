@@ -1,0 +1,4 @@
+coverage/unreachable/debug-assert/main.rs, 6, PARTIAL
+coverage/unreachable/debug-assert/main.rs, 7, PARTIAL
+coverage/unreachable/debug-assert/main.rs, 8, NONE
+coverage/unreachable/debug-assert/main.rs, 10, NONE
