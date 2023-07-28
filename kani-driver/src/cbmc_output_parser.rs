@@ -102,6 +102,7 @@ impl Property {
         self.property_id.class.clone()
     }
 
+    // Returns true if this is a code_coverage check
     pub fn is_code_coverage_property(&self) -> bool {
         self.property_id.class == Self::COVERAGE_PROPERTY_CLASS
     }
