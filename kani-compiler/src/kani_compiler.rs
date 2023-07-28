@@ -95,20 +95,28 @@ struct CrateInfo {
 /// - We always start in the [CompilationStage::Init].
 /// - After [CompilationStage::Init] we transition to either
 ///   - [CompilationStage::CodegenNoStubs] on a regular crate compilation, this will follow Init.
-///   - [CompilationStage::Done], running the compiler to gather information, such as `--version`
-///     will skip code generation completely, and there is no work to be done.
+///   - [CompilationStage::CompilationSkipped], running the compiler to gather information, such as
+///     `--version` will skip code generation completely, and there is no work to be done.
 /// - After the [CompilationStage::CodegenNoStubs], we transition to either
 ///   - [CompilationStage::CodegenWithStubs] when there is at least one harness with stubs.
 ///   - [CompilationStage::Done] where there is no harness left to process.
 /// - The [CompilationStage::CodegenWithStubs] can last multiple Rust compiler runs. Once there is
 ///   no harness left, we move to [CompilationStage::Done].
+/// - The final stages are either [CompilationStage::Done] or [CompilationStage::CompilationSkipped].
+///    - [CompilationStage::Done] represents the final state of the compiler after a successful
+///      compilation. The crate metadata is stored here (even if no codegen was actually performed).
+///    - [CompilationStage::CompilationSkipped] no compilation was actually performed.
+///      No work needs to be done.
+/// - Note: In a scenario where the compilation fails, the compiler will exit immediately,
+///  independent on the stage. Any artifact produced shouldn't be used.
 /// I.e.:
 /// ```dot
 /// graph CompilationStage {
-///   Init -> {CodegenNoStubs, Done}
+///   Init -> {CodegenNoStubs, CompilationSkipped}
 ///   CodegenNoStubs -> {CodegenStubs, Done}
 ///   // Loop up to N harnesses times.
 ///   CodegenStubs -> {CodegenStubs, Done}
+///   CompilationSkipped
 ///   Done
 /// }
 /// ```
@@ -118,6 +126,8 @@ enum CompilationStage {
     /// Initial state that the compiler is always instantiated with.
     /// In this stage, we initialize the Query and collect all harnesses.
     Init,
+    /// State where the compiler ran but didn't actually compile anything (e.g.: --version).
+    CompilationSkipped,
     /// Stage where the compiler will perform codegen of all harnesses that don't use stub.
     CodegenNoStubs {
         target_harnesses: Vec<HarnessId>,
@@ -202,7 +212,8 @@ impl KaniCompiler {
                     }
                     return Ok(());
                 }
-                CompilationStage::Done { metadata: None } => {
+                CompilationStage::Done { metadata: None }
+                | CompilationStage::CompilationSkipped => {
                     return Ok(());
                 }
             };
@@ -244,7 +255,7 @@ impl KaniCompiler {
                     }
                 }
             }
-            CompilationStage::Done { .. } => {
+            CompilationStage::Done { .. } | CompilationStage::CompilationSkipped => {
                 unreachable!()
             }
         };
@@ -331,7 +342,9 @@ impl KaniCompiler {
                     .collect();
                 Compilation::Continue
             }
-            CompilationStage::Init | CompilationStage::Done { .. } => unreachable!(),
+            CompilationStage::Init
+            | CompilationStage::Done { .. }
+            | CompilationStage::CompilationSkipped => unreachable!(),
         }
     }
 
