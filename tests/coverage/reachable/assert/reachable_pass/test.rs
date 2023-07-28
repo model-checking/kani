@@ -3,7 +3,7 @@
 
 #[kani::proof]
 fn main() {
-    let x = 5;
+    let x: u32 = kani::any_where(|val| *val == 5);
     if x > 3 {
         assert!(x > 4); // FULL: `x > 4` since `x = 5`
     }
