@@ -451,10 +451,15 @@ pub fn format_coverage(
     result
 }
 
-/// Generate coverage result from all coverage properties (i.e., the checks with "coverage" property class).
-/// To be used when the user requests coverage information with --coverage. The output is tested through the coverage-based testing suite, not the regular expected suite.
-/// Loops through each of the check with a coverage property class and gives a status of FULL if all checks pertaining
-/// to a line number are FAILURE (SATISFIED). Similarly, it gives a status of NONE if all checks related to a line are SUCCESS (UNSAT). If a line has both, it reports PARTIAL coverage.
+/// Generate coverage result from all coverage properties (i.e., checks with `code_coverage` property class).
+/// Loops through each of the checks with the `code_coverage` property class on a line and gives:
+///  - A status `FULL` if all checks pertaining to a line number are `COVERED`
+///  - A status `NONE` if all checks related to a line are `UNCOVERED`
+///  - Otherwise (i.e., if the line contains both) it reports `PARTIAL`.
+/// 
+/// Used when the user requests coverage information with `--coverage`.
+/// Output is tested through the `coverage-based` testing suite, not the regular
+/// `expected` suite.
 fn format_result_coverage(properties: &[Property]) -> String {
     let mut formatted_output = String::new();
     formatted_output.push_str("\nCoverage Results:\n");
