@@ -1,10 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// This test checks that kani injects a reachability check for arithmetic
-// overflow checks and that it reports ones that are unreachable.
-// The arithmetic overflow check in this test is reachable, so should be
-// reported as SUCCESS
+//! Checks that Kani reports the correct coverage results (`FULL` for all lines)
+//! in a case where arithmetic overflow failures are prevented.
 
 fn reduce(x: u32) -> u32 {
     if x > 1000 { x - 1000 } else { x }
