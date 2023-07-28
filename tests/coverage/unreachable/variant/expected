@@ -1,9 +1,10 @@
-coverage/unreachable/variant/main.rs, 12, PARTIAL
+coverage/unreachable/variant/main.rs, 12, FULL
 coverage/unreachable/variant/main.rs, 13, NONE
 coverage/unreachable/variant/main.rs, 14, NONE
 coverage/unreachable/variant/main.rs, 15, FULL
 coverage/unreachable/variant/main.rs, 16, NONE
-coverage/unreachable/variant/main.rs, 19, FULL
-coverage/unreachable/variant/main.rs, 23, FULL
+coverage/unreachable/variant/main.rs, 18, NONE
+coverage/unreachable/variant/main.rs, 20, FULL
 coverage/unreachable/variant/main.rs, 24, FULL
 coverage/unreachable/variant/main.rs, 25, FULL
+coverage/unreachable/variant/main.rs, 26, FULL

@@ -1,10 +1,8 @@
-coverage/reachable/assert-false/main.rs, 5, FULL
 coverage/reachable/assert-false/main.rs, 6, FULL
-coverage/reachable/assert-false/main.rs, 10, FULL
+coverage/reachable/assert-false/main.rs, 7, FULL
 coverage/reachable/assert-false/main.rs, 11, FULL
-coverage/reachable/assert-false/main.rs, 14, FULL
+coverage/reachable/assert-false/main.rs, 12, FULL
 coverage/reachable/assert-false/main.rs, 15, FULL
-coverage/reachable/assert-false/main.rs, 16, PARTIAL
+coverage/reachable/assert-false/main.rs, 16, FULL
+coverage/reachable/assert-false/main.rs, 17, PARTIAL
 coverage/reachable/assert-false/main.rs, 19, FULL
-coverage/reachable/assert-false/main.rs, 20, PARTIAL
-coverage/reachable/assert-false/main.rs, 22, FULL

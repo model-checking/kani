@@ -15,6 +15,7 @@ fn print_direction(dir: Direction) {
         Direction::Left => println!("Going left!"),
         Direction::Right => println!("Going right!"),
         // This part is unreachable since we cover all variants in the match.
+        _ => {}
     }
 }
 
