@@ -153,7 +153,7 @@ static CBMC_ALT_DESCRIPTIONS: Lazy<CbmcAltDescriptions> = Lazy::new(|| {
 #[derive(PartialEq, Eq, AsRefStr, Clone, Copy, Display)]
 #[strum(serialize_all = "UPPERCASE")]
 // The status of coverage reported by Kani
-enum CoverStatus {
+enum CoverageStatus {
     Full,
     Partial,
     None,
@@ -464,12 +464,12 @@ fn format_result_coverage(properties: &[Property]) -> String {
     let mut formatted_output = String::new();
     formatted_output.push_str("\nCoverage Results:\n");
 
-    let mut coverage_results: BTreeMap<String, BTreeMap<usize, CoverStatus>> = BTreeMap::default();
+    let mut coverage_results: BTreeMap<String, BTreeMap<usize, CoverageStatus>> = BTreeMap::default();
     for prop in properties {
         let src = prop.source_location.clone();
         let file_entries = coverage_results.entry(src.file.unwrap()).or_default();
         let check_status =
-            if prop.status == CheckStatus::Covered { CoverStatus::Full } else { CoverStatus::None };
+            if prop.status == CheckStatus::Covered { CoverageStatus::Full } else { CoverageStatus::None };
 
         // Create Map<file, Map<line, status>>
         file_entries
@@ -478,7 +478,7 @@ fn format_result_coverage(properties: &[Property]) -> String {
                 if *line_status == check_status {
                     *line_status = check_status
                 } else {
-                    *line_status = CoverStatus::Partial
+                    *line_status = CoverageStatus::Partial
                 }
             })
             .or_insert(check_status);
