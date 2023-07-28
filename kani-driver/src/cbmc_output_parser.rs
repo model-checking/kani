@@ -328,13 +328,13 @@ impl std::fmt::Display for TraceData {
 #[serde(rename_all = "UPPERCASE")]
 pub enum CheckStatus {
     Failure,
-    Covered,   // for code coverage
-    Satisfied, // for cover properties only
+    Covered,       // for `code_coverage` properties only
+    Satisfied,     // for `cover` properties only
     Success,
     Undetermined,
     Unreachable,
-    Uncovered,     // for code coverage
-    Unsatisfiable, // for cover properties only
+    Uncovered,     // for `code_coverage` properties only
+    Unsatisfiable, // for `cover` properties only
 }
 
 impl std::fmt::Display for CheckStatus {
