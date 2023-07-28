@@ -9,8 +9,7 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use rustc_demangle::demangle;
 use std::collections::{BTreeMap, HashMap};
-use std::fmt;
-use strum_macros::AsRefStr;
+use strum_macros::{AsRefStr, Display};
 
 type CbmcAltDescriptions = HashMap<&'static str, Vec<(&'static str, Option<&'static str>)>>;
 
@@ -151,23 +150,13 @@ static CBMC_ALT_DESCRIPTIONS: Lazy<CbmcAltDescriptions> = Lazy::new(|| {
     map
 });
 
-#[derive(PartialEq, Eq, AsRefStr, Clone, Copy)]
+#[derive(PartialEq, Eq, AsRefStr, Clone, Copy, Display)]
 #[strum(serialize_all = "UPPERCASE")]
 // The status of coverage reported by Kani
 enum CoverStatus {
     Full,
     Partial,
     None,
-}
-
-impl fmt::Display for CoverStatus {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            CoverStatus::Full => write!(f, "FULL"),
-            CoverStatus::Partial => write!(f, "PARTIAL"),
-            CoverStatus::None => write!(f, "NONE"),
-        }
-    }
 }
 
 const UNSUPPORTED_CONSTRUCT_DESC: &str = "is not currently supported by Kani";
