@@ -157,7 +157,7 @@ impl<'tcx> GotocCtx<'tcx> {
         self.codegen_assert(
             Expr::bool_false(),
             PropertyClass::CodeCoverage,
-            "cover_experiment",
+            "code coverage for location",
             loc,
         )
     }
