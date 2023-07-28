@@ -5,6 +5,6 @@
 fn main() {
     let x = 5;
     if x > 3 {
-        assert!(x > 4);
+        assert!(x > 4); // FULL: `x > 4` since `x = 5`
     }
 }
