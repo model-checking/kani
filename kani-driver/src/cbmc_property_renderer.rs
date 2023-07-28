@@ -481,7 +481,7 @@ fn format_result_coverage(properties: &[Property]) -> String {
         file_entries
             .entry(src.line.unwrap().parse().unwrap())
             .and_modify(|line_status| {
-                if *line_status == check_status.clone() {
+                if *line_status == check_status {
                     *line_status = check_status
                 } else {
                     *line_status = CoverStatus::Partial
