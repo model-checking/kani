@@ -300,6 +300,7 @@ pub struct VerificationArgs {
     )]
     pub enable_stubbing: bool,
 
+    /// Enable Kani coverage output alongside verification result
     #[arg(long, hide_short_help = true)]
     pub coverage: bool,
 
