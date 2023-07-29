@@ -1,12 +1,12 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-//! Verify that Kani can properly handle SIMD declared using array syntax.
+//! Verify that Kani can properly handle SIMD declaration and field access using array syntax.
 
 #![allow(non_camel_case_types)]
 #![feature(repr_simd)]
 
 #[repr(simd)]
-#[derive(PartialEq, Eq, kani::Arbitrary)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, kani::Arbitrary)]
 pub struct i64x2([i64; 2]);
 
 #[kani::proof]
@@ -17,11 +17,11 @@ fn check_diff() {
 }
 
 #[kani::proof]
-fn check_nondet() {
+fn check_ge() {
     let x: i64x2 = kani::any();
-    let y: i64x2 = kani::any();
-    kani::cover!(x != y);
-    kani::cover!(x == y);
+    kani::assume(x.0[0] > 0);
+    kani::assume(x.0[1] > 0);
+    assert!(x > i64x2([0, 0]));
 }
 
 #[derive(Clone, Debug)]
@@ -30,5 +30,7 @@ struct CustomSimd<T, const LANES: usize>([T; LANES]);
 
 #[kani::proof]
 fn simd_vec() {
-    std::hint::black_box(CustomSimd([0u8; 10]));
+    let simd = CustomSimd([0u8; 10]);
+    let idx: usize = kani::any_where(|x: &usize| *x < 10);
+    assert_eq!(simd.0[idx], 0);
 }

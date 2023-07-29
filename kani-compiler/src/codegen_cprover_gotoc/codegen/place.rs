@@ -235,6 +235,11 @@ impl<'tcx> TypeOrVariant<'tcx> {
 }
 
 impl<'tcx> GotocCtx<'tcx> {
+    /// Codegen field access for types that allow direct field projection.
+    ///
+    /// I.e.: Algebraic data types, closures, and generators.
+    ///
+    /// Other composite types such as array only support index projection.
     fn codegen_field(
         &mut self,
         parent_expr: Expr,
@@ -255,13 +260,14 @@ impl<'tcx> GotocCtx<'tcx> {
                     | ty::Never
                     | ty::FnDef(..)
                     | ty::GeneratorWitness(..)
+                    | ty::GeneratorWitnessMIR(..)
                     | ty::Foreign(..)
                     | ty::Dynamic(..)
                     | ty::Bound(..)
                     | ty::Placeholder(..)
                     | ty::Param(_)
                     | ty::Infer(_)
-                    | ty::Error(_) => unreachable!("type {:?} does not have a field", parent_ty),
+                    | ty::Error(_) => unreachable!("type {parent_ty:?} does not have a field"),
                     ty::Tuple(_) => Ok(parent_expr
                         .member(&Self::tuple_fld_name(field.index()), &self.symbol_table)),
                     ty::Adt(def, _) if def.repr().simd() => Ok(self.codegen_simd_field(
@@ -283,7 +289,11 @@ impl<'tcx> GotocCtx<'tcx> {
                             .member("direct_fields", &self.symbol_table)
                             .member(field_name, &self.symbol_table))
                     }
-                    _ => unimplemented!(),
+                    ty::Str | ty::Array(_, _) | ty::Slice(_) | ty::RawPtr(_) | ty::Ref(_, _, _) => {
+                        unreachable!(
+                            "element of {parent_ty:?} is not accessed via field projection"
+                        )
+                    }
                 }
             }
             // if we fall here, then we are handling an enum
