@@ -1585,7 +1585,7 @@ impl<'tcx> GotocCtx<'tcx> {
         );
         let res = op_fun(a, b);
         let expr_place = self.codegen_expr_to_place(p, res);
-        Stmt::block(vec![expr_place, check_stmt], loc)
+        Stmt::block(vec![check_stmt, expr_place], loc)
     }
 
     /// `simd_shuffle` constructs a new vector from the elements of two input
