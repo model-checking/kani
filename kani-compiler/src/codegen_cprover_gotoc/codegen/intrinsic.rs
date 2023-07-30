@@ -509,9 +509,9 @@ impl<'tcx> GotocCtx<'tcx> {
                 loc,
             ),
             "simd_and" => codegen_intrinsic_binop!(bitand),
-            // TODO: `simd_div` and `simd_rem` don't check for overflow cases.
-            // <https://github.com/model-checking/kani/issues/1970>
-            "simd_div" => codegen_intrinsic_binop!(div),
+            "simd_div" | "simd_rem" => {
+                self.codegen_simd_div_with_overflow(fargs, intrinsic, p, loc)
+            }
             "simd_eq" => self.codegen_simd_cmp(Expr::vector_eq, fargs, p, span, farg_types, ret_ty),
             "simd_extract" => {
                 self.codegen_intrinsic_simd_extract(fargs, p, farg_types, ret_ty, span)
@@ -535,9 +535,6 @@ impl<'tcx> GotocCtx<'tcx> {
                 self.codegen_simd_cmp(Expr::vector_neq, fargs, p, span, farg_types, ret_ty)
             }
             "simd_or" => codegen_intrinsic_binop!(bitor),
-            // TODO: `simd_div` and `simd_rem` don't check for overflow cases.
-            // <https://github.com/model-checking/kani/issues/1970>
-            "simd_rem" => codegen_intrinsic_binop!(rem),
             // TODO: `simd_shl` and `simd_shr` don't check overflow cases.
             // <https://github.com/model-checking/kani/issues/1963>
             "simd_shl" => codegen_intrinsic_binop!(shl),
@@ -1520,6 +1517,37 @@ impl<'tcx> GotocCtx<'tcx> {
         // Create the vector comparison expression
         let e = f(arg1, arg2, ret_typ);
         self.codegen_expr_to_place(p, e)
+    }
+
+    /// Codegen for `simd_div` and `simd_rem` intrinsics including overflow checks.
+    /// The divide-by-zero check appears to already be handled by CBMC.
+    fn codegen_simd_div_with_overflow(
+        &mut self,
+        fargs: Vec<Expr>,
+        intrinsic: &str,
+        p: &Place<'tcx>,
+        loc: Location,
+    ) -> Stmt {
+        let op_fun = match intrinsic {
+            "simd_div" => Expr::div,
+            "simd_rem" => Expr::rem,
+            _ => unreachable!("expected simd_div or simd_rem"),
+        };
+        let base_type = fargs[0].typ().base_type().unwrap().clone();
+        if base_type.is_signed(self.symbol_table.machine_model()) {
+            let min_int_expr = base_type.min_int_expr(self.symbol_table.machine_model());
+            let negative_one = Expr::int_constant(-1, base_type);
+            self.codegen_simd_op_with_overflow(
+                op_fun,
+                |a, b| a.eq(min_int_expr.clone()).and(b.eq(negative_one.clone())),
+                fargs,
+                intrinsic,
+                p,
+                loc,
+            )
+        } else {
+            self.binop(p, fargs, op_fun)
+        }
     }
 
     /// Intrinsics which encode a SIMD arithmetic operation with overflow check.
