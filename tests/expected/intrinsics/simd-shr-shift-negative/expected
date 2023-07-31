@@ -1,2 +1,2 @@
 FAILURE\
-shift distance is negative
+attempt simd_shr with negative shift distance
