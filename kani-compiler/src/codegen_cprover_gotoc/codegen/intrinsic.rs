@@ -188,7 +188,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let a = fargs.remove(0);
                 let b = fargs.remove(0);
                 let div_does_not_overflow = self.div_does_not_overflow(a.clone(), b.clone());
-                let div_overflow_check = self.codegen_assert(
+                let div_overflow_check = self.codegen_assert_assume(
                     div_does_not_overflow,
                     PropertyClass::ArithmeticOverflow,
                     format!("attempt to compute {} which would overflow", intrinsic).as_str(),

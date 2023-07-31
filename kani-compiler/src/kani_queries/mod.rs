@@ -28,6 +28,7 @@ pub enum ReachabilityType {
 #[derive(Debug, Default, Clone)]
 pub struct QueryDb {
     pub check_assertion_reachability: bool,
+    pub check_coverage: bool,
     pub emit_vtable_restrictions: bool,
     pub output_pretty_json: bool,
     pub ignore_global_asm: bool,

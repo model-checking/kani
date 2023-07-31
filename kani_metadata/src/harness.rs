@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 /// We emit this structure for each annotated proof harness (`#[kani::proof]`) we find.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct HarnessMetadata {
     /// The fully qualified name the user gave to the function (i.e. includes the module path).
     pub pretty_name: String,
@@ -27,7 +27,7 @@ pub struct HarnessMetadata {
 }
 
 /// The attributes added by the user to control how a harness is executed.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct HarnessAttributes {
     /// Whether the harness has been annotated with proof.
     pub proof: bool,
@@ -42,7 +42,7 @@ pub struct HarnessAttributes {
 }
 
 /// The stubbing type.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Stub {
     pub original: String,
     pub replacement: String,

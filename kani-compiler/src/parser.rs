@@ -28,6 +28,9 @@ pub const RESTRICT_FN_PTRS: &str = "restrict-vtable-fn-ptrs";
 /// Option name used to enable assertion reachability checks.
 pub const ASSERTION_REACH_CHECKS: &str = "assertion-reach-checks";
 
+/// Option name used to enable coverage checks.
+pub const COVERAGE_CHECKS: &str = "coverage-checks";
+
 /// Option name used to use json pretty-print for output files.
 pub const PRETTY_OUTPUT_FILES: &str = "pretty-json-files";
 
@@ -96,6 +99,12 @@ pub fn parser() -> Command {
             Arg::new(ASSERTION_REACH_CHECKS)
                 .long(ASSERTION_REACH_CHECKS)
                 .help("Check the reachability of every assertion.")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(COVERAGE_CHECKS)
+                .long(COVERAGE_CHECKS)
+                .help("Check the reachability of every statement.")
                 .action(ArgAction::SetTrue),
         )
         .arg(

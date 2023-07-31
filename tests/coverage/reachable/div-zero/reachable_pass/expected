@@ -1,0 +1,4 @@
+coverage/reachable/div-zero/reachable_pass/test.rs, 5, PARTIAL
+coverage/reachable/div-zero/reachable_pass/test.rs, 6, FULL
+coverage/reachable/div-zero/reachable_pass/test.rs, 10, FULL
+coverage/reachable/div-zero/reachable_pass/test.rs, 11, FULL
