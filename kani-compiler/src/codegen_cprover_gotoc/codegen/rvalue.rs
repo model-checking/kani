@@ -582,24 +582,28 @@ impl<'tcx> GotocCtx<'tcx> {
             AggregateKind::Adt(_, _, _, _, _) if res_ty.is_simd() => {
                 let typ = self.codegen_ty(res_ty);
                 let layout = self.layout_of(res_ty);
-                let vector_element_type = typ.base_type().unwrap().clone();
-                Expr::vector_expr(
-                    typ,
-                    layout
-                        .fields
-                        .index_by_increasing_offset()
-                        .map(|idx| {
-                            let cgo = self.codegen_operand(&operands[idx.into()]);
-                            // The input operand might actually be a one-element array, as seen
-                            // when running assess on firecracker.
-                            if *cgo.typ() == vector_element_type {
-                                cgo
-                            } else {
-                                cgo.transmute_to(vector_element_type.clone(), &self.symbol_table)
-                            }
-                        })
-                        .collect(),
-                )
+                trace!(shape=?layout.fields, "codegen_rvalue_aggregate");
+                assert!(operands.len() > 0, "SIMD vector cannot be empty");
+                if operands.len() == 1 {
+                    let data = self.codegen_operand(&operands[0u32.into()]);
+                    if data.typ().is_array() {
+                        // Array-based SIMD representation.
+                        data.transmute_to(typ, &self.symbol_table)
+                    } else {
+                        // Multi field-based representation with one field.
+                        Expr::vector_expr(typ, vec![data])
+                    }
+                } else {
+                    // Multi field SIMD representation.
+                    Expr::vector_expr(
+                        typ,
+                        layout
+                            .fields
+                            .index_by_increasing_offset()
+                            .map(|idx| self.codegen_operand(&operands[idx.into()]))
+                            .collect(),
+                    )
+                }
             }
             AggregateKind::Adt(_, variant_index, ..) if res_ty.is_enum() => {
                 self.codegen_rvalue_enum_aggregate(variant_index, operands, res_ty, loc)
