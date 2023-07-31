@@ -7,7 +7,9 @@
 
 use crate::common::KaniFailStep;
 use crate::common::{output_base_dir, output_base_name};
-use crate::common::{CargoKani, CargoKaniTest, Exec, Expected, Kani, KaniFixme, Stub};
+use crate::common::{
+    CargoKani, CargoKaniTest, CoverageBased, Exec, Expected, Kani, KaniFixme, Stub,
+};
 use crate::common::{Config, TestPaths};
 use crate::header::TestProps;
 use crate::read2::read2;
@@ -75,6 +77,7 @@ impl<'test> TestCx<'test> {
             KaniFixme => self.run_kani_test(),
             CargoKani => self.run_cargo_kani_test(false),
             CargoKaniTest => self.run_cargo_kani_test(true),
+            CoverageBased => self.run_expected_coverage_test(),
             Exec => self.run_exec_test(),
             Expected => self.run_expected_test(),
             Stub => self.run_stub_test(),
@@ -311,6 +314,22 @@ impl<'test> TestCx<'test> {
         self.compose_and_run(kani)
     }
 
+    /// Run coverage based output for kani on a single file
+    fn run_kani_with_coverage(&self) -> ProcRes {
+        let mut kani = Command::new("kani");
+        if !self.props.compile_flags.is_empty() {
+            kani.env("RUSTFLAGS", self.props.compile_flags.join(" "));
+        }
+        kani.arg(&self.testpaths.file).args(&self.props.kani_flags);
+        kani.arg("--coverage").args(&["-Z", "line-coverage"]);
+
+        if !self.props.cbmc_flags.is_empty() {
+            kani.arg("--cbmc-args").args(&self.props.cbmc_flags);
+        }
+
+        self.compose_and_run(kani)
+    }
+
     /// Runs an executable file and:
     ///  * Checks the expected output if an expected file is specified
     ///  * Checks the exit code (assumed to be 0 by default)
@@ -376,6 +395,13 @@ impl<'test> TestCx<'test> {
     /// the expected output in `expected` file.
     fn run_expected_test(&self) {
         let proc_res = self.run_kani();
+        let expected_path = self.testpaths.file.parent().unwrap().join("expected");
+        self.verify_output(&proc_res, &expected_path);
+    }
+
+    /// Runs Kani in coverage mode on the test file specified by `self.testpaths.file`.
+    fn run_expected_coverage_test(&self) {
+        let proc_res = self.run_kani_with_coverage();
         let expected_path = self.testpaths.file.parent().unwrap().join("expected");
         self.verify_output(&proc_res, &expected_path);
     }

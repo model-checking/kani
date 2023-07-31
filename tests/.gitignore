@@ -1,2 +1,12 @@
 *.goto
 *.json
+
+# Temporary folders
+rmet*/
+kani_concrete_playback
+
+# Binary artifacts
+*out
+smoke
+check_tests
+function

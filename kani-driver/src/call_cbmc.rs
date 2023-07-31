@@ -13,7 +13,7 @@ use crate::args::{OutputFormat, VerificationArgs};
 use crate::cbmc_output_parser::{
     extract_results, process_cbmc_output, CheckStatus, ParserItem, Property, VerificationOutput,
 };
-use crate::cbmc_property_renderer::{format_result, kani_cbmc_output_filter};
+use crate::cbmc_property_renderer::{format_coverage, format_result, kani_cbmc_output_filter};
 use crate::session::KaniSession;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -302,14 +302,23 @@ impl VerificationResult {
         }
     }
 
-    pub fn render(&self, output_format: &OutputFormat, should_panic: bool) -> String {
+    pub fn render(
+        &self,
+        output_format: &OutputFormat,
+        should_panic: bool,
+        coverage_mode: bool,
+    ) -> String {
         match &self.results {
             Ok(results) => {
                 let status = self.status;
                 let failed_properties = self.failed_properties;
                 let show_checks = matches!(output_format, OutputFormat::Regular);
-                let mut result =
-                    format_result(results, status, should_panic, failed_properties, show_checks);
+
+                let mut result = if coverage_mode {
+                    format_coverage(results, status, should_panic, failed_properties, show_checks)
+                } else {
+                    format_result(results, status, should_panic, failed_properties, show_checks)
+                };
                 writeln!(result, "Verification Time: {}s", self.runtime.as_secs_f32()).unwrap();
                 result
             }

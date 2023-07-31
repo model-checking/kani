@@ -94,7 +94,7 @@ pub fn parse_config(args: Vec<String>) -> Config {
         .optflag("", "report-time",
                  "report the time of each test. Configuration is done via env variables, like \
                  rust unit tests.")
-        .optmulti("", "kani-flag", 
+        .optmulti("", "kani-flag",
                   "pass extra flags to Kani. Note that this may cause spurious failures if the \
                   passed flag conflicts with the test configuration. Only works for `kani`, \
                   `cargo-kani`, and `expected` modes."
