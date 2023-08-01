@@ -1,5 +1,5 @@
 - **Feature Name:** Function Contracts
-- **Feature Request Issue:** [#2652](https://github.com/model-checking/kani/issues/2652)
+- **Feature Request Issue:** [#2652](https://github.com/model-checking/kani/issues/2652) and [Milestone](https://github.com/model-checking/kani/milestone/31)
 - **RFC PR:** [#2620](https://github.com/model-checking/kani/pull/2620)
 - **Status:** Under Review 
 - **Version:** 0
@@ -61,8 +61,8 @@ Function contract provide a verifiable way to specify function behavior. In
 addition the specified behavior can subsequently be used as an abstraction of
 the functions behavior at call sites.
 
-The lifecycle of a contract is split roughly into three phases. Which we will
-explore on this simple example:
+The lifecycle of a contract is split roughly into three phases: specification,
+verification and stubbing. Which we will explore on this simple example:
 
 ```rs
 fn my_div(dividend: u32, divisor: u32) -> u32 {
@@ -139,9 +139,9 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
    fn my_div_harness() {
      let dividend = kani::any();
      let divisor = kani::any();
-     kani::assume(divisor != 0);
+     kani::assume(divisor != 0); // requires
      let result = my_div(dividend, divisor);
-     kani::assert(result <= dividend);
+     kani::assert(result <= dividend); // ensures
    }
    ```
 
