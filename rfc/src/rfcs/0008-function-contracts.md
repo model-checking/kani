@@ -151,7 +151,7 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
 3. In the last phase the **verified** contract is ready for us to use to
    **stub** other harnesses.
 
-   Unlike in regular stubbing Kani there to be at least one associated
+   Unlike in regular stubbing, there has to be at least one associated
    `proof_for_contract` harness for each function to stub *and* it requires all
    such harnesses to pass verification before attempting verification of any
    harnesses that use it as a stub.
@@ -304,7 +304,7 @@ Any violation of the following constraints constitutes a compile-time error.
 
   Harnesses (general or for contract checking) may not have any such annotation.
 
-- A function may have one `proof_for_contract(TARGET)` annotation. `TARGET` must
+- A harness may have up to one `proof_for_contract(TARGET)` annotation where `TARGET` must
   "have a contract". One or more `proof_for_contract` harnesses may have the
   same `TARGET`. All such harnesses must pass verification, before `TARGET` may
   be used as a verified stub.
@@ -312,10 +312,10 @@ Any violation of the following constraints constitutes a compile-time error.
   A `proof_for_contract` harness may use any harness attributes, including
   `stub` and `stub_verified`, though the `TARGET` may not appear in either. 
 
-  Kani checks that `TARGET` is reachable from the `proof_for_contract` harness,
+-  Kani checks that `TARGET` is reachable from the `proof_for_contract` harness,
   but it does not warn if stubbed functions use `TARGET`[^stubcheck].
 
-  A `proof_for_contract` function may not have the `kani::proof` attribute (it
+-  A `proof_for_contract` function may not have the `kani::proof` attribute (it
   is already implied by `proof_for_contract`).
 
 - A harness may have multiple `stub_verified(TARGET)` attributes. Each `TARGET`
