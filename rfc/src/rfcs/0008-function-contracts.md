@@ -1,27 +1,34 @@
 - **Feature Name:** Function Contracts
-- **Feature Request Issue:** -
+- **Feature Request Issue:** [#2652](https://github.com/model-checking/kani/issues/2652)
 - **RFC PR:** [#2620](https://github.com/model-checking/kani/pull/2620)
 - **Status:** Under Review 
 - **Version:** 0
 - **Proof-of-concept:** [features/contracts](https://github.com/model-checking/kani/tree/features/contracts)
+- **Gate:** `-Zcontracts`, enforced by compile time error[^gate]
+
+[^gate]: Enforced gates means all uses of constructs (functions, annotations,
+    macros) in this RFC are an error.
 
 -------------------
 
 ## Summary
 
-Function contracts are a mechanism for a stubbing-like abstraction of concrete
+Function contracts are a mechanism for a [stubbing]-like abstraction of concrete
 implementations but with a significantly reduced threat to soundness[^simple-unsoundness].
 
 Lays the ground work for modular verification.
 <!-- Shorter? -->
+
+[stubbing]: https://model-checking.github.io/kani/rfc/rfcs/0002-function-stubbing.html
 
 ## User Impact
 
 <!-- Is basically the pitch and addressing the user. -->
 
 Function contracts provide an interface for verified abstraction, a mechanism
-similar to stubbing, but sound[^simple-unsoundness]. It also paves the way for
-the following two ambitious goals.
+similar to [stubbing], but sound[^simple-unsoundness]. This kind of verified
+stubbing allows for modular verification, which paves the way for the
+following two ambitious goals.
 
 [^simple-unsoundness]: The main remaining threat to soundness in the use of
     contracts, as defined in this proposal, is the reliance on user-supplied
@@ -40,25 +47,22 @@ the following two ambitious goals.
 Enabling function contracts is a non-invasive change. While it contains a new
 API, that API is strictly additive for users. All prior operations are unchanged.
 
-A `-Zcontracts` guard will be added which is necessary to access any of the
-contract functionality described below. Any use of the contracts API, such as attributes,
-without `-Zcontracts` is a compile time error.
-
 ### Caveats
 
-This proposal focuses on scalability benefits within a single verification session,
-caching strategies for cross-session speedup are left to future work.
-
 We add function contract functionality, but do not add the inductive reasoning
-support needed for many unbounded problems, such as "decreases" measures and
-inductive lemmas.
+support needed for many unbounded problems, such as ["decreases"
+measures](https://diffblue.github.io/cbmc/contracts-decreases.html) and
+inductive lemmas (for instance in [ACSL](https://frama-c.com/download/acsl.pdf)
+section 2.6.3 "inductive predicates").
 
 ## User Experience
 
-Function contracts provide a way to approximate function behavior, verify the
-approximation and subsequently use the approximation instead if the (possibly
-costly) implementation. The lifecycle of a contract is split roughly into three
-phases. Which we will explore on this simple example:
+Function contract provide a verifiable way to specify function behavior. In
+addition the specified behavior can subsequently be used as an abstraction of
+the functions behavior at call sites.
+
+The lifecycle of a contract is split roughly into three phases. Which we will
+explore on this simple example:
 
 ```rs
 fn my_div(dividend: u32, divisor: u32) -> u32 {
@@ -86,7 +90,7 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
 
    Conditions in contracts are plain Rust expressions which can reference the
    function arguments and, in case of `ensures`, the result of the function as a
-   special `result`[^result-naming] varaible. Syntactically Kani supports any
+   special `result`[^result-naming] variable. Syntactically Kani supports any
    Rust expression, including function calls, defining types etc, however they
    must be side-effect free[^side-effects]. Multiple `requires` and `ensures`
    clauses are allowed on the same function, they are implicitly logically
@@ -95,24 +99,11 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
    [^result-naming]: See [open questions](#open-questions) for a discussion
        about naming of the result variable.
 
-2. Checking the Contract
-
-   Next Kani must make sure that the approximation we specified actually holds.
-   This is in opposition to the related "stubbing" mechanism, where the
-   approximation is not checked but always trusted.
+2. Next Kani must make sure that the approximation we specified actually holds
+   by **checking** the contract against the implementation. This is in contrast
+   to ["stubbing"][stubbing], where the approximation is blindly trusted.
 
    The contract must always overapproximate the function to guarantee soundness.
-   Specifically the domain (inputs) of the function described (by the `requires`
-   clause) must be *at most* as large as the input space for which the
-   function's behavior is well defined, and the codomain (outputs, described by
-   `ensures`) must be *at least* as large as the actual space of outputs the
-   function may produce.
-
-   For example in our case it would be permissible to use
-   `#[kani::requires(divisor > 100)]` (smaller permissible input domain) or
-   `#[kani::ensures(result < dividend + divisor)]` (larger possible output
-   domain), but `#[kani::ensures(result < dividend)]` (small output) is not
-   allowed.
 
    To facilitate the check Kani needs a suitable environment to verify the
    function in. For this proposal the environment must be provided by us (the
@@ -129,11 +120,10 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
    }
    ```
 
-   Similar to a unit-test harness for any other function, we are supposed to
-   create inputs for the function that are as generic/abstract as possible to
-   make sure we catch all edge cases, then call the function at least once with
-   those abstract inputs. If we forget to call `my_div` Kani would report an
-   error.
+   Similar to a verification harness for any other function, we are supposed to
+   create all possible input combinations the function can encounter, then call
+   the function at least once with those abstract inputs. If we forget to call
+   `my_div` Kani reports an error.
    
    Unlike a unit-test we can however elide any checks of the output and
    post-call state. Instead Kani uses the conditions we specified in the
@@ -187,20 +177,12 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
    Mutable memory is similarly made non-deterministic, discussed later in
    [havociing](#memory-predicates-and-havocing).
 
-   The expanded version is equivalent to this:
+   Stubbing `my_div` expands it similar to this:
   
    ```rs
-   #[kani::proof]
-   #[kani::stub_verified(my_div)]
-   fn use_div() {
-     let v = vec![...];
-     let dividend = v.len() - 1;
-     let divisor = 3;
-     kani::assert(divisor != 0);
-     let result = kani::any();
-     kani::assume(result <= dividend);
-     let some_idx = result;
-     v[some_idx];
+   fn my_div_stub(dividend: u32, divisor: u32) -> u32 {
+     kani::assert(divisor != 0); // pre-condition
+     kani::any_where(|result| { /* post-condition */ result <= dividend })
    }
    ```
 
@@ -323,12 +305,12 @@ Any violation of the following constraints constitutes a compile-time error.
   Harnesses (general or for contract checking) may not have any such annotation.
 
 - A function may have one `proof_for_contract(TARGET)` annotation. `TARGET` must
-  "have a contract". Multiple functions may have `proof_for_contract`
-  annotations with the same `TARGET`. All such harnesses must pass verification,
-  before `TARGET` may be used as a verified stub.
+  "have a contract". One or more `proof_for_contract` harnesses may have the
+  same `TARGET`. All such harnesses must pass verification, before `TARGET` may
+  be used as a verified stub.
 
-  A `proof_for_contract` harness may use both `stub` and `stub_verified`, though
-  the `TARGET` may not appear in either. 
+  A `proof_for_contract` harness may use any harness attributes, including
+  `stub` and `stub_verified`, though the `TARGET` may not appear in either. 
 
   Kani checks that `TARGET` is reachable from the `proof_for_contract` harness,
   but it does not warn if stubbed functions use `TARGET`[^stubcheck].
@@ -542,6 +524,8 @@ This is the technical portion of the RFC. Please provide high level details of t
   semantics. Alternatively we can let the user pick the name with an additional
   argument to `ensures`, e.g. `ensures(my_result_var, CONDITION)`
 
+  See [#2597](https://github.com/model-checking/kani/issues/2597)
+
  
 <!-- 
 - Is there any part of the design that you expect to resolve through the RFC process?
@@ -578,3 +562,14 @@ This is the technical portion of the RFC. Please provide high level details of t
   the original method depending on context. The occurrence inside the contract
   generated from the trait method is replaced by the impl contract. Any other
   occurrence is replaced by the just altered trait method contract.
+- **Cross Session Verification Caching:** This proposal focuses on scalability
+  benefits within a single verification session, but those verification results
+  could be cached across sessions and speed up verification for large projects
+  using contacts in the future.
+- **Inductive Reasoning:** Describing recursive functions can require that the
+  contract also recurse, describing a fixpoint logic. This is needed for
+  instance for linked data structures like linked lists or trees.
+- **Compositional Contracts:** The proposal in this document lacks a
+  comprehensive handling of type parameters. Correctness of a function with a
+  constrained type parameter (e.g. `T : Trait`) depends on `T` observing a
+  contract as well. This is most striking in the case of higher order functions.
