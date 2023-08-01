@@ -229,7 +229,7 @@ impl<T> Vec<T> {
 ```
 
 `old` allows evaluating any (side-effect free[^side-effects]) Rust expression.
-The bowwor checker enforces the result of `old` cannot observe the mutations
+The borrow checker enforces the result of `old` cannot observe the mutations
 from e.g. `pop`, as that would defeat the purpose. If `your` expression in `old`
 returns borrowed content, make a copy instead (using e.g. `clone()`).
 
