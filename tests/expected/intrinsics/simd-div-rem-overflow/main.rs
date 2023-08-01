@@ -1,8 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// Checks that the `simd_div` and `simd_rem` intrinsics check for overflows.
-// kani-verify-fail
+// Checks that the `simd_div` and `simd_rem` intrinsics check for integer overflows.
 
 #![feature(repr_simd, platform_intrinsics)]
 
