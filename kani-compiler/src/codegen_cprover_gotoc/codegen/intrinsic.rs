@@ -1511,8 +1511,11 @@ impl<'tcx> GotocCtx<'tcx> {
         self.codegen_expr_to_place(p, e)
     }
 
-    /// Codegen for `simd_div` and `simd_rem` intrinsics including overflow checks.
-    /// The divide-by-zero check appears to already be handled by CBMC.
+    /// Codegen for `simd_div` and `simd_rem` intrinsics.
+    /// This checks for overflow in signed integer division (i.e. when dividing the minimum integer
+    /// for the type by -1). Overflow checks on floating point division are handled by CBMC, as is
+    /// division by zero for both integers and floats.
+    /// Note: `simd_rem` is valid as long as second operand is non-zero (checked by CBMC).
     fn codegen_simd_div_with_overflow(
         &mut self,
         fargs: Vec<Expr>,
@@ -1526,7 +1529,7 @@ impl<'tcx> GotocCtx<'tcx> {
             _ => unreachable!("expected simd_div or simd_rem"),
         };
         let base_type = fargs[0].typ().base_type().unwrap().clone();
-        if base_type.is_signed(self.symbol_table.machine_model()) {
+        if base_type.is_integer() && base_type.is_signed(self.symbol_table.machine_model()) {
             let min_int_expr = base_type.min_int_expr(self.symbol_table.machine_model());
             let negative_one = Expr::int_constant(-1, base_type);
             self.codegen_simd_op_with_overflow(
