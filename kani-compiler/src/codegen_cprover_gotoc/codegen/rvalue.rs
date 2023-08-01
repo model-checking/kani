@@ -116,6 +116,14 @@ impl<'tcx> GotocCtx<'tcx> {
             BinOp::BitXor => ce1.bitxor(ce2),
             BinOp::Div => ce1.div(ce2),
             BinOp::Rem => ce1.rem(ce2),
+            BinOp::ShlUnchecked => ce1.shl(ce2),
+            BinOp::ShrUnchecked => {
+                if self.operand_ty(e1).is_signed() {
+                    ce1.ashr(ce2)
+                } else {
+                    ce1.lshr(ce2)
+                }
+            }
             _ => unreachable!("Unexpected {:?}", op),
         }
     }
@@ -343,11 +351,14 @@ impl<'tcx> GotocCtx<'tcx> {
             BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Shl | BinOp::Shr => {
                 self.codegen_scalar_binop(op, e1, e2)
             }
-            // We currently rely on CBMC's UB checks for shift which isn't always accurate.
-            // We should implement the checks ourselves.
-            // See https://github.com/model-checking/kani/issues/2374
-            BinOp::ShlUnchecked => self.codegen_scalar_binop(&BinOp::Shl, e1, e2),
-            BinOp::ShrUnchecked => self.codegen_scalar_binop(&BinOp::Shr, e1, e2),
+            BinOp::ShlUnchecked | BinOp::ShrUnchecked => {
+                let result = self.codegen_unchecked_scalar_binop(op, e1, e2);
+                let check = self.check_unchecked_shift_distance(e1, e2, loc);
+                Expr::statement_expression(
+                    vec![check, result.clone().as_stmt(loc)],
+                    result.typ().clone(),
+                )
+            }
             BinOp::AddUnchecked | BinOp::MulUnchecked | BinOp::SubUnchecked => {
                 self.codegen_binop_with_overflow_check(op, e1, e2, loc)
             }
@@ -452,6 +463,39 @@ impl<'tcx> GotocCtx<'tcx> {
             Stmt::block(vec![overflow_check, div_by_zero_check], loc)
         } else {
             div_by_zero_check
+        }
+    }
+
+    /// Check for valid unchecked shift distance.
+    /// Shifts on an integer of type T are UB if shift distance < 0 or >= T::BITS.
+    fn check_unchecked_shift_distance(
+        &mut self,
+        value: &Operand<'tcx>,
+        distance: &Operand<'tcx>,
+        loc: Location,
+    ) -> Stmt {
+        let value_expr = self.codegen_operand(value);
+        let distance_expr = self.codegen_operand(distance);
+        let value_width = value_expr.typ().sizeof_in_bits(&self.symbol_table);
+        let value_width_expr = Expr::int_constant(value_width, distance_expr.typ().clone());
+
+        let excessive_distance_check = self.codegen_assert_assume(
+            distance_expr.clone().lt(value_width_expr),
+            PropertyClass::ArithmeticOverflow,
+            "attempt to shift by excessive shift distance",
+            loc,
+        );
+
+        if distance_expr.typ().is_signed(self.symbol_table.machine_model()) {
+            let negative_distance_check = self.codegen_assert_assume(
+                distance_expr.is_non_negative(),
+                PropertyClass::ArithmeticOverflow,
+                "attempt to shift by negative distance",
+                loc,
+            );
+            Stmt::block(vec![negative_distance_check, excessive_distance_check], loc)
+        } else {
+            excessive_distance_check
         }
     }
 
@@ -582,24 +626,28 @@ impl<'tcx> GotocCtx<'tcx> {
             AggregateKind::Adt(_, _, _, _, _) if res_ty.is_simd() => {
                 let typ = self.codegen_ty(res_ty);
                 let layout = self.layout_of(res_ty);
-                let vector_element_type = typ.base_type().unwrap().clone();
-                Expr::vector_expr(
-                    typ,
-                    layout
-                        .fields
-                        .index_by_increasing_offset()
-                        .map(|idx| {
-                            let cgo = self.codegen_operand(&operands[idx.into()]);
-                            // The input operand might actually be a one-element array, as seen
-                            // when running assess on firecracker.
-                            if *cgo.typ() == vector_element_type {
-                                cgo
-                            } else {
-                                cgo.transmute_to(vector_element_type.clone(), &self.symbol_table)
-                            }
-                        })
-                        .collect(),
-                )
+                trace!(shape=?layout.fields, "codegen_rvalue_aggregate");
+                assert!(operands.len() > 0, "SIMD vector cannot be empty");
+                if operands.len() == 1 {
+                    let data = self.codegen_operand(&operands[0u32.into()]);
+                    if data.typ().is_array() {
+                        // Array-based SIMD representation.
+                        data.transmute_to(typ, &self.symbol_table)
+                    } else {
+                        // Multi field-based representation with one field.
+                        Expr::vector_expr(typ, vec![data])
+                    }
+                } else {
+                    // Multi field SIMD representation.
+                    Expr::vector_expr(
+                        typ,
+                        layout
+                            .fields
+                            .index_by_increasing_offset()
+                            .map(|idx| self.codegen_operand(&operands[idx.into()]))
+                            .collect(),
+                    )
+                }
             }
             AggregateKind::Adt(_, variant_index, ..) if res_ty.is_enum() => {
                 self.codegen_rvalue_enum_aggregate(variant_index, operands, res_ty, loc)
