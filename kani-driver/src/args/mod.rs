@@ -208,6 +208,7 @@ pub struct VerificationArgs {
     #[arg(long, requires("harnesses"))]
     pub unwind: Option<u32>,
     /// Specify the CBMC solver to use. Overrides the harness `solver` attribute.
+    /// If no solver is specified (with --solver or harness attribute), Kani will use CaDiCal.
     #[arg(long, value_parser = CbmcSolverValueParser::new(CbmcSolver::VARIANTS))]
     pub solver: Option<CbmcSolver>,
     /// Pass through directly to CBMC; must be the last flag.
