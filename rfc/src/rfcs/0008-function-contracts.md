@@ -39,10 +39,9 @@ following two ambitious goals.
 
 - **Scalability:** Function contracts are sound (over)abstractions of function
   behavior. By verifiying the contract against its implemetation and
-  subsequently performing caller verification against the (cheaper) abstraction
+  subsequently performing caller verification against the (cheaper) abstraction,
   verification can be modularized, cached and thus scaled.
-- **Unbounded Verification:** Contracts can be reasoned over inductively and
-  thus verify recursive functions.
+- **Unbounded Verification:** The abstraction provided by the contract can be used instead of a recursive call, thus allowing verification of recursive functions.
 
 Enabling function contracts is a non-invasive change. While it contains a new
 API, that API is strictly additive for users. All prior operations are unchanged.
