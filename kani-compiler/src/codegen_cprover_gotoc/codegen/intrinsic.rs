@@ -1515,7 +1515,6 @@ impl<'tcx> GotocCtx<'tcx> {
     /// This checks for overflow in signed integer division (i.e. when dividing the minimum integer
     /// for the type by -1). Overflow checks on floating point division are handled by CBMC, as is
     /// division by zero for both integers and floats.
-    /// Note: `simd_rem` is valid as long as second operand is non-zero (checked by CBMC).
     fn codegen_simd_div_with_overflow(
         &mut self,
         fargs: Vec<Expr>,
