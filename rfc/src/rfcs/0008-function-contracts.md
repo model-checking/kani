@@ -91,10 +91,11 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
    Conditions in contracts are plain Rust expressions which can reference the
    function arguments and, in case of `ensures`, the result of the function as a
    special `result`[^result-naming] variable. Syntactically Kani supports any
-   Rust expression, including function calls, defining types etc, however they
-   must be side-effect free[^side-effects]. Multiple `requires` and `ensures`
-   clauses are allowed on the same function, they are implicitly logically
-   conjoined.
+   Rust expression, including function calls, defining types etc. However they
+   must be side-effect free[^side-effects] or Kani will throw a compile error.
+
+   Multiple `requires` and `ensures` clauses are allowed on the same function,
+   they are implicitly logically conjoined.
 
    [^result-naming]: See [open questions](#open-questions) for a discussion
        about naming of the result variable.
@@ -196,15 +197,21 @@ later used as stub, which ensures soundness (see discussion on lingering threats
 to soundness in the [future](#future-possibilities) section) and guarding against
 stubs diverging from their checks.
 
-### History Variables
+[^side-effects]: Code used in contracts is required to be side effect free which
+    means it must not perform I/O, mutate memory (`&mut` vars and such) or
+    (de)allocate heap memory. This is enforced by the verifier, see the
+    discussion in the [future](#future-possibilities) section.
 
-Kani's contract language contains additional support for reasoning about changes
-to memory. One case where this is necessary is whenever `ensures` needs to
-reason about state before the function call. By default it only has access to
-state after the call completes, which will be different if the call mutates
-memory.
+### Write Sets and Havocing
 
-Consider the `Vec::pop` function
+A return value is only one way in which a function may communicate data. It can
+also communicate data by modifying values stored behind mutable pointers.
+
+To simulate all possible modifications a function could apply to pointed-to data
+the verifier "havocs" those regions, essentially replacing their content with
+non-deterministic values.
+
+Let us consider a simple example of a `pop` method.
 
 ```rs
 impl<T> Vec<T> {
@@ -214,10 +221,90 @@ impl<T> Vec<T> {
 }
 ```
 
-If we want to describe in which case the result is `Some`, we need to know
-whether `self` is empty *before* `pop` is called. To do this Kani provides the
-`old(EXPR)` pseudo function, which evaluates `EXPR` before the call (e.g. to
-`pop`) and makes the result available to `ensures`. It is used like so:
+This function can, in theory, modify any memory behind `&mut self`, so this is
+what Kani will assume it does by default. It infers the "write set", that is the
+set of memory locations a function may modify, from the type system. As a result
+any data pointed to by a mutable reference or pointer is considered part of the
+write set. In addition a static analysis of the source code discovers any
+`static mut` variables the function or it's dependencies reference and add all
+pointed-to data to the write set also. During havocing all locations in the
+write set are replaced by non-deterministic values by the verifier.
+
+While the inferred write set is sound and enough for successful contract
+checking[^inferred-footprint] in many cases (such as `pop`) this inference is
+too coarse grained. In this case every value in this vector will be made
+non-deterministic.
+
+This proposal also adds an `assigns` and `frees` clause which limits the scope
+of havocing. Both clauses represent an assertion that the function will modify
+only the specified memory regions. Similar to requires/ensures the verifier
+enforces the assertion in the checking stage to ensure soundness. When the
+contract is used as a stub the assigns clause is used as the write set to havoc.
+
+In our `pop` example the only modified memory location is the last element and
+only if the vector was not already empty, which would be specified thusly.
+
+```rs
+impl<T> Vec<T> {
+  #[assigns(!self.is_empty(), (*self).buf.ptr.pointer.pointer[self.len])]
+  #[assigns(self.is_empty(), false)]
+  fn pop(&mut self) -> Option<T> {
+    ...
+  }
+}
+```
+
+The `#[assigns(CONDITION, ASSIGNS_RANGE)]` consists of an optional `CONDITION`
+(defaults to `true`) and a `ASSIGNS_RANGE` which is essentially an lvalue. 
+
+Lvalues are simple expressions permissible on the left hand side of an
+assignment. They compose of the name of one function argument and zero or more
+projections (dereference `*`, field access `.x`, slice indexing `[1]`).
+
+Because lvalues are restricted to using projections only, Kani must break
+encapsulation here. If need be we can reference fields that are usually hidden,
+without an error from the compiler.
+
+In addition to lvalues an `ASSIGNS_RANGE` can also be terminated with a more
+complex slice expressions as the last projection. This only applies to `*mut`
+pointers to arrays. For instance this is needed for `Vec::truncate` where all of
+the the latter section of the allocation is assigned (dropped).
+
+```rs
+impl<T> Vec<T> {
+  #[assigns(self.buf.ptr.pointer.pointer[len..])]
+  fn truncate(&mut self, len: usize) {
+    ...
+  }
+}
+```
+
+`[..]` denotes the entirety of an allocation, `[i..]`, `[..j]` and `[i..j]` are
+ranges of pointer offsets. The slice indices are offsets with sizing `T`, e.g.
+in Rust `p[i..j]` would be equivalent to
+`std::slice::from_raw_parts(p.offset(i), i - j)`. `i` must be smaller or equal
+than `j`.
+
+A `#[frees(CONDITION, LVALUE)]` clause works similarly to `assigns` but denotes
+memory that is deallocated. It does not admit slice syntax, only lvalues.
+
+[^inferred-footprint]: While inferred memory footprints are sound for both safe
+    and unsafe Rust certain features in unsafe rust (e.g. `RefCell`) get
+    inferred incorrectly and will lead to a failing contract check.
+
+### History Variables
+
+Kani's contract language contains additional support for reasoning about changes
+to memory. One case where this is necessary is whenever `ensures` needs to
+reason about state before the function call. By default it only has access to
+state after the call completes, which will be different if the call mutates
+memory.
+
+Returning to out `pop` function from before we may wish to describe in which
+case the result is `Some`. However that depends on whether `self` is empty
+*before* `pop` is called. To do this Kani provides the `old(EXPR)` pseudo
+function, which evaluates `EXPR` before the call (e.g. to `pop`) and makes the
+result available to `ensures`. It is used like so:
 
 ```rs
 impl<T> Vec<T> {
@@ -241,58 +328,6 @@ not local variables. Compare the following
 **Valid ✅:** `#[kani::ensures(old({ let x = self.is_empty(); x }) || result.is_some())]`
 
 And it will only be recognized as `old(...)`, not as `let old1 = old; old1(...)` etc.
-
-### Memory Predicates and Havocing
-
-The last new feature added are predicates to refine a function's access to heap
-memory. A memory footprint is used by the verifier to perform "havocing" during
-contract stubbing. Recall that stubbing replaces the result value with a
-non-deterministic `kani::any()`, havocing is the equivalent memory regions
-touched by the function. Any memory regions in the footprint are "havoced" by
-the verifier, that is replaced by a non-deterministic value (subject to type
-constraints).
-
-By default Kani infers a memory footprint as all memory reachable from a `&mut`
-input or any `static` global referenced, directly or transitively, by the
-function. While the inferred footprint is sound and enough for successful
-contract checking[^inferred-footprint] it can easily turn large section of
-memory to non-deterministic values, invalidate invariants of your program and
-cause the verification to fail when the contract is used as a stub.
-
-[^inferred-footprint]: While inferred memory footprints are sound for both safe
-    and unsafe rust certain features in unsafe rust (e.g. `RefCell`) get
-    inferred incorrectly and will lead to a failing contract check.
-
-To reduce the scope of havocing Kani provides the `#[kani::assigns(CONDITION,
-ASSIGN_RANGE...)]` and `#[kani::frees(CONDITION, LVALUE...)]` attributes. When
-these attributes are provided Kani will only havoc the location mentioned in
-`ASSIGN_RANGE` and `LVALUE` instead of the inferred footprint. Additionally Kani
-verifies during checking that only the mentioned memory regions are touched and
-only under the specified `CONDITION`. The `CONDITION` is optional and defaults
-to `true`.
-
-`LVALUE` are simple expressions permissible on the left hand side of an
-assignment. They compose of the name of one function argument and zero or more
-projections (dereference `*`, field access `.x`, slice indexing `[1]`).
-
-The `ASSIGN_RANGE` permits any `LVALUE` but additionally permits more complex
-slice expressions as the last projection that applies to pointer values. `[..]`
-denotes the entirety of an allocation, `[i..]`, `[..j]` and `[i..j]` are
-ranges of pointer offsets. A slicing syntax `p[i..j]` only applies if `p` is a
-`*mut T` and points to an array allocation. The slice indices are offsets with
-sizing `T`, e.g. in Rust `p[i..j]` would be equivalent to
-`std::slice::from_raw_parts(p.offset(i), i - j)`. `i` must be smaller or equal
-than `j`.
-
-Because lvalues are restricted to using projections only, Kani must break
-encapsulation here. If need be we can reference fields that are usually hidden,
-without an error from the compiler.
-
-[^side-effects]: Code used in contracts is required to be side effect free which
-    means it must not perform I/O, mutate memory (`&mut` vars and such) or
-    (de)allocate heap memory. This is enforced by the verifier, see the
-    discussion in the [future](#future-possibilities) section.
-
 
 ### Detailed Attribute Contraints Overview
 
@@ -553,6 +588,20 @@ This is the technical portion of the RFC. Please provide high level details of t
   generate the check harness automatically, but this is difficult both because
   heap datastructures are potentially infinite, and also because it must observe
   user-level invariants.
+
+  A complete solution for this is not known to us but there are ongoing
+  investigations into harness generation mechanisms in CBMC.
+
+  One mechanism that is known to us already and potentially applicable to Kani
+  is using *memory predicates* to declaratively describe the state of the heap
+  both before and after the function call. 
+  
+  In CBMC's implementation heap predicates are simply part of the
+  pre/postconditions. This does not easily translate to Kani, since we handle
+  pre/postconditions manually and mainly in proc-macros. There are multiple ways
+  to bridge this gap, perhaps the easiest being to add memory predicates
+  *separately* to Kani instead of as part of pre/postcondtions, so they can be
+  handled separately.
 - What about mutable trait inputs (wrt memory access patters), e.g. a `mut impl AccessMe`
 - **Trait contracts:** Ous proposal could be extended easily to handle simple
   trait contracts. The macros would generate new trait methods with default
