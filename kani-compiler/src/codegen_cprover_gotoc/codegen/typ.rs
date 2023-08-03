@@ -12,9 +12,9 @@ use rustc_middle::mir::{HasLocalDecls, Local, Operand, Place, Rvalue};
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::print::FmtPrinter;
-use rustc_middle::ty::subst::InternalSubsts;
+use rustc_middle::ty::GenericArgsRef;
 use rustc_middle::ty::{
-    self, AdtDef, Const, FloatTy, GeneratorSubsts, Instance, IntTy, PolyFnSig, Ty, TyCtxt, TyKind,
+    self, AdtDef, Const, FloatTy, GeneratorArgs, Instance, IntTy, PolyFnSig, Ty, TyCtxt, TyKind,
     UintTy, VariantDef, VtblEntry,
 };
 use rustc_middle::ty::{List, TypeFoldable};
@@ -291,7 +291,7 @@ impl<'tcx> GotocCtx<'tcx> {
     fn closure_sig(
         &self,
         def_id: DefId,
-        substs: ty::subst::SubstsRef<'tcx>,
+        substs: ty::GenericArgsRef<'tcx>,
     ) -> ty::PolyFnSig<'tcx> {
         let sig = self.monomorphize(substs.as_closure().sig());
 
@@ -334,7 +334,7 @@ impl<'tcx> GotocCtx<'tcx> {
         &self,
         did: &DefId,
         ty: Ty<'tcx>,
-        substs: ty::subst::SubstsRef<'tcx>,
+        substs: ty::GenericArgsRef<'tcx>,
     ) -> ty::PolyFnSig<'tcx> {
         let sig = substs.as_generator().poly_sig();
 
@@ -350,7 +350,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         let pin_did = self.tcx.require_lang_item(LangItem::Pin, None);
         let pin_adt_ref = self.tcx.adt_def(pin_did);
-        let pin_substs = self.tcx.mk_substs(&[env_ty.into()]);
+        let pin_substs = self.tcx.mk_args(&[env_ty.into()]);
         let env_ty = self.tcx.mk_adt(pin_adt_ref, pin_substs);
 
         let sig = sig.skip_binder();
@@ -363,8 +363,8 @@ impl<'tcx> GotocCtx<'tcx> {
             // The signature should be `Future::poll(_, &mut Context<'_>) -> Poll<Output>`
             let poll_did = tcx.require_lang_item(LangItem::Poll, None);
             let poll_adt_ref = tcx.adt_def(poll_did);
-            let poll_substs = tcx.mk_substs(&[sig.return_ty.into()]);
-            let ret_ty = tcx.mk_adt(poll_adt_ref, poll_substs);
+            let poll_substs = tcx.mk_args(&[sig.return_ty.into()]);
+            let ret_ty = tcx.mk_adt_def(poll_adt_ref, poll_substs);
 
             // We have to replace the `ResumeTy` that is used for type and borrow checking
             // with `&mut Context<'_>` which is used in codegen.
@@ -384,7 +384,7 @@ impl<'tcx> GotocCtx<'tcx> {
             // The signature should be `Generator::resume(_, Resume) -> GeneratorState<Yield, Return>`
             let state_did = tcx.require_lang_item(LangItem::GeneratorState, None);
             let state_adt_ref = tcx.adt_def(state_did);
-            let state_substs = tcx.mk_substs(&[sig.yield_ty.into(), sig.return_ty.into()]);
+            let state_substs = tcx.mk_args(&[sig.yield_ty.into(), sig.return_ty.into()]);
             let ret_ty = tcx.mk_adt(state_adt_ref, state_substs);
 
             (sig.resume_ty, ret_ty)
@@ -982,7 +982,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// A closure is a struct of all its environments. That is, a closure is
     /// just a tuple with a unique type identifier, so that Fn related traits
     /// can find its impl.
-    fn codegen_ty_closure(&mut self, t: Ty<'tcx>, substs: ty::subst::SubstsRef<'tcx>) -> Type {
+    fn codegen_ty_closure(&mut self, t: Ty<'tcx>, substs: ty::GenericArgsRef<'tcx>) -> Type {
         self.ensure_struct(self.ty_mangled_name(t), self.ty_pretty_name(t), |ctx, _| {
             ctx.codegen_ty_tuple_like(t, substs.as_closure().upvar_tys().collect())
         })
@@ -1091,7 +1091,7 @@ impl<'tcx> GotocCtx<'tcx> {
             };
             let mut fields = vec![direct_fields];
             for var_idx in variants.indices() {
-                let variant_name = GeneratorSubsts::variant_name(var_idx).into();
+                let variant_name = GeneratorArgs::variant_name(var_idx).into();
                 fields.push(DatatypeComponent::Field {
                     name: ctx.generator_variant_name(var_idx),
                     typ: ctx.codegen_generator_variant_struct(
@@ -1156,7 +1156,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     pub fn generator_variant_name(&self, var_idx: VariantIdx) -> InternedString {
-        format!("generator_variant_{}", GeneratorSubsts::variant_name(var_idx)).into()
+        format!("generator_variant_{}", GeneratorArgs::variant_name(var_idx)).into()
     }
 
     pub fn generator_field_name(&self, field_idx: usize) -> InternedString {
@@ -1346,7 +1346,7 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         ty: Ty<'tcx>,
         def: &'tcx AdtDef,
-        subst: &'tcx InternalSubsts<'tcx>,
+        subst: &'tcx GenericArgsRef<'tcx>,
     ) -> Type {
         self.ensure_struct(self.ty_mangled_name(ty), self.ty_pretty_name(ty), |ctx, _| {
             let variant = &def.variants().raw[0];
@@ -1359,7 +1359,7 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_variant_struct_fields(
         &mut self,
         variant: &VariantDef,
-        subst: &'tcx InternalSubsts<'tcx>,
+        subst: &'tcx GenericArgsRef<'tcx>,
         layout: &LayoutS,
         initial_offset: Size,
     ) -> Vec<DatatypeComponent> {
@@ -1373,7 +1373,7 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         ty: Ty<'tcx>,
         def: &'tcx AdtDef,
-        subst: &'tcx InternalSubsts<'tcx>,
+        subst: &'tcx GenericArgsRef<'tcx>,
     ) -> Type {
         self.ensure_union(self.ty_mangled_name(ty), self.ty_pretty_name(ty), |ctx, _| {
             def.variants().raw[0]
@@ -1425,7 +1425,7 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         ty: Ty<'tcx>,
         adtdef: &'tcx AdtDef,
-        subst: &'tcx InternalSubsts<'tcx>,
+        subst: &'tcx GenericArgsRef<'tcx>,
     ) -> Type {
         let pretty_name = self.ty_pretty_name(ty);
         // variants appearing in source code (in source code order)
@@ -1528,7 +1528,7 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         ty: Ty<'tcx>,
         adtdef: &'tcx AdtDef,
-        subst: &'tcx InternalSubsts<'tcx>,
+        subst: &'tcx GenericArgsRef<'tcx>,
         variants: &IndexVec<VariantIdx, LayoutS>,
     ) -> Type {
         let non_zst_count = variants.iter().filter(|layout| layout.size.bytes() > 0).count();
@@ -1631,7 +1631,7 @@ impl<'tcx> GotocCtx<'tcx> {
         name: InternedString,
         pretty_name: InternedString,
         def: &'tcx AdtDef,
-        subst: &'tcx InternalSubsts<'tcx>,
+        subst: &'tcx GenericArgsRef<'tcx>,
         layouts: &IndexVec<VariantIdx, LayoutS>,
         initial_offset: Size,
     ) -> Vec<DatatypeComponent> {
@@ -1663,7 +1663,7 @@ impl<'tcx> GotocCtx<'tcx> {
         name: InternedString,
         pretty_name: InternedString,
         case: &VariantDef,
-        subst: &'tcx InternalSubsts<'tcx>,
+        subst: &'tcx GenericArgsRef<'tcx>,
         variant: &LayoutS,
         initial_offset: Size,
     ) -> Type {

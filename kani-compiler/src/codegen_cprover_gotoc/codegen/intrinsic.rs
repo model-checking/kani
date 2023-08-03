@@ -245,7 +245,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         macro_rules! codegen_size_align {
             ($which: ident) => {{
-                let tp_ty = instance.substs.type_at(0);
+                let tp_ty = instance.args.type_at(0);
                 let arg = fargs.remove(0);
                 let size_align = self.size_and_align_of_dst(tp_ty, arg);
                 self.codegen_expr_to_place(p, size_align.$which)
@@ -422,7 +422,7 @@ impl<'tcx> GotocCtx<'tcx> {
             "cttz" => codegen_count_intrinsic!(cttz, true),
             "cttz_nonzero" => codegen_count_intrinsic!(cttz, false),
             "discriminant_value" => {
-                let ty = instance.substs.type_at(0);
+                let ty = instance.args.type_at(0);
                 let e = self.codegen_get_discriminant(fargs.remove(0).dereference(), ty, ret_ty);
                 self.codegen_expr_to_place(p, e)
             }
@@ -764,7 +764,7 @@ impl<'tcx> GotocCtx<'tcx> {
         intrinsic: &str,
         span: Option<Span>,
     ) -> Stmt {
-        let ty = instance.substs.type_at(0);
+        let ty = instance.args.type_at(0);
         let layout = self.layout_of(ty);
         // Note: We follow the pattern seen in `codegen_panic_intrinsic` from `rustc_codegen_ssa`
         // https://github.com/rust-lang/rust/blob/master/compiler/rustc_codegen_ssa/src/mir/block.rs
@@ -1034,7 +1034,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let offset = fargs.remove(0);
 
         // Check that computing `offset` in bytes would not overflow
-        let ty = self.monomorphize(instance.substs.type_at(0));
+        let ty = self.monomorphize(instance.args.type_at(0));
         let (offset_bytes, bytes_overflow_check) =
             self.count_in_bytes(offset.clone(), ty, Type::ssize_t(), intrinsic, loc);
 
@@ -1184,7 +1184,7 @@ impl<'tcx> GotocCtx<'tcx> {
         p: &Place<'tcx>,
         loc: Location,
     ) -> Stmt {
-        let ty = self.monomorphize(instance.substs.type_at(0));
+        let ty = self.monomorphize(instance.args.type_at(0));
         let dst = fargs.remove(0).cast_to(Type::void_pointer());
         let val = fargs.remove(0).cast_to(Type::void_pointer());
         let layout = self.layout_of(ty);

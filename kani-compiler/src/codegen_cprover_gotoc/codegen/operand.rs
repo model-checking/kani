@@ -699,7 +699,7 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_fndef(
         &mut self,
         d: DefId,
-        substs: ty::subst::SubstsRef<'tcx>,
+        substs: ty::GenericArgsRef<'tcx>,
         span: Option<&Span>,
     ) -> Expr {
         let instance =

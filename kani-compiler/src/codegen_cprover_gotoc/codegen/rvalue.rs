@@ -20,7 +20,7 @@ use num::bigint::BigInt;
 use rustc_abi::FieldIdx;
 use rustc_index::IndexVec;
 use rustc_middle::mir::{AggregateKind, BinOp, CastKind, NullOp, Operand, Place, Rvalue, UnOp};
-use rustc_middle::ty::adjustment::PointerCast;
+use rustc_middle::ty::adjustment::PointerCoercion;
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{self, Instance, IntTy, Ty, TyCtxt, UintTy, VtblEntry};
 use rustc_target::abi::{FieldsShape, Size, TagEncoding, VariantIdx, Variants};
@@ -706,7 +706,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     "https://github.com/model-checking/kani/issues/1784",
                 )
             }
-            Rvalue::Cast(CastKind::Pointer(k), e, t) => {
+            Rvalue::Cast(CastKind::PointerCoercion(k), e, t) => {
                 let t = self.monomorphize(*t);
                 self.codegen_pointer_cast(k, e, t, loc)
             }
@@ -991,19 +991,19 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// "Pointer casts" are particular kinds of pointer-to-pointer casts.
-    /// See the [`PointerCast`] type for specifics.
+    /// See the [`PointerCoercion`] type for specifics.
     /// Note that this does not include all casts involving pointers,
     /// many of which are instead handled by [`Self::codegen_misc_cast`] instead.
     fn codegen_pointer_cast(
         &mut self,
-        k: &PointerCast,
+        k: &PointerCoercion,
         operand: &Operand<'tcx>,
         t: Ty<'tcx>,
         loc: Location,
     ) -> Expr {
         debug!(cast=?k, op=?operand, ?loc, "codegen_pointer_cast");
         match k {
-            PointerCast::ReifyFnPointer => match self.operand_ty(operand).kind() {
+            PointerCoercion::ReifyFnPointer => match self.operand_ty(operand).kind() {
                 ty::FnDef(def_id, substs) => {
                     let instance =
                         Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), *def_id, substs)
@@ -1015,8 +1015,8 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
                 _ => unreachable!(),
             },
-            PointerCast::UnsafeFnPointer => self.codegen_operand(operand),
-            PointerCast::ClosureFnPointer(_) => {
+            PointerCoercion::UnsafeFnPointer => self.codegen_operand(operand),
+            PointerCoercion::ClosureFnPointer(_) => {
                 if let ty::Closure(def_id, substs) = self.operand_ty(operand).kind() {
                     let instance = Instance::resolve_closure(
                         self.tcx,
@@ -1031,8 +1031,8 @@ impl<'tcx> GotocCtx<'tcx> {
                     unreachable!("{:?} cannot be cast to a fn ptr", operand)
                 }
             }
-            PointerCast::MutToConstPointer => self.codegen_operand(operand),
-            PointerCast::ArrayToPointer => {
+            PointerCoercion::MutToConstPointer => self.codegen_operand(operand),
+            PointerCoercion::ArrayToPointer => {
                 // TODO: I am not sure whether it is correct or not.
                 //
                 // some reasoning is as follows.
@@ -1054,7 +1054,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     _ => unreachable!(),
                 }
             }
-            PointerCast::Unsize => {
+            PointerCoercion::Unsize => {
                 let src_goto_expr = self.codegen_operand(operand);
                 let src_mir_type = self.operand_ty(operand);
                 let dst_mir_type = t;
