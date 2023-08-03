@@ -331,7 +331,7 @@ fn has_kani_attribute<F: Fn(KaniAttributeKind) -> bool>(
     tcx.get_attrs_unchecked(def_id)
         .iter()
         .filter_map(|a| attr_kind(tcx, a))
-        .any(|attr| predicate(attr))
+        .any(predicate)
 }
 
 /// Same as [`KaniAttributes::is_harness`] but more efficient because less
