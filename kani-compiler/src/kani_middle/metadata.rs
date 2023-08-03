@@ -10,23 +10,23 @@ use kani_metadata::{ArtifactType, HarnessAttributes, HarnessMetadata};
 use rustc_hir::def_id::DefId;
 use rustc_middle::ty::{Instance, InstanceDef, TyCtxt};
 
-use super::{attributes::extract_harness_attributes, SourceLocation};
+use super::{attributes, SourceLocation};
 
 /// Create the harness metadata for a proof harness for a given function.
 pub fn gen_proof_metadata(tcx: TyCtxt, def_id: DefId, base_name: &Path) -> HarnessMetadata {
-    let attributes = extract_harness_attributes(tcx, def_id);
+    let attributes = attributes::KaniAttributes::for_item(tcx, def_id).harness_attributes();
     let pretty_name = tcx.def_path_str(def_id);
+    let mut mangled_name = tcx.symbol_name(Instance::mono(tcx, def_id)).to_string();
     // Main function a special case in order to support `--function main`
     // TODO: Get rid of this: https://github.com/model-checking/kani/issues/2129
-    let mangled_name = if pretty_name == "main" {
-        pretty_name.clone()
-    } else {
-        tcx.symbol_name(Instance::mono(tcx, def_id)).to_string()
+    if pretty_name == "main" {
+        mangled_name = pretty_name.clone()
     };
 
     let body = tcx.instance_mir(InstanceDef::Item(def_id));
     let loc = SourceLocation::new(tcx, &body.span);
-    let file_stem = format!("{}_{mangled_name}", base_name.file_stem().unwrap().to_str().unwrap());
+    let file_stem =
+        format!("{}_{}", base_name.file_stem().unwrap().to_str().unwrap(), mangled_name);
     let model_file = base_name.with_file_name(file_stem).with_extension(ArtifactType::SymTabGoto);
 
     HarnessMetadata {

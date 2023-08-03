@@ -1,0 +1,9 @@
+gcd.assertion\
+	 - Status: FAILURE\
+	 - Description: "result != 0 && x % result == 0 && y % result == 0"\
+	 gcd_failure_code.rs:8:1 in function gcd
+
+Failed Checks: result != 0 && x % result == 0 && y % result == 0
+
+VERIFICATION:- FAILED
+

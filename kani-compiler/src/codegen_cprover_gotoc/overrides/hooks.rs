@@ -325,6 +325,40 @@ impl<'tcx> GotocHook<'tcx> for MemCmp {
     }
 }
 
+/// A builtin that is essentially a C-style dereference operation. Takes in a
+/// `&T` reference and returns a `T` (like clone would but without cloning).
+/// Breaks ownership rules and is only used in the context of function contracts
+/// where we can structurally guarantee the use is safe.
+struct UntrackedDeref;
+
+impl<'tcx> GotocHook<'tcx> for UntrackedDeref {
+    fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
+        matches_function(tcx, instance, "KaniUntrackedDeref")
+    }
+
+    fn handle(
+        &self,
+        tcx: &mut GotocCtx<'tcx>,
+        _instance: Instance<'tcx>,
+        mut fargs: Vec<Expr>,
+        assign_to: Place<'tcx>,
+        _target: Option<BasicBlock>,
+        span: Option<Span>,
+    ) -> Stmt {
+        assert_eq!(fargs.len(), 1);
+        let loc = tcx.codegen_span_option(span);
+        Stmt::block(
+            vec![Stmt::assign(
+                unwrap_or_return_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&assign_to))
+                    .goto_expr,
+                fargs.pop().unwrap().dereference(),
+                loc,
+            )],
+            loc,
+        )
+    }
+}
+
 pub fn fn_hooks<'tcx>() -> GotocHooks<'tcx> {
     GotocHooks {
         hooks: vec![
@@ -335,6 +369,7 @@ pub fn fn_hooks<'tcx>() -> GotocHooks<'tcx> {
             Rc::new(Nondet),
             Rc::new(RustAlloc),
             Rc::new(MemCmp),
+            Rc::new(UntrackedDeref),
         ],
     }
 }

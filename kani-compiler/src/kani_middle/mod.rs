@@ -25,7 +25,7 @@ use std::fs::File;
 use std::io::BufWriter;
 use std::io::Write;
 
-use self::attributes::{check_attributes, check_unstable_features};
+use self::attributes::KaniAttributes;
 
 pub mod analysis;
 pub mod attributes;
@@ -39,13 +39,13 @@ pub mod stubbing;
 /// Check that all crate items are supported and there's no misconfiguration.
 /// This method will exhaustively print any error / warning and it will abort at the end if any
 /// error was found.
-pub fn check_crate_items(tcx: TyCtxt, ignore_asm: bool) {
+pub fn check_crate_items(tcx: TyCtxt, queries: &QueryDb) {
     let krate = tcx.crate_name(LOCAL_CRATE);
     for item in tcx.hir_crate_items(()).items() {
         let def_id = item.owner_id.def_id.to_def_id();
-        check_attributes(tcx, def_id);
+        KaniAttributes::for_item(tcx, def_id).check_attributes(queries);
         if tcx.def_kind(def_id) == DefKind::GlobalAsm {
-            if !ignore_asm {
+            if !queries.ignore_global_asm {
                 let error_msg = format!(
                     "Crate {krate} contains global ASM, which is not supported by Kani. Rerun with \
                     `--enable-unstable --ignore-global-asm` to suppress this error \
@@ -72,7 +72,8 @@ pub fn check_reachable_items(tcx: TyCtxt, queries: &QueryDb, items: &[MonoItem])
         let def_id = item.def_id();
         if !def_ids.contains(&def_id) {
             // Check if any unstable attribute was reached.
-            check_unstable_features(tcx, &queries.unstable_features, def_id);
+            KaniAttributes::for_item(tcx, def_id)
+                .check_unstable_features(&queries.unstable_features);
             def_ids.insert(def_id);
         }
     }

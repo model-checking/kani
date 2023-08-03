@@ -36,6 +36,7 @@ pub struct QueryDb {
     pub write_json_symtab: bool,
     pub reachability_analysis: ReachabilityType,
     pub stubbing_enabled: bool,
+    pub function_contracts_enabled: bool,
     pub unstable_features: Vec<String>,
 
     /// Information about all target harnesses.
@@ -55,5 +56,10 @@ impl QueryDb {
     /// Get the model path for a given harness.
     pub fn harness_model_path(&self, harness: &DefPathHash) -> Option<&PathBuf> {
         self.harnesses_info.get(harness)
+    }
+
+    /// Has the `-Zfunction-contracts` option been passed to the driver
+    pub fn function_contracts_enabled(&self) -> bool {
+        self.function_contracts_enabled
     }
 }

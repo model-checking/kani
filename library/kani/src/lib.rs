@@ -65,6 +65,20 @@ pub fn assume(cond: bool) {
     assert!(cond, "`kani::assume` should always hold");
 }
 
+/// If the `premise` is true, so must be the `conclusion`
+pub fn implies(premise: bool, conclusion: bool) -> bool {
+    !premise || conclusion
+}
+
+/// A way to break the ownerhip rules. Only used by contracts where we can
+/// guarantee it is done safely.
+#[inline(never)]
+#[doc(hidden)]
+#[rustc_diagnostic_item = "KaniUntrackedDeref"]
+pub fn untracked_deref<T>(_: &T) -> T {
+    todo!()
+}
+
 /// Creates an assertion of the specified condition and message.
 ///
 /// # Example:

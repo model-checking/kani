@@ -24,7 +24,9 @@ use strum::VariantNames;
 /// Trait used to perform extra validation after parsing.
 pub trait ValidateArgs {
     /// Perform post-parsing validation but do not abort.
-    fn validate(&self) -> Result<(), Error>;
+    fn validate(&self) -> Result<(), Error> {
+        Ok(())
+    }
 }
 
 /// Validate a set of arguments and ensure they are in a valid state.
@@ -180,7 +182,7 @@ pub struct VerificationArgs {
 
     /// When specified, the harness filter will only match the exact fully qualified name of a harness
     #[arg(long, requires("harnesses"))]
-    pub exact: bool,
+    exact: bool,
 
     /// Link external C files referenced by Rust code.
     /// This is an experimental feature and requires `-Z c-ffi` to be used
@@ -298,7 +300,7 @@ pub struct VerificationArgs {
         requires("enable_unstable"),
         conflicts_with("concrete_playback")
     )]
-    pub enable_stubbing: bool,
+    enable_stubbing: bool,
 
     /// Enable Kani coverage output alongside verification result
     #[arg(long, hide_short_help = true)]
@@ -343,6 +345,21 @@ impl VerificationArgs {
             Some(None) => None,       // -j
             Some(Some(x)) => Some(x), // -j=x
         }
+    }
+
+    /// Public access to the value set for the `--exact` flag
+    pub fn exact(&self) -> bool {
+        self.exact
+    }
+
+    /// Are experimental function contracts enabled?
+    pub fn function_contracts_enabled(&self) -> bool {
+        self.common_args.unstable_features.contains(&UnstableFeatures::FunctionContracts)
+    }
+
+    /// Is experimental stubing enabled? Implied if function contracts are enabled.
+    pub fn stubbing_enabled(&self) -> bool {
+        self.enable_stubbing || self.function_contracts_enabled()
     }
 }
 

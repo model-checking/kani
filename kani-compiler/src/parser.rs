@@ -46,6 +46,9 @@ pub const REACHABILITY: &str = "reachability";
 /// Option name used to enable stubbing.
 pub const ENABLE_STUBBING: &str = "enable-stubbing";
 
+/// Option name used to enable function contracts
+pub const ENABLE_FUNCTION_CONTRACTS: &str = "enable-function-contracts";
+
 /// Option name used to define unstable features.
 pub const UNSTABLE_FEATURE: &str = "unstable";
 
@@ -138,6 +141,12 @@ pub fn parser() -> Command {
             Arg::new(ENABLE_STUBBING)
                 .long(ENABLE_STUBBING)
                 .help("Instruct the compiler to perform stubbing.")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(ENABLE_FUNCTION_CONTRACTS)
+                .long(ENABLE_FUNCTION_CONTRACTS)
+                .help("Allow function contract specification, checking and replacement")
                 .action(ArgAction::SetTrue),
         )
         .arg(

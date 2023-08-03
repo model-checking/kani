@@ -1,0 +1,6 @@
+max.assertion\
+	 - Status: SUCCESS\
+	 - Description: "(result == x) | (result == y)"\
+	 simple_ensures_pass.rs:5:1 in function max
+
+VERIFICATION:- SUCCESSFUL

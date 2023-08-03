@@ -7,6 +7,7 @@
 // downstream crates to enable these features as well.
 // So we have to enable this on the commandline (see kani-rustc) with:
 //   RUSTFLAGS="-Zcrate-attr=feature(register_tool) -Zcrate-attr=register_tool(kanitool)"
+#![feature(let_chains, proc_macro_diagnostic, box_patterns)]
 
 mod derive;
 
@@ -94,150 +95,42 @@ pub fn derive_arbitrary(item: TokenStream) -> TokenStream {
     derive::expand_derive_arbitrary(item)
 }
 
+/// Add a precondition to this function.
+///
+/// This is part of the function contract API, together with [`ensures`].
+///
+/// The contents of the attribute is a condition over the input values to the
+/// annotated function. All Rust syntax is supported, even calling other
+/// functions, but the computations must be side effect free, e.g. it cannot
+/// perform I/O or use mutable memory.
+#[proc_macro_attribute]
+pub fn requires(attr: TokenStream, item: TokenStream) -> TokenStream {
+    attr_impl::requires(attr, item)
+}
+
+/// Add a postcondition to this function.
+///
+/// This is part of the function contract API, together with [`requires`].
+///
+/// The contents of the attribute is a condition over the input values to the
+/// annotated function *and* its return value, accessible as a variable called
+/// `result`. All Rust syntax is supported, even calling other functions, but
+/// the computations must be side effect free, e.g. it cannot perform I/O or use
+/// mutable memory.
+#[proc_macro_attribute]
+pub fn ensures(attr: TokenStream, item: TokenStream) -> TokenStream {
+    attr_impl::ensures(attr, item)
+}
+
+#[proc_macro_attribute]
+pub fn proof_for_contract(attr: TokenStream, item: TokenStream) -> TokenStream {
+    attr_impl::proof_for_contract(attr, item)
+}
+
 /// This module implements Kani attributes in a way that only Kani's compiler can understand.
 /// This code should only be activated when pre-building Kani's sysroot.
 #[cfg(kani_sysroot)]
-mod sysroot {
-    use proc_macro_error::{abort, abort_call_site};
-
-    use super::*;
-
-    use {
-        quote::{format_ident, quote},
-        syn::parse::{Parse, ParseStream},
-        syn::{parse_macro_input, ItemFn},
-    };
-
-    /// Annotate the harness with a #[kanitool::<name>] with optional arguments.
-    macro_rules! kani_attribute {
-        ($name:ident) => {
-            pub fn $name(attr: TokenStream, item: TokenStream) -> TokenStream {
-                let args = proc_macro2::TokenStream::from(attr);
-                let fn_item = parse_macro_input!(item as ItemFn);
-                let attribute = format_ident!("{}", stringify!($name));
-                quote!(
-                    #[kanitool::#attribute(#args)]
-                    #fn_item
-                ).into()
-            }
-        };
-        ($name:ident, no_args) => {
-            pub fn $name(attr: TokenStream, item: TokenStream) -> TokenStream {
-                assert!(attr.is_empty(), "`#[kani::{}]` does not take any arguments currently", stringify!($name));
-                let fn_item = parse_macro_input!(item as ItemFn);
-                let attribute = format_ident!("{}", stringify!($name));
-                quote!(
-                    #[kanitool::#attribute]
-                    #fn_item
-                ).into()
-            }
-        };
-    }
-
-    struct ProofOptions {
-        schedule: Option<syn::Expr>,
-    }
-
-    impl Parse for ProofOptions {
-        fn parse(input: ParseStream) -> syn::Result<Self> {
-            if input.is_empty() {
-                Ok(ProofOptions { schedule: None })
-            } else {
-                let ident = input.parse::<syn::Ident>()?;
-                if ident != "schedule" {
-                    abort_call_site!("`{}` is not a valid option for `#[kani::proof]`.", ident;
-                        help = "did you mean `schedule`?";
-                        note = "for now, `schedule` is the only option for `#[kani::proof]`.";
-                    );
-                }
-                let _ = input.parse::<syn::Token![=]>()?;
-                let schedule = Some(input.parse::<syn::Expr>()?);
-                Ok(ProofOptions { schedule })
-            }
-        }
-    }
-
-    pub fn proof(attr: TokenStream, item: TokenStream) -> TokenStream {
-        let proof_options = parse_macro_input!(attr as ProofOptions);
-        let fn_item = parse_macro_input!(item as ItemFn);
-        let attrs = fn_item.attrs;
-        let vis = fn_item.vis;
-        let sig = fn_item.sig;
-        let body = fn_item.block;
-
-        let kani_attributes = quote!(
-            #[allow(dead_code)]
-            #[kanitool::proof]
-        );
-
-        if sig.asyncness.is_none() {
-            if proof_options.schedule.is_some() {
-                abort_call_site!(
-                    "`#[kani::proof(schedule = ...)]` can only be used with `async` functions.";
-                    help = "did you mean to make this function `async`?";
-                );
-            }
-            // Adds `#[kanitool::proof]` and other attributes
-            quote!(
-                #kani_attributes
-                #(#attrs)*
-                #vis #sig #body
-            )
-            .into()
-        } else {
-            // For async functions, it translates to a synchronous function that calls `kani::block_on`.
-            // Specifically, it translates
-            // ```ignore
-            // #[kani::proof]
-            // #[attribute]
-            // pub async fn harness() { ... }
-            // ```
-            // to
-            // ```ignore
-            // #[kanitool::proof]
-            // #[attribute]
-            // pub fn harness() {
-            //   async fn harness() { ... }
-            //   kani::block_on(harness())
-            //   // OR
-            //   kani::spawnable_block_on(harness(), schedule)
-            //   // where `schedule` was provided as an argument to `#[kani::proof]`.
-            // }
-            // ```
-            if !sig.inputs.is_empty() {
-                abort!(
-                    sig.inputs,
-                    "`#[kani::proof]` cannot be applied to async functions that take arguments for now";
-                    help = "try removing the arguments";
-                );
-            }
-            let mut modified_sig = sig.clone();
-            modified_sig.asyncness = None;
-            let fn_name = &sig.ident;
-            let schedule = proof_options.schedule;
-            let block_on_call = if let Some(schedule) = schedule {
-                quote!(kani::block_on_with_spawn(#fn_name(), #schedule))
-            } else {
-                quote!(kani::block_on(#fn_name()))
-            };
-            quote!(
-                #kani_attributes
-                #(#attrs)*
-                #vis #modified_sig {
-                    #sig #body
-                    #block_on_call
-                }
-            )
-            .into()
-        }
-    }
-
-    kani_attribute!(should_panic, no_args);
-    kani_attribute!(solver);
-    kani_attribute!(stub);
-    kani_attribute!(unstable);
-    kani_attribute!(unwind);
-}
+mod sysroot;
 
 /// This module provides dummy implementations of Kani attributes which cannot be interpreted by
 /// other tools such as MIRI and the regular rust compiler.
@@ -269,4 +162,7 @@ mod regular {
     no_op!(stub);
     no_op!(unstable);
     no_op!(unwind);
+    no_op!(requires);
+    no_op!(ensures);
+    no_op!(proof_for_contract);
 }

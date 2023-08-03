@@ -46,6 +46,8 @@ pub enum UnstableFeatures {
     AsyncLib,
     /// Enable line coverage instrumentation/reports
     LineCoverage,
+    /// Enable function contracts [RFC 9](https://model-checking.github.io/kani/rfc/rfcs/0009-function-contracts.html)
+    FunctionContracts,
 }
 
 impl ValidateArgs for CommonArgs {

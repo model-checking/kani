@@ -13,6 +13,7 @@ use regex::Regex;
 use rustc_data_structures::fingerprint::Fingerprint;
 use rustc_hir::{def_id::DefId, definitions::DefPathHash};
 use rustc_middle::{mir::Body, ty::TyCtxt};
+use tracing::debug;
 
 /// Returns the `DefId` of the stub for the function/method identified by the
 /// parameter `def_id`, and `None` if the function/method is not stubbed.
@@ -29,6 +30,11 @@ pub fn transform<'tcx>(
     old_body: &'tcx Body<'tcx>,
 ) -> &'tcx Body<'tcx> {
     if let Some(replacement) = get_stub(tcx, def_id) {
+        debug!(
+            original = tcx.def_path_debug_str(def_id),
+            replaced = tcx.def_path_debug_str(replacement),
+            "transform"
+        );
         let new_body = tcx.optimized_mir(replacement).clone();
         if check_compatibility(tcx, def_id, old_body, replacement, &new_body) {
             return tcx.arena.alloc(new_body);
