@@ -367,7 +367,7 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_local_fndef(&mut self, ty: ty::Ty<'tcx>) -> Option<Expr> {
         match ty.kind() {
             // A local that is itself a FnDef, like Fn::call_once
-            ty::FnDef(defid, substs) => Some(self.codegen_fndef(*defid, substs, None)),
+            ty::FnDef(defid, args) => Some(self.codegen_fndef(*defid, args, None)),
             // A local can be pointer to a FnDef, like Fn::call and Fn::call_mut
             ty::RawPtr(inner) => self
                 .codegen_local_fndef(inner.ty)

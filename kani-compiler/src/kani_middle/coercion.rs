@@ -174,7 +174,7 @@ impl<'tcx> Iterator for CoerceUnsizedIterator<'tcx> {
         let src_ty = self.src_ty.take().unwrap();
         let dst_ty = self.dst_ty.take().unwrap();
         let field = match (&src_ty.kind(), &dst_ty.kind()) {
-            (&ty::Adt(src_def, src_substs), &ty::Adt(dst_def, dst_substs)) => {
+            (&ty::Adt(src_def, src_args), &ty::Adt(dst_def, dst_args)) => {
                 // Handle smart pointers by using CustomCoerceUnsized to find the field being
                 // coerced.
                 assert_eq!(src_def, dst_def);
@@ -186,8 +186,8 @@ impl<'tcx> Iterator for CoerceUnsizedIterator<'tcx> {
                     custom_coerce_unsize_info(self.tcx, src_ty, dst_ty);
                 assert!(coerce_index.as_usize() < src_fields.len());
 
-                self.src_ty = Some(src_fields[coerce_index].ty(self.tcx, src_substs));
-                self.dst_ty = Some(dst_fields[coerce_index].ty(self.tcx, dst_substs));
+                self.src_ty = Some(src_fields[coerce_index].ty(self.tcx, src_args));
+                self.dst_ty = Some(dst_fields[coerce_index].ty(self.tcx, dst_args));
                 Some(src_fields[coerce_index].name)
             }
             _ => {
@@ -213,11 +213,11 @@ fn custom_coerce_unsize_info<'tcx>(
 ) -> CustomCoerceUnsized {
     let def_id = tcx.require_lang_item(LangItem::CoerceUnsized, None);
 
-    let trait_ref = ty::Binder::dummy(TraitRef::new(
+    let trait_ref = TraitRef::new(
         tcx,
         def_id,
         tcx.mk_args_trait(source_ty, [target_ty.into()]),
-    ));
+    );
 
     match tcx.codegen_select_candidate((ParamEnv::reveal_all(), trait_ref)) {
         Ok(ImplSource::UserDefined(ImplSourceUserDefinedData { impl_def_id, .. })) => {

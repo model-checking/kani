@@ -461,7 +461,7 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
 
         let tcx = self.tcx;
         match terminator.kind {
-            TerminatorKind::Call { ref func, ref args, .. } => {
+            TerminatorKind::Call { ref func, args: ref outer_args, .. } => {
                 let callee_ty = func.ty(self.body, tcx);
                 let fn_ty = self.monomorphize(callee_ty);
                 if let TyKind::FnDef(def_id, substs) = *fn_ty.kind() {
@@ -479,7 +479,7 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
                                 // implement the same traits as those in the
                                 // original function/method. A trait mismatch shows
                                 // up here, when we try to resolve a trait method
-                                let generic_ty = args[0].ty(self.body, tcx).peel_refs();
+                                let generic_ty = outer_args[0].ty(self.body, tcx).peel_refs();
                                 let receiver_ty = tcx.subst_and_normalize_erasing_regions(
                                     substs,
                                     ParamEnv::reveal_all(),

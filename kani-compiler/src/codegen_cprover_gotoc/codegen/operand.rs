@@ -139,7 +139,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             ConstValue::ZeroSized => match lit_ty.kind() {
                 // Rust "function items" (not closures, not function pointers, see `codegen_fndef`)
-                ty::FnDef(d, substs) => self.codegen_fndef(*d, substs, span),
+                ty::FnDef(d, args) => self.codegen_fndef(*d, args, span),
                 _ => Expr::init_unit(self.codegen_ty(lit_ty), &self.symbol_table),
             },
         }
@@ -699,11 +699,11 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_fndef(
         &mut self,
         d: DefId,
-        substs: ty::GenericArgsRef<'tcx>,
+        args: ty::GenericArgsRef<'tcx>,
         span: Option<&Span>,
     ) -> Expr {
         let instance =
-            Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), d, substs).unwrap().unwrap();
+            Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), d, args).unwrap().unwrap();
         self.codegen_fn_item(instance, span)
     }
 

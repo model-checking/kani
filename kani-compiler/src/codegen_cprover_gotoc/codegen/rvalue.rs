@@ -1004,9 +1004,9 @@ impl<'tcx> GotocCtx<'tcx> {
         debug!(cast=?k, op=?operand, ?loc, "codegen_pointer_cast");
         match k {
             PointerCoercion::ReifyFnPointer => match self.operand_ty(operand).kind() {
-                ty::FnDef(def_id, substs) => {
+                ty::FnDef(def_id, args) => {
                     let instance =
-                        Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), *def_id, substs)
+                        Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), *def_id, args)
                             .unwrap()
                             .unwrap();
                     // We need to handle this case in a special way because `codegen_operand` compiles FnDefs to dummy structs.
@@ -1017,11 +1017,11 @@ impl<'tcx> GotocCtx<'tcx> {
             },
             PointerCoercion::UnsafeFnPointer => self.codegen_operand(operand),
             PointerCoercion::ClosureFnPointer(_) => {
-                if let ty::Closure(def_id, substs) = self.operand_ty(operand).kind() {
+                if let ty::Closure(def_id, args) = self.operand_ty(operand).kind() {
                     let instance = Instance::resolve_closure(
                         self.tcx,
                         *def_id,
-                        substs,
+                        args,
                         ty::ClosureKind::FnOnce,
                     )
                     .expect("failed to normalize and resolve closure during codegen")

@@ -263,7 +263,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let fn_sig = sig.skip_binder();
         if let Some((tupe, prev_args)) = fn_sig.inputs().split_last() {
             let args = match *tupe.kind() {
-                ty::Tuple(substs) => substs,
+                ty::Tuple(args) => args,
                 _ => unreachable!("the final argument of a closure must be a tuple"),
             };
 
@@ -291,11 +291,11 @@ impl<'tcx> GotocCtx<'tcx> {
     fn closure_sig(
         &self,
         def_id: DefId,
-        substs: ty::GenericArgsRef<'tcx>,
+        args: ty::GenericArgsRef<'tcx>,
     ) -> ty::PolyFnSig<'tcx> {
-        let sig = self.monomorphize(substs.as_closure().sig());
+        let sig = self.monomorphize(args.as_closure().sig());
 
-        // In addition to `def_id` and `substs`, we need to provide the kind of region `env_region`
+        // In addition to `def_id` and `args`, we need to provide the kind of region `env_region`
         // in `closure_env_ty`, which we can build from the bound variables as follows
         let bound_vars = self.tcx.mk_bound_variable_kinds_from_iter(
             sig.bound_vars().iter().chain(iter::once(ty::BoundVariableKind::Region(ty::BrEnv))),
@@ -305,7 +305,7 @@ impl<'tcx> GotocCtx<'tcx> {
             kind: ty::BoundRegionKind::BrEnv,
         };
         let env_region = ty::Region::new_late_bound(self.tcx, ty::INNERMOST, br);
-        let env_ty = self.tcx.closure_env_ty(def_id, substs, env_region).unwrap();
+        let env_ty = self.tcx.closure_env_ty(def_id, args, env_region).unwrap();
 
         let sig = sig.skip_binder();
 
@@ -334,9 +334,9 @@ impl<'tcx> GotocCtx<'tcx> {
         &self,
         did: &DefId,
         ty: Ty<'tcx>,
-        substs: ty::GenericArgsRef<'tcx>,
+        args: ty::GenericArgsRef<'tcx>,
     ) -> ty::PolyFnSig<'tcx> {
-        let sig = substs.as_generator().poly_sig();
+        let sig = args.as_generator().poly_sig();
 
         let bound_vars = self.tcx.mk_bound_variable_kinds_from_iter(
             sig.bound_vars().iter().chain(iter::once(ty::BoundVariableKind::Region(ty::BrEnv))),
@@ -350,8 +350,8 @@ impl<'tcx> GotocCtx<'tcx> {
 
         let pin_did = self.tcx.require_lang_item(LangItem::Pin, None);
         let pin_adt_ref = self.tcx.adt_def(pin_did);
-        let pin_substs = self.tcx.mk_args(&[env_ty.into()]);
-        let env_ty = Ty::new_adt(self.tcx, pin_adt_ref, pin_substs);
+        let pin_args = self.tcx.mk_args(&[env_ty.into()]);
+        let env_ty = Ty::new_adt(self.tcx, pin_adt_ref, pin_args);
 
         let sig = sig.skip_binder();
         // The `FnSig` and the `ret_ty` here is for a generators main
@@ -363,9 +363,9 @@ impl<'tcx> GotocCtx<'tcx> {
             // The signature should be `Future::poll(_, &mut Context<'_>) -> Poll<Output>`
             let poll_did = tcx.require_lang_item(LangItem::Poll, None);
             let poll_adt_ref = tcx.adt_def(poll_did);
-            let poll_substs = tcx.mk_args(&[sig.return_ty.into()]);
+            let poll_args = tcx.mk_args(&[sig.return_ty.into()]);
             // TODO figure out where this one went
-            let ret_ty = tcx.mk_adt_def(poll_adt_ref, poll_substs);
+            let ret_ty = Ty::new_adt(tcx, poll_adt_ref, poll_args);
 
             // We have to replace the `ResumeTy` that is used for type and borrow checking
             // with `&mut Context<'_>` which is used in codegen.
@@ -385,8 +385,8 @@ impl<'tcx> GotocCtx<'tcx> {
             // The signature should be `Generator::resume(_, Resume) -> GeneratorState<Yield, Return>`
             let state_did = tcx.require_lang_item(LangItem::GeneratorState, None);
             let state_adt_ref = tcx.adt_def(state_did);
-            let state_substs = tcx.mk_args(&[sig.yield_ty.into(), sig.return_ty.into()]);
-            let ret_ty = Ty::new_adt(tcx, state_adt_ref, state_substs);
+            let state_args = tcx.mk_args(&[sig.yield_ty.into(), sig.return_ty.into()]);
+            let ret_ty = Ty::new_adt(tcx, state_adt_ref, state_args);
 
             (sig.resume_ty, ret_ty)
         };
@@ -415,7 +415,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
                 sig
             }
-            ty::Generator(did, substs, _) => self.generator_sig(did, fntyp, substs),
+            ty::Generator(did, args, _) => self.generator_sig(did, fntyp, args),
             _ => unreachable!("Can't get function signature of type: {:?}", fntyp),
         })
     }
@@ -661,7 +661,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // linked C libraries
         // https://github.com/model-checking/kani/issues/450
         match t.kind() {
-            TyKind::Adt(def, substs) if substs.is_empty() && def.repr().c() => {
+            TyKind::Adt(def, args) if args.is_empty() && def.repr().c() => {
                 // For non-generic #[repr(C)] types, use the literal path instead of mangling it.
                 self.tcx.def_path_str(def.did()).intern()
             }
@@ -785,9 +785,9 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Slice(e) => self.codegen_ty(*e).flexible_array_of(),
             ty::Str => Type::unsigned_int(8).flexible_array_of(),
             ty::Ref(_, t, _) | ty::RawPtr(ty::TypeAndMut { ty: t, .. }) => self.codegen_ty_ref(*t),
-            ty::FnDef(def_id, substs) => {
+            ty::FnDef(def_id, args) => {
                 let instance =
-                    Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), *def_id, substs)
+                    Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), *def_id, args)
                         .unwrap()
                         .unwrap();
                 self.codegen_fndef_type(instance)
@@ -983,9 +983,9 @@ impl<'tcx> GotocCtx<'tcx> {
     /// A closure is a struct of all its environments. That is, a closure is
     /// just a tuple with a unique type identifier, so that Fn related traits
     /// can find its impl.
-    fn codegen_ty_closure(&mut self, t: Ty<'tcx>, substs: ty::GenericArgsRef<'tcx>) -> Type {
+    fn codegen_ty_closure(&mut self, t: Ty<'tcx>, args: ty::GenericArgsRef<'tcx>) -> Type {
         self.ensure_struct(self.ty_mangled_name(t), self.ty_pretty_name(t), |ctx, _| {
-            ctx.codegen_ty_tuple_like(t, substs.as_closure().upvar_tys().collect())
+            ctx.codegen_ty_tuple_like(t, args.as_closure().upvar_tys().to_vec())
         })
     }
 
@@ -1773,7 +1773,7 @@ impl<'tcx> GotocCtx<'tcx> {
             // Codegen the type replacing the non-zst field.
             let new_name = self.ty_mangled_name(*curr).to_string() + "::WithDataPtr";
             let new_pretty_name = format!("{}::WithDataPtr", self.ty_pretty_name(*curr));
-            if let ty::Adt(adt_def, adt_substs) = curr.kind() {
+            if let ty::Adt(adt_def, adt_args) = curr.kind() {
                 let fields = &adt_def.variants().get(VariantIdx::from_u32(0)).unwrap().fields;
                 self.ensure_struct(new_name, new_pretty_name, |ctx, s_name| {
                     let fields_shape = ctx.layout_of(*curr).layout.fields();
@@ -1782,7 +1782,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         .map(|idx| {
                             let idx = idx.into();
                             let name = fields[idx].name.to_string().intern();
-                            let field_ty = fields[idx].ty(ctx.tcx, adt_substs);
+                            let field_ty = fields[idx].ty(ctx.tcx, adt_args);
                             let typ = if !ctx.is_zst(field_ty) {
                                 last_type.clone()
                             } else {
@@ -1813,11 +1813,11 @@ impl<'tcx> GotocCtx<'tcx> {
         }
 
         let mut typ = struct_type;
-        while let ty::Adt(adt_def, adt_substs) = typ.kind() {
+        while let ty::Adt(adt_def, adt_args) = typ.kind() {
             assert_eq!(adt_def.variants().len(), 1, "Expected a single-variant ADT. Found {typ:?}");
             let fields = &adt_def.variants().get(VariantIdx::from_u32(0)).unwrap().fields;
             let last_field = fields.last_index().expect("Trait should be the last element.");
-            typ = fields[last_field].ty(self.tcx, adt_substs);
+            typ = fields[last_field].ty(self.tcx, adt_args);
         }
         if typ.is_trait() { Some(typ) } else { None }
     }
@@ -1860,7 +1860,7 @@ impl<'tcx> GotocCtx<'tcx> {
             type Item = (String, Ty<'tcx>);
 
             fn next(&mut self) -> Option<Self::Item> {
-                if let ty::Adt(adt_def, adt_substs) = self.curr.kind() {
+                if let ty::Adt(adt_def, adt_args) = self.curr.kind() {
                     assert_eq!(
                         adt_def.variants().len(),
                         1,
@@ -1871,8 +1871,8 @@ impl<'tcx> GotocCtx<'tcx> {
                     let fields = &adt_def.variants().get(VariantIdx::from_u32(0)).unwrap().fields;
                     let mut non_zsts = fields
                         .iter()
-                        .filter(|field| !ctx.is_zst(field.ty(ctx.tcx, adt_substs)))
-                        .map(|non_zst| (non_zst.name.to_string(), non_zst.ty(ctx.tcx, adt_substs)));
+                        .filter(|field| !ctx.is_zst(field.ty(ctx.tcx, adt_args)))
+                        .map(|non_zst| (non_zst.name.to_string(), non_zst.ty(ctx.tcx, adt_args)));
                     let (name, next) = non_zsts.next().expect("Expected one non-zst field.");
                     self.curr = next;
                     assert!(non_zsts.next().is_none(), "Expected only one non-zst field.");
