@@ -260,13 +260,13 @@ where
 }
 
 /// The main meat of handling requires/ensures contracts.
-/// 
+///
 /// Generates a `check_<fn_name>_<fn_hash>` function that assumes preconditions
 /// and asserts postconditions.
-/// 
+///
 /// Decorates the original function with `#[checked_by =
 /// "check_<fn_name>_<fn_hash>"]
-/// 
+///
 /// Each clause (requires or ensures) creates its own check function that calls
 /// the prior check function inside. The innermost check function calls a copy
 /// of the originally decorated function. It is a copy, because the compiler

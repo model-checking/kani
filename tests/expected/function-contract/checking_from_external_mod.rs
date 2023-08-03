@@ -14,4 +14,3 @@ mod harnesses {
         super::max(7, 6);
     }
 }
-
