@@ -346,12 +346,12 @@ impl<'tcx> GotocCtx<'tcx> {
             kind: ty::BoundRegionKind::BrEnv,
         };
         let env_region = ty::ReLateBound(ty::INNERMOST, br);
-        let env_ty = self.tcx.mk_mut_ref(ty::Region::new_from_kind(self.tcx, env_region), ty);
+        let env_ty = Ty::new_mut_ref(self.tcx, ty::Region::new_from_kind(self.tcx, env_region), ty);
 
         let pin_did = self.tcx.require_lang_item(LangItem::Pin, None);
         let pin_adt_ref = self.tcx.adt_def(pin_did);
         let pin_substs = self.tcx.mk_args(&[env_ty.into()]);
-        let env_ty = self.tcx.mk_adt(pin_adt_ref, pin_substs);
+        let env_ty = Ty::new_adt(self.tcx, pin_adt_ref, pin_substs);
 
         let sig = sig.skip_binder();
         // The `FnSig` and the `ret_ty` here is for a generators main
@@ -364,6 +364,7 @@ impl<'tcx> GotocCtx<'tcx> {
             let poll_did = tcx.require_lang_item(LangItem::Poll, None);
             let poll_adt_ref = tcx.adt_def(poll_did);
             let poll_substs = tcx.mk_args(&[sig.return_ty.into()]);
+            // TODO figure out where this one went
             let ret_ty = tcx.mk_adt_def(poll_adt_ref, poll_substs);
 
             // We have to replace the `ResumeTy` that is used for type and borrow checking
@@ -377,7 +378,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     panic!("expected `ResumeTy`, found `{:?}`", sig.resume_ty);
                 };
             }
-            let context_mut_ref = tcx.mk_task_context();
+            let context_mut_ref = Ty::new_task_context(tcx);
 
             (context_mut_ref, ret_ty)
         } else {
@@ -385,7 +386,7 @@ impl<'tcx> GotocCtx<'tcx> {
             let state_did = tcx.require_lang_item(LangItem::GeneratorState, None);
             let state_adt_ref = tcx.adt_def(state_did);
             let state_substs = tcx.mk_args(&[sig.yield_ty.into(), sig.return_ty.into()]);
-            let ret_ty = tcx.mk_adt(state_adt_ref, state_substs);
+            let ret_ty = Ty::new_adt(tcx, state_adt_ref, state_substs);
 
             (sig.resume_ty, ret_ty)
         };
@@ -1610,7 +1611,7 @@ impl<'tcx> GotocCtx<'tcx> {
             Primitive::F32 => self.tcx.types.f32,
             Primitive::F64 => self.tcx.types.f64,
             Primitive::Pointer(_) => {
-                self.tcx.mk_ptr(ty::TypeAndMut { ty: self.tcx.types.u8, mutbl: Mutability::Not })
+                Ty::new_ptr(self.tcx, ty::TypeAndMut { ty: self.tcx.types.u8, mutbl: Mutability::Not })
             }
         }
     }

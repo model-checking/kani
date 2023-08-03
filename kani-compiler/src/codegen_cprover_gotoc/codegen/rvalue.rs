@@ -738,7 +738,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // See https://github.com/rust-lang/compiler-team/issues/460 for more details.
                 let operand = self.codegen_operand(operand);
                 let t = self.monomorphize(*content_ty);
-                let box_ty = self.tcx.mk_box(t);
+                let box_ty = Ty::new_box(self.tcx, t);
                 let box_ty = self.codegen_ty(box_ty);
                 let cbmc_t = self.codegen_ty(t);
                 let box_contents = operand.cast_to(cbmc_t.to_pointer());
