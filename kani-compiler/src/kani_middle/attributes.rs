@@ -11,7 +11,10 @@ use rustc_ast::{
 };
 use rustc_errors::ErrorGuaranteed;
 use rustc_hir::{def::DefKind, def_id::DefId};
-use rustc_middle::ty::{Instance, TyCtxt, TyKind};
+use rustc_middle::{
+    mir,
+    ty::{self, Instance, TyCtxt, TyKind},
+};
 use rustc_session::Session;
 use rustc_span::{Span, Symbol};
 use std::str::FromStr;
@@ -59,9 +62,16 @@ impl KaniAttributeKind {
     }
 
     /// Is this attribute kind one of the suite of attributes that form the function contracts API
-    pub fn is_function_contract_attribute(self) -> bool {
+    pub fn is_function_contract_api(self) -> bool {
         use KaniAttributeKind::*;
-        matches!(self, CheckedWith | ReplacedWith | ProofForContract)
+        self.is_function_contract() || matches!(self, ProofForContract)
+    }
+
+    /// Would this attribute be placed on a function as part of a function
+    /// contract.
+    pub fn is_function_contract(self) -> bool {
+        use KaniAttributeKind::*;
+        matches!(self, CheckedWith | ReplacedWith)
     }
 }
 
@@ -164,7 +174,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                     ),
                 );
             }
-            if kind.is_function_contract_attribute() && !queries.function_contracts_enabled() {
+            if kind.is_function_contract_api() && !queries.function_contracts_enabled() {
                 let msg = format!(
                     "Using the {} attribute requires activating the unstable `function-contracts` feature",
                     kind.as_ref()
@@ -174,6 +184,9 @@ impl<'tcx> KaniAttributes<'tcx> {
                 } else {
                     self.tcx.sess.err(msg);
                 }
+            }
+            if kind.is_function_contract() {
+                check_is_contract_safe(self.tcx, self.item);
             }
             match kind {
                 KaniAttributeKind::ShouldPanic => {
@@ -320,6 +333,71 @@ impl<'tcx> KaniAttributes<'tcx> {
                 }),
         );
         attrs
+    }
+}
+
+/// A basic check that ensures a function with a contract does not receive
+/// mutable pointers in its input and does not return raw pointers of any kind.
+///
+/// This is a temporary safety measure because contracts cannot yet reasona
+/// about those structures.
+fn check_is_contract_safe(tcx: TyCtxt, item: DefId) {
+    use ty::TypeVisitor;
+    struct NoMutPtr<'tcx> {
+        tcx: TyCtxt<'tcx>,
+        span: Span,
+        is_prohibited: fn(ty::Ty<'tcx>) -> bool,
+        r#where: &'static str,
+        what: &'static str,
+    }
+
+    impl<'tcx> TypeVisitor<TyCtxt<'tcx>> for NoMutPtr<'tcx> {
+        fn visit_ty(&mut self, t: ty::Ty<'tcx>) -> std::ops::ControlFlow<Self::BreakTy> {
+            use ty::TypeSuperVisitable;
+            if (self.is_prohibited)(t) {
+                self.tcx.sess.span_err(self.span, format!("{} contains a {}pointer ({t:?}). This is prohibited for functions with contracts, as they cannot yet reason about the pointer behavior.", self.r#where, self.what));
+            }
+
+            // Rust's type visitor only recursese into basically generics. Which
+            // menas it won't look at the field types of e.g. a struct or enum.
+            // So we override it here and do that ourselves.
+            //
+            // Since the field types also go over all the type variables
+            // implicitly we don't need to call back to `super` in this case.
+            if let ty::TyKind::Adt(adt_def, generics) = t.kind() {
+                for variant in adt_def.variants() {
+                    for field in &variant.fields {
+                        let ctrl = self.visit_ty(field.ty(self.tcx, generics));
+                        if ctrl.is_break() {
+                            // Technically we can just ignore this because we
+                            // know this case will never happen, but just to be
+                            // safe.
+                            return ctrl;
+                        }
+                    }
+                }
+                std::ops::ControlFlow::Continue(())
+            } else {
+                t.super_visit_with(self)
+            }
+        }
+    }
+
+    fn is_raw_mutable_ptr(t: ty::Ty) -> bool {
+        matches!(t.kind(), ty::TyKind::RawPtr(tmut) if tmut.mutbl == rustc_ast::Mutability::Mut)
+    }
+
+    let body = tcx.optimized_mir(item);
+
+    for (arg, (is_prohibited, r#where, what)) in body
+        .args_iter()
+        .zip(std::iter::repeat((is_raw_mutable_ptr as fn(_) -> _, "This argument", "mutable ")))
+        .chain([(mir::RETURN_PLACE, (ty::Ty::is_unsafe_ptr as fn(_) -> _, "The return", ""))])
+    {
+        let decl = &body.local_decls[arg];
+        let span = decl.source_info.span;
+        let mut v = NoMutPtr { tcx, span, is_prohibited, r#where, what };
+        v.visit_ty(decl.ty);
     }
 }
 

@@ -1,0 +1,5 @@
+error: Function argument contains a mutable pointer (*mut u32). This is prohibited for functions with contracts, as they cannot yet reason about the pointer behavior.
+
+error: Function argument contains a mutable pointer (*mut i32). This is prohibited for functions with contracts, as they cannot yet reason about the pointer behavior.
+
+error: Function argument contains a return pointer (*const usize). This is prohibited for functions with contracts, as they cannot yet reason about the pointer behavior.
