@@ -167,7 +167,6 @@ impl KaniSession {
             args.push("--div-by-zero-check".into());
             args.push("--float-overflow-check".into());
             args.push("--nan-check".into());
-            args.push("--undefined-shift-check".into());
             // With PR #647 we use Rust's `-C overflow-checks=on` instead of:
             // --unsigned-overflow-check
             // --signed-overflow-check

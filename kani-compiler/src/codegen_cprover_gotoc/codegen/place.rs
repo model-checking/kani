@@ -23,7 +23,7 @@ use tracing::{debug, trace, warn};
 
 /// A projection in Kani can either be to a type (the normal case),
 /// or a variant in the case of a downcast.
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum TypeOrVariant<'tcx> {
     Type(Ty<'tcx>),
     Variant(&'tcx VariantDef),
@@ -235,15 +235,21 @@ impl<'tcx> TypeOrVariant<'tcx> {
 }
 
 impl<'tcx> GotocCtx<'tcx> {
+    /// Codegen field access for types that allow direct field projection.
+    ///
+    /// I.e.: Algebraic data types, closures, and generators.
+    ///
+    /// Other composite types such as array only support index projection.
     fn codegen_field(
         &mut self,
-        res: Expr,
-        t: TypeOrVariant<'tcx>,
-        f: &FieldIdx,
+        parent_expr: Expr,
+        parent_ty_or_var: TypeOrVariant<'tcx>,
+        field: &FieldIdx,
+        field_ty_or_var: TypeOrVariant<'tcx>,
     ) -> Result<Expr, UnimplementedData> {
-        match t {
-            TypeOrVariant::Type(t) => {
-                match t.kind() {
+        match parent_ty_or_var {
+            TypeOrVariant::Type(parent_ty) => {
+                match parent_ty.kind() {
                     ty::Alias(..)
                     | ty::Bool
                     | ty::Char
@@ -254,53 +260,95 @@ impl<'tcx> GotocCtx<'tcx> {
                     | ty::Never
                     | ty::FnDef(..)
                     | ty::GeneratorWitness(..)
+                    | ty::GeneratorWitnessMIR(..)
                     | ty::Foreign(..)
                     | ty::Dynamic(..)
                     | ty::Bound(..)
                     | ty::Placeholder(..)
                     | ty::Param(_)
                     | ty::Infer(_)
-                    | ty::Error(_) => unreachable!("type {:?} does not have a field", t),
-                    ty::Tuple(_) => {
-                        Ok(res.member(&Self::tuple_fld_name(f.index()), &self.symbol_table))
-                    }
-                    ty::Adt(def, _) if def.repr().simd() => {
-                        // this is a SIMD vector - the index represents one
-                        // of the elements, so we want to index as an array
-                        // Example:
-                        // pub struct i64x2(i64, i64);
-                        // fn main() {
-                        //   let v = i64x2(1, 2);
-                        //   assert!(v.0 == 1); // refers to the first i64
-                        //   assert!(v.1 == 2);
-                        // }
-                        let size_index = Expr::int_constant(f.index(), Type::size_t());
-                        Ok(res.index_array(size_index))
-                    }
+                    | ty::Error(_) => unreachable!("type {parent_ty:?} does not have a field"),
+                    ty::Tuple(_) => Ok(parent_expr
+                        .member(&Self::tuple_fld_name(field.index()), &self.symbol_table)),
+                    ty::Adt(def, _) if def.repr().simd() => Ok(self.codegen_simd_field(
+                        parent_expr,
+                        *field,
+                        field_ty_or_var.expect_type(),
+                    )),
                     // if we fall here, then we are handling either a struct or a union
                     ty::Adt(def, _) => {
-                        let field = &def.variants().raw[0].fields[*f];
-                        Ok(res.member(&field.name.to_string(), &self.symbol_table))
+                        let field = &def.variants().raw[0].fields[*field];
+                        Ok(parent_expr.member(&field.name.to_string(), &self.symbol_table))
                     }
-                    ty::Closure(..) => Ok(res.member(&f.index().to_string(), &self.symbol_table)),
+                    ty::Closure(..) => {
+                        Ok(parent_expr.member(&field.index().to_string(), &self.symbol_table))
+                    }
                     ty::Generator(..) => {
-                        let field_name = self.generator_field_name(f.as_usize());
-                        Ok(res
+                        let field_name = self.generator_field_name(field.as_usize());
+                        Ok(parent_expr
                             .member("direct_fields", &self.symbol_table)
                             .member(field_name, &self.symbol_table))
                     }
-                    _ => unimplemented!(),
+                    ty::Str | ty::Array(_, _) | ty::Slice(_) | ty::RawPtr(_) | ty::Ref(_, _, _) => {
+                        unreachable!(
+                            "element of {parent_ty:?} is not accessed via field projection"
+                        )
+                    }
                 }
             }
             // if we fall here, then we are handling an enum
-            TypeOrVariant::Variant(v) => {
-                let field = &v.fields[*f];
-                Ok(res.member(&field.name.to_string(), &self.symbol_table))
+            TypeOrVariant::Variant(parent_var) => {
+                let field = &parent_var.fields[*field];
+                Ok(parent_expr.member(&field.name.to_string(), &self.symbol_table))
             }
             TypeOrVariant::GeneratorVariant(_var_idx) => {
-                let field_name = self.generator_field_name(f.index());
-                Ok(res.member(field_name, &self.symbol_table))
+                let field_name = self.generator_field_name(field.index());
+                Ok(parent_expr.member(field_name, &self.symbol_table))
             }
+        }
+    }
+
+    /// This is a SIMD vector, which has 2 possible internal representations:
+    /// 1- Multi-field representation (original and currently deprecated)
+    ///    In this case, a field is one lane (i.e.: one element)
+    ///    Example:
+    /// ```ignore
+    ///    pub struct i64x2(i64, i64);
+    ///    fn main() {
+    ///      let v = i64x2(1, 2);
+    ///      assert!(v.0 == 1); // refers to the first i64
+    ///      assert!(v.1 == 2);
+    ///    }
+    /// ```
+    /// 2- Array-based representation
+    ///    In this case, the projection refers to the entire array.
+    /// ```ignore
+    ///    pub struct i64x2([i64; 2]);
+    ///    fn main() {
+    ///      let v = i64x2([1, 2]);
+    ///      assert!(v.0 == [1, 2]); // refers to the entire array
+    ///    }
+    /// ```
+    /// * Note that projection inside SIMD structs may eventually become illegal.
+    /// See <https://github.com/rust-lang/stdarch/pull/1422#discussion_r1176415609> thread.
+    ///
+    /// Since the goto representation for both is the same, we use the expected type to decide
+    /// what to return.
+    fn codegen_simd_field(
+        &mut self,
+        parent_expr: Expr,
+        field: FieldIdx,
+        field_ty: Ty<'tcx>,
+    ) -> Expr {
+        if matches!(field_ty.kind(), ty::Array { .. }) {
+            // Array based
+            assert_eq!(field.index(), 0);
+            let field_typ = self.codegen_ty(field_ty);
+            parent_expr.reinterpret_cast(field_typ)
+        } else {
+            // Return the given field.
+            let index_expr = Expr::int_constant(field.index(), Type::size_t());
+            parent_expr.index_array(index_expr)
         }
     }
 
@@ -424,7 +472,8 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             ProjectionElem::Field(f, t) => {
                 let typ = TypeOrVariant::Type(t);
-                let expr = self.codegen_field(before.goto_expr, before.mir_typ_or_variant, &f)?;
+                let expr =
+                    self.codegen_field(before.goto_expr, before.mir_typ_or_variant, &f, typ)?;
                 ProjectedPlace::try_new(
                     expr,
                     typ,
