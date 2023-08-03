@@ -1,5 +1,5 @@
 	 - Status: SUCCESS\
 	 - Description: "(result == x) | (result == y)"\
-	 checking_from_external_mod.rs:4:1 in function max
+	 checking_from_external_mod.rs:5:1 in function max
 
 VERIFICATION:- SUCCESSFUL
