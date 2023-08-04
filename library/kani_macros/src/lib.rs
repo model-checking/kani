@@ -22,11 +22,12 @@ use regular as attr_impl;
 
 /// Marks a Kani proof harness
 ///
-/// For async harnesses, this will call [`block_on`] to drive the future to completion (see its documentation for more information).
+/// For async harnesses, this will call [`block_on`](/kani/futures/fn.block_on.html) to drive the future to completion (see its documentation for more information).
 ///
 /// If you want to spawn tasks in an async harness, you have to pass a schedule to the `#[kani::proof]` attribute,
 /// e.g. `#[kani::proof(schedule = kani::RoundRobin::default())]`.
-/// This will wrap the async function in a call to [`block_on_with_spawn`] (see its documentation for more information).
+///
+/// This will wrap the async function in a call to [`block_on_with_spawn`](/kani/futures/fn.block_on_with_spawn.html) (see its documentation for more information).
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn proof(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -51,7 +52,7 @@ pub fn should_panic(attr: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 /// Set Loop unwind limit for proof harnesses
-/// The attribute '#[kani::unwind(arg)]' can only be called alongside '#[kani::proof]'.
+/// The attribute `#[kani::unwind(arg)]` can only be called alongside `#[kani::proof]`.
 /// arg - Takes in a integer value (u32) that represents the unwind value for the harness.
 #[proc_macro_attribute]
 pub fn unwind(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -71,7 +72,8 @@ pub fn stub(attr: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 /// Select the SAT solver to use with CBMC for this harness
-/// The attribute `#[kani::solver(arg)]` can only be used alongside `#[kani::proof]``
+///
+/// The attribute `#[kani::solver(arg)]` can only be used alongside `#[kani::proof]`.
 ///
 /// arg - name of solver, e.g. kissat
 #[proc_macro_attribute]

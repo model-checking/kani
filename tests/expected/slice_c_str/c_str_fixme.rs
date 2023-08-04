@@ -1,6 +1,6 @@
 #![feature(rustc_private)]
 #![feature(c_str_literals)]
-// support seems currently disabled CF https://github.com/rust-lang/rust/issues/113333
+//! FIXME: <https://github.com/rust-lang/rust/issues/113333>
 extern crate libc;
 use libc::c_char;
 

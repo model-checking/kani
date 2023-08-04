@@ -447,7 +447,7 @@ impl CheckArgs {
 ///
 /// We currently define a bunch of cargo specific arguments as part of the overall arguments,
 /// however, they are invalid in the Kani standalone usage. Explicitly check them for now.
-/// TODO: Remove this as part of https://github.com/model-checking/kani/issues/1831
+/// TODO: Remove this as part of <https://github.com/model-checking/kani/issues/1831>
 fn check_no_cargo_opt(is_set: bool, name: &str) -> Result<(), Error> {
     if is_set {
         Err(Error::raw(
