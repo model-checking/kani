@@ -232,7 +232,7 @@ impl CodegenBackend for GotocCodegenBackend {
                 // Cross-crate collecting of all items that are reachable from the crate harnesses.
                 let harnesses = queries.target_harnesses();
                 let mut items: HashSet<DefPathHash> = HashSet::with_capacity(harnesses.len());
-                items.extend(harnesses.into_iter());
+                items.extend(harnesses);
                 let harnesses =
                     filter_crate_items(tcx, |_, def_id| items.contains(&tcx.def_path_hash(def_id)));
                 for harness in harnesses {
@@ -321,7 +321,7 @@ impl CodegenBackend for GotocCodegenBackend {
         match ongoing_codegen.downcast::<(CodegenResults, FxIndexMap<WorkProductId, WorkProduct>)>()
         {
             Ok(val) => Ok(*val),
-            Err(val) => panic!("unexpected error: {:?}", val.type_id()),
+            Err(val) => panic!("unexpected error: {:?}", (*val).type_id()),
         }
     }
 
@@ -571,9 +571,9 @@ impl<'tcx> GotoCodegenResults<'tcx> {
         metadata: Option<HarnessMetadata>,
     ) {
         let mut items = items;
-        self.harnesses.extend(metadata.into_iter());
-        self.concurrent_constructs.extend(gcx.concurrent_constructs.into_iter());
-        self.unsupported_constructs.extend(gcx.unsupported_constructs.into_iter());
+        self.harnesses.extend(metadata);
+        self.concurrent_constructs.extend(gcx.concurrent_constructs);
+        self.unsupported_constructs.extend(gcx.unsupported_constructs);
         self.items.append(&mut items);
     }
 

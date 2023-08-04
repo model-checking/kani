@@ -110,18 +110,15 @@ impl<'tcx> GotocCtx<'tcx> {
             .args
             .iter()
             .enumerate()
-            .filter_map(|(idx, arg)| {
-                (!arg.is_ignore()).then(|| {
-                    let arg_name = format!("{fn_name}::param_{idx}");
-                    let base_name = format!("param_{idx}");
-                    let arg_type = self.codegen_ty(arg.layout.ty);
-                    let sym = Symbol::variable(&arg_name, &base_name, arg_type.clone(), loc)
-                        .with_is_parameter(true);
-                    self.symbol_table.insert(sym);
-                    arg_type.as_parameter(Some(arg_name.into()), Some(base_name.into()))
-                })
-            })
-            .collect();
+            .filter(|&(_, arg)| (!arg.is_ignore())).map(|(idx, arg)| {
+                let arg_name = format!("{fn_name}::param_{idx}");
+                let base_name = format!("param_{idx}");
+                let arg_type = self.codegen_ty(arg.layout.ty);
+                let sym = Symbol::variable(&arg_name, &base_name, arg_type.clone(), loc)
+                    .with_is_parameter(true);
+                self.symbol_table.insert(sym);
+                arg_type.as_parameter(Some(arg_name.into()), Some(base_name.into()))
+            }).collect();
         let ret_type = self.codegen_ty(fn_abi.ret.layout.ty);
 
         if fn_abi.c_variadic {

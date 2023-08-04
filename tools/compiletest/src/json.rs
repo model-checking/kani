@@ -57,21 +57,28 @@ pub fn extract_rendered(output: &str) -> String {
                     if report.future_incompat_report.is_empty() {
                         None
                     } else {
+                        // TODO clippy madness
+                        use std::fmt::Write;
                         Some(format!(
                             "Future incompatibility report: {}",
                             report
                                 .future_incompat_report
                                 .into_iter()
-                                .map(|item| {
-                                    format!(
-                                        "Future breakage diagnostic:\n{}",
-                                        item.diagnostic
-                                            .rendered
-                                            .unwrap_or_else(|| "Not rendered".to_string())
-                                    )
-                                })
-                                .collect::<String>()
-                        ))
+                                .fold(String::new(), |mut output, item| {
+                                    let _ = write!(output, "Future breakage diagnostic:\n");
+                                    let s = item.diagnostic.rendered.unwrap_or_else(|| "Not rendered".to_string());
+                                    let _ = write!(output,"{s}");
+                                    output
+                                })))
+                                // .map(|item| {
+                                //     format!(
+                                //         "Future breakage diagnostic:\n{}",
+                                //         item.diagnostic
+                                //             .rendered
+                                //             .unwrap_or_else(|| "Not rendered".to_string())
+                                //     )
+                                // })
+                                // .collect::<String>() // TODO use fold ???
                     }
                 } else if serde_json::from_str::<ArtifactNotification>(line).is_ok() {
                     // Ignore the notification.
