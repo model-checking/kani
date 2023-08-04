@@ -340,6 +340,7 @@ impl<'tcx> GotocCtx<'tcx> {
         field: FieldIdx,
         field_ty: Ty<'tcx>,
     ) -> Expr {
+        let field_ty = self.monomorphize(field_ty);
         if matches!(field_ty.kind(), ty::Array { .. }) {
             // Array based
             assert_eq!(field.index(), 0);
