@@ -285,6 +285,24 @@ impl ContractFunctionState {
     }
 }
 
+/// A visitor which injects a copy of the token stream it holds before every
+/// `return` expression. 
+/// 
+/// This is intended to be used with postconditions and for that purpose it also
+/// performs a rewrite where the return value is first bound to `result` so the
+/// postconditions can access it.
+/// 
+/// # Example
+/// 
+/// The expression `return x;` turns into
+/// 
+/// ```rs
+/// { // Always opens a new block
+///     let result = x;
+///     <injected tokenstream>
+///     return result;
+/// }
+/// ```
 struct PostconditionInjector(TokenStream2);
 
 impl VisitMut for PostconditionInjector {
@@ -300,11 +318,11 @@ impl VisitMut for PostconditionInjector {
                 output.extend(quote!(let result = #expr;));
                 *expr = Box::new(Expr::Verbatim(quote!(result)));
             }
-            *i = syn::Expr::Verbatim(quote!(
+            *i = syn::Expr::Verbatim(quote!({
                 #output
                 #tokens
                 #i
-            ))
+            }))
         } else {
             syn::visit_mut::visit_expr_mut(self, i)
         }
@@ -319,16 +337,42 @@ impl VisitMut for PostconditionInjector {
 /// Decorates the original function with `#[checked_by =
 /// "check_<fn_name>_<fn_hash>"]
 ///
-/// Each clause (requires or ensures) creates its own check function that calls
-/// the prior check function inside. The innermost check function calls a copy
-/// of the originally decorated function. It is a copy, because the compiler
-/// later replaces all invocations of the original function with this check and
-/// that would also apply to the inner check. We need that to be the untouched
-/// function though so we make a copy that will survive the replacement from the
-/// compiler.
+/// The check function is a copy of the original function with pre and
+/// postconditions added before and after respectively. Each clause (requires or
+/// ensures) adds new layers of pre or postconditions to the check function. 
+/// 
+/// Postconditions are also injected before every `return` expression, see also
+/// [`PostconditionInjector`].
+/// 
+/// All arguments of the function are unsafely shallow-copied with the
+/// `kani::unsafe_deref` function. We must ensure that those copies are not
+/// dropped so after the postconditions we call `mem::forget` on each copy.
 ///
 /// # Complete example
+/// 
+/// ```rs
+/// 
+/// ```
+/// 
+/// Turns into
 ///
+/// ```rs
+/// #[kanitool::checked_with = "div_check_965916"]
+/// fn div(dividend: u32, divisor: u32) -> u32 { dividend / divisor }
+/// 
+/// #[allow(dead_code)]
+/// #[allow(unused_variables)]
+/// #[kanitool::is_contract_generated(check)]
+/// fn div_check_965916(dividend: u32, divisor: u32) -> u32 {
+///     let dividend_renamed = kani::untracked_deref(&dividend);
+///     let divisor_renamed = kani::untracked_deref(&divisor);
+///     let result = { kani::assume(divisor != 0); { dividend / divisor } };
+///     kani::assert(result <= dividend_renamed, "result <= dividend");
+///     std::mem::forget(dividend_renamed);
+///     std::mem::forget(divisor_renamed);
+///     result
+/// }
+/// ```
 fn requires_ensures_alt(attr: TokenStream, item: TokenStream, is_requires: bool) -> TokenStream {
     let attr_copy = proc_macro2::TokenStream::from(attr.clone());
     let mut attr = parse_macro_input!(attr as Expr);
