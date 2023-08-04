@@ -160,7 +160,7 @@ pub fn proof(attr: TokenStream, item: TokenStream) -> TokenStream {
     }
 }
 
-use syn::{visit_mut::VisitMut, ExprBlock};
+use syn::visit_mut::VisitMut;
 
 /// Hash this `TokenStream` and return an integer that is at most digits
 /// long when hex formatted.
@@ -209,15 +209,20 @@ impl<'ast> Visit<'ast> for ArgumentIdentCollector {
     }
 }
 
-/// Applies the contained renaming to everything visited.
+/// Applies the contained renaming to every ident pattern and ident expr
+/// visited.
+///
+/// In each case if the path has only one segments that corresponds to a key, it
+/// is replaced by the ident in the value.
 struct Renamer<'a>(&'a HashMap<Ident, Ident>);
 
 impl<'a> VisitMut for Renamer<'a> {
     fn visit_expr_path_mut(&mut self, i: &mut syn::ExprPath) {
-        if i.path.segments.len() == 1
-            && let Some(p) = i.path.segments.first_mut()
-            && let Some(new) = self.0.get(&p.ident) {
-                p.ident = new.clone();
+        if i.path.segments.len() == 1 {
+            i.path
+                .segments
+                .first_mut()
+                .and_then(|p| self.0.get(&p.ident).map(|new| p.ident = new.clone()));
         }
     }
 
@@ -286,16 +291,16 @@ impl ContractFunctionState {
 }
 
 /// A visitor which injects a copy of the token stream it holds before every
-/// `return` expression. 
-/// 
+/// `return` expression.
+///
 /// This is intended to be used with postconditions and for that purpose it also
 /// performs a rewrite where the return value is first bound to `result` so the
 /// postconditions can access it.
-/// 
+///
 /// # Example
-/// 
+///
 /// The expression `return x;` turns into
-/// 
+///
 /// ```rs
 /// { // Always opens a new block
 ///     let result = x;
@@ -329,6 +334,34 @@ impl VisitMut for PostconditionInjector {
     }
 }
 
+/// A supporting function for creating shallow, unsafe copies of the arguments
+/// for the postconditions.
+///
+/// This function
+/// - collects all [`Ident`]s found in the argument patterns
+/// - creates new names for them
+/// - Replaces all occurrences of those idents in `attrs` with the new names and
+/// - Returns the mapping of old names to new names so the macro can emit the
+///   code that makes the copies.
+fn rename_argument_occurences(sig: &syn::Signature, attr: &mut Expr) -> HashMap<Ident, Ident> {
+    let mut arg_ident_collector = ArgumentIdentCollector::new();
+    arg_ident_collector.visit_signature(&sig);
+
+    let mk_new_ident_for = |id: &Ident| Ident::new(&format!("{}_renamed", id), Span::mixed_site());
+    let arg_idents = arg_ident_collector
+        .0
+        .into_iter()
+        .map(|i| {
+            let new = mk_new_ident_for(&i);
+            (i, new)
+        })
+        .collect::<HashMap<_, _>>();
+
+    let mut ident_rewriter = Renamer(&arg_idents);
+    ident_rewriter.visit_expr_mut(attr);
+    arg_idents
+}
+
 /// The main meat of handling requires/ensures contracts.
 ///
 /// Generates a `check_<fn_name>_<fn_hash>` function that assumes preconditions
@@ -339,27 +372,27 @@ impl VisitMut for PostconditionInjector {
 ///
 /// The check function is a copy of the original function with pre and
 /// postconditions added before and after respectively. Each clause (requires or
-/// ensures) adds new layers of pre or postconditions to the check function. 
-/// 
+/// ensures) adds new layers of pre or postconditions to the check function.
+///
 /// Postconditions are also injected before every `return` expression, see also
 /// [`PostconditionInjector`].
-/// 
+///
 /// All arguments of the function are unsafely shallow-copied with the
-/// `kani::unsafe_deref` function. We must ensure that those copies are not
+/// `kani::untracked_deref` function. We must ensure that those copies are not
 /// dropped so after the postconditions we call `mem::forget` on each copy.
 ///
 /// # Complete example
-/// 
+///
 /// ```rs
-/// 
+///
 /// ```
-/// 
+///
 /// Turns into
 ///
 /// ```rs
 /// #[kanitool::checked_with = "div_check_965916"]
 /// fn div(dividend: u32, divisor: u32) -> u32 { dividend / divisor }
-/// 
+///
 /// #[allow(dead_code)]
 /// #[allow(unused_variables)]
 /// #[kanitool::is_contract_generated(check)]
@@ -380,7 +413,6 @@ fn requires_ensures_alt(attr: TokenStream, item: TokenStream, is_requires: bool)
     let mut output = proc_macro2::TokenStream::new();
 
     let a_short_hash = short_hash_of_token_stream(&item);
-
     let item_fn = &mut parse_macro_input!(item as ItemFn);
 
     // If we didn't find any other contract handling related attributes we
@@ -446,26 +478,7 @@ fn requires_ensures_alt(attr: TokenStream, item: TokenStream, is_requires: bool)
             #call_to_prior
         )
     } else {
-        // This machinery here is responsible for making shallow, unsafe copies
-        // of the arguments that are accessed by the postconditions. This is so
-        // that the return value can mutably borrow from the arguments without
-        // Rust complaining.
-        let mut arg_ident_collector = ArgumentIdentCollector::new();
-        arg_ident_collector.visit_signature(&item_fn.sig);
-
-        let mk_new_ident_for =
-            |id: &Ident| Ident::new(&format!("{}_renamed", id), Span::mixed_site());
-        let arg_idents = arg_ident_collector
-            .0
-            .into_iter()
-            .map(|i| {
-                let new = mk_new_ident_for(&i);
-                (i, new)
-            })
-            .collect::<HashMap<_, _>>();
-
-        let mut ident_rewriter = Renamer(&arg_idents);
-        ident_rewriter.visit_expr_mut(&mut attr);
+        let arg_idents = rename_argument_occurences(&item_fn.sig, &mut attr);
 
         let arg_copy_names = arg_idents.values();
         let also_arg_copy_names = arg_copy_names.clone();
