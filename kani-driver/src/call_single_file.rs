@@ -92,7 +92,7 @@ impl KaniSession {
             flags.push("--write-json-symtab".into());
         }
 
-        if self.args.stubbing_enabled() {
+        if self.args.is_stubbing_enabled() {
             flags.push("--enable-stubbing".into());
         }
 

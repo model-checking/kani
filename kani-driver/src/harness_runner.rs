@@ -111,7 +111,7 @@ impl KaniSession {
     /// Prints a warning at the end of the verification if harness contained a stub but stubs were
     /// not enabled.
     fn stubbing_statuses(&self, results: &[HarnessResult]) {
-        if !self.args.stubbing_enabled() {
+        if !self.args.is_stubbing_enabled() {
             let ignored_stubs: Vec<_> = results
                 .iter()
                 .filter_map(|result| {

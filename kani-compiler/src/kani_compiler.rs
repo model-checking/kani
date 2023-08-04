@@ -422,11 +422,7 @@ impl Callbacks for KaniCompiler {
     ) -> Compilation {
         if self.stage.is_init() {
             self.stage = rustc_queries.global_ctxt().unwrap().enter(|tcx| {
-                // Extra block necessary to unlock queries
-                {
-                    let queries = self.queries.lock().unwrap();
-                    check_crate_items(tcx, &queries);
-                }
+                check_crate_items(tcx, &self.queries.lock().unwrap());
                 self.process_harnesses(tcx)
             });
         }

@@ -325,10 +325,13 @@ impl<'tcx> GotocHook<'tcx> for MemCmp {
     }
 }
 
-/// A builtin that is essentially a C-style dereference operation. Takes in a
-/// `&T` reference and returns a `T` (like clone would but without cloning).
-/// Breaks ownership rules and is only used in the context of function contracts
-/// where we can structurally guarantee the use is safe.
+/// A builtin that is essentially a C-style dereference operation, creating an
+/// unsafe challow copy. Importantly either this copy or the original needs to
+/// be `mem::forget`en or a double-free will occur.
+/// 
+/// Takes in a `&T` reference and returns a `T` (like clone would but without
+/// cloning). Breaks ownership rules and is only used in the context of function
+/// contracts where we can structurally guarantee the use is safe.
 struct UntrackedDeref;
 
 impl<'tcx> GotocHook<'tcx> for UntrackedDeref {
