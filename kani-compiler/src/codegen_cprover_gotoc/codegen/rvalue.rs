@@ -1018,14 +1018,10 @@ impl<'tcx> GotocCtx<'tcx> {
             PointerCoercion::UnsafeFnPointer => self.codegen_operand(operand),
             PointerCoercion::ClosureFnPointer(_) => {
                 if let ty::Closure(def_id, args) = self.operand_ty(operand).kind() {
-                    let instance = Instance::resolve_closure(
-                        self.tcx,
-                        *def_id,
-                        args,
-                        ty::ClosureKind::FnOnce,
-                    )
-                    .expect("failed to normalize and resolve closure during codegen")
-                    .polymorphize(self.tcx);
+                    let instance =
+                        Instance::resolve_closure(self.tcx, *def_id, args, ty::ClosureKind::FnOnce)
+                            .expect("failed to normalize and resolve closure during codegen")
+                            .polymorphize(self.tcx);
                     self.codegen_func_expr(instance, None).address_of()
                 } else {
                     unreachable!("{:?} cannot be cast to a fn ptr", operand)

@@ -213,11 +213,7 @@ fn custom_coerce_unsize_info<'tcx>(
 ) -> CustomCoerceUnsized {
     let def_id = tcx.require_lang_item(LangItem::CoerceUnsized, None);
 
-    let trait_ref = TraitRef::new(
-        tcx,
-        def_id,
-        tcx.mk_args_trait(source_ty, [target_ty.into()]),
-    );
+    let trait_ref = TraitRef::new(tcx, def_id, tcx.mk_args_trait(source_ty, [target_ty.into()]));
 
     match tcx.codegen_select_candidate((ParamEnv::reveal_all(), trait_ref)) {
         Ok(ImplSource::UserDefined(ImplSourceUserDefinedData { impl_def_id, .. })) => {

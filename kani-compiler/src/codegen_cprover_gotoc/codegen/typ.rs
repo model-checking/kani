@@ -288,11 +288,7 @@ impl<'tcx> GotocCtx<'tcx> {
         sig
     }
 
-    fn closure_sig(
-        &self,
-        def_id: DefId,
-        args: ty::GenericArgsRef<'tcx>,
-    ) -> ty::PolyFnSig<'tcx> {
+    fn closure_sig(&self, def_id: DefId, args: ty::GenericArgsRef<'tcx>) -> ty::PolyFnSig<'tcx> {
         let sig = self.monomorphize(args.as_closure().sig());
 
         // In addition to `def_id` and `args`, we need to provide the kind of region `env_region`
@@ -1610,9 +1606,10 @@ impl<'tcx> GotocCtx<'tcx> {
 
             Primitive::F32 => self.tcx.types.f32,
             Primitive::F64 => self.tcx.types.f64,
-            Primitive::Pointer(_) => {
-                Ty::new_ptr(self.tcx, ty::TypeAndMut { ty: self.tcx.types.u8, mutbl: Mutability::Not })
-            }
+            Primitive::Pointer(_) => Ty::new_ptr(
+                self.tcx,
+                ty::TypeAndMut { ty: self.tcx.types.u8, mutbl: Mutability::Not },
+            ),
         }
     }
 

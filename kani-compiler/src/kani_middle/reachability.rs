@@ -355,7 +355,11 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
         trace!(rvalue=?*rvalue, "visit_rvalue");
 
         match *rvalue {
-            Rvalue::Cast(CastKind::PointerCoercion(PointerCoercion::Unsize), ref operand, target) => {
+            Rvalue::Cast(
+                CastKind::PointerCoercion(PointerCoercion::Unsize),
+                ref operand,
+                target,
+            ) => {
                 // Check if the conversion include casting a concrete type to a trait type.
                 // If so, collect items from the impl `Trait for Concrete {}`.
                 let target_ty = self.monomorphize(target);
@@ -367,7 +371,11 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
                     self.collect_vtable_methods(base_coercion.src_ty, base_coercion.dst_ty);
                 }
             }
-            Rvalue::Cast(CastKind::PointerCoercion(PointerCoercion::ReifyFnPointer), ref operand, _) => {
+            Rvalue::Cast(
+                CastKind::PointerCoercion(PointerCoercion::ReifyFnPointer),
+                ref operand,
+                _,
+            ) => {
                 let fn_ty = operand.ty(self.body, self.tcx);
                 let fn_ty = self.monomorphize(fn_ty);
                 if let TyKind::FnDef(def_id, substs) = *fn_ty.kind() {
@@ -383,7 +391,11 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
                     unreachable!("Expected FnDef type, but got: {:?}", fn_ty);
                 }
             }
-            Rvalue::Cast(CastKind::PointerCoercion(PointerCoercion::ClosureFnPointer(_)), ref operand, _) => {
+            Rvalue::Cast(
+                CastKind::PointerCoercion(PointerCoercion::ClosureFnPointer(_)),
+                ref operand,
+                _,
+            ) => {
                 let source_ty = operand.ty(self.body, self.tcx);
                 let source_ty = self.monomorphize(source_ty);
                 match *source_ty.kind() {
