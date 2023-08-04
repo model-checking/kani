@@ -12,7 +12,7 @@ use {
         parse_macro_input,
         spanned::Spanned,
         visit::Visit,
-        Expr, ItemFn, PathSegment,
+        Expr, ItemFn,
     },
 };
 
@@ -190,22 +190,6 @@ pub fn ensures(attr: TokenStream, item: TokenStream) -> TokenStream {
     requires_ensures_alt(attr, item, false)
 }
 
-struct SelfDetector(bool);
-
-impl<'ast> Visit<'ast> for SelfDetector {
-    fn visit_path(&mut self, i: &'ast syn::Path) {
-        self.0 |= i.get_ident().map_or(false, |i| i == "self")
-            || i.get_ident().map_or(false, |i| i == "Self")
-    }
-}
-
-/// Heyristic to determine if this item originated in some kind of `impl`
-fn is_probably_impl_fn(item_fn: &ItemFn) -> bool {
-    let mut vis = SelfDetector(false);
-    vis.visit_signature(&item_fn.sig);
-    vis.0
-}
-
 /// Collect all named identifiers used in the argument patterns of a function.
 struct ArgumentIdentCollector(HashSet<Ident>);
 
@@ -259,6 +243,37 @@ where
         && path.segments.iter().zip(mtch).all(|(actual, expected)| actual.ident == *expected)
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ContractFunctionState {
+    Original,
+    Untouched,
+    Check,
+}
+
+impl ContractFunctionState {
+    fn from_attribute(attribute: &syn::Attribute) -> Option<Self> {
+        if let syn::Meta::List(lst) = &attribute.meta {
+            if matches_path(&lst.path, &["kanitool", "is_contract_generated"]) {
+                match syn::parse2::<Ident>(lst.tokens.clone()) {
+                    Err(e) => {
+                        lst.span().unwrap().error(format!("{e}")).emit();
+                    }
+                    Ok(ident) => {
+                        if ident.to_string() == "check" {
+                            return Some(Self::Check);
+                        } else {
+                            lst.span().unwrap().error("Expected `check` ident").emit();
+                        }
+                    }
+                }
+            } else if matches_path(&lst.path, &["kanitool", "checked_with"]) {
+                return Some(ContractFunctionState::Original);
+            }
+        }
+        None
+    }
+}
+
 /// The main meat of handling requires/ensures contracts.
 ///
 /// Generates a `check_<fn_name>_<fn_hash>` function that assumes preconditions
@@ -274,8 +289,10 @@ where
 /// that would also apply to the inner check. We need that to be the untouched
 /// function though so we make a copy that will survive the replacement from the
 /// compiler.
+///
+/// # Complete example
+///
 fn requires_ensures_alt(attr: TokenStream, item: TokenStream, is_requires: bool) -> TokenStream {
-    use syn::{FnArg, Pat, PatIdent, PatType};
     let attr_copy = proc_macro2::TokenStream::from(attr.clone());
     let mut attr = parse_macro_input!(attr as Expr);
 
@@ -285,88 +302,64 @@ fn requires_ensures_alt(attr: TokenStream, item: TokenStream, is_requires: bool)
 
     let item_fn = &mut parse_macro_input!(item as ItemFn);
 
-    let item_name = &item_fn.sig.ident.to_string();
-
-    let mut attrs = std::mem::replace(&mut item_fn.attrs, vec![]);
-
-    let check_fn_name = identifier_for_generated_function(item_fn, "check", a_short_hash);
-
-    let mut check_fn_sig = item_fn.sig.clone();
-
-    check_fn_sig.ident = check_fn_name.clone();
-
-    // This just collects all the arguments and passes them on.
-    // TODO: Support patterns.
-    let args: Vec<_> = item_fn
-        .sig
-        .inputs
+    // If we didn't find any other contract handling related attributes we
+    // assume this function has not been touched by a contract before.
+    let function_state = item_fn
+        .attrs
         .iter()
-        .map(|arg| {
-            Expr::Path(syn::ExprPath {
-                attrs: vec![],
-                qself: None,
-                path: syn::Path {
-                    leading_colon: None,
-                    segments: [PathSegment {
-                        ident: match arg {
-                            FnArg::Receiver(_) => Ident::new("self", Span::call_site()),
-                            FnArg::Typed(PatType { pat, .. }) => match &**pat {
-                                Pat::Ident(PatIdent { ident, .. }) => ident.clone(),
-                                _ => {
-                                    pat.span().unwrap().error("Unexpected pattern").emit();
-                                    unreachable!()
-                                }
-                            },
-                        },
-                        arguments: syn::PathArguments::None,
-                    }]
-                    .into_iter()
-                    .collect(),
-                },
-            })
-        })
-        .collect();
-    let is_impl_fn = is_probably_impl_fn(item_fn);
+        .find_map(ContractFunctionState::from_attribute)
+        .unwrap_or(ContractFunctionState::Untouched);
 
-    let mut prior_check = None;
+    if matches!(function_state, ContractFunctionState::Original) {
+        // If we're the original function that means we're *not* the first time
+        // that a contract attribute is handled on this function. This means
+        // there must exist a generated check function somewhere onto which the
+        // attributes have been copied and where they will be expanded into more
+        // checks. So we just return outselves unchanged.
+        return item_fn.into_token_stream().into();
+    }
 
-    // We remove any prior `checked_with` or `replaced_with` and use the
-    // identifiers stored there as the inner functions we will call to in the
-    // checking and replacing track respectively.
-    //
-    // This also maintains the invariant that there is always at most one
-    // annotation each of `kanitool::{checked_with, replaced_with}` on the
-    // function, e.g. there is a canonical check/replace.
-    attrs.retain(|attr| {
-        if let syn::Meta::NameValue(nv) = &attr.meta {
-            if matches_path(&nv.path, &["kanitool", "checked_with"]) {
-                if let syn::Expr::Lit(syn::ExprLit { lit: syn::Lit::Str(strlit), .. }) = &nv.value {
-                    assert!(prior_check.replace(strlit.value()).is_none());
-                    return false;
-                }
-            }
-        }
-        true
-    });
+    let attrs = std::mem::replace(&mut item_fn.attrs, vec![]);
 
-    let prior_check_fn_name = prior_check.map_or_else(
-        || {
-            // If there was no prior check we make a copy and use its name.
-            let copy_fn_name = identifier_for_generated_function(&item_fn, "copy", a_short_hash);
-            let mut copy_fn = item_fn.clone();
-            copy_fn.sig.ident = copy_fn_name.clone();
-            output.extend(copy_fn.into_token_stream());
-            copy_fn_name
-        },
-        |prior| Ident::new(&prior, Span::call_site()),
-    );
+    if matches!(function_state, ContractFunctionState::Untouched) {
+        // We are the first time a contract is handled on this function, so
+        // we're responsible for
+        //
+        // 1. Generating a name for the check function
+        // 2. Emitting the original, unchanged item and register the check
+        //    function on it via attribute
+        // 3. Renaming our item to the new name
+        // 4. And adding #[kanitool::is_contract_generated(check)],
+        //    #[allow(dead_code)] and #[allow(unused_variables)] to the check
+        //    function attributes
 
-    let call_to_prior = if is_impl_fn {
-        // If we're in an `impl`, we need to call it with `Self::`
-        quote!(Self::#prior_check_fn_name(#(#args),*))
-    } else {
-        quote!(#prior_check_fn_name(#(#args),*))
-    };
+        // The order of `attrs` and `kanitool::{checked_with,
+        // is_contract_generated}` is important here, because macros are
+        // expanded outside in. This way other contract annotations in
+        // `attrs` sees those attribuites which they need to determine
+        // `function_state` attribute and can use them.
+        //
+        // The same applies later when we emit the check function.
+        let check_fn_name = identifier_for_generated_function(item_fn, "check", a_short_hash);
+
+        // Constructing string literals explicitly here, because if we call
+        // `stringify!` in the generated code that is passed on as that
+        // expression to the next expansion of a contract, not as the
+        // literal.
+        let check_fn_name_str = syn::LitStr::new(&check_fn_name.to_string(), Span::call_site());
+        output.extend(quote!(
+            #(#attrs)*
+            #[kanitool::checked_with = #check_fn_name_str]
+            #item_fn
+
+            #[allow(dead_code)]
+            #[allow(unused_variables)]
+            #[kanitool::is_contract_generated(check)]
+        ));
+        item_fn.sig.ident = check_fn_name;
+    }
+
+    let call_to_prior = &item_fn.block;
 
     let check_body = if is_requires {
         quote!(
@@ -374,6 +367,10 @@ fn requires_ensures_alt(attr: TokenStream, item: TokenStream, is_requires: bool)
             #call_to_prior
         )
     } else {
+        // This machinery here is responsible for making shallow, unsafe copies
+        // of the arguments that are accessed by the postconditions. This is so
+        // that the return value can mutably borrow from the arguments without
+        // Rust complaining.
         let mut arg_ident_collector = ArgumentIdentCollector::new();
         arg_ident_collector.visit_signature(&item_fn.sig);
 
@@ -392,35 +389,24 @@ fn requires_ensures_alt(attr: TokenStream, item: TokenStream, is_requires: bool)
         ident_rewriter.visit_expr_mut(&mut attr);
 
         let arg_copy_names = arg_idents.values();
+        let also_arg_copy_names = arg_copy_names.clone();
         let arg_idents = arg_idents.keys();
 
         quote!(
             #(let #arg_copy_names = kani::untracked_deref(&#arg_idents);)*
             let result = #call_to_prior;
             kani::assert(#attr, stringify!(#attr_copy));
+            #(std::mem::forget(#also_arg_copy_names);)*
             result
         )
     };
 
-    // Constructing string literals explicitly here, because if we call
-    // `stringify!` in the generated code that is passed on as that expression to
-    // the next expansion of a contract, not as the literal.
-    let check_fn_name_str = syn::LitStr::new(&check_fn_name.to_string(), Span::call_site());
+    let sig = &item_fn.sig;
 
-    // The order of `attrs` and `kanitool::checked_with` is
-    // important here, because macros are expanded outside in. This way other
-    // contract annotations in `attrs` sees the `checked_with`
-    // attribute and can use them.
-    //
-    // This way we generate a clean chain of checking and replacing calls.
+    // Finally emit the check function.
     output.extend(quote!(
         #(#attrs)*
-        #[kanitool::checked_with = #check_fn_name_str]
-        #item_fn
-
-        #[allow(dead_code)]
-        #[allow(unused_variables)]
-        #check_fn_sig {
+        #sig {
             #check_body
         }
     ));

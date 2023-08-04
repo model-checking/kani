@@ -43,6 +43,7 @@ enum KaniAttributeKind {
     ProofForContract,
     CheckedWith,
     ReplacedWith,
+    IsContractGenerated,
 }
 
 impl KaniAttributeKind {
@@ -57,6 +58,7 @@ impl KaniAttributeKind {
             | KaniAttributeKind::Unwind => true,
             KaniAttributeKind::Unstable
             | KaniAttributeKind::CheckedWith
+            | KaniAttributeKind::IsContractGenerated
             | KaniAttributeKind::ReplacedWith => false,
         }
     }
@@ -71,7 +73,7 @@ impl KaniAttributeKind {
     /// contract.
     pub fn is_function_contract(self) -> bool {
         use KaniAttributeKind::*;
-        matches!(self, CheckedWith | ReplacedWith)
+        matches!(self, CheckedWith | ReplacedWith | IsContractGenerated)
     }
 }
 
@@ -226,6 +228,11 @@ impl<'tcx> KaniAttributes<'tcx> {
                     self.expect_maybe_one(kind)
                         .map(|attr| expect_key_string_value(&self.tcx.sess, attr));
                 }
+                KaniAttributeKind::IsContractGenerated => {
+                    // Ignored here because this is only used by the proc macros
+                    // to communicate with one another. So by the time it gets
+                    // here we don't care if it's valid or not.
+                }
             };
         }
     }
@@ -301,7 +308,9 @@ impl<'tcx> KaniAttributes<'tcx> {
                         // Internal attribute which shouldn't exist here.
                         unreachable!()
                     }
-                    KaniAttributeKind::CheckedWith | KaniAttributeKind::ReplacedWith => {
+                    KaniAttributeKind::CheckedWith
+                    | KaniAttributeKind::ReplacedWith
+                    | KaniAttributeKind::IsContractGenerated => {
                         todo!("Contract attributes are not supported on proofs")
                     }
                 };
@@ -358,12 +367,14 @@ fn check_is_contract_safe(tcx: TyCtxt, item: DefId) {
                 self.tcx.sess.span_err(self.span, format!("{} contains a {}pointer ({t:?}). This is prohibited for functions with contracts, as they cannot yet reason about the pointer behavior.", self.r#where, self.what));
             }
 
-            // Rust's type visitor only recursese into basically generics. Which
-            // menas it won't look at the field types of e.g. a struct or enum.
-            // So we override it here and do that ourselves.
+            // Rust's type visitor only recurses into type arguments, (e.g.
+            // `generics` in this match). This is enough for may types, but it
+            // won't look at the field types of structs or enums. So we override
+            // it here and do that ourselves.
             //
-            // Since the field types also go over all the type variables
-            // implicitly we don't need to call back to `super` in this case.
+            // Since the field types also must contain in some form all the type
+            // arguments the visitor will see them as it inspects the fields and
+            // we don't need to call back to `super`.
             if let ty::TyKind::Adt(adt_def, generics) = t.kind() {
                 for variant in adt_def.variants() {
                     for field in &variant.fields {
@@ -378,6 +389,7 @@ fn check_is_contract_safe(tcx: TyCtxt, item: DefId) {
                 }
                 std::ops::ControlFlow::Continue(())
             } else {
+                // For every other type
                 t.super_visit_with(self)
             }
         }
