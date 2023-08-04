@@ -16,7 +16,7 @@ use {
     },
 };
 
-use proc_macro2::{Ident, Span};
+use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
 
 /// Create a unique hash for a token stream (basically a [`std::hash::Hash`]
 /// impl for `proc_macro2::TokenStream`).
@@ -160,7 +160,7 @@ pub fn proof(attr: TokenStream, item: TokenStream) -> TokenStream {
     }
 }
 
-use syn::visit_mut::VisitMut;
+use syn::{visit_mut::VisitMut, ExprBlock};
 
 /// Hash this `TokenStream` and return an integer that is at most digits
 /// long when hex formatted.
@@ -243,14 +243,22 @@ where
         && path.segments.iter().zip(mtch).all(|(actual, expected)| actual.ident == *expected)
 }
 
+/// Classifies the state a function is in in the contract handling pipeline.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ContractFunctionState {
+    /// This is the original code, re-emitted from a contract attribute
     Original,
+    /// This is the first time a contract attribute is evaluated on this
+    /// function
     Untouched,
+    /// This is a check function that was generated from a previous evaluation
+    /// of a contract attribute
     Check,
 }
 
 impl ContractFunctionState {
+    /// Find out if this attribute could be describing a "contract handling"
+    /// state and if so return it.
     fn from_attribute(attribute: &syn::Attribute) -> Option<Self> {
         if let syn::Meta::List(lst) = &attribute.meta {
             if matches_path(&lst.path, &["kanitool", "is_contract_generated"]) {
@@ -266,11 +274,40 @@ impl ContractFunctionState {
                         }
                     }
                 }
-            } else if matches_path(&lst.path, &["kanitool", "checked_with"]) {
+            }
+        }
+        if let syn::Meta::NameValue(nv) = &attribute.meta {
+            if matches_path(&nv.path, &["kanitool", "checked_with"]) {
                 return Some(ContractFunctionState::Original);
             }
         }
         None
+    }
+}
+
+struct PostconditionInjector(TokenStream2);
+
+impl VisitMut for PostconditionInjector {
+    fn visit_expr_closure_mut(&mut self, _: &mut syn::ExprClosure) {
+        // Empty because inside the closure we don't want to inject
+    }
+
+    fn visit_expr_mut(&mut self, i: &mut Expr) {
+        if let syn::Expr::Return(r) = i {
+            let tokens = self.0.clone();
+            let mut output = TokenStream2::new();
+            if let Some(expr) = &mut r.expr {
+                output.extend(quote!(let result = #expr;));
+                *expr = Box::new(Expr::Verbatim(quote!(result)));
+            }
+            *i = syn::Expr::Verbatim(quote!(
+                #output
+                #tokens
+                #i
+            ))
+        } else {
+            syn::visit_mut::visit_expr_mut(self, i)
+        }
     }
 }
 
@@ -329,9 +366,8 @@ fn requires_ensures_alt(attr: TokenStream, item: TokenStream, is_requires: bool)
         // 2. Emitting the original, unchanged item and register the check
         //    function on it via attribute
         // 3. Renaming our item to the new name
-        // 4. And adding #[kanitool::is_contract_generated(check)],
-        //    #[allow(dead_code)] and #[allow(unused_variables)] to the check
-        //    function attributes
+        // 4. And (minor point) adding #[allow(dead_code)] and
+        //    #[allow(unused_variables)] to the check function attributes
 
         // The order of `attrs` and `kanitool::{checked_with,
         // is_contract_generated}` is important here, because macros are
@@ -354,12 +390,11 @@ fn requires_ensures_alt(attr: TokenStream, item: TokenStream, is_requires: bool)
 
             #[allow(dead_code)]
             #[allow(unused_variables)]
-            #[kanitool::is_contract_generated(check)]
         ));
         item_fn.sig.ident = check_fn_name;
     }
 
-    let call_to_prior = &item_fn.block;
+    let call_to_prior = &mut item_fn.block;
 
     let check_body = if is_requires {
         quote!(
@@ -392,20 +427,35 @@ fn requires_ensures_alt(attr: TokenStream, item: TokenStream, is_requires: bool)
         let also_arg_copy_names = arg_copy_names.clone();
         let arg_idents = arg_idents.keys();
 
+        let exec_postconditions = quote!(
+            kani::assert(#attr, stringify!(#attr_copy));
+            #(std::mem::forget(#also_arg_copy_names);)*
+        );
+
+        let mut inject_conditions = PostconditionInjector(exec_postconditions.clone());
+
+        inject_conditions.visit_block_mut(&mut *call_to_prior);
+
         quote!(
             #(let #arg_copy_names = kani::untracked_deref(&#arg_idents);)*
             let result = #call_to_prior;
-            kani::assert(#attr, stringify!(#attr_copy));
-            #(std::mem::forget(#also_arg_copy_names);)*
+            #exec_postconditions
             result
         )
     };
 
     let sig = &item_fn.sig;
 
-    // Finally emit the check function.
     output.extend(quote!(
         #(#attrs)*
+    ));
+
+    if matches!(function_state, ContractFunctionState::Untouched) {
+        output.extend(quote!(#[kanitool::is_contract_generated(check)]));
+    }
+
+    // Finally emit the check function.
+    output.extend(quote!(
         #sig {
             #check_body
         }
