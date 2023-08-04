@@ -36,12 +36,29 @@ pub fn transform<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId, old_body: &'tcx Body<'t
     old_body.clone()
 }
 
-struct ExternFunctionTransformer<'tcx> {
-    tcx: TyCtxt<'tcx>,
-    body: Body<'tcx>,
+/// Tranverse `body` searching for calls to foreing functions and, whevever there is
+/// a stub available, replace the call to the foreign function with a call
+/// to its correspondent stub. This happens as a separate step because there is no
+/// body available to foreign functions at this stage.
+pub fn transform_foreign_functions<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
+    let mut visitor = if let Some(stub_map) = get_stub_mapping(tcx) {
+        ForeignFunctionTransformer { tcx, body: body.clone(), stub_map }
+    } else {
+        ForeignFunctionTransformer { tcx, body: body.clone(), stub_map: HashMap::default() }
+    };
+    visitor.visit_body(body);
 }
 
-impl<'tcx> MutVisitor<'tcx> for ExternFunctionTransformer<'tcx> {
+struct ForeignFunctionTransformer<'tcx> {
+    /// The compiler context.
+    tcx: TyCtxt<'tcx>,
+    /// Body of the callee function. Kani searches here for foreign functions.
+    body: Body<'tcx>,
+    /// Map of functions/methods to their correspondent stubs.
+    stub_map: HashMap<DefId, DefId>,
+}
+
+impl<'tcx> MutVisitor<'tcx> for ForeignFunctionTransformer<'tcx> {
     fn tcx(&self) -> TyCtxt<'tcx> {
         self.tcx
     }
@@ -49,20 +66,17 @@ impl<'tcx> MutVisitor<'tcx> for ExternFunctionTransformer<'tcx> {
     fn visit_operand(&mut self, operand: &mut Operand<'tcx>, _location: Location) {
         let func_ty = operand.ty(&self.body, self.tcx);
         if let ty::FnDef(reachable_function, generics) = *func_ty.kind() {
-            if let Some(stub) = get_stub(self.tcx, reachable_function) {
-                let Operand::Constant(fn_def) = operand else { unreachable!() };
-                fn_def.literal = ConstantKind::from_value(
-                    ConstValue::ZeroSized,
-                    self.tcx.type_of(stub).subst(self.tcx, generics),
-                );
+            if self.tcx.is_foreign_item(reachable_function) {
+                if let Some(stub) = self.stub_map.get(&reachable_function) {
+                    let Operand::Constant(fn_def) = operand else { unreachable!() };
+                    fn_def.literal = ConstantKind::from_value(
+                        ConstValue::ZeroSized,
+                        self.tcx.type_of(stub).subst(self.tcx, generics),
+                    );
+                }
             }
         }
     }
-}
-
-pub fn transform_extern_functions<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
-    let mut visitor = ExternFunctionTransformer { tcx, body: body.clone() };
-    visitor.visit_body(body);
 }
 
 /// Checks whether the stub is compatible with the original function/method: do

@@ -56,7 +56,7 @@ fn run_kani_mir_passes<'tcx>(
 ) -> &'tcx Body<'tcx> {
     tracing::debug!(?def_id, "Run Kani transformation passes");
     let mut transformed_body = stubbing::transform(tcx, def_id, body);
-    stubbing::transform_extern_functions(tcx, &mut transformed_body);
+    stubbing::transform_foreign_functions(tcx, &mut transformed_body);
     tcx.arena.alloc(transformed_body)
 }
 
