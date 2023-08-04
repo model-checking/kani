@@ -129,7 +129,7 @@ pub fn proof_for_contract(attr: TokenStream, item: TokenStream) -> TokenStream {
 
 /// This module implements Kani attributes in a way that only Kani's compiler can understand.
 /// This code should only be activated when pre-building Kani's sysroot.
-//#[cfg(kani_sysroot)]
+#[cfg(kani_sysroot)]
 mod sysroot;
 
 /// This module provides dummy implementations of Kani attributes which cannot be interpreted by
