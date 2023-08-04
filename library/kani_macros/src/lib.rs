@@ -22,12 +22,12 @@ use regular as attr_impl;
 
 /// Marks a Kani proof harness
 ///
-/// For async harnesses, this will call [`block_on`](/kani/futures/fn.block_on.html) to drive the future to completion (see its documentation for more information).
+/// For async harnesses, this will call [`block_on`](https://model-checking.github.io/kani/crates/doc/kani/futures/fn.block_on.html) to drive the future to completion (see its documentation for more information).
 ///
 /// If you want to spawn tasks in an async harness, you have to pass a schedule to the `#[kani::proof]` attribute,
 /// e.g. `#[kani::proof(schedule = kani::RoundRobin::default())]`.
 ///
-/// This will wrap the async function in a call to [`block_on_with_spawn`](/kani/futures/fn.block_on_with_spawn.html) (see its documentation for more information).
+/// This will wrap the async function in a call to [`block_on_with_spawn`](https://model-checking.github.io/kani/crates/doc/kani/futures/fn.block_on_with_spawn.html) (see its documentation for more information).
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn proof(attr: TokenStream, item: TokenStream) -> TokenStream {
