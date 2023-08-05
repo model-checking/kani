@@ -203,8 +203,8 @@ VERIFICATION:- SUCCESSFUL
 This may change the verification time required to verify a harness.
 
 At present, `<solver>` can be one of:
- - `minisat` (default): [MiniSat](http://minisat.se/).
- - `cadical`: [CaDiCaL](https://github.com/arminbiere/cadical).
+ - `minisat`: [MiniSat](http://minisat.se/).
+ - `cadical` (default): [CaDiCaL](https://github.com/arminbiere/cadical).
  - `kissat`: [kissat](https://github.com/arminbiere/kissat).
  - `bin="<SAT_SOLVER_BINARY>"`: A custom solver binary, `"<SAT_SOLVER_BINARY>"`, that must be in path.
 
@@ -225,6 +225,11 @@ fn check() {
 ```
 
 Changing the solver may result in different verification times depending on the harness.
+
+Note that the default solver may vary depending on Kani's version.
+We highly recommend users to annotate their harnesses if the choice of solver
+has a major impact on performance, even if the solver used is the current
+default one.
 
 ## `#[kani::stub(<original>, <replacement>)]`
 

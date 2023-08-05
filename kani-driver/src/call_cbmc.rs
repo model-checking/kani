@@ -16,6 +16,10 @@ use crate::cbmc_output_parser::{
 use crate::cbmc_property_renderer::{format_coverage, format_result, kani_cbmc_output_filter};
 use crate::session::KaniSession;
 
+/// We will use Cadical by default since it performed better than MiniSAT in our analysis.
+/// Note: Kissat was marginally better, but it is an external solver which could be more unstable.
+static DEFAULT_SOLVER: CbmcSolver = CbmcSolver::Cadical;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VerificationStatus {
     Success,
@@ -206,8 +210,7 @@ impl KaniSession {
         } else if let Some(solver) = harness_solver {
             solver
         } else {
-            // Nothing to do
-            return Ok(());
+            &DEFAULT_SOLVER
         };
 
         match solver {

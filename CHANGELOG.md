@@ -4,6 +4,18 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
+## [0.34.0]
+
+### Breaking Changes
+* Change default solver to CaDiCaL by @celinval in https://github.com/model-checking/kani/pull/2557
+By default, Kani will now run CBMC with CaDiCaL, since this solver has outperformed Minisat in most of our benchmarks.
+User's should still be able to select Minisat (or a different solver) either by using `#[solver]` harness attribute,
+or by passing `--solver=<SOLVER>` command line option.
+
+## What's Changed
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.33.0...kani-0.34.0
+
 ## [0.33.0]
 
 ## What's Changed
