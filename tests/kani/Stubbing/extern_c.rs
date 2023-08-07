@@ -27,7 +27,7 @@ mod stubs {
     }
 }
 
-fn dig_depper(input : c_int) {
+fn dig_deeper(input: c_int) {
     unsafe {
         type FunctionPointerType = unsafe extern "C" fn(c_int) -> c_longlong;
         let ptr: FunctionPointerType = libc::sysconf;
@@ -36,7 +36,7 @@ fn dig_depper(input : c_int) {
 }
 
 fn deeper_call() {
-    dig_depper(libc::_SC_PAGESIZE)
+    dig_deeper(libc::_SC_PAGESIZE)
 }
 
 #[kani::proof]
@@ -48,4 +48,6 @@ fn harness() {
     assert_eq!(unsafe { libc::strlen(str_ptr) }, 4);
     assert_eq!(unsafe { libc::sysconf(libc::_SC_PAGESIZE) } as usize, 10);
     deeper_call();
+    let new_ptr = libc::strlen;
+    assert_eq!(unsafe { new_ptr(str_ptr) }, 4);
 }

@@ -36,17 +36,15 @@ pub fn transform<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId, old_body: &'tcx Body<'t
     old_body.clone()
 }
 
-/// Tranverse `body` searching for calls to foreing functions and, whevever there is
+/// Traverse `body` searching for calls to foreing functions and, whevever there is
 /// a stub available, replace the call to the foreign function with a call
 /// to its correspondent stub. This happens as a separate step because there is no
 /// body available to foreign functions at this stage.
 pub fn transform_foreign_functions<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
-    let mut visitor = if let Some(stub_map) = get_stub_mapping(tcx) {
-        ForeignFunctionTransformer { tcx, body: body.clone(), stub_map }
-    } else {
-        ForeignFunctionTransformer { tcx, body: body.clone(), stub_map: HashMap::default() }
-    };
-    visitor.visit_body(body);
+    if let Some(stub_map) = get_stub_mapping(tcx) {
+        let mut visitor = ForeignFunctionTransformer { tcx, body: body.clone(), stub_map };
+        visitor.visit_body(body);
+    }
 }
 
 struct ForeignFunctionTransformer<'tcx> {
@@ -68,8 +66,8 @@ impl<'tcx> MutVisitor<'tcx> for ForeignFunctionTransformer<'tcx> {
         if let ty::FnDef(reachable_function, generics) = *func_ty.kind() {
             if self.tcx.is_foreign_item(reachable_function) {
                 if let Some(stub) = self.stub_map.get(&reachable_function) {
-                    let Operand::Constant(fn_def) = operand else { unreachable!() };
-                    fn_def.literal = ConstantKind::from_value(
+                    let Operand::Constant(function_definition) = operand else { return; };
+                    function_definition.literal = ConstantKind::from_value(
                         ConstValue::ZeroSized,
                         self.tcx.type_of(stub).subst(self.tcx, generics),
                     );
