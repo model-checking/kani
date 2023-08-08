@@ -196,17 +196,11 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
                 ty::Slice(slice_ty) => {
                     if let Uint(UintTy::U8) = slice_ty.kind() {
-                        // The case where we have a slice of u8 is easy enough: make an array of u8
+                        let mem_var = self.codegen_const_allocation(data, None);
                         let slice =
                             data.inspect_with_uninit_and_ptr_outside_interpreter(start..end);
-                        let vec_of_bytes: Vec<Expr> = slice
-                            .iter()
-                            .map(|b| Expr::int_constant(*b, Type::unsigned_int(8)))
-                            .collect();
-                        let len = vec_of_bytes.len();
-                        let array_expr =
-                            Expr::array_expr(Type::unsigned_int(8).array_of(len), vec_of_bytes);
-                        let data_expr = array_expr.array_to_ptr();
+                        let len = slice.len();
+                        let data_expr = mem_var.cast_to(Type::unsigned_int(8).to_pointer());
                         let len_expr = Expr::int_constant(len, Type::size_t());
                         return slice_fat_ptr(
                             self.codegen_ty(lit_ty),
