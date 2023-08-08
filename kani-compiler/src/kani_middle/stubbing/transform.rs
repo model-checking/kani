@@ -66,7 +66,7 @@ impl<'tcx> MutVisitor<'tcx> for ForeignFunctionTransformer<'tcx> {
 
     fn visit_operand(&mut self, operand: &mut Operand<'tcx>, _location: Location) {
         let func_ty = operand.ty(&self.local_decls, self.tcx);
-        if let ty::FnDef(reachable_function, generics) = *func_ty.kind() {
+        if let ty::FnDef(reachable_function, arguments) = *func_ty.kind() {
             if self.tcx.is_foreign_item(reachable_function) {
                 if let Some(stub) = self.stub_map.get(&reachable_function) {
                     let Operand::Constant(function_definition) = operand else {
@@ -74,7 +74,7 @@ impl<'tcx> MutVisitor<'tcx> for ForeignFunctionTransformer<'tcx> {
                     };
                     function_definition.literal = ConstantKind::from_value(
                         ConstValue::ZeroSized,
-                        self.tcx.type_of(stub).subst(self.tcx, generics),
+                        self.tcx.type_of(stub).instantiate(self.tcx, arguments),
                     );
                 }
             }
