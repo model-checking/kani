@@ -187,7 +187,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         let tupe = sig.inputs().last().unwrap();
         let args = match tupe.kind() {
-            ty::Tuple(substs) => *substs,
+            ty::Tuple(args) => *args,
             _ => unreachable!("a function's spread argument must be a tuple"),
         };
         let starting_idx = sig.inputs().len();
