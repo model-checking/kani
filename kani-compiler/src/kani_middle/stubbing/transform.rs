@@ -12,8 +12,10 @@ use lazy_static::lazy_static;
 use regex::Regex;
 use rustc_data_structures::fingerprint::Fingerprint;
 use rustc_hir::{def_id::DefId, definitions::DefPathHash};
+use rustc_index::IndexVec;
 use rustc_middle::mir::{
-    interpret::ConstValue, visit::MutVisitor, Body, ConstantKind, Location, Operand,
+    interpret::ConstValue, visit::MutVisitor, Body, ConstantKind, Local, LocalDecl, Location,
+    Operand,
 };
 use rustc_middle::ty::{self, TyCtxt};
 
@@ -42,7 +44,8 @@ pub fn transform<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId, old_body: &'tcx Body<'t
 /// body available to foreign functions at this stage.
 pub fn transform_foreign_functions<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
     if let Some(stub_map) = get_stub_mapping(tcx) {
-        let mut visitor = ForeignFunctionTransformer { tcx, body: body.clone(), stub_map };
+        let mut visitor =
+            ForeignFunctionTransformer { tcx, local_decls: body.clone().local_decls, stub_map };
         visitor.visit_body(body);
     }
 }
@@ -50,8 +53,8 @@ pub fn transform_foreign_functions<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx
 struct ForeignFunctionTransformer<'tcx> {
     /// The compiler context.
     tcx: TyCtxt<'tcx>,
-    /// Body of the callee function. Kani searches here for foreign functions.
-    body: Body<'tcx>,
+    /// Local declarations of the callee function. Kani searches here for foreign functions.
+    local_decls: IndexVec<Local, LocalDecl<'tcx>>,
     /// Map of functions/methods to their correspondent stubs.
     stub_map: HashMap<DefId, DefId>,
 }
@@ -62,7 +65,7 @@ impl<'tcx> MutVisitor<'tcx> for ForeignFunctionTransformer<'tcx> {
     }
 
     fn visit_operand(&mut self, operand: &mut Operand<'tcx>, _location: Location) {
-        let func_ty = operand.ty(&self.body, self.tcx);
+        let func_ty = operand.ty(&self.local_decls, self.tcx);
         if let ty::FnDef(reachable_function, generics) = *func_ty.kind() {
             if self.tcx.is_foreign_item(reachable_function) {
                 if let Some(stub) = self.stub_map.get(&reachable_function) {
