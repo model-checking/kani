@@ -75,7 +75,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                 // Get the string the appears after "kanitool::" in each attribute string.
                 // Ex - "proof" | "unwind" etc.
                 if let Some(kind) = attr_kind(tcx, attribute) {
-                    result.entry(kind).or_insert_with(Default::default).push(attribute)
+                    result.entry(kind).or_default().push(attribute)
                 }
                 result
             },
