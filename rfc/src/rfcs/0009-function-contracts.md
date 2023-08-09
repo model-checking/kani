@@ -52,7 +52,7 @@ newly introduced APIs are entirely backwards compatible.
 ## User Experience
 
 Function contracts provide a verifiable way to specify function behavior. In
-addition, the specified behavior can subsequently be used as an abstraction of
+addition, the specified behavior can subsequently be used as an  of
 the function's behavior at call sites.
 
 The lifecycle of a contract is split roughly into three phases: specification,
@@ -93,18 +93,18 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
    they are implicitly logically conjoined.
 
 
-2. Next, Kani must make sure that the approximation we specified actually holds
-   by **checking** the contract against the implementation. This is in contrast
-   to ["stubbing"][stubbing], where the approximation is blindly trusted.
+2. Next, Kani makes sure that the contract we specified overapproximates the
+   implementation with a **check**. This is in contrast to
+   ["stubbing"][stubbing], where the approximation is trusted blindly.
 
-   The contract must always overapproximate the function to guarantee soundness.
-   To facilitate the check Kani needs a suitable environment to verify the
+   To facilitate this check Kani needs a suitable environment to verify the
    function in. For this proposal the environment must be provided by us (the
    users). See [future possibilities](#future-possibilities) for a discussion
    about the arising soundness issues and their remedies.
 
-   We provide the checking environment for our contract with a special new
-   `proof_for_contract` harness.
+   We provide the checking environment for our contract with a
+   `proof_for_contract` harness that specifies the contract it is supposed to
+   check.
 
    ```rs
    #[kani::proof_for_contract(my_div)]
@@ -116,14 +116,14 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
    Similar to a verification harness for any other function, we are supposed to
    create all possible input combinations the function can encounter, then call
    the function at least once with those abstract inputs. If we forget to call
-   `my_div` Kani reports an error.
+   `my_div` Kani reports an error. Unlike other harnesses we only need to create
+   suitable data structures but we don't need to add any checks as Kani will
+   use the conditions we specified in the contract. 
    
-   Unlike a unit-test we can however elide any checks of the output and
-   post-call state. Instead Kani uses the conditions we specified in the
-   contract as checks. Preconditions (`requires`) are inserted as `kani::assume`
-   *before* the call to `my_div`, limiting the generic inputs to those the
-   function is actually defined for. Postconditions (`ensures`) are inserted as
-   `kani::assert` checks *after* the call to `my_div`.
+   Kani inserts preconditions (`requires`) as `kani::assume` *before* the call
+   to `my_div`, limiting inputs to those the function is actually defined for.
+   It inserts postconditions (`ensures`) as `kani::assert` checks *after* the
+   call to `my_div` enforcing the contract.
 
    The expanded version of our harness and function is equivalent to the following:
 
@@ -138,16 +138,16 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
    }
    ```
 
-   This expanded harness is then verified like any other harness but also gives
-   the green light for the next step: verified stubbing.
+   Kani verifies the expanded harness like any other harness which gives the
+   green light for the next step: verified stubbing.
 
 3. In the last phase the **verified** contract is ready for us to use to
    **stub** other harnesses.
 
    Unlike in regular stubbing, there has to be at least one associated
-   `proof_for_contract` harness for each function to stub *and* it requires all
-   such harnesses to pass verification before attempting verification of any
-   harnesses that use it as a stub.
+   `proof_for_contract` harness for each function to stub *and* by default it
+   requires all such harnesses to pass verification before attempting
+   verification of any harnesses that use it as a stub.
 
    A possible harness that uses our `my_div` contract could be the following:
 
@@ -325,9 +325,22 @@ not local variables. Compare the following
 
 And it will only be recognized as `old(...)`, not as `let old1 = old; old1(...)` etc.
 
-### Detailed Attribute Contraints Overview
+### Workflow and Attribute Contraints Overview
 
-Any violation of the following constraints constitutes a compile-time error.
+1. By default `kani` or `cargo kani` first verifies all contract harnesses
+   (`proof_for_contract`) reachable from the file or in the local workspace
+   respectively.
+2. Each contract that is used in a `stub_verified` is required to have at least
+   one associated contract harness. Kani reports any missing contract harnesses
+   as errors.
+3. Kani verifies all non-contract harnesses where every `stub_verified` they use
+   had at least one contract harness present and all verifications of contract
+   harnesses succeeded.
+
+When specific harnesses are selected (with `--harness`) contracts are not
+verified.
+
+Kani reports a compile time error if any of the following constraints are violated:
 
 - A function may have any number of `requires`, `ensures`, `modifies` and `frees`
   attributes. Any function with at least one such annotation is considered as
@@ -457,13 +470,14 @@ variables and their occurrence in the postcondition is renamed.
 
 ### Recursion
 
-Verifying contrcts for recursive functions is performed inductively. Upon
-reentry of the function we use the replacement of the contract instead of the
-function body.
+Kani verifies contractgs for recursive functions inductively. Reentry of the
+function is detected with a static variable and in this case we use the
+replacement of the contract instead of the function body.
 
-The mechanism is generating an additional wrapper function around the check,
-with a global variable to track reentry. If we use the `pop` example from before
-we would get the following pattern after macro expansion.
+Kani generates an additional wrapper around the function to add this detection.
+The additional wrapper is there so we can place the `modifies` contract on
+`check_pop` and `replace_pop` instead of `recursion_wrapper` which prevents CBMC
+from triggering its recursion induction.
 
 ```rs
 #[checked_with = "recursion_wrapper"]
@@ -600,13 +614,6 @@ This is the technical portion of the RFC. Please provide high level details of t
 
 - Is it really correct to return `kani::any()` from the replacement copy, even
   if it can be a pointer?
-- Our handling of `impl` in `requires` and `ensures` macros is brittle, though
-  probably can't be improved. If the contracted function is an `impl` item, then
-  the call to the next onion layer has to be `Self::<next fn>()` instead of
-  `<next fn>()`. However we have no reliable way of knowing when we are in an
-  `impl` fn. The macro uses a heuristic (is `self` or `Self` present) but in
-  theory a user can declare an `impl` fn that never uses either `Self` or `self`
-  in which case we generate broken code that throws cryptic error messages.
 - Making result special. Should we use special syntax here like `@result` or
   `kani::result()`, though with the latter I worry that people may get confused
   because it is syntactic and not subject to usual `use` renaming and import
@@ -614,7 +621,31 @@ This is the technical portion of the RFC. Please provide high level details of t
   argument to `ensures`, e.g. `ensures(my_result_var, CONDITION)`
 
   See [#2597](https://github.com/model-checking/kani/issues/2597)
+- How to check the right contracts at the right time. By default `kani` and
+  `cargo kani` check all contracts in a file/workspace. This represents the
+  safest option for the user but may be too costly in some cases.
 
+  The user should be provided with options to disable contract checking for the
+  sake of efficiency. Such options may look like this:
+
+  - **By default** (`kani`/`cargo kani`) all local contracts are checked, dependent
+    harnesses are only checked if their dependent contracts succeeded.
+  - **With harness selection** (`--harness`) only those contracts which the
+    selected harnesses depend on are checked.
+  - **For high assurance** passing a `--paranoid` flag also checks contracts for
+    dependencies (other crates) when they are used in stubs.
+  - **Per harness** the users can disable the checking for specific contracts
+    via attribute, like `#[stub_verified(TARGET, trusted)]` or
+    `#[stub_unverified(TARGET)]`. This also plays nicely with `cfg_attr`.
+  - **On the command line** users can similarly disable contract checks by
+    passing (multiple times) `--trusted TARGET` to skip checking those
+    contracts.
+  - **The bold** (or naïve) user can skip all contracts with `--all-trusted`.
+  - **For the lawyer** that is only interested in checking contracts and nothing
+    else a `--litigate` flag checks only contract harnesses.
+
+  Aside: I'm obviously having some fun here with the names, happy to change,
+  it's more about the semantics.
  
 <!-- 
 - Is there any part of the design that you expect to resolve through the RFC process?
