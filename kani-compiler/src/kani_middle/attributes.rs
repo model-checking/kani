@@ -192,6 +192,9 @@ impl<'tcx> KaniAttributes<'tcx> {
     }
 }
 
+/// An efficient check for the existence for a particular [`KaniAttributeKind`].
+/// Unlike querying [`KaniAttributes`] this method builds no new heap data
+/// structures and has short circuiting.
 fn has_kani_attribute<F: Fn(KaniAttributeKind) -> bool>(
     tcx: TyCtxt,
     def_id: DefId,
