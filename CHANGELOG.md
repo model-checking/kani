@@ -7,20 +7,20 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 ## [0.34.0]
 
 ### Breaking Changes
-* Change default solver to CaDiCaL by @celinval in https://github.com/model-checking/kani/pull/2557
+* Change default solver to CaDiCaL ([pull request](https://github.com/model-checking/kani/pull/2557) by @celinval)
 By default, Kani will now run CBMC with CaDiCaL, since this solver has outperformed Minisat in most of our benchmarks.
 User's should still be able to select Minisat (or a different solver) either by using `#[solver]` harness attribute,
 or by passing `--solver=<SOLVER>` command line option.
 
 ## What's Changed
 
-* Allow specifying the scheduling strategy in #[kani_proof] for async functions by @fzaiser in https://github.com/model-checking/kani/pull/1661
-* Support for stubbing out foreign functions by @feliperodri in https://github.com/model-checking/kani/pull/2658
-* Coverage reporting without a need for cbmc-viewer by @adpaco-aws in https://github.com/model-checking/kani/pull/2609
-* Add support to array-based SIMD by @celinval in https://github.com/model-checking/kani/pull/2633
-* Add unchecked/SIMD bitshift checks and disable CBMC flag by @reisnera in https://github.com/model-checking/kani/pull/2630
-* Bump CBMC to v5.89.0 by @remi-delmas-3000 in https://github.com/model-checking/kani/pull/2662
-* Update Rust toolchain to nightly 2023-08-04 by @remi-delmas-3000 in https://github.com/model-checking/kani/pull/2661
+* Allow specifying the scheduling strategy in #[kani_proof] for async functions ([pull request](https://github.com/model-checking/kani/pull/1661) by @fzaiser)
+* Support for stubbing out foreign functions ([pull request](https://github.com/model-checking/kani/pull/2658) by @feliperodri)
+* Coverage reporting without a need for cbmc-viewer ([pull request](https://github.com/model-checking/kani/pull/2609) by @adpaco-aws)
+* Add support to array-based SIMD ([pull request](https://github.com/model-checking/kani/pull/2633) by @celinval)
+* Add unchecked/SIMD bitshift checks and disable CBMC flag ([pull request](https://github.com/model-checking/kani/pull/2630) by @reisnera)
+* Bump CBMC to v5.89.0 ([pull request](https://github.com/model-checking/kani/pull/2662) by @remi-delmas-3000)
+* Update Rust toolchain to nightly 2023-08-04 ([pull request](https://github.com/model-checking/kani/pull/2661) by @remi-delmas-3000)
 
 ## New Contributors
 * @reisnera made their first contribution in https://github.com/model-checking/kani/pull/2630
