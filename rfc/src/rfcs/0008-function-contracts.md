@@ -41,18 +41,13 @@ following two ambitious goals.
   behavior. By verifiying the contract against its implemetation and
   subsequently performing caller verification against the (cheaper) abstraction,
   verification can be modularized, cached and thus scaled.
-- **Unbounded Verification:** The abstraction provided by the contract can be used instead of a recursive call, thus allowing verification of recursive functions.
+- **Unbounded Verification:** The abstraction provided by the contract can be
+  used instead of a recursive call, thus allowing verification of recursive
+  functions.
 
-Enabling function contracts is a non-invasive change. While it contains a new
-API, that API is strictly additive for users. All prior operations are unchanged.
+Function contracts are completely optional with no user impact if unused. The
+newly introduced APIs are entirely backwards compatible.
 
-### Caveats
-
-We add function contract functionality, but do not add the inductive reasoning
-support needed for many unbounded problems, such as ["decreases"
-measures](https://diffblue.github.io/cbmc/contracts-decreases.html) and
-inductive lemmas (for instance in [ACSL](https://frama-c.com/download/acsl.pdf)
-section 2.6.3 "inductive predicates").
 
 ## User Experience
 
@@ -89,15 +84,14 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
 
    Conditions in contracts are plain Rust expressions which can reference the
    function arguments and, in case of `ensures`, the result of the function as a
-   special `result`[^result-naming] variable. Syntactically Kani supports any
-   Rust expression, including function calls, defining types etc. However they
-   must be side-effect free[^side-effects] or Kani will throw a compile error.
+   special `result` variable (see [open questions](#open-questions) on a
+   discussion about (re)naming). Syntactically Kani supports any Rust
+   expression, including function calls, defining types etc. However they must
+   be side-effect free[^side-effects] or Kani will throw a compile error.
 
    Multiple `requires` and `ensures` clauses are allowed on the same function,
    they are implicitly logically conjoined.
 
-   [^result-naming]: See [open questions](#open-questions) for a discussion
-       about naming of the result variable.
 
 2. Next, Kani must make sure that the approximation we specified actually holds
    by **checking** the contract against the implementation. This is in contrast
@@ -174,7 +168,7 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
    `kani::assume` of the postconditions (`ensures`).
    
    Mutable memory is similarly made non-deterministic, discussed later in
-   [havociing](#memory-predicates-and-havocing).
+   [havocking](#memory-predicates-and-havocking).
 
    Stubbing `my_div` expands it similar to this:
   
@@ -200,7 +194,7 @@ stubs diverging from their checks.
     (de)allocate heap memory. This is enforced by the verifier, see the
     discussion in the [future](#future-possibilities) section.
 
-### Write Sets and Havocing
+### Write Sets and havocking
 
 A return value is only one way in which a function may communicate data. It can
 also communicate data by modifying values stored behind mutable pointers.
@@ -225,7 +219,7 @@ set of memory locations a function may modify, from the type system. As a result
 any data pointed to by a mutable reference or pointer is considered part of the
 write set. In addition a static analysis of the source code discovers any
 `static mut` variables the function or it's dependencies reference and add all
-pointed-to data to the write set also. During havocing all locations in the
+pointed-to data to the write set also. During havocking all locations in the
 write set are replaced by non-deterministic values by the verifier.
 
 While the inferred write set is sound and enough for successful contract
@@ -233,44 +227,47 @@ checking[^inferred-footprint] in many cases (such as `pop`) this inference is
 too coarse grained. In this case every value in this vector will be made
 non-deterministic.
 
-This proposal also adds an `assigns` and `frees` clause which limits the scope
-of havocing. Both clauses represent an assertion that the function will modify
+This proposal also adds an `modifies` and `frees` clause which limits the scope
+of havocking. Both clauses represent an assertion that the function will modify
 only the specified memory regions. Similar to requires/ensures the verifier
 enforces the assertion in the checking stage to ensure soundness. When the
-contract is used as a stub the assigns clause is used as the write set to havoc.
+contract is used as a stub the modifies clause is used as the write set to havoc.
 
 In our `pop` example the only modified memory location is the last element and
 only if the vector was not already empty, which would be specified thusly.
 
 ```rs
 impl<T> Vec<T> {
-  #[assigns(!self.is_empty(), (*self).buf.ptr.pointer.pointer[self.len])]
-  #[assigns(self.is_empty(), false)]
+  #[modifies(!self.is_empty(), (*self).buf.ptr.pointer.pointer[self.len])]
+  #[modifies(self.is_empty(), false)]
   fn pop(&mut self) -> Option<T> {
     ...
   }
 }
 ```
 
-The `#[assigns(CONDITION, ASSIGNS_RANGE)]` consists of an optional `CONDITION`
-(defaults to `true`) and a `ASSIGNS_RANGE` which is essentially an lvalue. 
+The `#[modifies(CONDITION, MODIFIES_RANGE)]` consists of an optional `CONDITION`
+(defaults to `true`) and a `MODIFIES_RANGE` which is essentially an lvalue. 
 
 Lvalues are simple expressions permissible on the left hand side of an
-assignment. They compose of the name of one function argument and zero or more
-projections (dereference `*`, field access `.x`, slice indexing `[1]`).
+assignment. They compose of the name of one function argument (or static
+variable) and zero or more projections (dereference `*`, field access `.x`,
+slice indexing `[1]`[^slice-exprs]).
+
+[^slice_exprs]: Slice indices can be lvalues and integer arithmetic expressions.
 
 Because lvalues are restricted to using projections only, Kani must break
 encapsulation here. If need be we can reference fields that are usually hidden,
 without an error from the compiler.
 
-In addition to lvalues an `ASSIGNS_RANGE` can also be terminated with a more
+In addition to lvalues an `MODIFIES_RANGE` can also be terminated with a more
 complex slice expressions as the last projection. This only applies to `*mut`
 pointers to arrays. For instance this is needed for `Vec::truncate` where all of
 the the latter section of the allocation is assigned (dropped).
 
 ```rs
 impl<T> Vec<T> {
-  #[assigns(self.buf.ptr.pointer.pointer[len..])]
+  #[modifies(self.buf.ptr.pointer.pointer[len..])]
   fn truncate(&mut self, len: usize) {
     ...
   }
@@ -278,12 +275,12 @@ impl<T> Vec<T> {
 ```
 
 `[..]` denotes the entirety of an allocation, `[i..]`, `[..j]` and `[i..j]` are
-ranges of pointer offsets. The slice indices are offsets with sizing `T`, e.g.
+ranges of pointer offsets[^slice-expr]. The slice indices are offsets with sizing `T`, e.g.
 in Rust `p[i..j]` would be equivalent to
 `std::slice::from_raw_parts(p.offset(i), i - j)`. `i` must be smaller or equal
 than `j`.
 
-A `#[frees(CONDITION, LVALUE)]` clause works similarly to `assigns` but denotes
+A `#[frees(CONDITION, LVALUE)]` clause works similarly to `modifies` but denotes
 memory that is deallocated. It does not admit slice syntax, only lvalues.
 
 [^inferred-footprint]: While inferred memory footprints are sound for both safe
@@ -331,7 +328,7 @@ And it will only be recognized as `old(...)`, not as `let old1 = old; old1(...)`
 
 Any violation of the following constraints constitutes a compile-time error.
 
-- A function may have any number of `requires`, `ensures`, `assigns` and `frees`
+- A function may have any number of `requires`, `ensures`, `modifies` and `frees`
   attributes. Any function with at least one such annotation is considered as
   "having a contract".
 
@@ -457,19 +454,62 @@ the borrow checker like this is safe for 2 reasons:
 The "copies" of arguments created by by `unsafe_deref` are stored as fresh local
 variables and their occurrence in the postcondition is renamed.
 
+### Recursion
+
+Verifying contrcts for recursive functions is performed inductively. Upon
+reentry of the function we use the replacement of the contract instead of the
+function body.
+
+The mechanism is generating an additional wrapper function around the check,
+with a global variable to track reentry. If we use the `pop` example from before
+we would get the following pattern after macro expansion.
+
+```rs
+#[checked_with = "recursion_wrapper"]
+#[replaced_with = "replace_pop"]
+fn pop(&mut self) { ... }
+
+fn check_pop(&mut self) { ... }
+
+fn replace_pop(&mut self) { ... }
+
+fn recursion_wrapper(&mut self) { 
+  static mut IS_ENTERED: bool;
+
+  if unsafe { IS_ENTERED } {
+    replace_pop(self)
+  } else {
+    unsafe { IS_ENTERED = true; }
+    check_pop(self)
+  }
+}
+```
+
+Note that this is insufficient to verify all types of recursive functions, as
+the contract specification language has no support for inductive lemmas
+inductive lemmas (for instance in [ACSL](https://frama-c.com/download/acsl.pdf)
+section 2.6.3 "inductive predicates"). Inductive lemmas are usually needed for
+recursive datastructures.
+
 ### Changes to Other Components
 
 Contract enforcement and replacement (`kani::proof_for_contract(f)`,
-`kani::stub_verified(f)`) both dispatch to the stubbing logic, stubbing `f` with
-the generated check and replace function respectively. If `f` has no contract,
-an error is thrown.
+`kani::stub_verified(f)`) both dispatch to the **stubbing logic**, stubbing `f`
+with the generated check and replace function respectively. If `f` has no
+contract, an error is thrown.
 
-For memory predicates Kani relies on CBMC. Generated memory predicates (whether
-derived from types of from explicit clauses) are emitted from the compiler as
-GOTO contracts in the artifact. Then the driver invokes `goto-instrument` with
-the name of the GOTO-level function names to enforce or replace the memory
-contracts. The compiler communicates the names of the function via harness
-metadata.
+For **write sets and memory predicates** Kani relies on CBMC. Generated memory
+predicates (whether derived from types of from explicit clauses) are emitted
+from the compiler as GOTO contracts in the artifact. Then the driver invokes
+`goto-instrument` with the name of the GOTO-level function names to enforce or
+replace the memory contracts. The compiler communicates the names of the
+function via harness metadata.
+
+**Side effect** freedom is enforced with an MIR traversal over all code
+reachable from a contract expression. An error is thrown if known side-effecting
+actions are performed such as `ptr::write`, `malloc` or `free` and reported as a
+graceful compiler error. If the code calls out to C we rely on CBMC to catch the
+violation dynamically, resulting in a less readable error.
 
 <!-- 
 This is the technical portion of the RFC. Please provide high level details of the implementation you have in mind:
@@ -536,7 +576,23 @@ This is the technical portion of the RFC. Please provide high level details of t
   only thing required to make this work is an additional pass over the condition
   that replaces every `self` with a fresh identifier that now becomes the first
   argument of the function.
-- **Explicit command line checking/substitution vs attributes**
+- **Explicit command line checking/substitution vs attributes:** Instead of
+  adding a new special `proof_for_contact` attributes we could have instead done:
+
+  1. **Check contracts on the command line** like CBMC does. This makes contract
+     checking a separate `kani` invocation with something like a
+     `--check-contract` flag that directs the system to instrument the function.
+     This is a very flexible design, but also easily used incorrectly.
+     Specifically nothing in the source indicates which harnesses are supposed
+     to be used for which contract, users must remember to invoke the check and
+     are also responsible for ensuring they really do verify *all* contacts they
+     will later be replacing and lastly.
+  2. **Check contracts with a `#[proof]` harness.** This would have used e.g. a
+     `#[for_contract]` attributes on a `#[proof]`. Since `#[for_contract]` is
+     *only* valid on a proof, we decided to just imply it and save the user some
+     headache. Contract checking harnesses are not meant to be reused for other
+     purposes anyway and if the user *really* wants to the can just factor out the
+     actual contents of the harness to reuse it.
 
 ## Open questions
 
@@ -577,10 +633,6 @@ This is the technical portion of the RFC. Please provide high level details of t
   interface is familiar to developers, but the code generation is tricky, as
   CBMC level quantifiers only allow certain kinds of expressions. This
   necessiates a rewrite of the `Fn` closure to a compliant expression.
-- **Side effect** freedom is currently enforced by CBMC. This means that the error
-  originates there and is likely not legible. Intead Kani should perform a
-  reachability analysis from the contract expressions and determine whether side
-  effects are possible, throwing a graceful error.
 - Letting the user supply the **harnesses for checking contracts** is a source of
   unsoundness, if corner cases are not adequately covered. Ideally Kani would
   generate the check harness automatically, but this is difficult both because
