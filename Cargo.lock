@@ -120,7 +120,7 @@ dependencies = [
 
 [[package]]
 name = "build-kani"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "anyhow",
  "cargo_metadata",
@@ -267,7 +267,7 @@ dependencies = [
 
 [[package]]
 name = "cprover_bindings"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "lazy_static",
  "linear-map",
@@ -487,14 +487,14 @@ checksum = "af150ab688ff2122fcef229be89cb50dd66af9e01a4ff320cc137eecc9bacc38"
 
 [[package]]
 name = "kani"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "kani_macros",
 ]
 
 [[package]]
 name = "kani-compiler"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "clap",
  "cprover_bindings",
@@ -515,7 +515,7 @@ dependencies = [
 
 [[package]]
 name = "kani-driver"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "anyhow",
  "cargo_metadata",
@@ -542,7 +542,7 @@ dependencies = [
 
 [[package]]
 name = "kani-verifier"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "anyhow",
  "home",
@@ -551,7 +551,7 @@ dependencies = [
 
 [[package]]
 name = "kani_macros"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "proc-macro-error",
  "proc-macro2",
@@ -561,7 +561,7 @@ dependencies = [
 
 [[package]]
 name = "kani_metadata"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "cprover_bindings",
  "serde",
@@ -1149,7 +1149,7 @@ checksum = "62bb4feee49fdd9f707ef802e22365a35de4b7b299de4763d44bfea899442ff9"
 
 [[package]]
 name = "std"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "kani",
 ]
