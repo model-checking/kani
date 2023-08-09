@@ -254,7 +254,7 @@ assignment. They compose of the name of one function argument (or static
 variable) and zero or more projections (dereference `*`, field access `.x`,
 slice indexing `[1]`[^slice-exprs]).
 
-[^slice_exprs]: Slice indices can be lvalues and integer arithmetic expressions.
+[^slice-exprs]: Slice indices can be lvalues and integer arithmetic expressions.
 
 Because lvalues are restricted to using projections only, Kani must break
 encapsulation here. If need be we can reference fields that are usually hidden,
@@ -474,7 +474,7 @@ fn check_pop(&mut self) { ... }
 fn replace_pop(&mut self) { ... }
 
 fn recursion_wrapper(&mut self) { 
-  static mut IS_ENTERED: bool;
+  static mut IS_ENTERED: bool = false;
 
   if unsafe { IS_ENTERED } {
     replace_pop(self)
