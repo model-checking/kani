@@ -254,7 +254,8 @@ assignment. They compose of the name of one function argument (or static
 variable) and zero or more projections (dereference `*`, field access `.x`,
 slice indexing `[1]`[^slice-exprs]).
 
-[^slice-exprs]: Slice indices can be lvalues and integer arithmetic expressions.
+[^slice-exprs]: Slice indices can be lvalues referencing function arguments,
+    constants and integer arithmetic expressions.
 
 Because lvalues are restricted to using projections only, Kani must break
 encapsulation here. If need be we can reference fields that are usually hidden,
@@ -371,7 +372,7 @@ Kani implements the functionality of function contracts in two places.
 
 1. Code generation in the `requires` and `ensures` macros (`kani_macros`).
 2. GOTO level contracts using CBMC's contract language generated in
-   `kani-compiler` for handling memory predicates.
+   `kani-compiler` for `modifies` clauses.
 
 With some additional plumbing in the compiler and the driver.
 
@@ -498,12 +499,11 @@ Contract enforcement and replacement (`kani::proof_for_contract(f)`,
 with the generated check and replace function respectively. If `f` has no
 contract, an error is thrown.
 
-For **write sets and memory predicates** Kani relies on CBMC. Generated memory
-predicates (whether derived from types of from explicit clauses) are emitted
-from the compiler as GOTO contracts in the artifact. Then the driver invokes
-`goto-instrument` with the name of the GOTO-level function names to enforce or
-replace the memory contracts. The compiler communicates the names of the
-function via harness metadata.
+For **write sets** Kani relies on CBMC. `modifies` clauses (whether derived from
+types of from explicit clauses) are emitted from the compiler as GOTO contracts
+in the artifact. Then the driver invokes `goto-instrument` with the name of the
+GOTO-level function names to enforce or replace the memory contracts. The
+compiler communicates the names of the function via harness metadata.
 
 **Side effect** freedom is enforced with an MIR traversal over all code
 reachable from a contract expression. An error is thrown if known side-effecting
@@ -600,7 +600,7 @@ This is the technical portion of the RFC. Please provide high level details of t
 
 - Is it really correct to return `kani::any()` from the replacement copy, even
   if it can be a pointer?
-- Our handling of `impl` in `reuqires` and `ensures` macros is brittle, though
+- Our handling of `impl` in `requires` and `ensures` macros is brittle, though
   probably can't be improved. If the contracted function is an `impl` item, then
   the call to the next onion layer has to be `Self::<next fn>()` instead of
   `<next fn>()`. However we have no reliable way of knowing when we are in an
