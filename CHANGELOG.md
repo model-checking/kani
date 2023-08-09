@@ -14,6 +14,17 @@ or by passing `--solver=<SOLVER>` command line option.
 
 ## What's Changed
 
+* Allow specifying the scheduling strategy in #[kani_proof] for async functions by @fzaiser in https://github.com/model-checking/kani/pull/1661
+* Support for stubbing out foreign functions by @feliperodri in https://github.com/model-checking/kani/pull/2658
+* Coverage reporting without a need for cbmc-viewer by @adpaco-aws in https://github.com/model-checking/kani/pull/2609
+* Add support to array-based SIMD by @celinval in https://github.com/model-checking/kani/pull/2633
+* Add unchecked/SIMD bitshift checks and disable CBMC flag by @reisnera in https://github.com/model-checking/kani/pull/2630
+* Bump CBMC to v5.89.0 by @remi-delmas-3000 in https://github.com/model-checking/kani/pull/2662
+* Update Rust toolchain to nightly 2023-08-04 by @remi-delmas-3000 in https://github.com/model-checking/kani/pull/2661
+
+## New Contributors
+* @reisnera made their first contribution in https://github.com/model-checking/kani/pull/2630
+
 **Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.33.0...kani-0.34.0
 
 ## [0.33.0]
