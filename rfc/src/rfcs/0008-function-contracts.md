@@ -4,7 +4,7 @@
 - **Status:** Under Review 
 - **Version:** 0
 - **Proof-of-concept:** [features/contracts](https://github.com/model-checking/kani/tree/features/contracts)
-- **Gate:** `-Zcontracts`, enforced by compile time error[^gate]
+- **Feature Gate:** `-Zcontracts`, enforced by compile time error[^gate]
 
 [^gate]: Enforced gates means all uses of constructs (functions, annotations,
     macros) in this RFC are an error.
@@ -32,7 +32,7 @@ following two ambitious goals.
 
 [^simple-unsoundness]: The main remaining threat to soundness in the use of
     contracts, as defined in this proposal, is the reliance on user-supplied
-    harnesses for contract checking (explained in bulled 2 of [user
+    harnesses for contract checking (explained in item 2 of [user
     experience](#user-experience)). A more thorough discussion on the dangers
     and potential remedies can be found in the [future](#future-possibilities)
     section.
@@ -56,9 +56,9 @@ section 2.6.3 "inductive predicates").
 
 ## User Experience
 
-Function contract provide a verifiable way to specify function behavior. In
-addition the specified behavior can subsequently be used as an abstraction of
-the functions behavior at call sites.
+Function contracts provide a verifiable way to specify function behavior. In
+addition, the specified behavior can subsequently be used as an abstraction of
+the function's behavior at call sites.
 
 The lifecycle of a contract is split roughly into three phases: specification,
 verification and stubbing. Which we will explore on this simple example:
@@ -99,12 +99,11 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
    [^result-naming]: See [open questions](#open-questions) for a discussion
        about naming of the result variable.
 
-2. Next Kani must make sure that the approximation we specified actually holds
+2. Next, Kani must make sure that the approximation we specified actually holds
    by **checking** the contract against the implementation. This is in contrast
    to ["stubbing"][stubbing], where the approximation is blindly trusted.
 
    The contract must always overapproximate the function to guarantee soundness.
-
    To facilitate the check Kani needs a suitable environment to verify the
    function in. For this proposal the environment must be provided by us (the
    users). See [future possibilities](#future-possibilities) for a discussion
