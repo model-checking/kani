@@ -13,10 +13,11 @@
 
 ## Summary
 
-Function contracts are a mechanism for a [stubbing]-like abstraction of concrete
-implementations but with a significantly reduced threat to soundness[^simple-unsoundness].
+Function contracts are a mechanism, similar to [stubbing], which allows a
+concrete implementations to be replaced by an overapproximation without losing
+soundness[^simple-unsoundness].
 
-Lays the ground work for modular verification.
+this allows for a modular verification.
 <!-- Shorter? -->
 
 [stubbing]: https://model-checking.github.io/kani/rfc/rfcs/0002-function-stubbing.html
@@ -25,10 +26,9 @@ Lays the ground work for modular verification.
 
 <!-- Is basically the pitch and addressing the user. -->
 
-Function contracts provide an interface for verified abstraction, a mechanism
-similar to [stubbing], but sound[^simple-unsoundness]. This kind of verified
-stubbing allows for modular verification, which paves the way for the
-following two ambitious goals.
+Function contracts provide an interface for a verified,
+sound[^simple-unsoundness] type of of [stubbing]. This allows for modular
+verification, which paves the way for the following two ambitious goals.
 
 [^simple-unsoundness]: The main remaining threat to soundness in the use of
     contracts, as defined in this proposal, is the reliance on user-supplied
@@ -51,12 +51,11 @@ newly introduced APIs are entirely backwards compatible.
 
 ## User Experience
 
-Function contracts provide a verifiable way to specify function behavior. In
-addition, the specified behavior can subsequently be used as an  of
-the function's behavior at call sites.
+A function contracts approximates the behavior of a function. This approximation
+can subsequently be used as a stub for the concrete implementation.
 
-The lifecycle of a contract is split roughly into three phases: specification,
-verification and stubbing. Which we will explore on this simple example:
+The lifecycle of a contract is split into three phases: specification,
+verification and stubbing, which we will explore on this example:
 
 ```rs
 fn my_div(dividend: u32, divisor: u32) -> u32 {
@@ -82,12 +81,13 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
 
    `ensures` puts a bound on the output, relative to the `dividend` input.
 
-   Conditions in contracts are plain Rust expressions which can reference the
-   function arguments and, in case of `ensures`, the result of the function as a
-   special `result` variable (see [open questions](#open-questions) on a
-   discussion about (re)naming). Syntactically Kani supports any Rust
-   expression, including function calls, defining types etc. However they must
-   be side-effect free[^side-effects] or Kani will throw a compile error.
+   Conditions in contracts are plain Rust expressions which reference the
+   function arguments and, in case of `ensures`, the return value of the
+   function. The return value is a special variable called `result` (see [open
+   questions](#open-questions) on a discussion about (re)naming). Syntactically
+   Kani supports any Rust expression, including function calls, defining types
+   etc. However they must be side-effect free (see also side effects
+   [here](#changes-to-other-components)) or Kani will throw a compile error.
 
    Multiple `requires` and `ensures` clauses are allowed on the same function,
    they are implicitly logically conjoined.
@@ -98,9 +98,10 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
    ["stubbing"][stubbing], where the approximation is trusted blindly.
 
    To facilitate this check Kani needs a suitable environment to verify the
-   function in. For this proposal the environment must be provided by us (the
-   users). See [future possibilities](#future-possibilities) for a discussion
-   about the arising soundness issues and their remedies.
+   function in. Kani demands of us, as the user, to provide this environment.
+   This is a limitation of this proposal, see also [future
+   possibilities](#future-possibilities) for a discussion about the arising
+   soundness issues and their remedies.
 
    We provide the checking environment for our contract with a
    `proof_for_contract` harness that specifies the contract it is supposed to
@@ -188,11 +189,6 @@ checking is, by construction, performed **against the same condition** that is
 later used as stub, which ensures soundness (see discussion on lingering threats
 to soundness in the [future](#future-possibilities) section) and guarding against
 stubs diverging from their checks.
-
-[^side-effects]: Code used in contracts is required to be side effect free which
-    means it must not perform I/O, mutate memory (`&mut` vars and such) or
-    (de)allocate heap memory. This is enforced by the verifier, see the
-    discussion in the [future](#future-possibilities) section.
 
 ### Write Sets and havocking
 
@@ -311,7 +307,7 @@ impl<T> Vec<T> {
 }
 ```
 
-`old` allows evaluating any (side-effect free[^side-effects]) Rust expression.
+`old` allows evaluating any (side-effect free, see [here](#changes-to-other-components)) Rust expression.
 The borrow checker enforces the result of `old` cannot observe the mutations
 from e.g. `pop`, as that would defeat the purpose. If `your` expression in `old`
 returns borrowed content, make a copy instead (using e.g. `clone()`).
@@ -461,9 +457,10 @@ using a new hidden builtin `kani::unckecked_deref` with the type signature `for
 <T> fn (&T) -> T` which is essentially a C-style dereference operation. Breaking
 the borrow checker like this is safe for 2 reasons:
 
-1. Postconditions are not allowed perform mutation[^side-effects] and
+1. Postconditions are not allowed perform mutation and
 2. Post conditions are of type `bool`, meaning they cannot leak references to
-   the arguments and cause race conditions.
+   the arguments and cause the race conditions the Rust type system tries to
+   prevent.
 
 The "copies" of arguments created by by `unsafe_deref` are stored as fresh local
 variables and their occurrence in the postcondition is renamed.
@@ -495,8 +492,10 @@ fn recursion_wrapper(&mut self) {
     replace_pop(self)
   } else {
     unsafe { IS_ENTERED = true; }
-    check_pop(self)
-  }
+    let result = check_pop(self);
+    unsafe { IS_ENTERED = false; }
+    result
+  };
 }
 ```
 
@@ -519,11 +518,14 @@ in the artifact. Then the driver invokes `goto-instrument` with the name of the
 GOTO-level function names to enforce or replace the memory contracts. The
 compiler communicates the names of the function via harness metadata.
 
-**Side effect** freedom is enforced with an MIR traversal over all code
-reachable from a contract expression. An error is thrown if known side-effecting
-actions are performed such as `ptr::write`, `malloc` or `free` and reported as a
-graceful compiler error. If the code calls out to C we rely on CBMC to catch the
-violation dynamically, resulting in a less readable error.
+
+Code used in contracts is required to be **side effect** free which means it
+must not perform I/O, mutate memory (`&mut` vars and such) or (de)allocate heap
+memory. This is enforced in two layers. First with an MIR traversal over all
+code reachable from a contract expression. An error is thrown if known
+side-effecting actions are performed such as `ptr::write`, `malloc` or `free` in
+a second layer we rely on CBMC to catch the violation dynamically if the code
+calls out to C, ensuring soundness but causing less readable errors.
 
 <!-- 
 This is the technical portion of the RFC. Please provide high level details of the implementation you have in mind:
@@ -673,16 +675,27 @@ This is the technical portion of the RFC. Please provide high level details of t
   A complete solution for this is not known to us but there are ongoing
   investigations into harness generation mechanisms in CBMC.
 
-  One mechanism that is known to us already and potentially applicable to Kani
-  is using *memory predicates* to declaratively describe the state of the heap
-  both before and after the function call. 
+  Environments that are non-inductive, safe Rust (e.g. no recursively defined
+  data structures, no raw pointers). Could be inferred from the type.
+
+  For Dealing with pointers one applocable mechanism could be *memory
+  predicates* to declaratively describe the state of the heap both before and
+  after the function call. 
   
   In CBMC's implementation heap predicates are simply part of the
   pre/postconditions. This does not easily translate to Kani, since we handle
   pre/postconditions manually and mainly in proc-macros. There are multiple ways
   to bridge this gap, perhaps the easiest being to add memory predicates
   *separately* to Kani instead of as part of pre/postcondtions, so they can be
-  handled separately.
+  handled by forwarding them to CBMC. However this is also tricky, because
+  memory predicates are used to describe pointers and pointers only. Meaning
+  that if they are encapsulated in a structure (such as `Vec` or `RefCell`)
+  there is no way of specifying the target of the predicate without breaking
+  encapsulation (similar to `modifies`).
+  
+  A better solution would be for the data structure to declare its own
+  invariants at definition site which are automatically swapped in on every
+  contract that uses this type.
 - What about mutable trait inputs (wrt memory access patters), e.g. a `mut impl AccessMe`
 - **Trait contracts:** Ous proposal could be extended easily to handle simple
   trait contracts. The macros would generate new trait methods with default
