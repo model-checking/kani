@@ -26,8 +26,6 @@ use crate::kani_queries::QueryDb;
 
 use super::resolve::{self, resolve_fn};
 
-extern crate enum_map;
-
 #[derive(Debug, Clone, Copy, AsRefStr, EnumString, PartialEq, Eq, PartialOrd, Ord)]
 #[strum(serialize_all = "snake_case")]
 enum KaniAttributeKind {
@@ -378,8 +376,8 @@ impl<'tcx> KaniAttributes<'tcx> {
 /// A basic check that ensures a function with a contract does not receive
 /// mutable pointers in its input and does not return raw pointers of any kind.
 ///
-/// This is a temporary safety measure because contracts cannot yet reasona
-/// about those structures.
+/// This is a temporary safety measure because contracts cannot yet reason
+/// about the heap.
 fn check_is_contract_safe(tcx: TyCtxt, item: DefId) {
     use ty::TypeVisitor;
     struct NoMutPtr<'tcx> {
