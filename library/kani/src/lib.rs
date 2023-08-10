@@ -66,7 +66,7 @@ pub fn assume(cond: bool) {
 }
 
 /// If the `premise` is true, so must be the `conclusion`
-/// 
+///
 /// Note that boolean operators (such as `||`) are evaluated lazily by Rust.
 /// This function is not and both conditions will be evaluated always. As a
 /// reult this function is not intended to be used in regular code. Instead it

@@ -159,7 +159,9 @@ fn resolve_prefix<'tcx>(
 ) -> Result<Path, ResolveError<'tcx>> {
     debug!(?name, ?current_module, "resolve_prefix");
 
-    // Split the string into segments separated by `::`.
+    // Split the string into segments separated by `::`. Trim the whitespace
+    // since path strings generated from macros sometimes add spaces around
+    // `::`.
     let mut segments = name.split("::").map(|s| s.trim().to_string()).peekable();
     assert!(segments.peek().is_some(), "expected identifier, found `{name}`");
 

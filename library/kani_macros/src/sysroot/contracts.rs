@@ -50,12 +50,10 @@ fn identifier_for_generated_function(related_function: &ItemFn, purpose: &str, h
 }
 
 pub fn requires(attr: TokenStream, item: TokenStream) -> TokenStream {
-    //handle_requires_ensures("requires", false, attr, item)
     requires_ensures_alt(attr, item, true)
 }
 
 pub fn ensures(attr: TokenStream, item: TokenStream) -> TokenStream {
-    //handle_requires_ensures("ensures", true, attr, item)
     requires_ensures_alt(attr, item, false)
 }
 
@@ -78,11 +76,8 @@ impl<'ast> Visit<'ast> for ArgumentIdentCollector {
     }
 }
 
-/// Applies the contained renaming to every ident pattern and ident expr
-/// visited.
-///
-/// In each case if the path has only one segments that corresponds to a key, it
-/// is replaced by the ident in the value.
+/// Applies the contained renaming (key renamed to value) to every ident pattern
+/// and ident expr visited.
 struct Renamer<'a>(&'a HashMap<Ident, Ident>);
 
 impl<'a> VisitMut for Renamer<'a> {
@@ -96,7 +91,7 @@ impl<'a> VisitMut for Renamer<'a> {
     }
 
     /// This restores shadowing. Without this we would rename all ident
-    /// occurrences, but not the binding location. This is because our
+    /// occurrences, but not rebinding location. This is because our
     /// [`visit_expr_path_mut`] is scope-unaware.
     fn visit_pat_ident_mut(&mut self, i: &mut syn::PatIdent) {
         if let Some(new) = self.0.get(&i.ident) {
@@ -180,15 +175,19 @@ impl ContractFunctionState {
 struct PostconditionInjector(TokenStream2);
 
 impl VisitMut for PostconditionInjector {
-    fn visit_expr_closure_mut(&mut self, _: &mut syn::ExprClosure) {
-        // Empty because inside the closure we don't want to inject
-    }
+    /// We leave this emtpy to stop the recursion here. We don't want to look
+    /// inside the closure, because the return statements contained within are
+    /// for a different function, duh.
+    fn visit_expr_closure_mut(&mut self, _: &mut syn::ExprClosure) {}
 
     fn visit_expr_mut(&mut self, i: &mut Expr) {
         if let syn::Expr::Return(r) = i {
             let tokens = self.0.clone();
             let mut output = TokenStream2::new();
             if let Some(expr) = &mut r.expr {
+                // In theory the return expression can contain itself a `return`
+                // so we need to recurse here.
+                self.visit_expr_mut(expr);
                 output.extend(quote!(let result = #expr;));
                 *expr = Box::new(Expr::Verbatim(quote!(result)));
             }
@@ -207,11 +206,10 @@ impl VisitMut for PostconditionInjector {
 /// for the postconditions.
 ///
 /// This function
-/// - collects all [`Ident`]s found in the argument patterns
-/// - creates new names for them
+/// - Collects all [`Ident`]s found in the argument patterns
+/// - Creates new names for them
 /// - Replaces all occurrences of those idents in `attrs` with the new names and
-/// - Returns the mapping of old names to new names so the macro can emit the
-///   code that makes the copies.
+/// - Returns the mapping of old names to new names
 fn rename_argument_occurences(sig: &syn::Signature, attr: &mut Expr) -> HashMap<Ident, Ident> {
     let mut arg_ident_collector = ArgumentIdentCollector::new();
     arg_ident_collector.visit_signature(&sig);
@@ -234,26 +232,35 @@ fn rename_argument_occurences(sig: &syn::Signature, attr: &mut Expr) -> HashMap<
 /// The main meat of handling requires/ensures contracts.
 ///
 /// Generates a `check_<fn_name>_<fn_hash>` function that assumes preconditions
-/// and asserts postconditions.
+/// and asserts postconditions. The check function is also marked as generated
+/// with the `#[kanitool::is_contract_generated(check)]` attribute.
 ///
-/// Decorates the original function with `#[checked_by =
+/// Decorates the original function with `#[kanitool::checked_by =
 /// "check_<fn_name>_<fn_hash>"]
 ///
-/// The check function is a copy of the original function with pre and
-/// postconditions added before and after respectively. Each clause (requires or
-/// ensures) adds new layers of pre or postconditions to the check function.
+/// The check function is a copy of the original function with preconditions
+/// added before the body and postconditions after as well as injected before
+/// every `return` (see [`PostconditionInjector`]). Attributes on the original
+/// function are also copied to the check function. Each clause (requires or
+/// ensures) after the first will be ignored on the original function (detected
+/// by finding the `kanitool::checked_with` attribute). On the check function
+/// (detected by finding the `kanitool::is_contract_generated` attribute) it
+/// expands into a new layer of pre- or postconditions. This state machine is
+/// also explained in more detail in comments in the body of this macro.
 ///
-/// Postconditions are also injected before every `return` expression, see also
-/// [`PostconditionInjector`].
-///
-/// All arguments of the function are unsafely shallow-copied with the
-/// `kani::untracked_deref` function. We must ensure that those copies are not
+/// In the check function all named arguments of the function are unsafely
+/// shallow-copied with the `kani::untracked_deref` function to circumvent the
+/// borrow checker for postconditions. We must ensure that those copies are not
 /// dropped so after the postconditions we call `mem::forget` on each copy.
 ///
 /// # Complete example
 ///
 /// ```rs
-///
+/// #[kani::requires(divisor != 0)]
+/// #[kani::ensures(result <= dividend)]
+/// fn div(dividend: u32, divisor: u32) -> u32 {
+///     dividend / divisor
+/// }
 /// ```
 ///
 /// Turns into
@@ -314,13 +321,6 @@ fn requires_ensures_alt(attr: TokenStream, item: TokenStream, is_requires: bool)
         // 4. And (minor point) adding #[allow(dead_code)] and
         //    #[allow(unused_variables)] to the check function attributes
 
-        // The order of `attrs` and `kanitool::{checked_with,
-        // is_contract_generated}` is important here, because macros are
-        // expanded outside in. This way other contract annotations in
-        // `attrs` sees those attribuites which they need to determine
-        // `function_state` attribute and can use them.
-        //
-        // The same applies later when we emit the check function.
         let check_fn_name = identifier_for_generated_function(item_fn, "check", a_short_hash);
 
         // Constructing string literals explicitly here, because if we call
@@ -328,6 +328,15 @@ fn requires_ensures_alt(attr: TokenStream, item: TokenStream, is_requires: bool)
         // expression to the next expansion of a contract, not as the
         // literal.
         let check_fn_name_str = syn::LitStr::new(&check_fn_name.to_string(), Span::call_site());
+
+        // The order of `attrs` and `kanitool::{checked_with,
+        // is_contract_generated}` is important here, because macros are
+        // expanded outside in. This way other contract annotations in `attrs`
+        // sees those attribuites and can use them to determine
+        // `function_state`.
+        //
+        // We're emitting the original here but the same applies later when we
+        // emit the check function.
         output.extend(quote!(
             #(#attrs)*
             #[kanitool::checked_with = #check_fn_name_str]
@@ -353,13 +362,14 @@ fn requires_ensures_alt(attr: TokenStream, item: TokenStream, is_requires: bool)
         let also_arg_copy_names = arg_copy_names.clone();
         let arg_idents = arg_idents.keys();
 
+        // The code that enforces the postconditions and cleans up the shallow
+        // argument copies (with `mem::forget`).
         let exec_postconditions = quote!(
             kani::assert(#attr, stringify!(#attr_copy));
             #(std::mem::forget(#also_arg_copy_names);)*
         );
 
         let mut inject_conditions = PostconditionInjector(exec_postconditions.clone());
-
         inject_conditions.visit_block_mut(&mut *call_to_prior);
 
         quote!(
@@ -372,15 +382,19 @@ fn requires_ensures_alt(attr: TokenStream, item: TokenStream, is_requires: bool)
 
     let sig = &item_fn.sig;
 
+    // Prepare emitting the check function by emitting the rest of the
+    // attributes.
     output.extend(quote!(
         #(#attrs)*
     ));
 
     if matches!(function_state, ContractFunctionState::Untouched) {
+        // If it's the first time we also emit this marker. Again, order is
+        // important so this happens as the last emitted attribute.
         output.extend(quote!(#[kanitool::is_contract_generated(check)]));
     }
 
-    // Finally emit the check function.
+    // Finally emit the check function itself.
     output.extend(quote!(
         #sig {
             #check_body

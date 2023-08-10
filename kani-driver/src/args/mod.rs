@@ -24,9 +24,7 @@ use strum::VariantNames;
 /// Trait used to perform extra validation after parsing.
 pub trait ValidateArgs {
     /// Perform post-parsing validation but do not abort.
-    fn validate(&self) -> Result<(), Error> {
-        Ok(())
-    }
+    fn validate(&self) -> Result<(), Error>;
 }
 
 /// Validate a set of arguments and ensure they are in a valid state.
