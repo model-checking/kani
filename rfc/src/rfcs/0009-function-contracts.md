@@ -51,8 +51,9 @@ newly introduced APIs are entirely backwards compatible.
 
 ## User Experience
 
-A function contracts approximates the behavior of a function. This approximation
-can subsequently be used as a stub for the concrete implementation.
+A function contracts specifies the behavior of a function in a way that can be
+both checked against the function and also used as a stub for the concrete
+implementation.
 
 The lifecycle of a contract is split into three phases: specification,
 verification and stubbing, which we will explore on this example:
@@ -77,11 +78,12 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
    ```
   
    `requires` here indicates this function expects its `divisor` input to never
-   be 0, or it will not execute correctly (i.e. panic).
+   be 0, or it will not execute correctly (for instance panic or cause undefined
+   behavior).
 
    `ensures` puts a bound on the output, relative to the `dividend` input.
 
-   Conditions in contracts are plain Rust expressions which reference the
+   Conditions in contracts are Rust expressions which reference the
    function arguments and, in case of `ensures`, the return value of the
    function. The return value is a special variable called `result` (see [open
    questions](#open-questions) on a discussion about (re)naming). Syntactically
@@ -97,18 +99,18 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
    implementation with a **check**. This is in contrast to a
    ["stub"][stubbing], which is trusted blindly.
 
-   To facilitate this check Kani needs a suitable environment to verify the
-   function in. The environment consists mainly of the function arguments but
-   also of a valid heap that any pointers may refer to and properly initialized
-   `static` variables.
+   To perform this check Kani needs a suitable harness to verify the function
+   in. The harness is mainly responsible for providing the function arguments
+   but also set up a valid heap that pointers may refer to and properly
+   initialize `static` variables.
    
-   Kani demands of us, as the user, to provide this environment; a limitation of
+   Kani demands of us, as the user, to provide this harness; a limitation of
    this proposal. See also [future possibilities](#future-possibilities) for a
    discussion about the arising soundness issues and their remedies.
 
-   We provide the checking environment for our contract with a
-   `proof_for_contract` harness that references the function for which the
-   contract is supposed to be checked.
+   Harnesses for checking contract are defined with the
+   `proof_for_contract(TARGET)` attribute which references `TARGET`, the
+   function for which the contract is supposed to be checked.
 
    ```rs
    #[kani::proof_for_contract(my_div)]
@@ -129,7 +131,8 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
    It inserts postconditions (`ensures`) as `kani::assert` checks *after* the
    call to `my_div`, enforcing the contract.
 
-   The expanded version of our harness and function is equivalent to the following:
+   The expanded version of our harness that Kani generates looks roughly like
+   this:
 
    ```rs
    #[kani::proof]
@@ -148,10 +151,11 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
 3. In the last phase the **verified** contract is ready for us to use to
    **stub** other harnesses.
 
-   Unlike in regular stubbing, there has to be at least one associated
-   `proof_for_contract` harness for each function to stub *and* by default it
-   requires all such harnesses to pass verification before attempting
-   verification of any harnesses that use it as a stub.
+   Kani requires that there has to be at least one associated
+   `proof_for_contract` harness for each function to stub, otherwise an eror is
+   thrown. In addition, by default, it requires all `proof_for_contract`
+   harnesses to pass verification before attempting verification of any
+   harnesses that use the contract as a stub.
 
    A possible harness that uses our `my_div` contract could be the following:
 
@@ -165,11 +169,9 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
    }
    ```
 
-   To use the contract as a stub Kani must first ensure the calling context is
-   safe. It inserts a `kani::assert` for the preconditions (`requires`) before
-   the call; then it replaces the result of `my_div` with a non-deterministic
-   value. Finally the non-deterministic result is constrained by a
-   `kani::assume` of the postconditions (`ensures`).
+   At a call site where the contract is used as a stub Kani `kani::assert`s the
+   preconditions (`requies`) and produces a nondeterministic value (`kani::any`)
+   which satisfies the postconditions.
    
    Mutable memory is similarly made non-deterministic, discussed later in
    [havocking](#memory-predicates-and-havocking).
@@ -195,12 +197,10 @@ stubs diverging from their checks.
 
 ### Write Sets and Havocking
 
-A return value is only one way in which a function may communicate data. It can
-also communicate data by modifying values stored behind mutable pointers.
-
-To simulate all possible modifications a function could apply to pointed-to data
-the verifier "havocks" those regions, essentially replacing their content with
-non-deterministic values.
+Functions can have side effects on data rechable through mutable refrences or
+pointers. To overapproximate all such modifications a function could apply to
+pointed-to data the verifier "havocks" those regions, essentially replacing
+their content with non-deterministic values.
 
 Let us consider a simple example of a `pop` method.
 
@@ -238,16 +238,21 @@ only if the vector was not already empty, which would be specified thusly.
 
 ```rs
 impl<T> Vec<T> {
-  #[modifies(!self.is_empty(), (*self).buf.ptr.pointer.pointer[self.len])]
-  #[modifies(self.is_empty(), false)]
+  #[modifies(if !self.is_empty() => (*self).buf.ptr.pointer.pointer[self.len])]
+  #[modifies(if self.is_empty())]
   fn pop(&mut self) -> Option<T> {
     ...
   }
 }
 ```
 
-The `#[modifies(CONDITION, MODIFIES_RANGE)]` consists of an optional `CONDITION`
-(defaults to `true`) and a `MODIFIES_RANGE` which is essentially an lvalue. 
+The `#[modifies(if CONDITION => MODIFIES_RANGE, ...)]` consists of an optional
+`CONDITION` (defaults to `true`) and zero or more, comma separated
+`MODIFIES_RANGE`s which are essentially an lvalue.
+
+If no condition is provided both `if` and `=>` are optional. If no ranges are
+provided then `=>` can be omitted and the semantics are that nothing gets
+assigned.
 
 Lvalues are simple expressions permissible on the left hand side of an
 assignment. They compose of the name of one function argument (or static
@@ -558,50 +563,67 @@ This is the technical portion of the RFC. Please provide high level details of t
 -->
 
 
-- **Kani-side implementation vs CBMC** Instead of generating check and replace
-  functions in Kani, we could use the contract instrumentation provided by CBMC.
-  We tried this earlier but came up short, because it is difficult to implement,
-  while supporting arbitrary Rust syntax. We exported the conditions into
-  functions so that Rust would do the parsing/type checking/lowering for us and
-  then call the lowered function in the CBMC contract. The trouble is that
-  CBMC's `old` is only supported directly in the contract, not in functions
-  called from the contract. This means we either need to inline the contract
-  function body, which is brittle in the presence if control flow, or we must
-  extract the `old` expressions, evaluate them in the contract directly and pass
-  the results to the check function. However this means we must restrict the
-  expressions in `old`, because we now need to lower those by hand and even if
-  we could let rustc do it, CBMC's old has no support for function calls in its
-  argument expression.
-- **Expanding all contract macros at the same time** Instead of expanding
-  contract macros one-at-a-atime and creating the onion layer structure we could
-  expand all subsequent one's with the outermost one, creating only one check
-  and replace function each. This is however brittle with respect to renaming.
-  If a user does `use kani::requires as my_requires` and then does multiple
-  `#[my_requires(condition)]` macro would not collect them properly since it can
-  only mathc syntactically and it does not know about the `use` and neither can
-  we restrict this kind if use or warn the user. By contrast the collection with
-  `kanitool::checked_with` is safe, because that attribute is generated by our
-  macro itself, so we can rely on the fact that it uses then canonical
-  representation.
-- **Generating nested functions instead of siblings** Instead of generating the
-  `check` and `replace` functions as siblings to the contracted function we
-  could nest them like so
+### Kani-side implementation vs CBMC 
 
-  ```rs
-  fn my_div(dividend: u32, divisor: u32) -> u32 {
-    fn my_div_check_5e3713(dividend: u32, divisor: u32) -> u32 {
-      ...
-    }
+Instead of generating check and replace functions in Kani, we could use the contract instrumentation provided by CBMC.
+
+We tried this earlier but came up short, because it is difficult to implement,
+while supporting arbitrary Rust syntax. We exported the conditions into
+functions so that Rust would do the parsing/type checking/lowering for us and
+then call the lowered function in the CBMC contract. 
+
+The trouble is that CBMC's `old` is only supported directly in the contract, not
+in functions called from the contract. This means we either need to inline the
+contract function body, which is brittle in the presence if control flow, or we
+must extract the `old` expressions, evaluate them in the contract directly and
+pass the results to the check function. However this means we must restrict the
+expressions in `old`, because we now need to lower those by hand and even if we
+could let rustc do it, CBMC's old has no support for function calls in its
+argument expression.
+
+### Expanding all contract macros at the same time 
+
+Instead of expanding contract macros one-at-a-atime and layering the checks we
+could expand all subsequent one's with the outermost one in one go.
+
+This is however brittle with respect to renaming. If a user does `use
+kani::requires as my_requires` and then does multiple
+`#[my_requires(condition)]` macro would not collect them properly since it can
+only mathc syntactically and it does not know about the `use` and neither can we
+restrict this kind if use or warn the user. By contrast the collection with
+`kanitool::checked_with` is safe, because that attribute is generated by our
+macro itself, so we can rely on the fact that it uses then canonical
+representation.
+
+### Generating nested functions instead of siblings 
+
+Instead of generating the `check` and `replace` functions as siblings to the
+contracted function we could nest them like so
+
+```rs
+fn my_div(dividend: u32, divisor: u32) -> u32 {
+  fn my_div_check_5e3713(dividend: u32, divisor: u32) -> u32 {
     ...
   }
-  ```
+  ...
+}
+```
 
-  This could be beneficial if we want to be able to allow contracts on trait
-  impl items, in which case generating sibling functions is not allowed. The
-  only thing required to make this work is an additional pass over the condition
-  that replaces every `self` with a fresh identifier that now becomes the first
-  argument of the function.
-- **Explicit command line checking/substitution vs attributes:** Instead of
+This could be beneficial if we want to be able to allow contracts on trait impl
+items, in which case generating sibling functions is not allowed. On the other
+hand this makes it harder to implement contracts on traits *definitions*,
+because there is no body available which we could nest the function into.
+Utimately we may require both so that we vcan support both.
+
+
+What is required to make this work is an additional pass over the condition that
+replaces every `self` with a fresh identifier that now becomes the first
+argument of the function. In addition there are open questions as to how to
+resolve the nested name inside the compiler.
+
+### Explicit command line checking/substitution vs attributes: 
+
+Instead of
   adding a new special `proof_for_contact` attributes we could have instead done:
 
   1. **Check contracts on the command line** like CBMC does. This makes contract
