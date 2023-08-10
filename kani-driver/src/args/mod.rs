@@ -182,7 +182,7 @@ pub struct VerificationArgs {
 
     /// When specified, the harness filter will only match the exact fully qualified name of a harness
     #[arg(long, requires("harnesses"))]
-    exact: bool,
+    pub exact: bool,
 
     /// Link external C files referenced by Rust code.
     /// This is an experimental feature and requires `-Z c-ffi` to be used
@@ -346,11 +346,6 @@ impl VerificationArgs {
             Some(None) => None,       // -j
             Some(Some(x)) => Some(x), // -j=x
         }
-    }
-
-    /// Public access to the value set for the `--exact` flag
-    pub fn exact(&self) -> bool {
-        self.exact
     }
 
     /// Are experimental function contracts enabled?

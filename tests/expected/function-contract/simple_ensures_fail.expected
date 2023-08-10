@@ -1,7 +1,7 @@
 max.assertion\
-	 - Status: FAILURE\
-	 - Description: "result == x"\
-	 simple_ensures_fail.rs:5:1 in function max
+- Status: FAILURE\
+- Description: "result == x"\
+in function max
 
 Failed Checks: result == x
 

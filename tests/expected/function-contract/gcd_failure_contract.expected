@@ -1,7 +1,7 @@
 gcd.assertion\
-	 - Status: FAILURE\
-	 - Description: "result != 0 && x % result == 1 && y % result == 0"\
-	 gcd_failure_contract.rs:9:1 in function gcd\
+- Status: FAILURE\
+- Description: "result != 0 && x % result == 1 && y % result == 0"\
+in function gcd\
 	 
 Failed Checks: result != 0 && x % result == 1 && y % result == 0
 

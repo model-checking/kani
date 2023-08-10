@@ -1,6 +1,6 @@
 gcd.assertion\
-	 - Status: SUCCESS\
-	 - Description: "result != 0 && x % result == 0 && y % result == 0"\
-	 gcd_success.rs:8:1 in function gcd
+- Status: SUCCESS\
+- Description: "result != 0 && x % result == 0 && y % result == 0"\
+in function gcd
 
 VERIFICATION:- SUCCESSFUL

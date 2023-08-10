@@ -1,4 +1,3 @@
 assertion\
-         - Status: FAILURE\
-         - Description: "attempt to divide by zero"\
-         pattern_use.rs:7:5
+- Status: FAILURE\
+- Description: "attempt to divide by zero"\

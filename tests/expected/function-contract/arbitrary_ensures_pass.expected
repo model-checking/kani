@@ -1,6 +1,6 @@
 max.assertion\
-	 - Status: SUCCESS\
-	 - Description: "result == x || result == y"\
-	 arbitrary_ensures_pass.rs:5:1 in function max
+- Status: SUCCESS\
+- Description: "result == x || result == y"\
+in function max
      
 VERIFICATION:- SUCCESSFUL

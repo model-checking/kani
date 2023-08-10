@@ -128,10 +128,10 @@ impl KaniSession {
             Ok(Vec::from(all_harnesses))
         } else {
             let harnesses_found: Vec<&HarnessMetadata> =
-                find_proof_harnesses(&harnesses, all_harnesses, self.args.exact());
+                find_proof_harnesses(&harnesses, all_harnesses, self.args.exact);
 
             // If even one harness was not found with --exact, return an error to user
-            if self.args.exact() && harnesses_found.len() < total_harnesses {
+            if self.args.exact && harnesses_found.len() < total_harnesses {
                 let harness_found_names: BTreeSet<&String> =
                     harnesses_found.iter().map(|&h| &h.pretty_name).collect();
 

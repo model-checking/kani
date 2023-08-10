@@ -1,6 +1,6 @@
-max.assertion
-         - Status: FAILURE
-         - Description: "result == x"
-         arbitrary_ensures_fail.rs:5:1 in function max 
+max.assertion\
+- Status: FAILURE\
+- Description: "result == x"\
+in function max 
 
 VERIFICATION:- FAILED
