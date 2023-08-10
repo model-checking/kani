@@ -8,7 +8,7 @@ fn max(x: u32, y: u32) -> u32 {
 }
 
 #[kani::proof_for_contract(max)]
-fn main() {
+fn max_harness() {
     let _ = Box::new(9_usize);
     max(7, 9);
 }

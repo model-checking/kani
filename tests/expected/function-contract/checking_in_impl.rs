@@ -15,7 +15,7 @@ impl WrappedInt {
 }
 
 #[kani::proof_for_contract(WrappedInt::max)]
-fn main() {
+fn max_harness() {
     let _ = Box::new(9_usize);
     WrappedInt(7).max(WrappedInt(6));
 }

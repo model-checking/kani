@@ -9,7 +9,7 @@ fn max(x: u32, y: u32) -> u32 {
 
 mod harnesses {
     #[kani::proof_for_contract(super::max)]
-    fn main() {
+    fn max_harness() {
         let _ = Box::new(9_usize);
         super::max(7, 6);
     }

@@ -57,7 +57,7 @@ impl Frac {
 
 #[kani::unwind(12)]
 #[kani::proof_for_contract(gcd)]
-fn main() {
+fn gcd_harness() {
     // Needed to avoid having `free` be removed as unused function. This is
     // because DFCC contract enforcement assumes that a definition for `free`
     // exists.

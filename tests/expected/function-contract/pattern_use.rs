@@ -8,7 +8,7 @@ fn div((dividend, divisor): (u32, u32)) -> u32 {
 }
 
 #[kani::proof_for_contract(div)]
-fn main() {
+fn div_harness() {
     let _ = Box::new(());
     div((kani::any(), kani::any()));
 }
