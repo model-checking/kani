@@ -137,7 +137,8 @@ impl<'tcx> KaniAttributes<'tcx> {
     /// TODO: Improve error message by printing the span of the harness instead of the definition.
     pub fn check_unstable_features(&self, enabled_features: &[String]) {
         if !matches!(self.tcx.type_of(self.item).skip_binder().kind(), TyKind::FnDef(..)) {
-            // skip closures due to an issue with rustc.
+            // Skip closures since it shouldn't be possible to add an unstable attribute to them.
+            // We have to explicitly skip them though due to an issue with rustc:
             // https://github.com/model-checking/kani/pull/2406#issuecomment-1534333862
             return;
         }
