@@ -123,7 +123,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                 }
                 KaniAttributeKind::Proof => {
                     expect_single(self.tcx, kind, &attrs);
-                    attrs.iter().for_each(|attr| check_proof_attribute(self.tcx, self.item, attr))
+                    attrs.iter().for_each(|attr| self.check_proof_attribute(attr))
                 }
                 KaniAttributeKind::Unstable => attrs.iter().for_each(|attr| {
                     let _ = UnstableAttribute::try_from(*attr).map_err(|err| err.report(self.tcx));
@@ -208,6 +208,23 @@ impl<'tcx> KaniAttributes<'tcx> {
             harness
         })
     }
+
+    /// Check that if this item is tagged with a proof_attribute, it is a valid harness.
+    fn check_proof_attribute(&self, proof_attribute: &Attribute) {
+        let span = proof_attribute.span;
+        let tcx = self.tcx;
+        expect_no_args(tcx, KaniAttributeKind::Proof, proof_attribute);
+        if tcx.def_kind(self.item) != DefKind::Fn {
+            tcx.sess.span_err(span, "the `proof` attribute can only be applied to functions");
+        } else if tcx.generics_of(self.item).requires_monomorphization(tcx) {
+            tcx.sess.span_err(span, "the `proof` attribute cannot be applied to generic functions");
+        } else {
+            let instance = Instance::mono(tcx, self.item);
+            if !super::fn_abi(tcx, instance).args.is_empty() {
+                tcx.sess.span_err(span, "functions used as harnesses cannot have any arguments");
+            }
+        }
+    }
 }
 
 /// An efficient check for the existence for a particular [`KaniAttributeKind`].
@@ -255,22 +272,6 @@ fn expect_single<'a>(
         );
     }
     attr
-}
-
-/// Check that if an item is tagged with a proof_attribute, it is a valid harness.
-fn check_proof_attribute(tcx: TyCtxt, def_id: DefId, proof_attribute: &Attribute) {
-    let span = proof_attribute.span;
-    expect_no_args(tcx, KaniAttributeKind::Proof, proof_attribute);
-    if tcx.def_kind(def_id) != DefKind::Fn {
-        tcx.sess.span_err(span, "the `proof` attribute can only be applied to functions");
-    } else if tcx.generics_of(def_id).requires_monomorphization(tcx) {
-        tcx.sess.span_err(span, "the `proof` attribute cannot be applied to generic functions");
-    } else {
-        let instance = Instance::mono(tcx, def_id);
-        if !super::fn_abi(tcx, instance).args.is_empty() {
-            tcx.sess.span_err(span, "functions used as harnesses cannot have any arguments");
-        }
-    }
 }
 
 /// Attribute used to mark a Kani lib API unstable.
