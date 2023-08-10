@@ -360,6 +360,9 @@ Kani reports a compile time error if any of the following constraints are violat
 -  Kani checks that `TARGET` is reachable from the `proof_for_contract` harness,
   but it does not warn if stubbed functions use `TARGET`[^stubcheck].
 
+  A current limitation with how contracts are enforced means that if target is
+  polymorphic, only one monomorphization of `TARGET` is permissible.
+
 -  A `proof_for_contract` function may not have the `kani::proof` attribute (it
   is already implied by `proof_for_contract`).
 
@@ -723,6 +726,23 @@ This is the technical portion of the RFC. Please provide high level details of t
   contract also recurse, describing a fixpoint logic. This is needed for
   instance for linked data structures like linked lists or trees.
 - **Compositional Contracts:** The proposal in this document lacks a
-  comprehensive handling of type parameters. Correctness of a function with a
-  constrained type parameter (e.g. `T : Trait`) depends on `T` observing a
-  contract as well. This is most striking in the case of higher order functions.
+  comprehensive handling of type parameters. Contract checking harnesses require
+  monomorphization. However this means the contract is only checked against a
+  finite number of instantiations of any type parameter (at most as many as
+  contract checking harnesses were defined). There is nothing preventing the
+  user from using different instantiations of the function's type parameters.
+
+  A function (`f()`) can only interact with its type parameters `P` through the
+  traits (`T`) they are constrained over. We can require `T` to carry contracts
+  on each method `T::m()`. During checking we can use a synthetic type that
+  stubs `T::m()` with its contract. This way we check `f()` against `T`s
+  contract. Then we later stub `f()` we can ensure any instantiations of `P`
+  have passed verification of the contract of `T::m()`. This makes the
+  substitution safe even if the particular type has not been used in a checking
+  harness.
+
+  For higher order functions this gets a bit more tricky, as closures are ad-hoc
+  defined types. Here the contract for the closure could be attached to `f()`
+  and then checked for each closure that may be provided. However this does not
+  work so long as the user has to provide the harnesses, as they cannot recreate
+  the closure type.
