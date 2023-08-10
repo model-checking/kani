@@ -146,12 +146,30 @@ impl<'tcx> KaniAttributes<'tcx> {
                 let unstable_attr = UnstableAttribute::try_from(*attr).unwrap();
                 if !enabled_features.contains(&unstable_attr.feature) {
                     // Reached an unstable attribute that was not enabled.
-                    report_unstable_forbidden(self.tcx, self.item, &unstable_attr);
+                    self.report_unstable_forbidden(&unstable_attr);
                 } else {
                     debug!(enabled=?attr, def_id=?self.item, "check_unstable_features");
                 }
             }
         }
+    }
+
+    /// Report misusage of an unstable feature that was not enabled.
+    fn report_unstable_forbidden(&self, unstable_attr: &UnstableAttribute) -> ErrorGuaranteed {
+        let fn_name = self.tcx.def_path_str(self.item);
+        self.tcx
+            .sess
+            .struct_err(format!(
+                "Use of unstable feature `{}`: {}",
+                unstable_attr.feature, unstable_attr.reason
+            ))
+            .span_note(
+                self.tcx.def_span(self.item),
+                format!("the function `{fn_name}` is unstable:"),
+            )
+            .note(format!("see issue {} for more information", unstable_attr.issue))
+            .help(format!("use `-Z {}` to enable using this function.", unstable_attr.feature))
+            .emit()
     }
 
     /// Is this item a harness? (either `proof` or `proof_for_contract`
@@ -220,24 +238,6 @@ pub fn test_harness_name(tcx: TyCtxt, def_id: DefId) -> String {
     let attrs = tcx.get_attrs_unchecked(def_id);
     let marker = attr::find_by_name(attrs, rustc_span::symbol::sym::rustc_test_marker).unwrap();
     parse_str_value(&marker).unwrap()
-}
-
-/// Report misusage of an unstable feature that was not enabled.
-fn report_unstable_forbidden(
-    tcx: TyCtxt,
-    def_id: DefId,
-    unstable_attr: &UnstableAttribute,
-) -> ErrorGuaranteed {
-    let fn_name = tcx.def_path_str(def_id);
-    tcx.sess
-        .struct_err(format!(
-            "Use of unstable feature `{}`: {}",
-            unstable_attr.feature, unstable_attr.reason
-        ))
-        .span_note(tcx.def_span(def_id), format!("the function `{fn_name}` is unstable:"))
-        .note(format!("see issue {} for more information", unstable_attr.issue))
-        .help(format!("use `-Z {}` to enable using this function.", unstable_attr.feature))
-        .emit()
 }
 
 fn expect_single<'a>(
