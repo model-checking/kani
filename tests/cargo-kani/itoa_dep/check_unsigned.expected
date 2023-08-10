@@ -1,7 +1,4 @@
 Status: SUCCESS\
 Description: "assertion failed: result == &output"
 
-Status: FAILURE\
-Description: "memcpy source region readable"
-
-VERIFICATION:- FAILED
+VERIFICATION:- SUCCESSFUL

@@ -16,7 +16,6 @@ extern "platform-intrinsic" {
 #[kani::proof]
 fn test_simd_shr() {
     let value = kani::any();
-    kani::assume(value >= 0);
     let values = i32x2(value, value);
     let shift = kani::any();
     kani::assume(shift < 32);

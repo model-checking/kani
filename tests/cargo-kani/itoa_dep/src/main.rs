@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 //! This test checks Kani's support for the `itoa` crate
-//! Currently fails with a spurious failure:
-//! https://github.com/model-checking/kani/issues/2066
 
 use itoa::{Buffer, Integer};
 use std::fmt::Write;

@@ -33,7 +33,7 @@ git worktree add old $(git describe --tags --abbrev=0)
 tools/benchcomp/bin/benchcomp --config tools/benchcomp/configs/perf-regression.yaml
 ```
 
-This uses the [`perf-regression.yaml` configuration file](https://github.com/model-checking/kani/tree/main/tools/benchcomp/benchcomp/configs/perf-regression.yaml) that we use in continuous integration.
+This uses the [`perf-regression.yaml` configuration file](https://github.com/model-checking/kani/blob/main/tools/benchcomp/configs/perf-regression.yaml) that we use in continuous integration.
 After running the suite twice, the configuration file terminates `benchcomp` with a return code of 1 if any of the benchmarks regressed on metrics such as `success` (a boolean), `solver_runtime`, and `number_vccs` (numerical).
 Additionally, the config file directs benchcomp to print out a Markdown table that GitHub's CI summary page renders in to a table.
 
