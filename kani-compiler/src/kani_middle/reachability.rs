@@ -28,7 +28,7 @@ use rustc_middle::mir::{
     Body, CastKind, Constant, ConstantKind, Location, Rvalue, Terminator, TerminatorKind,
 };
 use rustc_middle::span_bug;
-use rustc_middle::ty::adjustment::PointerCast;
+use rustc_middle::ty::adjustment::PointerCoercion;
 use rustc_middle::ty::{
     Closure, ClosureKind, ConstKind, EarlyBinder, Instance, InstanceDef, ParamEnv, Ty, TyCtxt,
     TyKind, TypeFoldable, VtblEntry,
@@ -355,7 +355,11 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
         trace!(rvalue=?*rvalue, "visit_rvalue");
 
         match *rvalue {
-            Rvalue::Cast(CastKind::Pointer(PointerCast::Unsize), ref operand, target) => {
+            Rvalue::Cast(
+                CastKind::PointerCoercion(PointerCoercion::Unsize),
+                ref operand,
+                target,
+            ) => {
                 // Check if the conversion include casting a concrete type to a trait type.
                 // If so, collect items from the impl `Trait for Concrete {}`.
                 let target_ty = self.monomorphize(target);
@@ -367,7 +371,11 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
                     self.collect_vtable_methods(base_coercion.src_ty, base_coercion.dst_ty);
                 }
             }
-            Rvalue::Cast(CastKind::Pointer(PointerCast::ReifyFnPointer), ref operand, _) => {
+            Rvalue::Cast(
+                CastKind::PointerCoercion(PointerCoercion::ReifyFnPointer),
+                ref operand,
+                _,
+            ) => {
                 let fn_ty = operand.ty(self.body, self.tcx);
                 let fn_ty = self.monomorphize(fn_ty);
                 if let TyKind::FnDef(def_id, substs) = *fn_ty.kind() {
@@ -383,7 +391,11 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
                     unreachable!("Expected FnDef type, but got: {:?}", fn_ty);
                 }
             }
-            Rvalue::Cast(CastKind::Pointer(PointerCast::ClosureFnPointer(_)), ref operand, _) => {
+            Rvalue::Cast(
+                CastKind::PointerCoercion(PointerCoercion::ClosureFnPointer(_)),
+                ref operand,
+                _,
+            ) => {
                 let source_ty = operand.ty(self.body, self.tcx);
                 let source_ty = self.monomorphize(source_ty);
                 match *source_ty.kind() {
@@ -461,7 +473,7 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
 
         let tcx = self.tcx;
         match terminator.kind {
-            TerminatorKind::Call { ref func, ref args, .. } => {
+            TerminatorKind::Call { ref func, args: ref outer_args, .. } => {
                 let callee_ty = func.ty(self.body, tcx);
                 let fn_ty = self.monomorphize(callee_ty);
                 if let TyKind::FnDef(def_id, substs) = *fn_ty.kind() {
@@ -479,7 +491,7 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
                                 // implement the same traits as those in the
                                 // original function/method. A trait mismatch shows
                                 // up here, when we try to resolve a trait method
-                                let generic_ty = args[0].ty(self.body, tcx).peel_refs();
+                                let generic_ty = outer_args[0].ty(self.body, tcx).peel_refs();
                                 let receiver_ty = tcx.subst_and_normalize_erasing_regions(
                                     substs,
                                     ParamEnv::reveal_all(),

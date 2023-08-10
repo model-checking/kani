@@ -1410,7 +1410,7 @@ impl Expr {
         ArithmeticOverflowResult { result, overflowed }
     }
 
-    /// Uses CBMC's [binop]-with-overflow operation that performs a single arithmetic
+    /// Uses CBMC's \[binop\]-with-overflow operation that performs a single arithmetic
     /// operation
     /// `struct (T, bool) overflow(binop, self, e)` where `T` is the type of `self`
     /// Pseudocode:

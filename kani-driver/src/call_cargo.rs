@@ -346,8 +346,7 @@ fn map_kani_artifact(rustc_artifact: cargo_metadata::Artifact) -> Option<Artifac
     let result = rustc_artifact.filenames.iter().find_map(|path| {
         if path.extension() == Some("rmeta") {
             let file_stem = path.file_stem()?.strip_prefix("lib")?;
-            let parent =
-                path.parent().map(|p| p.as_std_path().to_path_buf()).unwrap_or(PathBuf::new());
+            let parent = path.parent().map(|p| p.as_std_path().to_path_buf()).unwrap_or_default();
             let mut meta_path = parent.join(file_stem);
             meta_path.set_extension(ArtifactType::Metadata);
             trace!(rmeta=?path, kani_meta=?meta_path.display(), "map_kani_artifact");

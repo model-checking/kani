@@ -10,11 +10,11 @@ use kani_metadata::{ArtifactType, HarnessAttributes, HarnessMetadata};
 use rustc_hir::def_id::DefId;
 use rustc_middle::ty::{Instance, InstanceDef, TyCtxt};
 
-use super::{attributes, SourceLocation};
+use super::{attributes::KaniAttributes, SourceLocation};
 
 /// Create the harness metadata for a proof harness for a given function.
 pub fn gen_proof_metadata(tcx: TyCtxt, def_id: DefId, base_name: &Path) -> HarnessMetadata {
-    let attributes = attributes::KaniAttributes::for_item(tcx, def_id).harness_attributes();
+    let attributes = KaniAttributes::for_item(tcx, def_id).harness_attributes();
     let pretty_name = tcx.def_path_str(def_id);
     let mut mangled_name = tcx.symbol_name(Instance::mono(tcx, def_id)).to_string();
     // Main function a special case in order to support `--function main`

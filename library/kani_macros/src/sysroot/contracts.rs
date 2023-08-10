@@ -6,12 +6,7 @@ use super::*;
 
 use {
     quote::{quote, ToTokens},
-    syn::{
-        parse_macro_input,
-        spanned::Spanned,
-        visit::Visit,
-        Expr, ItemFn,
-    },
+    syn::{parse_macro_input, spanned::Spanned, visit::Visit, Expr, ItemFn},
 };
 
 use proc_macro2::{Ident, Span, TokenStream as TokenStream2};

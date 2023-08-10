@@ -20,7 +20,7 @@ use num::bigint::BigInt;
 use rustc_abi::FieldIdx;
 use rustc_index::IndexVec;
 use rustc_middle::mir::{AggregateKind, BinOp, CastKind, NullOp, Operand, Place, Rvalue, UnOp};
-use rustc_middle::ty::adjustment::PointerCast;
+use rustc_middle::ty::adjustment::PointerCoercion;
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{self, Instance, IntTy, Ty, TyCtxt, UintTy, VtblEntry};
 use rustc_target::abi::{FieldsShape, Size, TagEncoding, VariantIdx, Variants};
@@ -116,6 +116,14 @@ impl<'tcx> GotocCtx<'tcx> {
             BinOp::BitXor => ce1.bitxor(ce2),
             BinOp::Div => ce1.div(ce2),
             BinOp::Rem => ce1.rem(ce2),
+            BinOp::ShlUnchecked => ce1.shl(ce2),
+            BinOp::ShrUnchecked => {
+                if self.operand_ty(e1).is_signed() {
+                    ce1.ashr(ce2)
+                } else {
+                    ce1.lshr(ce2)
+                }
+            }
             _ => unreachable!("Unexpected {:?}", op),
         }
     }
@@ -343,11 +351,14 @@ impl<'tcx> GotocCtx<'tcx> {
             BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Shl | BinOp::Shr => {
                 self.codegen_scalar_binop(op, e1, e2)
             }
-            // We currently rely on CBMC's UB checks for shift which isn't always accurate.
-            // We should implement the checks ourselves.
-            // See https://github.com/model-checking/kani/issues/2374
-            BinOp::ShlUnchecked => self.codegen_scalar_binop(&BinOp::Shl, e1, e2),
-            BinOp::ShrUnchecked => self.codegen_scalar_binop(&BinOp::Shr, e1, e2),
+            BinOp::ShlUnchecked | BinOp::ShrUnchecked => {
+                let result = self.codegen_unchecked_scalar_binop(op, e1, e2);
+                let check = self.check_unchecked_shift_distance(e1, e2, loc);
+                Expr::statement_expression(
+                    vec![check, result.clone().as_stmt(loc)],
+                    result.typ().clone(),
+                )
+            }
             BinOp::AddUnchecked | BinOp::MulUnchecked | BinOp::SubUnchecked => {
                 self.codegen_binop_with_overflow_check(op, e1, e2, loc)
             }
@@ -452,6 +463,39 @@ impl<'tcx> GotocCtx<'tcx> {
             Stmt::block(vec![overflow_check, div_by_zero_check], loc)
         } else {
             div_by_zero_check
+        }
+    }
+
+    /// Check for valid unchecked shift distance.
+    /// Shifts on an integer of type T are UB if shift distance < 0 or >= T::BITS.
+    fn check_unchecked_shift_distance(
+        &mut self,
+        value: &Operand<'tcx>,
+        distance: &Operand<'tcx>,
+        loc: Location,
+    ) -> Stmt {
+        let value_expr = self.codegen_operand(value);
+        let distance_expr = self.codegen_operand(distance);
+        let value_width = value_expr.typ().sizeof_in_bits(&self.symbol_table);
+        let value_width_expr = Expr::int_constant(value_width, distance_expr.typ().clone());
+
+        let excessive_distance_check = self.codegen_assert_assume(
+            distance_expr.clone().lt(value_width_expr),
+            PropertyClass::ArithmeticOverflow,
+            "attempt to shift by excessive shift distance",
+            loc,
+        );
+
+        if distance_expr.typ().is_signed(self.symbol_table.machine_model()) {
+            let negative_distance_check = self.codegen_assert_assume(
+                distance_expr.is_non_negative(),
+                PropertyClass::ArithmeticOverflow,
+                "attempt to shift by negative distance",
+                loc,
+            );
+            Stmt::block(vec![negative_distance_check, excessive_distance_check], loc)
+        } else {
+            excessive_distance_check
         }
     }
 
@@ -582,24 +626,28 @@ impl<'tcx> GotocCtx<'tcx> {
             AggregateKind::Adt(_, _, _, _, _) if res_ty.is_simd() => {
                 let typ = self.codegen_ty(res_ty);
                 let layout = self.layout_of(res_ty);
-                let vector_element_type = typ.base_type().unwrap().clone();
-                Expr::vector_expr(
-                    typ,
-                    layout
-                        .fields
-                        .index_by_increasing_offset()
-                        .map(|idx| {
-                            let cgo = self.codegen_operand(&operands[idx.into()]);
-                            // The input operand might actually be a one-element array, as seen
-                            // when running assess on firecracker.
-                            if *cgo.typ() == vector_element_type {
-                                cgo
-                            } else {
-                                cgo.transmute_to(vector_element_type.clone(), &self.symbol_table)
-                            }
-                        })
-                        .collect(),
-                )
+                trace!(shape=?layout.fields, "codegen_rvalue_aggregate");
+                assert!(operands.len() > 0, "SIMD vector cannot be empty");
+                if operands.len() == 1 {
+                    let data = self.codegen_operand(&operands[0u32.into()]);
+                    if data.typ().is_array() {
+                        // Array-based SIMD representation.
+                        data.transmute_to(typ, &self.symbol_table)
+                    } else {
+                        // Multi field-based representation with one field.
+                        Expr::vector_expr(typ, vec![data])
+                    }
+                } else {
+                    // Multi field SIMD representation.
+                    Expr::vector_expr(
+                        typ,
+                        layout
+                            .fields
+                            .index_by_increasing_offset()
+                            .map(|idx| self.codegen_operand(&operands[idx.into()]))
+                            .collect(),
+                    )
+                }
             }
             AggregateKind::Adt(_, variant_index, ..) if res_ty.is_enum() => {
                 self.codegen_rvalue_enum_aggregate(variant_index, operands, res_ty, loc)
@@ -658,7 +706,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     "https://github.com/model-checking/kani/issues/1784",
                 )
             }
-            Rvalue::Cast(CastKind::Pointer(k), e, t) => {
+            Rvalue::Cast(CastKind::PointerCoercion(k), e, t) => {
                 let t = self.monomorphize(*t);
                 self.codegen_pointer_cast(k, e, t, loc)
             }
@@ -690,7 +738,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // See https://github.com/rust-lang/compiler-team/issues/460 for more details.
                 let operand = self.codegen_operand(operand);
                 let t = self.monomorphize(*content_ty);
-                let box_ty = self.tcx.mk_box(t);
+                let box_ty = Ty::new_box(self.tcx, t);
                 let box_ty = self.codegen_ty(box_ty);
                 let cbmc_t = self.codegen_ty(t);
                 let box_contents = operand.cast_to(cbmc_t.to_pointer());
@@ -943,22 +991,22 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// "Pointer casts" are particular kinds of pointer-to-pointer casts.
-    /// See the [`PointerCast`] type for specifics.
+    /// See the [`PointerCoercion`] type for specifics.
     /// Note that this does not include all casts involving pointers,
     /// many of which are instead handled by [`Self::codegen_misc_cast`] instead.
     fn codegen_pointer_cast(
         &mut self,
-        k: &PointerCast,
+        k: &PointerCoercion,
         operand: &Operand<'tcx>,
         t: Ty<'tcx>,
         loc: Location,
     ) -> Expr {
         debug!(cast=?k, op=?operand, ?loc, "codegen_pointer_cast");
         match k {
-            PointerCast::ReifyFnPointer => match self.operand_ty(operand).kind() {
-                ty::FnDef(def_id, substs) => {
+            PointerCoercion::ReifyFnPointer => match self.operand_ty(operand).kind() {
+                ty::FnDef(def_id, args) => {
                     let instance =
-                        Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), *def_id, substs)
+                        Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), *def_id, args)
                             .unwrap()
                             .unwrap();
                     // We need to handle this case in a special way because `codegen_operand` compiles FnDefs to dummy structs.
@@ -967,24 +1015,20 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
                 _ => unreachable!(),
             },
-            PointerCast::UnsafeFnPointer => self.codegen_operand(operand),
-            PointerCast::ClosureFnPointer(_) => {
-                if let ty::Closure(def_id, substs) = self.operand_ty(operand).kind() {
-                    let instance = Instance::resolve_closure(
-                        self.tcx,
-                        *def_id,
-                        substs,
-                        ty::ClosureKind::FnOnce,
-                    )
-                    .expect("failed to normalize and resolve closure during codegen")
-                    .polymorphize(self.tcx);
+            PointerCoercion::UnsafeFnPointer => self.codegen_operand(operand),
+            PointerCoercion::ClosureFnPointer(_) => {
+                if let ty::Closure(def_id, args) = self.operand_ty(operand).kind() {
+                    let instance =
+                        Instance::resolve_closure(self.tcx, *def_id, args, ty::ClosureKind::FnOnce)
+                            .expect("failed to normalize and resolve closure during codegen")
+                            .polymorphize(self.tcx);
                     self.codegen_func_expr(instance, None).address_of()
                 } else {
                     unreachable!("{:?} cannot be cast to a fn ptr", operand)
                 }
             }
-            PointerCast::MutToConstPointer => self.codegen_operand(operand),
-            PointerCast::ArrayToPointer => {
+            PointerCoercion::MutToConstPointer => self.codegen_operand(operand),
+            PointerCoercion::ArrayToPointer => {
                 // TODO: I am not sure whether it is correct or not.
                 //
                 // some reasoning is as follows.
@@ -1006,7 +1050,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     _ => unreachable!(),
                 }
             }
-            PointerCast::Unsize => {
+            PointerCoercion::Unsize => {
                 let src_goto_expr = self.codegen_operand(operand);
                 let src_mir_type = self.operand_ty(operand);
                 let dst_mir_type = t;

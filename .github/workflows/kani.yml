@@ -93,6 +93,8 @@ jobs:
 
       - name: Execute Kani performance tests
         run: ./scripts/kani-perf.sh
+        env:
+          RUST_TEST_THREADS: 1
 
   bookrunner:
     runs-on: ubuntu-20.04

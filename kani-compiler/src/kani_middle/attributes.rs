@@ -28,9 +28,7 @@ use super::resolve::{self, resolve_fn};
 
 extern crate enum_map;
 
-use enum_map::{Enum, EnumMap};
-
-#[derive(Debug, Clone, Copy, AsRefStr, EnumString, PartialEq, Eq, PartialOrd, Ord, Enum)]
+#[derive(Debug, Clone, Copy, AsRefStr, EnumString, PartialEq, Eq, PartialOrd, Ord)]
 #[strum(serialize_all = "snake_case")]
 enum KaniAttributeKind {
     Proof,
@@ -86,7 +84,7 @@ pub struct KaniAttributes<'tcx> {
     /// The function which these attributes decorate.
     item: DefId,
     /// All attributes we found in raw format.
-    map: EnumMap<KaniAttributeKind, Option<Vec<&'tcx Attribute>>>,
+    map: BTreeMap<KaniAttributeKind, Vec<&'tcx Attribute>>,
 }
 
 impl<'tcx> std::fmt::Debug for KaniAttributes<'tcx> {
@@ -104,12 +102,12 @@ impl<'tcx> KaniAttributes<'tcx> {
     pub fn for_item(tcx: TyCtxt<'tcx>, def_id: DefId) -> Self {
         let all_attributes = tcx.get_attrs_unchecked(def_id);
         let map = all_attributes.iter().fold(
-            enum_map::enum_map! { _ => <Option<Vec<&'tcx Attribute>>>::None },
+            <BTreeMap<KaniAttributeKind, Vec<&'tcx Attribute>>>::default(),
             |mut result, attribute| {
                 // Get the string the appears after "kanitool::" in each attribute string.
                 // Ex - "proof" | "unwind" etc.
                 if let Some(kind) = attr_kind(tcx, attribute) {
-                    result[kind].get_or_insert_with(Default::default).push(attribute)
+                    result.entry(kind).or_default().push(attribute)
                 }
                 result
             },
@@ -120,7 +118,7 @@ impl<'tcx> KaniAttributes<'tcx> {
     /// Expect that at most one attribute of this kind exists on the function
     /// and return it.
     fn expect_maybe_one(&self, kind: KaniAttributeKind) -> Option<&'tcx Attribute> {
-        match self.map[kind].as_ref()?.as_slice() {
+        match self.map.get(&kind)?.as_slice() {
             [one] => Some(one),
             _ => {
                 self.tcx.sess.err(format!(
@@ -160,13 +158,20 @@ impl<'tcx> KaniAttributes<'tcx> {
         })
     }
 
+    /// Extact the name of the sibling function this contract is checked with
+    /// (if any)
+    pub fn checked_with(&self) -> Option<Symbol> {
+        self.expect_maybe_one(KaniAttributeKind::CheckedWith)
+            .map(|target| expect_key_string_value(self.tcx.sess, target))
+    }
+
     /// Check that all attributes assigned to an item is valid.
     /// Errors will be added to the session. Invoke self.tcx.sess.abort_if_errors() to terminate
     /// the session and emit all errors found.
     pub(super) fn check_attributes(&self, queries: &QueryDb) {
         // Check that all attributes are correctly used and well formed.
         let is_harness = self.is_harness();
-        for (kind, attrs) in self.map.iter().filter_map(|(k, v)| Some((k, v.as_ref()?))) {
+        for (&kind, attrs) in self.map.iter() {
             if !is_harness && kind.is_harness_only() {
                 self.tcx.sess.span_err(
                     attrs[0].span,
@@ -213,15 +218,15 @@ impl<'tcx> KaniAttributes<'tcx> {
                     })
                 }
                 KaniAttributeKind::Proof => {
+                    assert!(!self.map.contains_key(&KaniAttributeKind::ProofForContract));
                     expect_single(self.tcx, kind, &attrs);
-                    assert!(self.map[KaniAttributeKind::ProofForContract].is_none());
-                    attrs.iter().for_each(|attr| check_proof_attribute(self.tcx, self.item, attr))
+                    attrs.iter().for_each(|attr| self.check_proof_attribute(attr))
                 }
                 KaniAttributeKind::Unstable => attrs.iter().for_each(|attr| {
                     let _ = UnstableAttribute::try_from(*attr).map_err(|err| err.report(self.tcx));
                 }),
                 KaniAttributeKind::ProofForContract => {
-                    assert!(self.map[KaniAttributeKind::Proof].is_none());
+                    assert!(!self.map.contains_key(&KaniAttributeKind::Proof));
                     expect_single(self.tcx, kind, &attrs);
                 }
                 KaniAttributeKind::ReplacedWith | KaniAttributeKind::CheckedWith => {
@@ -233,7 +238,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                     // to communicate with one another. So by the time it gets
                     // here we don't care if it's valid or not.
                 }
-            };
+            }
         }
     }
 
@@ -242,16 +247,17 @@ impl<'tcx> KaniAttributes<'tcx> {
     /// TODO: Improve error message by printing the span of the harness instead of the definition.
     pub fn check_unstable_features(&self, enabled_features: &[String]) {
         if !matches!(self.tcx.type_of(self.item).skip_binder().kind(), TyKind::FnDef(..)) {
-            // skip closures due to an issue with rustc.
+            // Skip closures since it shouldn't be possible to add an unstable attribute to them.
+            // We have to explicitly skip them though due to an issue with rustc:
             // https://github.com/model-checking/kani/pull/2406#issuecomment-1534333862
             return;
         }
-        if let Some(unstable_attrs) = self.map[KaniAttributeKind::Unstable].as_ref() {
+        if let Some(unstable_attrs) = self.map.get(&KaniAttributeKind::Unstable) {
             for attr in unstable_attrs {
                 let unstable_attr = UnstableAttribute::try_from(*attr).unwrap();
                 if !enabled_features.contains(&unstable_attr.feature) {
                     // Reached an unstable attribute that was not enabled.
-                    report_unstable_forbidden(self.tcx, self.item, &unstable_attr);
+                    self.report_unstable_forbidden(&unstable_attr);
                 } else {
                     debug!(enabled=?attr, def_id=?self.item, "check_unstable_features");
                 }
@@ -259,18 +265,29 @@ impl<'tcx> KaniAttributes<'tcx> {
         }
     }
 
-    /// Extact the name of the sibling function this contract is checked with
-    /// (if any)
-    pub fn checked_with(&self) -> Option<Symbol> {
-        self.expect_maybe_one(KaniAttributeKind::CheckedWith)
-            .map(|target| expect_key_string_value(self.tcx.sess, target))
+    /// Report misusage of an unstable feature that was not enabled.
+    fn report_unstable_forbidden(&self, unstable_attr: &UnstableAttribute) -> ErrorGuaranteed {
+        let fn_name = self.tcx.def_path_str(self.item);
+        self.tcx
+            .sess
+            .struct_err(format!(
+                "Use of unstable feature `{}`: {}",
+                unstable_attr.feature, unstable_attr.reason
+            ))
+            .span_note(
+                self.tcx.def_span(self.item),
+                format!("the function `{fn_name}` is unstable:"),
+            )
+            .note(format!("see issue {} for more information", unstable_attr.issue))
+            .help(format!("use `-Z {}` to enable using this function.", unstable_attr.feature))
+            .emit()
     }
 
     /// Is this item a harness? (either `proof` or `proof_for_contract`
     /// attribute are present)
     fn is_harness(&self) -> bool {
-        self.map[KaniAttributeKind::Proof].is_some()
-            || self.map[KaniAttributeKind::ProofForContract].is_some()
+        self.map.contains_key(&KaniAttributeKind::Proof)
+            || self.map.contains_key(&KaniAttributeKind::ProofForContract)
     }
 
     /// Extract harness attributes for a given `def_id`.
@@ -287,9 +304,6 @@ impl<'tcx> KaniAttributes<'tcx> {
         let mut attrs = self.map.iter().fold(
             HarnessAttributes::default(),
             |mut harness, (kind, attributes)| {
-                let Some(attributes) = attributes.as_ref() else {
-                    return harness;
-                };
                 match kind {
                     KaniAttributeKind::ShouldPanic => harness.should_panic = true,
                     KaniAttributeKind::Solver => {
@@ -317,7 +331,6 @@ impl<'tcx> KaniAttributes<'tcx> {
                 harness
             },
         );
-
         let current_module = self.tcx.parent_module_from_def_id(local_id);
         attrs.stubs.extend(
             self.for_contract()
@@ -342,6 +355,23 @@ impl<'tcx> KaniAttributes<'tcx> {
                 }),
         );
         attrs
+    }
+
+    /// Check that if this item is tagged with a proof_attribute, it is a valid harness.
+    fn check_proof_attribute(&self, proof_attribute: &Attribute) {
+        let span = proof_attribute.span;
+        let tcx = self.tcx;
+        expect_no_args(tcx, KaniAttributeKind::Proof, proof_attribute);
+        if tcx.def_kind(self.item) != DefKind::Fn {
+            tcx.sess.span_err(span, "the `proof` attribute can only be applied to functions");
+        } else if tcx.generics_of(self.item).requires_monomorphization(tcx) {
+            tcx.sess.span_err(span, "the `proof` attribute cannot be applied to generic functions");
+        } else {
+            let instance = Instance::mono(tcx, self.item);
+            if !super::fn_abi(tcx, instance).args.is_empty() {
+                tcx.sess.span_err(span, "functions used as harnesses cannot have any arguments");
+            }
+        }
     }
 }
 
@@ -413,6 +443,9 @@ fn check_is_contract_safe(tcx: TyCtxt, item: DefId) {
     }
 }
 
+/// An efficient check for the existence for a particular [`KaniAttributeKind`].
+/// Unlike querying [`KaniAttributes`] this method builds no new heap data
+/// structures and has short circuiting.
 fn has_kani_attribute<F: Fn(KaniAttributeKind) -> bool>(
     tcx: TyCtxt,
     def_id: DefId,
@@ -463,24 +496,6 @@ pub fn expect_key_string_value(sess: &Session, attr: &Attribute) -> rustc_span::
     }
 }
 
-/// Report misusage of an unstable feature that was not enabled.
-fn report_unstable_forbidden(
-    tcx: TyCtxt,
-    def_id: DefId,
-    unstable_attr: &UnstableAttribute,
-) -> ErrorGuaranteed {
-    let fn_name = tcx.def_path_str(def_id);
-    tcx.sess
-        .struct_err(format!(
-            "Use of unstable feature `{}`: {}",
-            unstable_attr.feature, unstable_attr.reason
-        ))
-        .span_note(tcx.def_span(def_id), format!("the function `{fn_name}` is unstable:"))
-        .note(format!("see issue {} for more information", unstable_attr.issue))
-        .help(format!("use `-Z {}` to enable using this function.", unstable_attr.feature))
-        .emit()
-}
-
 fn expect_single<'a>(
     tcx: TyCtxt,
     kind: KaniAttributeKind,
@@ -496,22 +511,6 @@ fn expect_single<'a>(
         );
     }
     attr
-}
-
-/// Check that if an item is tagged with a proof_attribute, it is a valid harness.
-fn check_proof_attribute(tcx: TyCtxt, def_id: DefId, proof_attribute: &Attribute) {
-    let span = proof_attribute.span;
-    expect_no_args(tcx, KaniAttributeKind::Proof, proof_attribute);
-    if tcx.def_kind(def_id) != DefKind::Fn {
-        tcx.sess.span_err(span, "the `proof` attribute can only be applied to functions");
-    } else if tcx.generics_of(def_id).requires_monomorphization(tcx) {
-        tcx.sess.span_err(span, "the `proof` attribute cannot be applied to generic functions");
-    } else {
-        let instance = Instance::mono(tcx, def_id);
-        if !super::fn_abi(tcx, instance).args.is_empty() {
-            tcx.sess.span_err(span, "functions used as harnesses cannot have any arguments");
-        }
-    }
 }
 
 /// Attribute used to mark a Kani lib API unstable.
