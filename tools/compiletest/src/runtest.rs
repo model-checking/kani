@@ -393,7 +393,7 @@ impl<'test> TestCx<'test> {
     /// Runs Kani on the test file specified by `self.testpaths.file`. An error
     /// message is printed to stdout if verification output does not contain the
     /// expected output.
-    /// 
+    ///
     /// We read the expected output from the file
     /// `self.testpaths.file.with_extension("expected")` (same file name but
     /// extension replaced with `.expected`). For backwards compatibility, if we
