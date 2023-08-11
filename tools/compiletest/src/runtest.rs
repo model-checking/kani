@@ -491,7 +491,7 @@ impl<'test> TestCx<'test> {
     /// contains a line from `lines`
     fn contains(str: &[&str], lines: &[&str]) -> bool {
         // Does *any* subslice of length `lines.len()` satisfy the containment of
-        // *all* `lines`
+        // *all* `lines`?
         // `trim()` added to ignore trailing and preceding whitespace
         str.windows(lines.len()).any(|subslice| {
             subslice.iter().zip(lines).all(|(output, expected)| output.contains(expected.trim()))
