@@ -19,7 +19,7 @@ use rustc_middle::{
 /// Sets up rustc's query mechanism to apply Kani's custom queries to code from
 /// the present crate.
 pub fn provide(providers: &mut Providers, queries: &QueryDb) {
-    if queries.reachability_analysis != ReachabilityType::None {
+    if queries.reachability_analysis != ReachabilityType::None && !queries.build_std {
         // Don't override queries if we are only compiling our dependencies.
         providers.optimized_mir = run_mir_passes;
         if queries.stubbing_enabled {

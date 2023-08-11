@@ -49,6 +49,9 @@ pub const ENABLE_STUBBING: &str = "enable-stubbing";
 /// Option name used to define unstable features.
 pub const UNSTABLE_FEATURE: &str = "unstable";
 
+/// Option used for building standard library.
+pub const BUILD_STD: &str = "build-std";
+
 /// Configure command options for the Kani compiler.
 pub fn parser() -> Command {
     let app = command!()
@@ -152,6 +155,12 @@ pub fn parser() -> Command {
                 .help("Enable an unstable feature")
                 .value_name("UNSTABLE_FEATURE")
                 .action(ArgAction::Append),
+        )
+        .arg(
+            Arg::new(BUILD_STD)
+                .long(BUILD_STD)
+                .help("Enable building the standard library.")
+                .action(ArgAction::SetTrue),
         );
     app
 }
