@@ -1,0 +1,2 @@
+error: Harness `main` contains stubs which are unstable.
+To enable stubbing, pass options `-Z stubbing`
