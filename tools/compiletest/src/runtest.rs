@@ -391,11 +391,22 @@ impl<'test> TestCx<'test> {
     }
 
     /// Runs Kani on the test file specified by `self.testpaths.file`. An error
-    /// message is printed to stdout if verification output does not contain
-    /// the expected output in `expected` file.
+    /// message is printed to stdout if verification output does not contain the
+    /// expected output.
+    ///
+    /// We read the expected output from the file
+    /// `self.testpaths.file.with_extension("expected")` (same file name but
+    /// extension replaced with `.expected`). For backwards compatibility, if we
+    /// don't find this file, we will also try a file called `expected` in the
+    /// same directory as `self.testpaths.file`.
     fn run_expected_test(&self) {
         let proc_res = self.run_kani();
-        let expected_path = self.testpaths.file.parent().unwrap().join("expected");
+        let dot_expected_path = self.testpaths.file.with_extension("expected");
+        let expected_path = if dot_expected_path.exists() {
+            dot_expected_path
+        } else {
+            self.testpaths.file.parent().unwrap().join("expected")
+        };
         self.verify_output(&proc_res, &expected_path);
     }
 
@@ -475,35 +486,22 @@ impl<'test> TestCx<'test> {
                 consecutive_lines.clear();
             }
         }
-        None
+        // Someone may add a `\` to the last line (probably by accident) but
+        // that would mean this test would succeed without actually testing so
+        // we add a check here again.
+        (!consecutive_lines.is_empty() && !TestCx::contains(str, &consecutive_lines))
+            .then_some(consecutive_lines)
     }
 
     /// Check if there is a set of consecutive lines in `str` where each line
     /// contains a line from `lines`
     fn contains(str: &[&str], lines: &[&str]) -> bool {
-        let mut i = str.iter();
-        while let Some(output_line) = i.next() {
-            if output_line.contains(&lines[0]) {
-                // Check if the rest of the lines in `lines` are contained in
-                // the subsequent lines in `str`
-                let mut matches = true;
-                // Clone the iterator so that we keep i unchanged
-                let mut j = i.clone();
-                for line in lines.iter().skip(1) {
-                    if let Some(output_line) = j.next() {
-                        if output_line.contains(line) {
-                            continue;
-                        }
-                    }
-                    matches = false;
-                    break;
-                }
-                if matches {
-                    return true;
-                }
-            }
-        }
-        false
+        // Does *any* subslice of length `lines.len()` satisfy the containment of
+        // *all* `lines`?
+        // `trim()` added to ignore trailing and preceding whitespace
+        str.windows(lines.len()).any(|subslice| {
+            subslice.iter().zip(lines).all(|(output, expected)| output.contains(expected.trim()))
+        })
     }
 
     fn create_stamp(&self) {
