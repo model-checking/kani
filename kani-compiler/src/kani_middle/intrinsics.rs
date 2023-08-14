@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! This module contains a MIR pass that replaces some intrinsics by rust intrinsics models as
 //! well as validation logic that can only be added during monomorphization.
-#![allow(dead_code)]
 use rustc_index::IndexVec;
 use rustc_middle::mir::{interpret::ConstValue, Body, ConstantKind, Operand, TerminatorKind};
 use rustc_middle::mir::{Local, LocalDecl};

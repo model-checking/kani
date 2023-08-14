@@ -16,7 +16,7 @@ fn check_sum_any() {
 
 #[kani::proof]
 fn check_mask() {
-    // From array doesn't work either. Manually build [false, true, false, true].t st
+    // From array doesn't work either. Manually build [false, true, false, true]
     let mut mask = mask32x4::splat(false);
     mask.set(1, true);
     mask.set(3, true);

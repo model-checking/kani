@@ -65,7 +65,7 @@ fn run_kani_mir_passes<'tcx>(
     tracing::debug!(?def_id, "Run Kani transformation passes");
     let mut transformed_body = stubbing::transform(tcx, def_id, body);
     stubbing::transform_foreign_functions(tcx, &mut transformed_body);
-    // This should be appled after stubbing so user stubs take precedence.
+    // This should be applied after stubbing so user stubs take precedence.
     AbstractIntrinsics::run_pass(tcx, &mut transformed_body);
     tcx.arena.alloc(transformed_body)
 }
