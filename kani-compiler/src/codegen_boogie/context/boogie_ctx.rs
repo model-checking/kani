@@ -59,7 +59,7 @@ impl<'tcx> BoogieCtx<'tcx> {
         ))
     }
 
-    pub fn codegen_declare_variables(&self, instance: Instance<'tcx>) -> Vec<Stmt> {
+    fn codegen_declare_variables(&self, instance: Instance<'tcx>) -> Vec<Stmt> {
         let mir = self.tcx.instance_mir(instance.def);
         let ldecls = mir.local_decls();
         let decls: Vec<Stmt> = ldecls
@@ -79,7 +79,7 @@ impl<'tcx> BoogieCtx<'tcx> {
         decls
     }
 
-    pub fn codegen_type(&self, ty: Ty<'tcx>) -> Type {
+    fn codegen_type(&self, ty: Ty<'tcx>) -> Type {
         trace!(typ=?ty, "codegen_type");
         match ty.kind() {
             ty::Bool => Type::Bool,
@@ -88,7 +88,7 @@ impl<'tcx> BoogieCtx<'tcx> {
         }
     }
 
-    pub fn codegen_body(&self, instance: Instance<'tcx>) -> Stmt {
+    fn codegen_body(&self, instance: Instance<'tcx>) -> Stmt {
         let mir = self.tcx.instance_mir(instance.def);
         let statements: Vec<Stmt> = reverse_postorder(mir)
             .map(|(bb, bbd)| self.codegen_block(mir.local_decls(), bb, bbd))
@@ -96,7 +96,7 @@ impl<'tcx> BoogieCtx<'tcx> {
         Stmt::Block { statements }
     }
 
-    pub fn codegen_block(
+    fn codegen_block(
         &self,
         local_decls: &LocalDecls<'tcx>,
         bb: BasicBlock,
@@ -123,7 +123,7 @@ impl<'tcx> BoogieCtx<'tcx> {
         Stmt::Block { statements }
     }
 
-    pub fn codegen_statement(&self, stmt: &Statement<'tcx>) -> Stmt {
+    fn codegen_statement(&self, stmt: &Statement<'tcx>) -> Stmt {
         match &stmt.kind {
             StatementKind::Assign(box (place, rvalue)) => {
                 debug!(?place, ?rvalue, "codegen_statement");
@@ -145,7 +145,7 @@ impl<'tcx> BoogieCtx<'tcx> {
         }
     }
 
-    pub fn codegen_rvalue(&self, rvalue: &Rvalue<'tcx>) -> Expr {
+    fn codegen_rvalue(&self, rvalue: &Rvalue<'tcx>) -> Expr {
         debug!(rvalue=?rvalue, "codegen_rvalue");
         match rvalue {
             Rvalue::Use(operand) => self.codegen_operand(operand),
@@ -154,7 +154,7 @@ impl<'tcx> BoogieCtx<'tcx> {
         }
     }
 
-    pub fn codegen_binary_op(
+    fn codegen_binary_op(
         &self,
         binop: &BinOp,
         lhs: &Operand<'tcx>,
@@ -170,7 +170,7 @@ impl<'tcx> BoogieCtx<'tcx> {
         }
     }
 
-    pub fn codegen_terminator(
+    fn codegen_terminator(
         &self,
         local_decls: &LocalDecls<'tcx>,
         term: &Terminator<'tcx>,
@@ -191,7 +191,7 @@ impl<'tcx> BoogieCtx<'tcx> {
         }
     }
 
-    pub fn codegen_funcall(
+    fn codegen_funcall(
         &self,
         local_decls: &LocalDecls<'tcx>,
         func: &Operand<'tcx>,
@@ -218,7 +218,7 @@ impl<'tcx> BoogieCtx<'tcx> {
         }
     }
 
-    pub fn codegen_funcall_args(
+    fn codegen_funcall_args(
         &self,
         local_decls: &LocalDecls<'tcx>,
         args: &[Operand<'tcx>],
@@ -231,12 +231,12 @@ impl<'tcx> BoogieCtx<'tcx> {
                 if ty.is_primitive() {
                     return Some(self.codegen_operand(o));
                 }
-                None
+                todo!()
             })
             .collect()
     }
 
-    pub fn codegen_operand(&self, o: &Operand<'tcx>) -> Expr {
+    fn codegen_operand(&self, o: &Operand<'tcx>) -> Expr {
         trace!(operand=?o, "codegen_operand");
         // A MIR operand is either a constant (literal or `const` declaration)
         // or a place (being moved or copied for this operation).
@@ -248,19 +248,19 @@ impl<'tcx> BoogieCtx<'tcx> {
         }
     }
 
-    pub fn codegen_place(&self, place: &Place<'tcx>) -> Expr {
+    fn codegen_place(&self, place: &Place<'tcx>) -> Expr {
         debug!(place=?place, "codegen_place");
         debug!(place.local=?place.local, "codegen_place");
         debug!(place.projection=?place.projection, "codegen_place");
         self.codegen_local(place.local)
     }
 
-    pub fn codegen_local(&self, local: Local) -> Expr {
+    fn codegen_local(&self, local: Local) -> Expr {
         // TODO: handle function definitions
         Expr::Symbol { name: format!("{local:?}") }
     }
 
-    pub fn codegen_constant(&self, c: &Constant<'tcx>) -> Expr {
+    fn codegen_constant(&self, c: &Constant<'tcx>) -> Expr {
         trace!(constant=?c, "codegen_constant");
         // TODO: monomorphize
         match c.literal {
@@ -269,7 +269,7 @@ impl<'tcx> BoogieCtx<'tcx> {
         }
     }
 
-    pub fn codegen_constant_value(&self, val: ConstValue<'tcx>, ty: Ty<'tcx>) -> Expr {
+    fn codegen_constant_value(&self, val: ConstValue<'tcx>, ty: Ty<'tcx>) -> Expr {
         debug!(val=?val, "codegen_constant_value");
         match val {
             ConstValue::Scalar(s) => self.codegen_scalar(s, ty),
@@ -277,7 +277,7 @@ impl<'tcx> BoogieCtx<'tcx> {
         }
     }
 
-    pub fn codegen_scalar(&self, s: Scalar, ty: Ty<'tcx>) -> Expr {
+    fn codegen_scalar(&self, s: Scalar, ty: Ty<'tcx>) -> Expr {
         match (s, ty.kind()) {
             (Scalar::Int(_), ty::Bool) => Expr::Literal(Literal::Bool(s.to_bool().unwrap())),
             (Scalar::Int(_), ty::Int(it)) => match it {
@@ -304,12 +304,13 @@ impl<'tcx> BoogieCtx<'tcx> {
         }
     }
 
+    /// Write the program to the given writer
     pub fn write<T: Write>(&self, writer: &mut T) -> std::io::Result<()> {
         self.program.write_to(writer)?;
         Ok(())
     }
 
-    pub fn operand_ty(&self, local_decls: &LocalDecls<'tcx>, o: &Operand<'tcx>) -> Ty<'tcx> {
+    fn operand_ty(&self, local_decls: &LocalDecls<'tcx>, o: &Operand<'tcx>) -> Ty<'tcx> {
         // TODO: monomorphize
         o.ty(local_decls, self.tcx)
     }
