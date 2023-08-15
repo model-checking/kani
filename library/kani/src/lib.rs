@@ -14,6 +14,8 @@
 #![feature(repr_simd)]
 // Features used for tests only.
 #![cfg_attr(test, feature(platform_intrinsics, portable_simd))]
+// Required for rustc_diagnostic_item
+#![allow(internal_features)]
 
 pub mod arbitrary;
 #[cfg(feature = "concrete_playback")]

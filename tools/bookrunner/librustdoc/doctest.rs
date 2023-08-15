@@ -5,7 +5,7 @@
 use rustc_ast as ast;
 use rustc_data_structures::sync::Lrc;
 use rustc_driver::DEFAULT_LOCALE_RESOURCES;
-use rustc_errors::{ColorConfig, TerminalUrl};
+use rustc_errors::ColorConfig;
 use rustc_span::edition::Edition;
 use rustc_span::source_map::SourceMap;
 use rustc_span::symbol::sym;
@@ -81,33 +81,11 @@ pub fn make_test(
 
             let fallback_bundle =
                 rustc_errors::fallback_fluent_bundle(DEFAULT_LOCALE_RESOURCES.to_vec(), false);
-            supports_color = EmitterWriter::stderr(
-                ColorConfig::Auto,
-                None,
-                None,
-                fallback_bundle.clone(),
-                false,
-                false,
-                Some(80),
-                false,
-                false,
-                TerminalUrl::No,
-            )
-            .supports_color();
+            supports_color = EmitterWriter::stderr(ColorConfig::Auto, fallback_bundle.clone())
+                .diagnostic_width(Some(80))
+                .supports_color();
 
-            let emitter = EmitterWriter::new(
-                Box::new(io::sink()),
-                None,
-                None,
-                fallback_bundle,
-                false,
-                false,
-                false,
-                None,
-                false,
-                false,
-                TerminalUrl::No,
-            );
+            let emitter = EmitterWriter::new(Box::new(io::sink()), fallback_bundle);
 
             // FIXME(misdreavus): pass `-Z treat-err-as-bug` to the doctest parser
             let handler = Handler::with_emitter(Box::new(emitter));
