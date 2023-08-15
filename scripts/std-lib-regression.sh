@@ -74,6 +74,7 @@ RUST_FLAGS=(
     "-Cllvm-args=--goto-c"
     "-Cllvm-args=--ignore-global-asm"
     "-Cllvm-args=--reachability=pub_fns"
+    "-Cllvm-args=--build-std"
 )
 export RUSTFLAGS="${RUST_FLAGS[@]}"
 export RUSTC="$KANI_DIR/target/kani/bin/kani-compiler"
