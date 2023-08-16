@@ -10,13 +10,13 @@ use rustc_middle::ty::{Const, GenericArgsRef};
 use rustc_span::symbol::{sym, Symbol};
 use tracing::{debug, trace};
 
-pub struct AbstractIntrinsics<'tcx> {
+pub struct ModelIntrinsics<'tcx> {
     tcx: TyCtxt<'tcx>,
     /// Local declarations of the function being transformed.
     local_decls: IndexVec<Local, LocalDecl<'tcx>>,
 }
 
-impl<'tcx> AbstractIntrinsics<'tcx> {
+impl<'tcx> ModelIntrinsics<'tcx> {
     /// Function that replace calls to some intrinsics that have a high level model in our library.
     ///
     /// For now, we only look at intrinsic calls, which are modelled by a terminator.
@@ -24,7 +24,7 @@ impl<'tcx> AbstractIntrinsics<'tcx> {
     /// However, this pass runs after lowering intrinsics, which may replace the terminator by
     /// an intrinsic statement (non-diverging intrinsic).
     pub fn run_pass(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
-        AbstractIntrinsics { tcx, local_decls: body.local_decls.clone() }.transform(body)
+        ModelIntrinsics { tcx, local_decls: body.local_decls.clone() }.transform(body)
     }
 
     pub fn transform(&self, body: &mut Body<'tcx>) {

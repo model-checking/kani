@@ -33,7 +33,15 @@ mod intrinsics {
     macro_rules! impl_unsigned_element {
         { $ty:ty } => {
             impl MaskElement for $ty {
+                // Note that in the declaration of the intrinsic it is documented that the lane
+                // values should be -1 or 0:
+                // <https://github.com/rust-lang/rust/blob/338cfd3/library/portable-simd/crates/core_simd/src/intrinsics.rs#L134-L144>
+                //
+                // However, MIRI and the Rust compiler seems to accept unsigned values and they
+                // use their binary representation. Thus, that's what we use for now.
+                /// All bits are 1 which represents TRUE.
                 const TRUE: Self = <$ty>::MAX;
+                /// All bits are 0 which represents FALSE.
                 const FALSE: Self = 0;
             }
         }
@@ -53,6 +61,9 @@ mod intrinsics {
     impl_unsigned_element! { u128 }
     impl_unsigned_element! { usize }
 
+    /// Calculate the minimum number of lanes to represent a mask
+    /// Logic similar to `bitmask_len` from `portable_simd`.
+    /// <https://github.com/rust-lang/portable-simd/blob/490b5cf/crates/core_simd/src/masks/to_bitmask.rs#L75-L79>
     pub(super) const fn mask_len(len: usize) -> usize {
         (len + 7) / 8
     }
@@ -70,7 +81,7 @@ mod intrinsics {
             *mask = if input[lane] == T::TRUE {
                 shift_mask | 0x1
             } else {
-                assert_eq!(input[lane], T::FALSE, "Masks values should either be 0 or 1");
+                assert_eq!(input[lane], T::FALSE, "Masks values should either be 0 or -1");
                 shift_mask
             };
         }
@@ -122,14 +133,17 @@ mod test {
         fn simd_bitmask<T, U>(x: T) -> U;
     }
 
+    /// Test that the simd_bitmask model is equivalent to the intrinsic for all true and all false
+    /// masks with lanes represented using i16.
     #[test]
     fn test_bitmask_i16() {
         check_portable_bitmask::<_, i16, 16>(mask16x16::splat(false));
         check_portable_bitmask::<_, i16, 16>(mask16x16::splat(true));
     }
 
+    /// Tests that the model correctly fails if an invalid value is given.
     #[test]
-    #[should_panic(expected = "Masks values should either be 0 or 1")]
+    #[should_panic(expected = "Masks values should either be 0 or -1")]
     fn test_invalid_bitmask() {
         let invalid_mask = unsafe { mask32x16::from_int_unchecked(i32x16::splat(10)) };
         assert_eq!(
@@ -138,6 +152,8 @@ mod test {
         );
     }
 
+    /// Tests that the model correctly fails if the size parameter of the mask doesn't match the
+    /// expected number of bytes in the representation.
     #[test]
     #[should_panic(expected = "Expected size of return type and mask lanes to match")]
     fn test_invalid_generics() {
@@ -145,6 +161,8 @@ mod test {
         assert_eq!(unsafe { kani_intrinsic::simd_bitmask::<_, u16, i32, 2>(mask) }, u16::MAX);
     }
 
+    /// Test that the simd_bitmask model is equivalent to the intrinsic for a few random values.
+    /// These values shouldn't be symmetric and ensure that we also handle endianess correctly.
     #[test]
     fn test_bitmask_i32() {
         check_portable_bitmask::<_, i32, 8>(mask32x8::from([
@@ -158,12 +176,15 @@ mod test {
     #[derive(Clone, Debug)]
     struct CustomMask<T, const LANES: usize>([T; LANES]);
 
+    /// Check that the bitmask model can handle odd size SIMD arrays.
+    /// Since the portable_simd restricts the number of lanes, we have to use our own custom SIMD.
     #[test]
     fn test_bitmask_odd_lanes() {
         check_bitmask::<_, [u8; 3], i128, 23>(CustomMask([0i128; 23]));
         check_bitmask::<_, [u8; 9], i128, 70>(CustomMask([-1i128; 70]));
     }
 
+    /// Compare the value returned by our model and the portable simd representation.
     fn check_portable_bitmask<T, E, const LANES: usize>(mask: T)
     where
         T: ToBitMask + Clone,
@@ -177,6 +198,7 @@ mod test {
         );
     }
 
+    /// Compare the value returned by our model and the simd_bitmask intrinsic.
     fn check_bitmask<T, U, E, const LANES: usize>(mask: T)
     where
         T: Clone,
