@@ -11,10 +11,7 @@ use rustc_ast::{
 };
 use rustc_errors::ErrorGuaranteed;
 use rustc_hir::{def::DefKind, def_id::DefId};
-use rustc_middle::{
-    mir,
-    ty::{self, Instance, TyCtxt, TyKind},
-};
+use rustc_middle::ty::{Instance, TyCtxt, TyKind};
 use rustc_session::Session;
 use rustc_span::{Span, Symbol};
 use std::str::FromStr;
@@ -22,7 +19,7 @@ use strum_macros::{AsRefStr, EnumString};
 
 use tracing::{debug, trace};
 
-use crate::kani_queries::QueryDb;
+use crate::parser::ENABLE_FUNCTION_CONTRACTS;
 
 use super::resolve::{self, resolve_fn};
 
@@ -64,14 +61,16 @@ impl KaniAttributeKind {
         }
     }
 
-    /// Is this attribute kind one of the suite of attributes that form the function contracts API
+    /// Is this attribute kind one of the suite of attributes that form the
+    /// function contracts API. E.g. where [`Self::is_function_contract`] is
+    /// true but also auto harness attributes like `proof_for_contract`
     pub fn is_function_contract_api(self) -> bool {
         use KaniAttributeKind::*;
         self.is_function_contract() || matches!(self, ProofForContract)
     }
 
     /// Would this attribute be placed on a function as part of a function
-    /// contract.
+    /// contract. E.g. created by `requires`, `ensures`
     pub fn is_function_contract(self) -> bool {
         use KaniAttributeKind::*;
         matches!(self, CheckedWith | IsContractGenerated)
@@ -137,7 +136,7 @@ impl<'tcx> KaniAttributes<'tcx> {
     /// Parse and extract the `proof_for_contract(TARGET)` attribute. The
     /// returned symbol and defid are respectively the name and id of `TARGET`,
     /// the span in the span for the attribute (contents).
-    pub fn for_contract(&self) -> Option<(Symbol, DefId, Span)> {
+    fn interpret_the_for_contract_attribute(&self) -> Option<(Symbol, DefId, Span)> {
         self.expect_maybe_one(KaniAttributeKind::ProofForContract).and_then(|target| {
             let name = expect_key_string_value(self.tcx.sess, target);
             let resolved = resolve_fn(
@@ -171,7 +170,7 @@ impl<'tcx> KaniAttributes<'tcx> {
     /// Check that all attributes assigned to an item is valid.
     /// Errors will be added to the session. Invoke self.tcx.sess.abort_if_errors() to terminate
     /// the session and emit all errors found.
-    pub(super) fn check_attributes(&self, queries: &QueryDb) {
+    pub(super) fn check_attributes(&self) {
         // Check that all attributes are correctly used and well formed.
         let is_harness = self.is_harness();
         for (&kind, attrs) in self.map.iter() {
@@ -183,20 +182,6 @@ impl<'tcx> KaniAttributes<'tcx> {
                         kind.as_ref()
                     ),
                 );
-            }
-            if kind.is_function_contract_api() && !queries.function_contracts_enabled() {
-                let msg = format!(
-                    "Using the {} attribute requires activating the unstable `function-contracts` feature",
-                    kind.as_ref()
-                );
-                if let Some(attr) = attrs.first() {
-                    self.tcx.sess.span_err(attr.span, msg);
-                } else {
-                    self.tcx.sess.err(msg);
-                }
-            }
-            if kind.is_function_contract() {
-                check_is_contract_safe(self.tcx, self.item);
             }
             match kind {
                 KaniAttributeKind::ShouldPanic => {
@@ -255,6 +240,27 @@ impl<'tcx> KaniAttributes<'tcx> {
             // https://github.com/model-checking/kani/pull/2406#issuecomment-1534333862
             return;
         }
+
+        if !enabled_features.iter().any(|feature| feature == ENABLE_FUNCTION_CONTRACTS) {
+            for kind in self
+                .map
+                .keys()
+                .copied()
+                .filter(|a| a.is_function_contract_api())
+                .collect::<Vec<_>>()
+            {
+                let msg = format!(
+                    "Using the {} attribute requires activating the unstable `function-contracts` feature",
+                    kind.as_ref()
+                );
+                if let Some(attr) = self.map.get(&kind).unwrap().first() {
+                    self.tcx.sess.span_err(attr.span, msg);
+                } else {
+                    self.tcx.sess.err(msg);
+                }
+            }
+        }
+
         if let Some(unstable_attrs) = self.map.get(&KaniAttributeKind::Unstable) {
             for attr in unstable_attrs {
                 let unstable_attr = UnstableAttribute::try_from(*attr).unwrap();
@@ -334,7 +340,7 @@ impl<'tcx> KaniAttributes<'tcx> {
         );
         let current_module = self.tcx.parent_module_from_def_id(local_id);
         attrs.stubs.extend(
-            self.for_contract()
+            self.interpret_the_for_contract_attribute()
                 .and_then(|(name, id, span)| {
                     let replacement_name = KaniAttributes::for_item(self.tcx, id).checked_with();
                     if replacement_name.is_none() {
@@ -376,74 +382,6 @@ impl<'tcx> KaniAttributes<'tcx> {
     }
 }
 
-/// A basic check that ensures a function with a contract does not receive
-/// mutable pointers in its input and does not return raw pointers of any kind.
-///
-/// This is a temporary safety measure because contracts cannot yet reason
-/// about the heap.
-fn check_is_contract_safe(tcx: TyCtxt, item: DefId) {
-    use ty::TypeVisitor;
-    struct NoMutPtr<'tcx> {
-        tcx: TyCtxt<'tcx>,
-        span: Span,
-        is_prohibited: fn(ty::Ty<'tcx>) -> bool,
-        r#where: &'static str,
-        what: &'static str,
-    }
-
-    impl<'tcx> TypeVisitor<TyCtxt<'tcx>> for NoMutPtr<'tcx> {
-        fn visit_ty(&mut self, t: ty::Ty<'tcx>) -> std::ops::ControlFlow<Self::BreakTy> {
-            use ty::TypeSuperVisitable;
-            if (self.is_prohibited)(t) {
-                self.tcx.sess.span_err(self.span, format!("{} contains a {}pointer ({t:?}). This is prohibited for functions with contracts, as they cannot yet reason about the pointer behavior.", self.r#where, self.what));
-            }
-
-            // Rust's type visitor only recurses into type arguments, (e.g.
-            // `generics` in this match). This is enough for may types, but it
-            // won't look at the field types of structs or enums. So we override
-            // it here and do that ourselves.
-            //
-            // Since the field types also must contain in some form all the type
-            // arguments the visitor will see them as it inspects the fields and
-            // we don't need to call back to `super`.
-            if let ty::TyKind::Adt(adt_def, generics) = t.kind() {
-                for variant in adt_def.variants() {
-                    for field in &variant.fields {
-                        let ctrl = self.visit_ty(field.ty(self.tcx, generics));
-                        if ctrl.is_break() {
-                            // Technically we can just ignore this because we
-                            // know this case will never happen, but just to be
-                            // safe.
-                            return ctrl;
-                        }
-                    }
-                }
-                std::ops::ControlFlow::Continue(())
-            } else {
-                // For every other type
-                t.super_visit_with(self)
-            }
-        }
-    }
-
-    fn is_raw_mutable_ptr(t: ty::Ty) -> bool {
-        matches!(t.kind(), ty::TyKind::RawPtr(tmut) if tmut.mutbl == rustc_ast::Mutability::Mut)
-    }
-
-    let body = tcx.optimized_mir(item);
-
-    for (arg, (is_prohibited, r#where, what)) in body
-        .args_iter()
-        .zip(std::iter::repeat((is_raw_mutable_ptr as fn(_) -> _, "This argument", "mutable ")))
-        .chain([(mir::RETURN_PLACE, (ty::Ty::is_unsafe_ptr as fn(_) -> _, "The return", ""))])
-    {
-        let decl = &body.local_decls[arg];
-        let span = decl.source_info.span;
-        let mut v = NoMutPtr { tcx, span, is_prohibited, r#where, what };
-        v.visit_ty(decl.ty);
-    }
-}
-
 /// An efficient check for the existence for a particular [`KaniAttributeKind`].
 /// Unlike querying [`KaniAttributes`] this method builds no new heap data
 /// structures and has short circuiting.
@@ -453,6 +391,12 @@ fn has_kani_attribute<F: Fn(KaniAttributeKind) -> bool>(
     predicate: F,
 ) -> bool {
     tcx.get_attrs_unchecked(def_id).iter().filter_map(|a| attr_kind(tcx, a)).any(predicate)
+}
+
+/// Test is this function was generated by expanding a contract attribute like
+/// `requires` and `ensures`
+pub fn is_function_contract_generated(tcx: TyCtxt, def_id: DefId) -> bool {
+    has_kani_attribute(tcx, def_id, KaniAttributeKind::is_function_contract)
 }
 
 /// Same as [`KaniAttributes::is_harness`] but more efficient because less
@@ -478,7 +422,7 @@ pub fn test_harness_name(tcx: TyCtxt, def_id: DefId) -> String {
 
 /// Expect the contents of this attribute to be of the format #[attribute =
 /// "value"] and return the `"value"`
-pub fn expect_key_string_value(sess: &Session, attr: &Attribute) -> rustc_span::Symbol {
+fn expect_key_string_value(sess: &Session, attr: &Attribute) -> rustc_span::Symbol {
     let span = attr.span;
     let AttrArgs::Eq(_, it) = &attr.get_normal_item().args else {
         sess.span_fatal(span, "Expected attribute of the form #[attr = \"value\"]")

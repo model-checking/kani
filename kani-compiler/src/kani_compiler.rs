@@ -400,9 +400,6 @@ impl Callbacks for KaniCompiler {
                 queries.unstable_features = features.cloned().collect::<Vec<_>>();
             }
 
-            queries.function_contracts_enabled =
-                queries.unstable_features.iter().any(|s| s == "function-contracts");
-
             if matches.get_flag(parser::ENABLE_STUBBING)
                 && queries.reachability_analysis == ReachabilityType::Harnesses
             {
@@ -422,7 +419,7 @@ impl Callbacks for KaniCompiler {
     ) -> Compilation {
         if self.stage.is_init() {
             self.stage = rustc_queries.global_ctxt().unwrap().enter(|tcx| {
-                check_crate_items(tcx, &self.queries.lock().unwrap());
+                check_crate_items(tcx, self.queries.lock().unwrap().ignore_global_asm);
                 self.process_harnesses(tcx)
             });
         }
