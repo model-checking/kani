@@ -99,9 +99,7 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
    they are implicitly logically conjoined.
 
 
-2. Next, Kani makes sure that the contract we specified overapproximates the
-   implementation with a **check**. This is in contrast to a
-   ["stub"][stubbing], which is trusted blindly.
+2. Next, Kani ensures that the function implementation respects all the conditions specified in its contract.
 
    To perform this check Kani needs a suitable harness to verify the function
    in. The harness is mainly responsible for providing the function arguments
@@ -218,9 +216,9 @@ impl<T> Vec<T> {
 
 This function can, in theory, modify any memory behind `&mut self`, so this is
 what Kani will assume it does by default. It infers the "write set", that is the
-set of memory locations a function may modify, from the type system. As a result
+set of memory locations a function may modify, from the type system. As a result,
 any data pointed to by a mutable reference or pointer is considered part of the
-write set. In addition a static analysis of the source code discovers any
+write set. In addition, a static analysis of the source code discovers any
 `static mut` variables the function or it's dependencies reference and adds all
 pointed-to data to the write set also. During havocking the verifier replaces
 all locations in the write set with non-deterministic values.
@@ -230,7 +228,7 @@ checking[^inferred-footprint] in many cases this inference is too coarse
 grained. In the case of `pop` case every value in this vector will be made
 non-deterministic.
 
-To address this the proposal also adds an `modifies` and `frees` clause which
+To address this the proposal also adds a `modifies` and `frees` clause which
 limits the scope of havocking. Both clauses represent an assertion that the
 function will modify only the specified memory regions. Similar to
 requires/ensures the verifier enforces the assertion in the checking stage to
@@ -270,10 +268,10 @@ Because lvalues are restricted to using projections only, Kani must break
 encapsulation here. If need be we can reference fields that are usually hidden,
 without an error from the compiler.
 
-In addition to lvalues an `MODIFIES_RANGE` can also be terminated with a more
+In addition to lvalues, a `MODIFIES_RANGE` can also be terminated with more
 complex slice expressions as the last projection. This only applies to `*mut`
 pointers to arrays. For instance this is needed for `Vec::truncate` where all of
-the the latter section of the allocation is assigned (dropped).
+the latter section of the allocation is assigned (dropped).
 
 ```rs
 impl<T> Vec<T> {
@@ -343,7 +341,7 @@ And it will only be recognized as `old(...)`, not as `let old1 = old; old1(...)`
 2. Each contract that is used in a `stub_verified` is required to have at least
    one associated contract harness. Kani reports any missing contract harnesses
    as errors.
-3. Kani verifies all non-contract harnesses where every `stub_verified` they use
+3. Kani verifies all non-contract harnesses enforcing that any occurrence of `stub_verified` has at least one correspondent contract harness, and that the verification of all contract harnesses succeeded.
    had at least one contract harness present and all verifications of contract
    harnesses succeeded.
 
@@ -382,7 +380,7 @@ Kani reports a compile time error if any of the following constraints are violat
   annotations, though no target may occur in `S_TARGET`s and `V_TARGET`s
   simultaneously.
 
-- For mutually recursive functions using `stub_verified` kani will check their
+- For mutually recursive functions using `stub_verified`, Kani will check their
   contracts in non-deterministic order and assume each time the respective other
   check succeeded.
 
@@ -450,7 +448,7 @@ The borrow checker also ensures for us that none of the temporary variables
 borrow in a way that would be able to observe the modification in `pop` which
 would occur for instance if the user wrote `old(self)`. Instead of borrowing
 copies should be created (e.g. `old(self.clone())`). This is only enforced for
-safe rust though.
+safe Rust though.
 
 The second part relevant for the implementation is how we deal with the borrow
 checker for postconditions. They reference the arguments of the function after
@@ -479,7 +477,7 @@ the borrow checker like this is safe for 2 reasons:
    the arguments and cause the race conditions the Rust type system tries to
    prevent.
 
-The "copies" of arguments created by by `unsafe_deref` are stored as fresh local
+The "copies" of arguments created by `unsafe_deref` are stored as fresh local
 variables and their occurrence in the postcondition is renamed. In addition a
 `mem::forget` is emitted for each copy to avoid a double free.
 
@@ -531,7 +529,7 @@ with the generated check and replace function respectively. If `f` has no
 contract, Kani throws an error.
 
 For **write sets** Kani relies on CBMC. `modifies` clauses (whether derived from
-types of from explicit clauses) are emitted from the compiler as GOTO contracts
+types or from explicit clauses) are emitted from the compiler as GOTO contracts
 in the artifact. Then the driver invokes `goto-instrument` with the name of the
 GOTO-level function names to enforce or replace the memory contracts. The
 compiler communicates the names of the function via harness metadata.
@@ -578,25 +576,25 @@ then call the lowered function in the CBMC contract.
 
 The trouble is that CBMC's `old` is only supported directly in the contract, not
 in functions called from the contract. This means we either need to inline the
-contract function body, which is brittle in the presence if control flow, or we
+contract function body, which is brittle in the presence of control flow, or we
 must extract the `old` expressions, evaluate them in the contract directly and
 pass the results to the check function. However this means we must restrict the
 expressions in `old`, because we now need to lower those by hand and even if we
-could let rustc do it, CBMC's old has no support for function calls in its
+could let `rustc` do it, CBMC's `old` has no support for function calls in its
 argument expression.
 
 ### Expanding all contract macros at the same time 
 
-Instead of expanding contract macros one-at-a-atime and layering the checks we
+Instead of expanding contract macros one-at-a-time and layering the checks we
 could expand all subsequent one's with the outermost one in one go.
 
 This is however brittle with respect to renaming. If a user does `use
 kani::requires as my_requires` and then does multiple
 `#[my_requires(condition)]` macro would not collect them properly since it can
 only match syntactically and it does not know about the `use` and neither can we
-restrict this kind if use or warn the user. By contrast the collection with
+restrict this kind of use or warn the user. By contrast, the collection with
 `kanitool::checked_with` is safe, because that attribute is generated by our
-macro itself, so we can rely on the fact that it uses then canonical
+macro itself, so we can rely on the fact that it uses the canonical
 representation.
 
 ### Generating nested functions instead of siblings 
@@ -615,7 +613,7 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
 
 This could be beneficial if we want to be able to allow contracts on trait impl
 items, in which case generating sibling functions is not allowed. On the other
-hand this makes it harder to implement contracts on traits *definitions*,
+hand this makes it harder to implement contracts on trait *definitions*,
 because there is no body available which we could nest the function into.
 Ultimately we may require both so that we can support both.
 
@@ -750,13 +748,13 @@ Instead of
   invariants at definition site which are automatically swapped in on every
   contract that uses this type.
 - What about mutable trait inputs (wrt memory access patters), e.g. a `mut impl AccessMe`
-- **Trait contracts:** Ous proposal could be extended easily to handle simple
+- **Trait contracts:** Our proposal could be extended easily to handle simple
   trait contracts. The macros would generate new trait methods with default
-  implementation, similar to the functions it generates today. Using sealed
+  implementations, similar to the functions it generates today. Using sealed
   types we can prevent the user from overwriting the generated contract methods.
   Contracts for the trait and contracts on it's impls are combined by abstracting
   the original method depending on context. The occurrence inside the contract
-  generated from the trait method is replaced by the impl contract. Any other
+  generated from the trait method is replaced by the `impl` contract. Any other
   occurrence is replaced by the just altered trait method contract.
 - **Cross Session Verification Caching:** This proposal focuses on scalability
   benefits within a single verification session, but those verification results
