@@ -55,7 +55,7 @@ to Kani's current interface.
 
 ## User Experience
 
-A function contracts specifies the behavior of a function as a predicate that
+A function contract specifies the behavior of a function as a predicate that
 can be checked against the function implementation and also used as an
 abstraction of the implementation at the call sites.
 
@@ -201,7 +201,7 @@ and guarding against abstractions diverging from their checks.
 
 Functions can have side effects on data reachable through mutable references or
 pointers. To overapproximate all such modifications a function could apply to
-pointed-to data the verifier "havocs" those regions, essentially replacing
+pointed-to data, the verifier "havocs" those regions, essentially replacing
 their content with non-deterministic values.
 
 Let us consider a simple example of a `pop` method.
@@ -225,14 +225,14 @@ all locations in the write set with non-deterministic values.
 
 While the inferred write set is sound and enough for successful contract
 checking[^inferred-footprint] in many cases this inference is too coarse
-grained. In the case of `pop` case every value in this vector will be made
+grained. In the case of `pop` every value in this vector will be made
 non-deterministic.
 
 To address this the proposal also adds a `modifies` and `frees` clause which
 limits the scope of havocking. Both clauses represent an assertion that the
 function will modify only the specified memory regions. Similar to
 requires/ensures the verifier enforces the assertion in the checking stage to
-ensure soundness. When the contract is used as an abstraction the modifies
+ensure soundness. When the contract is used as an abstraction, the `modifies`
 clause is used as the write set to havoc.
 
 In our `pop` example the only modified memory location is the last element and
@@ -248,13 +248,14 @@ impl<T> Vec<T> {
 }
 ```
 
-The `#[modifies(if CONDITION => MODIFIES_RANGE, ...)]` consists of an optional
-`CONDITION` (defaults to `true`) and zero or more, comma separated
-`MODIFIES_RANGE`s which are essentially an lvalue.
+The `#[modifies(when = CONDITION, targets = { MODIFIES_RANGE, ... })]` consists
+of an `CONDITION` and zero or more, comma separated `MODIFIES_RANGE`s which are
+essentially an lvalue.
 
-If no condition is provided both `if` and `=>` are optional. If no ranges are
-provided then `=>` can be omitted and the semantics are that nothing gets
-assigned.
+If no `when` is provided the condition defaults to `true`, meaning the modifies
+ranges apply to all invocations of the function. If `targets` is omitted it
+defaults to `{}`, e.g. an empty set of targets meaning under this condition the
+function modifies no mutable memory.
 
 Lvalues are simple expressions permissible on the left hand side of an
 assignment. They compose of the name of one function argument (or static
@@ -288,8 +289,10 @@ in Rust `p[i..j]` would be equivalent to
 `std::slice::from_raw_parts(p.offset(i), i - j)`. `i` must be smaller or equal
 than `j`.
 
-A `#[frees(CONDITION, LVALUE)]` clause works similarly to `modifies` but denotes
-memory that is deallocated. It does not admit slice syntax, only lvalues.
+A `#[frees(when = CONDITION, targets = { LVALUE, ... })]` clause works similarly
+to `modifies` but denotes memory that is deallocated. Like `modifies` it applies
+only to pointers but unlike modifies it does not admit slice syntax, only
+lvalues, because the whole allocation has to be freed.
 
 [^inferred-footprint]: While inferred memory footprints are sound for both safe
     and unsafe Rust certain features in unsafe rust (e.g. `RefCell`) get
@@ -319,10 +322,11 @@ impl<T> Vec<T> {
 }
 ```
 
-`old` allows evaluating any (side-effect free, see [here](#changes-to-other-components)) Rust expression.
-The borrow checker enforces the result of `old` cannot observe the mutations
-from e.g. `pop`, as that would defeat the purpose. If `your` expression in `old`
-returns borrowed content, make a copy instead (using e.g. `clone()`).
+`old` allows evaluating any Rust expression, so long as it is free of
+side-effects. See also [this explanation](#changes-to-other-components). The
+borrow checker enforces that the result of `old` cannot observe the mutations
+from e.g. `pop`, as that would defeat the purpose. If you wish to return
+borrowed content from `old`, make a copy instead (using e.g. `clone()`).
 
 Note also that `old` is syntax, not a function and implemented as an extraction
 and lifting during code generation. It can reference e.g. `pop`'s arguments but
@@ -338,12 +342,19 @@ And it will only be recognized as `old(...)`, not as `let old1 = old; old1(...)`
 1. By default `kani` or `cargo kani` first verifies all contract harnesses
    (`proof_for_contract`) reachable from the file or in the local workspace
    respectively.
-2. Each contract that is used in a `stub_verified` is required to have at least
-   one associated contract harness. Kani reports any missing contract harnesses
-   as errors.
-3. Kani verifies all non-contract harnesses enforcing that any occurrence of `stub_verified` has at least one correspondent contract harness, and that the verification of all contract harnesses succeeded.
-   had at least one contract harness present and all verifications of contract
-   harnesses succeeded.
+2. Each contract (from the local
+   crate[^external-contract-checking-expectations]) that is used in a
+   `stub_verified` is required to have at least one associated contract harness.
+   Kani reports any missing contract harnesses as errors.
+3. Kani verifies all regular harnesses *if* their `stub_verified` contracts
+   passed step 1 and 2.
+
+[^external-contract-checking-expectations]: Contracts for functions from
+    external crates (crates from outside the workspace, which is not quite the
+    definition of `extern crate` in Rust) are not checked by default. The
+    expectation is that the library author providing the contract has performed
+    this check. See also [open question](#open-questions) for a discussion on
+    defaults and checking external contracts.
 
 When specific harnesses are selected (with `--harness`) contracts are not
 verified.
@@ -366,9 +377,6 @@ Kani reports a compile time error if any of the following constraints are violat
 
 -  Kani checks that `TARGET` is reachable from the `proof_for_contract` harness,
   but it does not warn if abstracted functions use `TARGET`[^stubcheck].
-
-  A current limitation with how contracts are enforced means that if target is
-  polymorphic, only one monomorphization of `TARGET` is permissible.
 
 -  A `proof_for_contract` function may not have the `kani::proof` attribute (it
   is already implied by `proof_for_contract`).
@@ -397,8 +405,9 @@ Kani implements the functionality of function contracts in two places.
 1. Code generation in the `requires` and `ensures` macros (`kani_macros`).
 2. GOTO level contracts using CBMC's contract language generated in
    `kani-compiler` for `modifies` clauses.
-
-With some additional plumbing in the compiler and the driver.
+3. Dependencies and ordering among harnesses in the driver to enforce contract
+   checking before replacement. Also plumbing between compiler and driver for
+   enforcement of assigns clauses.
 
 ### Code generation in `kani_macros`
 
@@ -539,9 +548,9 @@ Code used in contracts is required to be **side effect** free which means it
 must not perform I/O, mutate memory (`&mut` vars and such) or (de)allocate heap
 memory. This is enforced in two layers. First with an MIR traversal over all
 code reachable from a contract expression. An error is thrown if known
-side-effecting actions are performed such as `ptr::write`, `malloc` or `free`.
-In a second layer we rely on CBMC to catch the violation dynamically if the code
-calls out to C, ensuring soundness but causing less readable errors.
+side-effecting actions are performed such as `ptr::write`, `malloc`, `free` or
+functions which we cannot check, such as e.g. `extern "C"`, with the exception
+of known side effect free functions in e.g. the standard library.
 
 <!-- 
 This is the technical portion of the RFC. Please provide high level details of the implementation you have in mind:
@@ -613,7 +622,7 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
 
 This could be beneficial if we want to be able to allow contracts on trait impl
 items, in which case generating sibling functions is not allowed. On the other
-hand this makes it harder to implement contracts on trait *definitions*,
+hand this makes it harder to implement contracts on *trait definitions*,
 because there is no body available which we could nest the function into.
 Ultimately we may require both so that we can support both.
 
@@ -636,19 +645,52 @@ Instead of
      to be used for which contract, users must remember to invoke the check and
      are also responsible for ensuring they really do verify *all* contacts they
      will later be replacing and lastly.
-  2. **Check contracts with a `#[proof]` harness.** This would have used e.g. a
-     `#[for_contract]` attributes on a `#[proof]`. Since `#[for_contract]` is
-     *only* valid on a proof, we decided to just imply it and save the user some
-     headache. Contract checking harnesses are not meant to be reused for other
-     purposes anyway and if the user *really* wants to the can just factor out the
-     actual contents of the harness to reuse it.
+  2. **Check contracts with a `#[kani::proof]` harness.** This would have used
+     e.g. a `#[kani::for_contract]` attributes on a `#[kani::proof]`. Since
+     `#[kani::for_contract]` is *only* valid on a proof, we decided to just
+     imply it and save the user some headache. Contract checking harnesses are
+     not meant to be reused for other purposes anyway and if the user *really*
+     wants to the can just factor out the actual contents of the harness to
+     reuse it.
+
+### Misc
+
+- A current limitation with how contracts are enforced means that if the target
+  of a `proof_for_contract` is polymorphic, only one monomorphization is
+  permitted to occur in the harness. This does not limit the target to a single
+  occurrence, *but* to a single instantiation of its generic parameters.
+
+  This is because we rely on CBMC for enforcing the `assigns` contract. At the
+  GOTO level all monomorphized instances are distinct functions *and* CBMC only
+  allows checking one function contract at a time, hence this restriction.
+
+- We make the user supply the harnesses for checking contracts. This is our
+  major source of unsoundness, if corner cases are not adequately covered.
+  Having Kani generate the harnesses automatically is a non-trivial task
+  (because heaps are hard) and will be the subject of [future
+  improvements](#future-possibilities). 
+
+  In limited cases we could generate harnesses, for instance if only bounded
+  types (integers, booleans, enums, tuples, structs, references and their
+  combinations) were used. We could restrict the use of contracts to cases where
+  only such types are involved in the function inputs and outputs, however this
+  would drastically limit the applicability, as even simple heap data structures
+  such as `Vec`, `String` and even `&[T]` and `&str` (slices) would be out of
+  scope. These data structures however are ubiquitous and users can avoid the
+  unsoundness with relative confidence by overprovisioning (generating inputs
+  that are several times larger than what they expect the function will touch).
+
 
 ## Open questions
 
 <!-- For Developers -->
 
-- Is it really correct to return `kani::any()` from the replacement copy, even
-  if it can be a pointer?
+- Returning `kani::any()` in a replacement isn't great, because it wouldn't work
+  for references as they can't have an `Arbitrary` implementation. Plus the
+  soundness then relies on a correct implementation of `Arbitrary`. Instead it
+  may be better to allow for the user to specify type invariants which can the
+  be used to generate correct values in replacement but also be checked as part
+  of the contract checking.
 - Making result special. Should we use special syntax here like `@result` or
   `kani::result()`, though with the latter I worry that people may get confused
   because it is syntactic and not subject to usual `use` renaming and import
