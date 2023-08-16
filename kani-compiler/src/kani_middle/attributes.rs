@@ -36,9 +36,15 @@ enum KaniAttributeKind {
     /// Attribute used to mark unstable APIs.
     Unstable,
     Unwind,
+    /// A harness, similar to [`Self::Proof`], but for checking a function
+    /// contract, e.g. the contract check is substituted for the target function
+    /// before the the verification runs.
     ProofForContract,
+    /// Attribute on a function with a contract that identifies the code
+    /// implementing the check for this contract.
     CheckedWith,
-    ReplacedWith,
+    /// Attribute on a function that was auto-generated from expanding a
+    /// function contract.
     IsContractGenerated,
 }
 
@@ -54,8 +60,7 @@ impl KaniAttributeKind {
             | KaniAttributeKind::Unwind => true,
             KaniAttributeKind::Unstable
             | KaniAttributeKind::CheckedWith
-            | KaniAttributeKind::IsContractGenerated
-            | KaniAttributeKind::ReplacedWith => false,
+            | KaniAttributeKind::IsContractGenerated => false,
         }
     }
 
@@ -69,7 +74,7 @@ impl KaniAttributeKind {
     /// contract.
     pub fn is_function_contract(self) -> bool {
         use KaniAttributeKind::*;
-        matches!(self, CheckedWith | ReplacedWith | IsContractGenerated)
+        matches!(self, CheckedWith | IsContractGenerated)
     }
 }
 
@@ -227,7 +232,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                     assert!(!self.map.contains_key(&KaniAttributeKind::Proof));
                     expect_single(self.tcx, kind, &attrs);
                 }
-                KaniAttributeKind::ReplacedWith | KaniAttributeKind::CheckedWith => {
+                KaniAttributeKind::CheckedWith => {
                     self.expect_maybe_one(kind)
                         .map(|attr| expect_key_string_value(&self.tcx.sess, attr));
                 }
@@ -320,9 +325,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                         // Internal attribute which shouldn't exist here.
                         unreachable!()
                     }
-                    KaniAttributeKind::CheckedWith
-                    | KaniAttributeKind::ReplacedWith
-                    | KaniAttributeKind::IsContractGenerated => {
+                    KaniAttributeKind::CheckedWith | KaniAttributeKind::IsContractGenerated => {
                         todo!("Contract attributes are not supported on proofs")
                     }
                 };
