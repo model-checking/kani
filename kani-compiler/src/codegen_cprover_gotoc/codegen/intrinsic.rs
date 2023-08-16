@@ -510,7 +510,6 @@ impl<'tcx> GotocCtx<'tcx> {
             ),
             "simd_and" => codegen_intrinsic_binop!(bitand),
             // TODO: `simd_rem` doesn't check for overflow cases for floating point operands.
-            // <https://github.com/model-checking/kani/issues/1970>
             // <https://github.com/model-checking/kani/pull/2645>
             "simd_div" | "simd_rem" => {
                 self.codegen_simd_div_with_overflow(fargs, intrinsic, p, loc)
