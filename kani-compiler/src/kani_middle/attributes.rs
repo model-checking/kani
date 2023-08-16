@@ -19,8 +19,6 @@ use strum_macros::{AsRefStr, EnumString};
 
 use tracing::{debug, trace};
 
-use crate::parser::ENABLE_FUNCTION_CONTRACTS;
-
 use super::resolve::{self, resolve_fn};
 
 #[derive(Debug, Clone, Copy, AsRefStr, EnumString, PartialEq, Eq, PartialOrd, Ord)]
@@ -241,7 +239,7 @@ impl<'tcx> KaniAttributes<'tcx> {
             return;
         }
 
-        if !enabled_features.iter().any(|feature| feature == ENABLE_FUNCTION_CONTRACTS) {
+        if !enabled_features.iter().any(|feature| feature == "function-contracts") {
             for kind in self
                 .map
                 .keys()
