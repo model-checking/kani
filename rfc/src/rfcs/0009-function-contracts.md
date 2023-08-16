@@ -38,7 +38,7 @@ verification, which paves the way for the following two ambitious goals.
     section.
 
 - **Scalability:** Function contracts are sound (over)abstractions of function
-  behavior. By verifiying the contract against its implemetation and
+  behavior. By verifying the contract against its implementation and
   subsequently performing caller verification against the (cheaper) abstraction,
   verification can be modularized, cached and thus scaled.
 - **Unbounded Verification:** The abstraction provided by the contract can be
@@ -152,7 +152,7 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
    **stub** other harnesses.
 
    Kani requires that there has to be at least one associated
-   `proof_for_contract` harness for each function to stub, otherwise an eror is
+   `proof_for_contract` harness for each function to stub, otherwise an error is
    thrown. In addition, by default, it requires all `proof_for_contract`
    harnesses to pass verification before attempting verification of any
    harnesses that use the contract as a stub.
@@ -170,7 +170,7 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
    ```
 
    At a call site where the contract is used as a stub Kani `kani::assert`s the
-   preconditions (`requies`) and produces a nondeterministic value (`kani::any`)
+   preconditions (`requires`) and produces a nondeterministic value (`kani::any`)
    which satisfies the postconditions.
    
    Mutable memory is similarly made non-deterministic, discussed later in
@@ -197,9 +197,9 @@ stubs diverging from their checks.
 
 ### Write Sets and Havocking
 
-Functions can have side effects on data rechable through mutable refrences or
+Functions can have side effects on data reachable through mutable references or
 pointers. To overapproximate all such modifications a function could apply to
-pointed-to data the verifier "havocks" those regions, essentially replacing
+pointed-to data the verifier "havocs" those regions, essentially replacing
 their content with non-deterministic values.
 
 Let us consider a simple example of a `pop` method.
@@ -223,7 +223,7 @@ all locations in the write set with non-deterministic values.
 
 While the inferred write set is sound and enough for successful contract
 checking[^inferred-footprint] in many cases this inference is too coarse
-grained. In the caase of `pop` case every value in this vector will be made
+grained. In the case of `pop` case every value in this vector will be made
 non-deterministic.
 
 To address this the proposal also adds an `modifies` and `frees` clause which
@@ -231,7 +231,7 @@ limits the scope of havocking. Both clauses represent an assertion that the
 function will modify only the specified memory regions. Similar to
 requires/ensures the verifier enforces the assertion in the checking stage to
 ensure soundness. When the contract is used as a stub the modifies clause is
-used as the write set to havock.
+used as the write set to havoc.
 
 In our `pop` example the only modified memory location is the last element and
 only if the vector was not already empty, which would be specified thusly.
@@ -331,7 +331,7 @@ not local variables. Compare the following
 
 And it will only be recognized as `old(...)`, not as `let old1 = old; old1(...)` etc.
 
-### Workflow and Attribute Contraints Overview
+### Workflow and Attribute Constraints Overview
 
 1. By default `kani` or `cargo kani` first verifies all contract harnesses
    (`proof_for_contract`) reachable from the file or in the local workspace
@@ -423,7 +423,7 @@ impl<T> Vec<T> {
 }
 ```
 
-The `ensures` macro performs an AST rewrite constiting of an extraction of the
+The `ensures` macro performs an AST rewrite consisting of an extraction of the
 expressions in `old` and a replacement with a fresh local variable, creating the
 following:
 
@@ -443,7 +443,7 @@ variables in the contract (Rust will report those variables as not being in
 scope). 
 
 The borrow checker also ensures for us that none of the temporary variables
-borrow in a way that would be able to observe the moditication in `pop` which
+borrow in a way that would be able to observe the modification in `pop` which
 would occur for instance if the user wrote `old(self)`. Instead of borrowing
 copies should be created (e.g. `old(self.clone())`). This is only enforced for
 safe rust though.
@@ -466,7 +466,7 @@ impl<T> Vec<T> {
 This contract refers simultaneously to `self` and the result. Since the method
 however borrows `self` mutably, it would no longer be accessible in the
 postcondition. To work around this we strategically break the borrowing rules
-using a new hidden builtin `kani::unckecked_deref` with the type signature `for
+using a new hidden builtin `kani::unchecked_deref` with the type signature `for
 <T> fn (&T) -> T` which is essentially a C-style dereference operation. Breaking
 the borrow checker like this is safe for 2 reasons:
 
@@ -517,7 +517,7 @@ Note that this is insufficient to verify all types of recursive functions, as
 the contract specification language has no support for inductive lemmas (for
 instance in [ACSL](https://frama-c.com/download/acsl.pdf) section 2.6.3
 "inductive predicates"). Inductive lemmas are usually needed for recursive
-datastructures.
+data structures.
 
 ### Changes to Other Components
 
@@ -589,7 +589,7 @@ could expand all subsequent one's with the outermost one in one go.
 This is however brittle with respect to renaming. If a user does `use
 kani::requires as my_requires` and then does multiple
 `#[my_requires(condition)]` macro would not collect them properly since it can
-only mathc syntactically and it does not know about the `use` and neither can we
+only match syntactically and it does not know about the `use` and neither can we
 restrict this kind if use or warn the user. By contrast the collection with
 `kanitool::checked_with` is safe, because that attribute is generated by our
 macro itself, so we can rely on the fact that it uses then canonical
@@ -613,7 +613,7 @@ This could be beneficial if we want to be able to allow contracts on trait impl
 items, in which case generating sibling functions is not allowed. On the other
 hand this makes it harder to implement contracts on traits *definitions*,
 because there is no body available which we could nest the function into.
-Utimately we may require both so that we vcan support both.
+Ultimately we may require both so that we can support both.
 
 
 What is required to make this work is an additional pass over the condition that
@@ -653,7 +653,7 @@ Instead of
   semantics. Alternatively we can let the user pick the name with an additional
   argument to `ensures`, e.g. `ensures(my_result_var, CONDITION)`
 
-  Similar concers apply to `old`, which may be more appropriate to be special
+  Similar concerns apply to `old`, which may be more appropriate to be special
   syntax, e.g. `@old`.
 
   See [#2597](https://github.com/model-checking/kani/issues/2597)
@@ -699,11 +699,11 @@ Instead of
   bool`, where `T` is some arbitrary type that can be quantified over. This
   interface is familiar to developers, but the code generation is tricky, as
   CBMC level quantifiers only allow certain kinds of expressions. This
-  necessiates a rewrite of the `Fn` closure to a compliant expression.
+  necessitates a rewrite of the `Fn` closure to a compliant expression.
 - Letting the user supply the **harnesses for checking contracts** is a source of
   unsoundness, if corner cases are not adequately covered. Ideally Kani would
   generate the check harness automatically, but this is difficult both because
-  heap datastructures are potentially infinite, and also because it must observe
+  heap data structures are potentially infinite, and also because it must observe
   user-level type invariants.
 
   A complete solution for this is not known to us but there are ongoing
@@ -711,7 +711,7 @@ Instead of
 
   Environments that are non-inductive, safe Rust (e.g. no recursively defined
   data structures, no raw pointers) could be created from the type as the
-  safe Rust type contraints describe a finite space.
+  safe Rust type constraints describe a finite space.
 
   For dealing with pointers one applicable mechanism could be *memory
   predicates* to declaratively describe the state of the heap both before and
@@ -721,7 +721,7 @@ Instead of
   This does not easily translate to Kani, since we handle pre/postconditions
   manually and mainly in proc-macros. There are multiple ways to bridge this
   gap, perhaps the easiest being to add memory predicates *separately* to Kani
-  instead of as part of pre/postcondtions, so they can be handled by forwarding
+  instead of as part of pre/postconditions, so they can be handled by forwarding
   them to CBMC. However this is also tricky, because memory predicates are used
   to describe pointers and pointers only. Meaning that if they are encapsulated
   in a structure (such as `Vec` or `RefCell`) there is no way of specifying the
