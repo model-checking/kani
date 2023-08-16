@@ -239,13 +239,14 @@ impl<'tcx> KaniAttributes<'tcx> {
             return;
         }
 
+        // If the `function-contracts` unstable feature is not enabled then no
+        // function should use any of those APIs. 
         if !enabled_features.iter().any(|feature| feature == "function-contracts") {
             for kind in self
                 .map
                 .keys()
                 .copied()
                 .filter(|a| a.is_function_contract_api())
-                .collect::<Vec<_>>()
             {
                 let msg = format!(
                     "Using the {} attribute requires activating the unstable `function-contracts` feature",
