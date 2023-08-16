@@ -14,8 +14,9 @@
 ## Summary
 
 Function contracts are a mechanism, similar to [stubbing], which allows a
-concrete implementations to be replaced by an overapproximation without losing
-soundness[^simple-unsoundness].
+concrete implementations to be replaced by an abstraction without losing
+soundness[^simple-unsoundness] by first validating the abstraction against the
+implementation it will replace.
 
 This allows for a modular verification.
 <!-- Shorter? -->
@@ -27,8 +28,9 @@ This allows for a modular verification.
 <!-- Is basically the pitch and addressing the user. -->
 
 Function contracts provide an interface for a verified,
-sound[^simple-unsoundness] type of of [stubbing]. This allows for modular
-verification, which paves the way for the following two ambitious goals.
+sound[^simple-unsoundness] function abstraction. This is similar to [stubbing]
+but with verification of the abstraction instead of blind trust. This allows for
+modular verification, which paves the way for the following two ambitious goals.
 
 [^simple-unsoundness]: The main remaining threat to soundness in the use of
     contracts, as defined in this proposal, is the reliance on user-supplied
@@ -37,26 +39,28 @@ verification, which paves the way for the following two ambitious goals.
     and potential remedies can be found in the [future](#future-possibilities)
     section.
 
-- **Scalability:** Function contracts are sound (over)abstractions of function
-  behavior. By verifying the contract against its implementation and
-  subsequently performing caller verification against the (cheaper) abstraction,
-  verification can be modularized, cached and thus scaled.
+- **Scalability:** A function contract is an abstraction (sound
+  overapproximation) of a function's behavior. By verifying the contract against
+  its implementation and subsequently performing caller verification against the
+  (cheaper) abstraction, verification can be modularized, cached and thus
+  scaled.
 - **Unbounded Verification:** The abstraction provided by the contract can be
   used instead of a recursive call, thus allowing verification of recursive
   functions.
 
 Function contracts are completely optional with no user impact if unused. The
-newly introduced APIs are entirely backwards compatible.
+newly introduced interface (attributes, macros, CLI) do not require any changes
+to Kani's current interface.
 
 
 ## User Experience
 
-A function contracts specifies the behavior of a function in a way that can be
-both checked against the function and also used as a stub for the concrete
-implementation.
+A function contracts specifies the behavior of a function as a predicate that
+can be checked against the function implementation and also used as an
+abstraction of the implementation at the call sites.
 
 The lifecycle of a contract is split into three phases: specification,
-verification and stubbing, which we will explore on this example:
+verification and call abstraction, which we will explore on this example:
 
 ```rs
 fn my_div(dividend: u32, divisor: u32) -> u32 {
@@ -146,16 +150,16 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
    ```
 
    Kani verifies the expanded harness like any other harness, giving the
-   green light for the next step: verified stubbing.
+   green light for the next step: call abstraction.
 
 3. In the last phase the **verified** contract is ready for us to use to
-   **stub** other harnesses.
+   abstract the function at its call sites.
 
    Kani requires that there has to be at least one associated
-   `proof_for_contract` harness for each function to stub, otherwise an error is
+   `proof_for_contract` harness for each abstracted function, otherwise an error is
    thrown. In addition, by default, it requires all `proof_for_contract`
    harnesses to pass verification before attempting verification of any
-   harnesses that use the contract as a stub.
+   harnesses that use the contract as an abstraction.
 
    A possible harness that uses our `my_div` contract could be the following:
 
@@ -169,9 +173,9 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
    }
    ```
 
-   At a call site where the contract is used as a stub Kani `kani::assert`s the
-   preconditions (`requires`) and produces a nondeterministic value (`kani::any`)
-   which satisfies the postconditions.
+   At a call site where the contract is used as an abstraction Kani
+   `kani::assert`s the preconditions (`requires`) and produces a
+   nondeterministic value (`kani::any`) which satisfies the postconditions.
    
    Mutable memory is similarly made non-deterministic, discussed later in
    [havocking](#memory-predicates-and-havocking).
@@ -188,12 +192,12 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
    Notice that this performs no actual computation for `my_div` (other than the
    conditions) which allows us to avoid something potentially costly.
 
-Also notice that Kani was able to express both contract checking and stubbing
+Also notice that Kani was able to express both contract checking and abstracting
 with existing capabilities; the important feature is the enforcement. The
 checking is, by construction, performed **against the same condition** that is
-later used as stub, which ensures soundness (see discussion on lingering threats
-to soundness in the [future](#future-possibilities) section) and guarding against
-stubs diverging from their checks.
+later used as the abstraction, which ensures soundness (see discussion on
+lingering threats to soundness in the [future](#future-possibilities) section)
+and guarding against abstractions diverging from their checks.
 
 ### Write Sets and Havocking
 
@@ -230,8 +234,8 @@ To address this the proposal also adds an `modifies` and `frees` clause which
 limits the scope of havocking. Both clauses represent an assertion that the
 function will modify only the specified memory regions. Similar to
 requires/ensures the verifier enforces the assertion in the checking stage to
-ensure soundness. When the contract is used as a stub the modifies clause is
-used as the write set to havoc.
+ensure soundness. When the contract is used as an abstraction the modifies
+clause is used as the write set to havoc.
 
 In our `pop` example the only modified memory location is the last element and
 only if the vector was not already empty, which would be specified thusly.
@@ -357,13 +361,13 @@ Kani reports a compile time error if any of the following constraints are violat
 - A harness may have up to one `proof_for_contract(TARGET)` annotation where `TARGET` must
   "have a contract". One or more `proof_for_contract` harnesses may have the
   same `TARGET`. All such harnesses must pass verification, before `TARGET` may
-  be used as a verified stub.
+  be used as an abstraction.
 
   A `proof_for_contract` harness may use any harness attributes, including
   `stub` and `stub_verified`, though the `TARGET` may not appear in either. 
 
 -  Kani checks that `TARGET` is reachable from the `proof_for_contract` harness,
-  but it does not warn if stubbed functions use `TARGET`[^stubcheck].
+  but it does not warn if abstracted functions use `TARGET`[^stubcheck].
 
   A current limitation with how contracts are enforced means that if target is
   polymorphic, only one monomorphization of `TARGET` is permissible.
@@ -383,7 +387,7 @@ Kani reports a compile time error if any of the following constraints are violat
   check succeeded.
 
 [^stubcheck]: Kani cannot report the occurrence of a contract function to check
-    in stubbed functions as errors, because the mechanism is needed to verify
+    in abstracted functions as errors, because the mechanism is needed to verify
     mutually recursive functions.
 
 ## Detailed Design
@@ -669,7 +673,7 @@ Instead of
   - **With harness selection** (`--harness`) only those contracts which the
     selected harnesses depend on are checked.
   - **For high assurance** passing a `--paranoid` flag also checks contracts for
-    dependencies (other crates) when they are used in stubs.
+    dependencies (other crates) when they are used in abstractions.
   - **Per harness** the users can disable the checking for specific contracts
     via attribute, like `#[stub_verified(TARGET, trusted)]` or
     `#[stub_unverified(TARGET)]`. This also plays nicely with `cfg_attr`.
@@ -682,7 +686,21 @@ Instead of
 
   Aside: I'm obviously having some fun here with the names, happy to change,
   it's really just about the semantics.
- 
+- Can `old` accidentally break scope? The `old` function cannot reference local
+  variables. For instance `#[ensures({let x = ...; old(x)})]` cannot work as an
+  AST rewrite because the expression in `old` is lifted out of it's context into
+  one where the only bound variables are the function arguments (see also
+  [history variables](#history-variables)). In most cases this will be a
+  compiler error complaining that `x` is unbound, however it is possible that
+  *if* there is also a function argument `x`, then it may silently succeed the
+  code generation but confusingly fail verification. For instance `#[ensures({
+  let x = 1; old(x) == x })]` on a function that has an argument named `x` would
+  *not* hold.
+
+  To handle this correctly we would need an extra check that detects if `old`
+  references local variables. That would also enable us to provide a better
+  error message than the default "cannot find value `x` in this scope".
+
 <!-- 
 - Is there any part of the design that you expect to resolve through the RFC process?
 - What kind of user feedback do you expect to gather before stabilization? How will this impact your design? 
@@ -736,7 +754,7 @@ Instead of
   trait contracts. The macros would generate new trait methods with default
   implementation, similar to the functions it generates today. Using sealed
   types we can prevent the user from overwriting the generated contract methods.
-  Contracts for the trait and contracts on it's impls are combined by stubbing
+  Contracts for the trait and contracts on it's impls are combined by abstracting
   the original method depending on context. The occurrence inside the contract
   generated from the trait method is replaced by the impl contract. Any other
   occurrence is replaced by the just altered trait method contract.
@@ -757,8 +775,8 @@ Instead of
   A function (`f()`) can only interact with its type parameters `P` through the
   traits (`T`) they are constrained over. We can require `T` to carry contracts
   on each method `T::m()`. During checking we can use a synthetic type that
-  stubs `T::m()` with its contract. This way we check `f()` against `T`s
-  contract. Then we later stub `f()` we can ensure any instantiations of `P`
+  abstracts `T::m()` with its contract. This way we check `f()` against `T`s
+  contract. Then we later abstract `f()` we can ensure any instantiations of `P`
   have passed verification of the contract of `T::m()`. This makes the
   substitution safe even if the particular type has not been used in a checking
   harness.
