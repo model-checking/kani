@@ -70,7 +70,7 @@ pub fn assume(cond: bool) {
 /// Note that boolean operators (such as `||`) are evaluated lazily by Rust.
 /// This function is not and both conditions will be evaluated always. As a
 /// reult this function is not intended to be used in regular code. Instead it
-/// is intended to make implications in a function function contract
+/// is intended to make implications in a function contract
 /// ([`requires`], [`ensures`]) more readable. For eample
 /// `implies(self.is_empty(), self.len() == 0)` is a little easier to understand
 /// than `!self.is_empty() || self.len() == 0` (which is the inlined definition
