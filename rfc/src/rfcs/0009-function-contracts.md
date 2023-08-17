@@ -703,7 +703,7 @@ times larger than what they expect the function will touch).
 
   See [#2597](https://github.com/model-checking/kani/issues/2597)
 - How to **check the right contracts at the right time**. By default `kani` and
-  `cargo kani` check all contracts in a file/workspace. This represents the
+  `cargo kani` check all contracts in a crate/workspace. This represents the
   safest option for the user but may be too costly in some cases.
 
   The user should be provided with options to disable contract checking for the
