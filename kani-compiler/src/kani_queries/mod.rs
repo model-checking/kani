@@ -68,12 +68,15 @@ pub struct QueryDb {
     #[clap(long)]
     /// Option name used to set the log output to a json file.
     pub json_output: bool,
-    #[clap(long, conflicts_with = "json-output")]
+    #[clap(long, conflicts_with = "json_output")]
     /// Option name used to force logger to use color output. This doesn't work with --json-output.
     pub color_output: bool,
     #[clap(long)]
     /// Pass the kani version to the compiler to ensure cache coherence.
-    check_version: bool,
+    check_version: Option<String>,
+    #[clap(long)]
+    /// A legacy flag that is now ignored.
+    goto_c: bool,
 
     /// Information about all target harnesses.
     #[clap(skip = HashMap::new())]
@@ -102,9 +105,12 @@ impl QueryDb {
     /// Panics if a single def path occurs in both `harness_info`s
     pub fn merge(&mut self, other: &Self) {
         // We use this unpacking here so that if we add new fields to the struct
-        // Rustc will complain that we're not handling all fields *and* if we
+        // rustc will complain that we're not handling all fields *and* if we
         // forget to set one of the fields the linter will error about an unused
         // value.
+        //
+        // To ensures these protections stay in place this pattern should always
+        // match explicitly on all fields and never use `..`.
         let Self {
             check_assertion_reachability,
             check_coverage,
@@ -121,6 +127,7 @@ impl QueryDb {
             log_level,
             json_output,
             check_version: _,
+            goto_c: _,
         } = self;
 
         *check_assertion_reachability = other.check_assertion_reachability;
