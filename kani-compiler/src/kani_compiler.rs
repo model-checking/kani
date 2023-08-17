@@ -23,8 +23,8 @@ use crate::kani_middle::metadata::gen_proof_metadata;
 use crate::kani_middle::reachability::filter_crate_items;
 use crate::kani_middle::stubbing::{self, harness_stub_map};
 use crate::kani_queries::{QueryDb, ReachabilityType};
-use crate::parser::{self, KaniCompilerParser};
 use crate::session::init_session;
+use clap::Parser;
 use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata};
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_driver::{Callbacks, Compilation, RunCompiler};
@@ -380,32 +380,15 @@ impl Callbacks for KaniCompiler {
         if self.stage.is_init() {
             let mut args = vec!["kani-compiler".to_string()];
             args.extend(config.opts.cg.llvm_args.iter().cloned());
-            let matches = parser::parser().get_matches_from(&args);
+            let matches = QueryDb::parse_from(args);
             init_session(
                 &matches,
                 matches!(config.opts.error_format, ErrorOutputType::Json { .. }),
             );
             // Configure queries.
             let queries = &mut (*self.queries.lock().unwrap());
-            queries.emit_vtable_restrictions = matches.get_flag(parser::RESTRICT_FN_PTRS);
-            queries.check_assertion_reachability = matches.get_flag(parser::ASSERTION_REACH_CHECKS);
-            queries.check_coverage = matches.get_flag(parser::COVERAGE_CHECKS);
-            queries.output_pretty_json = matches.get_flag(parser::PRETTY_OUTPUT_FILES);
-            queries.ignore_global_asm = matches.get_flag(parser::IGNORE_GLOBAL_ASM);
-            queries.write_json_symtab =
-                cfg!(feature = "write_json_symtab") || matches.get_flag(parser::WRITE_JSON_SYMTAB);
-            queries.reachability_analysis = matches.reachability_type();
-            queries.build_std = matches.get_flag(parser::BUILD_STD);
 
-            if let Some(features) = matches.get_many::<String>(parser::UNSTABLE_FEATURE) {
-                queries.unstable_features = features.cloned().collect::<Vec<_>>();
-            }
-
-            if matches.get_flag(parser::ENABLE_STUBBING)
-                && queries.reachability_analysis == ReachabilityType::Harnesses
-            {
-                queries.stubbing_enabled = true;
-            }
+            queries.merge(&matches);
 
             debug!(?queries, "config end");
         }
