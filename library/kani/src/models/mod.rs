@@ -133,7 +133,7 @@ mod test {
         fn simd_bitmask<T, U>(x: T) -> U;
     }
 
-    /// Test that the simd_bitmask model is equivalent to the intrinsic for all true and all false
+    /// Test that the `simd_bitmask` model is equivalent to the intrinsic for all true and all false
     /// masks with lanes represented using i16.
     #[test]
     fn test_bitmask_i16() {
@@ -161,8 +161,8 @@ mod test {
         assert_eq!(unsafe { kani_intrinsic::simd_bitmask::<_, u16, i32, 2>(mask) }, u16::MAX);
     }
 
-    /// Test that the simd_bitmask model is equivalent to the intrinsic for a few random values.
-    /// These values shouldn't be symmetric and ensure that we also handle endianess correctly.
+    /// Test that the `simd_bitmask` model is equivalent to the intrinsic for a few random values.
+    /// These values shouldn't be symmetric and ensure that we also handle endianness correctly.
     #[test]
     fn test_bitmask_i32() {
         check_portable_bitmask::<_, i32, 8>(mask32x8::from([
