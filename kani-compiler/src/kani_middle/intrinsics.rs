@@ -29,13 +29,14 @@ impl<'tcx> ModelIntrinsics<'tcx> {
 
     pub fn transform(&self, body: &mut Body<'tcx>) {
         for block in body.basic_blocks.as_mut() {
-            let terminator = block.terminator.as_mut().unwrap();
+            let terminator = block.terminator_mut();
             if let TerminatorKind::Call { func, args, .. } = &mut terminator.kind {
                 let func_ty = func.ty(&self.local_decls, self.tcx);
-                if let Some((intrinsic_name, _args)) = resolve_rust_intrinsic(self.tcx, func_ty) {
+                if let Some((intrinsic_name, generics)) = resolve_rust_intrinsic(self.tcx, func_ty)
+                {
                     trace!(?func, ?intrinsic_name, "run_pass");
                     if intrinsic_name == sym::simd_bitmask {
-                        self.replace_simd_bitmask(func, args)
+                        self.replace_simd_bitmask(func, args, generics)
                     }
                 }
             }
@@ -44,7 +45,12 @@ impl<'tcx> ModelIntrinsics<'tcx> {
 
     /// Change the function call to use the stubbed version.
     /// We only replace calls if we can ensure the input has simd representation.
-    fn replace_simd_bitmask(&self, func: &mut Operand<'tcx>, args: &[Operand<'tcx>]) {
+    fn replace_simd_bitmask(
+        &self,
+        func: &mut Operand<'tcx>,
+        args: &[Operand<'tcx>],
+        gen_args: GenericArgsRef<'tcx>,
+    ) {
         assert_eq!(args.len(), 1);
         let tcx = self.tcx;
         let arg_ty = args[0].ty(&self.local_decls, tcx);
@@ -54,8 +60,6 @@ impl<'tcx> ModelIntrinsics<'tcx> {
             debug!(?func, ?stub_id, "replace_simd_bitmask");
 
             // Get SIMD information from the type.
-            let Operand::Constant(fn_def) = func else { unreachable!() };
-            let ty::FnDef(_, gen_args) = fn_def.literal.ty().kind() else { unreachable!() };
             let (len, elem_ty) = simd_len_and_type(tcx, arg_ty);
             debug!(?len, ?elem_ty, "replace_simd_bitmask Ok");
 
@@ -64,6 +68,7 @@ impl<'tcx> ModelIntrinsics<'tcx> {
             new_gen_args.push(elem_ty.into());
             new_gen_args.push(len.into());
 
+            let Operand::Constant(fn_def) = func else { unreachable!() };
             fn_def.literal = ConstantKind::from_value(
                 ConstValue::ZeroSized,
                 tcx.type_of(stub_id).instantiate(tcx, &new_gen_args),
