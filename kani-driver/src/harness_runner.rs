@@ -85,12 +85,12 @@ impl<'sess, 'pr> HarnessRunner<'sess, 'pr> {
             match with_stubs.as_slice() {
                 [] => { /* do nothing */ }
                 [harness] => bail!(
-                    "Harness `{}` contains stubs which are unstable.\n\
+                    "Use of unstable feature 'stubbing' in harness `{}`.\n\
                     To enable stubbing, pass options `-Z stubbing`",
                     harness
                 ),
                 harnesses => bail!(
-                    "Harness `{}` contains stubs which are unstable.\n\
+                    "Use of unstable feature 'stubbing' in harnesses `{}`.\n\
                     To enable stubbing, pass options `-Z stubbing`",
                     harnesses.join("`, `")
                 ),

@@ -1,2 +1,2 @@
-error: Harness `main` contains stubs which are unstable.
+error: Use of unstable feature 'stubbing' in harness `main`.
 To enable stubbing, pass options `-Z stubbing`
