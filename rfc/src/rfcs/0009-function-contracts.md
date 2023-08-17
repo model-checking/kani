@@ -400,14 +400,14 @@ Kani reports a compile time error if any of the following constraints are violat
 
 <!-- For the implementors or the hackers -->
 
-Kani implements the functionality of function contracts in two places.
+Kani implements the functionality of function contracts in three places.
 
 1. Code generation in the `requires` and `ensures` macros (`kani_macros`).
 2. GOTO level contracts using CBMC's contract language generated in
    `kani-compiler` for `modifies` clauses.
-3. Dependencies and ordering among harnesses in the driver to enforce contract
-   checking before replacement. Also plumbing between compiler and driver for
-   enforcement of assigns clauses.
+3. Dependencies and ordering among harnesses in `kani-driver` to enforce
+   contract checking before replacement. Also plumbing between compiler and
+   driver for enforcement of assigns clauses.
 
 ### Code generation in `kani_macros`
 
@@ -686,7 +686,7 @@ times larger than what they expect the function will touch).
 
 <!-- For Developers -->
 
-- Returning `kani::any()` in a replacement isn't great, because it wouldn't work
+- Returning **`kani::any()` in a replacement isn't great**, because it wouldn't work
   for references as they can't have an `Arbitrary` implementation. Plus the
   soundness then relies on a correct implementation of `Arbitrary`. Instead it
   may be better to allow for the user to specify type invariants which can the
@@ -702,7 +702,7 @@ times larger than what they expect the function will touch).
   syntax, e.g. `@old`.
 
   See [#2597](https://github.com/model-checking/kani/issues/2597)
-- How to check the right contracts at the right time. By default `kani` and
+- How to **check the right contracts at the right time**. By default `kani` and
   `cargo kani` check all contracts in a file/workspace. This represents the
   safest option for the user but may be too costly in some cases.
 
@@ -727,7 +727,7 @@ times larger than what they expect the function will touch).
 
   Aside: I'm obviously having some fun here with the names, happy to change,
   it's really just about the semantics.
-- Can `old` accidentally break scope? The `old` function cannot reference local
+- **Can `old` accidentally break scope?** The `old` function cannot reference local
   variables. For instance `#[ensures({let x = ...; old(x)})]` cannot work as an
   AST rewrite because the expression in `old` is lifted out of it's context into
   one where the only bound variables are the function arguments (see also
@@ -741,6 +741,16 @@ times larger than what they expect the function will touch).
   To handle this correctly we would need an extra check that detects if `old`
   references local variables. That would also enable us to provide a better
   error message than the default "cannot find value `x` in this scope".
+- **Can panicking be expected behavior?** Usually preconditions are used to rule
+  out panics but it is conceivable that a user would want to specify that a
+  function panics under certain conditions. Specifying this would require an
+  extension to the current interface.
+- **UB checking.** With unsafe rust it is possible to break the type system
+  guarantees in Rust without causing immediate errors. Contracts must be
+  cognizant of this and enforce the guarantees as part of the contract *or*
+  require users to explicitly defer such checks to use sites. The latter case
+  requires dedicated support because the potential UB must be reflected in the
+  havoc.
 
 <!-- 
 - Is there any part of the design that you expect to resolve through the RFC process?
@@ -768,8 +778,7 @@ times larger than what they expect the function will touch).
   A complete solution for this is not known to us but there are ongoing
   investigations into harness generation mechanisms in CBMC.
 
-  Environments that are non-inductive, safe Rust (e.g. no recursively defined
-  data structures, no raw pointers) could be created from the type as the
+  Environments that are non-inductive could be created from the type as the
   safe Rust type constraints describe a finite space.
 
   For dealing with pointers one applicable mechanism could be *memory
