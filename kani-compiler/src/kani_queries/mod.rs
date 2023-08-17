@@ -28,6 +28,7 @@ pub enum ReachabilityType {
 #[derive(Debug, Default, Clone)]
 pub struct QueryDb {
     pub check_assertion_reachability: bool,
+    pub check_coverage: bool,
     pub emit_vtable_restrictions: bool,
     pub output_pretty_json: bool,
     pub ignore_global_asm: bool,
@@ -36,6 +37,9 @@ pub struct QueryDb {
     pub reachability_analysis: ReachabilityType,
     pub stubbing_enabled: bool,
     pub unstable_features: Vec<String>,
+    /// Flag that indicates that we are currently building the standard library.
+    /// Note that `kani` library will not be available if this is `true`.
+    pub build_std: bool,
 
     /// Information about all target harnesses.
     pub harnesses_info: HashMap<DefPathHash, PathBuf>,

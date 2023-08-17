@@ -589,6 +589,11 @@ impl ToIrep for Type {
                 sub: vec![],
                 named_sub: linear_map![(IrepId::Width, Irep::just_int_id(mm.int_width),)],
             },
+            Type::CInteger(CIntType::LongInt) => Irep {
+                id: IrepId::Signedbv,
+                sub: vec![],
+                named_sub: linear_map![(IrepId::Width, Irep::just_int_id(mm.long_int_width),)],
+            },
             Type::CInteger(CIntType::SizeT) => Irep {
                 id: IrepId::Unsignedbv,
                 sub: vec![],

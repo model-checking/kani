@@ -208,6 +208,7 @@ pub struct VerificationArgs {
     #[arg(long, requires("harnesses"))]
     pub unwind: Option<u32>,
     /// Specify the CBMC solver to use. Overrides the harness `solver` attribute.
+    /// If no solver is specified (with --solver or harness attribute), Kani will use CaDiCaL.
     #[arg(long, value_parser = CbmcSolverValueParser::new(CbmcSolver::VARIANTS))]
     pub solver: Option<CbmcSolver>,
     /// Pass through directly to CBMC; must be the last flag.
@@ -299,6 +300,10 @@ pub struct VerificationArgs {
         conflicts_with("concrete_playback")
     )]
     pub enable_stubbing: bool,
+
+    /// Enable Kani coverage output alongside verification result
+    #[arg(long, hide_short_help = true)]
+    pub coverage: bool,
 
     /// Arguments to pass down to Cargo
     #[command(flatten)]
@@ -443,7 +448,7 @@ impl CheckArgs {
 ///
 /// We currently define a bunch of cargo specific arguments as part of the overall arguments,
 /// however, they are invalid in the Kani standalone usage. Explicitly check them for now.
-/// TODO: Remove this as part of https://github.com/model-checking/kani/issues/1831
+/// TODO: Remove this as part of <https://github.com/model-checking/kani/issues/1831>
 fn check_no_cargo_opt(is_set: bool, name: &str) -> Result<(), Error> {
     if is_set {
         Err(Error::raw(
@@ -638,6 +643,16 @@ impl ValidateArgs for VerificationArgs {
                 unstable C-FFI support.",
                 ));
             }
+        }
+
+        if self.coverage
+            && !self.common_args.unstable_features.contains(&UnstableFeatures::LineCoverage)
+        {
+            return Err(Error::raw(
+                ErrorKind::MissingRequiredArgument,
+                "The `--coverage` argument is unstable and requires `-Z \
+            line-coverage` to be used.",
+            ));
         }
 
         Ok(())

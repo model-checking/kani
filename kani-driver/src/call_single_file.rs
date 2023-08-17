@@ -96,6 +96,10 @@ impl KaniSession {
             flags.push("--enable-stubbing".into());
         }
 
+        if self.args.coverage {
+            flags.push("--coverage-checks".into());
+        }
+
         flags.extend(
             self.args
                 .common_args

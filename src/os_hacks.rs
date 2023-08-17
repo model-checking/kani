@@ -106,7 +106,9 @@ pub fn setup_os_hacks(kani_dir: &Path, os: &Info) -> Result<()> {
 fn setup_nixos_patchelf(kani_dir: &Path) -> Result<()> {
     // Encode our assumption that we're working on x86 here, because when we add ARM
     // support, we need to look for a different path.
-    assert!(env!("TARGET") == "x86_64-unknown-linux-gnu");
+    // Prevents clippy error.
+    let target = "x86_64-unknown-linux-gnu";
+    assert!(env!("TARGET") == target);
     if Path::new("/lib64/ld-linux-x86-64.so.2").exists() {
         // if the expected path exists, I guess things are fine?
         return Ok(());

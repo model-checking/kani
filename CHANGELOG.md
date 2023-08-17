@@ -4,6 +4,37 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
+## [0.34.0]
+
+### Breaking Changes
+* Change default solver to CaDiCaL by @celinval in https://github.com/model-checking/kani/pull/2557
+By default, Kani will now run CBMC with CaDiCaL, since this solver has outperformed Minisat in most of our benchmarks.
+User's should still be able to select Minisat (or a different solver) either by using `#[solver]` harness attribute,
+or by passing `--solver=<SOLVER>` command line option.
+
+## What's Changed
+
+* Allow specifying the scheduling strategy in #[kani_proof] for async functions by @fzaiser in https://github.com/model-checking/kani/pull/1661
+* Support for stubbing out foreign functions by @feliperodri in https://github.com/model-checking/kani/pull/2658
+* Coverage reporting without a need for cbmc-viewer by @adpaco-aws in https://github.com/model-checking/kani/pull/2609
+* Add support to array-based SIMD by @celinval in https://github.com/model-checking/kani/pull/2633
+* Add unchecked/SIMD bitshift checks and disable CBMC flag by @reisnera in https://github.com/model-checking/kani/pull/2630
+* Fix codegen of constant byte slices to address spurious verification failures by @zhassan in https://github.com/model-checking/kani/pull/2663
+* Bump CBMC to v5.89.0 by @remi-delmas-3000 in https://github.com/model-checking/kani/pull/2662
+* Update Rust toolchain to nightly 2023-08-04 by @remi-delmas-3000 in https://github.com/model-checking/kani/pull/2661
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.33.0...kani-0.34.0
+
+## [0.33.0]
+
+## What's Changed
+* Add support for sysconf by @feliperodri in https://github.com/model-checking/kani/pull/2557
+* Print Kani version by @adpaco-aws in https://github.com/model-checking/kani/pull/2619
+* Upgrade Rust toolchain to nightly-2023-07-01 by @qinheping in https://github.com/model-checking/kani/pull/2616
+* Bump CBMC version to 5.88.1 by @zhassan-aws in https://github.com/model-checking/kani/pull/2623
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.32.0...kani-0.33.0
+
 ## [0.32.0]
 
 ## What's Changed

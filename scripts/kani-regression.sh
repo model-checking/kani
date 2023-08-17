@@ -19,15 +19,15 @@ KANI_DIR=$SCRIPT_DIR/..
 export KANI_FAIL_ON_UNEXPECTED_DESCRIPTION="true"
 
 # Required dependencies
-check-cbmc-version.py --major 5 --minor 88
+check-cbmc-version.py --major 5 --minor 89
 check-cbmc-viewer-version.py --major 3 --minor 8
 check_kissat_version.sh
 
 # Formatting check
 ${SCRIPT_DIR}/kani-fmt.sh --check
 
-# Build all packages in the workspace
-cargo build-dev
+# Build all packages in the workspace and ensure no warning is emitted.
+RUSTFLAGS="-D warnings" cargo build-dev
 
 # Unit tests
 cargo test -p cprover_bindings
@@ -38,6 +38,7 @@ cargo test -p kani_metadata
 # Declare testing suite information (suite and mode)
 TESTS=(
     "script-based-pre exec"
+    "coverage coverage-based"
     "kani kani"
     "expected expected"
     "ui expected"

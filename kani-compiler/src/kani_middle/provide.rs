@@ -6,7 +6,7 @@
 
 use crate::kani_middle::reachability::{collect_reachable_items, filter_crate_items};
 use crate::kani_middle::stubbing;
-use crate::kani_queries::QueryDb;
+use crate::kani_queries::{QueryDb, ReachabilityType};
 use rustc_hir::def_id::{DefId, LocalDefId};
 use rustc_interface;
 use rustc_middle::{
@@ -18,9 +18,13 @@ use rustc_middle::{
 /// Sets up rustc's query mechanism to apply Kani's custom queries to code from
 /// the present crate.
 pub fn provide(providers: &mut Providers, queries: &QueryDb) {
-    providers.optimized_mir = run_mir_passes;
-    if queries.stubbing_enabled {
-        providers.collect_and_partition_mono_items = collect_and_partition_mono_items;
+    if queries.reachability_analysis != ReachabilityType::None && !queries.build_std {
+        // Don't override queries if we are only compiling our dependencies.
+        providers.optimized_mir = run_mir_passes;
+        if queries.stubbing_enabled {
+            // TODO: Check if there's at least one stub being applied.
+            providers.collect_and_partition_mono_items = collect_and_partition_mono_items;
+        }
     }
 }
 
@@ -55,7 +59,9 @@ fn run_kani_mir_passes<'tcx>(
     body: &'tcx Body<'tcx>,
 ) -> &'tcx Body<'tcx> {
     tracing::debug!(?def_id, "Run Kani transformation passes");
-    stubbing::transform(tcx, def_id, body)
+    let mut transformed_body = stubbing::transform(tcx, def_id, body);
+    stubbing::transform_foreign_functions(tcx, &mut transformed_body);
+    tcx.arena.alloc(transformed_body)
 }
 
 /// Runs a reachability analysis before running the default

@@ -28,6 +28,9 @@ pub const RESTRICT_FN_PTRS: &str = "restrict-vtable-fn-ptrs";
 /// Option name used to enable assertion reachability checks.
 pub const ASSERTION_REACH_CHECKS: &str = "assertion-reach-checks";
 
+/// Option name used to enable coverage checks.
+pub const COVERAGE_CHECKS: &str = "coverage-checks";
+
 /// Option name used to use json pretty-print for output files.
 pub const PRETTY_OUTPUT_FILES: &str = "pretty-json-files";
 
@@ -45,6 +48,9 @@ pub const ENABLE_STUBBING: &str = "enable-stubbing";
 
 /// Option name used to define unstable features.
 pub const UNSTABLE_FEATURE: &str = "unstable";
+
+/// Option used for building standard library.
+pub const BUILD_STD: &str = "build-std";
 
 /// Configure command options for the Kani compiler.
 pub fn parser() -> Command {
@@ -99,6 +105,12 @@ pub fn parser() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
+            Arg::new(COVERAGE_CHECKS)
+                .long(COVERAGE_CHECKS)
+                .help("Check the reachability of every statement.")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
             Arg::new(REACHABILITY)
                 .long(REACHABILITY)
                 .value_parser(PossibleValuesParser::new(ReachabilityType::VARIANTS))
@@ -143,6 +155,12 @@ pub fn parser() -> Command {
                 .help("Enable an unstable feature")
                 .value_name("UNSTABLE_FEATURE")
                 .action(ArgAction::Append),
+        )
+        .arg(
+            Arg::new(BUILD_STD)
+                .long(BUILD_STD)
+                .help("Enable building the standard library.")
+                .action(ArgAction::SetTrue),
         );
     app
 }

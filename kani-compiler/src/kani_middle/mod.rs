@@ -25,7 +25,7 @@ use std::fs::File;
 use std::io::BufWriter;
 use std::io::Write;
 
-use self::attributes::{check_attributes, check_unstable_features};
+use self::attributes::KaniAttributes;
 
 pub mod analysis;
 pub mod attributes;
@@ -43,7 +43,7 @@ pub fn check_crate_items(tcx: TyCtxt, ignore_asm: bool) {
     let krate = tcx.crate_name(LOCAL_CRATE);
     for item in tcx.hir_crate_items(()).items() {
         let def_id = item.owner_id.def_id.to_def_id();
-        check_attributes(tcx, def_id);
+        KaniAttributes::for_item(tcx, def_id).check_attributes();
         if tcx.def_kind(def_id) == DefKind::GlobalAsm {
             if !ignore_asm {
                 let error_msg = format!(
@@ -72,7 +72,8 @@ pub fn check_reachable_items(tcx: TyCtxt, queries: &QueryDb, items: &[MonoItem])
         let def_id = item.def_id();
         if !def_ids.contains(&def_id) {
             // Check if any unstable attribute was reached.
-            check_unstable_features(tcx, &queries.unstable_features, def_id);
+            KaniAttributes::for_item(tcx, def_id)
+                .check_unstable_features(&queries.unstable_features);
             def_ids.insert(def_id);
         }
     }

@@ -12,4 +12,6 @@
 - [0004-loop-contract-synthesis](rfcs/0004-loop-contract-synthesis.md)
 - [0005-should-panic-attr](rfcs/0005-should-panic-attr.md)
 - [0006-unstable-api](rfcs/0006-unstable-api.md)
+- [0007-global-conditions](rfcs/0007-global-conditions.md)
+- [0008-line-coverage](rfcs/0008-line-coverage.md)
 - [0009-function-contracts](rfcs/0009-function-contracts.md)

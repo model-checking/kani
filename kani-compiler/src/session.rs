@@ -9,6 +9,8 @@ use rustc_errors::{
     emitter::Emitter, emitter::HumanReadableErrorType, fallback_fluent_bundle, json::JsonEmitter,
     ColorConfig, Diagnostic, TerminalUrl,
 };
+use rustc_session::config::ErrorOutputType;
+use rustc_session::EarlyErrorHandler;
 use std::io::IsTerminal;
 use std::panic;
 use std::str::FromStr;
@@ -71,7 +73,8 @@ pub fn init_session(args: &ArgMatches, json_hook: bool) {
     // Initialize the rustc logger using value from RUSTC_LOG. We keep the log control separate
     // because we cannot control the RUSTC log format unless if we match the exact tracing
     // version used by RUSTC.
-    rustc_driver::init_rustc_env_logger();
+    let handler = EarlyErrorHandler::new(ErrorOutputType::default());
+    rustc_driver::init_rustc_env_logger(&handler);
 
     // Install Kani panic hook.
     if json_hook {
