@@ -406,9 +406,9 @@ impl<'tcx> GotocCtx<'tcx> {
         proj: ProjectionElem<Local, Ty<'tcx>>,
     ) -> Result<ProjectedPlace<'tcx>, UnimplementedData> {
         let before = before?;
+        trace!(?before, ?proj, "codegen_projection");
         match proj {
             ProjectionElem::Deref => {
-                trace!(?before, ?proj, "codegen_projection");
                 let base_type = before.mir_typ();
                 let inner_goto_expr = if base_type.is_box() {
                     self.deref_box(before.goto_expr)

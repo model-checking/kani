@@ -34,6 +34,7 @@ cargo test -p cprover_bindings
 cargo test -p kani-compiler
 cargo test -p kani-driver
 cargo test -p kani_metadata
+cargo test -p kani --lib # skip doc tests.
 
 # Declare testing suite information (suite and mode)
 TESTS=(
