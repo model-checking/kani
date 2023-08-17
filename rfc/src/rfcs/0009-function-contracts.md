@@ -48,9 +48,9 @@ modular verification, which paves the way for the following two ambitious goals.
   used instead of a recursive call, thus allowing verification of recursive
   functions.
 
-Function contracts are completely optional with no user impact if unused. The
-newly introduced interface (attributes, macros, CLI) do not require any changes
-to Kani's current interface.
+Function contracts are completely optional with no user impact if unused. This
+RFC proposes the addition of new attributes, and functions, that shouldn't
+interfere with existing functionalities.  
 
 
 ## User Experience
@@ -653,32 +653,33 @@ Instead of
      wants to the can just factor out the actual contents of the harness to
      reuse it.
 
-### Misc
+### Polymorphism during contract checking
 
-- A current limitation with how contracts are enforced means that if the target
-  of a `proof_for_contract` is polymorphic, only one monomorphization is
-  permitted to occur in the harness. This does not limit the target to a single
-  occurrence, *but* to a single instantiation of its generic parameters.
+A current limitation with how contracts are enforced means that if the target of
+a `proof_for_contract` is polymorphic, only one monomorphization is permitted to
+occur in the harness. This does not limit the target to a single occurrence,
+*but* to a single instantiation of its generic parameters.
 
-  This is because we rely on CBMC for enforcing the `assigns` contract. At the
-  GOTO level all monomorphized instances are distinct functions *and* CBMC only
-  allows checking one function contract at a time, hence this restriction.
+This is because we rely on CBMC for enforcing the `modifies` contract. At the
+GOTO level all monomorphized instances are distinct functions *and* CBMC only
+allows checking one function contract at a time, hence this restriction.
 
-- We make the user supply the harnesses for checking contracts. This is our
-  major source of unsoundness, if corner cases are not adequately covered.
-  Having Kani generate the harnesses automatically is a non-trivial task
-  (because heaps are hard) and will be the subject of [future
-  improvements](#future-possibilities). 
+### User supplied harnesses
 
-  In limited cases we could generate harnesses, for instance if only bounded
-  types (integers, booleans, enums, tuples, structs, references and their
-  combinations) were used. We could restrict the use of contracts to cases where
-  only such types are involved in the function inputs and outputs, however this
-  would drastically limit the applicability, as even simple heap data structures
-  such as `Vec`, `String` and even `&[T]` and `&str` (slices) would be out of
-  scope. These data structures however are ubiquitous and users can avoid the
-  unsoundness with relative confidence by overprovisioning (generating inputs
-  that are several times larger than what they expect the function will touch).
+We make the user supply the harnesses for checking contracts. This is our major
+source of unsoundness, if corner cases are not adequately covered. Having Kani
+generate the harnesses automatically is a non-trivial task (because heaps are
+hard) and will be the subject of [future improvements](#future-possibilities). 
+
+In limited cases we could generate harnesses, for instance if only bounded types
+(integers, booleans, enums, tuples, structs, references and their combinations)
+were used. We could restrict the use of contracts to cases where only such types
+are involved in the function inputs and outputs, however this would drastically
+limit the applicability, as even simple heap data structures such as `Vec`,
+`String` and even `&[T]` and `&str` (slices) would be out of scope. These data
+structures however are ubiquitous and users can avoid the unsoundness with
+relative confidence by overprovisioning (generating inputs that are several
+times larger than what they expect the function will touch).
 
 
 ## Open questions
@@ -794,7 +795,7 @@ Instead of
   trait contracts. The macros would generate new trait methods with default
   implementations, similar to the functions it generates today. Using sealed
   types we can prevent the user from overwriting the generated contract methods.
-  Contracts for the trait and contracts on it's impls are combined by abstracting
+  Contracts for the trait and contracts on it's `impl`s are combined by abstracting
   the original method depending on context. The occurrence inside the contract
   generated from the trait method is replaced by the `impl` contract. Any other
   occurrence is replaced by the just altered trait method contract.
