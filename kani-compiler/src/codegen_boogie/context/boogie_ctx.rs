@@ -3,7 +3,6 @@
 
 use std::io::Write;
 
-use crate::codegen_boogie::overrides::{fn_hooks, BoogieHooks};
 use crate::kani_queries::QueryDb;
 use boogie_ast::boogie_program::{BinaryOp, BoogieProgram, Expr, Literal, Procedure, Stmt, Type};
 use rustc_middle::mir::interpret::{ConstValue, Scalar};
@@ -19,7 +18,10 @@ use rustc_middle::ty::layout::{
 use rustc_middle::ty::{self, Instance, IntTy, Ty, TyCtxt, UintTy};
 use rustc_span::Span;
 use rustc_target::abi::{HasDataLayout, TargetDataLayout};
+use strum::VariantNames;
 use tracing::{debug, debug_span, trace};
+
+use super::kani_intrinsic::KaniIntrinsic;
 
 /// A context that provides the main methods for translating MIR constructs to
 /// Boogie and stores what has been codegen so far
@@ -31,20 +33,26 @@ pub struct BoogieCtx<'tcx> {
     pub queries: QueryDb,
     /// the Boogie program
     program: BoogieProgram,
-    pub hooks: BoogieHooks<'tcx>,
+    /// Kani intrinsics
+    pub intrinsics: Vec<String>,
 }
 
 impl<'tcx> BoogieCtx<'tcx> {
     pub fn new(tcx: TyCtxt<'tcx>, queries: QueryDb) -> BoogieCtx<'tcx> {
-        BoogieCtx { tcx, queries, program: BoogieProgram::new(), hooks: fn_hooks() }
+        BoogieCtx {
+            tcx,
+            queries,
+            program: BoogieProgram::new(),
+            intrinsics: KaniIntrinsic::VARIANTS.iter().map(|s| (*s).into()).collect(),
+        }
     }
 
     /// Codegen a function into a Boogie procedure.
     /// Returns `None` if the function is a hook.
     pub fn codegen_function(&self, instance: Instance<'tcx>) -> Option<Procedure> {
         debug!(?instance, "boogie_codegen_function");
-        if self.hooks.hook_applies(self.tcx, instance).is_some() {
-            debug!("skipping hook function `{instance}`");
+        if self.kani_intrinsic(instance).is_some() {
+            debug!("skipping kani intrinsic `{instance}`");
             return None;
         }
         let mut decl = self.codegen_declare_variables(instance);
@@ -176,11 +184,7 @@ impl<'tcx> BoogieCtx<'tcx> {
         (None, expr)
     }
 
-    fn codegen_terminator(
-        &self,
-        local_decls: &LocalDecls<'tcx>,
-        term: &Terminator<'tcx>,
-    ) -> Stmt {
+    fn codegen_terminator(&self, local_decls: &LocalDecls<'tcx>, term: &Terminator<'tcx>) -> Stmt {
         let _trace_span = debug_span!("CodegenTerminator", statement = ?term.kind).entered();
         debug!("handling terminator {:?}", term);
         match &term.kind {
@@ -209,14 +213,21 @@ impl<'tcx> BoogieCtx<'tcx> {
         debug!(?func, ?args, ?destination, ?span, "codegen_funcall");
         let fargs = self.codegen_funcall_args(local_decls, args);
         let funct = self.operand_ty(local_decls, func);
-        // TODO: Only hooks are handled currently
+        // TODO: Only Kani intrinsics are handled currently
         match &funct.kind() {
             ty::FnDef(defid, substs) => {
                 let instance =
                     Instance::expect_resolve(self.tcx, ty::ParamEnv::reveal_all(), *defid, substs);
 
-                if let Some(hk) = self.hooks.hook_applies(self.tcx, instance) {
-                    return hk.handle(self, instance, fargs, *destination, *target, Some(span));
+                if let Some(intrinsic) = self.kani_intrinsic(instance) {
+                    return self.codegen_kani_intrinsic(
+                        intrinsic,
+                        instance,
+                        fargs,
+                        *destination,
+                        *target,
+                        Some(span),
+                    );
                 }
                 todo!()
             }
@@ -237,7 +248,9 @@ impl<'tcx> BoogieCtx<'tcx> {
                 if ty.is_primitive() {
                     return Some(self.codegen_operand(o));
                 }
-                todo!()
+                // TODO: ignore non-primitive arguments for now (e.g. `msg`
+                // argument of `kani::assert`)
+                None
             })
             .collect()
     }
@@ -357,15 +370,13 @@ impl<'tcx> BoogieCtx<'tcx> {
 /// Create a new statement that includes `s1` (if non-empty) and `s2`
 fn add_statement(s1: Option<Stmt>, s2: Stmt) -> Stmt {
     match s1 {
-        Some(s1) => {
-            match s1 {
-                Stmt::Block { mut statements } => {
-                    statements.push(s2);
-                    Stmt::Block { statements }
-                }
-                _ => Stmt::Block { statements: vec![s1, s2] },
+        Some(s1) => match s1 {
+            Stmt::Block { mut statements } => {
+                statements.push(s2);
+                Stmt::Block { statements }
             }
-        }
-        None => s2
+            _ => Stmt::Block { statements: vec![s1, s2] },
+        },
+        None => s2,
     }
 }
