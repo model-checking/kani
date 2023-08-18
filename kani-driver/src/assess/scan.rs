@@ -201,10 +201,16 @@ fn scan_cargo_projects(path: PathBuf, accumulator: &mut Vec<PathBuf>) {
         return;
     }
     // Errors are silently skipped entirely here
-    let Ok(entries) = std::fs::read_dir(path) else { return; };
+    let Ok(entries) = std::fs::read_dir(path) else {
+        return;
+    };
     for entry in entries {
-        let Ok(entry) = entry else { continue; };
-        let Ok(typ) = entry.file_type() else { continue; };
+        let Ok(entry) = entry else {
+            continue;
+        };
+        let Ok(typ) = entry.file_type() else {
+            continue;
+        };
         // symlinks are not `is_dir()`
         if typ.is_dir() {
             scan_cargo_projects(entry.path(), accumulator)

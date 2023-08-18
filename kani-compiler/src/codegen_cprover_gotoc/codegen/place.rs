@@ -340,6 +340,7 @@ impl<'tcx> GotocCtx<'tcx> {
         field: FieldIdx,
         field_ty: Ty<'tcx>,
     ) -> Expr {
+        let field_ty = self.monomorphize(field_ty);
         if matches!(field_ty.kind(), ty::Array { .. }) {
             // Array based
             assert_eq!(field.index(), 0);
@@ -367,7 +368,7 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_local_fndef(&mut self, ty: ty::Ty<'tcx>) -> Option<Expr> {
         match ty.kind() {
             // A local that is itself a FnDef, like Fn::call_once
-            ty::FnDef(defid, substs) => Some(self.codegen_fndef(*defid, substs, None)),
+            ty::FnDef(defid, args) => Some(self.codegen_fndef(*defid, args, None)),
             // A local can be pointer to a FnDef, like Fn::call and Fn::call_mut
             ty::RawPtr(inner) => self
                 .codegen_local_fndef(inner.ty)
@@ -405,9 +406,9 @@ impl<'tcx> GotocCtx<'tcx> {
         proj: ProjectionElem<Local, Ty<'tcx>>,
     ) -> Result<ProjectedPlace<'tcx>, UnimplementedData> {
         let before = before?;
+        trace!(?before, ?proj, "codegen_projection");
         match proj {
             ProjectionElem::Deref => {
-                trace!(?before, ?proj, "codegen_projection");
                 let base_type = before.mir_typ();
                 let inner_goto_expr = if base_type.is_box() {
                     self.deref_box(before.goto_expr)
@@ -512,14 +513,14 @@ impl<'tcx> GotocCtx<'tcx> {
                 // https://rust-lang.github.io/rfcs/2359-subslice-pattern-syntax.html
                 match before.mir_typ().kind() {
                     ty::Array(ty, len) => {
-                        let len = len.kind().try_to_target_usize(self.tcx).unwrap();
+                        let len = len.try_to_target_usize(self.tcx).unwrap();
                         let subarray_len = if from_end {
                             // `to` counts from the end of the array
                             len - to - from
                         } else {
                             to - from
                         };
-                        let typ = self.tcx.mk_array(*ty, subarray_len);
+                        let typ = Ty::new_array(self.tcx, *ty, subarray_len);
                         let goto_typ = self.codegen_ty(typ);
                         // unimplemented
                         Err(UnimplementedData::new(
@@ -541,9 +542,9 @@ impl<'tcx> GotocCtx<'tcx> {
                         } else {
                             Expr::int_constant(to - from, Type::size_t())
                         };
-                        let typ = self.tcx.mk_slice(*elemt);
+                        let typ = Ty::new_slice(self.tcx, *elemt);
                         let typ_and_mut = TypeAndMut { ty: typ, mutbl: Mutability::Mut };
-                        let ptr_typ = self.tcx.mk_ptr(typ_and_mut);
+                        let ptr_typ = Ty::new_ptr(self.tcx, typ_and_mut);
                         let goto_type = self.codegen_ty(ptr_typ);
 
                         let index = Expr::int_constant(from, Type::ssize_t());
@@ -703,7 +704,7 @@ impl<'tcx> GotocCtx<'tcx> {
         match before.mir_typ().kind() {
             //TODO, ask on zulip if we can ever have from_end here?
             ty::Array(elemt, length) => {
-                let length = length.kind().try_to_target_usize(self.tcx).unwrap();
+                let length = length.try_to_target_usize(self.tcx).unwrap();
                 assert!(length >= min_length);
                 let idx = if from_end { length - offset } else { offset };
                 let idxe = Expr::int_constant(idx, Type::ssize_t());
