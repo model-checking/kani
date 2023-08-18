@@ -395,6 +395,7 @@ impl Callbacks for KaniCompiler {
             queries.write_json_symtab =
                 cfg!(feature = "write_json_symtab") || matches.get_flag(parser::WRITE_JSON_SYMTAB);
             queries.reachability_analysis = matches.reachability_type();
+            queries.build_std = matches.get_flag(parser::BUILD_STD);
 
             if let Some(features) = matches.get_many::<String>(parser::UNSTABLE_FEATURE) {
                 queries.unstable_features = features.cloned().collect::<Vec<_>>();

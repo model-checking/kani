@@ -193,7 +193,7 @@ impl CodegenBackend for GotocCodegenBackend {
     }
 
     fn provide_extern(&self, providers: &mut ExternProviders) {
-        provide::provide_extern(providers);
+        provide::provide_extern(providers, &self.queries.lock().unwrap());
     }
 
     fn print_version(&self) {
@@ -345,7 +345,7 @@ impl CodegenBackend for GotocCodegenBackend {
         codegen_results: CodegenResults,
         outputs: &OutputFilenames,
     ) -> Result<(), ErrorGuaranteed> {
-        let requested_crate_types = sess.crate_types();
+        let requested_crate_types = &codegen_results.crate_info.crate_types;
         for crate_type in requested_crate_types {
             let out_fname = out_filename(
                 sess,

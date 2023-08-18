@@ -26,14 +26,15 @@ check_kissat_version.sh
 # Formatting check
 ${SCRIPT_DIR}/kani-fmt.sh --check
 
-# Build all packages in the workspace
-cargo build-dev
+# Build all packages in the workspace and ensure no warning is emitted.
+RUSTFLAGS="-D warnings" cargo build-dev
 
 # Unit tests
 cargo test -p cprover_bindings
 cargo test -p kani-compiler
 cargo test -p kani-driver
 cargo test -p kani_metadata
+cargo test -p kani --lib # skip doc tests.
 
 # Declare testing suite information (suite and mode)
 TESTS=(
