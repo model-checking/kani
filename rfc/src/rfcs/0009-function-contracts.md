@@ -751,6 +751,13 @@ times larger than what they expect the function will touch).
   require users to explicitly defer such checks to use sites. The latter case
   requires dedicated support because the potential UB must be reflected in the
   havoc.
+- **`modifies` clauses over patterns.** Modifies clauses mention values bound in
+  the function header and as a user I would expect that if I use a pattern in
+  the function header then I can use the names bound in that pattern as lvalues
+  in the `modifies` clause. However `modifies` clauses are implemented as
+  `assigns` clauses in CBMC which does not have a notion of function header
+  patterns. Thus it is necessary to project any `modifies` ranges deeper by the
+  fields used in the matched pattern.
 
 <!-- 
 - Is there any part of the design that you expect to resolve through the RFC process?
