@@ -5,5 +5,6 @@
 //! the file level comments for more details.
 
 mod boogie_ctx;
+mod kani_intrinsic;
 
 pub use boogie_ctx::BoogieCtx;
