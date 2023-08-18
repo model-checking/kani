@@ -13,6 +13,7 @@ runs:
   using: composite
   steps:
       - name: Remove unnecessary software to free up disk space
+        shell: bash
         run: |
           # inspired by https://github.com/easimon/maximize-build-space/blob/master/action.yml
           df -h
