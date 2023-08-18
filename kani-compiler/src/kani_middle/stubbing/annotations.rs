@@ -18,7 +18,7 @@ fn stub_def_ids(tcx: TyCtxt, harness: LocalDefId, stub: &Stub) -> Option<(DefId,
     // Resolve the attribute arguments to `DefId`s
     let current_module = tcx.parent_module_from_def_id(harness);
     let resolve = |name: &str| -> Option<DefId> {
-        let maybe_resolved = resolve_fn(tcx, current_module, name);
+        let maybe_resolved = resolve_fn(tcx, current_module.to_local_def_id(), name);
         match maybe_resolved {
             Ok(def_id) => {
                 tracing::debug!(?def_id, "Resolved {name} to {}", tcx.def_path_str(def_id));
