@@ -12,6 +12,14 @@ inputs:
 runs:
   using: composite
   steps:
+      - name: Remove unnecessary software to free up disk space
+        shell: bash
+        run: |
+          # inspired by https://github.com/easimon/maximize-build-space/blob/master/action.yml
+          df -h
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          df -h
+
       - name: Install dependencies
         run: cd ${{ inputs.kani_dir }} && ./scripts/setup/${{ inputs.os }}/install_deps.sh
         shell: bash
