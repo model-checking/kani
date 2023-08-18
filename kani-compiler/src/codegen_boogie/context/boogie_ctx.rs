@@ -128,7 +128,10 @@ impl<'tcx> BoogieCtx<'tcx> {
             StatementKind::Assign(box (place, rvalue)) => {
                 debug!(?place, ?rvalue, "codegen_statement");
                 let rv = self.codegen_rvalue(rvalue);
-                Stmt::Assignment { target: format!("{:?}", place.local), value: rv }
+                // assignment statement
+                let asgn = Stmt::Assignment { target: format!("{:?}", place.local), value: rv.1 };
+                // add it to other statements generated while creating the rvalue (if any)
+                add_statement(rv.0, asgn)
             }
             StatementKind::FakeRead(..)
             | StatementKind::SetDiscriminant { .. }
@@ -145,10 +148,12 @@ impl<'tcx> BoogieCtx<'tcx> {
         }
     }
 
-    fn codegen_rvalue(&self, rvalue: &Rvalue<'tcx>) -> Expr {
+    /// Codegen an rvalue. Returns the expression for the rvalue and an optional
+    /// statement for any possible checks instrumented for the rvalue expression
+    fn codegen_rvalue(&self, rvalue: &Rvalue<'tcx>) -> (Option<Stmt>, Expr) {
         debug!(rvalue=?rvalue, "codegen_rvalue");
         match rvalue {
-            Rvalue::Use(operand) => self.codegen_operand(operand),
+            Rvalue::Use(operand) => (None, self.codegen_operand(operand)),
             Rvalue::BinaryOp(binop, box (lhs, rhs)) => self.codegen_binary_op(binop, lhs, rhs),
             _ => todo!(),
         }
@@ -159,15 +164,16 @@ impl<'tcx> BoogieCtx<'tcx> {
         binop: &BinOp,
         lhs: &Operand<'tcx>,
         rhs: &Operand<'tcx>,
-    ) -> Expr {
-        match binop {
+    ) -> (Option<Stmt>, Expr) {
+        let expr = match binop {
             BinOp::Eq => Expr::BinaryOp {
                 op: BinaryOp::Eq,
                 left: Box::new(self.codegen_operand(lhs)),
                 right: Box::new(self.codegen_operand(rhs)),
             },
             _ => todo!(),
-        }
+        };
+        (None, expr)
     }
 
     fn codegen_terminator(
@@ -345,5 +351,21 @@ impl<'tcx> HasDataLayout for BoogieCtx<'tcx> {
 impl<'tcx> BoogieCtx<'tcx> {
     pub fn add_procedure(&mut self, procedure: Procedure) {
         self.program.add_procedure(procedure);
+    }
+}
+
+/// Create a new statement that includes `s1` (if non-empty) and `s2`
+fn add_statement(s1: Option<Stmt>, s2: Stmt) -> Stmt {
+    match s1 {
+        Some(s1) => {
+            match s1 {
+                Stmt::Block { mut statements } => {
+                    statements.push(s2);
+                    Stmt::Block { statements }
+                }
+                _ => Stmt::Block { statements: vec![s1, s2] },
+            }
+        }
+        None => s2
     }
 }
