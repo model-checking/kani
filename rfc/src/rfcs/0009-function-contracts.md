@@ -40,13 +40,13 @@ modular verification, which paves the way for the following two ambitious goals.
     section.
 
 - **Scalability:** A function contract is an abstraction (sound
-  overapproximation) of a function's behavior. By verifying the contract against
-  its implementation and subsequently performing caller verification against the
-  (cheaper) abstraction, verification can be modularized, cached and thus
-  scaled.
-- **Unbounded Verification:** The abstraction provided by the contract can be
-  used instead of a recursive call, thus allowing verification of recursive
-  functions.
+  overapproximation) of a function's behavior. After verifying the contract
+  against its implementation we can subsequently use the (cheaper) abstraction
+  instead of the concrete implementation when analyzing its callers.
+  Verification is thus modularized and even cacheable.
+- **Unbounded Verification:** Contracts enable inductive reasoning for recursive
+  functions where the first call is checked against the contract and recursive
+  calls are stubbed out using the abstraction.
 
 Function contracts are completely optional with no user impact if unused. This
 RFC proposes the addition of new attributes, and functions, that shouldn't
@@ -216,12 +216,23 @@ impl<T> Vec<T> {
 
 This function can, in theory, modify any memory behind `&mut self`, so this is
 what Kani will assume it does by default. It infers the "write set", that is the
-set of memory locations a function may modify, from the type system. As a result,
-any data pointed to by a mutable reference or pointer is considered part of the
-write set. In addition, a static analysis of the source code discovers any
-`static mut` variables the function or it's dependencies reference and adds all
-pointed-to data to the write set also. During havocking the verifier replaces
-all locations in the write set with non-deterministic values.
+set of memory locations a function may modify, from the type of the function
+arguments. As a result, any data pointed to by a mutable reference or pointer is
+considered part of the write set[^write-set-recursion]. In addition, a static
+analysis of the source code discovers any `static mut` variables the function or
+it's dependencies reference and adds all pointed-to data to the write set also.
+
+During havocking the verifier replaces all locations in the write set with
+non-deterministic values. Kani emits a set of automatically generated
+postconditions which encode the expectations from the Rust type system and
+`assume`s them for the havocked locations to ensure they are valid. This
+encompasses both limits as to what values are acceptable for a given type, such
+as `char` or the possible values of an enum discriminator, as well as lifetime
+constraints.
+
+[^write-set-recursion]: For inductively defined types the write set inference
+    will only add the first "layer" to the write set. If you wish to modify
+    deeper layers of a recursive type an explicit `modifies` clause is required.
 
 While the inferred write set is sound and enough for successful contract
 checking[^inferred-footprint] in many cases this inference is too coarse
@@ -249,7 +260,7 @@ impl<T> Vec<T> {
 ```
 
 The `#[modifies(when = CONDITION, targets = { MODIFIES_RANGE, ... })]` consists
-of an `CONDITION` and zero or more, comma separated `MODIFIES_RANGE`s which are
+of a `CONDITION` and zero or more, comma separated `MODIFIES_RANGE`s which are
 essentially an lvalue.
 
 If no `when` is provided the condition defaults to `true`, meaning the modifies
@@ -263,7 +274,16 @@ variable) and zero or more projections (dereference `*`, field access `.x`,
 slice indexing `[1]`[^slice-exprs]).
 
 [^slice-exprs]: Slice indices can be lvalues referencing function arguments,
-    constants and integer arithmetic expressions.
+    constants and integer arithmetic expressions. Take for example this vector
+    function (lvalues simplified vs. actual implementation in `std`):
+
+    ```rs
+    impl<T> Vec<T> {
+        #[modifies(self.buf[len..self.len], self.len)]
+        fn truncate(&mut self, len: usize) { ... }
+    }
+    ```
+
 
 Because lvalues are restricted to using projections only, Kani must break
 encapsulation here. If need be we can reference fields that are usually hidden,
@@ -300,11 +320,11 @@ lvalues, because the whole allocation has to be freed.
 
 ### History Variables
 
-Kani's contract language contains additional support for reasoning how the value
-of mutable memory changes. One case where this is necessary is whenever
-`ensures` needs to reason about state before the function call. By default it
-only has access to state after the call completes, which will be different if
-the call mutates memory.
+Kani's contract language contains additional support to reason about changes of
+mutable memory. One case where this is necessary is whenever `ensures` needs to
+refer to state before the function call. By default variables in the ensures
+clause are interpreted in the post-call state whereas history variables are
+interpreted in the pre-call state.
 
 Returning to our `pop` function from before we may wish to describe in which
 case the result is `Some`. However that depends on whether `self` is empty
@@ -322,11 +342,12 @@ impl<T> Vec<T> {
 }
 ```
 
-`old` allows evaluating any Rust expression, so long as it is free of
-side-effects. See also [this explanation](#changes-to-other-components). The
-borrow checker enforces that the result of `old` cannot observe the mutations
-from e.g. `pop`, as that would defeat the purpose. If you wish to return
-borrowed content from `old`, make a copy instead (using e.g. `clone()`).
+`old` allows evaluating any Rust expression in the pre-call context, so long as
+it is free of side-effects. See also [this
+explanation](#changes-to-other-components). The borrow checker enforces that the
+mutations performed by e.g. `pop` cannot be observed by the history variable, as
+that would defeat the purpose. If you wish to return borrowed content from
+`old`, make a copy instead (using e.g. `clone()`).
 
 Note also that `old` is syntax, not a function and implemented as an extraction
 and lifting during code generation. It can reference e.g. `pop`'s arguments but
@@ -785,7 +806,7 @@ times larger than what they expect the function will touch).
   A complete solution for this is not known to us but there are ongoing
   investigations into harness generation mechanisms in CBMC.
 
-  Environments that are non-inductive could be created from the type as the
+  Function inputs that are non-inductive could be created from the type as the
   safe Rust type constraints describe a finite space.
 
   For dealing with pointers one applicable mechanism could be *memory
@@ -801,7 +822,8 @@ times larger than what they expect the function will touch).
   to describe pointers and pointers only. Meaning that if they are encapsulated
   in a structure (such as `Vec` or `RefCell`) there is no way of specifying the
   target of the predicate without breaking encapsulation (similar to
-  `modifies`).
+  `modifies`). In addition there are limitations also on the pointer predicates
+  in CBMC itself. For instance they cannot be combined with quantifiers.
   
   A better solution would be for the data structure to declare its own
   invariants at definition site which are automatically swapped in on every
@@ -821,7 +843,18 @@ times larger than what they expect the function will touch).
   using contacts in the future.
 - **Inductive Reasoning:** Describing recursive functions can require that the
   contract also recurse, describing a fixpoint logic. This is needed for
-  instance for linked data structures like linked lists or trees.
+  instance for linked data structures like linked lists or trees. Consider for
+  instance a reachability predicate for a linked list:
+
+  ```rs
+  struct LL<T> { head: T, next: *const LL<T> }
+
+  fn reachable(list: &LL<T>, t: &T) -> bool {
+      list.head == t
+      || unsafe { next.as_ref() }.map_or(false, |p| reachable(p, t))
+  }
+
+  ```
 - **Compositional Contracts:** The proposal in this document lacks a
   comprehensive handling of type parameters. Contract checking harnesses require
   monomorphization. However this means the contract is only checked against a
