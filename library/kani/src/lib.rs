@@ -9,6 +9,7 @@
 // This is required for the optimized version of `any_array()`
 #![feature(generic_const_exprs)]
 #![allow(incomplete_features)]
+#![allow(internal_features)]
 
 pub mod arbitrary;
 #[cfg(feature = "concrete_playback")]

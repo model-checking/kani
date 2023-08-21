@@ -391,8 +391,14 @@ impl<'test> TestCx<'test> {
     }
 
     /// Runs Kani on the test file specified by `self.testpaths.file`. An error
-    /// message is printed to stdout if verification output does not contain
-    /// the expected output in `expected` file.
+    /// message is printed to stdout if verification output does not contain the
+    /// expected output.
+    ///
+    /// We read the expected output from the file
+    /// `self.testpaths.file.with_extension("expected")` (same file name but
+    /// extension replaced with `.expected`). For backwards compatibility, if we
+    /// don't find this file, we will also try a file called `expected` in the
+    /// same directory as `self.testpaths.file`.
     fn run_expected_test(&self) {
         let proc_res = self.run_kani();
         let dot_expected_path = self.testpaths.file.with_extension("expected");
@@ -491,7 +497,7 @@ impl<'test> TestCx<'test> {
     /// contains a line from `lines`
     fn contains(str: &[&str], lines: &[&str]) -> bool {
         // Does *any* subslice of length `lines.len()` satisfy the containment of
-        // *all* `lines`
+        // *all* `lines`?
         // `trim()` added to ignore trailing and preceding whitespace
         str.windows(lines.len()).any(|subslice| {
             subslice.iter().zip(lines).all(|(output, expected)| output.contains(expected.trim()))
