@@ -13,4 +13,3 @@ fn return_pointer() -> *const usize {
 fn return_ptr_harness() {
     return_pointer();
 }
-

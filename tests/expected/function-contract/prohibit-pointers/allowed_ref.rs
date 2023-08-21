@@ -13,4 +13,3 @@ fn allowed_ref_harness() {
     let a = true;
     allowed_ref(&a)
 }
-
