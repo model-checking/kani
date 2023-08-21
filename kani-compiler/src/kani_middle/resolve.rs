@@ -14,7 +14,7 @@ use std::fmt;
 use std::iter::Peekable;
 
 use rustc_hir::def::{DefKind, Res};
-use rustc_hir::def_id::{DefId, LocalDefId, CRATE_DEF_INDEX, LOCAL_CRATE};
+use rustc_hir::def_id::{DefId, LocalDefId, LocalModDefId, CRATE_DEF_INDEX, LOCAL_CRATE};
 use rustc_hir::{ItemKind, UseKind};
 use rustc_middle::ty::TyCtxt;
 use tracing::debug;
@@ -286,7 +286,7 @@ enum RelativeResolution {
 }
 
 /// Resolves a path relative to a local module.
-fn resolve_relative(tcx: TyCtxt, current_module: LocalDefId, name: &str) -> RelativeResolution {
+fn resolve_relative(tcx: TyCtxt, current_module: LocalModDefId, name: &str) -> RelativeResolution {
     debug!(?name, ?current_module, "resolve_relative");
 
     let mut glob_imports = vec![];
@@ -326,7 +326,7 @@ fn resolve_in_module<'tcx>(
             ResolveError::MissingItem { tcx, base: current_module, unresolved: name.to_string() }
         }),
         Some(local_id) => {
-            let result = resolve_relative(tcx, local_id, name);
+            let result = resolve_relative(tcx, LocalModDefId::new_unchecked(local_id), name);
             match result {
                 RelativeResolution::Found(def_id) => Ok(def_id),
                 RelativeResolution::Globs(globs) => {
@@ -380,7 +380,7 @@ fn resolve_in_glob_uses<'tcx>(
 fn resolve_in_glob_use(tcx: TyCtxt, res: &Res, name: &str) -> RelativeResolution {
     if let Res::Def(DefKind::Mod, def_id) = res {
         if let Some(local_id) = def_id.as_local() {
-            resolve_relative(tcx, local_id, name)
+            resolve_relative(tcx, LocalModDefId::new_unchecked(local_id), name)
         } else {
             resolve_in_foreign_module(tcx, *def_id, name)
                 .map_or(RelativeResolution::Globs(vec![]), RelativeResolution::Found)

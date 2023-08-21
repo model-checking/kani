@@ -139,7 +139,7 @@ impl<'tcx> KaniAttributes<'tcx> {
             let name = expect_key_string_value(self.tcx.sess, target);
             let resolved = resolve_fn(
                 self.tcx,
-                self.tcx.parent_module_from_def_id(self.item.expect_local()),
+                self.tcx.parent_module_from_def_id(self.item.expect_local()).to_local_def_id(),
                 name.as_str(),
             );
             match resolved {
@@ -240,14 +240,9 @@ impl<'tcx> KaniAttributes<'tcx> {
         }
 
         // If the `function-contracts` unstable feature is not enabled then no
-        // function should use any of those APIs. 
+        // function should use any of those APIs.
         if !enabled_features.iter().any(|feature| feature == "function-contracts") {
-            for kind in self
-                .map
-                .keys()
-                .copied()
-                .filter(|a| a.is_function_contract_api())
-            {
+            for kind in self.map.keys().copied().filter(|a| a.is_function_contract_api()) {
                 let msg = format!(
                     "Using the {} attribute requires activating the unstable `function-contracts` feature",
                     kind.as_ref()
@@ -356,7 +351,8 @@ impl<'tcx> KaniAttributes<'tcx> {
                         || replace_str.to_string(),
                         |t| t.0.to_string() + "::" + replace_str,
                     );
-                    resolve::resolve_fn(self.tcx, current_module, &replacement).unwrap();
+                    resolve::resolve_fn(self.tcx, current_module.to_local_def_id(), &replacement)
+                        .unwrap();
                     Stub { original: original_str.to_string(), replacement }
                 }),
         );
@@ -556,7 +552,7 @@ fn parse_unwind(tcx: TyCtxt, attr: &Attribute) -> Option<u32> {
 fn parse_stubs(tcx: TyCtxt, harness: DefId, attributes: &[&Attribute]) -> Vec<Stub> {
     let current_module = tcx.parent_module_from_def_id(harness.expect_local());
     let check_resolve = |attr: &Attribute, name: &str| {
-        let result = resolve::resolve_fn(tcx, current_module, name);
+        let result = resolve::resolve_fn(tcx, current_module.to_local_def_id(), name);
         if let Err(err) = result {
             tcx.sess.span_err(attr.span, format!("failed to resolve `{name}`: {err}"));
         }
