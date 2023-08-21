@@ -346,7 +346,7 @@ impl VerificationArgs {
         }
     }
 
-    /// Is experimental stubing enabled?
+    /// Is experimental stubbing enabled?
     pub fn is_stubbing_enabled(&self) -> bool {
         self.enable_stubbing
             || self.common_args.unstable_features.contains(&UnstableFeatures::Stubbing)

@@ -86,12 +86,12 @@ impl<'sess, 'pr> HarnessRunner<'sess, 'pr> {
                 [] => { /* do nothing */ }
                 [harness] => bail!(
                     "Use of unstable feature 'stubbing' in harness `{}`.\n\
-                    To enable stubbing, pass options `-Z stubbing`",
+                    To enable stubbing, pass option `-Z stubbing`",
                     harness
                 ),
                 harnesses => bail!(
                     "Use of unstable feature 'stubbing' in harnesses `{}`.\n\
-                    To enable stubbing, pass options `-Z stubbing`",
+                    To enable stubbing, pass option `-Z stubbing`",
                     harnesses.join("`, `")
                 ),
             }
