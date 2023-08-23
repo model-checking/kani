@@ -13,10 +13,14 @@ runs:
   using: composite
   steps:
       - name: Remove unnecessary software to free up disk space
+        if: contains(fromJSON('["ubuntu-18.04","ubuntu-20.04","ubuntu-22.04"]'), inputs.os)
         shell: bash
         run: |
           # inspired by https://github.com/easimon/maximize-build-space/blob/master/action.yml
           df -h
+          echo $PATH
+          ls /
+          ls /opt
           sudo rm -r /usr/share/dotnet /usr/local/lib/android /opt/ghc
           df -h
 
