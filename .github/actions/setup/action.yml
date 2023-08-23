@@ -19,12 +19,11 @@ runs:
           # inspired by https://github.com/easimon/maximize-build-space/blob/master/action.yml
           df -h
           echo $PATH
-          ls /
-          ls /opt
-          ls -la /usr/local/.ghcup/bin
-          ls -la /home/runner/.dotnet/tools
-          which ghc
-          sudo rm -r /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          du -hs /usr/share/dotnet
+          du -hs /usr/local/lib/android
+          ls -la /usr/local
+          du -hs /usr/local/.ghcup
+          sudo rm -r /usr/share/dotnet /usr/local/lib/android /usr/local/.ghcup
           df -h
 
       - name: Install dependencies
