@@ -13,16 +13,11 @@ runs:
   using: composite
   steps:
       - name: Remove unnecessary software to free up disk space
-        if: contains(fromJSON('["ubuntu-18.04","ubuntu-20.04","ubuntu-22.04"]'), inputs.os)
+        if: contains(fromJSON('["ubuntu-20.04","ubuntu-22.04"]'), inputs.os)
         shell: bash
         run: |
           # inspired by https://github.com/easimon/maximize-build-space/blob/master/action.yml
           df -h
-          echo $PATH
-          du -hs /usr/share/dotnet
-          du -hs /usr/local/lib/android
-          ls -la /usr/local
-          du -hs /usr/local/.ghcup
           sudo rm -r /usr/share/dotnet /usr/local/lib/android /usr/local/.ghcup
           df -h
 

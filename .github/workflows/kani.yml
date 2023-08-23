@@ -188,7 +188,7 @@ jobs:
           retention-days: 3
 
   releasebundle-ubuntu:
-    runs-on: ubuntu-20.04
+    runs-on: macos-latest
     container:
       image: ubuntu:18.04
     steps:
@@ -197,6 +197,7 @@ jobs:
       # action requires Git >=2.18, so use the Git maintainers' PPA.
       - name: Install system dependencies
         run: |
+          df -h
           apt-get update
           apt-get install -y software-properties-common apt-utils
           add-apt-repository ppa:git-core/ppa
