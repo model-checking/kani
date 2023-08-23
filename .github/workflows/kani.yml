@@ -198,7 +198,7 @@ jobs:
         run: |
           # inspired by https://github.com/easimon/maximize-build-space/blob/master/action.yml
           df -h
-          rm -r /__w/usr/share/dotnet /__w/usr/local/lib/android /__w/usr/local/.ghcup
+          rm -r /mnt/host-local/lib/android /mnt/host-local/.ghcup
           df -h
       # This is required before checkout because the container does not
       # have Git installed, so cannot run checkout action. The checkout
