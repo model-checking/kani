@@ -188,15 +188,19 @@ jobs:
           retention-days: 3
 
   releasebundle-ubuntu:
-    runs-on: macos-latest
+    runs-on: ubuntu-20.04
     container:
       image: ubuntu:18.04
+      volumes:
+        /usr/local:/mnt/host-local
     steps:
       # This is required before checkout because the container does not
       # have Git installed, so cannot run checkout action. The checkout
       # action requires Git >=2.18, so use the Git maintainers' PPA.
       - name: Install system dependencies
         run: |
+          df -h
+          rm -r /mnt/host-local/lib/android /mnt/host-local/.ghcup
           df -h
           apt-get update
           apt-get install -y software-properties-common apt-utils
