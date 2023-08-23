@@ -147,8 +147,18 @@ fn check_is_contract_safe<'tcx>(tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) {
         matches!(t.kind(), ty::TyKind::RawPtr(tmut) if tmut.mutbl == rustc_ast::Mutability::Mut)
     }
 
-    let fn_typ =
-        instance.ty(tcx, ParamEnv::reveal_all()).fn_sig(tcx).no_bound_vars().expect("impossible");
+    let bound_fn_sig = instance.ty(tcx, ParamEnv::reveal_all()).fn_sig(tcx);
+
+    for v in bound_fn_sig.bound_vars() {
+        if let ty::BoundVariableKind::Ty(t) = v {
+            tcx.sess.span_err(
+                tcx.def_span(instance.def_id()),
+                format!("Found a bound type variable {t:?} after monomorphization"),
+            );
+        }
+    }
+
+    let fn_typ = bound_fn_sig.skip_binder();
 
     for (typ, (is_prohibited, r#where, what)) in fn_typ
         .inputs()
