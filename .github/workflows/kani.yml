@@ -192,7 +192,7 @@ jobs:
     container:
       image: ubuntu:18.04
       volumes:
-        /usr/local:/mnt/host-local
+        - /usr/local:/mnt/host-local
     steps:
       # This is required before checkout because the container does not
       # have Git installed, so cannot run checkout action. The checkout
