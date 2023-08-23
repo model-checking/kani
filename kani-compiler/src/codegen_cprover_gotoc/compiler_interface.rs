@@ -393,8 +393,13 @@ fn check_target(session: &Session) {
     let is_x86_64_darwin_target = session.target.llvm_target.starts_with("x86_64-apple-");
     // looking for `arm64-apple-*`
     let is_arm64_darwin_target = session.target.llvm_target.starts_with("arm64-apple-");
+    let is_arm64_linux_gnu = session.target.llvm_target == "aarch64-unknown-linux-gnu";
 
-    if !is_linux_target && !is_x86_64_darwin_target && !is_arm64_darwin_target {
+    if !is_linux_target
+        && !is_x86_64_darwin_target
+        && !is_arm64_darwin_target
+        && !is_arm64_linux_gnu
+    {
         let err_msg = format!(
             "Kani requires the target platform to be `x86_64-unknown-linux-gnu` or \
             `x86_64-apple-*` or `arm64-apple-*`, but it is {}",
@@ -695,7 +700,7 @@ fn new_machine_model(sess: &Session) -> MachineModel {
             let long_long_int_width = 64;
             let short_int_width = 16;
             let single_width = 32;
-            let wchar_t_is_unsigned = false;
+            let wchar_t_is_unsigned = true;
             let wchar_t_width = 32;
 
             MachineModel {
