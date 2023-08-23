@@ -13,11 +13,12 @@ runs:
   using: composite
   steps:
       - name: Remove unnecessary software to free up disk space
+        if: contains(fromJSON('["ubuntu-20.04","ubuntu-22.04"]'), inputs.os)
         shell: bash
         run: |
           # inspired by https://github.com/easimon/maximize-build-space/blob/master/action.yml
           df -h
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          sudo rm -r /usr/share/dotnet /usr/local/lib/android /usr/local/.ghcup
           df -h
 
       - name: Install dependencies
