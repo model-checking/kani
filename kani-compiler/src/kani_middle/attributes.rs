@@ -59,12 +59,15 @@ impl KaniAttributeKind {
         }
     }
 
-    /// Is this attribute kind one of the suite of attributes that form the
-    /// function contracts API. E.g. where [`Self::is_function_contract`] is
-    /// true but also auto harness attributes like `proof_for_contract`
-    pub fn is_function_contract_api(self) -> bool {
-        use KaniAttributeKind::*;
-        self.is_function_contract() || matches!(self, ProofForContract)
+    /// Is this an "active" function contract attribute? This means it is is
+    /// part of the function contract interface *and* it implies that a contract
+    /// will be used (stubbed or checked) in some way, thus requiring that the
+    /// user activate the unstable feature.
+    ///
+    /// If we find an "inactive" contract attribute we chose not to error,
+    /// because it wouldn't have any effect anyway.
+    pub fn demands_function_contract_use(self) -> bool {
+        matches!(self, KaniAttributeKind::ProofForContract)
     }
 
     /// Would this attribute be placed on a function as part of a function
@@ -242,7 +245,7 @@ impl<'tcx> KaniAttributes<'tcx> {
         // If the `function-contracts` unstable feature is not enabled then no
         // function should use any of those APIs.
         if !enabled_features.iter().any(|feature| feature == "function-contracts") {
-            for kind in self.map.keys().copied().filter(|a| a.is_function_contract_api()) {
+            for kind in self.map.keys().copied().filter(|a| a.demands_function_contract_use()) {
                 let msg = format!(
                     "Using the {} attribute requires activating the unstable `function-contracts` feature",
                     kind.as_ref()
