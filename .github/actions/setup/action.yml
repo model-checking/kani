@@ -21,6 +21,9 @@ runs:
           echo $PATH
           ls /
           ls /opt
+          ls -la /usr/local/.ghcup/bin
+          ls -la /home/runner/.dotnet/tools
+          which ghc
           sudo rm -r /usr/share/dotnet /usr/local/lib/android /opt/ghc
           df -h
 
