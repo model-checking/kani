@@ -13,10 +13,10 @@
 
 ## Summary
 
-Function contracts are a mechanism, similar to [stubbing], which allows a
-concrete implementations to be replaced by an abstraction without losing
-soundness[^simple-unsoundness] by first validating the abstraction against the
-implementation it will replace.
+Function contracts are a means to specify and check function behavior. On top of
+that the specification can then be used as a sound[^simple-unsoundness]
+abstraction to replace the concrete implementation, similar to [stubbing].
+
 
 This allows for a modular verification.
 <!-- Shorter? -->
@@ -157,7 +157,7 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
    `proof_for_contract` harness for each abstracted function, otherwise an error is
    thrown. In addition, by default, it requires all `proof_for_contract`
    harnesses to pass verification before attempting verification of any
-   harnesses that use the contract as an abstraction.
+   harnesses that use the contract as a stub.
 
    A possible harness that uses our `my_div` contract could be the following:
 
@@ -261,21 +261,22 @@ impl<T> Vec<T> {
 
 The `#[modifies(when = CONDITION, targets = { MODIFIES_RANGE, ... })]` consists
 of a `CONDITION` and zero or more, comma separated `MODIFIES_RANGE`s which are
-essentially an lvalue.
+essentially a place expression.
+
+Place expressions describe a position in the abstract program memory. You may
+think of it as what goes to the left of an assignment. They compose of the name
+of one function argument (or static variable) and zero or more projections
+(dereference `*`, field access `.x` and slice indexing `[1]`[^slice-exprs]).
 
 If no `when` is provided the condition defaults to `true`, meaning the modifies
 ranges apply to all invocations of the function. If `targets` is omitted it
 defaults to `{}`, e.g. an empty set of targets meaning under this condition the
 function modifies no mutable memory.
 
-Lvalues are simple expressions permissible on the left hand side of an
-assignment. They compose of the name of one function argument (or static
-variable) and zero or more projections (dereference `*`, field access `.x`,
-slice indexing `[1]`[^slice-exprs]).
 
-[^slice-exprs]: Slice indices can be lvalues referencing function arguments,
-    constants and integer arithmetic expressions. Take for example this vector
-    function (lvalues simplified vs. actual implementation in `std`):
+[^slice-exprs]: Slice indices can be place expressions referencing function
+    arguments, constants and integer arithmetic expressions. Take for example
+    this vector function (places simplified vs. actual implementation in `std`):
 
     ```rs
     impl<T> Vec<T> {
@@ -285,14 +286,34 @@ slice indexing `[1]`[^slice-exprs]).
     ```
 
 
-Because lvalues are restricted to using projections only, Kani must break
-encapsulation here. If need be we can reference fields that are usually hidden,
-without an error from the compiler.
+Because place expressions are restricted to using projections only, Kani must
+break Rusts `pub`/no-`pub` encapsulation here[^assigns-encapsulation-breaking].
+If need be we can reference fields that are usually hidden, without an error
+from the compiler.
 
-In addition to lvalues, a `MODIFIES_RANGE` can also be terminated with more
-complex slice expressions as the last projection. This only applies to `*mut`
-pointers to arrays. For instance this is needed for `Vec::truncate` where all of
-the latter section of the allocation is assigned (dropped).
+[^assigns-encapsulation-breaking]: Breaking the `pub` encapsulation has
+    unfortunate side effects because it means the contract depends on non-public
+    elements which are not expected to be stable and can drastically change even
+    in minor versions. For instance if your project depends on crate `a` which
+    in turn depends on crate `b`, and `a::foo` has a contract that takes as
+    input a pointer data structure `b::Bar` then `a::foo`s `assigns` contract
+    must reference internal fields of `b::Bar`. Say your project depends on the
+    *replacement* of `a::foo`, if `b` changes the internal representation of
+    `Bar` in a minor version update cargo could bump your version of `b`,
+    breaking the contract of `a::foo` (it now crashes because it e.g. references
+    non-existent fields).
+
+    You cannot easily update the contract for `a::foo`, since it is a
+    third-party crate; in fact even the author of `a` could not properly update
+    to the new contract since their old version specification would still admit
+    the new, broken version of `b`. They would have to yank the old version and
+    explicitly nail down the exact minor version of `b` which defeats the whole
+    purpose of semantic versioning.
+
+In addition to a place expression, a `MODIFIES_RANGE` can also be terminated
+with more complex *slice* expressions as the last projection. This only applies
+to `*mut` pointers to arrays. For instance this is needed for `Vec::truncate`
+where all of the latter section of the allocation is assigned (dropped).
 
 ```rs
 impl<T> Vec<T> {
@@ -309,10 +330,10 @@ in Rust `p[i..j]` would be equivalent to
 `std::slice::from_raw_parts(p.offset(i), i - j)`. `i` must be smaller or equal
 than `j`.
 
-A `#[frees(when = CONDITION, targets = { LVALUE, ... })]` clause works similarly
+A `#[frees(when = CONDITION, targets = { PLACE, ... })]` clause works similarly
 to `modifies` but denotes memory that is deallocated. Like `modifies` it applies
 only to pointers but unlike modifies it does not admit slice syntax, only
-lvalues, because the whole allocation has to be freed.
+place expressions, because the whole allocation has to be freed.
 
 [^inferred-footprint]: While inferred memory footprints are sound for both safe
     and unsafe Rust certain features in unsafe rust (e.g. `RefCell`) get
@@ -390,8 +411,7 @@ Kani reports a compile time error if any of the following constraints are violat
 
 - A harness may have up to one `proof_for_contract(TARGET)` annotation where `TARGET` must
   "have a contract". One or more `proof_for_contract` harnesses may have the
-  same `TARGET`. All such harnesses must pass verification, before `TARGET` may
-  be used as an abstraction.
+  same `TARGET`. 
 
   A `proof_for_contract` harness may use any harness attributes, including
   `stub` and `stub_verified`, though the `TARGET` may not appear in either. 
@@ -403,7 +423,10 @@ Kani reports a compile time error if any of the following constraints are violat
   is already implied by `proof_for_contract`).
 
 - A harness may have multiple `stub_verified(TARGET)` attributes. Each `TARGET`
-  must "have a contract". No `TARGET` may appear twice.
+  must "have a contract". No `TARGET` may appear twice. Each local `TARGET` is
+  expected to have at least one associated `proof_for_contract` harness which
+  passes verification, see also the discussion on when to check contracts in
+  [open questions](#open-questions).
 
 - Harnesses may combine `stub(S_TARGET, ..)` and `stub_verified(V_TARGET)`
   annotations, though no target may occur in `S_TARGET`s and `V_TARGET`s
@@ -774,9 +797,9 @@ times larger than what they expect the function will touch).
   havoc.
 - **`modifies` clauses over patterns.** Modifies clauses mention values bound in
   the function header and as a user I would expect that if I use a pattern in
-  the function header then I can use the names bound in that pattern as lvalues
-  in the `modifies` clause. However `modifies` clauses are implemented as
-  `assigns` clauses in CBMC which does not have a notion of function header
+  the function header then I can use the names bound in that pattern as base
+  variables in the `modifies` clause. However `modifies` clauses are implemented
+  as `assigns` clauses in CBMC which does not have a notion of function header
   patterns. Thus it is necessary to project any `modifies` ranges deeper by the
   fields used in the matched pattern.
 
