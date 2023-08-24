@@ -1,15 +1,197 @@
 # Copyright Kani Contributors
 # SPDX-License-Identifier: Apache-2.0 OR MIT
-name: Release
+#
+# This workflow will build, and, optionally, release Kani bundles in this order.
+#
+# The release will create a draft release and upload the bundles to it, and it will only run when we push a new
+# release tag (i.e.: tag named `kani-*`).
+name: Release Bundle
 on:
+  pull_request:
   push:
+    branches:
+      - 'main'
     tags:
       - kani-*
 
+env:
+  RUST_BACKTRACE: 1
+
 jobs:
-  Release:
+  build_bundle_macos:
+    name: BuildBundle-MacOs
+    runs-on: macos-12
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.bundle.outputs.version }}
+      bundle: ${{ steps.bundle.outputs.bundle }}
+      package: ${{ steps.bundle.outputs.package }}
+      crate_version: ${{ steps.bundle.outputs.crate_version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Kani Dependencies
+        uses: ./.github/actions/setup
+        with:
+          os: macos-12
+
+      - name: Build bundle
+        id: bundle
+        uses: ./.github/actions/build-bundle
+        with:
+          os: macos-12
+          arch: x86_64-apple-darwin
+
+  build_bundle_linux:
+    name: BuildBundle-Linux
+    runs-on: ubuntu-20.04
+    outputs:
+      # The bundle version (latest or the version to be released)
+      version: ${{ steps.bundle.outputs.version }}
+      bundle: ${{ steps.bundle.outputs.bundle }}
+      package: ${{ steps.bundle.outputs.package }}
+      crate_version: ${{ steps.bundle.outputs.crate_version }}
+    container:
+      # Build using ubuntu 18 due to compatibility issues with older OS.
+      image: ubuntu:18.04
+      volumes:
+        - /usr/local:/mnt/host-local
+    steps:
+
+      - name: Free up docker disk space
+        run: |
+          # inspired by https://github.com/easimon/maximize-build-space/blob/master/action.yml
+          df -h
+          rm -r /mnt/host-local/lib/android /mnt/host-local/.ghcup
+          df -h
+
+      # This is required before checkout because the container does not
+      # have Git installed, so cannot run checkout action. The checkout
+      # action requires Git >=2.18, so use the Git maintainers' PPA.
+      - name: Install system dependencies
+        run: |
+          apt-get update
+          apt-get install -y software-properties-common apt-utils
+          add-apt-repository ppa:git-core/ppa
+          apt-get update
+          apt-get install -y \
+            build-essential bash-completion curl lsb-release sudo g++ gcc flex \
+            bison make patch git
+
+      - name: Checkout Kani
+        uses: actions/checkout@v3
+
+      - name: Setup Kani Dependencies
+        uses: ./.github/actions/setup
+        with:
+          os: ubuntu-18.04
+
+      - name: Build bundle
+        id: bundle
+        uses: ./.github/actions/build-bundle
+        with:
+          os: linux
+          arch: x86_64-unknown-linux-gnu
+
+  test_bundle:
+    name: TestBundle
+    needs: [build_bundle_macos, build_bundle_linux]
+    strategy:
+      matrix:
+        os: [macos-12, ubuntu-20.04, ubuntu-22.04]
+        include:
+          # Stores the output of the previous job conditional to the OS
+          - prev_job: ${{ needs.build_bundle_linux.outputs }}
+          - os: macos-12
+            prev_job: ${{ needs.build_bundle_macos.outputs }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Download bundle
+        uses: actions/download-artifact@v3
+        with:
+          name: ${{ matrix.prev_job.bundle }}
+
+      - name: Download kani-verifier crate
+        uses: actions/download-artifact@v3
+        with:
+          name: ${{ matrix.prev_job.package }}
+
+      - name: Check download
+        run: |
+          ls -lh .
+
+      - name: Install from bundle
+        run: |
+          tar zxvf ${{ matrix.prev_job.package }}
+          cargo install --locked --path kani-verifier-${{ matrix.prev_job.crate_version }}
+          cargo kani setup --use-local-bundle ./${{ matrix.prev_job.bundle }}
+
+      - name: Checkout tests
+        uses: actions/checkout@v3
+
+      - name: Run tests
+        # TODO: Customize compiletest to run custom kani. For now, just run a few cargo kani tests.
+        run: |
+          for dir in simple-lib simple-visualize build-rs-works simple-kissat; do
+            >&2 echo "Running test $dir"
+            pushd tests/cargo-kani/$dir
+            cargo kani
+            popd
+          done
+
+  # This job will run tests for platforms that don't have a respective GitHub worker.
+  # For now, we only test for Ubuntu-18.04 so we don't bother using matrix to configure the platform.
+  test_alt_platform:
+    name: TestAlternativePlatforms
+    if: ${{ github.event_name == 'push' }}
+    needs: [build_bundle_linux]
+    runs-on: ubuntu-22.04
+    env:
+      PKG: ${{ needs.build_bundle_linux.outputs.package }}
+      BUNDLE: ${{ needs.build_bundle_linux.outputs.bundle }}
+      VERSION: ${{ needs.build_bundle_linux.outputs.crate_version }}
+      KANI_SRC: ./kani_src
+    steps:
+      - name: Checkout Kani
+        uses: actions/checkout@v3
+        with:
+          path: ${{ env.KANI_SRC }}
+
+      - name: Download bundle
+        uses: actions/download-artifact@v3
+        with:
+          name: ${{ env.BUNDLE }}
+
+      - name: Download kani-verifier crate
+        uses: actions/download-artifact@v3
+        with:
+          name: ${{ env.PKG }}
+
+      - name: Build container test
+        run: |
+          docker build -t kani-18-04 -f ${{ env.KANI_SRC }}/scripts/ci/Dockerfile.bundle-test-ubuntu-18-04 .
+
+      - name: Run installed tests
+        run: |
+          for dir in simple-lib simple-visualize build-rs-works simple-kissat; do
+            >&2 echo "Running test $dir"
+            docker run -v /var/run/docker.sock:/var/run/docker.sock \
+              -w /tmp/kani/tests/cargo-kani/$dir kani-18-04 cargo kani
+          done
+
+          # While the above test OS issues, now try testing with nightly as
+          # default:
+          docker run -v /var/run/docker.sock:/var/run/docker.sock \
+            -w /tmp/kani/tests/cargo-kani/simple-lib kani-18-04  \
+            bash -c "rustup default nightly && cargo kani"
+
+  kani_release:
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/kani-') }}
     name: Release
     runs-on: ubuntu-20.04
+    needs: [build_bundle_macos, build_bundle_linux, test_bundle, test_alt_platform]
     permissions:
       contents: write
     outputs:
@@ -23,19 +205,27 @@ jobs:
         run: |
           # pkgid is something like file:///home/ubuntu/kani#kani-verifier:0.1.0
           echo "CRATE_VERSION=$(cargo pkgid | cut -d@ -f2)" >> $GITHUB_ENV
-          # GITHUB_REF is refs/tags/kani-0.1.0
+          # GITHUB_REF is something like refs/tags/kani-0.1.0
           echo "TAG_VERSION=$(echo ${{ github.ref }} | cut -d "-" -f 2)" >> $GITHUB_ENV
-          # Note that the above env vars get set for future steps, not this one
-      - name: Version Check
+
+      - name: Check Version
         id: versioning
         run: |
-          # Output for upload scripts to see
-          echo "version=${{ env.TAG_VERSION }}" >> $GITHUB_OUTPUT
           # Validate git tag & Cargo.toml are in sync on version number
           if [[ ${{ env.CRATE_VERSION }} != ${{ env.TAG_VERSION }} ]]; then
             echo "Git tag ${{env.TAG_VERSION}} did not match crate version ${{env.CRATE_VERSION}}"
             exit 1
           fi
+
+      - name: Download MacOS bundle
+        uses: actions/download-artifact@v3
+        with:
+          name: ${{ needs.build_bundle_macos.outputs.bundle }}
+
+      - name: Download Linux bundle
+        uses: actions/download-artifact@v3
+        with:
+          name: ${{ needs.build_bundle_linux.outputs.bundle }}
 
       - name: Create release
         id: create_release
@@ -45,97 +235,14 @@ jobs:
         with:
           name: kani-${{ env.TAG_VERSION }}
           tag: kani-${{ env.TAG_VERSION }}
+          artifacts: "${{ needs.build_bundle_linux.outputs.bundle }},${{ needs.build_bundle_macos.outputs.bundle }}"
           body: |
             Kani Rust verifier release bundle version ${{ env.TAG_VERSION }}.
           draft: true
 
-  MacOs-Bundle:
-    name: MacOs-Bundle
-    needs: Release
-    runs-on: macos-12
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Setup Kani Dependencies
-        uses: ./.github/actions/setup
-        with:
-          os: macos-12
-
-      - name: Build release bundle
-        run: |
-          cargo bundle
-
-      - name: Upload artifact
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.Release.outputs.upload_url }}
-          asset_path: kani-${{ needs.Release.outputs.version }}-x86_64-apple-darwin.tar.gz
-          asset_name: kani-${{ needs.Release.outputs.version }}-x86_64-apple-darwin.tar.gz
-          asset_content_type: application/gzip
-
-  Linux-Bundle:
-    name: Linux-Bundle
-    needs: Release
-    runs-on: ubuntu-20.04
-    container:
-      image: ubuntu:18.04
-      volumes:
-        - /usr/local:/mnt/host-local
-    permissions:
-      contents: write
-    steps:
-      - name: Remove unnecessary software to free up disk space
-        run: |
-          # inspired by https://github.com/easimon/maximize-build-space/blob/master/action.yml
-          df -h
-          rm -r /mnt/host-local/lib/android /mnt/host-local/.ghcup
-          df -h
-      # This is required before checkout because the container does not
-      # have Git installed, so cannot run checkout action. The checkout
-      # action requires Git >=2.18, so use the Git maintainers' PPA.
-      - name: Install system dependencies
-        run: |
-          apt-get update
-          apt-get install -y software-properties-common apt-utils
-          add-apt-repository ppa:git-core/ppa
-          apt-get update
-          apt-get install -y \
-            build-essential bash-completion curl lsb-release sudo g++ gcc flex \
-            bison make patch git
-          curl --proto '=https' --tlsv1.2 --retry 10 --retry-connrefused -fsSL \
-            https://get.docker.com -o /tmp/install-docker.sh
-          bash /tmp/install-docker.sh
-
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Setup Kani Dependencies
-        uses: ./.github/actions/setup
-        with:
-          os: ubuntu-18.04
-
-      - name: Build release bundle
-        run: |
-          PATH=/github/home/.cargo/bin:$PATH cargo bundle
-
-      - name: Upload artifact
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.Release.outputs.upload_url }}
-          asset_path: kani-${{ needs.Release.outputs.version }}-x86_64-unknown-linux-gnu.tar.gz
-          asset_name: kani-${{ needs.Release.outputs.version }}-x86_64-unknown-linux-gnu.tar.gz
-          asset_content_type: application/gzip
-
-  Package-Docker:
-    name: 'Package Docker'
-    needs: Release
+  package_docker:
+    name: Package Docker
+    needs: kani_release
     runs-on: ubuntu-20.04
     permissions:
       contents: write
@@ -178,11 +285,11 @@ jobs:
           push: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
           tags: |
-            ghcr.io/${{ env.OWNER_LC }}/kani-${{ env.os }}:${{ needs.Release.outputs.version }}
+            ghcr.io/${{ env.OWNER_LC }}/kani-${{ env.os }}:${{ needs.kani_release.outputs.version }}
             ghcr.io/${{ env.OWNER_LC }}/kani-${{ env.os }}:latest
           labels: |
             org.opencontainers.image.source=${{ github.repositoryUrl }}
-            org.opencontainers.image.version=${{ needs.Release.outputs.version }}
+            org.opencontainers.image.version=${{ needs.kani_release.outputs.version }}
             org.opencontainers.image.licenses=Apache-2.0 OR MIT
 
       # This check will not work until #1655 is completed.

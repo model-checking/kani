@@ -1,0 +1,91 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+name: Build bundle
+description: "Build the Kani bundle for the current architecture and OS. The inputs must match the worker architecture."
+inputs:
+  arch:
+    description: "Current architecture tuple"
+  os:
+    description: "Current operating system"
+outputs:
+  version:
+    description: "The bundle version (latest or =crate_version)"
+    value: ${{ steps.set_output.outputs.version }}
+  crate_version:
+    description: "The current crate version"
+    value: ${{ steps.set_output.outputs.crate_version }}
+  bundle:
+    description: "The bundle file name"
+    value: ${{ steps.set_output.outputs.bundle }}
+  package:
+    description: "The package file name"
+    value: ${{ steps.set_output.outputs.package }}
+runs:
+  using: composite
+  steps:
+    - name: Export crate version
+      shell: bash
+      run: |
+        echo "CRATE_VERSION=$(cargo pkgid | cut -d@ -f2)" >> $GITHUB_ENV
+
+    - name: Export tag version
+      shell: bash
+      if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+      run: |
+        echo "VERSION=${TAG_VERSION}" >> $GITHUB_ENV
+
+    - name: Check Version
+      shell: bash
+      if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+      run: |
+        # Validate git tag & Cargo.toml are in sync on version number
+        if [[ ${{ env.CRATE_VERSION }} != ${{ env.TAG_VERSION }} ]]; then
+          echo "Git tag ${{env.TAG_VERSION}} did not match crate version ${{env.CRATE_VERSION}}"
+          exit 1
+        fi
+
+    - name: Export latest version
+      shell: bash
+      if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+      run: |
+        echo "VERSION=latest" >> $GITHUB_ENV
+
+    - name: Build bundle
+      shell: bash
+      run: |
+        cargo bundle -- ${{ env.VERSION }}
+        echo "BUNDLE=kani-${{ env.VERSION }}-${{ inputs.arch }}.tar.gz" >> $GITHUB_ENV
+
+    - name: Build package
+      shell: bash
+      run: |
+        cargo package -p kani-verifier
+        mv target/package/kani-verifier-${{ env.CRATE_VERSION }}.crate ${{ inputs.os }}-kani-verifier.crate
+        echo "PKG=${{ inputs.os }}-kani-verifier.crate" >> $GITHUB_ENV
+
+    - name: Upload bundle
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ env.BUNDLE }}
+        path: ${{ env.BUNDLE }}
+        if-no-files-found: error
+        # Aggressively short retention: we don't really need these
+        retention-days: 3
+
+    - name: Upload kani-verifier pkg
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ env.PKG }}
+        path: ${{ env.PKG }}
+        if-no-files-found: error
+        # Aggressively short retention: we don't really need these
+        retention-days: 3
+
+    - name: Export output
+      shell: bash
+      id: set_output
+      run: |
+        echo "version=${{ env.VERSION }}" >> ${GITHUB_OUTPUT}
+        echo "crate_version=${{ env.CRATE_VERSION }}" >> ${GITHUB_OUTPUT}
+        echo "bundle=${{ env.BUNDLE }}" >> ${GITHUB_OUTPUT}
+        echo "package=${{ env.PKG }}" >> ${GITHUB_OUTPUT}

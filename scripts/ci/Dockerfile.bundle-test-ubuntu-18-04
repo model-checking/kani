@@ -2,6 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
 # Note: this file is intended only for testing the kani release bundle
+# This docker assumes the following locations:
+# - ./kani_src/: Kani source code
+# - ./kani-*tar.bz/: The Kani release bundle. E.g. `kani-0.39.0-x86_64-unknown-linux-gnu.tar.gz`
+# - ./linux-kani-verifier.crate: The kani-verifier package
 
 FROM ubuntu:18.04
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -12,9 +16,12 @@ RUN apt-get update && \
 ENV PATH="/root/.cargo/bin:${PATH}"
 
 WORKDIR /tmp/kani
-COPY ./tests ./tests
-COPY ./kani-latest-*.tar.gz ./
-# Very awkward glob (not regex!) to get `kani-verifier-*` and not `kani-verifier-*.crate`
-COPY ./target/package/kani-verifier-*[^e] ./kani-verifier
-RUN cargo install --path ./kani-verifier
-RUN cargo-kani setup --use-local-bundle ./kani-latest-*.tar.gz
+COPY ./kani_src/tests ./tests
+
+# This will extract things into kani-verifier-${VERSION} folder
+COPY ./linux-kani-verifier.crate ./kani-verifier.crate
+RUN tar zxvf ./kani-verifier.crate
+RUN cargo install --path ./kani-verifier-*
+
+COPY ./kani-*.tar.gz ./
+RUN cargo-kani setup --use-local-bundle ./kani-*.tar.gz
