@@ -19,7 +19,7 @@ KANI_DIR=$SCRIPT_DIR/..
 export KANI_FAIL_ON_UNEXPECTED_DESCRIPTION="true"
 
 # Required dependencies
-check-cbmc-version.py --major 5 --minor 89
+check-cbmc-version.py --major 5 --minor 90
 check-cbmc-viewer-version.py --major 3 --minor 8
 check_kissat_version.sh
 
@@ -34,6 +34,7 @@ cargo test -p cprover_bindings
 cargo test -p kani-compiler
 cargo test -p kani-driver
 cargo test -p kani_metadata
+cargo test -p kani --lib # skip doc tests.
 
 # Declare testing suite information (suite and mode)
 TESTS=(
