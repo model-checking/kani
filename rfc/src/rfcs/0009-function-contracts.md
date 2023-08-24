@@ -339,12 +339,12 @@ place expressions, because the whole allocation has to be freed.
     and unsafe Rust certain features in unsafe rust (e.g. `RefCell`) get
     inferred incorrectly and will lead to a failing contract check.
 
-### History Variables
+### History Expressions
 
 Kani's contract language contains additional support to reason about changes of
 mutable memory. One case where this is necessary is whenever `ensures` needs to
 refer to state before the function call. By default variables in the ensures
-clause are interpreted in the post-call state whereas history variables are
+clause are interpreted in the post-call state whereas history expressions are
 interpreted in the pre-call state.
 
 Returning to our `pop` function from before we may wish to describe in which
@@ -366,7 +366,7 @@ impl<T> Vec<T> {
 `old` allows evaluating any Rust expression in the pre-call context, so long as
 it is free of side-effects. See also [this
 explanation](#changes-to-other-components). The borrow checker enforces that the
-mutations performed by e.g. `pop` cannot be observed by the history variable, as
+mutations performed by e.g. `pop` cannot be observed by the history expression, as
 that would defeat the purpose. If you wish to return borrowed content from
 `old`, make a copy instead (using e.g. `clone()`).
 
@@ -775,7 +775,7 @@ times larger than what they expect the function will touch).
   variables. For instance `#[ensures({let x = ...; old(x)})]` cannot work as an
   AST rewrite because the expression in `old` is lifted out of it's context into
   one where the only bound variables are the function arguments (see also
-  [history variables](#history-variables)). In most cases this will be a
+  [history expressions](#history-expressions)). In most cases this will be a
   compiler error complaining that `x` is unbound, however it is possible that
   *if* there is also a function argument `x`, then it may silently succeed the
   code generation but confusingly fail verification. For instance `#[ensures({
