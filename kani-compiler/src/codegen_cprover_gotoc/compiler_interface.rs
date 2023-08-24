@@ -628,6 +628,7 @@ fn new_machine_model(sess: &Session) -> MachineModel {
     // `check_target` from src/kani-compiler/src/codegen_cprover_gotoc/compiler_interface.rs
     // and error if it is not any of the ones we expect.
     let architecture = &sess.target.arch;
+    let os = &sess.target.os;
     let pointer_width = sess.target.pointer_width.into();
 
     // The model assumes the following values for session options:
@@ -695,12 +696,18 @@ fn new_machine_model(sess: &Session) -> MachineModel {
             let double_width = 64;
             let float_width = 32;
             let int_width = 32;
-            let long_double_width = 64;
+            let long_double_width = match os.as_ref() {
+                "linux" => 128,
+                _ => 64,
+            };
             let long_int_width = 64;
             let long_long_int_width = 64;
             let short_int_width = 16;
             let single_width = 32;
-            let wchar_t_is_unsigned = true;
+            let wchar_t_is_unsigned = match os.as_ref() {
+                "linux" => true,
+                _ => false,
+            };
             let wchar_t_width = 32;
 
             MachineModel {
