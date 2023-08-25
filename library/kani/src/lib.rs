@@ -74,18 +74,22 @@ pub fn assume(cond: bool) {
     assert!(cond, "`kani::assume` should always hold");
 }
 
-/// If the `premise` is true, so must be the `conclusion`
+/// `implies!(premise => conclusion)` means that if the `premise` is true, so
+/// must be the `conclusion`.
 ///
-/// Note that boolean operators (such as `||`) are evaluated lazily by Rust.
-/// This function is not and both conditions will be evaluated always. As a
-/// reult this function is not intended to be used in regular code. Instead it
-/// is intended to make implications in a function contract
-/// ([`requires`], [`ensures`]) more readable. For eample
-/// `implies(self.is_empty(), self.len() == 0)` is a little easier to understand
-/// than `!self.is_empty() || self.len() == 0` (which is the inlined definition
-/// of this function).
-pub fn implies(premise: bool, conclusion: bool) -> bool {
-    !premise || conclusion
+/// This simply expands to `!premise || conclusion` and is intended to be used
+/// in function contracts to make them more readable, as the concept of an
+/// implication is more natural to think about than its expansion.
+///
+/// For further convenience multiple comma separated premises are allowed, and
+/// are joined with `||` in the expansion. E.g. `implies!(a, b => c)` expands to
+/// `!a || !b || c` and says that `c` is true if both `a` and `b` are true (see
+/// also [Horn Clauses](https://en.wikipedia.org/wiki/Horn_clause))
+#[macro_export]
+macro_rules! implies {
+    ($($premise:expr),+ => $conclusion:expr) => {
+        $(!$premise)||+ || ($conclusion)
+    };
 }
 
 /// A way to break the ownerhip rules. Only used by contracts where we can

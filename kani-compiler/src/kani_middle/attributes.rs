@@ -137,33 +137,31 @@ impl<'tcx> KaniAttributes<'tcx> {
     /// Parse and extract the `proof_for_contract(TARGET)` attribute. The
     /// returned symbol and defid are respectively the name and id of `TARGET`,
     /// the span in the span for the attribute (contents).
-    fn interpret_the_for_contract_attribute(&self) -> Option<(Symbol, DefId, Span)> {
-        self.expect_maybe_one(KaniAttributeKind::ProofForContract).and_then(|target| {
-            let name = expect_key_string_value(self.tcx.sess, target);
+    fn interpret_the_for_contract_attribute(
+        &self,
+    ) -> Option<Result<(Symbol, DefId, Span), ErrorGuaranteed>> {
+        self.expect_maybe_one(KaniAttributeKind::ProofForContract).map(|target| {
+            let name = expect_key_string_value(self.tcx.sess, target)?;
             let resolved = resolve_fn(
                 self.tcx,
                 self.tcx.parent_module_from_def_id(self.item.expect_local()).to_local_def_id(),
                 name.as_str(),
             );
-            match resolved {
-                Err(e) => {
-                    self.tcx.sess.span_err(
-                        target.span,
-                        format!(
-                            "Failed to resolve replacement function {} because {e}",
-                            name.as_str()
-                        ),
-                    );
-                    None
-                }
-                Ok(ok) => Some((name, ok, target.span)),
-            }
+            resolved.map(|ok| (name, ok, target.span)).map_err(|resolve_err| {
+                self.tcx.sess.span_err(
+                    target.span,
+                    format!(
+                        "Failed to resolve replacement function {} because {resolve_err}",
+                        name.as_str()
+                    ),
+                )
+            })
         })
     }
 
-    /// Extact the name of the sibling function this contract is checked with
+    /// Extract the name of the sibling function this contract is checked with
     /// (if any)
-    pub fn checked_with(&self) -> Option<Symbol> {
+    pub fn checked_with(&self) -> Option<Result<Symbol, ErrorGuaranteed>> {
         self.expect_maybe_one(KaniAttributeKind::CheckedWith)
             .map(|target| expect_key_string_value(self.tcx.sess, target))
     }
@@ -302,64 +300,54 @@ impl<'tcx> KaniAttributes<'tcx> {
     /// Note that all attributes should be valid by now.
     pub fn harness_attributes(&self) -> HarnessAttributes {
         // Abort if not local.
-        let Some(local_id) = self.item.as_local() else {
+        if !self.item.is_local() {
             panic!("Expected a local item, but got: {:?}", self.item);
         };
         trace!(?self, "extract_harness_attributes");
         assert!(self.is_harness());
-        let mut attrs = self.map.iter().fold(
-            HarnessAttributes::default(),
-            |mut harness, (kind, attributes)| {
-                match kind {
-                    KaniAttributeKind::ShouldPanic => harness.should_panic = true,
-                    KaniAttributeKind::Solver => {
-                        harness.solver = parse_solver(self.tcx, attributes[0]);
-                    }
-                    KaniAttributeKind::Stub => {
-                        harness.stubs = parse_stubs(self.tcx, self.item, attributes);
-                    }
-                    KaniAttributeKind::Unwind => {
-                        harness.unwind_value = parse_unwind(self.tcx, attributes[0])
-                    }
-                    KaniAttributeKind::Proof | KaniAttributeKind::ProofForContract => {
-                        harness.proof = true
-                    }
-                    KaniAttributeKind::Unstable => {
-                        // Internal attribute which shouldn't exist here.
-                        unreachable!()
-                    }
-                    KaniAttributeKind::CheckedWith | KaniAttributeKind::IsContractGenerated => {
-                        todo!("Contract attributes are not supported on proofs")
-                    }
-                };
-                harness
-            },
-        );
-        let current_module = self.tcx.parent_module_from_def_id(local_id);
-        attrs.stubs.extend(
-            self.interpret_the_for_contract_attribute()
-                .and_then(|(name, id, span)| {
-                    let replacement_name = KaniAttributes::for_item(self.tcx, id).checked_with();
-                    if replacement_name.is_none() {
+        self.map.iter().fold(HarnessAttributes::default(), |mut harness, (kind, attributes)| {
+            match kind {
+                KaniAttributeKind::ShouldPanic => harness.should_panic = true,
+                KaniAttributeKind::Solver => {
+                    harness.solver = parse_solver(self.tcx, attributes[0]);
+                }
+                KaniAttributeKind::Stub => {
+                    harness.stubs.extend_from_slice(&parse_stubs(self.tcx, self.item, attributes));
+                }
+                KaniAttributeKind::Unwind => {
+                    harness.unwind_value = parse_unwind(self.tcx, attributes[0])
+                }
+                KaniAttributeKind::Proof => harness.proof = true,
+                KaniAttributeKind::ProofForContract => {
+                    harness.proof = true;
+                    let Some(Ok((name, id, span))) = self.interpret_the_for_contract_attribute()
+                    else {
+                        self.tcx.sess.span_err(
+                            self.tcx.def_span(self.item),
+                            format!("Invalid `{}` attribute format", kind.as_ref()),
+                        );
+                        return harness;
+                    };
+                    let Some(Ok(replacement_name)) =
+                        KaniAttributes::for_item(self.tcx, id).checked_with()
+                    else {
                         self.tcx
                             .sess
                             .span_err(span, "Target function for this check has no contract");
-                    }
-                    Some((name, replacement_name?))
-                })
-                .map(|(original, replacement)| {
-                    let replace_str = replacement.as_str();
-                    let original_str = original.as_str();
-                    let replacement = original_str.rsplit_once("::").map_or_else(
-                        || replace_str.to_string(),
-                        |t| t.0.to_string() + "::" + replace_str,
-                    );
-                    resolve::resolve_fn(self.tcx, current_module.to_local_def_id(), &replacement)
-                        .unwrap();
-                    Stub { original: original_str.to_string(), replacement }
-                }),
-        );
-        attrs
+                        return harness;
+                    };
+                    harness.stubs.push(self.stub_for_relative_item(name, replacement_name));
+                }
+                KaniAttributeKind::Unstable => {
+                    // Internal attribute which shouldn't exist here.
+                    unreachable!()
+                }
+                KaniAttributeKind::CheckedWith | KaniAttributeKind::IsContractGenerated => {
+                    todo!("Contract attributes are not supported on proofs")
+                }
+            };
+            harness
+        })
     }
 
     /// Check that if this item is tagged with a proof_attribute, it is a valid harness.
@@ -377,6 +365,18 @@ impl<'tcx> KaniAttributes<'tcx> {
                 tcx.sess.span_err(span, "functions used as harnesses cannot have any arguments");
             }
         }
+    }
+
+    fn stub_for_relative_item(&self, anchor: Symbol, replacement: Symbol) -> Stub {
+        let local_id = self.item.expect_local();
+        let current_module = self.tcx.parent_module_from_def_id(local_id);
+        let replace_str = replacement.as_str();
+        let original_str = anchor.as_str();
+        let replacement = original_str
+            .rsplit_once("::")
+            .map_or_else(|| replace_str.to_string(), |t| t.0.to_string() + "::" + replace_str);
+        resolve::resolve_fn(self.tcx, current_module.to_local_def_id(), &replacement).unwrap();
+        Stub { original: original_str.to_string(), replacement }
     }
 }
 
@@ -420,22 +420,38 @@ pub fn test_harness_name(tcx: TyCtxt, def_id: DefId) -> String {
 
 /// Expect the contents of this attribute to be of the format #[attribute =
 /// "value"] and return the `"value"`
-fn expect_key_string_value(sess: &Session, attr: &Attribute) -> rustc_span::Symbol {
+fn expect_key_string_value(
+    sess: &Session,
+    attr: &Attribute,
+) -> Result<rustc_span::Symbol, ErrorGuaranteed> {
     let span = attr.span;
     let AttrArgs::Eq(_, it) = &attr.get_normal_item().args else {
-        sess.span_fatal(span, "Expected attribute of the form #[attr = \"value\"]")
+        return Err(sess.span_err(span, "Expected attribute of the form #[attr = \"value\"]"));
     };
     let maybe_str = match it {
-        AttrArgsEq::Ast(expr) => match expr.kind {
-            ExprKind::Lit(tok) => LitKind::from_token_lit(tok).unwrap().str(),
-            _ => sess.span_fatal(span, "Expected literal string as right hand side of `=`"),
-        },
+        AttrArgsEq::Ast(expr) => {
+            if let ExprKind::Lit(tok) = expr.kind {
+                match LitKind::from_token_lit(tok) {
+                    Ok(l) => l.str(),
+                    Err(err) => {
+                        return Err(sess.span_err(
+                            span,
+                            format!("Invalid string literal on right hand side of `=` {err:?}"),
+                        ));
+                    }
+                }
+            } else {
+                return Err(
+                    sess.span_err(span, "Expected literal string as right hand side of `=`")
+                );
+            }
+        }
         AttrArgsEq::Hir(lit) => lit.kind.str(),
     };
     if let Some(str) = maybe_str {
-        str
+        Ok(str)
     } else {
-        sess.span_fatal(span, "Expected literal string as right hand side of `=`")
+        Err(sess.span_err(span, "Expected literal string as right hand side of `=`"))
     }
 }
 
