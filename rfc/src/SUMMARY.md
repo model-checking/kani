@@ -14,3 +14,4 @@
 - [0006-unstable-api](rfcs/0006-unstable-api.md)
 - [0007-global-conditions](rfcs/0007-global-conditions.md)
 - [0008-line-coverage](rfcs/0008-line-coverage.md)
+- [0009-function-contracts](rfcs/0009-function-contracts.md)
