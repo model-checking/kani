@@ -102,12 +102,12 @@ impl<'a> VisitMut for Renamer<'a> {
 
 /// Does the provided path have the same chain of identifiers as `mtch` (match)
 /// and no arguments anywhere?
-/// 
+///
 /// So for instance (using some pseudo-syntax for the [`syn::Path`]s)
 /// `matches_path(std::vec::Vec, &["std", "vec", "Vec"]) == true` but
 /// `matches_path(std::Vec::<bool>::contains, &["std", "Vec", "contains"]) !=
 /// true`.
-/// 
+///
 /// This is intended to be used to match the internal `kanitool` family of
 /// attributes which we know to have a regular structure and no arguments.
 fn matches_path<E>(path: &syn::Path, mtch: &[E]) -> bool
