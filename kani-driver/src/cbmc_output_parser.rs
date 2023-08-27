@@ -95,8 +95,8 @@ pub struct PropertyId {
 }
 
 impl Property {
-    const COVER_PROPERTY_CLASS: &str = "cover";
-    const COVERAGE_PROPERTY_CLASS: &str = "code_coverage";
+    const COVER_PROPERTY_CLASS: &'static str = "cover";
+    const COVERAGE_PROPERTY_CLASS: &'static str = "code_coverage";
 
     pub fn property_class(&self) -> String {
         self.property_id.class.clone()

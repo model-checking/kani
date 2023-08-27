@@ -4,7 +4,8 @@
 //! to run during code generation. For example, this can be used to hook up
 //! custom MIR transformations.
 
-use crate::args::ReachabilityType;
+use crate::args::{ReachabilityType, Arguments};
+use crate::kani_middle::intrinsics::ModelIntrinsics;
 use crate::kani_middle::reachability::{collect_reachable_items, filter_crate_items};
 use crate::kani_middle::stubbing;
 use crate::kani_queries::QueryDb;
@@ -20,7 +21,7 @@ use rustc_middle::{
 /// the present crate.
 pub fn provide(providers: &mut Providers, queries: &QueryDb) {
     let args = queries.args();
-    if args.reachability_analysis != ReachabilityType::None && !args.build_std {
+    if should_override(args) {
         // Don't override queries if we are only compiling our dependencies.
         providers.optimized_mir = run_mir_passes;
         if args.stubbing_enabled {
@@ -32,8 +33,15 @@ pub fn provide(providers: &mut Providers, queries: &QueryDb) {
 
 /// Sets up rustc's query mechanism to apply Kani's custom queries to code from
 /// external crates.
-pub fn provide_extern(providers: &mut ExternProviders) {
-    providers.optimized_mir = run_mir_passes_extern;
+pub fn provide_extern(providers: &mut ExternProviders, queries: &QueryDb) {
+    if should_override(queries.args()) {
+        // Don't override queries if we are only compiling our dependencies.
+        providers.optimized_mir = run_mir_passes_extern;
+    }
+}
+
+fn should_override(args: &Arguments) -> bool {
+    args.reachability_analysis != ReachabilityType::None && !args.build_std
 }
 
 /// Returns the optimized code for the external function associated with `def_id` by
@@ -63,6 +71,8 @@ fn run_kani_mir_passes<'tcx>(
     tracing::debug!(?def_id, "Run Kani transformation passes");
     let mut transformed_body = stubbing::transform(tcx, def_id, body);
     stubbing::transform_foreign_functions(tcx, &mut transformed_body);
+    // This should be applied after stubbing so user stubs take precedence.
+    ModelIntrinsics::run_pass(tcx, &mut transformed_body);
     tcx.arena.alloc(transformed_body)
 }
 

@@ -532,12 +532,12 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
                 // We don't support inline assembly. This shall be replaced by an unsupported
                 // construct during codegen.
             }
-            TerminatorKind::Terminate { .. } | TerminatorKind::Assert { .. } => {
+            TerminatorKind::UnwindTerminate { .. } | TerminatorKind::Assert { .. } => {
                 // We generate code for this without invoking any lang item.
             }
             TerminatorKind::Goto { .. }
             | TerminatorKind::SwitchInt { .. }
-            | TerminatorKind::Resume
+            | TerminatorKind::UnwindResume
             | TerminatorKind::Return
             | TerminatorKind::Unreachable => {}
             TerminatorKind::GeneratorDrop
