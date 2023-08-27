@@ -3,6 +3,7 @@
 
 //! This file contains the code necessary to interface with the compiler backend
 
+use crate::args::ReachabilityType;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::analysis;
 use crate::kani_middle::attributes::is_test_harness_description;
@@ -12,7 +13,7 @@ use crate::kani_middle::reachability::{
     collect_reachable_items, filter_const_crate_items, filter_crate_items,
 };
 use crate::kani_middle::{check_reachable_items, dump_mir_items};
-use crate::kani_queries::{QueryDb, ReachabilityType};
+use crate::kani_queries::QueryDb;
 use cbmc::goto_program::Location;
 use cbmc::irep::goto_binary_serde::write_goto_binary_file;
 use cbmc::RoundingMode;
@@ -164,9 +165,9 @@ impl GotocCodegenBackend {
 
         // No output should be generated if user selected no_codegen.
         if !tcx.sess.opts.unstable_opts.no_codegen && tcx.sess.opts.output_types.should_codegen() {
-            let pretty = self.queries.lock().unwrap().output_pretty_json;
+            let pretty = self.queries.lock().unwrap().args().output_pretty_json;
             write_file(&symtab_goto, ArtifactType::PrettyNameMap, &pretty_name_map, pretty);
-            if gcx.queries.write_json_symtab {
+            if gcx.queries.args().write_json_symtab {
                 write_file(&symtab_goto, ArtifactType::SymTab, &gcx.symbol_table, pretty);
                 symbol_table_to_gotoc(&tcx, &symtab_goto);
             } else {
@@ -225,7 +226,7 @@ impl CodegenBackend for GotocCodegenBackend {
         // - PubFns: Generate code for all reachable logic starting from the local public functions.
         // - None: Don't generate code. This is used to compile dependencies.
         let base_filename = tcx.output_filenames(()).output_path(OutputType::Object);
-        let reachability = queries.reachability_analysis;
+        let reachability = queries.args().reachability_analysis;
         let mut results = GotoCodegenResults::new(tcx, reachability);
         match reachability {
             ReachabilityType::Harnesses => {
@@ -305,7 +306,7 @@ impl CodegenBackend for GotocCodegenBackend {
                     &base_filename,
                     ArtifactType::Metadata,
                     &results.generate_metadata(),
-                    queries.output_pretty_json,
+                    queries.args().output_pretty_json,
                 );
             }
         }

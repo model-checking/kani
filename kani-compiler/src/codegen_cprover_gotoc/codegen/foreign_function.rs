@@ -89,7 +89,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Checks whether C-FFI has been enabled or not.
     /// When enabled, we blindly encode the function type as is.
     fn is_cffi_enabled(&self) -> bool {
-        self.queries.unstable_features.contains(&"c-ffi".to_string())
+        self.queries.args().unstable_features.contains(&"c-ffi".to_string())
     }
 
     /// Generate code for a foreign function shim.

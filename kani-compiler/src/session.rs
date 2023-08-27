@@ -3,7 +3,7 @@
 
 //! Module used to configure a compiler session.
 
-use crate::kani_queries::QueryDb;
+use crate::args::Arguments;
 use rustc_errors::{
     emitter::Emitter, emitter::HumanReadableErrorType, fallback_fluent_bundle, json::JsonEmitter,
     ColorConfig, Diagnostic, TerminalUrl,
@@ -67,7 +67,7 @@ static JSON_PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send
     });
 
 /// Initialize compiler session.
-pub fn init_session(args: &QueryDb, json_hook: bool) {
+pub fn init_session(args: &Arguments, json_hook: bool) {
     // Initialize the rustc logger using value from RUSTC_LOG. We keep the log control separate
     // because we cannot control the RUSTC log format unless if we match the exact tracing
     // version used by RUSTC.
@@ -84,7 +84,7 @@ pub fn init_session(args: &QueryDb, json_hook: bool) {
 }
 
 /// Initialize the logger using the KANI_LOG environment variable and the --log-level argument.
-fn init_logger(args: &QueryDb) {
+fn init_logger(args: &Arguments) {
     let filter = EnvFilter::from_env(LOG_ENV_VAR);
     let filter = if let Some(log_level) = &args.log_level {
         filter.add_directive(log_level.clone())
@@ -107,7 +107,7 @@ fn json_logs(filter: EnvFilter) {
 }
 
 /// Configure global logger to use a hierarchical view.
-fn hier_logs(args: &QueryDb, filter: EnvFilter) {
+fn hier_logs(args: &Arguments, filter: EnvFilter) {
     let use_colors = std::io::stdout().is_terminal() || args.color_output;
     let subscriber = Registry::default().with(filter);
     let subscriber = subscriber.with(
