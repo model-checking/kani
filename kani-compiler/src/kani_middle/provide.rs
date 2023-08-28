@@ -4,7 +4,7 @@
 //! to run during code generation. For example, this can be used to hook up
 //! custom MIR transformations.
 
-use crate::args::{ReachabilityType, Arguments};
+use crate::args::{Arguments, ReachabilityType};
 use crate::kani_middle::intrinsics::ModelIntrinsics;
 use crate::kani_middle::reachability::{collect_reachable_items, filter_crate_items};
 use crate::kani_middle::stubbing;
