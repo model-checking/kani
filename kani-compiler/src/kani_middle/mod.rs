@@ -30,6 +30,7 @@ use self::attributes::KaniAttributes;
 pub mod analysis;
 pub mod attributes;
 pub mod coercion;
+mod intrinsics;
 pub mod metadata;
 pub mod provide;
 pub mod reachability;

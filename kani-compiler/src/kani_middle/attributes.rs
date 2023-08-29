@@ -374,7 +374,7 @@ fn parse_unwind(tcx: TyCtxt, attr: &Attribute) -> Option<u32> {
 fn parse_stubs(tcx: TyCtxt, harness: DefId, attributes: &[&Attribute]) -> Vec<Stub> {
     let current_module = tcx.parent_module_from_def_id(harness.expect_local());
     let check_resolve = |attr: &Attribute, name: &str| {
-        let result = resolve::resolve_fn(tcx, current_module, name);
+        let result = resolve::resolve_fn(tcx, current_module.to_local_def_id(), name);
         if let Err(err) = result {
             tcx.sess.span_err(attr.span, format!("failed to resolve `{name}`: {err}"));
         }

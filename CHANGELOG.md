@@ -4,6 +4,17 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
+## [0.35.0]
+
+## What's Changed
+
+* Add support to `simd_bitmask` by @celinval in https://github.com/model-checking/kani/pull/2677
+* Add integer overflow checking for `simd_div` and `simd_rem` by @reisnera in https://github.com/model-checking/kani/pull/2645
+* Bump CBMC version by @zhassan-aws in https://github.com/model-checking/kani/pull/2702
+* Upgrade Rust toolchain to 2023-08-19 by @zhassan-aws in https://github.com/model-checking/kani/pull/2696
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.34.0...kani-0.35.0
+
 ## [0.34.0]
 
 ### Breaking Changes

@@ -511,9 +511,11 @@ impl<'tcx> GotocCtx<'tcx> {
                 loc,
             ),
             "simd_and" => codegen_intrinsic_binop!(bitand),
-            // TODO: `simd_div` and `simd_rem` don't check for overflow cases.
-            // <https://github.com/model-checking/kani/issues/1970>
-            "simd_div" => codegen_intrinsic_binop!(div),
+            // TODO: `simd_rem` doesn't check for overflow cases for floating point operands.
+            // <https://github.com/model-checking/kani/pull/2645>
+            "simd_div" | "simd_rem" => {
+                self.codegen_simd_div_with_overflow(fargs, intrinsic, p, loc)
+            }
             "simd_eq" => self.codegen_simd_cmp(Expr::vector_eq, fargs, p, span, farg_types, ret_ty),
             "simd_extract" => {
                 self.codegen_intrinsic_simd_extract(fargs, p, farg_types, ret_ty, span)
@@ -537,9 +539,6 @@ impl<'tcx> GotocCtx<'tcx> {
                 self.codegen_simd_cmp(Expr::vector_neq, fargs, p, span, farg_types, ret_ty)
             }
             "simd_or" => codegen_intrinsic_binop!(bitor),
-            // TODO: `simd_div` and `simd_rem` don't check for overflow cases.
-            // <https://github.com/model-checking/kani/issues/1970>
-            "simd_rem" => codegen_intrinsic_binop!(rem),
             "simd_shl" | "simd_shr" => {
                 self.codegen_simd_shift_with_distance_check(fargs, intrinsic, p, loc)
             }
@@ -1552,6 +1551,39 @@ impl<'tcx> GotocCtx<'tcx> {
         self.codegen_expr_to_place(p, e)
     }
 
+    /// Codegen for `simd_div` and `simd_rem` intrinsics.
+    /// This checks for overflow in signed integer division (i.e. when dividing the minimum integer
+    /// for the type by -1). Overflow checks on floating point division are handled by CBMC, as is
+    /// division by zero for both integers and floats.
+    fn codegen_simd_div_with_overflow(
+        &mut self,
+        fargs: Vec<Expr>,
+        intrinsic: &str,
+        p: &Place<'tcx>,
+        loc: Location,
+    ) -> Stmt {
+        let op_fun = match intrinsic {
+            "simd_div" => Expr::div,
+            "simd_rem" => Expr::rem,
+            _ => unreachable!("expected simd_div or simd_rem"),
+        };
+        let base_type = fargs[0].typ().base_type().unwrap().clone();
+        if base_type.is_integer() && base_type.is_signed(self.symbol_table.machine_model()) {
+            let min_int_expr = base_type.min_int_expr(self.symbol_table.machine_model());
+            let negative_one = Expr::int_constant(-1, base_type);
+            self.codegen_simd_op_with_overflow(
+                op_fun,
+                |a, b| a.eq(min_int_expr.clone()).and(b.eq(negative_one.clone())),
+                fargs,
+                intrinsic,
+                p,
+                loc,
+            )
+        } else {
+            self.binop(p, fargs, op_fun)
+        }
+    }
+
     /// Intrinsics which encode a SIMD arithmetic operation with overflow check.
     /// We expand the overflow check because CBMC overflow operations don't accept array as
     /// argument.
@@ -1587,7 +1619,7 @@ impl<'tcx> GotocCtx<'tcx> {
         );
         let res = op_fun(a, b);
         let expr_place = self.codegen_expr_to_place(p, res);
-        Stmt::block(vec![expr_place, check_stmt], loc)
+        Stmt::block(vec![check_stmt, expr_place], loc)
     }
 
     /// Intrinsics which encode a SIMD bitshift.
