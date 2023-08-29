@@ -28,6 +28,12 @@
 //!
 //! Which will add the long form `--unstable feature-name` and short form `-Z
 //! feature-name` options to your argument parser.
+//! 
+//! **Note:** [`clap`] internally uses a unique name (string) to refer to each
+//! argument or group, which is usually derived from the field name.
+//! [`EnabledUnstableFeatures`] uses the internal name
+//! `"enabled_unstable_features"` which may therefore not be used (as a field
+//! name) in the embedding argument struct, e.g. `MyCmdArgs`.
 //!
 //! ### Reusing
 //!
