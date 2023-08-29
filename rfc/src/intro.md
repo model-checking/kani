@@ -50,7 +50,7 @@ This is the overall workflow for the RFC process:
    3. It is OK to implement the feature incrementally over multiple PRs.
       Just ensure that every pull request has a testable end-to-end flow and that it is properly tested.
    4. In the implementation stage, the feature should only be accessible if the user explicitly passes
-      `--enable-unstable` as an argument to Kani.
+      `-Z <FEATURE_ID>` as an argument to Kani.
    5. Document how to use the feature.
    6. Keep the RFC up-to-date with the decisions you make during implementation.
 4. Test and Gather Feedback.
@@ -60,7 +60,7 @@ This is the overall workflow for the RFC process:
    4. Add lots of tests.
 5. Stabilization.
    1. Propose to stabilize the feature when feature is well tested and UX has received positive feedback.
-   2. Create a new PR that removes the `--enable-unstable` guard and that marks the RFC status as "STABLE".
+   2. Create a new PR that removes the `-Z <FEATURE_ID>` guard and that marks the RFC status as "STABLE".
       1. Make sure the RFC reflects the final implementation and user experience.
    3. In some cases, we might decide not to incorporate a feature
       (E.g.: performance degradation, bad user experience, better alternative).
