@@ -704,10 +704,7 @@ fn new_machine_model(sess: &Session) -> MachineModel {
             let long_long_int_width = 64;
             let short_int_width = 16;
             let single_width = 32;
-            let wchar_t_is_unsigned = match os.as_ref() {
-                "linux" => true,
-                _ => false,
-            };
+            let wchar_t_is_unsigned = matches!(os.as_ref(), "linux");
             let wchar_t_width = 32;
 
             MachineModel {
