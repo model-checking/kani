@@ -92,7 +92,7 @@ impl UnstableFeature {
 #[derive(clap::Args, Debug)]
 pub struct EnabledUnstableFeatures {
     #[clap(short = 'Z', long = "unstable", num_args(1), value_name = "UNSTABLE_FEATURE")]
-    features: Vec<UnstableFeature>,
+    enabled_unstable_features: Vec<UnstableFeature>,
 }
 
 impl EnabledUnstableFeatures {
@@ -102,11 +102,11 @@ impl EnabledUnstableFeatures {
     ///
     /// See also the [module level documentation][self]
     pub fn as_arguments(&self) -> impl Iterator<Item = &str> {
-        self.features.iter().flat_map(|f| f.as_argument())
+        self.enabled_unstable_features.iter().flat_map(|f| f.as_argument())
     }
 
     /// Is this feature enabled?
     pub fn contains(&self, feature: UnstableFeature) -> bool {
-        self.features.contains(&feature)
+        self.enabled_unstable_features.contains(&feature)
     }
 }
