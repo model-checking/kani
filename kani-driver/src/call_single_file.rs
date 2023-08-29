@@ -100,13 +100,7 @@ impl KaniSession {
             flags.push("--coverage-checks".into());
         }
 
-        flags.extend(
-            self.args
-                .common_args
-                .unstable_features
-                .iter()
-                .map(|feature| format!("--unstable={feature}")),
-        );
+        flags.extend(self.args.common_args.unstable_features.as_arguments().map(str::to_string));
 
         // This argument will select the Kani flavour of the compiler. It will be removed before
         // rustc driver is invoked.
