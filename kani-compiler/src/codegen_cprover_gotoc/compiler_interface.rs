@@ -387,22 +387,23 @@ fn check_target(session: &Session) {
     // The requirement below is needed to build a valid CBMC machine model
     // in function `machine_model_from_session` from
     // src/kani-compiler/src/codegen_cprover_gotoc/context/goto_ctx.rs
-    let is_linux_target = session.target.llvm_target == "x86_64-unknown-linux-gnu";
+    let is_x86_64_linux_target = session.target.llvm_target == "x86_64-unknown-linux-gnu";
+    let is_arm64_linux_target = session.target.llvm_target == "aarch64-unknown-linux-gnu";
     // Comparison with `x86_64-apple-darwin` does not work well because the LLVM
     // target may become `x86_64-apple-macosx10.7.0` (or similar) and fail
     let is_x86_64_darwin_target = session.target.llvm_target.starts_with("x86_64-apple-");
     // looking for `arm64-apple-*`
     let is_arm64_darwin_target = session.target.llvm_target.starts_with("arm64-apple-");
-    let is_arm64_linux_gnu = session.target.llvm_target == "aarch64-unknown-linux-gnu";
 
-    if !is_linux_target
+    if !is_x86_64_linux_target
+        && !is_arm64_linux_target
         && !is_x86_64_darwin_target
         && !is_arm64_darwin_target
-        && !is_arm64_linux_gnu
     {
         let err_msg = format!(
-            "Kani requires the target platform to be `x86_64-unknown-linux-gnu` or \
-            `x86_64-apple-*` or `arm64-apple-*`, but it is {}",
+            "Kani requires the target platform to be `x86_64-unknown-linux-gnu`, \
+            `aarch64-unknown-linux-gnu`, `x86_64-apple-*` or `arm64-apple-*`, but \
+            it is {}",
             &session.target.llvm_target
         );
         session.err(err_msg);
