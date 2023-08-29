@@ -74,7 +74,7 @@ pub fn check_reachable_items(tcx: TyCtxt, queries: &QueryDb, items: &[MonoItem])
         if !def_ids.contains(&def_id) {
             // Check if any unstable attribute was reached.
             KaniAttributes::for_item(tcx, def_id)
-                .check_unstable_features(&queries.unstable_features);
+                .check_unstable_features(&queries.args().unstable_features);
             def_ids.insert(def_id);
         }
     }
