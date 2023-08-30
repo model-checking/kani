@@ -15,6 +15,7 @@
 //! in order to apply the stubs. For the subsequent runs, we add the stub configuration to
 //! `-C llvm-args`.
 
+use crate::args::{Arguments, ReachabilityType};
 #[cfg(feature = "cprover")]
 use crate::codegen_cprover_gotoc::GotocCodegenBackend;
 use crate::kani_middle::attributes::is_proof_harness;
@@ -22,9 +23,9 @@ use crate::kani_middle::check_crate_items;
 use crate::kani_middle::metadata::gen_proof_metadata;
 use crate::kani_middle::reachability::filter_crate_items;
 use crate::kani_middle::stubbing::{self, harness_stub_map};
-use crate::kani_queries::{QueryDb, ReachabilityType};
-use crate::parser::{self, KaniCompilerParser};
+use crate::kani_queries::QueryDb;
 use crate::session::init_session;
+use clap::Parser;
 use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata};
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_driver::{Callbacks, Compilation, RunCompiler};
@@ -202,7 +203,7 @@ impl KaniCompiler {
                     // Only store metadata for harnesses for now.
                     // TODO: This should only skip None.
                     // https://github.com/model-checking/kani/issues/2493
-                    if self.queries.lock().unwrap().reachability_analysis
+                    if self.queries.lock().unwrap().args().reachability_analysis
                         == ReachabilityType::Harnesses
                     {
                         // Store metadata file.
@@ -276,7 +277,8 @@ impl KaniCompiler {
             name: tcx.crate_name(LOCAL_CRATE).as_str().into(),
             output_path: metadata_output_path(tcx),
         };
-        if self.queries.lock().unwrap().reachability_analysis == ReachabilityType::Harnesses {
+        if self.queries.lock().unwrap().args().reachability_analysis == ReachabilityType::Harnesses
+        {
             let base_filename = tcx.output_filenames(()).output_path(OutputType::Object);
             let harnesses = filter_crate_items(tcx, |_, def_id| is_proof_harness(tcx, def_id));
             let all_harnesses = harnesses
@@ -291,7 +293,7 @@ impl KaniCompiler {
                 .collect::<HashMap<_, _>>();
 
             let (no_stubs, with_stubs): (Vec<_>, Vec<_>) =
-                if self.queries.lock().unwrap().stubbing_enabled {
+                if self.queries.lock().unwrap().args().stubbing_enabled {
                     // Partition harnesses that don't have stub with the ones with stub.
                     all_harnesses
                         .keys()
@@ -353,7 +355,7 @@ impl KaniCompiler {
         debug!(?filename, "write_metadata");
         let out_file = File::create(&filename).unwrap();
         let writer = BufWriter::new(out_file);
-        if self.queries.lock().unwrap().output_pretty_json {
+        if self.queries.lock().unwrap().args().output_pretty_json {
             serde_json::to_writer_pretty(writer, &metadata).unwrap();
         } else {
             serde_json::to_writer(writer, &metadata).unwrap();
@@ -380,32 +382,12 @@ impl Callbacks for KaniCompiler {
         if self.stage.is_init() {
             let mut args = vec!["kani-compiler".to_string()];
             args.extend(config.opts.cg.llvm_args.iter().cloned());
-            let matches = parser::parser().get_matches_from(&args);
-            init_session(
-                &matches,
-                matches!(config.opts.error_format, ErrorOutputType::Json { .. }),
-            );
+            let args = Arguments::parse_from(args);
+            init_session(&args, matches!(config.opts.error_format, ErrorOutputType::Json { .. }));
             // Configure queries.
             let queries = &mut (*self.queries.lock().unwrap());
-            queries.emit_vtable_restrictions = matches.get_flag(parser::RESTRICT_FN_PTRS);
-            queries.check_assertion_reachability = matches.get_flag(parser::ASSERTION_REACH_CHECKS);
-            queries.check_coverage = matches.get_flag(parser::COVERAGE_CHECKS);
-            queries.output_pretty_json = matches.get_flag(parser::PRETTY_OUTPUT_FILES);
-            queries.ignore_global_asm = matches.get_flag(parser::IGNORE_GLOBAL_ASM);
-            queries.write_json_symtab =
-                cfg!(feature = "write_json_symtab") || matches.get_flag(parser::WRITE_JSON_SYMTAB);
-            queries.reachability_analysis = matches.reachability_type();
-            queries.build_std = matches.get_flag(parser::BUILD_STD);
 
-            if let Some(features) = matches.get_many::<String>(parser::UNSTABLE_FEATURE) {
-                queries.unstable_features = features.cloned().collect::<Vec<_>>();
-            }
-
-            if matches.get_flag(parser::ENABLE_STUBBING)
-                && queries.reachability_analysis == ReachabilityType::Harnesses
-            {
-                queries.stubbing_enabled = true;
-            }
+            queries.set_args(args);
 
             debug!(?queries, "config end");
         }
@@ -420,7 +402,7 @@ impl Callbacks for KaniCompiler {
     ) -> Compilation {
         if self.stage.is_init() {
             self.stage = rustc_queries.global_ctxt().unwrap().enter(|tcx| {
-                check_crate_items(tcx, self.queries.lock().unwrap().ignore_global_asm);
+                check_crate_items(tcx, self.queries.lock().unwrap().args().ignore_global_asm);
                 self.process_harnesses(tcx)
             });
         }

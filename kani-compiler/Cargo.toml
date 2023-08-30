@@ -10,7 +10,7 @@ publish = false
 
 [dependencies]
 cbmc = { path = "../cprover_bindings", package = "cprover_bindings", optional = true }
-clap = { version = "4.1.3", features = ["cargo"] }
+clap = { version = "4.1.3", features = ["derive", "cargo"] }
 home = "0.5"
 itertools = "0.11"
 kani_metadata = {path = "../kani_metadata"}
