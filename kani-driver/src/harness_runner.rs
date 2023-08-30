@@ -4,14 +4,13 @@
 use anyhow::{bail, Result};
 use kani_metadata::{ArtifactType, HarnessMetadata};
 use rayon::prelude::*;
-use std::cmp::Ordering;
 use std::path::Path;
 
 use crate::args::OutputFormat;
 use crate::call_cbmc::{VerificationResult, VerificationStatus};
 use crate::project::Project;
 use crate::session::KaniSession;
-use crate::util::{error, warning};
+use crate::util::error;
 
 /// A HarnessRunner is responsible for checking all proof harnesses. The data in this structure represents
 /// "background information" that the controlling driver (e.g. cargo-kani or kani) computed.
@@ -38,6 +37,8 @@ impl<'sess, 'pr> HarnessRunner<'sess, 'pr> {
         &self,
         harnesses: &'pr [&HarnessMetadata],
     ) -> Result<Vec<HarnessResult<'pr>>> {
+        self.check_stubbing(harnesses)?;
+
         let sorted_harnesses = crate::metadata::sort_harnesses_by_loc(harnesses);
 
         let pool = {
@@ -69,6 +70,33 @@ impl<'sess, 'pr> HarnessRunner<'sess, 'pr> {
         })?;
 
         Ok(results)
+    }
+
+    /// Return an error if the user is trying to verify a harness with stubs without enabling the
+    /// experimental feature.
+    fn check_stubbing(&self, harnesses: &[&HarnessMetadata]) -> Result<()> {
+        if !self.sess.args.is_stubbing_enabled() {
+            let with_stubs: Vec<_> = harnesses
+                .iter()
+                .filter_map(|harness| {
+                    (!harness.attributes.stubs.is_empty()).then_some(harness.pretty_name.as_str())
+                })
+                .collect();
+            match with_stubs.as_slice() {
+                [] => { /* do nothing */ }
+                [harness] => bail!(
+                    "Use of unstable feature 'stubbing' in harness `{}`.\n\
+                    To enable stubbing, pass option `-Z stubbing`",
+                    harness
+                ),
+                harnesses => bail!(
+                    "Use of unstable feature 'stubbing' in harnesses `{}`.\n\
+                    To enable stubbing, pass option `-Z stubbing`",
+                    harnesses.join("`, `")
+                ),
+            }
+        }
+        Ok(())
     }
 }
 
@@ -105,33 +133,6 @@ impl KaniSession {
             }
             self.gen_and_add_concrete_playback(harness, &mut result)?;
             Ok(result)
-        }
-    }
-
-    /// Prints a warning at the end of the verification if harness contained a stub but stubs were
-    /// not enabled.
-    fn stubbing_statuses(&self, results: &[HarnessResult]) {
-        if !self.args.enable_stubbing {
-            let ignored_stubs: Vec<_> = results
-                .iter()
-                .filter_map(|result| {
-                    (!result.harness.attributes.stubs.is_empty())
-                        .then_some(result.harness.pretty_name.as_str())
-                })
-                .collect();
-            match ignored_stubs.len().cmp(&1) {
-                Ordering::Equal => warning(&format!(
-                    "harness `{}` contained stubs which were ignored.\n\
-                    To enable stubbing, pass options `--enable-unstable --enable-stubbing`",
-                    ignored_stubs[0]
-                )),
-                Ordering::Greater => warning(&format!(
-                    "harnesses `{}` contained stubs which were ignored.\n\
-                    To enable stubbing, pass options `--enable-unstable --enable-stubbing`",
-                    ignored_stubs.join("`, `")
-                )),
-                Ordering::Less => {}
-            }
         }
     }
 
@@ -194,8 +195,6 @@ impl KaniSession {
                 };
             }
         }
-
-        self.stubbing_statuses(results);
 
         if failing > 0 {
             // Failure exit code without additional error message

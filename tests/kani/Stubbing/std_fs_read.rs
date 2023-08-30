@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-// kani-flags: --harness harness --enable-unstable --enable-stubbing
+// kani-flags: --harness harness -Z stubbing
 //
 //! This tests stubbing `std` functions like `std::fs::read`.
 
