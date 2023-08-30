@@ -16,12 +16,13 @@
 //! like so:
 //!
 //! ```
+//! # use kani_metadata::unstable::*;
 //! use clap::Parser;
 //!
 //! #[derive(Parser)]
 //! struct MyCmdArgs {
 //!     // ...
-//!     #[flatten]
+//!     #[clap(flatten)]
 //!     unstable: EnabledUnstableFeatures,
 //! }
 //! ```
