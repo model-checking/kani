@@ -57,7 +57,7 @@ This is the overall workflow for the RFC process:
    1. Fix major issues related to the new feature.
    2. Gather user feedback and make necessary adjustments.
    3. Resolve RFC open questions.
-   4. Add lots of tests.
+   4. Add regression tests to cover all expected behaviors and unit tests whenever possible.
 5. Stabilization.
    1. Propose to stabilize the feature when feature is well tested and UX has received positive feedback.
    2. Create a new PR that removes the `-Z <FEATURE_ID>` guard and that marks the RFC status as "STABLE".

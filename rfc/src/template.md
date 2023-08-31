@@ -27,10 +27,10 @@ Users should be able to read this section and understand how to use the feature.
 **Do not include implementation details in this section, neither discuss the rationale behind the chosen UX.**
 
 Please include:
-  - High level user flow description
+  - High level user flow description.
   - Any new major functions or attributes that will be added to Kani library.
   - New command line options or subcommands (no need to mention the unstable flag).
-  - What are possible user errors and how are they presented. E.g: Compilation vs Verification error.
+  - List failure scenarios and how are they presented (e.g., compilation errors, verification failures, and possible failed user iterations).
   - Substantial changes to existing functionality or Kani output.
 
 If the RFC is related to architectural changes and there are no visible changes to UX, please state so.
@@ -61,7 +61,7 @@ List of open questions + an optional link to an issue that capture the work requ
 
 Example:
 - Is there any use case that isn't handled yet?
-- Is there any part of the UX that still need some improvement?
+- Is there any part of the UX that still needs some improvement?
 
 Make sure all open questions are addressed before stabilization.
 
