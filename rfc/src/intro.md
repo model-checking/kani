@@ -37,7 +37,8 @@ This is the overall workflow for the RFC process:
    3. Copy the template file ([`rfc/src/template.md`](./template.md)) to `rfc/src/rfcs/<ID_NUMBER><my-feature>.md`.
    4. Fill in the details according to the template instructions.
      - For the first RFC version, we recommend that you leave the "Software Design" section empty.
-       Focus on the user impact and user experience.
+     - Focus on the user impact and user experience.
+       Include a few usage examples if possible.
    5. Add a link to the new RFC inside [`rfc/src/SUMMARY.md`](https://github.com/model-checking/kani/blob/main/rfc/src/SUMMARY.md)
    6. Submit a pull request.
 2. Build consensus and integrate feedback.
