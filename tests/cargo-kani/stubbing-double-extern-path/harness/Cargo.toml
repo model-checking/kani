@@ -11,6 +11,7 @@ description = "Should test invoking double extern but found cycle issue"
 crate_b = { path = "../crate_b" }
 
 [package.metadata.kani.flags]
-enable-unstable = true
-enable-stubbing = true
 harness = ["check_inverted"]
+
+[package.metadata.kani.unstable]
+stubbing = true

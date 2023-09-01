@@ -118,13 +118,13 @@ impl<'tcx> GotocCtx<'tcx> {
             // because we don't want to raise the warning during compilation.
             // These operations will normally be codegen'd but normally be unreachable
             // since we make use of `-C unwind=abort`.
-            TerminatorKind::Resume => self.codegen_mimic_unimplemented(
+            TerminatorKind::UnwindResume => self.codegen_mimic_unimplemented(
                 "TerminatorKind::Resume",
                 loc,
                 "https://github.com/model-checking/kani/issues/692",
             ),
-            TerminatorKind::Terminate => self.codegen_mimic_unimplemented(
-                "TerminatorKind::Terminate",
+            TerminatorKind::UnwindTerminate => self.codegen_mimic_unimplemented(
+                "TerminatorKind::UnwindTerminate",
                 loc,
                 "https://github.com/model-checking/kani/issues/692",
             ),
