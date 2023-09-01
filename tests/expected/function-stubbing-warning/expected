@@ -1,5 +1,0 @@
-Checking harness main...
-Failed Checks: assertion failed: foo() == 42
-
-warning: harness `main` contained stubs which were ignored.\
-To enable stubbing, pass options `--enable-unstable --enable-stubbing`
