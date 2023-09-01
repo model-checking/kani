@@ -1,0 +1,13 @@
+VERIFICATION:- FAILED
+
+Concrete playback
+```
+#[test]
+fn kani_concrete_playback_oob_ptr
+    let concrete_vals: Vec<Vec<u8>> = vec![
+        // 3ul
+        vec![3, 0, 0, 0, 0, 0, 0, 0],
+    ];
+    kani::concrete_playback_run(concrete_vals, oob_ptr);
+}
+```
