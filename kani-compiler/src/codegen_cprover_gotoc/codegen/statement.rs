@@ -123,7 +123,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 loc,
                 "https://github.com/model-checking/kani/issues/692",
             ),
-            TerminatorKind::UnwindTerminate => self.codegen_mimic_unimplemented(
+            TerminatorKind::UnwindTerminate(_) => self.codegen_mimic_unimplemented(
                 "TerminatorKind::UnwindTerminate",
                 loc,
                 "https://github.com/model-checking/kani/issues/692",
