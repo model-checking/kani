@@ -81,5 +81,6 @@ tests/rustdoc-gui/src/**.lock
 tests/kani-dependency-test/diamond-dependency/build
 tests/kani-multicrate/type-mismatch/mismatch/target
 /docs/book
+/docs/gen_src
 /docs/mdbook*
 /kani-*.tar.gz

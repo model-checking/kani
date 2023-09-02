@@ -9,12 +9,16 @@ use std::path::Path;
 use std::process::Command;
 use std::time::{Duration, Instant};
 
-use crate::args::{KaniArgs, OutputFormat};
+use crate::args::{OutputFormat, VerificationArgs};
 use crate::cbmc_output_parser::{
     extract_results, process_cbmc_output, CheckStatus, ParserItem, Property, VerificationOutput,
 };
-use crate::cbmc_property_renderer::{format_result, kani_cbmc_output_filter};
+use crate::cbmc_property_renderer::{format_coverage, format_result, kani_cbmc_output_filter};
 use crate::session::KaniSession;
+
+/// We will use Cadical by default since it performed better than MiniSAT in our analysis.
+/// Note: Kissat was marginally better, but it is an external solver which could be more unstable.
+static DEFAULT_SOLVER: CbmcSolver = CbmcSolver::Cadical;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VerificationStatus {
@@ -66,8 +70,7 @@ impl KaniSession {
 
         let start_time = Instant::now();
 
-        let mut verification_results = if self.args.output_format == crate::args::OutputFormat::Old
-        {
+        let verification_results = if self.args.output_format == crate::args::OutputFormat::Old {
             if self.run_terminal(cmd).is_err() {
                 VerificationResult::mock_failure()
             } else {
@@ -85,7 +88,7 @@ impl KaniSession {
                 kani_cbmc_output_filter(
                     i,
                     self.args.extra_pointer_checks,
-                    self.args.quiet,
+                    self.args.common_args.quiet,
                     &self.args.output_format,
                 )
             })?;
@@ -93,7 +96,6 @@ impl KaniSession {
             VerificationResult::from(output, harness.attributes.should_panic, start_time)
         };
 
-        self.gen_and_add_concrete_playback(harness, &mut verification_results)?;
         Ok(verification_results)
     }
 
@@ -169,7 +171,6 @@ impl KaniSession {
             args.push("--div-by-zero-check".into());
             args.push("--float-overflow-check".into());
             args.push("--nan-check".into());
-            args.push("--undefined-shift-check".into());
             // With PR #647 we use Rust's `-C overflow-checks=on` instead of:
             // --unsigned-overflow-check
             // --signed-overflow-check
@@ -209,8 +210,7 @@ impl KaniSession {
         } else if let Some(solver) = harness_solver {
             solver
         } else {
-            // Nothing to do
-            return Ok(());
+            &DEFAULT_SOLVER
         };
 
         match solver {
@@ -305,14 +305,23 @@ impl VerificationResult {
         }
     }
 
-    pub fn render(&self, output_format: &OutputFormat, should_panic: bool) -> String {
+    pub fn render(
+        &self,
+        output_format: &OutputFormat,
+        should_panic: bool,
+        coverage_mode: bool,
+    ) -> String {
         match &self.results {
             Ok(results) => {
                 let status = self.status;
                 let failed_properties = self.failed_properties;
                 let show_checks = matches!(output_format, OutputFormat::Regular);
-                let mut result =
-                    format_result(results, status, should_panic, failed_properties, show_checks);
+
+                let mut result = if coverage_mode {
+                    format_coverage(results, status, should_panic, failed_properties, show_checks)
+                } else {
+                    format_result(results, status, should_panic, failed_properties, show_checks)
+                };
                 writeln!(result, "Verification Time: {}s", self.runtime.as_secs_f32()).unwrap();
                 result
             }
@@ -377,7 +386,10 @@ fn determine_failed_properties(properties: &[Property]) -> FailedProperties {
 }
 
 /// Solve Unwind Value from conflicting inputs of unwind values. (--default-unwind, annotation-unwind, --unwind)
-pub fn resolve_unwind_value(args: &KaniArgs, harness_metadata: &HarnessMetadata) -> Option<u32> {
+pub fn resolve_unwind_value(
+    args: &VerificationArgs,
+    harness_metadata: &HarnessMetadata,
+) -> Option<u32> {
     // Check for which flag is being passed and prioritize extracting unwind from the
     // respective flag/annotation.
     args.unwind.or(harness_metadata.attributes.unwind_value).or(args.default_unwind)
@@ -400,12 +412,12 @@ mod tests {
         let args_both =
             ["kani", "x.rs", "--default-unwind", "2", "--unwind", "1", "--harness", "check_one"];
 
-        let harness_none = mock_proof_harness("check_one", None, None);
-        let harness_some = mock_proof_harness("check_one", Some(3), None);
+        let harness_none = mock_proof_harness("check_one", None, None, None);
+        let harness_some = mock_proof_harness("check_one", Some(3), None, None);
 
         fn resolve(args: &[&str], harness: &HarnessMetadata) -> Option<u32> {
             resolve_unwind_value(
-                &args::StandaloneArgs::try_parse_from(args).unwrap().common_opts,
+                &args::StandaloneArgs::try_parse_from(args).unwrap().verify_opts,
                 harness,
             )
         }

@@ -1,0 +1,6 @@
+error: Type check failed for intrinsic `ctpop`: Expected integer type, found ()
+   |
+12 |     let n = ctpop(());
+   |             ^^^^^^^^^
+
+error: aborting due to previous error

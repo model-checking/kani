@@ -10,9 +10,8 @@ use crate::metadata::merge_kani_metadata;
 use crate::project;
 use crate::session::KaniSession;
 
-pub use self::args::AssessArgs;
+pub use crate::args::{AssessArgs, AssessSubcommand};
 
-mod args;
 mod metadata;
 mod scan;
 mod table_builder;
@@ -24,7 +23,7 @@ mod table_unsupported_features;
 ///
 /// See <https://model-checking.github.io/kani/dev-assess.html>
 pub(crate) fn run_assess(session: KaniSession, args: AssessArgs) -> Result<()> {
-    if let Some(args::AssessSubcommand::Scan(args)) = &args.command {
+    if let Some(AssessSubcommand::Scan(args)) = &args.command {
         return scan::assess_scan_main(session, args);
     }
 

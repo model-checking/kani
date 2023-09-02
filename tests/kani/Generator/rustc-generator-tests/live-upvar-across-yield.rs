@@ -14,7 +14,6 @@ use std::ops::Generator;
 use std::pin::Pin;
 
 #[kani::proof]
-#[kani::unwind(2)]
 fn main() {
     let b = |_| 3;
     let mut a = || {

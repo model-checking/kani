@@ -70,9 +70,11 @@ export RUSTC_LOG=error
 RUST_FLAGS=(
     "--kani-compiler"
     "-Cpanic=abort"
+    "-Zalways-encode-mir"
     "-Cllvm-args=--goto-c"
     "-Cllvm-args=--ignore-global-asm"
-    "-Cllvm-args=--reachability=legacy"
+    "-Cllvm-args=--reachability=pub_fns"
+    "-Cllvm-args=--build-std"
 )
 export RUSTFLAGS="${RUST_FLAGS[@]}"
 export RUSTC="$KANI_DIR/target/kani/bin/kani-compiler"

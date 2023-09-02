@@ -4,44 +4,60 @@
 //! to run during code generation. For example, this can be used to hook up
 //! custom MIR transformations.
 
+use crate::args::{Arguments, ReachabilityType};
+use crate::kani_middle::intrinsics::ModelIntrinsics;
 use crate::kani_middle::reachability::{collect_reachable_items, filter_crate_items};
 use crate::kani_middle::stubbing;
-use crate::kani_middle::ty::query::query_provided::collect_and_partition_mono_items;
-use kani_queries::{QueryDb, UserInput};
-use rustc_hir::def_id::DefId;
+use crate::kani_queries::QueryDb;
+use rustc_hir::def_id::{DefId, LocalDefId};
 use rustc_interface;
 use rustc_middle::{
     mir::Body,
-    ty::{query::ExternProviders, query::Providers, TyCtxt},
+    query::{queries, ExternProviders, Providers},
+    ty::TyCtxt,
 };
 
 /// Sets up rustc's query mechanism to apply Kani's custom queries to code from
 /// the present crate.
 pub fn provide(providers: &mut Providers, queries: &QueryDb) {
-    providers.optimized_mir = run_mir_passes::<false>;
-    if queries.get_stubbing_enabled() {
-        providers.collect_and_partition_mono_items = collect_and_partition_mono_items;
+    let args = queries.args();
+    if should_override(args) {
+        // Don't override queries if we are only compiling our dependencies.
+        providers.optimized_mir = run_mir_passes;
+        if args.stubbing_enabled {
+            // TODO: Check if there's at least one stub being applied.
+            providers.collect_and_partition_mono_items = collect_and_partition_mono_items;
+        }
     }
 }
 
 /// Sets up rustc's query mechanism to apply Kani's custom queries to code from
 /// external crates.
-pub fn provide_extern(providers: &mut ExternProviders) {
-    providers.optimized_mir = run_mir_passes::<true>;
+pub fn provide_extern(providers: &mut ExternProviders, queries: &QueryDb) {
+    if should_override(queries.args()) {
+        // Don't override queries if we are only compiling our dependencies.
+        providers.optimized_mir = run_mir_passes_extern;
+    }
 }
 
-/// Returns the optimized code for the function associated with `def_id` by
-/// running rustc's optimization passes followed by Kani-specific passes.
-fn run_mir_passes<const EXTERN: bool>(tcx: TyCtxt, def_id: DefId) -> &Body {
-    tracing::debug!(?def_id, "Run rustc transformation passes");
-    let optimized_mir = if EXTERN {
-        rustc_interface::DEFAULT_EXTERN_QUERY_PROVIDERS.optimized_mir
-    } else {
-        rustc_interface::DEFAULT_QUERY_PROVIDERS.optimized_mir
-    };
-    let body = optimized_mir(tcx, def_id);
+fn should_override(args: &Arguments) -> bool {
+    args.reachability_analysis != ReachabilityType::None && !args.build_std
+}
 
+/// Returns the optimized code for the external function associated with `def_id` by
+/// running rustc's optimization passes followed by Kani-specific passes.
+fn run_mir_passes_extern(tcx: TyCtxt, def_id: DefId) -> &Body {
+    tracing::debug!(?def_id, "run_mir_passes_extern");
+    let body = (rustc_interface::DEFAULT_EXTERN_QUERY_PROVIDERS.optimized_mir)(tcx, def_id);
     run_kani_mir_passes(tcx, def_id, body)
+}
+
+/// Returns the optimized code for the local function associated with `def_id` by
+/// running rustc's optimization passes followed by Kani-specific passes.
+fn run_mir_passes(tcx: TyCtxt, def_id: LocalDefId) -> &Body {
+    tracing::debug!(?def_id, "run_mir_passes");
+    let body = (rustc_interface::DEFAULT_QUERY_PROVIDERS.optimized_mir)(tcx, def_id);
+    run_kani_mir_passes(tcx, def_id.to_def_id(), body)
 }
 
 /// Returns the optimized code for the function associated with `def_id` by
@@ -53,7 +69,11 @@ fn run_kani_mir_passes<'tcx>(
     body: &'tcx Body<'tcx>,
 ) -> &'tcx Body<'tcx> {
     tracing::debug!(?def_id, "Run Kani transformation passes");
-    stubbing::transform(tcx, def_id, body)
+    let mut transformed_body = stubbing::transform(tcx, def_id, body);
+    stubbing::transform_foreign_functions(tcx, &mut transformed_body);
+    // This should be applied after stubbing so user stubs take precedence.
+    ModelIntrinsics::run_pass(tcx, &mut transformed_body);
+    tcx.arena.alloc(transformed_body)
 }
 
 /// Runs a reachability analysis before running the default
@@ -63,7 +83,10 @@ fn run_kani_mir_passes<'tcx>(
 /// This is an issue when compiling a library, since the crate metadata is
 /// generated (using this query) before code generation begins (which is
 /// when we normally run the reachability analysis).
-fn collect_and_partition_mono_items(tcx: TyCtxt, key: ()) -> collect_and_partition_mono_items {
+fn collect_and_partition_mono_items(
+    tcx: TyCtxt,
+    key: (),
+) -> queries::collect_and_partition_mono_items::ProvidedValue {
     let entry_fn = tcx.entry_fn(()).map(|(id, _)| id);
     let local_reachable = filter_crate_items(tcx, |_, def_id| {
         tcx.is_reachable_non_generic(def_id) || entry_fn == Some(def_id)

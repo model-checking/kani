@@ -7,12 +7,4 @@ Failed Checks: attempt to calculate the remainder with a divisor of zero
 Failed Checks: attempt to calculate the remainder with overflow
 Failed Checks: attempt to shift left with overflow
 Failed Checks: attempt to shift right with overflow
-Failed Checks: arithmetic overflow on signed addition
-Failed Checks: arithmetic overflow on signed subtraction
-Failed Checks: arithmetic overflow on signed multiplication
-Failed Checks: shift distance is negative
-Failed Checks: shift distance too large
-Failed Checks: shift operand is negative
 Failed Checks: arithmetic overflow on signed shl
-Failed Checks: shift distance is negative
-Failed Checks: shift distance too large

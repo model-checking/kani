@@ -4,12 +4,12 @@
 use super::typ::{self, pointee_type};
 use super::PropertyClass;
 use crate::codegen_cprover_gotoc::GotocCtx;
+use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::{
-    arithmetic_overflow_result_type, ArithmeticOverflowResult, BuiltinFn, Expr, Location, Stmt,
-    Type, ARITH_OVERFLOW_OVERFLOWED_FIELD, ARITH_OVERFLOW_RESULT_FIELD,
+    ArithmeticOverflowResult, BinaryOperator, BuiltinFn, Expr, Location, Stmt, Type,
 };
 use rustc_middle::mir::{BasicBlock, Operand, Place};
-use rustc_middle::ty::layout::LayoutOf;
+use rustc_middle::ty::layout::{LayoutOf, ValidityRequirement};
 use rustc_middle::ty::{self, Ty};
 use rustc_middle::ty::{Instance, InstanceDef};
 use rustc_span::Span;
@@ -120,9 +120,20 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    /// c.f. `rustc_codegen_llvm::intrinsic` `impl IntrinsicCallMethods<'tcx> for Builder<'a, 'll, 'tcx>`
-    /// `fn codegen_intrinsic_call`
-    /// c.f. <https://doc.rust-lang.org/std/intrinsics/index.html>
+    /// c.f. `rustc_codegen_llvm::intrinsic` `impl IntrinsicCallMethods<'tcx>
+    /// for Builder<'a, 'll, 'tcx>` `fn codegen_intrinsic_call` c.f.
+    /// <https://doc.rust-lang.org/std/intrinsics/index.html>
+    ///
+    /// ### A note on type checking
+    ///
+    /// The backend/codegen generally assumes that at this point arguments have
+    /// been type checked and that the given intrinsic is safe to call with the
+    /// provided arguments. However in rare cases the intrinsics type signature
+    /// is too permissive or has to be liberal because the types are enforced by
+    /// the specific code gen/backend. In such cases we handle the type checking
+    /// here. The type constraints enforced here must be at least as strict as
+    /// the assertions made in in the builder functions in
+    /// [`Expr`].
     fn codegen_intrinsic(
         &mut self,
         instance: Instance<'tcx>,
@@ -172,82 +183,13 @@ impl<'tcx> GotocCtx<'tcx> {
             }};
         }
 
-        // Intrinsics of the form *_with_overflow
-        macro_rules! codegen_op_with_overflow {
-            ($f:ident) => {{
-                let pt = self.place_ty(p);
-                let t = self.codegen_ty(pt);
-                let a = fargs.remove(0);
-                let b = fargs.remove(0);
-                let op_type = a.typ().clone();
-                let res = a.$f(b);
-                // add to symbol table
-                let struct_tag = self.codegen_arithmetic_overflow_result_type(op_type.clone());
-                assert_eq!(*res.typ(), struct_tag);
-
-                // store the result in a temporary variable
-                let (var, decl) = self.decl_temp_variable(struct_tag, Some(res), loc);
-                // cast into result type
-                let e = Expr::struct_expr_from_values(
-                    t.clone(),
-                    vec![
-                        var.clone().member(ARITH_OVERFLOW_RESULT_FIELD, &self.symbol_table),
-                        var.member(ARITH_OVERFLOW_OVERFLOWED_FIELD, &self.symbol_table)
-                            .cast_to(Type::c_bool()),
-                    ],
-                    &self.symbol_table,
-                );
-                self.codegen_expr_to_place(
-                    p,
-                    Expr::statement_expression(vec![decl, e.as_stmt(loc)], t),
-                )
-            }};
-        }
-
-        // Intrinsics which encode a simple arithmetic operation with overflow check
-        macro_rules! codegen_op_with_overflow_check {
-            ($f:ident) => {{
-                let a = fargs.remove(0);
-                let b = fargs.remove(0);
-                let op_type = a.typ().clone();
-                let res = a.$f(b);
-                // add to symbol table
-                let struct_tag = self.codegen_arithmetic_overflow_result_type(op_type.clone());
-                assert_eq!(*res.typ(), struct_tag);
-
-                // store the result in a temporary variable
-                let (var, decl) = self.decl_temp_variable(struct_tag, Some(res), loc);
-                let check = self.codegen_assert(
-                    var.clone()
-                        .member(ARITH_OVERFLOW_OVERFLOWED_FIELD, &self.symbol_table)
-                        .cast_to(Type::c_bool())
-                        .not(),
-                    PropertyClass::ArithmeticOverflow,
-                    format!("attempt to compute {} which would overflow", intrinsic).as_str(),
-                    loc,
-                );
-                self.codegen_expr_to_place(
-                    p,
-                    Expr::statement_expression(
-                        vec![
-                            decl,
-                            check,
-                            var.member(ARITH_OVERFLOW_RESULT_FIELD, &self.symbol_table)
-                                .as_stmt(loc),
-                        ],
-                        op_type,
-                    ),
-                )
-            }};
-        }
-
         // Intrinsics which encode a division operation with overflow check
         macro_rules! codegen_op_with_div_overflow_check {
             ($f:ident) => {{
                 let a = fargs.remove(0);
                 let b = fargs.remove(0);
                 let div_does_not_overflow = self.div_does_not_overflow(a.clone(), b.clone());
-                let div_overflow_check = self.codegen_assert(
+                let div_overflow_check = self.codegen_assert_assume(
                     div_does_not_overflow,
                     PropertyClass::ArithmeticOverflow,
                     format!("attempt to compute {} which would overflow", intrinsic).as_str(),
@@ -304,7 +246,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         macro_rules! codegen_size_align {
             ($which: ident) => {{
-                let tp_ty = instance.substs.type_at(0);
+                let tp_ty = instance.args.type_at(0);
                 let arg = fargs.remove(0);
                 let size_align = self.size_and_align_of_dst(tp_ty, arg);
                 self.codegen_expr_to_place(p, size_align.$which)
@@ -362,7 +304,9 @@ impl<'tcx> GotocCtx<'tcx> {
         }
 
         match intrinsic {
-            "add_with_overflow" => codegen_op_with_overflow!(add_overflow_result),
+            "add_with_overflow" => {
+                self.codegen_op_with_overflow(BinaryOperator::OverflowResultPlus, fargs, p, loc)
+            }
             "arith_offset" => self.codegen_offset(intrinsic, instance, fargs, p, loc),
             "assert_inhabited" => self.codegen_assert_intrinsic(instance, intrinsic, span),
             "assert_mem_uninitialized_valid" => {
@@ -465,6 +409,7 @@ impl<'tcx> GotocCtx<'tcx> {
             ),
             "ceilf32" => codegen_simple_intrinsic!(Ceilf),
             "ceilf64" => codegen_simple_intrinsic!(Ceil),
+            "compare_bytes" => self.codegen_compare_bytes(fargs, p, loc),
             "copy" => self.codegen_copy(intrinsic, false, fargs, farg_types, Some(p), loc),
             "copy_nonoverlapping" => unreachable!(
                 "Expected `core::intrinsics::unreachable` to be handled by `StatementKind::CopyNonOverlapping`"
@@ -475,11 +420,11 @@ impl<'tcx> GotocCtx<'tcx> {
             "cosf64" => codegen_simple_intrinsic!(Cos),
             "ctlz" => codegen_count_intrinsic!(ctlz, true),
             "ctlz_nonzero" => codegen_count_intrinsic!(ctlz, false),
-            "ctpop" => self.codegen_expr_to_place(p, fargs.remove(0).popcount()),
+            "ctpop" => self.codegen_ctpop(*p, span, fargs.remove(0), farg_types[0]),
             "cttz" => codegen_count_intrinsic!(cttz, true),
             "cttz_nonzero" => codegen_count_intrinsic!(cttz, false),
             "discriminant_value" => {
-                let ty = instance.substs.type_at(0);
+                let ty = instance.args.type_at(0);
                 let e = self.codegen_get_discriminant(fargs.remove(0).dereference(), ty, ret_ty);
                 self.codegen_expr_to_place(p, e)
             }
@@ -528,11 +473,16 @@ impl<'tcx> GotocCtx<'tcx> {
             "min_align_of_val" => codegen_size_align!(align),
             "minnumf32" => codegen_simple_intrinsic!(Fminf),
             "minnumf64" => codegen_simple_intrinsic!(Fmin),
-            "mul_with_overflow" => codegen_op_with_overflow!(mul_overflow_result),
+            "mul_with_overflow" => {
+                self.codegen_op_with_overflow(BinaryOperator::OverflowResultMult, fargs, p, loc)
+            }
             "nearbyintf32" => codegen_simple_intrinsic!(Nearbyintf),
             "nearbyintf64" => codegen_simple_intrinsic!(Nearbyint),
             "needs_drop" => codegen_intrinsic_const!(),
-            "offset" => self.codegen_offset(intrinsic, instance, fargs, p, loc),
+            // As of https://github.com/rust-lang/rust/pull/110822 the `offset` intrinsic is lowered to `mir::BinOp::Offset`
+            "offset" => unreachable!(
+                "Expected `core::intrinsics::unreachable` to be handled by `BinOp::OffSet`"
+            ),
             "powf32" => unstable_codegen!(codegen_simple_intrinsic!(Powf)),
             "powf64" => unstable_codegen!(codegen_simple_intrinsic!(Pow)),
             "powif32" => unstable_codegen!(codegen_simple_intrinsic!(Powif)),
@@ -561,9 +511,11 @@ impl<'tcx> GotocCtx<'tcx> {
                 loc,
             ),
             "simd_and" => codegen_intrinsic_binop!(bitand),
-            // TODO: `simd_div` and `simd_rem` don't check for overflow cases.
-            // <https://github.com/model-checking/kani/issues/1970>
-            "simd_div" => codegen_intrinsic_binop!(div),
+            // TODO: `simd_rem` doesn't check for overflow cases for floating point operands.
+            // <https://github.com/model-checking/kani/pull/2645>
+            "simd_div" | "simd_rem" => {
+                self.codegen_simd_div_with_overflow(fargs, intrinsic, p, loc)
+            }
             "simd_eq" => self.codegen_simd_cmp(Expr::vector_eq, fargs, p, span, farg_types, ret_ty),
             "simd_extract" => {
                 self.codegen_intrinsic_simd_extract(fargs, p, farg_types, ret_ty, span)
@@ -587,19 +539,8 @@ impl<'tcx> GotocCtx<'tcx> {
                 self.codegen_simd_cmp(Expr::vector_neq, fargs, p, span, farg_types, ret_ty)
             }
             "simd_or" => codegen_intrinsic_binop!(bitor),
-            // TODO: `simd_div` and `simd_rem` don't check for overflow cases.
-            // <https://github.com/model-checking/kani/issues/1970>
-            "simd_rem" => codegen_intrinsic_binop!(rem),
-            // TODO: `simd_shl` and `simd_shr` don't check overflow cases.
-            // <https://github.com/model-checking/kani/issues/1963>
-            "simd_shl" => codegen_intrinsic_binop!(shl),
-            "simd_shr" => {
-                if fargs[0].typ().base_type().unwrap().is_signed(self.symbol_table.machine_model())
-                {
-                    codegen_intrinsic_binop!(ashr)
-                } else {
-                    codegen_intrinsic_binop!(lshr)
-                }
+            "simd_shl" | "simd_shr" => {
+                self.codegen_simd_shift_with_distance_check(fargs, intrinsic, p, loc)
             }
             // "simd_shuffle#" => handled in an `if` preceding this match
             "simd_sub" => self.codegen_simd_op_with_overflow(
@@ -615,7 +556,9 @@ impl<'tcx> GotocCtx<'tcx> {
             "size_of_val" => codegen_size_align!(size),
             "sqrtf32" => unstable_codegen!(codegen_simple_intrinsic!(Sqrtf)),
             "sqrtf64" => unstable_codegen!(codegen_simple_intrinsic!(Sqrt)),
-            "sub_with_overflow" => codegen_op_with_overflow!(sub_overflow_result),
+            "sub_with_overflow" => {
+                self.codegen_op_with_overflow(BinaryOperator::OverflowResultMinus, fargs, p, loc)
+            }
             "transmute" => self.codegen_intrinsic_transmute(fargs, ret_ty, p),
             "truncf32" => codegen_simple_intrinsic!(Truncf),
             "truncf64" => codegen_simple_intrinsic!(Trunc),
@@ -629,19 +572,12 @@ impl<'tcx> GotocCtx<'tcx> {
             "unaligned_volatile_load" => {
                 unstable_codegen!(self.codegen_expr_to_place(p, fargs.remove(0).dereference()))
             }
-            "unchecked_add" => codegen_op_with_overflow_check!(add_overflow_result),
-            "unchecked_div" => codegen_op_with_div_overflow_check!(div),
-            "unchecked_mul" => codegen_op_with_overflow_check!(mul_overflow_result),
-            "unchecked_rem" => codegen_op_with_div_overflow_check!(rem),
-            "unchecked_shl" => codegen_intrinsic_binop!(shl),
-            "unchecked_shr" => {
-                if fargs[0].typ().is_signed(self.symbol_table.machine_model()) {
-                    codegen_intrinsic_binop!(ashr)
-                } else {
-                    codegen_intrinsic_binop!(lshr)
-                }
+            "unchecked_add" | "unchecked_mul" | "unchecked_shl" | "unchecked_shr"
+            | "unchecked_sub" => {
+                unreachable!("Expected intrinsic `{intrinsic}` to be lowered before codegen")
             }
-            "unchecked_sub" => codegen_op_with_overflow_check!(sub_overflow_result),
+            "unchecked_div" => codegen_op_with_div_overflow_check!(div),
+            "unchecked_rem" => codegen_op_with_div_overflow_check!(rem),
             "unlikely" => self.codegen_expr_to_place(p, fargs.remove(0)),
             "unreachable" => unreachable!(
                 "Expected `std::intrinsics::unreachable` to be handled by `TerminatorKind::Unreachable`"
@@ -671,6 +607,48 @@ impl<'tcx> GotocCtx<'tcx> {
                 "https://github.com/model-checking/kani/issues/new/choose",
             ),
         }
+    }
+
+    /// Perform type checking and code generation for the `ctpop` rust intrinsic.
+    fn codegen_ctpop(
+        &mut self,
+        target_place: Place<'tcx>,
+        span: Option<Span>,
+        arg: Expr,
+        arg_rust_ty: Ty<'tcx>,
+    ) -> Stmt {
+        if !arg.typ().is_integer() {
+            self.intrinsics_typecheck_fail(span, "ctpop", "integer type", arg_rust_ty)
+        } else {
+            self.codegen_expr_to_place(&target_place, arg.popcount())
+        }
+    }
+
+    /// Report that a delayed type check on an intrinsic failed.
+    ///
+    /// The idea is to blame one of the arguments on the failed type check and
+    /// report the type that was found for that argument in `actual`. The
+    /// `expected` type for that argument can be very permissive (e.g. "some
+    /// integer type") and as a result it allows a permissive string as
+    /// description.
+    ///
+    /// Calling this function will abort the compilation though that is not
+    /// obvious by the type.
+    fn intrinsics_typecheck_fail(
+        &self,
+        span: Option<Span>,
+        name: &str,
+        expected: &str,
+        actual: Ty,
+    ) -> ! {
+        self.tcx.sess.span_err(
+            span.into_iter().collect::<Vec<_>>(),
+            format!(
+                "Type check failed for intrinsic `{name}`: Expected {expected}, found {actual}"
+            ),
+        );
+        self.tcx.sess.abort_if_errors();
+        unreachable!("Rustc should have aborted already")
     }
 
     // Fast math intrinsics for floating point operations like `fadd_fast`
@@ -719,6 +697,25 @@ impl<'tcx> GotocCtx<'tcx> {
         dividend_is_int_min.and(divisor_is_minus_one).not()
     }
 
+    /// Intrinsics of the form *_with_overflow
+    fn codegen_op_with_overflow(
+        &mut self,
+        binop: BinaryOperator,
+        mut fargs: Vec<Expr>,
+        place: &Place<'tcx>,
+        loc: Location,
+    ) -> Stmt {
+        let place_ty = self.place_ty(place);
+        let result_type = self.codegen_ty(place_ty);
+        let left = fargs.remove(0);
+        let right = fargs.remove(0);
+        let res = self.codegen_binop_with_overflow(binop, left, right, result_type.clone(), loc);
+        self.codegen_expr_to_place(
+            place,
+            Expr::statement_expression(vec![res.as_stmt(loc)], result_type),
+        )
+    }
+
     fn codegen_exact_div(&mut self, mut fargs: Vec<Expr>, p: &Place<'tcx>, loc: Location) -> Stmt {
         // Check for undefined behavior conditions defined in
         // https://doc.rust-lang.org/std/intrinsics/fn.exact_div.html
@@ -760,7 +757,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// layout is invalid so we get a message that mentions the offending type.
     ///
     /// <https://doc.rust-lang.org/std/intrinsics/fn.assert_inhabited.html>
-    /// <https://doc.rust-lang.org/std/intrinsics/fn.assert_uninit_valid.html>
+    /// <https://doc.rust-lang.org/std/intrinsics/fn.assert_mem_uninitialized_valid.html>
     /// <https://doc.rust-lang.org/std/intrinsics/fn.assert_zero_valid.html>
     fn codegen_assert_intrinsic(
         &mut self,
@@ -768,7 +765,7 @@ impl<'tcx> GotocCtx<'tcx> {
         intrinsic: &str,
         span: Option<Span>,
     ) -> Stmt {
-        let ty = instance.substs.type_at(0);
+        let ty = instance.args.type_at(0);
         let layout = self.layout_of(ty);
         // Note: We follow the pattern seen in `codegen_panic_intrinsic` from `rustc_codegen_ssa`
         // https://github.com/rust-lang/rust/blob/master/compiler/rustc_codegen_ssa/src/mir/block.rs
@@ -788,7 +785,10 @@ impl<'tcx> GotocCtx<'tcx> {
         // Then we check if the type allows "raw" initialization for the cases
         // where memory is zero-initialized or entirely uninitialized
         if intrinsic == "assert_zero_valid"
-            && !self.tcx.permits_zero_init(param_env_and_type).ok().unwrap()
+            && !self
+                .tcx
+                .check_validity_requirement((ValidityRequirement::Zero, param_env_and_type))
+                .unwrap()
         {
             return self.codegen_fatal_error(
                 PropertyClass::SafetyCheck,
@@ -797,8 +797,14 @@ impl<'tcx> GotocCtx<'tcx> {
             );
         }
 
-        if intrinsic == "assert_uninit_valid"
-            && !self.tcx.permits_uninit_init(param_env_and_type).ok().unwrap()
+        if intrinsic == "assert_mem_uninitialized_valid"
+            && !self
+                .tcx
+                .check_validity_requirement((
+                    ValidityRequirement::UninitMitigated0x01Fill,
+                    param_env_and_type,
+                ))
+                .unwrap()
         {
             return self.codegen_fatal_error(
                 PropertyClass::SafetyCheck,
@@ -982,6 +988,42 @@ impl<'tcx> GotocCtx<'tcx> {
         Stmt::block(vec![src_align_check, dst_align_check, overflow_check, copy_expr], loc)
     }
 
+    /// This is an intrinsic that was added in
+    /// https://github.com/rust-lang/rust/pull/114382 that is essentially the
+    /// same as memcmp: it compares two slices up to the specified length.
+    /// The implementation is the same as the hook for `memcmp`.
+    pub fn codegen_compare_bytes(
+        &mut self,
+        mut fargs: Vec<Expr>,
+        p: &Place<'tcx>,
+        loc: Location,
+    ) -> Stmt {
+        let lhs = fargs.remove(0).cast_to(Type::void_pointer());
+        let rhs = fargs.remove(0).cast_to(Type::void_pointer());
+        let len = fargs.remove(0);
+        let (len_var, len_decl) = self.decl_temp_variable(len.typ().clone(), Some(len), loc);
+        let (lhs_var, lhs_decl) = self.decl_temp_variable(lhs.typ().clone(), Some(lhs), loc);
+        let (rhs_var, rhs_decl) = self.decl_temp_variable(rhs.typ().clone(), Some(rhs), loc);
+        let is_len_zero = len_var.clone().is_zero();
+        // We have to ensure that the pointers are valid even if we're comparing zero bytes.
+        // According to Rust's current definition (see https://github.com/model-checking/kani/issues/1489),
+        // this means they have to be non-null and aligned.
+        // But alignment is automatically satisfied because `memcmp` takes `*const u8` pointers.
+        let is_lhs_ok = lhs_var.clone().is_nonnull();
+        let is_rhs_ok = rhs_var.clone().is_nonnull();
+        let should_skip_pointer_checks = is_len_zero.and(is_lhs_ok).and(is_rhs_ok);
+        let place_expr =
+            unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place(&p)).goto_expr;
+        let res = should_skip_pointer_checks.ternary(
+            Expr::int_constant(0, place_expr.typ().clone()), // zero bytes are always equal (as long as pointers are nonnull and aligned)
+            BuiltinFn::Memcmp
+                .call(vec![lhs_var, rhs_var, len_var], loc)
+                .cast_to(place_expr.typ().clone()),
+        );
+        let code = place_expr.assign(res, loc).with_location(loc);
+        Stmt::block(vec![len_decl, lhs_decl, rhs_decl, code], loc)
+    }
+
     // In some contexts (e.g., compilation-time evaluation),
     // `ptr_guaranteed_cmp` compares two pointers and returns:
     //  * 2 if the result is unknown.
@@ -1029,7 +1071,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let offset = fargs.remove(0);
 
         // Check that computing `offset` in bytes would not overflow
-        let ty = self.monomorphize(instance.substs.type_at(0));
+        let ty = self.monomorphize(instance.args.type_at(0));
         let (offset_bytes, bytes_overflow_check) =
             self.count_in_bytes(offset.clone(), ty, Type::ssize_t(), intrinsic, loc);
 
@@ -1179,7 +1221,7 @@ impl<'tcx> GotocCtx<'tcx> {
         p: &Place<'tcx>,
         loc: Location,
     ) -> Stmt {
-        let ty = self.monomorphize(instance.substs.type_at(0));
+        let ty = self.monomorphize(instance.args.type_at(0));
         let dst = fargs.remove(0).cast_to(Type::void_pointer());
         let val = fargs.remove(0).cast_to(Type::void_pointer());
         let layout = self.layout_of(ty);
@@ -1509,6 +1551,39 @@ impl<'tcx> GotocCtx<'tcx> {
         self.codegen_expr_to_place(p, e)
     }
 
+    /// Codegen for `simd_div` and `simd_rem` intrinsics.
+    /// This checks for overflow in signed integer division (i.e. when dividing the minimum integer
+    /// for the type by -1). Overflow checks on floating point division are handled by CBMC, as is
+    /// division by zero for both integers and floats.
+    fn codegen_simd_div_with_overflow(
+        &mut self,
+        fargs: Vec<Expr>,
+        intrinsic: &str,
+        p: &Place<'tcx>,
+        loc: Location,
+    ) -> Stmt {
+        let op_fun = match intrinsic {
+            "simd_div" => Expr::div,
+            "simd_rem" => Expr::rem,
+            _ => unreachable!("expected simd_div or simd_rem"),
+        };
+        let base_type = fargs[0].typ().base_type().unwrap().clone();
+        if base_type.is_integer() && base_type.is_signed(self.symbol_table.machine_model()) {
+            let min_int_expr = base_type.min_int_expr(self.symbol_table.machine_model());
+            let negative_one = Expr::int_constant(-1, base_type);
+            self.codegen_simd_op_with_overflow(
+                op_fun,
+                |a, b| a.eq(min_int_expr.clone()).and(b.eq(negative_one.clone())),
+                fargs,
+                intrinsic,
+                p,
+                loc,
+            )
+        } else {
+            self.binop(p, fargs, op_fun)
+        }
+    }
+
     /// Intrinsics which encode a SIMD arithmetic operation with overflow check.
     /// We expand the overflow check because CBMC overflow operations don't accept array as
     /// argument.
@@ -1544,7 +1619,76 @@ impl<'tcx> GotocCtx<'tcx> {
         );
         let res = op_fun(a, b);
         let expr_place = self.codegen_expr_to_place(p, res);
-        Stmt::block(vec![expr_place, check_stmt], loc)
+        Stmt::block(vec![check_stmt, expr_place], loc)
+    }
+
+    /// Intrinsics which encode a SIMD bitshift.
+    /// Also checks for valid shift distance. Shifts on an integer of type T are UB if shift
+    /// distance < 0 or >= T::BITS.
+    fn codegen_simd_shift_with_distance_check(
+        &mut self,
+        mut fargs: Vec<Expr>,
+        intrinsic: &str,
+        p: &Place<'tcx>,
+        loc: Location,
+    ) -> Stmt {
+        let values = fargs.remove(0);
+        let distances = fargs.remove(0);
+
+        let values_len = values.typ().len().unwrap();
+        let distances_len = distances.typ().len().unwrap();
+        assert_eq!(values_len, distances_len, "expected same length vectors");
+
+        let value_type = values.typ().base_type().unwrap();
+        let distance_type = distances.typ().base_type().unwrap();
+        let value_width = value_type.sizeof_in_bits(&self.symbol_table);
+        let value_width_expr = Expr::int_constant(value_width, distance_type.clone());
+        let distance_is_signed = distance_type.is_signed(self.symbol_table.machine_model());
+
+        let mut excessive_check = Expr::bool_false();
+        let mut negative_check = Expr::bool_false();
+        for i in 0..distances_len {
+            let index = Expr::int_constant(i, Type::ssize_t());
+            let distance = distances.clone().index_array(index);
+            let excessive_distance_cond = distance.clone().ge(value_width_expr.clone());
+            excessive_check = excessive_check.or(excessive_distance_cond);
+            if distance_is_signed {
+                let negative_distance_cond = distance.is_negative();
+                negative_check = negative_check.or(negative_distance_cond);
+            }
+        }
+        let excessive_check_stmt = self.codegen_assert_assume(
+            excessive_check.not(),
+            PropertyClass::ArithmeticOverflow,
+            format!("attempt {intrinsic} with excessive shift distance").as_str(),
+            loc,
+        );
+
+        let op_fun = match intrinsic {
+            "simd_shl" => Expr::shl,
+            "simd_shr" => {
+                if distance_is_signed {
+                    Expr::ashr
+                } else {
+                    Expr::lshr
+                }
+            }
+            _ => unreachable!("expected a simd shift intrinsic"),
+        };
+        let res = op_fun(values, distances);
+        let expr_place = self.codegen_expr_to_place(p, res);
+
+        if distance_is_signed {
+            let negative_check_stmt = self.codegen_assert_assume(
+                negative_check.not(),
+                PropertyClass::ArithmeticOverflow,
+                format!("attempt {intrinsic} with negative shift distance").as_str(),
+                loc,
+            );
+            Stmt::block(vec![excessive_check_stmt, negative_check_stmt, expr_place], loc)
+        } else {
+            Stmt::block(vec![excessive_check_stmt, expr_place], loc)
+        }
     }
 
     /// `simd_shuffle` constructs a new vector from the elements of two input
@@ -1727,7 +1871,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Returns a tuple with:
     ///  * The result expression of the computation.
     ///  * An assertion statement to ensure the operation has not overflowed.
-    fn count_in_bytes(
+    pub fn count_in_bytes(
         &mut self,
         count: Expr,
         ty: Ty<'tcx>,
@@ -1749,20 +1893,5 @@ impl<'tcx> GotocCtx<'tcx> {
             loc,
         );
         (size_of_count_elems.result, assert_stmt)
-    }
-
-    /// Codegens the struct type that CBMC produces for its arithmetic with overflow operators:
-    /// ```
-    /// struct overflow_result_<operand_type> {
-    ///     operand_type result;     // the result of the operation
-    ///     bool         overflowed; // whether the operation overflowed
-    /// }
-    /// ```
-    /// and adds the type to the symbol table
-    fn codegen_arithmetic_overflow_result_type(&mut self, operand_type: Type) -> Type {
-        let res_type = arithmetic_overflow_result_type(operand_type);
-        self.ensure_struct(res_type.tag().unwrap(), res_type.tag().unwrap(), |_, _| {
-            res_type.components().unwrap().clone()
-        })
     }
 }

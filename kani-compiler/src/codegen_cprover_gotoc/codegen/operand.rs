@@ -130,8 +130,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             ConstValue::ByRef { alloc, offset } => {
                 debug!("ConstValue by ref {:?} {:?}", alloc, offset);
-                let mem_var = self
-                    .codegen_allocation_auto_imm_name(alloc.inner(), |tcx| tcx.next_global_name());
+                let mem_var = self.codegen_const_allocation(alloc.inner(), None);
                 mem_var
                     .cast_to(Type::unsigned_int(8).to_pointer())
                     .plus(Expr::int_constant(offset.bytes(), Type::unsigned_int(64)))
@@ -140,8 +139,8 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             ConstValue::ZeroSized => match lit_ty.kind() {
                 // Rust "function items" (not closures, not function pointers, see `codegen_fndef`)
-                ty::FnDef(d, substs) => self.codegen_fndef(*d, substs, span),
-                _ => unimplemented!(),
+                ty::FnDef(d, args) => self.codegen_fndef(*d, args, span),
+                _ => Expr::init_unit(self.codegen_ty(lit_ty), &self.symbol_table),
             },
         }
     }
@@ -165,8 +164,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     // These seem to always start at 0
                     assert_eq!(start, 0);
                     // Create a static variable that holds its value
-                    let mem_var =
-                        self.codegen_allocation_auto_imm_name(data, |tcx| tcx.next_global_name());
+                    let mem_var = self.codegen_const_allocation(data, None);
 
                     // Extract identifier for static variable.
                     // codegen_allocation_auto_imm_name returns the *address* of
@@ -198,17 +196,11 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
                 ty::Slice(slice_ty) => {
                     if let Uint(UintTy::U8) = slice_ty.kind() {
-                        // The case where we have a slice of u8 is easy enough: make an array of u8
+                        let mem_var = self.codegen_const_allocation(data, None);
                         let slice =
                             data.inspect_with_uninit_and_ptr_outside_interpreter(start..end);
-                        let vec_of_bytes: Vec<Expr> = slice
-                            .iter()
-                            .map(|b| Expr::int_constant(*b, Type::unsigned_int(8)))
-                            .collect();
-                        let len = vec_of_bytes.len();
-                        let array_expr =
-                            Expr::array_expr(Type::unsigned_int(8).array_of(len), vec_of_bytes);
-                        let data_expr = array_expr.array_to_ptr();
+                        let len = slice.len();
+                        let data_expr = mem_var.cast_to(Type::unsigned_int(8).to_pointer());
                         let len_expr = Expr::int_constant(len, Type::size_t());
                         return slice_fat_ptr(
                             self.codegen_ty(lit_ty),
@@ -228,6 +220,19 @@ impl<'tcx> GotocCtx<'tcx> {
                             "https://github.com/model-checking/kani/issues/1339",
                         );
                     }
+                }
+                ty::Adt(def, _) if Some(def.did()) == self.tcx.lang_items().c_str() => {
+                    // TODO: Handle CString
+                    // <https://github.com/model-checking/kani/issues/2549>
+                    let loc = self.codegen_span_option(span.cloned());
+                    let typ = self.codegen_ty(lit_ty);
+                    let operation_name = "C string literal";
+                    return self.codegen_unimplemented_expr(
+                        &operation_name,
+                        typ,
+                        loc,
+                        "https://github.com/model-checking/kani/issues/2549",
+                    );
                 }
                 _ => {}
             }
@@ -310,7 +315,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         }
                     } else {
                         // otherwise, there is just one field, which is stored as the scalar data
-                        let field = &variant.fields[0];
+                        let field = &variant.fields[0usize.into()];
                         let fty = field.ty(self.tcx, subst);
 
                         let overall_t = self.codegen_ty(ty);
@@ -336,7 +341,7 @@ impl<'tcx> GotocCtx<'tcx> {
                                     &self.symbol_table,
                                 ),
                                 1 => {
-                                    let fty = variant.fields[0].ty(self.tcx, subst);
+                                    let fty = variant.fields[0usize.into()].ty(self.tcx, subst);
                                     self.codegen_single_variant_single_field(
                                         s, span, overall_t, fty,
                                     )
@@ -407,10 +412,11 @@ impl<'tcx> GotocCtx<'tcx> {
                 expr_int.transmute_to(overall_t, &self.symbol_table)
             }
             (_, ty::Array(_, _)) => {
+                let typ = self.codegen_ty(ty);
                 // we must have zero size array here
                 Expr::struct_expr_from_values(
-                    self.codegen_ty(ty),
-                    vec![Expr::array_expr(self.codegen_ty_raw_array(ty), vec![])],
+                    typ.clone(),
+                    vec![Expr::array_expr(typ, vec![])],
                     &self.symbol_table,
                 )
             }
@@ -464,7 +470,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // crates do not conflict. The name alone is insufficient because Rust
                 // allows different versions of the same crate to be used.
                 let name = format!("{}::{alloc_id:?}", self.full_crate_name());
-                self.codegen_allocation(alloc.inner(), |_| name.clone(), Some(name.clone()))
+                self.codegen_const_allocation(alloc.inner(), Some(name))
             }
             GlobalAlloc::VTable(ty, trait_ref) => {
                 // This is similar to GlobalAlloc::Memory but the type is opaque to rust and it
@@ -472,7 +478,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let alloc_id = self.tcx.vtable_allocation((ty, trait_ref));
                 let alloc = self.tcx.global_alloc(alloc_id).unwrap_memory();
                 let name = format!("{}::{alloc_id:?}", self.full_crate_name());
-                self.codegen_allocation(alloc.inner(), |_| name.clone(), Some(name.clone()))
+                self.codegen_const_allocation(alloc.inner(), Some(name))
             }
         };
         assert!(res_t.is_pointer() || res_t.is_transparent_type(&self.symbol_table));
@@ -530,77 +536,36 @@ impl<'tcx> GotocCtx<'tcx> {
         sym.clone().to_expr().address_of()
     }
 
-    /// `codegen_allocation` but without an `imm_name`
+    /// Generate an expression that represents the address for a constant allocation.
     ///
-    /// TODO: This could use some refactoring. This function is only ever invoked as:
-    /// `self.codegen_allocation_auto_imm_name(alloc, |tcx| tcx.next_global_name())`
-    fn codegen_allocation_auto_imm_name<F: FnOnce(&mut GotocCtx<'tcx>) -> String>(
-        &mut self,
-        alloc: &'tcx Allocation,
-        mut_name: F,
-    ) -> Expr {
-        self.codegen_allocation(alloc, mut_name, None)
-    }
-
-    /// Add a new static allocation to the symbol table (if not already present) and
-    /// generate a goto expression that points to it.
+    /// This function will only allocate a new memory location if necessary. The standard does
+    /// not offer any guarantees over the location of a constant.
     ///
-    /// This is *the* mechanism for generating (and ensuring the intialization of) a global
-    /// (often but not necessarily immutable) variable in the symbol table.
-    ///
-    /// We need to codegen allocations from two sources:
-    /// 1. `codegen_static` which supplies the initialization code for top-level statics.
-    /// 2. Constants, scattered throughout the source, which need to be initialized statically,
-    /// so those functions can reference them. (These should always be immutable.)
-    /// (These also require de-duplication.)
-    ///
-    /// TODO: This function could use some refactoring. Outside of `codegen_allocation_auto_imm_name`
-    /// above, this function is only ever invoked as:
-    /// `self.codegen_allocation(alloc, |_| name.clone(), Some(name.clone()))`
-    pub fn codegen_allocation<F: FnOnce(&mut GotocCtx<'tcx>) -> String>(
-        &mut self,
-        alloc: &'tcx Allocation,
-        mut_name: F,
-        imm_name: Option<String>,
-    ) -> Expr {
-        debug!("codegen_allocation imm_name {:?}", imm_name);
-        let mem_var = match alloc.mutability {
-            Mutability::Mut => {
-                let name = mut_name(self);
-                self.codegen_alloc_in_memory(alloc, name.clone());
-                // here we know name must be in the symbol table
-                self.symbol_table.lookup(&name).unwrap().clone().to_expr()
-            }
-            Mutability::Not => self.codegen_immutable_allocation(alloc, imm_name),
-        };
-        mem_var.address_of()
-    }
-
-    /// Generate a goto expression for an immutable (constant) allocation.
-    ///
-    /// This function's primary purpose is to de-duplicate immutable global constants.
-    /// If it already has been codegen'd, use that.
-    /// If not, we otherwise proceed identically to the mutable case and call `codegen_alloc_in_memory`
-    fn codegen_immutable_allocation(
-        &mut self,
-        alloc: &'tcx Allocation,
-        name: Option<String>,
-    ) -> Expr {
+    /// These constants can be named constants which are declared by the user, or constant values
+    /// used scattered throughout the source
+    fn codegen_const_allocation(&mut self, alloc: &'tcx Allocation, name: Option<String>) -> Expr {
+        debug!(?name, "codegen_const_allocation");
+        assert_eq!(
+            alloc.mutability,
+            Mutability::Not,
+            "Expected constant allocation for `{name:?}`, but got a mutable instead"
+        );
         if !self.alloc_map.contains_key(&alloc) {
             let name = if let Some(name) = name { name } else { self.next_global_name() };
             self.codegen_alloc_in_memory(alloc, name);
         }
 
-        self.symbol_table.lookup(&self.alloc_map.get(&alloc).unwrap()).unwrap().to_expr()
+        let mem_place =
+            self.symbol_table.lookup(&self.alloc_map.get(&alloc).unwrap()).unwrap().to_expr();
+        mem_place.address_of()
     }
 
     /// Insert an allocation into the goto symbol table, and generate a goto function that will
     /// initialize it.
     ///
     /// This function is ultimately responsible for creating new statically initialized global variables
-    /// in our goto binaries. These may be actual (potentially mutable) globals or (more often) constants
-    /// that were encountered during code generation (that are of course immutable).
-    fn codegen_alloc_in_memory(&mut self, alloc: &'tcx Allocation, name: String) {
+    /// in our goto binaries.
+    pub fn codegen_alloc_in_memory(&mut self, alloc: &'tcx Allocation, name: String) {
         debug!("codegen_alloc_in_memory name: {}", name);
         let struct_name = &format!("{name}::struct");
 
@@ -728,11 +693,11 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_fndef(
         &mut self,
         d: DefId,
-        substs: ty::subst::SubstsRef<'tcx>,
+        args: ty::GenericArgsRef<'tcx>,
         span: Option<&Span>,
     ) -> Expr {
         let instance =
-            Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), d, substs).unwrap().unwrap();
+            Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), d, args).unwrap().unwrap();
         self.codegen_fn_item(instance, span)
     }
 
@@ -743,19 +708,18 @@ impl<'tcx> GotocCtx<'tcx> {
     /// sometimes subtly differs from the type that codegen_function_sig returns.
     /// This is tracked in <https://github.com/model-checking/kani/issues/1350>.
     fn codegen_func_symbol(&mut self, instance: Instance<'tcx>) -> (&Symbol, Type) {
-        let func = self.symbol_name(instance);
         let funct = self.codegen_function_sig(self.fn_sig_of_instance(instance));
-        // make sure the functions imported from other modules (or externs) are in the symbol table
-        let sym = self.ensure(&func, |ctx, _| {
-            Symbol::function(
-                &func,
-                funct.clone(),
-                None,
-                ctx.readable_instance_name(instance),
-                Location::none(),
-            )
-            .with_is_extern(true)
-        });
+        let sym = if self.tcx.is_foreign_item(instance.def_id()) {
+            // Get the symbol that represents a foreign instance.
+            self.codegen_foreign_fn(instance)
+        } else {
+            // All non-foreign functions should've been declared beforehand.
+            trace!(func=?instance, "codegen_func_symbol");
+            let func = self.symbol_name(instance);
+            self.symbol_table
+                .lookup(func)
+                .expect("Function `{func}` should've been declared before usage")
+        };
         (sym, funct)
     }
 

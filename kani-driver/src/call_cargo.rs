@@ -1,11 +1,11 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use crate::args::KaniArgs;
+use crate::args::VerificationArgs;
 use crate::call_single_file::to_rustc_arg;
 use crate::project::Artifact;
 use crate::session::KaniSession;
-use crate::util;
+use crate::{session, util};
 use anyhow::{bail, Context, Result};
 use cargo_metadata::diagnostic::{Diagnostic, DiagnosticLevel};
 use cargo_metadata::{Message, Metadata, MetadataCommand, Package, Target};
@@ -14,6 +14,7 @@ use std::ffi::{OsStr, OsString};
 use std::fmt::{self, Display};
 use std::fs::{self, File};
 use std::io::BufReader;
+use std::io::IsTerminal;
 use std::path::PathBuf;
 use std::process::Command;
 use tracing::{debug, trace};
@@ -78,8 +79,7 @@ impl KaniSession {
             cargo_args.push(format!("--features={}", features.join(",")).into());
         }
 
-        cargo_args.push("--target".into());
-        cargo_args.push(build_target.into());
+        cargo_args.append(&mut cargo_config_args());
 
         cargo_args.push("--target-dir".into());
         cargo_args.push(target_dir.into());
@@ -95,7 +95,7 @@ impl KaniSession {
             cargo_args.push("test".into());
         }
 
-        if self.args.verbose {
+        if self.args.common_args.verbose {
             cargo_args.push("-v".into());
         }
 
@@ -110,7 +110,8 @@ impl KaniSession {
         for package in packages {
             for verification_target in package_targets(&self.args, package) {
                 let mut cmd = Command::new("cargo");
-                cmd.args(&cargo_args)
+                cmd.arg(session::toolchain_shorthand())
+                    .args(&cargo_args)
                     .args(vec!["-p", &package.name])
                     .args(&verification_target.to_args())
                     .args(&pkg_args)
@@ -180,7 +181,7 @@ impl KaniSession {
     /// Run cargo and collect any error found.
     /// We also collect the metadata file generated during compilation if any.
     fn run_cargo(&self, cargo_cmd: Command, target: &Target) -> Result<Option<Artifact>> {
-        let support_color = atty::is(atty::Stream::Stdout);
+        let support_color = std::io::stdout().is_terminal();
         let mut artifact = None;
         if let Some(mut cargo_process) = self.run_piped(cargo_cmd)? {
             let reader = BufReader::new(cargo_process.stdout.take().unwrap());
@@ -205,7 +206,7 @@ impl KaniSession {
                             )));
                         }
                         _ => {
-                            if !self.args.quiet {
+                            if !self.args.common_args.quiet {
                                 print_msg(&msg.message, support_color)?;
                             }
                         }
@@ -223,14 +224,14 @@ impl KaniSession {
                         // do nothing
                     }
                     Message::TextLine(msg) => {
-                        if !self.args.quiet {
+                        if !self.args.common_args.quiet {
                             println!("{msg}");
                         }
                     }
 
                     // Non-exhaustive enum.
                     _ => {
-                        if !self.args.quiet {
+                        if !self.args.common_args.quiet {
                             println!("{message:?}");
                         }
                     }
@@ -249,6 +250,19 @@ impl KaniSession {
         // for the last compiler artifact.
         Ok(artifact.and_then(map_kani_artifact))
     }
+}
+
+pub fn cargo_config_args() -> Vec<OsString> {
+    [
+        "--target",
+        env!("TARGET"),
+        // Propagate `--cfg=kani` to build scripts.
+        "-Zhost-config",
+        "-Ztarget-applies-to-host",
+        "--config=host.rustflags=[\"--cfg=kani\"]",
+    ]
+    .map(OsString::from)
+    .to_vec()
 }
 
 /// Print the compiler message following the coloring schema.
@@ -292,7 +306,10 @@ fn validate_package_names(package_names: &[String], packages: &[Package]) -> Res
 /// In addition, if either `--package <pkg>` or `--exclude <pkg>` is given,
 /// validate that `<pkg>` is a package name in the workspace, or return an error
 /// otherwise.
-fn packages_to_verify<'b>(args: &KaniArgs, metadata: &'b Metadata) -> Result<Vec<&'b Package>> {
+fn packages_to_verify<'b>(
+    args: &VerificationArgs,
+    metadata: &'b Metadata,
+) -> Result<Vec<&'b Package>> {
     debug!(package_selection=?args.cargo.package, package_exclusion=?args.cargo.exclude, workspace=args.cargo.workspace, "packages_to_verify args");
     let packages = if !args.cargo.package.is_empty() {
         validate_package_names(&args.cargo.package, &metadata.packages)?;
@@ -329,8 +346,7 @@ fn map_kani_artifact(rustc_artifact: cargo_metadata::Artifact) -> Option<Artifac
     let result = rustc_artifact.filenames.iter().find_map(|path| {
         if path.extension() == Some("rmeta") {
             let file_stem = path.file_stem()?.strip_prefix("lib")?;
-            let parent =
-                path.parent().map(|p| p.as_std_path().to_path_buf()).unwrap_or(PathBuf::new());
+            let parent = path.parent().map(|p| p.as_std_path().to_path_buf()).unwrap_or_default();
             let mut meta_path = parent.join(file_stem);
             meta_path.set_extension(ArtifactType::Metadata);
             trace!(rmeta=?path, kani_meta=?meta_path.display(), "map_kani_artifact");
@@ -403,7 +419,7 @@ impl Display for VerificationTarget {
 /// The documentation for `crate-type` explicitly states that the only time `kind` and
 /// `crate-type` differs is for examples.
 /// <https://docs.rs/cargo_metadata/0.15.0/cargo_metadata/struct.Target.html#structfield.crate_types>
-fn package_targets(args: &KaniArgs, package: &Package) -> Vec<VerificationTarget> {
+fn package_targets(args: &VerificationArgs, package: &Package) -> Vec<VerificationTarget> {
     let mut ignored_tests = vec![];
     let mut ignored_unsupported = vec![];
     let mut verification_targets = vec![];
@@ -415,23 +431,31 @@ fn package_targets(args: &KaniArgs, package: &Package) -> Vec<VerificationTarget
         for kind in &target.kind {
             match kind.as_str() {
                 CRATE_TYPE_BIN => {
-                    // Binary targets.
-                    verification_targets.push(VerificationTarget::Bin(target.clone()));
+                    if args.target.include_bin(&target.name) {
+                        // Binary targets.
+                        verification_targets.push(VerificationTarget::Bin(target.clone()));
+                    }
                 }
                 CRATE_TYPE_LIB | CRATE_TYPE_RLIB | CRATE_TYPE_CDYLIB | CRATE_TYPE_DYLIB
                 | CRATE_TYPE_STATICLIB => {
-                    supported_lib = true;
+                    if args.target.include_lib() {
+                        supported_lib = true;
+                    }
                 }
                 CRATE_TYPE_PROC_MACRO => {
-                    unsupported_lib = true;
-                    ignored_unsupported.push(target.name.as_str());
+                    if args.target.include_lib() {
+                        unsupported_lib = true;
+                        ignored_unsupported.push(target.name.as_str());
+                    }
                 }
                 CRATE_TYPE_TEST => {
                     // Test target.
-                    if args.tests {
-                        verification_targets.push(VerificationTarget::Test(target.clone()));
-                    } else {
-                        ignored_tests.push(target.name.as_str());
+                    if args.target.include_tests() {
+                        if args.tests {
+                            verification_targets.push(VerificationTarget::Test(target.clone()));
+                        } else {
+                            ignored_tests.push(target.name.as_str());
+                        }
                     }
                 }
                 _ => {
@@ -450,7 +474,7 @@ fn package_targets(args: &KaniArgs, package: &Package) -> Vec<VerificationTarget
         }
     }
 
-    if args.verbose {
+    if args.common_args.verbose {
         // Print targets that were skipped only on verbose mode.
         if !ignored_tests.is_empty() {
             println!("Skipped the following test targets: '{}'.", ignored_tests.join("', '"));

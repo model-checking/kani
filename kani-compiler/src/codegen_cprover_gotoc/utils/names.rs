@@ -34,6 +34,10 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
+    pub fn is_user_variable(&self, var: &Local) -> bool {
+        self.find_debug_info(var).is_some()
+    }
+
     // Special naming conventions for parameters that are spread from a tuple
     // into its individual components at the LLVM level, see comment at
     // compiler/rustc_codegen_llvm/src/gotoc/mod.rs:codegen_function_prelude
@@ -50,43 +54,25 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// A human readable name in Rust for reference, should not be used as a key.
     pub fn readable_instance_name(&self, instance: Instance<'tcx>) -> String {
-        with_no_trimmed_paths!(
-            self.tcx.def_path_str_with_substs(instance.def_id(), instance.substs)
-        )
+        with_no_trimmed_paths!(self.tcx.def_path_str_with_args(instance.def_id(), instance.args))
     }
 
     /// The actual function name used in the symbol table
     pub fn symbol_name(&self, instance: Instance<'tcx>) -> String {
         let llvm_mangled = self.tcx.symbol_name(instance).name.to_string();
         debug!(
-            "finding function name for instance: {}, debug: {:?}, name: {}, symbol: {}, demangle: {}",
+            "finding function name for instance: {}, debug: {:?}, name: {}, symbol: {}",
             instance,
             instance,
             self.readable_instance_name(instance),
             llvm_mangled,
-            rustc_demangle::demangle(&llvm_mangled).to_string()
         );
 
         let pretty = self.readable_instance_name(instance);
 
-        // Make main function a special case for easy CBMC entry
-        // TODO: probably need to edit for https://github.com/model-checking/kani/issues/169
-        if pretty == "main" {
-            "main".to_string()
-        } else {
-            // TODO: llvm mangled string is not very readable. one way to tackle this is to
-            // demangle it. but the demangled string has no generic info.
-            // the best scenario is to use v0 mangler, but this is not default at this moment.
-            // this is the kind of tiny but annoying issue.
-            // c.f. https://github.com/rust-lang/rust/issues/60705
-            //
-            // the following solution won't work pretty:
-            // match self.tcx.sess.opts.debugging_opts.symbol_mangling_version {
-            //     SymbolManglingVersion::Legacy => llvm_mangled,
-            //     SymbolManglingVersion::V0 => rustc_demangle::demangle(llvm_mangled.as_str()).to_string(),
-            // }
-            llvm_mangled
-        }
+        // Make main function a special case in order to support `--function main`
+        // TODO: Get rid of this: https://github.com/model-checking/kani/issues/2129
+        if pretty == "main" { pretty } else { llvm_mangled }
     }
 
     /// The name for a tuple field

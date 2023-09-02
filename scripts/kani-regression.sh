@@ -19,29 +19,27 @@ KANI_DIR=$SCRIPT_DIR/..
 export KANI_FAIL_ON_UNEXPECTED_DESCRIPTION="true"
 
 # Required dependencies
-check-cbmc-version.py --major 5 --minor 81
+check-cbmc-version.py --major 5 --minor 90
 check-cbmc-viewer-version.py --major 3 --minor 8
 check_kissat_version.sh
 
 # Formatting check
 ${SCRIPT_DIR}/kani-fmt.sh --check
 
-# Build all packages in the workspace
-if [[ "" != "${KANI_ENABLE_WRITE_JSON_SYMTAB-}" ]]; then
-  cargo build-dev -- --features write_json_symtab
-else
-  cargo build-dev
-fi
+# Build all packages in the workspace and ensure no warning is emitted.
+RUSTFLAGS="-D warnings" cargo build-dev
 
 # Unit tests
 cargo test -p cprover_bindings
 cargo test -p kani-compiler
 cargo test -p kani-driver
 cargo test -p kani_metadata
+cargo test -p kani --lib # skip doc tests.
 
 # Declare testing suite information (suite and mode)
 TESTS=(
     "script-based-pre exec"
+    "coverage coverage-based"
     "kani kani"
     "expected expected"
     "ui expected"

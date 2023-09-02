@@ -1,0 +1,49 @@
+Checking harness check_remainder...
+
+RESULTS:
+check_remainder.assertion\
+Status: FAILURE\
+Description: "attempt to calculate the remainder with a divisor of zero"
+
+check_remainder.assertion\
+Status: FAILURE\
+Description: "attempt to calculate the remainder with overflow"
+
+check_remainder.arithmetic_overflow\
+Status: SUCCESS\
+Description: "attempt to calculate the remainder with overflow"
+
+check_remainder.arithmetic_overflow\
+Status: SUCCESS\
+Description: "attempt to calculate the remainder with a divisor of zero"
+
+check_remainder.division-by-zero\
+Status: SUCCESS\
+Description: "division by zero"
+
+Failed Checks: attempt to calculate the remainder with a divisor of zero
+Failed Checks: attempt to calculate the remainder with overflow
+
+Checking harness check_division...
+check_division.assertion\
+Status: FAILURE\
+Description: "attempt to divide by zero"
+
+check_division.assertion\
+Status: FAILURE\
+Description: "attempt to divide with overflow"
+
+check_division.arithmetic_overflow\
+Status: SUCCESS\
+Description: "attempt to divide with overflow"
+
+check_division.arithmetic_overflow\
+Status: SUCCESS\
+Description: "attempt to divide by zero"
+
+check_division.division-by-zero\
+Status: SUCCESS\
+Description: "division by zero"
+
+Failed Checks: attempt to divide by zero
+Failed Checks: attempt to divide with overflow

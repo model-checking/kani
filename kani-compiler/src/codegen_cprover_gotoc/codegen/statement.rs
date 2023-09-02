@@ -86,6 +86,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     location,
                 )
             }
+            StatementKind::PlaceMention(_) => todo!(),
             StatementKind::FakeRead(_)
             | StatementKind::Retag(_, _)
             | StatementKind::AscribeUserType(_, _)
@@ -117,13 +118,13 @@ impl<'tcx> GotocCtx<'tcx> {
             // because we don't want to raise the warning during compilation.
             // These operations will normally be codegen'd but normally be unreachable
             // since we make use of `-C unwind=abort`.
-            TerminatorKind::Resume => self.codegen_mimic_unimplemented(
+            TerminatorKind::UnwindResume => self.codegen_mimic_unimplemented(
                 "TerminatorKind::Resume",
                 loc,
                 "https://github.com/model-checking/kani/issues/692",
             ),
-            TerminatorKind::Abort => self.codegen_mimic_unimplemented(
-                "TerminatorKind::Abort",
+            TerminatorKind::UnwindTerminate(_) => self.codegen_mimic_unimplemented(
+                "TerminatorKind::UnwindTerminate",
                 loc,
                 "https://github.com/model-checking/kani/issues/692",
             ),
@@ -148,7 +149,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 "unreachable code",
                 loc,
             ),
-            TerminatorKind::Drop { place, target, unwind: _ } => {
+            TerminatorKind::Drop { place, target, unwind: _, replace: _ } => {
                 self.codegen_drop(place, target, loc)
             }
             TerminatorKind::Call { func, args, destination, target, .. } => {
@@ -160,11 +161,15 @@ impl<'tcx> GotocCtx<'tcx> {
                     if *expected { r } else { Expr::not(r) }
                 };
 
-                let msg = if let AssertKind::BoundsCheck { .. } = msg {
+                let msg = if let AssertKind::BoundsCheck { .. } = &**msg {
                     // For bounds check the following panic message is generated at runtime:
                     // "index out of bounds: the length is {len} but the index is {index}",
                     // but CBMC only accepts static messages so we don't add values to the message.
                     "index out of bounds: the length is less than or equal to the given index"
+                } else if let AssertKind::MisalignedPointerDereference { .. } = &**msg {
+                    // Misaligned pointer dereference check messages is also a runtime messages.
+                    // Generate a generic one here.
+                    "misaligned pointer dereference: address must be a multiple of its type's alignment"
                 } else {
                     // For all other assert kind we can get the static message.
                     msg.description()
@@ -187,9 +192,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     loc,
                 )
             }
-            TerminatorKind::DropAndReplace { .. }
-            | TerminatorKind::FalseEdge { .. }
-            | TerminatorKind::FalseUnwind { .. } => {
+            TerminatorKind::FalseEdge { .. } | TerminatorKind::FalseUnwind { .. } => {
                 unreachable!("drop elaboration removes these TerminatorKind")
             }
             TerminatorKind::Yield { .. } | TerminatorKind::GeneratorDrop => {
@@ -232,19 +235,23 @@ impl<'tcx> GotocCtx<'tcx> {
                     // DISCRIMINANT - val:255 ty:i8
                     // DISCRIMINANT - val:0 ty:i8
                     // DISCRIMINANT - val:1 ty:i8
-                    let discr = Expr::int_constant(discr.val, self.codegen_ty(discr_t));
-                    self.codegen_discriminant_field(dest_expr, dest_ty).assign(discr, location)
+                    trace!(?discr, ?discr_t, ?dest_ty, "codegen_set_discriminant direct");
+                    // The discr.ty doesn't always match the tag type. Explicitly cast if needed.
+                    let discr_expr = Expr::int_constant(discr.val, self.codegen_ty(discr.ty))
+                        .cast_to(self.codegen_ty(discr_t));
+                    self.codegen_discriminant_field(dest_expr, dest_ty).assign(discr_expr, location)
                 }
                 TagEncoding::Niche { untagged_variant, niche_variants, niche_start } => {
                     if *untagged_variant != variant_index {
                         let offset = match &layout.fields {
-                            FieldsShape::Arbitrary { offsets, .. } => offsets[0],
+                            FieldsShape::Arbitrary { offsets, .. } => offsets[0usize.into()],
                             _ => unreachable!("niche encoding must have arbitrary fields"),
                         };
                         let discr_ty = self.codegen_enum_discr_typ(dest_ty);
                         let discr_ty = self.codegen_ty(discr_ty);
                         let niche_value = variant_index.as_u32() - niche_variants.start().as_u32();
                         let niche_value = (niche_value as u128).wrapping_add(*niche_start);
+                        trace!(val=?niche_value, typ=?discr_ty, "codegen_set_discriminant niche");
                         let value = if niche_value == 0
                             && matches!(tag.primitive(), Primitive::Pointer(_))
                         {
@@ -548,6 +555,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     // Normal, non-virtual function calls
                     InstanceDef::Item(..)
                     | InstanceDef::DropGlue(_, Some(_))
+                    | InstanceDef::FnPtrAddrShim(_, _)
                     | InstanceDef::Intrinsic(..)
                     | InstanceDef::FnPtrShim(..)
                     | InstanceDef::VTableShim(..)
@@ -562,6 +570,7 @@ impl<'tcx> GotocCtx<'tcx> {
                                 .with_location(loc),
                         ]
                     }
+                    InstanceDef::ThreadLocalShim(_) => todo!(),
                 };
                 stmts.push(self.codegen_end_call(target.as_ref(), loc));
                 Stmt::block(stmts, loc)

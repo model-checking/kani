@@ -10,12 +10,17 @@ use crate::kani_middle::coercion::{
     extract_unsize_casting, CoerceUnsizedInfo, CoerceUnsizedIterator, CoercionBase,
 };
 use crate::unwrap_or_return_codegen_unimplemented;
-use cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
+use cbmc::goto_program::{
+    arithmetic_overflow_result_type, BinaryOperator, Expr, Location, Stmt, Symbol, Type,
+    ARITH_OVERFLOW_OVERFLOWED_FIELD, ARITH_OVERFLOW_RESULT_FIELD,
+};
 use cbmc::MachineModel;
 use cbmc::{btree_string_map, InternString, InternedString};
 use num::bigint::BigInt;
+use rustc_abi::FieldIdx;
+use rustc_index::IndexVec;
 use rustc_middle::mir::{AggregateKind, BinOp, CastKind, NullOp, Operand, Place, Rvalue, UnOp};
-use rustc_middle::ty::adjustment::PointerCast;
+use rustc_middle::ty::adjustment::PointerCoercion;
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{self, Instance, IntTy, Ty, TyCtxt, UintTy, VtblEntry};
 use rustc_target::abi::{FieldsShape, Size, TagEncoding, VariantIdx, Variants};
@@ -111,6 +116,14 @@ impl<'tcx> GotocCtx<'tcx> {
             BinOp::BitXor => ce1.bitxor(ce2),
             BinOp::Div => ce1.div(ce2),
             BinOp::Rem => ce1.rem(ce2),
+            BinOp::ShlUnchecked => ce1.shl(ce2),
+            BinOp::ShrUnchecked => {
+                if self.operand_ty(e1).is_signed() {
+                    ce1.ashr(ce2)
+                } else {
+                    ce1.lshr(ce2)
+                }
+            }
             _ => unreachable!("Unexpected {:?}", op),
         }
     }
@@ -139,18 +152,11 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         op: &Operand<'tcx>,
         sz: ty::Const<'tcx>,
-        res_ty: Ty<'tcx>,
         loc: Location,
     ) -> Expr {
-        let res_t = self.codegen_ty(res_ty);
         let op_expr = self.codegen_operand(op);
         let width = sz.try_eval_target_usize(self.tcx, ty::ParamEnv::reveal_all()).unwrap();
-        Expr::struct_expr(
-            res_t,
-            btree_string_map![("0", op_expr.array_constant(width))],
-            &self.symbol_table,
-        )
-        .with_location(loc)
+        op_expr.array_constant(width).with_location(loc)
     }
 
     fn codegen_rvalue_len(&mut self, p: &Place<'tcx>) -> Expr {
@@ -165,6 +171,83 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
+    /// Generate code for a binary operation with an overflow check.
+    fn codegen_binop_with_overflow_check(
+        &mut self,
+        op: &BinOp,
+        left_op: &Operand<'tcx>,
+        right_op: &Operand<'tcx>,
+        loc: Location,
+    ) -> Expr {
+        debug!(?op, "codegen_binop_with_overflow_check");
+        let left = self.codegen_operand(left_op);
+        let right = self.codegen_operand(right_op);
+        let ret_type = left.typ().clone();
+        let (bin_op, op_name) = match op {
+            BinOp::AddUnchecked => (BinaryOperator::OverflowResultPlus, "unchecked_add"),
+            BinOp::SubUnchecked => (BinaryOperator::OverflowResultMinus, "unchecked_sub"),
+            BinOp::MulUnchecked => (BinaryOperator::OverflowResultMult, "unchecked_mul"),
+            _ => unreachable!("Expected Add/Sub/Mul but got {op:?}"),
+        };
+        // Create CBMC result type and add to the symbol table.
+        let res_type = arithmetic_overflow_result_type(left.typ().clone());
+        let tag = res_type.tag().unwrap();
+        let struct_tag =
+            self.ensure_struct(tag, tag, |_, _| res_type.components().unwrap().clone());
+        let res = left.overflow_op(bin_op, right);
+        // store the result in a temporary variable
+        let (var, decl) = self.decl_temp_variable(struct_tag, Some(res), loc);
+        // cast into result type
+        let check = self.codegen_assert(
+            var.clone()
+                .member(ARITH_OVERFLOW_OVERFLOWED_FIELD, &self.symbol_table)
+                .cast_to(Type::c_bool())
+                .not(),
+            PropertyClass::ArithmeticOverflow,
+            format!("attempt to compute `{op_name}` which would overflow").as_str(),
+            loc,
+        );
+        Expr::statement_expression(
+            vec![
+                decl,
+                check,
+                var.member(ARITH_OVERFLOW_RESULT_FIELD, &self.symbol_table).as_stmt(loc),
+            ],
+            ret_type,
+        )
+    }
+
+    /// Generate code for a binary operation with an overflow and returns a tuple (res, overflow).
+    pub fn codegen_binop_with_overflow(
+        &mut self,
+        bin_op: BinaryOperator,
+        left: Expr,
+        right: Expr,
+        expected_typ: Type,
+        loc: Location,
+    ) -> Expr {
+        // Create CBMC result type and add to the symbol table.
+        let res_type = arithmetic_overflow_result_type(left.typ().clone());
+        let tag = res_type.tag().unwrap();
+        let struct_tag =
+            self.ensure_struct(tag, tag, |_, _| res_type.components().unwrap().clone());
+        let res = left.overflow_op(bin_op, right);
+        // store the result in a temporary variable
+        let (var, decl) = self.decl_temp_variable(struct_tag, Some(res), loc);
+        // cast into result type
+        let cast = Expr::struct_expr_from_values(
+            expected_typ.clone(),
+            vec![
+                var.clone().member(ARITH_OVERFLOW_RESULT_FIELD, &self.symbol_table),
+                var.member(ARITH_OVERFLOW_OVERFLOWED_FIELD, &self.symbol_table)
+                    .cast_to(Type::c_bool()),
+            ],
+            &self.symbol_table,
+        );
+        Expr::statement_expression(vec![decl, cast.as_stmt(loc)], expected_typ)
+    }
+
+    /// Generate code for a binary arithmetic operation with UB / overflow checks in place.
     fn codegen_rvalue_checked_binary_op(
         &mut self,
         op: &BinOp,
@@ -199,27 +282,33 @@ impl<'tcx> GotocCtx<'tcx> {
 
         match op {
             BinOp::Add => {
-                let res = ce1.add_overflow(ce2);
-                Expr::struct_expr_from_values(
-                    self.codegen_ty(res_ty),
-                    vec![res.result, res.overflowed.cast_to(Type::c_bool())],
-                    &self.symbol_table,
+                let res_type = self.codegen_ty(res_ty);
+                self.codegen_binop_with_overflow(
+                    BinaryOperator::OverflowResultPlus,
+                    ce1,
+                    ce2,
+                    res_type,
+                    Location::None,
                 )
             }
             BinOp::Sub => {
-                let res = ce1.sub_overflow(ce2);
-                Expr::struct_expr_from_values(
-                    self.codegen_ty(res_ty),
-                    vec![res.result, res.overflowed.cast_to(Type::c_bool())],
-                    &self.symbol_table,
+                let res_type = self.codegen_ty(res_ty);
+                self.codegen_binop_with_overflow(
+                    BinaryOperator::OverflowResultMinus,
+                    ce1,
+                    ce2,
+                    res_type,
+                    Location::None,
                 )
             }
             BinOp::Mul => {
-                let res = ce1.mul_overflow(ce2);
-                Expr::struct_expr_from_values(
-                    self.codegen_ty(res_ty),
-                    vec![res.result, res.overflowed.cast_to(Type::c_bool())],
-                    &self.symbol_table,
+                let res_type = self.codegen_ty(res_ty);
+                self.codegen_binop_with_overflow(
+                    BinaryOperator::OverflowResultMult,
+                    ce1,
+                    ce2,
+                    res_type,
+                    Location::None,
                 )
             }
             BinOp::Shl => {
@@ -252,6 +341,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     fn codegen_rvalue_binary_op(
         &mut self,
+        ty: Ty<'tcx>,
         op: &BinOp,
         e1: &Operand<'tcx>,
         e2: &Operand<'tcx>,
@@ -261,7 +351,31 @@ impl<'tcx> GotocCtx<'tcx> {
             BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Shl | BinOp::Shr => {
                 self.codegen_scalar_binop(op, e1, e2)
             }
-            BinOp::Div | BinOp::Rem | BinOp::BitXor | BinOp::BitAnd | BinOp::BitOr => {
+            BinOp::ShlUnchecked | BinOp::ShrUnchecked => {
+                let result = self.codegen_unchecked_scalar_binop(op, e1, e2);
+                let check = self.check_unchecked_shift_distance(e1, e2, loc);
+                Expr::statement_expression(
+                    vec![check, result.clone().as_stmt(loc)],
+                    result.typ().clone(),
+                )
+            }
+            BinOp::AddUnchecked | BinOp::MulUnchecked | BinOp::SubUnchecked => {
+                self.codegen_binop_with_overflow_check(op, e1, e2, loc)
+            }
+            BinOp::Div | BinOp::Rem => {
+                let result = self.codegen_unchecked_scalar_binop(op, e1, e2);
+                if self.operand_ty(e1).is_integral() {
+                    let is_rem = matches!(op, BinOp::Rem);
+                    let check = self.check_div_overflow(e1, e2, is_rem, loc);
+                    Expr::statement_expression(
+                        vec![check, result.clone().as_stmt(loc)],
+                        result.typ().clone(),
+                    )
+                } else {
+                    result
+                }
+            }
+            BinOp::BitXor | BinOp::BitAnd | BinOp::BitOr => {
                 self.codegen_unchecked_scalar_binop(op, e1, e2)
             }
             BinOp::Eq | BinOp::Lt | BinOp::Le | BinOp::Ne | BinOp::Ge | BinOp::Gt => {
@@ -275,13 +389,122 @@ impl<'tcx> GotocCtx<'tcx> {
             BinOp::Offset => {
                 let ce1 = self.codegen_operand(e1);
                 let ce2 = self.codegen_operand(e2);
-                ce1.plus(ce2)
+
+                // Check that computing `offset` in bytes would not overflow
+                let (offset_bytes, bytes_overflow_check) = self.count_in_bytes(
+                    ce2.clone().cast_to(Type::ssize_t()),
+                    ty,
+                    Type::ssize_t(),
+                    "offset",
+                    loc,
+                );
+
+                // Check that the computation would not overflow an `isize` which is UB:
+                // https://doc.rust-lang.org/std/primitive.pointer.html#method.offset
+                // These checks may allow a wrapping-around behavior in CBMC:
+                // https://github.com/model-checking/kani/issues/1150
+                let overflow_res = ce1.clone().cast_to(Type::ssize_t()).add_overflow(offset_bytes);
+                let overflow_check = self.codegen_assert_assume(
+                    overflow_res.overflowed.not(),
+                    PropertyClass::ArithmeticOverflow,
+                    "attempt to compute offset which would overflow",
+                    loc,
+                );
+                let res = ce1.clone().plus(ce2);
+                Expr::statement_expression(
+                    vec![bytes_overflow_check, overflow_check, res.as_stmt(loc)],
+                    ce1.typ().clone(),
+                )
             }
         }
     }
 
+    /// Check that a division does not overflow.
+    /// For integer types, division by zero is UB, as is MIN / -1 for signed.
+    /// Note that the compiler already inserts these checks for regular division.
+    /// However, since <https://github.com/rust-lang/rust/pull/112168>, unchecked divisions are
+    /// lowered to `BinOp::Div`. Prefer adding duplicated checks for now.
+    fn check_div_overflow(
+        &mut self,
+        dividend: &Operand<'tcx>,
+        divisor: &Operand<'tcx>,
+        is_remainder: bool,
+        loc: Location,
+    ) -> Stmt {
+        let divisor_expr = self.codegen_operand(divisor);
+        let msg = if is_remainder {
+            "attempt to calculate the remainder with a divisor of zero"
+        } else {
+            "attempt to divide by zero"
+        };
+        let div_by_zero_check = self.codegen_assert_assume(
+            divisor_expr.clone().is_zero().not(),
+            PropertyClass::ArithmeticOverflow,
+            msg,
+            loc,
+        );
+        if self.operand_ty(dividend).is_signed() {
+            let dividend_expr = self.codegen_operand(dividend);
+            let overflow_msg = if is_remainder {
+                "attempt to calculate the remainder with overflow"
+            } else {
+                "attempt to divide with overflow"
+            };
+            let overflow_expr = dividend_expr
+                .clone()
+                .eq(dividend_expr.typ().min_int_expr(self.symbol_table.machine_model()))
+                .and(divisor_expr.clone().eq(Expr::int_constant(-1, divisor_expr.typ().clone())));
+            let overflow_check = self.codegen_assert_assume(
+                overflow_expr.not(),
+                PropertyClass::ArithmeticOverflow,
+                overflow_msg,
+                loc,
+            );
+            Stmt::block(vec![overflow_check, div_by_zero_check], loc)
+        } else {
+            div_by_zero_check
+        }
+    }
+
+    /// Check for valid unchecked shift distance.
+    /// Shifts on an integer of type T are UB if shift distance < 0 or >= T::BITS.
+    fn check_unchecked_shift_distance(
+        &mut self,
+        value: &Operand<'tcx>,
+        distance: &Operand<'tcx>,
+        loc: Location,
+    ) -> Stmt {
+        let value_expr = self.codegen_operand(value);
+        let distance_expr = self.codegen_operand(distance);
+        let value_width = value_expr.typ().sizeof_in_bits(&self.symbol_table);
+        let value_width_expr = Expr::int_constant(value_width, distance_expr.typ().clone());
+
+        let excessive_distance_check = self.codegen_assert_assume(
+            distance_expr.clone().lt(value_width_expr),
+            PropertyClass::ArithmeticOverflow,
+            "attempt to shift by excessive shift distance",
+            loc,
+        );
+
+        if distance_expr.typ().is_signed(self.symbol_table.machine_model()) {
+            let negative_distance_check = self.codegen_assert_assume(
+                distance_expr.is_non_negative(),
+                PropertyClass::ArithmeticOverflow,
+                "attempt to shift by negative distance",
+                loc,
+            );
+            Stmt::block(vec![negative_distance_check, excessive_distance_check], loc)
+        } else {
+            excessive_distance_check
+        }
+    }
+
     /// Create an initializer for a generator struct.
-    fn codegen_rvalue_generator(&mut self, operands: &[Operand<'tcx>], ty: Ty<'tcx>) -> Expr {
+    fn codegen_rvalue_generator(
+        &mut self,
+        operands: &IndexVec<FieldIdx, Operand<'tcx>>,
+        ty: Ty<'tcx>,
+    ) -> Expr {
         let layout = self.layout_of(ty);
         let discriminant_field = match &layout.variants {
             Variants::Multiple { tag_encoding: TagEncoding::Direct, tag_field, .. } => tag_field,
@@ -291,7 +514,6 @@ impl<'tcx> GotocCtx<'tcx> {
         };
         let overall_t = self.codegen_ty(ty);
         let direct_fields = overall_t.lookup_field("direct_fields", &self.symbol_table).unwrap();
-        let mut operands_iter = operands.iter();
         let direct_fields_expr = Expr::struct_expr_from_values(
             direct_fields.typ(),
             layout
@@ -302,13 +524,12 @@ impl<'tcx> GotocCtx<'tcx> {
                     if idx == *discriminant_field {
                         Expr::int_constant(0, self.codegen_ty(field_ty))
                     } else {
-                        self.codegen_operand(operands_iter.next().unwrap())
+                        self.codegen_operand(&operands[idx.into()])
                     }
                 })
                 .collect(),
             &self.symbol_table,
         );
-        assert!(operands_iter.next().is_none());
         Expr::union_expr(overall_t, "direct_fields", direct_fields_expr, &self.symbol_table)
     }
 
@@ -320,7 +541,7 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_rvalue_enum_aggregate(
         &mut self,
         variant_index: VariantIdx,
-        operands: &[Operand<'tcx>],
+        operands: &IndexVec<FieldIdx, Operand<'tcx>>,
         res_ty: Ty<'tcx>,
         loc: Location,
     ) -> Expr {
@@ -362,7 +583,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 variant_expr.typ().clone(),
                 fields
                     .index_by_increasing_offset()
-                    .map(|idx| self.codegen_operand(&operands[idx]))
+                    .map(|idx| self.codegen_operand(&operands[idx.into()]))
                     .collect(),
                 &self.symbol_table,
             );
@@ -381,28 +602,14 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_rvalue_aggregate(
         &mut self,
         aggregate: &AggregateKind<'tcx>,
-        operands: &[Operand<'tcx>],
+        operands: &IndexVec<FieldIdx, Operand<'tcx>>,
         res_ty: Ty<'tcx>,
         loc: Location,
     ) -> Expr {
         match *aggregate {
-            AggregateKind::Array(et) => {
-                if et.is_unit() {
-                    Expr::struct_expr_from_values(
-                        self.codegen_ty(res_ty),
-                        vec![],
-                        &self.symbol_table,
-                    )
-                } else {
-                    Expr::struct_expr_from_values(
-                        self.codegen_ty(res_ty),
-                        vec![Expr::array_expr(
-                            self.codegen_ty_raw_array(res_ty),
-                            operands.iter().map(|o| self.codegen_operand(o)).collect(),
-                        )],
-                        &self.symbol_table,
-                    )
-                }
+            AggregateKind::Array(_et) => {
+                let typ = self.codegen_ty(res_ty);
+                Expr::array_expr(typ, operands.iter().map(|o| self.codegen_operand(o)).collect())
             }
             AggregateKind::Adt(_, _, _, _, Some(active_field_index)) => {
                 assert!(res_ty.is_union());
@@ -411,32 +618,36 @@ impl<'tcx> GotocCtx<'tcx> {
                 let components = typ.lookup_components(&self.symbol_table).unwrap();
                 Expr::union_expr(
                     typ,
-                    components[active_field_index].name(),
-                    self.codegen_operand(&operands[0]),
+                    components[active_field_index.as_usize()].name(),
+                    self.codegen_operand(&operands[0usize.into()]),
                     &self.symbol_table,
                 )
             }
             AggregateKind::Adt(_, _, _, _, _) if res_ty.is_simd() => {
                 let typ = self.codegen_ty(res_ty);
                 let layout = self.layout_of(res_ty);
-                let vector_element_type = typ.base_type().unwrap().clone();
-                Expr::vector_expr(
-                    typ,
-                    layout
-                        .fields
-                        .index_by_increasing_offset()
-                        .map(|idx| {
-                            let cgo = self.codegen_operand(&operands[idx]);
-                            // The input operand might actually be a one-element array, as seen
-                            // when running assess on firecracker.
-                            if *cgo.typ() == vector_element_type {
-                                cgo
-                            } else {
-                                cgo.transmute_to(vector_element_type.clone(), &self.symbol_table)
-                            }
-                        })
-                        .collect(),
-                )
+                trace!(shape=?layout.fields, "codegen_rvalue_aggregate");
+                assert!(operands.len() > 0, "SIMD vector cannot be empty");
+                if operands.len() == 1 {
+                    let data = self.codegen_operand(&operands[0u32.into()]);
+                    if data.typ().is_array() {
+                        // Array-based SIMD representation.
+                        data.transmute_to(typ, &self.symbol_table)
+                    } else {
+                        // Multi field-based representation with one field.
+                        Expr::vector_expr(typ, vec![data])
+                    }
+                } else {
+                    // Multi field SIMD representation.
+                    Expr::vector_expr(
+                        typ,
+                        layout
+                            .fields
+                            .index_by_increasing_offset()
+                            .map(|idx| self.codegen_operand(&operands[idx.into()]))
+                            .collect(),
+                    )
+                }
             }
             AggregateKind::Adt(_, variant_index, ..) if res_ty.is_enum() => {
                 self.codegen_rvalue_enum_aggregate(variant_index, operands, res_ty, loc)
@@ -449,7 +660,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     layout
                         .fields
                         .index_by_increasing_offset()
-                        .map(|idx| self.codegen_operand(&operands[idx]))
+                        .map(|idx| self.codegen_operand(&operands[idx.into()]))
                         .collect(),
                     &self.symbol_table,
                 )
@@ -465,7 +676,7 @@ impl<'tcx> GotocCtx<'tcx> {
             Rvalue::Use(p) => self.codegen_operand(p),
             Rvalue::Repeat(op, sz) => {
                 let sz = self.monomorphize(*sz);
-                self.codegen_rvalue_repeat(op, sz, res_ty, loc)
+                self.codegen_rvalue_repeat(op, sz, loc)
             }
             Rvalue::Ref(_, _, p) | Rvalue::AddressOf(_, p) => self.codegen_place_ref(p),
             Rvalue::Len(p) => self.codegen_rvalue_len(p),
@@ -495,12 +706,16 @@ impl<'tcx> GotocCtx<'tcx> {
                     "https://github.com/model-checking/kani/issues/1784",
                 )
             }
-            Rvalue::Cast(CastKind::Pointer(k), e, t) => {
+            Rvalue::Cast(CastKind::PointerCoercion(k), e, t) => {
                 let t = self.monomorphize(*t);
                 self.codegen_pointer_cast(k, e, t, loc)
             }
+            Rvalue::Cast(CastKind::Transmute, operand, ty) => {
+                let goto_typ = self.codegen_ty(self.monomorphize(*ty));
+                self.codegen_operand(operand).transmute_to(goto_typ, &self.symbol_table)
+            }
             Rvalue::BinaryOp(op, box (ref e1, ref e2)) => {
-                self.codegen_rvalue_binary_op(op, e1, e2, loc)
+                self.codegen_rvalue_binary_op(res_ty, op, e1, e2, loc)
             }
             Rvalue::CheckedBinaryOp(op, box (ref e1, ref e2)) => {
                 self.codegen_rvalue_checked_binary_op(op, e1, e2, res_ty)
@@ -512,6 +727,10 @@ impl<'tcx> GotocCtx<'tcx> {
                     NullOp::SizeOf => Expr::int_constant(layout.size.bytes_usize(), Type::size_t())
                         .with_size_of_annotation(self.codegen_ty(t)),
                     NullOp::AlignOf => Expr::int_constant(layout.align.abi.bytes(), Type::size_t()),
+                    NullOp::OffsetOf(fields) => Expr::int_constant(
+                        layout.offset_of_subfield(self, fields.iter().map(|f| f.index())).bytes(),
+                        Type::size_t(),
+                    ),
                 }
             }
             Rvalue::ShallowInitBox(ref operand, content_ty) => {
@@ -519,7 +738,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // See https://github.com/rust-lang/compiler-team/issues/460 for more details.
                 let operand = self.codegen_operand(operand);
                 let t = self.monomorphize(*content_ty);
-                let box_ty = self.tcx.mk_box(t);
+                let box_ty = Ty::new_box(self.tcx, t);
                 let box_ty = self.codegen_ty(box_ty);
                 let cbmc_t = self.codegen_ty(t);
                 let box_contents = operand.cast_to(cbmc_t.to_pointer());
@@ -598,7 +817,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     // See also the cranelift backend:
                     // https://github.com/rust-lang/rust/blob/05d22212e89588e7c443cc6b9bc0e4e02fdfbc8d/compiler/rustc_codegen_cranelift/src/discriminant.rs#L116
                     let offset = match &layout.fields {
-                        FieldsShape::Arbitrary { offsets, .. } => offsets[0],
+                        FieldsShape::Arbitrary { offsets, .. } => offsets[0usize.into()],
                         _ => unreachable!("niche encoding must have arbitrary fields"),
                     };
 
@@ -772,22 +991,22 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// "Pointer casts" are particular kinds of pointer-to-pointer casts.
-    /// See the [`PointerCast`] type for specifics.
+    /// See the [`PointerCoercion`] type for specifics.
     /// Note that this does not include all casts involving pointers,
     /// many of which are instead handled by [`Self::codegen_misc_cast`] instead.
     fn codegen_pointer_cast(
         &mut self,
-        k: &PointerCast,
+        k: &PointerCoercion,
         operand: &Operand<'tcx>,
         t: Ty<'tcx>,
         loc: Location,
     ) -> Expr {
         debug!(cast=?k, op=?operand, ?loc, "codegen_pointer_cast");
         match k {
-            PointerCast::ReifyFnPointer => match self.operand_ty(operand).kind() {
-                ty::FnDef(def_id, substs) => {
+            PointerCoercion::ReifyFnPointer => match self.operand_ty(operand).kind() {
+                ty::FnDef(def_id, args) => {
                     let instance =
-                        Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), *def_id, substs)
+                        Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), *def_id, args)
                             .unwrap()
                             .unwrap();
                     // We need to handle this case in a special way because `codegen_operand` compiles FnDefs to dummy structs.
@@ -796,24 +1015,20 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
                 _ => unreachable!(),
             },
-            PointerCast::UnsafeFnPointer => self.codegen_operand(operand),
-            PointerCast::ClosureFnPointer(_) => {
-                if let ty::Closure(def_id, substs) = self.operand_ty(operand).kind() {
-                    let instance = Instance::resolve_closure(
-                        self.tcx,
-                        *def_id,
-                        substs,
-                        ty::ClosureKind::FnOnce,
-                    )
-                    .expect("failed to normalize and resolve closure during codegen")
-                    .polymorphize(self.tcx);
+            PointerCoercion::UnsafeFnPointer => self.codegen_operand(operand),
+            PointerCoercion::ClosureFnPointer(_) => {
+                if let ty::Closure(def_id, args) = self.operand_ty(operand).kind() {
+                    let instance =
+                        Instance::resolve_closure(self.tcx, *def_id, args, ty::ClosureKind::FnOnce)
+                            .expect("failed to normalize and resolve closure during codegen")
+                            .polymorphize(self.tcx);
                     self.codegen_func_expr(instance, None).address_of()
                 } else {
                     unreachable!("{:?} cannot be cast to a fn ptr", operand)
                 }
             }
-            PointerCast::MutToConstPointer => self.codegen_operand(operand),
-            PointerCast::ArrayToPointer => {
+            PointerCoercion::MutToConstPointer => self.codegen_operand(operand),
+            PointerCoercion::ArrayToPointer => {
                 // TODO: I am not sure whether it is correct or not.
                 //
                 // some reasoning is as follows.
@@ -827,7 +1042,6 @@ impl<'tcx> GotocCtx<'tcx> {
                         if let ty::Array(_, _) = ty.kind() {
                             let oe = self.codegen_operand(operand);
                             oe.dereference() // : struct [T; n]
-                                .member("0", &self.symbol_table) // : T[n]
                                 .array_to_ptr() // : T*
                         } else {
                             unreachable!()
@@ -836,7 +1050,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     _ => unreachable!(),
                 }
             }
-            PointerCast::Unsize => {
+            PointerCoercion::Unsize => {
                 let src_goto_expr = self.codegen_operand(operand);
                 let src_mir_type = self.operand_ty(operand);
                 let dst_mir_type = t;

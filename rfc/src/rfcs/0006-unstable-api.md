@@ -1,7 +1,7 @@
 - **Feature Name:** Unstable APIs (`unstable-api`)
 - **RFC Tracking Issue**: <https://github.com/model-checking/kani/issues/2279>
 - **RFC PR:** <https://github.com/model-checking/kani/pull/2281>
-- **Status:** Under Review
+- **Status:** Unstable
 - **Version:** 0
 
 -------------------
@@ -63,7 +63,7 @@ unstable = { unstable-options = true }
 In order to mark an API as unstable, we will add the following attribute to the APIs marked as unstable:
 
 ```rust
-#[kani::unstable(feature="<IDENTIFIER>", issue="<TRACKING_ISSUE_NUMBER>", reason="<OPTIONAL_DESCRIPTION>")]
+#[kani::unstable(feature="<IDENTIFIER>", issue="<TRACKING_ISSUE_NUMBER>", reason="<DESCRIPTION>")]
 pub fn unstable_api() {}
 ```
 

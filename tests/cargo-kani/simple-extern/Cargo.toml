@@ -10,5 +10,7 @@ edition = "2018"
 [workspace]
 
 [kani.flags]
-enable-unstable = true
 c-lib = ["src/helper.c"]
+
+[kani.unstable]
+c-ffi = true

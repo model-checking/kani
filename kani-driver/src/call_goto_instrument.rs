@@ -52,7 +52,7 @@ impl KaniSession {
 
             self.gen_c(output, &c_outfile)?;
 
-            if !self.args.quiet {
+            if !self.args.common_args.quiet {
                 println!("Generated C code written to {}", c_outfile.to_string_lossy());
             }
 
@@ -60,7 +60,7 @@ impl KaniSession {
             let prett_name_map =
                 project.get_harness_artifact(&harness, ArtifactType::PrettyNameMap).unwrap();
             self.demangle_c(prett_name_map, &c_outfile, &c_demangled)?;
-            if !self.args.quiet {
+            if !self.args.common_args.quiet {
                 println!("Demangled GotoC code written to {}", c_demangled.to_string_lossy())
             }
         }
@@ -71,7 +71,7 @@ impl KaniSession {
     /// Apply --restrict-vtable to a goto binary.
     pub fn apply_vtable_restrictions(&self, goto_file: &Path, restrictions: &Path) -> Result<()> {
         let linked_restrictions = alter_extension(goto_file, "linked-restrictions.json");
-        self.record_temporary_files(&[&linked_restrictions]);
+        self.record_temporary_file(&linked_restrictions);
         collect_and_link_function_pointer_restrictions(restrictions, &linked_restrictions)?;
 
         let args: Vec<OsString> = vec![

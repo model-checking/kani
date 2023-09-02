@@ -9,10 +9,11 @@ we recommend looking into [these issues](https://github.com/model-checking/kani/
 
 In this chapter, we provide documentation that might be helpful for Kani
 developers (including external contributors):
- 1. [Suggested workarounds](./workarounds.md).
+ 1. [Coding conventions](./conventions.md).
  2. [Useful command-line instructions for Kani/CBMC/Git](./cheat-sheets.md).
- 3. [Development setup recommendations for working with `rustc`](./rustc-hacks.md).
- 4. [Guide for testing in Kani](./testing.md).
+ 3. [Development setup recommendations for working with `cbmc`](./cbmc-hacks.md).
+ 4. [Development setup recommendations for working with `rustc`](./rustc-hacks.md).
+ 5. [Guide for testing in Kani](./testing.md).
 
 > **NOTE**: The developer documentation is intended for Kani developers and not
 users. At present, the project is under heavy development and some items

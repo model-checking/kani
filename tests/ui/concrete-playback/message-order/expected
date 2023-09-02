@@ -1,0 +1,14 @@
+VERIFICATION:- SUCCESSFUL
+
+
+Concrete playback unit test for `dummy`:
+```
+#[test]
+fn kani_concrete_playback_dummy
+    let concrete_vals: Vec<Vec<u8>> = vec![
+        // 10
+        vec![10, 0, 0, 0],
+    ];
+    kani::concrete_playback_run(concrete_vals, dummy);
+}
+```

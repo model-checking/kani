@@ -5,17 +5,15 @@
 use std::collections::BTreeMap;
 
 use kani_metadata::{CbmcSolver, HarnessAttributes, Stub};
-use rustc_ast::{AttrKind, Attribute, LitKind, MetaItem, MetaItemKind, NestedMetaItem};
+use rustc_ast::{attr, AttrKind, Attribute, LitKind, MetaItem, MetaItemKind, NestedMetaItem};
+use rustc_errors::ErrorGuaranteed;
 use rustc_hir::{def::DefKind, def_id::DefId};
-use rustc_middle::ty::{self, Instance, TyCtxt};
+use rustc_middle::ty::{Instance, TyCtxt, TyKind};
 use rustc_span::Span;
 use std::str::FromStr;
 use strum_macros::{AsRefStr, EnumString};
 
-use rustc_middle::ty::layout::FnAbiOf;
 use tracing::{debug, trace};
-
-use crate::kani_middle::CompilerHelpers;
 
 use super::resolve;
 
@@ -31,101 +29,233 @@ enum KaniAttributeKind {
     Unwind,
 }
 
-/// Check that all attributes assigned to an item is valid.
-/// Errors will be added to the session. Invoke self.tcx.sess.abort_if_errors() to terminate
-/// the session and emit all errors found.
-pub(super) fn check_attributes(tcx: TyCtxt, def_id: DefId) {
-    let attributes = extract_kani_attributes(tcx, def_id);
-    if let Some(proof_attributes) = attributes.get(&KaniAttributeKind::Proof) {
-        check_proof_attribute(tcx, def_id, proof_attributes);
-    } else if let Some((kind, attrs)) = attributes.first_key_value() {
-        tcx.sess.span_err(
-            attrs[0].span,
-            format!(
-                "the `{}` attribute also requires the '#[kani::proof]' attribute",
-                kind.as_ref()
-            )
-            .as_str(),
-        );
+impl KaniAttributeKind {
+    /// Returns whether an item is only relevant for harnesses.
+    pub fn is_harness_only(self) -> bool {
+        match self {
+            KaniAttributeKind::Proof
+            | KaniAttributeKind::ShouldPanic
+            | KaniAttributeKind::Solver
+            | KaniAttributeKind::Stub
+            | KaniAttributeKind::Unwind => true,
+            KaniAttributeKind::Unstable => false,
+        }
     }
 }
 
+/// Bundles together common data used when evaluating the attributes of a given
+/// function.
+#[derive(Clone)]
+pub struct KaniAttributes<'tcx> {
+    /// Rustc type context/queries
+    tcx: TyCtxt<'tcx>,
+    /// The function which these attributes decorate.
+    item: DefId,
+    /// All attributes we found in raw format.
+    map: BTreeMap<KaniAttributeKind, Vec<&'tcx Attribute>>,
+}
+
+impl<'tcx> std::fmt::Debug for KaniAttributes<'tcx> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("KaniAttributes")
+            .field("item", &self.tcx.def_path_debug_str(self.item))
+            .field("map", &self.map)
+            .finish()
+    }
+}
+
+impl<'tcx> KaniAttributes<'tcx> {
+    /// Perform preliminary parsing and checking for the attributes on this
+    /// function
+    pub fn for_item(tcx: TyCtxt<'tcx>, def_id: DefId) -> Self {
+        let all_attributes = tcx.get_attrs_unchecked(def_id);
+        let map = all_attributes.iter().fold(
+            <BTreeMap<KaniAttributeKind, Vec<&'tcx Attribute>>>::default(),
+            |mut result, attribute| {
+                // Get the string the appears after "kanitool::" in each attribute string.
+                // Ex - "proof" | "unwind" etc.
+                if let Some(kind) = attr_kind(tcx, attribute) {
+                    result.entry(kind).or_default().push(attribute)
+                }
+                result
+            },
+        );
+        Self { map, tcx, item: def_id }
+    }
+
+    /// Check that all attributes assigned to an item is valid.
+    /// Errors will be added to the session. Invoke self.tcx.sess.abort_if_errors() to terminate
+    /// the session and emit all errors found.
+    pub(super) fn check_attributes(&self) {
+        // Check that all attributes are correctly used and well formed.
+        let is_harness = self.is_harness();
+        for (&kind, attrs) in self.map.iter() {
+            if !is_harness && kind.is_harness_only() {
+                self.tcx.sess.span_err(
+                    attrs[0].span,
+                    format!(
+                        "the `{}` attribute also requires the `#[kani::proof]` attribute",
+                        kind.as_ref()
+                    ),
+                );
+            }
+            match kind {
+                KaniAttributeKind::ShouldPanic => {
+                    expect_single(self.tcx, kind, &attrs);
+                    attrs.iter().for_each(|attr| {
+                        expect_no_args(self.tcx, kind, attr);
+                    })
+                }
+                KaniAttributeKind::Solver => {
+                    expect_single(self.tcx, kind, &attrs);
+                    attrs.iter().for_each(|attr| {
+                        parse_solver(self.tcx, attr);
+                    })
+                }
+                KaniAttributeKind::Stub => {
+                    parse_stubs(self.tcx, self.item, attrs);
+                }
+                KaniAttributeKind::Unwind => {
+                    expect_single(self.tcx, kind, &attrs);
+                    attrs.iter().for_each(|attr| {
+                        parse_unwind(self.tcx, attr);
+                    })
+                }
+                KaniAttributeKind::Proof => {
+                    expect_single(self.tcx, kind, &attrs);
+                    attrs.iter().for_each(|attr| self.check_proof_attribute(attr))
+                }
+                KaniAttributeKind::Unstable => attrs.iter().for_each(|attr| {
+                    let _ = UnstableAttribute::try_from(*attr).map_err(|err| err.report(self.tcx));
+                }),
+            }
+        }
+    }
+
+    /// Check that any unstable API has been enabled. Otherwise, emit an error.
+    ///
+    /// TODO: Improve error message by printing the span of the harness instead of the definition.
+    pub fn check_unstable_features(&self, enabled_features: &[String]) {
+        if !matches!(self.tcx.type_of(self.item).skip_binder().kind(), TyKind::FnDef(..)) {
+            // Skip closures since it shouldn't be possible to add an unstable attribute to them.
+            // We have to explicitly skip them though due to an issue with rustc:
+            // https://github.com/model-checking/kani/pull/2406#issuecomment-1534333862
+            return;
+        }
+        if let Some(unstable_attrs) = self.map.get(&KaniAttributeKind::Unstable) {
+            for attr in unstable_attrs {
+                let unstable_attr = UnstableAttribute::try_from(*attr).unwrap();
+                if !enabled_features.contains(&unstable_attr.feature) {
+                    // Reached an unstable attribute that was not enabled.
+                    self.report_unstable_forbidden(&unstable_attr);
+                } else {
+                    debug!(enabled=?attr, def_id=?self.item, "check_unstable_features");
+                }
+            }
+        }
+    }
+
+    /// Report misusage of an unstable feature that was not enabled.
+    fn report_unstable_forbidden(&self, unstable_attr: &UnstableAttribute) -> ErrorGuaranteed {
+        let fn_name = self.tcx.def_path_str(self.item);
+        self.tcx
+            .sess
+            .struct_err(format!(
+                "Use of unstable feature `{}`: {}",
+                unstable_attr.feature, unstable_attr.reason
+            ))
+            .span_note(
+                self.tcx.def_span(self.item),
+                format!("the function `{fn_name}` is unstable:"),
+            )
+            .note(format!("see issue {} for more information", unstable_attr.issue))
+            .help(format!("use `-Z {}` to enable using this function.", unstable_attr.feature))
+            .emit()
+    }
+
+    /// Is this item a harness? (either `proof` or `proof_for_contract`
+    /// attribute are present)
+    fn is_harness(&self) -> bool {
+        self.map.get(&KaniAttributeKind::Proof).is_some()
+    }
+
+    /// Extract harness attributes for a given `def_id`.
+    ///
+    /// We only extract attributes for harnesses that are local to the current crate.
+    /// Note that all attributes should be valid by now.
+    pub fn harness_attributes(&self) -> HarnessAttributes {
+        // Abort if not local.
+        assert!(self.item.is_local(), "Expected a local item, but got: {:?}", self.item);
+        trace!(?self, "extract_harness_attributes");
+        assert!(self.is_harness());
+        self.map.iter().fold(HarnessAttributes::default(), |mut harness, (kind, attributes)| {
+            match kind {
+                KaniAttributeKind::ShouldPanic => harness.should_panic = true,
+                KaniAttributeKind::Solver => {
+                    harness.solver = parse_solver(self.tcx, attributes[0]);
+                }
+                KaniAttributeKind::Stub => {
+                    harness.stubs = parse_stubs(self.tcx, self.item, attributes);
+                }
+                KaniAttributeKind::Unwind => {
+                    harness.unwind_value = parse_unwind(self.tcx, attributes[0])
+                }
+                KaniAttributeKind::Proof => harness.proof = true,
+                KaniAttributeKind::Unstable => {
+                    // Internal attribute which shouldn't exist here.
+                    unreachable!()
+                }
+            };
+            harness
+        })
+    }
+
+    /// Check that if this item is tagged with a proof_attribute, it is a valid harness.
+    fn check_proof_attribute(&self, proof_attribute: &Attribute) {
+        let span = proof_attribute.span;
+        let tcx = self.tcx;
+        expect_no_args(tcx, KaniAttributeKind::Proof, proof_attribute);
+        if tcx.def_kind(self.item) != DefKind::Fn {
+            tcx.sess.span_err(span, "the `proof` attribute can only be applied to functions");
+        } else if tcx.generics_of(self.item).requires_monomorphization(tcx) {
+            tcx.sess.span_err(span, "the `proof` attribute cannot be applied to generic functions");
+        } else {
+            let instance = Instance::mono(tcx, self.item);
+            if !super::fn_abi(tcx, instance).args.is_empty() {
+                tcx.sess.span_err(span, "functions used as harnesses cannot have any arguments");
+            }
+        }
+    }
+}
+
+/// An efficient check for the existence for a particular [`KaniAttributeKind`].
+/// Unlike querying [`KaniAttributes`] this method builds no new heap data
+/// structures and has short circuiting.
+fn has_kani_attribute<F: Fn(KaniAttributeKind) -> bool>(
+    tcx: TyCtxt,
+    def_id: DefId,
+    predicate: F,
+) -> bool {
+    tcx.get_attrs_unchecked(def_id).iter().filter_map(|a| attr_kind(tcx, a)).any(predicate)
+}
+
+/// Same as [`KaniAttributes::is_harness`] but more efficient because less
+/// attribute parsing is performed.
 pub fn is_proof_harness(tcx: TyCtxt, def_id: DefId) -> bool {
-    let attributes = extract_kani_attributes(tcx, def_id);
-    attributes.contains_key(&KaniAttributeKind::Proof)
+    has_kani_attribute(tcx, def_id, |a| matches!(a, KaniAttributeKind::Proof))
 }
 
 /// Does this `def_id` have `#[rustc_test_marker]`?
 pub fn is_test_harness_description(tcx: TyCtxt, def_id: DefId) -> bool {
     let attrs = tcx.get_attrs_unchecked(def_id);
-    tcx.sess.contains_name(attrs, rustc_span::symbol::sym::rustc_test_marker)
+    attr::contains_name(attrs, rustc_span::symbol::sym::rustc_test_marker)
 }
 
-/// Is this the closure inside of a test description const (i.e. macro expanded from a `#[test]`)?
-///
-/// We're trying to detect the closure (`||`) inside code like:
-///
-/// ```ignore
-/// #[rustc_test_marker]
-/// pub const check_2: test::TestDescAndFn = test::TestDescAndFn {
-///     desc: ...,
-///     testfn: test::StaticTestFn(|| test::assert_test_result(check_2())),
-/// };
-/// ```
-pub fn is_test_harness_closure(tcx: TyCtxt, def_id: DefId) -> bool {
-    if !def_id.is_local() {
-        return false;
-    }
-
-    let local_def_id = def_id.expect_local();
-    let hir_id = tcx.hir().local_def_id_to_hir_id(local_def_id);
-
-    // The parent item of the closure appears to reliably be the `const` declaration item.
-    let parent_id = tcx.hir().get_parent_item(hir_id);
-    let parent_def_id = parent_id.to_def_id();
-
-    is_test_harness_description(tcx, parent_def_id)
-}
-
-/// Extract all Kani attributes for a given `def_id` if any exists.
-/// We only extract attributes for harnesses that are local to the current crate.
-pub fn extract_harness_attributes(tcx: TyCtxt, def_id: DefId) -> Option<HarnessAttributes> {
-    // Abort if not local.
-    def_id.as_local()?;
-    let attributes = extract_kani_attributes(tcx, def_id);
-    trace!(?def_id, ?attributes, "extract_harness_attributes");
-    if attributes.contains_key(&KaniAttributeKind::Proof) {
-        Some(attributes.into_iter().fold(
-            HarnessAttributes::default(),
-            |mut harness, (kind, attributes)| {
-                match kind {
-                    KaniAttributeKind::ShouldPanic => {
-                        expect_single(tcx, kind, &attributes);
-                        harness.should_panic = true
-                    }
-                    KaniAttributeKind::Solver => {
-                        // Make sure the solver is not already set
-                        harness.solver = parse_solver(tcx, expect_single(tcx, kind, &attributes));
-                    }
-                    KaniAttributeKind::Stub => {
-                        harness.stubs = parse_stubs(tcx, def_id, attributes);
-                    }
-                    KaniAttributeKind::Unwind => {
-                        harness.unwind_value =
-                            parse_unwind(tcx, expect_single(tcx, kind, &attributes))
-                    }
-                    KaniAttributeKind::Proof => harness.proof = true,
-                    KaniAttributeKind::Unstable => {
-                        // Internal attribute which shouldn't exist here.
-                        unreachable!()
-                    }
-                };
-                harness
-            },
-        ))
-    } else {
-        None
-    }
+/// Extract the test harness name from the `#[rustc_test_maker]`
+pub fn test_harness_name(tcx: TyCtxt, def_id: DefId) -> String {
+    let attrs = tcx.get_attrs_unchecked(def_id);
+    let marker = attr::find_by_name(attrs, rustc_span::symbol::sym::rustc_test_marker).unwrap();
+    parse_str_value(&marker).unwrap()
 }
 
 fn expect_single<'a>(
@@ -139,47 +269,83 @@ fn expect_single<'a>(
     if attributes.len() > 1 {
         tcx.sess.span_err(
             attr.span,
-            &format!("only one '#[kani::{}]' attribute is allowed per harness", kind.as_ref()),
+            format!("only one '#[kani::{}]' attribute is allowed per harness", kind.as_ref()),
         );
     }
     attr
 }
 
-/// Check that if an item is tagged with a proof_attribute, it is a valid harness.
-fn check_proof_attribute(tcx: TyCtxt, def_id: DefId, proof_attributes: &Vec<&Attribute>) {
-    assert!(!proof_attributes.is_empty());
-    let span = proof_attributes.first().unwrap().span;
-    if proof_attributes.len() > 1 {
-        tcx.sess.span_warn(proof_attributes[0].span, "duplicate attribute");
-    }
+/// Attribute used to mark a Kani lib API unstable.
+#[derive(Debug)]
+struct UnstableAttribute {
+    /// The feature identifier.
+    feature: String,
+    /// A link to the stabilization tracking issue.
+    issue: String,
+    /// A user friendly message that describes the reason why this feature is marked as unstable.
+    reason: String,
+}
 
-    if tcx.def_kind(def_id) != DefKind::Fn {
-        tcx.sess.span_err(span, "the `proof` attribute can only be applied to functions");
-    } else if tcx.generics_of(def_id).requires_monomorphization(tcx) {
-        tcx.sess.span_err(span, "the `proof` attribute cannot be applied to generic functions");
-    } else {
-        let instance = Instance::mono(tcx, def_id);
-        let helper = CompilerHelpers { tcx };
-        if !helper.fn_abi_of_instance(instance, ty::List::empty()).args.is_empty() {
-            tcx.sess.span_err(span, "functions used as harnesses cannot have any arguments");
+#[derive(Debug)]
+struct UnstableAttrParseError<'a> {
+    /// The reason why the parsing failed.
+    reason: String,
+    /// The attribute being parsed.
+    attr: &'a Attribute,
+}
+
+impl<'a> UnstableAttrParseError<'a> {
+    /// Report the error in a friendly format.
+    fn report(&self, tcx: TyCtxt) -> ErrorGuaranteed {
+        tcx.sess
+            .struct_span_err(
+                self.attr.span,
+                format!("failed to parse `#[kani::unstable]`: {}", self.reason),
+            )
+            .note(format!(
+                "expected format: #[kani::unstable({}, {}, {})]",
+                r#"feature="<IDENTIFIER>""#, r#"issue="<ISSUE>""#, r#"reason="<DESCRIPTION>""#
+            ))
+            .emit()
+    }
+}
+
+/// Try to parse an unstable attribute into an `UnstableAttribute`.
+impl<'a> TryFrom<&'a Attribute> for UnstableAttribute {
+    type Error = UnstableAttrParseError<'a>;
+    fn try_from(attr: &'a Attribute) -> Result<Self, Self::Error> {
+        let build_error = |reason: String| Self::Error { reason, attr };
+        let args = parse_key_values(attr).map_err(build_error)?;
+        let invalid_keys = args
+            .iter()
+            .filter_map(|(key, _)| {
+                (!matches!(key.as_str(), "feature" | "issue" | "reason")).then_some(key)
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+
+        if !invalid_keys.is_empty() {
+            Err(build_error(format!("unexpected argument `{}`", invalid_keys.join("`, `"))))
+        } else {
+            let get_val = |name: &str| {
+                args.get(name).cloned().ok_or(build_error(format!("missing `{name}` field")))
+            };
+            Ok(UnstableAttribute {
+                feature: get_val("feature")?,
+                issue: get_val("issue")?,
+                reason: get_val("reason")?,
+            })
         }
     }
 }
 
-/// Partition all the attributes according to their kind.
-fn extract_kani_attributes(
-    tcx: TyCtxt,
-    def_id: DefId,
-) -> BTreeMap<KaniAttributeKind, Vec<&Attribute>> {
-    let all_attributes = tcx.get_attrs_unchecked(def_id);
-    all_attributes.iter().fold(BTreeMap::default(), |mut result, attribute| {
-        // Get the string the appears after "kanitool::" in each attribute string.
-        // Ex - "proof" | "unwind" etc.
-        if let Some(kind) = attr_kind(tcx, attribute) {
-            result.entry(kind).or_default().push(attribute)
-        }
-        result
-    })
+fn expect_no_args(tcx: TyCtxt, kind: KaniAttributeKind, attr: &Attribute) {
+    if !attr.is_word() {
+        tcx.sess
+            .struct_span_err(attr.span, format!("unexpected argument for `{}`", kind.as_ref()))
+            .help("remove the extra argument")
+            .emit();
+    }
 }
 
 /// Return the unwind value from the given attribute.
@@ -205,10 +371,10 @@ fn parse_unwind(tcx: TyCtxt, attr: &Attribute) -> Option<u32> {
     }
 }
 
-fn parse_stubs(tcx: TyCtxt, harness: DefId, attributes: Vec<&Attribute>) -> Vec<Stub> {
+fn parse_stubs(tcx: TyCtxt, harness: DefId, attributes: &[&Attribute]) -> Vec<Stub> {
     let current_module = tcx.parent_module_from_def_id(harness.expect_local());
     let check_resolve = |attr: &Attribute, name: &str| {
-        let result = resolve::resolve_fn(tcx, current_module, name);
+        let result = resolve::resolve_fn(tcx, current_module.to_local_def_id(), name);
         if let Err(err) = result {
             tcx.sess.span_err(attr.span, format!("failed to resolve `{name}`: {err}"));
         }
@@ -347,18 +513,48 @@ fn parse_path(meta_item: &MetaItem) -> Option<String> {
     }
 }
 
+/// Parse the arguments of the attribute into a (key, value) map.
+fn parse_key_values(attr: &Attribute) -> Result<BTreeMap<String, String>, String> {
+    trace!(list=?attr.meta_item_list(), ?attr, "parse_key_values");
+    let args = attr.meta_item_list().ok_or("malformed attribute input")?;
+    args.iter()
+        .map(|arg| match arg.meta_item() {
+            Some(MetaItem { path: key, kind: MetaItemKind::NameValue(val), .. }) => {
+                Ok((key.segments.first().unwrap().ident.to_string(), val.symbol.to_string()))
+            }
+            _ => Err(format!(
+                r#"expected "key = value" pair, but found `{}`"#,
+                rustc_ast_pretty::pprust::meta_list_item_to_string(arg)
+            )),
+        })
+        .collect()
+}
+
+/// Extracts the string value argument from the attribute provided.
+///
+/// For attributes with the following format, this will return a string that represents "VALUE".
+/// - `#[attribute = "VALUE"]`
+fn parse_str_value(attr: &Attribute) -> Option<String> {
+    // Vector of meta items , that contain the arguments given the attribute
+    let value = attr.value_str();
+    value.map(|sym| sym.to_string())
+}
+
 /// If the attribute is named `kanitool::name`, this extracts `name`
 fn attr_kind(tcx: TyCtxt, attr: &Attribute) -> Option<KaniAttributeKind> {
     match &attr.kind {
         AttrKind::Normal(normal) => {
             let segments = &normal.item.path.segments;
             if (!segments.is_empty()) && segments[0].ident.as_str() == "kanitool" {
-                assert_eq!(segments.len(), 2, "Unexpected kani attribute {segments:?}");
-                let ident_str = segments[1].ident.as_str();
-                KaniAttributeKind::try_from(ident_str)
+                let ident_str = segments[1..]
+                    .iter()
+                    .map(|segment| segment.ident.as_str())
+                    .intersperse("::")
+                    .collect::<String>();
+                KaniAttributeKind::try_from(ident_str.as_str())
                     .map_err(|err| {
                         debug!(?err, "attr_kind_failed");
-                        tcx.sess.span_err(attr.span, format!("unknown solver `{ident_str}`"));
+                        tcx.sess.span_err(attr.span, format!("unknown attribute `{ident_str}`"));
                         err
                     })
                     .ok()

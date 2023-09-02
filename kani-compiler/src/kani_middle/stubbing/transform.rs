@@ -6,11 +6,18 @@
 //! body of its stub, if appropriate. The stub mapping it uses is set via rustc
 //! arguments.
 
+use std::collections::{BTreeMap, HashMap};
+
 use lazy_static::lazy_static;
 use regex::Regex;
-use rustc_data_structures::{fingerprint::Fingerprint, fx::FxHashMap};
+use rustc_data_structures::fingerprint::Fingerprint;
 use rustc_hir::{def_id::DefId, definitions::DefPathHash};
-use rustc_middle::{mir::Body, ty::TyCtxt};
+use rustc_index::IndexVec;
+use rustc_middle::mir::{
+    interpret::ConstValue, visit::MutVisitor, Body, ConstantKind, Local, LocalDecl, Location,
+    Operand,
+};
+use rustc_middle::ty::{self, TyCtxt};
 
 /// Returns the `DefId` of the stub for the function/method identified by the
 /// parameter `def_id`, and `None` if the function/method is not stubbed.
@@ -21,18 +28,58 @@ pub fn get_stub(tcx: TyCtxt, def_id: DefId) -> Option<DefId> {
 
 /// Returns the new body of a function/method if it has been stubbed out;
 /// otherwise, returns the old body.
-pub fn transform<'tcx>(
-    tcx: TyCtxt<'tcx>,
-    def_id: DefId,
-    old_body: &'tcx Body<'tcx>,
-) -> &'tcx Body<'tcx> {
+pub fn transform<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId, old_body: &'tcx Body<'tcx>) -> Body<'tcx> {
     if let Some(replacement) = get_stub(tcx, def_id) {
         let new_body = tcx.optimized_mir(replacement).clone();
         if check_compatibility(tcx, def_id, old_body, replacement, &new_body) {
-            return tcx.arena.alloc(new_body);
+            return new_body;
         }
     }
-    old_body
+    old_body.clone()
+}
+
+/// Traverse `body` searching for calls to foreing functions and, whevever there is
+/// a stub available, replace the call to the foreign function with a call
+/// to its correspondent stub. This happens as a separate step because there is no
+/// body available to foreign functions at this stage.
+pub fn transform_foreign_functions<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
+    if let Some(stub_map) = get_stub_mapping(tcx) {
+        let mut visitor =
+            ForeignFunctionTransformer { tcx, local_decls: body.clone().local_decls, stub_map };
+        visitor.visit_body(body);
+    }
+}
+
+struct ForeignFunctionTransformer<'tcx> {
+    /// The compiler context.
+    tcx: TyCtxt<'tcx>,
+    /// Local declarations of the callee function. Kani searches here for foreign functions.
+    local_decls: IndexVec<Local, LocalDecl<'tcx>>,
+    /// Map of functions/methods to their correspondent stubs.
+    stub_map: HashMap<DefId, DefId>,
+}
+
+impl<'tcx> MutVisitor<'tcx> for ForeignFunctionTransformer<'tcx> {
+    fn tcx(&self) -> TyCtxt<'tcx> {
+        self.tcx
+    }
+
+    fn visit_operand(&mut self, operand: &mut Operand<'tcx>, _location: Location) {
+        let func_ty = operand.ty(&self.local_decls, self.tcx);
+        if let ty::FnDef(reachable_function, arguments) = *func_ty.kind() {
+            if self.tcx.is_foreign_item(reachable_function) {
+                if let Some(stub) = self.stub_map.get(&reachable_function) {
+                    let Operand::Constant(function_definition) = operand else {
+                        return;
+                    };
+                    function_definition.literal = ConstantKind::from_value(
+                        ConstValue::ZeroSized,
+                        self.tcx.type_of(stub).instantiate(self.tcx, arguments),
+                    );
+                }
+            }
+        }
+    }
 }
 
 /// Checks whether the stub is compatible with the original function/method: do
@@ -113,13 +160,15 @@ fn check_compatibility<'a, 'tcx>(
 const RUSTC_ARG_PREFIX: &str = "kani_stubs=";
 
 /// Serializes the stub mapping into a rustc argument.
-pub fn mk_rustc_arg(stub_mapping: &FxHashMap<DefPathHash, DefPathHash>) -> String {
+pub fn mk_rustc_arg(stub_mapping: &BTreeMap<DefPathHash, DefPathHash>) -> String {
     // Serialize each `DefPathHash` as a pair of `u64`s, and the whole mapping
     // as an association list.
     let mut pairs = Vec::new();
     for (k, v) in stub_mapping {
-        let kparts = k.0.as_value();
-        let vparts = v.0.as_value();
+        let (k_a, k_b) = k.0.split();
+        let kparts = (k_a.as_u64(), k_b.as_u64());
+        let (v_a, v_b) = v.0.split();
+        let vparts = (v_a.as_u64(), v_b.as_u64());
         pairs.push((kparts, vparts));
     }
     // Store our serialized mapping as a fake LLVM argument (safe to do since
@@ -128,14 +177,14 @@ pub fn mk_rustc_arg(stub_mapping: &FxHashMap<DefPathHash, DefPathHash>) -> Strin
 }
 
 /// Deserializes the stub mapping from the rustc argument value.
-fn deserialize_mapping(tcx: TyCtxt, val: &str) -> FxHashMap<DefId, DefId> {
+fn deserialize_mapping(tcx: TyCtxt, val: &str) -> HashMap<DefId, DefId> {
     type Item = (u64, u64);
     let item_to_def_id = |item: Item| -> DefId {
         let hash = DefPathHash(Fingerprint::new(item.0, item.1));
         tcx.def_path_hash_to_def_id(hash, &mut || panic!())
     };
     let pairs: Vec<(Item, Item)> = serde_json::from_str(val).unwrap();
-    let mut m = FxHashMap::default();
+    let mut m = HashMap::default();
     for (k, v) in pairs {
         let kid = item_to_def_id(k);
         let vid = item_to_def_id(v);
@@ -145,7 +194,7 @@ fn deserialize_mapping(tcx: TyCtxt, val: &str) -> FxHashMap<DefId, DefId> {
 }
 
 /// Retrieves the stub mapping from the compiler configuration.
-fn get_stub_mapping(tcx: TyCtxt) -> Option<FxHashMap<DefId, DefId>> {
+fn get_stub_mapping(tcx: TyCtxt) -> Option<HashMap<DefId, DefId>> {
     // Use a static so that we compile the regex only once.
     lazy_static! {
         static ref RE: Regex = Regex::new(&format!("'{RUSTC_ARG_PREFIX}(.*)'")).unwrap();

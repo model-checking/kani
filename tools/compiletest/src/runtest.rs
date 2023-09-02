@@ -7,7 +7,9 @@
 
 use crate::common::KaniFailStep;
 use crate::common::{output_base_dir, output_base_name};
-use crate::common::{CargoKani, CargoKaniTest, Exec, Expected, Kani, KaniFixme, Stub};
+use crate::common::{
+    CargoKani, CargoKaniTest, CoverageBased, Exec, Expected, Kani, KaniFixme, Stub,
+};
 use crate::common::{Config, TestPaths};
 use crate::header::TestProps;
 use crate::read2::read2;
@@ -75,6 +77,7 @@ impl<'test> TestCx<'test> {
             KaniFixme => self.run_kani_test(),
             CargoKani => self.run_cargo_kani_test(false),
             CargoKaniTest => self.run_cargo_kani_test(true),
+            CoverageBased => self.run_expected_coverage_test(),
             Exec => self.run_exec_test(),
             Expected => self.run_expected_test(),
             Stub => self.run_stub_test(),
@@ -270,7 +273,8 @@ impl<'test> TestCx<'test> {
             .arg("kani")
             .arg("--target-dir")
             .arg(self.output_base_dir().join("target"))
-            .current_dir(&parent_dir);
+            .current_dir(&parent_dir)
+            .args(&self.config.extra_args);
         if test {
             cargo.arg("--tests");
         }
@@ -305,6 +309,22 @@ impl<'test> TestCx<'test> {
 
         if !self.props.cbmc_flags.is_empty() {
             kani.arg("--enable-unstable").arg("--cbmc-args").args(&self.props.cbmc_flags);
+        }
+
+        self.compose_and_run(kani)
+    }
+
+    /// Run coverage based output for kani on a single file
+    fn run_kani_with_coverage(&self) -> ProcRes {
+        let mut kani = Command::new("kani");
+        if !self.props.compile_flags.is_empty() {
+            kani.env("RUSTFLAGS", self.props.compile_flags.join(" "));
+        }
+        kani.arg(&self.testpaths.file).args(&self.props.kani_flags);
+        kani.arg("--coverage").args(&["-Z", "line-coverage"]);
+
+        if !self.props.cbmc_flags.is_empty() {
+            kani.arg("--cbmc-args").args(&self.props.cbmc_flags);
         }
 
         self.compose_and_run(kani)
@@ -371,10 +391,28 @@ impl<'test> TestCx<'test> {
     }
 
     /// Runs Kani on the test file specified by `self.testpaths.file`. An error
-    /// message is printed to stdout if verification output does not contain
-    /// the expected output in `expected` file.
+    /// message is printed to stdout if verification output does not contain the
+    /// expected output.
+    ///
+    /// We read the expected output from the file
+    /// `self.testpaths.file.with_extension("expected")` (same file name but
+    /// extension replaced with `.expected`). For backwards compatibility, if we
+    /// don't find this file, we will also try a file called `expected` in the
+    /// same directory as `self.testpaths.file`.
     fn run_expected_test(&self) {
         let proc_res = self.run_kani();
+        let dot_expected_path = self.testpaths.file.with_extension("expected");
+        let expected_path = if dot_expected_path.exists() {
+            dot_expected_path
+        } else {
+            self.testpaths.file.parent().unwrap().join("expected")
+        };
+        self.verify_output(&proc_res, &expected_path);
+    }
+
+    /// Runs Kani in coverage mode on the test file specified by `self.testpaths.file`.
+    fn run_expected_coverage_test(&self) {
+        let proc_res = self.run_kani_with_coverage();
         let expected_path = self.testpaths.file.parent().unwrap().join("expected");
         self.verify_output(&proc_res, &expected_path);
     }
@@ -448,35 +486,22 @@ impl<'test> TestCx<'test> {
                 consecutive_lines.clear();
             }
         }
-        None
+        // Someone may add a `\` to the last line (probably by accident) but
+        // that would mean this test would succeed without actually testing so
+        // we add a check here again.
+        (!consecutive_lines.is_empty() && !TestCx::contains(str, &consecutive_lines))
+            .then_some(consecutive_lines)
     }
 
     /// Check if there is a set of consecutive lines in `str` where each line
     /// contains a line from `lines`
     fn contains(str: &[&str], lines: &[&str]) -> bool {
-        let mut i = str.iter();
-        while let Some(output_line) = i.next() {
-            if output_line.contains(&lines[0]) {
-                // Check if the rest of the lines in `lines` are contained in
-                // the subsequent lines in `str`
-                let mut matches = true;
-                // Clone the iterator so that we keep i unchanged
-                let mut j = i.clone();
-                for line in lines.iter().skip(1) {
-                    if let Some(output_line) = j.next() {
-                        if output_line.contains(line) {
-                            continue;
-                        }
-                    }
-                    matches = false;
-                    break;
-                }
-                if matches {
-                    return true;
-                }
-            }
-        }
-        false
+        // Does *any* subslice of length `lines.len()` satisfy the containment of
+        // *all* `lines`?
+        // `trim()` added to ignore trailing and preceding whitespace
+        str.windows(lines.len()).any(|subslice| {
+            subslice.iter().zip(lines).all(|(output, expected)| output.contains(expected.trim()))
+        })
     }
 
     fn create_stamp(&self) {

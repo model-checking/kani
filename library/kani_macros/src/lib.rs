@@ -22,7 +22,13 @@ use regular as attr_impl;
 
 /// Marks a Kani proof harness
 ///
-/// For async harnesses, this will call [`kani::block_on`] (see its documentation for more information).
+/// For async harnesses, this will call [`block_on`](https://model-checking.github.io/kani/crates/doc/kani/futures/fn.block_on.html) to drive the future to completion (see its documentation for more information).
+///
+/// If you want to spawn tasks in an async harness, you have to pass a schedule to the `#[kani::proof]` attribute,
+/// e.g. `#[kani::proof(schedule = kani::RoundRobin::default())]`.
+///
+/// This will wrap the async function in a call to [`block_on_with_spawn`](https://model-checking.github.io/kani/crates/doc/kani/futures/fn.block_on_with_spawn.html) (see its documentation for more information).
+#[proc_macro_error]
 #[proc_macro_attribute]
 pub fn proof(attr: TokenStream, item: TokenStream) -> TokenStream {
     attr_impl::proof(attr, item)
@@ -46,7 +52,7 @@ pub fn should_panic(attr: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 /// Set Loop unwind limit for proof harnesses
-/// The attribute '#[kani::unwind(arg)]' can only be called alongside '#[kani::proof]'.
+/// The attribute `#[kani::unwind(arg)]` can only be called alongside `#[kani::proof]`.
 /// arg - Takes in a integer value (u32) that represents the unwind value for the harness.
 #[proc_macro_attribute]
 pub fn unwind(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -66,7 +72,8 @@ pub fn stub(attr: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 /// Select the SAT solver to use with CBMC for this harness
-/// The attribute `#[kani::solver(arg)]` can only be used alongside `#[kani::proof]``
+///
+/// The attribute `#[kani::solver(arg)]` can only be used alongside `#[kani::proof]`.
 ///
 /// arg - name of solver, e.g. kissat
 #[proc_macro_attribute]
@@ -93,10 +100,13 @@ pub fn derive_arbitrary(item: TokenStream) -> TokenStream {
 /// This code should only be activated when pre-building Kani's sysroot.
 #[cfg(kani_sysroot)]
 mod sysroot {
+    use proc_macro_error::{abort, abort_call_site};
+
     use super::*;
 
     use {
         quote::{format_ident, quote},
+        syn::parse::{Parse, ParseStream},
         syn::{parse_macro_input, ItemFn},
     };
 
@@ -126,7 +136,31 @@ mod sysroot {
         };
     }
 
+    struct ProofOptions {
+        schedule: Option<syn::Expr>,
+    }
+
+    impl Parse for ProofOptions {
+        fn parse(input: ParseStream) -> syn::Result<Self> {
+            if input.is_empty() {
+                Ok(ProofOptions { schedule: None })
+            } else {
+                let ident = input.parse::<syn::Ident>()?;
+                if ident != "schedule" {
+                    abort_call_site!("`{}` is not a valid option for `#[kani::proof]`.", ident;
+                        help = "did you mean `schedule`?";
+                        note = "for now, `schedule` is the only option for `#[kani::proof]`.";
+                    );
+                }
+                let _ = input.parse::<syn::Token![=]>()?;
+                let schedule = Some(input.parse::<syn::Expr>()?);
+                Ok(ProofOptions { schedule })
+            }
+        }
+    }
+
     pub fn proof(attr: TokenStream, item: TokenStream) -> TokenStream {
+        let proof_options = parse_macro_input!(attr as ProofOptions);
         let fn_item = parse_macro_input!(item as ItemFn);
         let attrs = fn_item.attrs;
         let vis = fn_item.vis;
@@ -138,9 +172,13 @@ mod sysroot {
             #[kanitool::proof]
         );
 
-        assert!(attr.is_empty(), "#[kani::proof] does not take any arguments currently");
-
         if sig.asyncness.is_none() {
+            if proof_options.schedule.is_some() {
+                abort_call_site!(
+                    "`#[kani::proof(schedule = ...)]` can only be used with `async` functions.";
+                    help = "did you mean to make this function `async`?";
+                );
+            }
             // Adds `#[kanitool::proof]` and other attributes
             quote!(
                 #kani_attributes
@@ -152,32 +190,44 @@ mod sysroot {
             // For async functions, it translates to a synchronous function that calls `kani::block_on`.
             // Specifically, it translates
             // ```ignore
-            // #[kani::async_proof]
+            // #[kani::proof]
             // #[attribute]
             // pub async fn harness() { ... }
             // ```
             // to
             // ```ignore
-            // #[kani::proof]
+            // #[kanitool::proof]
             // #[attribute]
             // pub fn harness() {
             //   async fn harness() { ... }
             //   kani::block_on(harness())
+            //   // OR
+            //   kani::spawnable_block_on(harness(), schedule)
+            //   // where `schedule` was provided as an argument to `#[kani::proof]`.
             // }
             // ```
-            assert!(
-                sig.inputs.is_empty(),
-                "#[kani::proof] cannot be applied to async functions that take inputs for now"
-            );
+            if !sig.inputs.is_empty() {
+                abort!(
+                    sig.inputs,
+                    "`#[kani::proof]` cannot be applied to async functions that take arguments for now";
+                    help = "try removing the arguments";
+                );
+            }
             let mut modified_sig = sig.clone();
             modified_sig.asyncness = None;
             let fn_name = &sig.ident;
+            let schedule = proof_options.schedule;
+            let block_on_call = if let Some(schedule) = schedule {
+                quote!(kani::block_on_with_spawn(#fn_name(), #schedule))
+            } else {
+                quote!(kani::block_on(#fn_name()))
+            };
             quote!(
                 #kani_attributes
                 #(#attrs)*
                 #vis #modified_sig {
                     #sig #body
-                    kani::block_on(#fn_name())
+                    #block_on_call
                 }
             )
             .into()
@@ -194,7 +244,7 @@ mod sysroot {
 /// This module provides dummy implementations of Kani attributes which cannot be interpreted by
 /// other tools such as MIRI and the regular rust compiler.
 ///
-/// This allow users to use code marked with Kani attributes, for example, during concrete playback.
+/// This allow users to use code marked with Kani attributes, for example, for IDE code inspection.
 #[cfg(not(kani_sysroot))]
 mod regular {
     use super::*;

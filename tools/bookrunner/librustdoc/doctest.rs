@@ -4,7 +4,8 @@
 // See GitHub history for details.
 use rustc_ast as ast;
 use rustc_data_structures::sync::Lrc;
-use rustc_errors::{ColorConfig, TerminalUrl};
+use rustc_driver::DEFAULT_LOCALE_RESOURCES;
+use rustc_errors::ColorConfig;
 use rustc_span::edition::Edition;
 use rustc_span::source_map::SourceMap;
 use rustc_span::symbol::sym;
@@ -79,37 +80,15 @@ pub fn make_test(
             let sm = Lrc::new(SourceMap::new(FilePathMapping::empty()));
 
             let fallback_bundle =
-                rustc_errors::fallback_fluent_bundle(rustc_errors::DEFAULT_LOCALE_RESOURCES, false);
-            supports_color = EmitterWriter::stderr(
-                ColorConfig::Auto,
-                None,
-                None,
-                fallback_bundle.clone(),
-                false,
-                false,
-                Some(80),
-                false,
-                false,
-                TerminalUrl::No,
-            )
-            .supports_color();
+                rustc_errors::fallback_fluent_bundle(DEFAULT_LOCALE_RESOURCES.to_vec(), false);
+            supports_color = EmitterWriter::stderr(ColorConfig::Auto, fallback_bundle.clone())
+                .diagnostic_width(Some(80))
+                .supports_color();
 
-            let emitter = EmitterWriter::new(
-                box io::sink(),
-                None,
-                None,
-                fallback_bundle,
-                false,
-                false,
-                false,
-                None,
-                false,
-                false,
-                TerminalUrl::No,
-            );
+            let emitter = EmitterWriter::new(Box::new(io::sink()), fallback_bundle);
 
             // FIXME(misdreavus): pass `-Z treat-err-as-bug` to the doctest parser
-            let handler = Handler::with_emitter(false, None, box emitter);
+            let handler = Handler::with_emitter(Box::new(emitter));
             let sess = ParseSess::with_span_handler(handler, sm);
 
             let mut found_main = false;
