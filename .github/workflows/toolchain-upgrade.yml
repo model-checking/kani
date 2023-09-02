@@ -31,7 +31,11 @@ jobs:
           current_toolchain_epoch=$(date --date $current_toolchain_date +%s)
           next_toolchain_date=$(date --date "@$(($current_toolchain_epoch + 86400))" +%Y-%m-%d)
           echo "next_toolchain_date=$next_toolchain_date" >> $GITHUB_ENV
-          if ! git ls-remote --exit-code origin toolchain-$next_toolchain_date ; then
+          if gh issue list -S \
+              "Toolchain upgrade to nightly-$next_toolchain_date failed" \
+              --json number,title | grep title ; then
+            echo "next_step=none" >> $GITHUB_ENV
+          elif ! git ls-remote --exit-code origin toolchain-$next_toolchain_date ; then
             echo "next_step=create_pr" >> $GITHUB_ENV
             sed -i "/^channel/ s/$current_toolchain_date/$next_toolchain_date/" rust-toolchain.toml
             git diff
