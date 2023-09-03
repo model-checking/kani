@@ -9,8 +9,10 @@ on:
   workflow_dispatch:     # Allow manual dispatching for a custom branch / tag.
 
 permissions:
-  contents: read
+  checks: write
+  contents: write
   issues: write
+  pull-requests: write
 
 jobs:
   create-toolchain-pr:
@@ -31,6 +33,7 @@ jobs:
           current_toolchain_epoch=$(date --date $current_toolchain_date +%s)
           next_toolchain_date=$(date --date "@$(($current_toolchain_epoch + 86400))" +%Y-%m-%d)
           echo "next_toolchain_date=$next_toolchain_date" >> $GITHUB_ENV
+          GH_TOKEN=${{ github.token }}
           if gh issue list -S \
               "Toolchain upgrade to nightly-$next_toolchain_date failed" \
               --json number,title | grep title ; then
