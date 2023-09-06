@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-// kani-flags: --enable-unstable --enable-stubbing
+// kani-flags: -Z stubbing
 //! Check that Kani can handle a different combination of stubs in
 //! the same crate.
 

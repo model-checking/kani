@@ -16,7 +16,7 @@ impl<'tcx> GotocCtx<'tcx> {
         debug!(?bb, "Codegen basicblock");
         self.current_fn_mut().set_current_bb(bb);
         let label: String = self.current_fn().find_label(&bb);
-        let check_coverage = self.queries.check_coverage;
+        let check_coverage = self.queries.args().check_coverage;
         // the first statement should be labelled. if there is no statements, then the
         // terminator should be labelled.
         match bbd.statements.len() {

@@ -157,10 +157,10 @@ impl<'tcx> From<&Terminator<'tcx>> for Key {
             TerminatorKind::FalseEdge { .. } => Key("FalseEdge"),
             TerminatorKind::FalseUnwind { .. } => Key("FalseUnwind"),
             TerminatorKind::InlineAsm { .. } => Key("InlineAsm"),
-            TerminatorKind::Resume => Key("Resume"),
+            TerminatorKind::UnwindResume => Key("UnwindResume"),
             TerminatorKind::Return => Key("Return"),
             TerminatorKind::SwitchInt { .. } => Key("SwitchInt"),
-            TerminatorKind::Terminate => Key("Terminate"),
+            TerminatorKind::UnwindTerminate(_) => Key("UnwindTerminate"),
             TerminatorKind::Unreachable => Key("Unreachable"),
             TerminatorKind::Yield { .. } => Key("Yield"),
         }

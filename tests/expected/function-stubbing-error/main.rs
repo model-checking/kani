@@ -3,8 +3,7 @@
 //
 // kani-flags: --harness main
 //
-//! This tests whether we issue a warning if a stub is specified for a harness
-//! but stubbing is not enabled.
+//! This tests whether we abort if a stub is specified for a harness but stubbing is not enabled.
 
 fn foo() -> u32 {
     0

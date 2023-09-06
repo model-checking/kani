@@ -8,5 +8,5 @@ edition = "2021"
 [dependencies]
 rand = "0.8.5"
 
-[package.metadata.kani]
-flags = { enable-unstable=true, enable-stubbing=true }
+[package.metadata.kani.unstable]
+stubbing = true

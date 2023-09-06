@@ -4,10 +4,11 @@
 //! to run during code generation. For example, this can be used to hook up
 //! custom MIR transformations.
 
+use crate::args::{Arguments, ReachabilityType};
 use crate::kani_middle::intrinsics::ModelIntrinsics;
 use crate::kani_middle::reachability::{collect_reachable_items, filter_crate_items};
 use crate::kani_middle::stubbing;
-use crate::kani_queries::{QueryDb, ReachabilityType};
+use crate::kani_queries::QueryDb;
 use rustc_hir::def_id::{DefId, LocalDefId};
 use rustc_interface;
 use rustc_middle::{
@@ -19,10 +20,11 @@ use rustc_middle::{
 /// Sets up rustc's query mechanism to apply Kani's custom queries to code from
 /// the present crate.
 pub fn provide(providers: &mut Providers, queries: &QueryDb) {
-    if should_override(queries) {
+    let args = queries.args();
+    if should_override(args) {
         // Don't override queries if we are only compiling our dependencies.
         providers.optimized_mir = run_mir_passes;
-        if queries.stubbing_enabled {
+        if args.stubbing_enabled {
             // TODO: Check if there's at least one stub being applied.
             providers.collect_and_partition_mono_items = collect_and_partition_mono_items;
         }
@@ -32,14 +34,14 @@ pub fn provide(providers: &mut Providers, queries: &QueryDb) {
 /// Sets up rustc's query mechanism to apply Kani's custom queries to code from
 /// external crates.
 pub fn provide_extern(providers: &mut ExternProviders, queries: &QueryDb) {
-    if should_override(queries) {
+    if should_override(queries.args()) {
         // Don't override queries if we are only compiling our dependencies.
         providers.optimized_mir = run_mir_passes_extern;
     }
 }
 
-fn should_override(queries: &QueryDb) -> bool {
-    queries.reachability_analysis != ReachabilityType::None && !queries.build_std
+fn should_override(args: &Arguments) -> bool {
+    args.reachability_analysis != ReachabilityType::None && !args.build_std
 }
 
 /// Returns the optimized code for the external function associated with `def_id` by

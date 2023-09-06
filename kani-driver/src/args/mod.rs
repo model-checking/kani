@@ -351,9 +351,11 @@ impl VerificationArgs {
         self.common_args.unstable_features.contains(&UnstableFeatures::FunctionContracts)
     }
 
-    /// Is experimental stubing enabled? Implied if function contracts are enabled.
+    /// Is experimental stubbing enabled?
     pub fn is_stubbing_enabled(&self) -> bool {
-        self.enable_stubbing || self.is_function_contracts_enabled()
+        self.enable_stubbing
+            || self.common_args.unstable_features.contains(&UnstableFeatures::Stubbing)
+            || self.is_function_contracts_enabled()
     }
 }
 
@@ -625,6 +627,10 @@ impl ValidateArgs for VerificationArgs {
                     ),
                 ));
             }
+        }
+
+        if self.enable_stubbing {
+            print_deprecated(&self.common_args, "--enable-stubbing", "-Z stubbing");
         }
 
         if self.concrete_playback.is_some()

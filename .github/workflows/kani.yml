@@ -191,7 +191,15 @@ jobs:
     runs-on: ubuntu-20.04
     container:
       image: ubuntu:18.04
+      volumes:
+        - /usr/local:/mnt/host-local
     steps:
+      - name: Remove unnecessary software to free up disk space
+        run: |
+          # inspired by https://github.com/easimon/maximize-build-space/blob/master/action.yml
+          df -h
+          rm -r /mnt/host-local/lib/android /mnt/host-local/.ghcup
+          df -h
       # This is required before checkout because the container does not
       # have Git installed, so cannot run checkout action. The checkout
       # action requires Git >=2.18, so use the Git maintainers' PPA.

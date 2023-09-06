@@ -509,16 +509,16 @@ impl goto_program::Symbol {
                 SymbolValues::None => Irep::nil(),
             },
             location: self.location.to_irep(mm),
-            /// Unique identifier, same as key in symbol table `foo::x`
+            // Unique identifier, same as key in symbol table `foo::x`
             name: self.name,
-            /// Only used by verilog
+            // Only used by verilog
             module: self.module.unwrap_or("".into()),
-            /// Local identifier `x`
+            // Local identifier `x`
             base_name: self.base_name.unwrap_or("".into()),
-            /// Almost always the same as base_name, but with name mangling can be relevant
+            // Almost always the same as `base_name`, but with name mangling can be relevant
             pretty_name: self.pretty_name.unwrap_or("".into()),
-            /// Currently set to C. Consider creating a "rust" mode and using it in cbmc
-            /// https://github.com/model-checking/kani/issues/1
+            // Currently set to C. Consider creating a "rust" mode and using it in cbmc
+            // https://github.com/model-checking/kani/issues/1
             mode: self.mode.to_string().into(),
 
             // global properties
