@@ -79,7 +79,7 @@ pub fn check_reachable_items<'tcx>(tcx: TyCtxt<'tcx>, queries: &QueryDb, items: 
         }
 
         // We don't short circuit here since this is a type check and can shake
-        // out differently depending on generic parameters
+        // out differently depending on generic parameters.
         if let MonoItem::Fn(instance) = item {
             if attributes::is_function_contract_generated(tcx, instance.def_id()) {
                 check_is_contract_safe(tcx, *instance);
@@ -103,7 +103,7 @@ fn check_is_contract_safe<'tcx>(tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) {
         /// composing error messages.
         r#where: &'static str,
         /// Adjective to describe the kind of pointer we're prohibiting.
-        /// Essentially `is_prohibited` but in english
+        /// Essentially `is_prohibited` but in English.
         what: &'static str,
     }
 
@@ -116,7 +116,7 @@ fn check_is_contract_safe<'tcx>(tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) {
             }
 
             // Rust's type visitor only recurses into type arguments, (e.g.
-            // `generics` in this match). This is enough for may types, but it
+            // `generics` in this match). This is enough for many types, but it
             // won't look at the field types of structs or enums. So we override
             // it here and do that ourselves.
             //
@@ -137,7 +137,7 @@ fn check_is_contract_safe<'tcx>(tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) {
                 }
                 std::ops::ControlFlow::Continue(())
             } else {
-                // For every other type
+                // For every other type.
                 t.super_visit_with(self)
             }
         }

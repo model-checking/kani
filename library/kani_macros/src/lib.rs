@@ -146,10 +146,10 @@ pub fn ensures(attr: TokenStream, item: TokenStream) -> TokenStream {
 ///
 /// The harness is expected to set up the arguments that `foo` should be called
 /// with and initialzied any `static mut` globals that are reachable. All of
-/// these should be initialized to as general a value as possible, usually
+/// these should be initialized to as general value as possible, usually
 /// achieved using `kani::any`. The harness must call e.g. `foo` at least once
 /// and if `foo` has type parameters, only one instantiation of those parameters
-/// is admissable. Violating either results in a compile error.
+/// is admissible. Violating either results in a compile error.
 ///
 /// If any of those types have special invariants you can use `kani::assume` to
 /// enforce them, but other than condition on inputs and checks of outputs

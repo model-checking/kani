@@ -84,7 +84,7 @@ pub fn assume(cond: bool) {
 /// For further convenience multiple comma separated premises are allowed, and
 /// are joined with `||` in the expansion. E.g. `implies!(a, b => c)` expands to
 /// `!a || !b || c` and says that `c` is true if both `a` and `b` are true (see
-/// also [Horn Clauses](https://en.wikipedia.org/wiki/Horn_clause))
+/// also [Horn Clauses](https://en.wikipedia.org/wiki/Horn_clause)).
 #[macro_export]
 macro_rules! implies {
     ($($premise:expr),+ => $conclusion:expr) => {

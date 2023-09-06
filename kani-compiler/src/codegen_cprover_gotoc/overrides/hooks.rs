@@ -326,7 +326,7 @@ impl<'tcx> GotocHook<'tcx> for MemCmp {
 }
 
 /// A builtin that is essentially a C-style dereference operation, creating an
-/// unsafe challow copy. Importantly either this copy or the original needs to
+/// unsafe shallow copy. Importantly either this copy or the original needs to
 /// be `mem::forget`en or a double-free will occur.
 ///
 /// Takes in a `&T` reference and returns a `T` (like clone would but without

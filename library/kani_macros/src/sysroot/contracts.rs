@@ -120,16 +120,16 @@ where
         && path.segments.iter().zip(mtch).all(|(actual, expected)| actual.ident == *expected)
 }
 
-/// Classifies the state a function is in in the contract handling pipeline.
+/// Classifies the state a function is in the contract handling pipeline.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ContractFunctionState {
-    /// This is the original code, re-emitted from a contract attribute
+    /// This is the original code, re-emitted from a contract attribute.
     Original,
     /// This is the first time a contract attribute is evaluated on this
-    /// function
+    /// function.
     Untouched,
     /// This is a check function that was generated from a previous evaluation
-    /// of a contract attribute
+    /// of a contract attribute.
     Check,
 }
 
@@ -185,7 +185,7 @@ struct PostconditionInjector(TokenStream2);
 impl VisitMut for PostconditionInjector {
     /// We leave this emtpy to stop the recursion here. We don't want to look
     /// inside the closure, because the return statements contained within are
-    /// for a different function, duh.
+    /// for a different function.
     fn visit_expr_closure_mut(&mut self, _: &mut syn::ExprClosure) {}
 
     fn visit_expr_mut(&mut self, i: &mut Expr) {
@@ -213,11 +213,11 @@ impl VisitMut for PostconditionInjector {
 /// A supporting function for creating shallow, unsafe copies of the arguments
 /// for the postconditions.
 ///
-/// This function
-/// - Collects all [`Ident`]s found in the argument patterns
-/// - Creates new names for them
-/// - Replaces all occurrences of those idents in `attrs` with the new names and
-/// - Returns the mapping of old names to new names
+/// This function:
+/// - Collects all [`Ident`]s found in the argument patterns;
+/// - Creates new names for them;
+/// - Replaces all occurrences of those idents in `attrs` with the new names and;
+/// - Returns the mapping of old names to new names.
 fn rename_argument_occurences(sig: &syn::Signature, attr: &mut Expr) -> HashMap<Ident, Ident> {
     let mut arg_ident_collector = ArgumentIdentCollector::new();
     arg_ident_collector.visit_signature(&sig);
@@ -320,14 +320,13 @@ fn requires_ensures_alt(attr: TokenStream, item: TokenStream, is_requires: bool)
 
     if matches!(function_state, ContractFunctionState::Untouched) {
         // We are the first time a contract is handled on this function, so
-        // we're responsible for
-        //
-        // 1. Generating a name for the check function
+        // we're responsible for:
+        // 1. Generating a name for the check function;
         // 2. Emitting the original, unchanged item and register the check
-        //    function on it via attribute
-        // 3. Renaming our item to the new name
+        //    function on it via attribute;
+        // 3. Renaming our item to the new name;
         // 4. And (minor point) adding #[allow(dead_code)] and
-        //    #[allow(unused_variables)] to the check function attributes
+        //    #[allow(unused_variables)] to the check function attributes.
 
         let check_fn_name = identifier_for_generated_function(item_fn, "check", a_short_hash);
 
