@@ -6,4 +6,3 @@ in function gcd
 Failed Checks: result != 0 && x % result == 0 && y % result == 0
 
 VERIFICATION:- FAILED
-

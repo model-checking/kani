@@ -173,14 +173,13 @@ impl<'tcx> KaniAttributes<'tcx> {
         // Check that all attributes are correctly used and well formed.
         let is_harness = self.is_harness();
         for (&kind, attrs) in self.map.iter() {
+            let local_error = |msg| self.tcx.sess.span_err(attrs[0].span, msg);
+
             if !is_harness && kind.is_harness_only() {
-                self.tcx.sess.span_err(
-                    attrs[0].span,
-                    format!(
-                        "the `{}` attribute also requires the `#[kani::proof]` attribute",
-                        kind.as_ref()
-                    ),
-                );
+                local_error(format!(
+                    "the `{}` attribute also requires the `#[kani::proof]` attribute",
+                    kind.as_ref()
+                ));
             }
             match kind {
                 KaniAttributeKind::ShouldPanic => {
@@ -205,7 +204,11 @@ impl<'tcx> KaniAttributes<'tcx> {
                     })
                 }
                 KaniAttributeKind::Proof => {
-                    assert!(!self.map.contains_key(&KaniAttributeKind::ProofForContract));
+                    if self.map.contains_key(&KaniAttributeKind::ProofForContract) {
+                        local_error(
+                            "`proof` and `proof_for_contract` may not be used on the same function.".to_string(),
+                        );
+                    }
                     expect_single(self.tcx, kind, &attrs);
                     attrs.iter().for_each(|attr| self.check_proof_attribute(attr))
                 }
@@ -213,7 +216,11 @@ impl<'tcx> KaniAttributes<'tcx> {
                     let _ = UnstableAttribute::try_from(*attr).map_err(|err| err.report(self.tcx));
                 }),
                 KaniAttributeKind::ProofForContract => {
-                    assert!(!self.map.contains_key(&KaniAttributeKind::Proof));
+                    if self.map.contains_key(&KaniAttributeKind::Proof) {
+                        local_error(
+                            "`proof` and `proof_for_contract` may not be used on the same function.".to_string(),
+                        );
+                    }
                     expect_single(self.tcx, kind, &attrs);
                 }
                 KaniAttributeKind::CheckedWith => {

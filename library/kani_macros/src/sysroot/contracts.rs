@@ -250,11 +250,12 @@ fn rename_argument_occurences(sig: &syn::Signature, attr: &mut Expr) -> HashMap<
 /// added before the body and postconditions after as well as injected before
 /// every `return` (see [`PostconditionInjector`]). Attributes on the original
 /// function are also copied to the check function. Each clause (requires or
-/// ensures) after the first will be ignored on the original function (detected
-/// by finding the `kanitool::checked_with` attribute). On the check function
-/// (detected by finding the `kanitool::is_contract_generated` attribute) it
-/// expands into a new layer of pre- or postconditions. This state machine is
-/// also explained in more detail in comments in the body of this macro.
+/// ensures) after the first clause will be ignored on the original function
+/// (detected by finding the `kanitool::checked_with` attribute). On the check
+/// function (detected by finding the `kanitool::is_contract_generated`
+/// attribute) it expands into a new layer of pre- or postconditions. This state
+/// machine is also explained in more detail in comments in the body of this
+/// macro.
 ///
 /// In the check function all named arguments of the function are unsafely
 /// shallow-copied with the `kani::untracked_deref` function to circumvent the
@@ -330,10 +331,12 @@ fn requires_ensures_alt(attr: TokenStream, item: TokenStream, is_requires: bool)
 
         let check_fn_name = identifier_for_generated_function(item_fn, "check", a_short_hash);
 
-        // Constructing string literals explicitly here, because if we call
-        // `stringify!` in the generated code that is passed on as that
-        // expression to the next expansion of a contract, not as the
-        // literal.
+        // Constructing string literals explicitly here, because `stringify!`
+        // doesn't work. Let's say we have an identifier `check_fn` and we were
+        // to do `quote!(stringify!(check_fn))` to try to have it expand to
+        // `"check_fn"` in the generated code. Then when the next macro parses
+        // this it will *not* see the literal `"check_fn"` as you may expect but
+        // instead the *expression* `stringify!(check_fn)`.
         let check_fn_name_str = syn::LitStr::new(&check_fn_name.to_string(), Span::call_site());
 
         // The order of `attrs` and `kanitool::{checked_with,
