@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-//! Unified handling of unstable feature flags across Kani.
+//! Unified handling of unstable-feature flags across Kani.
 //!
 //! The central types are [`UnstableFeature`], which describes a single feature
 //! and is intended as a small, cheap enum that is [`Copy`].
@@ -78,7 +78,7 @@ pub enum UnstableFeature {
     ConcretePlayback,
     /// Enable Kani's unstable async library.
     AsyncLib,
-    /// Enable line coverage instrumentation/reports
+    /// Enable line coverage instrumentation/reports.
     LineCoverage,
 }
 
@@ -105,9 +105,9 @@ pub struct EnabledUnstableFeatures {
 impl EnabledUnstableFeatures {
     /// The preferred way to serialize these unstable features back into a
     /// format that can be used as command line arguments fo an invocation of
-    /// e.g. the compiler
+    /// e.g. the compiler.
     ///
-    /// See also the [module level documentation][self]
+    /// See also the [module level documentation][self].
     pub fn as_arguments(&self) -> impl Iterator<Item = &str> {
         self.enabled_unstable_features.iter().flat_map(|f| f.as_argument())
     }
