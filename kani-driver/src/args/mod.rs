@@ -299,7 +299,7 @@ pub struct VerificationArgs {
         requires("enable_unstable"),
         conflicts_with("concrete_playback")
     )]
-    pub enable_stubbing: bool,
+    enable_stubbing: bool,
 
     /// Enable Kani coverage output alongside verification result
     #[arg(long, hide_short_help = true)]
@@ -344,6 +344,12 @@ impl VerificationArgs {
             Some(None) => None,       // -j
             Some(Some(x)) => Some(x), // -j=x
         }
+    }
+
+    /// Is experimental stubbing enabled?
+    pub fn is_stubbing_enabled(&self) -> bool {
+        self.enable_stubbing
+            || self.common_args.unstable_features.contains(&UnstableFeatures::Stubbing)
     }
 }
 
@@ -615,6 +621,10 @@ impl ValidateArgs for VerificationArgs {
                     ),
                 ));
             }
+        }
+
+        if self.enable_stubbing {
+            print_deprecated(&self.common_args, "--enable-stubbing", "-Z stubbing");
         }
 
         if self.concrete_playback.is_some()

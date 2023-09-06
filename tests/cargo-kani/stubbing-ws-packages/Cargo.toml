@@ -5,6 +5,5 @@
 [workspace]
 members = ["dependency", "top"]
 
-[workspace.metadata.kani.flags]
-enable-unstable=true
-enable-stubbing=true
+[workspace.metadata.kani.unstable]
+stubbing=true

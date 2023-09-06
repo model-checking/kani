@@ -160,7 +160,7 @@ impl<'tcx> From<&Terminator<'tcx>> for Key {
             TerminatorKind::UnwindResume => Key("UnwindResume"),
             TerminatorKind::Return => Key("Return"),
             TerminatorKind::SwitchInt { .. } => Key("SwitchInt"),
-            TerminatorKind::UnwindTerminate => Key("UnwindTerminate"),
+            TerminatorKind::UnwindTerminate(_) => Key("UnwindTerminate"),
             TerminatorKind::Unreachable => Key("Unreachable"),
             TerminatorKind::Yield { .. } => Key("Yield"),
         }
