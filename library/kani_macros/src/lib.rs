@@ -175,9 +175,7 @@ mod sysroot {
 
     mod contracts;
 
-    pub use contracts::{
-        ensures, proof_for_contract, requires, stub_verified,
-    };
+    pub use contracts::{ensures, proof_for_contract, requires, stub_verified};
 
     use super::*;
 

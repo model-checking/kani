@@ -19,7 +19,7 @@ use strum_macros::{AsRefStr, EnumString};
 
 use tracing::{debug, trace};
 
-use super::resolve::{self, resolve_fn};
+use super::resolve::{self, resolve_fn, ResolveError};
 
 #[derive(Debug, Clone, Copy, AsRefStr, EnumString, PartialEq, Eq, PartialOrd, Ord)]
 #[strum(serialize_all = "snake_case")]
@@ -139,19 +139,21 @@ impl<'tcx> KaniAttributes<'tcx> {
     }
 
     pub fn use_contract(&self) -> Vec<Result<(Symbol, DefId, Span), ErrorGuaranteed>> {
-        self.map.get(&KaniAttributeKind::StubVerified).map_or([].as_slice(), Vec::as_slice)
+        self.map
+            .get(&KaniAttributeKind::StubVerified)
+            .map_or([].as_slice(), Vec::as_slice)
             .iter()
             .map(|attr| {
                 let name = expect_key_string_value(self.tcx.sess, attr)?;
-                let ok = self.resolve_sibling(name.as_str())
-                    .map_err(|e| 
-                        self.tcx.sess.span_err(
-                            attr.span,
-                            format!(
-                                "Sould not resolve replacement function {} because {e}",
-                                name.as_str()
-                            ),
-                        ))?;
+                let ok = self.resolve_sibling(name.as_str()).map_err(|e| {
+                    self.tcx.sess.span_err(
+                        attr.span,
+                        format!(
+                            "Sould not resolve replacement function {} because {e}",
+                            name.as_str()
+                        ),
+                    )
+                })?;
                 Ok((name, ok, attr.span))
             })
             .collect()
@@ -165,20 +167,17 @@ impl<'tcx> KaniAttributes<'tcx> {
     ) -> Option<Result<(Symbol, DefId, Span), ErrorGuaranteed>> {
         self.expect_maybe_one(KaniAttributeKind::ProofForContract).map(|target| {
             let name = expect_key_string_value(self.tcx.sess, target)?;
-            let resolved = resolve_fn(
-                self.tcx,
-                self.tcx.parent_module_from_def_id(self.item.expect_local()).to_local_def_id(),
-                name.as_str(),
-            );
-            resolved.map(|ok| (name, ok, target.span)).map_err(|resolve_err| {
-                self.tcx.sess.span_err(
-                    target.span,
-                    format!(
-                        "Failed to resolve replacement function {} because {resolve_err}",
-                        name.as_str()
-                    ),
-                )
-            })
+            self.resolve_sibling(name.as_str()).map(|ok| (name, ok, target.span)).map_err(
+                |resolve_err| {
+                    self.tcx.sess.span_err(
+                        target.span,
+                        format!(
+                            "Failed to resolve replacement function {} because {resolve_err}",
+                            name.as_str()
+                        ),
+                    )
+                },
+            )
         })
     }
 
@@ -192,6 +191,14 @@ impl<'tcx> KaniAttributes<'tcx> {
     pub fn replaced_with(&self) -> Option<Result<Symbol, ErrorGuaranteed>> {
         self.expect_maybe_one(KaniAttributeKind::ReplacedWith)
             .map(|target| expect_key_string_value(self.tcx.sess, target))
+    }
+
+    fn resolve_sibling(&self, path_str: &str) -> Result<DefId, ResolveError<'tcx>> {
+        resolve_fn(
+            self.tcx,
+            self.tcx.parent_module_from_def_id(self.item.expect_local()).to_local_def_id(),
+            path_str,
+        )
     }
 
     /// Check that all attributes assigned to an item is valid.
@@ -252,8 +259,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                     expect_single(self.tcx, kind, &attrs);
                 }
                 KaniAttributeKind::StubVerified => {}
-                KaniAttributeKind::CheckedWith
-                | KaniAttributeKind::ReplacedWith => {
+                KaniAttributeKind::CheckedWith | KaniAttributeKind::ReplacedWith => {
                     self.expect_maybe_one(kind)
                         .map(|attr| expect_key_string_value(&self.tcx.sess, attr));
                 }
@@ -377,13 +383,16 @@ impl<'tcx> KaniAttributes<'tcx> {
                 }
                 KaniAttributeKind::StubVerified => {
                     for contract in self.use_contract() {
-                        let Ok((name, def_id, _span)) = contract else { continue; };
-                        let Some(Ok(replacement_name)) = KaniAttributes::for_item(self.tcx, def_id).replaced_with() else {
+                        let Ok((name, def_id, _span)) = contract else {
+                            continue;
+                        };
+                        let Some(Ok(replacement_name)) =
+                            KaniAttributes::for_item(self.tcx, def_id).replaced_with()
+                        else {
                             // TODO report errors
                             continue;
                         };
-                        harness.stubs.push(
-                            self.stub_for_relative_item(name, replacement_name))
+                        harness.stubs.push(self.stub_for_relative_item(name, replacement_name))
                     }
                 }
                 KaniAttributeKind::Unstable => {

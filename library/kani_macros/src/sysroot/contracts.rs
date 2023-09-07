@@ -161,9 +161,9 @@ impl ContractFunctionState {
                             "check" => Some(Self::Check),
                             "replace" => Some(Self::Replace),
                             _ => {
-                            lst.span().unwrap().error("Expected `check` ident").emit();
+                                lst.span().unwrap().error("Expected `check` ident").emit();
                                 None
-                        }
+                            }
                         };
                     }
                 }
@@ -206,7 +206,7 @@ impl ContractFunctionState {
     ///   tuple fields, indicating that both functions need to be emitted. We
     ///   also emit the original function with the `checked_with` and
     ///   `replaced_with` attributes added.
-    /// 
+    ///
     /// The only reason the `item_fn` is mutable is I'm using `std::mem::swap`
     /// to avoid making copies.
     fn prepare_header(
@@ -264,7 +264,9 @@ impl ContractFunctionState {
             }
             ContractFunctionState::Original | Self::ReplaceDummy => None,
             ContractFunctionState::Check => Some((None, Some(item_fn.sig.ident.clone()))),
-            ContractFunctionState::Replace => Some((Some((item_fn.sig.ident.clone(), false)), None)),
+            ContractFunctionState::Replace => {
+                Some((Some((item_fn.sig.ident.clone(), false)), None))
+            }
         }
     }
 }
@@ -357,7 +359,6 @@ enum ContractConditionsType {
 
 impl ContractConditionsType {
     fn new_ensures(sig: &Signature, attr: &mut Expr) -> Self {
-
         let arg_idents = rename_argument_occurrences(sig, attr);
 
         ContractConditionsType::Ensures { arg_idents }
@@ -365,12 +366,7 @@ impl ContractConditionsType {
 }
 
 impl<'a> ContractConditionsHandler<'a> {
-    fn new(
-        is_requires: bool,
-        mut attr: Expr,
-        fn_sig: &Signature,
-        fn_body: Block,
-    ) -> Self {
+    fn new(is_requires: bool, mut attr: Expr, fn_sig: &Signature, fn_body: Block) -> Self {
         let condition_type = if is_requires {
             ContractConditionsType::Requires
         } else {
@@ -421,11 +417,8 @@ impl<'a> ContractConditionsHandler<'a> {
 
     fn make_replace_body(&self, sig: &Signature, use_dummy_fn_call: bool) -> TokenStream2 {
         let attr = &self.attr;
-        let call_to_prior = if use_dummy_fn_call {
-            quote!(kani::any())
-        } else {
-            self.body.to_token_stream()
-        };
+        let call_to_prior =
+            if use_dummy_fn_call { quote!(kani::any()) } else { self.body.to_token_stream() };
         match &self.condition_type {
             ContractConditionsType::Requires => quote!(
                 kani::assert(#attr, stringify!(#attr));
@@ -444,9 +437,6 @@ impl<'a> ContractConditionsHandler<'a> {
         }
     }
 }
-
-}
-
 
 /// The main meat of handling requires/ensures contracts.
 ///
@@ -536,10 +526,10 @@ fn requires_ensures_alt(attr: TokenStream, item: TokenStream, is_requires: bool)
 
     let emit_common_header = |output: &mut TokenStream2| {
         if function_state.emit_tag_attr() {
-        output.extend(quote!(
-                #[allow(dead_code, unused_variables)]
-        ));
-    }
+            output.extend(quote!(
+                    #[allow(dead_code, unused_variables)]
+            ));
+        }
         output.extend(attrs.iter().flat_map(Attribute::to_token_stream));
     };
 
@@ -557,24 +547,24 @@ fn requires_ensures_alt(attr: TokenStream, item: TokenStream, is_requires: bool)
         sig.ident = replace_name;
 
         // Finally emit the check function itself.
-    output.extend(quote!(
-            #sig {
-                #body
-            }
-    ));
+        output.extend(quote!(
+                #sig {
+                    #body
+                }
+        ));
     }
 
     if let Some(check_name) = emit_check {
         emit_common_header(&mut output);
 
         if function_state.emit_tag_attr() {
-        // If it's the first time we also emit this marker. Again, order is
-        // important so this happens as the last emitted attribute.
-        output.extend(quote!(#[kanitool::is_contract_generated(check)]));
-    }
+            // If it's the first time we also emit this marker. Again, order is
+            // important so this happens as the last emitted attribute.
+            output.extend(quote!(#[kanitool::is_contract_generated(check)]));
+        }
         let body = handler.make_check_body();
         sig.ident = check_name;
-    output.extend(quote!(
+        output.extend(quote!(
         #sig {
                 #body
         }
@@ -606,6 +596,5 @@ macro_rules! passthrough {
         }
     }
 }
-
 
 passthrough!(stub_verified, false);
