@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! Define arguments that should be common to all subcommands in Kani.
 use crate::args::ValidateArgs;
-use clap::{error::Error, error::ErrorKind, ValueEnum};
+use clap::{error::Error, error::ErrorKind};
+pub use kani_metadata::{EnabledUnstableFeatures, UnstableFeature};
 
 /// Common Kani arguments that we expect to be included in most subcommands.
 #[derive(Debug, clap::Args)]
@@ -26,26 +27,8 @@ pub struct CommonArgs {
     pub dry_run: bool,
 
     /// Enable an unstable feature.
-    #[arg(short = 'Z', num_args(1), value_name = "UNSTABLE_FEATURE")]
-    pub unstable_features: Vec<UnstableFeatures>,
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum, strum_macros::Display)]
-#[strum(serialize_all = "kebab-case")]
-pub enum UnstableFeatures {
-    /// Allow replacing certain items with stubs (mocks).
-    /// See [RFC-0002](https://model-checking.github.io/kani/rfc/rfcs/0002-function-stubbing.html)
-    Stubbing,
-    /// Generate a C-like file equivalent to input program used for debugging purpose.
-    GenC,
-    /// Allow Kani to link against C code.
-    CFfi,
-    /// Enable concrete playback flow.
-    ConcretePlayback,
-    /// Enable Kani's unstable async library.
-    AsyncLib,
-    /// Enable line coverage instrumentation/reports
-    LineCoverage,
+    #[clap(flatten)]
+    pub unstable_features: EnabledUnstableFeatures,
 }
 
 impl ValidateArgs for CommonArgs {

@@ -549,6 +549,7 @@ dependencies = [
 name = "kani_metadata"
 version = "0.36.0"
 dependencies = [
+ "clap",
  "cprover_bindings",
  "serde",
  "strum 0.25.0",
