@@ -5,17 +5,21 @@
 use std::collections::BTreeMap;
 
 use kani_metadata::{CbmcSolver, HarnessAttributes, Stub};
-use rustc_ast::{attr, AttrKind, Attribute, LitKind, MetaItem, MetaItemKind, NestedMetaItem};
+use rustc_ast::{
+    attr, AttrArgs, AttrArgsEq, AttrKind, Attribute, ExprKind, LitKind, MetaItem, MetaItemKind,
+    NestedMetaItem,
+};
 use rustc_errors::ErrorGuaranteed;
 use rustc_hir::{def::DefKind, def_id::DefId};
 use rustc_middle::ty::{Instance, TyCtxt, TyKind};
-use rustc_span::Span;
+use rustc_session::Session;
+use rustc_span::{Span, Symbol};
 use std::str::FromStr;
 use strum_macros::{AsRefStr, EnumString};
 
 use tracing::{debug, trace};
 
-use super::resolve;
+use super::resolve::{self, resolve_fn};
 
 #[derive(Debug, Clone, Copy, AsRefStr, EnumString, PartialEq, Eq, PartialOrd, Ord)]
 #[strum(serialize_all = "snake_case")]
@@ -27,6 +31,16 @@ enum KaniAttributeKind {
     /// Attribute used to mark unstable APIs.
     Unstable,
     Unwind,
+    /// A harness, similar to [`Self::Proof`], but for checking a function
+    /// contract, e.g. the contract check is substituted for the target function
+    /// before the the verification runs.
+    ProofForContract,
+    /// Attribute on a function with a contract that identifies the code
+    /// implementing the check for this contract.
+    CheckedWith,
+    /// Attribute on a function that was auto-generated from expanding a
+    /// function contract.
+    IsContractGenerated,
 }
 
 impl KaniAttributeKind {
@@ -37,9 +51,30 @@ impl KaniAttributeKind {
             | KaniAttributeKind::ShouldPanic
             | KaniAttributeKind::Solver
             | KaniAttributeKind::Stub
+            | KaniAttributeKind::ProofForContract
             | KaniAttributeKind::Unwind => true,
-            KaniAttributeKind::Unstable => false,
+            KaniAttributeKind::Unstable
+            | KaniAttributeKind::CheckedWith
+            | KaniAttributeKind::IsContractGenerated => false,
         }
+    }
+
+    /// Is this an "active" function contract attribute? This means it is
+    /// part of the function contract interface *and* it implies that a contract
+    /// will be used (stubbed or checked) in some way, thus requiring that the
+    /// user activate the unstable feature.
+    ///
+    /// If we find an "inactive" contract attribute we chose not to error,
+    /// because it wouldn't have any effect anyway.
+    pub fn demands_function_contract_use(self) -> bool {
+        matches!(self, KaniAttributeKind::ProofForContract)
+    }
+
+    /// Would this attribute be placed on a function as part of a function
+    /// contract. E.g. created by `requires`, `ensures`.
+    pub fn is_function_contract(self) -> bool {
+        use KaniAttributeKind::*;
+        matches!(self, CheckedWith | IsContractGenerated)
     }
 }
 
@@ -83,6 +118,54 @@ impl<'tcx> KaniAttributes<'tcx> {
         Self { map, tcx, item: def_id }
     }
 
+    /// Expect that at most one attribute of this kind exists on the function
+    /// and return it.
+    fn expect_maybe_one(&self, kind: KaniAttributeKind) -> Option<&'tcx Attribute> {
+        match self.map.get(&kind)?.as_slice() {
+            [one] => Some(one),
+            _ => {
+                self.tcx.sess.err(format!(
+                    "Too many {} attributes on {}, expected 0 or 1",
+                    kind.as_ref(),
+                    self.tcx.def_path_debug_str(self.item)
+                ));
+                None
+            }
+        }
+    }
+
+    /// Parse and extract the `proof_for_contract(TARGET)` attribute. The
+    /// returned symbol and DefId are respectively the name and id of `TARGET`,
+    /// the span in the span for the attribute (contents).
+    fn interpret_the_for_contract_attribute(
+        &self,
+    ) -> Option<Result<(Symbol, DefId, Span), ErrorGuaranteed>> {
+        self.expect_maybe_one(KaniAttributeKind::ProofForContract).map(|target| {
+            let name = expect_key_string_value(self.tcx.sess, target)?;
+            let resolved = resolve_fn(
+                self.tcx,
+                self.tcx.parent_module_from_def_id(self.item.expect_local()).to_local_def_id(),
+                name.as_str(),
+            );
+            resolved.map(|ok| (name, ok, target.span)).map_err(|resolve_err| {
+                self.tcx.sess.span_err(
+                    target.span,
+                    format!(
+                        "Failed to resolve replacement function {} because {resolve_err}",
+                        name.as_str()
+                    ),
+                )
+            })
+        })
+    }
+
+    /// Extract the name of the sibling function this contract is checked with
+    /// (if any).
+    pub fn checked_with(&self) -> Option<Result<Symbol, ErrorGuaranteed>> {
+        self.expect_maybe_one(KaniAttributeKind::CheckedWith)
+            .map(|target| expect_key_string_value(self.tcx.sess, target))
+    }
+
     /// Check that all attributes assigned to an item is valid.
     /// Errors will be added to the session. Invoke self.tcx.sess.abort_if_errors() to terminate
     /// the session and emit all errors found.
@@ -90,14 +173,13 @@ impl<'tcx> KaniAttributes<'tcx> {
         // Check that all attributes are correctly used and well formed.
         let is_harness = self.is_harness();
         for (&kind, attrs) in self.map.iter() {
+            let local_error = |msg| self.tcx.sess.span_err(attrs[0].span, msg);
+
             if !is_harness && kind.is_harness_only() {
-                self.tcx.sess.span_err(
-                    attrs[0].span,
-                    format!(
-                        "the `{}` attribute also requires the `#[kani::proof]` attribute",
-                        kind.as_ref()
-                    ),
-                );
+                local_error(format!(
+                    "the `{}` attribute also requires the `#[kani::proof]` attribute",
+                    kind.as_ref()
+                ));
             }
             match kind {
                 KaniAttributeKind::ShouldPanic => {
@@ -122,12 +204,34 @@ impl<'tcx> KaniAttributes<'tcx> {
                     })
                 }
                 KaniAttributeKind::Proof => {
+                    if self.map.contains_key(&KaniAttributeKind::ProofForContract) {
+                        local_error(
+                            "`proof` and `proof_for_contract` may not be used on the same function.".to_string(),
+                        );
+                    }
                     expect_single(self.tcx, kind, &attrs);
                     attrs.iter().for_each(|attr| self.check_proof_attribute(attr))
                 }
                 KaniAttributeKind::Unstable => attrs.iter().for_each(|attr| {
                     let _ = UnstableAttribute::try_from(*attr).map_err(|err| err.report(self.tcx));
                 }),
+                KaniAttributeKind::ProofForContract => {
+                    if self.map.contains_key(&KaniAttributeKind::Proof) {
+                        local_error(
+                            "`proof` and `proof_for_contract` may not be used on the same function.".to_string(),
+                        );
+                    }
+                    expect_single(self.tcx, kind, &attrs);
+                }
+                KaniAttributeKind::CheckedWith => {
+                    self.expect_maybe_one(kind)
+                        .map(|attr| expect_key_string_value(&self.tcx.sess, attr));
+                }
+                KaniAttributeKind::IsContractGenerated => {
+                    // Ignored here because this is only used by the proc macros
+                    // to communicate with one another. So by the time it gets
+                    // here we don't care if it's valid or not.
+                }
             }
         }
     }
@@ -142,6 +246,23 @@ impl<'tcx> KaniAttributes<'tcx> {
             // https://github.com/model-checking/kani/pull/2406#issuecomment-1534333862
             return;
         }
+
+        // If the `function-contracts` unstable feature is not enabled then no
+        // function should use any of those APIs.
+        if !enabled_features.iter().any(|feature| feature == "function-contracts") {
+            for kind in self.map.keys().copied().filter(|a| a.demands_function_contract_use()) {
+                let msg = format!(
+                    "Using the {} attribute requires activating the unstable `function-contracts` feature",
+                    kind.as_ref()
+                );
+                if let Some(attr) = self.map.get(&kind).unwrap().first() {
+                    self.tcx.sess.span_err(attr.span, msg);
+                } else {
+                    self.tcx.sess.err(msg);
+                }
+            }
+        }
+
         if let Some(unstable_attrs) = self.map.get(&KaniAttributeKind::Unstable) {
             for attr in unstable_attrs {
                 let unstable_attr = UnstableAttribute::try_from(*attr).unwrap();
@@ -176,7 +297,8 @@ impl<'tcx> KaniAttributes<'tcx> {
     /// Is this item a harness? (either `proof` or `proof_for_contract`
     /// attribute are present)
     fn is_harness(&self) -> bool {
-        self.map.get(&KaniAttributeKind::Proof).is_some()
+        self.map.contains_key(&KaniAttributeKind::Proof)
+            || self.map.contains_key(&KaniAttributeKind::ProofForContract)
     }
 
     /// Extract harness attributes for a given `def_id`.
@@ -185,7 +307,9 @@ impl<'tcx> KaniAttributes<'tcx> {
     /// Note that all attributes should be valid by now.
     pub fn harness_attributes(&self) -> HarnessAttributes {
         // Abort if not local.
-        assert!(self.item.is_local(), "Expected a local item, but got: {:?}", self.item);
+        if !self.item.is_local() {
+            panic!("Expected a local item, but got: {:?}", self.item);
+        };
         trace!(?self, "extract_harness_attributes");
         assert!(self.is_harness());
         self.map.iter().fold(HarnessAttributes::default(), |mut harness, (kind, attributes)| {
@@ -195,15 +319,38 @@ impl<'tcx> KaniAttributes<'tcx> {
                     harness.solver = parse_solver(self.tcx, attributes[0]);
                 }
                 KaniAttributeKind::Stub => {
-                    harness.stubs = parse_stubs(self.tcx, self.item, attributes);
+                    harness.stubs.extend_from_slice(&parse_stubs(self.tcx, self.item, attributes));
                 }
                 KaniAttributeKind::Unwind => {
                     harness.unwind_value = parse_unwind(self.tcx, attributes[0])
                 }
                 KaniAttributeKind::Proof => harness.proof = true,
+                KaniAttributeKind::ProofForContract => {
+                    harness.proof = true;
+                    let Some(Ok((name, id, span))) = self.interpret_the_for_contract_attribute()
+                    else {
+                        self.tcx.sess.span_err(
+                            self.tcx.def_span(self.item),
+                            format!("Invalid `{}` attribute format", kind.as_ref()),
+                        );
+                        return harness;
+                    };
+                    let Some(Ok(replacement_name)) =
+                        KaniAttributes::for_item(self.tcx, id).checked_with()
+                    else {
+                        self.tcx
+                            .sess
+                            .span_err(span, "Target function for this check has no contract");
+                        return harness;
+                    };
+                    harness.stubs.push(self.stub_for_relative_item(name, replacement_name));
+                }
                 KaniAttributeKind::Unstable => {
                     // Internal attribute which shouldn't exist here.
                     unreachable!()
+                }
+                KaniAttributeKind::CheckedWith | KaniAttributeKind::IsContractGenerated => {
+                    todo!("Contract attributes are not supported on proofs")
                 }
             };
             harness
@@ -226,6 +373,18 @@ impl<'tcx> KaniAttributes<'tcx> {
             }
         }
     }
+
+    fn stub_for_relative_item(&self, anchor: Symbol, replacement: Symbol) -> Stub {
+        let local_id = self.item.expect_local();
+        let current_module = self.tcx.parent_module_from_def_id(local_id);
+        let replace_str = replacement.as_str();
+        let original_str = anchor.as_str();
+        let replacement = original_str
+            .rsplit_once("::")
+            .map_or_else(|| replace_str.to_string(), |t| t.0.to_string() + "::" + replace_str);
+        resolve::resolve_fn(self.tcx, current_module.to_local_def_id(), &replacement).unwrap();
+        Stub { original: original_str.to_string(), replacement }
+    }
 }
 
 /// An efficient check for the existence for a particular [`KaniAttributeKind`].
@@ -239,10 +398,18 @@ fn has_kani_attribute<F: Fn(KaniAttributeKind) -> bool>(
     tcx.get_attrs_unchecked(def_id).iter().filter_map(|a| attr_kind(tcx, a)).any(predicate)
 }
 
+/// Test if this function was generated by expanding a contract attribute like
+/// `requires` and `ensures`.
+pub fn is_function_contract_generated(tcx: TyCtxt, def_id: DefId) -> bool {
+    has_kani_attribute(tcx, def_id, KaniAttributeKind::is_function_contract)
+}
+
 /// Same as [`KaniAttributes::is_harness`] but more efficient because less
 /// attribute parsing is performed.
 pub fn is_proof_harness(tcx: TyCtxt, def_id: DefId) -> bool {
-    has_kani_attribute(tcx, def_id, |a| matches!(a, KaniAttributeKind::Proof))
+    has_kani_attribute(tcx, def_id, |a| {
+        matches!(a, KaniAttributeKind::Proof | KaniAttributeKind::ProofForContract)
+    })
 }
 
 /// Does this `def_id` have `#[rustc_test_marker]`?
@@ -256,6 +423,43 @@ pub fn test_harness_name(tcx: TyCtxt, def_id: DefId) -> String {
     let attrs = tcx.get_attrs_unchecked(def_id);
     let marker = attr::find_by_name(attrs, rustc_span::symbol::sym::rustc_test_marker).unwrap();
     parse_str_value(&marker).unwrap()
+}
+
+/// Expect the contents of this attribute to be of the format #[attribute =
+/// "value"] and return the `"value"`.
+fn expect_key_string_value(
+    sess: &Session,
+    attr: &Attribute,
+) -> Result<rustc_span::Symbol, ErrorGuaranteed> {
+    let span = attr.span;
+    let AttrArgs::Eq(_, it) = &attr.get_normal_item().args else {
+        return Err(sess.span_err(span, "Expected attribute of the form #[attr = \"value\"]"));
+    };
+    let maybe_str = match it {
+        AttrArgsEq::Ast(expr) => {
+            if let ExprKind::Lit(tok) = expr.kind {
+                match LitKind::from_token_lit(tok) {
+                    Ok(l) => l.str(),
+                    Err(err) => {
+                        return Err(sess.span_err(
+                            span,
+                            format!("Invalid string literal on right hand side of `=` {err:?}"),
+                        ));
+                    }
+                }
+            } else {
+                return Err(
+                    sess.span_err(span, "Expected literal string as right hand side of `=`")
+                );
+            }
+        }
+        AttrArgsEq::Hir(lit) => lit.kind.str(),
+    };
+    if let Some(str) = maybe_str {
+        Ok(str)
+    } else {
+        Err(sess.span_err(span, "Expected literal string as right hand side of `=`"))
+    }
 }
 
 fn expect_single<'a>(
