@@ -42,18 +42,6 @@ impl<'tcx> GotocCtx<'tcx> {
         self.current_fn().mir().var_debug_info.iter().find(|info| match info.value {
             VarDebugInfoContents::Place(p) => p.local == *l && p.projection.len() == 0,
             VarDebugInfoContents::Const(_) => false,
-            // This variant was added in
-            // https://github.com/rust-lang/rust/pull/102570 and is concerned
-            // with a scalar replacement of aggregates (SROA) MIR optimization
-            // that is only enabled with `--mir-opt-level=3` or higher.
-            // TODO: create a test and figure out if we should return debug info
-            // for this case:
-            // https://github.com/model-checking/kani/issues/1933
-            VarDebugInfoContents::Composite { .. } => {
-                // Fail in debug mode to determine if we ever hit this case
-                debug_assert!(false, "Unhandled VarDebugInfoContents::Composite");
-                false
-            }
         })
     }
 }
