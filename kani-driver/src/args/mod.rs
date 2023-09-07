@@ -348,13 +348,13 @@ impl VerificationArgs {
 
     /// Are experimental function contracts enabled?
     pub fn is_function_contracts_enabled(&self) -> bool {
-        self.common_args.unstable_features.contains(&UnstableFeatures::FunctionContracts)
+        self.common_args.unstable_features.contains(UnstableFeature::FunctionContracts)
     }
 
     /// Is experimental stubbing enabled?
     pub fn is_stubbing_enabled(&self) -> bool {
         self.enable_stubbing
-            || self.common_args.unstable_features.contains(&UnstableFeatures::Stubbing)
+            || self.common_args.unstable_features.contains(UnstableFeature::Stubbing)
             || self.is_function_contracts_enabled()
     }
 }
@@ -634,7 +634,7 @@ impl ValidateArgs for VerificationArgs {
         }
 
         if self.concrete_playback.is_some()
-            && !self.common_args.unstable_features.contains(&UnstableFeatures::ConcretePlayback)
+            && !self.common_args.unstable_features.contains(UnstableFeature::ConcretePlayback)
         {
             if self.common_args.enable_unstable {
                 print_deprecated(&self.common_args, "--enable-unstable", "-Z concrete-playback");
@@ -648,7 +648,7 @@ impl ValidateArgs for VerificationArgs {
         }
 
         if !self.c_lib.is_empty()
-            && !self.common_args.unstable_features.contains(&UnstableFeatures::CFfi)
+            && !self.common_args.unstable_features.contains(UnstableFeature::CFfi)
         {
             if self.common_args.enable_unstable {
                 print_deprecated(&self.common_args, "`--enable-unstable`", "-Z c-ffi");
@@ -662,7 +662,7 @@ impl ValidateArgs for VerificationArgs {
         }
 
         if self.coverage
-            && !self.common_args.unstable_features.contains(&UnstableFeatures::LineCoverage)
+            && !self.common_args.unstable_features.contains(UnstableFeature::LineCoverage)
         {
             return Err(Error::raw(
                 ErrorKind::MissingRequiredArgument,
