@@ -29,7 +29,7 @@ fn hash_of_token_stream<H: std::hash::Hasher>(hasher: &mut H, stream: proc_macro
     }
 }
 
-use syn::visit_mut::VisitMut;
+use syn::{visit_mut::VisitMut, Block, Signature, Attribute};
 
 /// Hash this `TokenStream` and return an integer that is at most digits
 /// long when hex formatted.
@@ -120,6 +120,8 @@ where
         && path.segments.iter().zip(mtch).all(|(actual, expected)| actual.ident == *expected)
 }
 
+/// Temporarily swap `$src` and `$target` using `std::mem::swap` for the
+/// execution of `$code`, then swap them back.
 macro_rules! swapped {
     ($src:expr, $target:expr, $code:expr) => {{
         std::mem::swap($src, $target);
@@ -141,7 +143,7 @@ enum ContractFunctionState {
     /// of a contract attribute.
     Check,
     /// This is a replace function that was generated from a previous evaluation
-    /// of a contract attribute
+    /// of a contract attribute.
     Replace,
 }
 
@@ -161,7 +163,7 @@ impl ContractFunctionState {
                             "check" => Some(Self::Check),
                             "replace" => Some(Self::Replace),
                             _ => {
-                                lst.span().unwrap().error("Expected `check` ident").emit();
+                                lst.span().unwrap().error("Expected `check` or `replace` ident").emit();
                                 None
                             }
                         };
@@ -177,6 +179,8 @@ impl ContractFunctionState {
         None
     }
 
+    /// Do we need to emit the `is_contract_generated` tag attribute on the
+    /// generated function(s)?
     fn emit_tag_attr(self) -> bool {
         matches!(self, ContractFunctionState::Untouched)
     }
@@ -262,7 +266,7 @@ impl ContractFunctionState {
                 });
                 Some((Some((replace_fn_name, true)), Some(check_fn_name)))
             }
-            ContractFunctionState::Original | Self::ReplaceDummy => None,
+            ContractFunctionState::Original => None,
             ContractFunctionState::Check => Some((None, Some(item_fn.sig.ident.clone()))),
             ContractFunctionState::Replace => {
                 Some((Some((item_fn.sig.ident.clone(), false)), None))
@@ -332,7 +336,7 @@ fn rename_argument_occurrences(sig: &syn::Signature, attr: &mut Expr) -> HashMap
     arg_ident_collector.visit_signature(&sig);
 
     let mk_new_ident_for = |id: &Ident| Ident::new(&format!("{}_renamed", id), Span::mixed_site());
-    let arg_idents = arg_ident_collector
+    let argument_names = arg_ident_collector
         .0
         .into_iter()
         .map(|i| {
@@ -341,41 +345,55 @@ fn rename_argument_occurrences(sig: &syn::Signature, attr: &mut Expr) -> HashMap
         })
         .collect::<HashMap<_, _>>();
 
-    let mut ident_rewriter = Renamer(&arg_idents);
+    let mut ident_rewriter = Renamer(&argument_names);
     ident_rewriter.visit_expr_mut(attr);
-    arg_idents
+    argument_names
 }
 
-struct ContractConditionsHandler<'a> {
+/// 
+struct ContractConditionsHandler {
     condition_type: ContractConditionsType,
     attr: Expr,
     body: Block,
 }
 
+/// Information needed for generating check and replace handlers for different
+/// contract attributes.
 enum ContractConditionsType {
     Requires,
-    Ensures { arg_idents: HashMap<Ident, Ident> },
+    Ensures { 
+        /// Translation map from original argument names to names of the copies
+        /// we will be emitting.
+        argument_names: HashMap<Ident, Ident> 
+    },
 }
 
 impl ContractConditionsType {
+    /// Constructs a [`Self::Ensures`] from the signature of the decorated
+    /// function and the contents of the decorating attribute.
+    /// 
+    /// Renames the [`Ident`]s used in `attr` and stores the translation map in
+    /// `argument_names`.
     fn new_ensures(sig: &Signature, attr: &mut Expr) -> Self {
-        let arg_idents = rename_argument_occurrences(sig, attr);
+        let argument_names = rename_argument_occurrences(sig, attr);
 
-        ContractConditionsType::Ensures { arg_idents }
+        ContractConditionsType::Ensures { argument_names }
     }
 }
 
-impl<'a> ContractConditionsHandler<'a> {
+impl ContractConditionsHandler {
+    /// Initialize the handler. Constructs the required [`ContractConditionsType`]
     fn new(is_requires: bool, mut attr: Expr, fn_sig: &Signature, fn_body: Block) -> Self {
         let condition_type = if is_requires {
             ContractConditionsType::Requires
         } else {
-            ContractConditionsType::new_ensures(sig, attr)
+            ContractConditionsType::new_ensures(fn_sig, &mut attr)
         };
 
         Self { condition_type, attr, body: fn_body }
     }
 
+    /// Create the body of a check function.
     fn make_check_body(&self) -> TokenStream2 {
         let attr = &self.attr;
         let call_to_prior = &self.body;
@@ -384,10 +402,10 @@ impl<'a> ContractConditionsHandler<'a> {
                 kani::assume(#attr);
                 #call_to_prior
             ),
-            ContractConditionsType::Ensures => {
-                let arg_names = arg_idents.values();
+            ContractConditionsType::Ensures { argument_names } => {
+                let arg_names = argument_names.values();
                 let arg_names_2 = arg_names.clone();
-                let arg_idents = arg_idents.keys();
+                let argument_names = argument_names.keys();
                 let attr = &self.attr;
 
                 // The code that enforces the postconditions and cleans up the shallow
@@ -406,7 +424,7 @@ impl<'a> ContractConditionsHandler<'a> {
                 let mut inject_conditions = PostconditionInjector(exec_postconditions.clone());
                 inject_conditions.visit_block_mut(&mut call);
                 quote!(
-                    #(let #arg_names = kani::untracked_deref(&#arg_idents);)*
+                    #(let #arg_names = kani::untracked_deref(&#argument_names);)*
                     let result = #call;
                     #exec_postconditions
                     result
@@ -415,7 +433,12 @@ impl<'a> ContractConditionsHandler<'a> {
         }
     }
 
-    fn make_replace_body(&self, sig: &Signature, use_dummy_fn_call: bool) -> TokenStream2 {
+    /// Create the body of a stub for this contract.
+    /// 
+    /// Wraps the conditions from this attribute around a prior call. If
+    /// `use_dummy_fn` is `true` the prior call we wrap is `kani::any`,
+    /// otherwise `self.body`.
+    fn make_replace_body(&self, use_dummy_fn_call: bool) -> TokenStream2 {
         let attr = &self.attr;
         let call_to_prior =
             if use_dummy_fn_call { quote!(kani::any()) } else { self.body.to_token_stream() };
@@ -424,9 +447,9 @@ impl<'a> ContractConditionsHandler<'a> {
                 kani::assert(#attr, stringify!(#attr));
                 #call_to_prior
             ),
-            ContractConditionsType::Ensures { arg_idents } => {
-                let arg_names = arg_idents.values();
-                let arg_values = arg_idents.keys();
+            ContractConditionsType::Ensures { argument_names } => {
+                let arg_names = argument_names.values();
+                let arg_values = argument_names.keys();
                 quote!(
                     #(let #arg_names = kani::untracked_deref(&#arg_values);)*
                     let result = #call_to_prior;
@@ -493,7 +516,6 @@ impl<'a> ContractConditionsHandler<'a> {
 /// }
 /// ```
 fn requires_ensures_alt(attr: TokenStream, item: TokenStream, is_requires: bool) -> TokenStream {
-    let attr_copy = proc_macro2::TokenStream::from(attr.clone());
     let attr = parse_macro_input!(attr as Expr);
 
     let mut output = proc_macro2::TokenStream::new();
@@ -542,15 +564,15 @@ fn requires_ensures_alt(attr: TokenStream, item: TokenStream, is_requires: bool)
             output.extend(quote!(#[kanitool::is_contract_generated(replace)]));
         }
 
-        let body = handler.make_replace_body(&sig, dummy);
+        let body = handler.make_replace_body(dummy);
 
         sig.ident = replace_name;
 
         // Finally emit the check function itself.
         output.extend(quote!(
-                #sig {
-                    #body
-                }
+            #sig {
+                #body
+            }
         ));
     }
 
@@ -565,9 +587,9 @@ fn requires_ensures_alt(attr: TokenStream, item: TokenStream, is_requires: bool)
         let body = handler.make_check_body();
         sig.ident = check_name;
         output.extend(quote!(
-        #sig {
+            #sig {
                 #body
-        }
+            }
         ))
     }
 
@@ -598,3 +620,4 @@ macro_rules! passthrough {
 }
 
 passthrough!(stub_verified, false);
+passthrough!(proof_for_contract, true);

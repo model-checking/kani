@@ -11,7 +11,5 @@ fn div(dividend: u32, divisor: u32) -> u32 {
 #[kani::proof]
 #[kani::stub_verified(div)]
 fn main() {
-    let _ = Box::new(());
-
     assert!(div(9, 1) != 10, "contract guarantees smallness");
 }

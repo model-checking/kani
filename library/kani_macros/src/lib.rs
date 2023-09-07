@@ -162,6 +162,21 @@ pub fn proof_for_contract(attr: TokenStream, item: TokenStream) -> TokenStream {
     attr_impl::proof_for_contract(attr, item)
 }
 
+/// `stub_verified(TARGET)` is a harness attribute (to be used on [`proof`] or
+/// [`proof_for_contract`] function) that replaces all occurrences of `TARGET`
+/// reachable from this harness with a stub generated from the contract on
+/// `TARGET`.
+/// 
+/// To create a contract for `TARGET` you must decorate it with at least one
+/// [`requires`] or [`ensures`] attribute.
+/// 
+/// You may use multiple `stub_verified` attributes on a single harness.
+/// 
+/// For more information see the [function contract
+/// RFC](https://model-checking.github.io/kani/rfc/rfcs/0009-function-contracts.html).
+/// 
+/// This attribute is part of the unstable contracts API and requires
+/// `-Zfunction-contracts` flag to be used.
 #[proc_macro_attribute]
 pub fn stub_verified(attr: TokenStream, item: TokenStream) -> TokenStream {
     attr_impl::stub_verified(attr, item)

@@ -138,7 +138,7 @@ impl<'tcx> KaniAttributes<'tcx> {
         }
     }
 
-    pub fn use_contract(&self) -> Vec<Result<(Symbol, DefId, Span), ErrorGuaranteed>> {
+    fn use_contract(&self) -> Vec<Result<(Symbol, DefId, Span), ErrorGuaranteed>> {
         self.map
             .get(&KaniAttributeKind::StubVerified)
             .map_or([].as_slice(), Vec::as_slice)
@@ -162,7 +162,7 @@ impl<'tcx> KaniAttributes<'tcx> {
     /// Parse and extract the `proof_for_contract(TARGET)` attribute. The
     /// returned symbol and DefId are respectively the name and id of `TARGET`,
     /// the span in the span for the attribute (contents).
-    pub fn interpret_the_for_contract_attribute(
+    fn interpret_the_for_contract_attribute(
         &self,
     ) -> Option<Result<(Symbol, DefId, Span), ErrorGuaranteed>> {
         self.expect_maybe_one(KaniAttributeKind::ProofForContract).map(|target| {
@@ -172,7 +172,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                     self.tcx.sess.span_err(
                         target.span,
                         format!(
-                            "Failed to resolve replacement function {} because {resolve_err}",
+                            "Failed to resolve checking function {} because {resolve_err}",
                             name.as_str()
                         ),
                     )
@@ -181,18 +181,28 @@ impl<'tcx> KaniAttributes<'tcx> {
         })
     }
 
-    /// Extract the name of the sibling function this contract is checked with
-    /// (if any).
+    /// Extract the name of the sibling function this function's contract is
+    /// checked with (if any).
+    /// 
+    /// `None` indicates this function does not use a contract, `Some(Err(_))`
+    /// indicates a contract does exist but an error occurred during resolution.
     pub fn checked_with(&self) -> Option<Result<Symbol, ErrorGuaranteed>> {
         self.expect_maybe_one(KaniAttributeKind::CheckedWith)
             .map(|target| expect_key_string_value(self.tcx.sess, target))
     }
 
+    /// Extract the name of the sibling function this function's contract is
+    /// stubbed as (if any). 
+    /// 
+    /// `None` indicates this function does not use a contract, `Some(Err(_))`
+    /// indicates a contract does exist but an error occurred during resolution.
     pub fn replaced_with(&self) -> Option<Result<Symbol, ErrorGuaranteed>> {
         self.expect_maybe_one(KaniAttributeKind::ReplacedWith)
             .map(|target| expect_key_string_value(self.tcx.sess, target))
     }
 
+    /// Resolve a function that is known to reside in the same module as the one
+    /// these attributes belong to (`self.item`).
     fn resolve_sibling(&self, path_str: &str) -> Result<DefId, ResolveError<'tcx>> {
         resolve_fn(
             self.tcx,
@@ -258,7 +268,9 @@ impl<'tcx> KaniAttributes<'tcx> {
                     }
                     expect_single(self.tcx, kind, &attrs);
                 }
-                KaniAttributeKind::StubVerified => {}
+                KaniAttributeKind::StubVerified => {
+                    expect_single(self.tcx, kind, &attrs);
+                }
                 KaniAttributeKind::CheckedWith | KaniAttributeKind::ReplacedWith => {
                     self.expect_maybe_one(kind)
                         .map(|attr| expect_key_string_value(&self.tcx.sess, attr));
@@ -389,7 +401,10 @@ impl<'tcx> KaniAttributes<'tcx> {
                         let Some(Ok(replacement_name)) =
                             KaniAttributes::for_item(self.tcx, def_id).replaced_with()
                         else {
-                            // TODO report errors
+                            self.tcx.sess.span_err(
+                                self.tcx.def_span(self.item),
+                                format!("Invalid `{}` attribute format", kind.as_ref()),
+                            );
                             continue;
                         };
                         harness.stubs.push(self.stub_for_relative_item(name, replacement_name))
@@ -402,8 +417,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                 KaniAttributeKind::CheckedWith
                 | KaniAttributeKind::IsContractGenerated
                 | KaniAttributeKind::ReplacedWith => {
-                    // TODO better error
-                    panic!("Contract attributes are not supported on proofs")
+                    self.tcx.sess.span_err(self.tcx.def_span(self.item), format!("Contracts are not supported on harnesses. (Found the kani-internal contract attribute `{}`)", kind.as_ref()));
                 }
             };
             harness
