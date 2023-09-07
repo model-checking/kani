@@ -162,6 +162,11 @@ pub fn proof_for_contract(attr: TokenStream, item: TokenStream) -> TokenStream {
     attr_impl::proof_for_contract(attr, item)
 }
 
+#[proc_macro_attribute]
+pub fn stub_verified(attr: TokenStream, item: TokenStream) -> TokenStream {
+    attr_impl::stub_verified(attr, item)
+}
+
 /// This module implements Kani attributes in a way that only Kani's compiler can understand.
 /// This code should only be activated when pre-building Kani's sysroot.
 #[cfg(kani_sysroot)]
@@ -170,7 +175,9 @@ mod sysroot {
 
     mod contracts;
 
-    pub use contracts::{ensures, proof_for_contract, requires};
+    pub use contracts::{
+        ensures, proof_for_contract, requires, stub_verified,
+    };
 
     use super::*;
 
@@ -344,4 +351,5 @@ mod regular {
     no_op!(requires);
     no_op!(ensures);
     no_op!(proof_for_contract);
+    no_op!(stub_verified);
 }

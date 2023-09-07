@@ -31,6 +31,7 @@ enum KaniAttributeKind {
     /// Attribute used to mark unstable APIs.
     Unstable,
     Unwind,
+    StubVerified,
     /// A harness, similar to [`Self::Proof`], but for checking a function
     /// contract, e.g. the contract check is substituted for the target function
     /// before the the verification runs.
@@ -38,6 +39,7 @@ enum KaniAttributeKind {
     /// Attribute on a function with a contract that identifies the code
     /// implementing the check for this contract.
     CheckedWith,
+    ReplacedWith,
     /// Attribute on a function that was auto-generated from expanding a
     /// function contract.
     IsContractGenerated,
@@ -52,8 +54,10 @@ impl KaniAttributeKind {
             | KaniAttributeKind::Solver
             | KaniAttributeKind::Stub
             | KaniAttributeKind::ProofForContract
+            | KaniAttributeKind::StubVerified
             | KaniAttributeKind::Unwind => true,
             KaniAttributeKind::Unstable
+            | KaniAttributeKind::ReplacedWith
             | KaniAttributeKind::CheckedWith
             | KaniAttributeKind::IsContractGenerated => false,
         }
@@ -134,10 +138,29 @@ impl<'tcx> KaniAttributes<'tcx> {
         }
     }
 
+    pub fn use_contract(&self) -> Vec<Result<(Symbol, DefId, Span), ErrorGuaranteed>> {
+        self.map.get(&KaniAttributeKind::StubVerified).map_or([].as_slice(), Vec::as_slice)
+            .iter()
+            .map(|attr| {
+                let name = expect_key_string_value(self.tcx.sess, attr)?;
+                let ok = self.resolve_sibling(name.as_str())
+                    .map_err(|e| 
+                        self.tcx.sess.span_err(
+                            attr.span,
+                            format!(
+                                "Sould not resolve replacement function {} because {e}",
+                                name.as_str()
+                            ),
+                        ))?;
+                Ok((name, ok, attr.span))
+            })
+            .collect()
+    }
+
     /// Parse and extract the `proof_for_contract(TARGET)` attribute. The
     /// returned symbol and DefId are respectively the name and id of `TARGET`,
     /// the span in the span for the attribute (contents).
-    fn interpret_the_for_contract_attribute(
+    pub fn interpret_the_for_contract_attribute(
         &self,
     ) -> Option<Result<(Symbol, DefId, Span), ErrorGuaranteed>> {
         self.expect_maybe_one(KaniAttributeKind::ProofForContract).map(|target| {
@@ -163,6 +186,11 @@ impl<'tcx> KaniAttributes<'tcx> {
     /// (if any).
     pub fn checked_with(&self) -> Option<Result<Symbol, ErrorGuaranteed>> {
         self.expect_maybe_one(KaniAttributeKind::CheckedWith)
+            .map(|target| expect_key_string_value(self.tcx.sess, target))
+    }
+
+    pub fn replaced_with(&self) -> Option<Result<Symbol, ErrorGuaranteed>> {
+        self.expect_maybe_one(KaniAttributeKind::ReplacedWith)
             .map(|target| expect_key_string_value(self.tcx.sess, target))
     }
 
@@ -223,7 +251,9 @@ impl<'tcx> KaniAttributes<'tcx> {
                     }
                     expect_single(self.tcx, kind, &attrs);
                 }
-                KaniAttributeKind::CheckedWith => {
+                KaniAttributeKind::StubVerified => {}
+                KaniAttributeKind::CheckedWith
+                | KaniAttributeKind::ReplacedWith => {
                     self.expect_maybe_one(kind)
                         .map(|attr| expect_key_string_value(&self.tcx.sess, attr));
                 }
@@ -345,12 +375,26 @@ impl<'tcx> KaniAttributes<'tcx> {
                     };
                     harness.stubs.push(self.stub_for_relative_item(name, replacement_name));
                 }
+                KaniAttributeKind::StubVerified => {
+                    for contract in self.use_contract() {
+                        let Ok((name, def_id, _span)) = contract else { continue; };
+                        let Some(Ok(replacement_name)) = KaniAttributes::for_item(self.tcx, def_id).replaced_with() else {
+                            // TODO report errors
+                            continue;
+                        };
+                        harness.stubs.push(
+                            self.stub_for_relative_item(name, replacement_name))
+                    }
+                }
                 KaniAttributeKind::Unstable => {
                     // Internal attribute which shouldn't exist here.
                     unreachable!()
                 }
-                KaniAttributeKind::CheckedWith | KaniAttributeKind::IsContractGenerated => {
-                    todo!("Contract attributes are not supported on proofs")
+                KaniAttributeKind::CheckedWith
+                | KaniAttributeKind::IsContractGenerated
+                | KaniAttributeKind::ReplacedWith => {
+                    // TODO better error
+                    panic!("Contract attributes are not supported on proofs")
                 }
             };
             harness
@@ -694,7 +738,7 @@ fn parse_paths(attr: &Attribute) -> Result<Vec<String>, Span> {
         .iter()
         .map(|arg| match arg {
             NestedMetaItem::Lit(item) => Err(item.span),
-            NestedMetaItem::MetaItem(item) => parse_path(item).ok_or(item.span),
+            NestedMetaItem::MetaItem(item) => parse_path(&item).ok_or(item.span),
         })
         .collect()
 }

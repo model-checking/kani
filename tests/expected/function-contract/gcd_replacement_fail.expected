@@ -1,0 +1,20 @@
+Frac::check_equals.assertion\
+	 - Status: FAILURE\
+	 - Description: "attempt to calculate the remainder with a divisor of zero"\
+	 gcd_replacement_fail.rs:50:20 in function Frac::check_equals
+
+Frac::check_equals.assertion\
+	 - Status: FAILURE\
+	 - Description: "assertion failed: self.den % f2.den == 0"\
+	 gcd_replacement_fail.rs:50:9 in function Frac::check_equals
+
+Frac::check_equals.assertion\
+	 - Status: FAILURE\
+	 - Description: "assertion failed: gcd1 == gcd2"\
+	 gcd_replacement_fail.rs:53:9 in function Frac::check_equals
+
+Failed Checks: attempt to calculate the remainder with a divisor of zero
+Failed Checks: assertion failed: self.den % f2.den == 0
+Failed Checks: assertion failed: gcd1 == gcd2
+
+VERIFICATION:- FAILED
