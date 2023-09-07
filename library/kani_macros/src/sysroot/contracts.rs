@@ -29,7 +29,7 @@ fn hash_of_token_stream<H: std::hash::Hasher>(hasher: &mut H, stream: proc_macro
     }
 }
 
-use syn::{visit_mut::VisitMut, Block, Signature, Attribute};
+use syn::{visit_mut::VisitMut, Attribute, Block, Signature};
 
 /// Hash this `TokenStream` and return an integer that is at most digits
 /// long when hex formatted.
@@ -163,7 +163,10 @@ impl ContractFunctionState {
                             "check" => Some(Self::Check),
                             "replace" => Some(Self::Replace),
                             _ => {
-                                lst.span().unwrap().error("Expected `check` or `replace` ident").emit();
+                                lst.span()
+                                    .unwrap()
+                                    .error("Expected `check` or `replace` ident")
+                                    .emit();
                                 None
                             }
                         };
@@ -336,7 +339,7 @@ fn rename_argument_occurrences(sig: &syn::Signature, attr: &mut Expr) -> HashMap
     arg_ident_collector.visit_signature(&sig);
 
     let mk_new_ident_for = |id: &Ident| Ident::new(&format!("{}_renamed", id), Span::mixed_site());
-    let argument_names = arg_ident_collector
+    let arg_idents = arg_ident_collector
         .0
         .into_iter()
         .map(|i| {
@@ -345,15 +348,19 @@ fn rename_argument_occurrences(sig: &syn::Signature, attr: &mut Expr) -> HashMap
         })
         .collect::<HashMap<_, _>>();
 
-    let mut ident_rewriter = Renamer(&argument_names);
+    let mut ident_rewriter = Renamer(&arg_idents);
     ident_rewriter.visit_expr_mut(attr);
-    argument_names
+    arg_idents
 }
 
-/// 
+/// The information needed to generate the bodies of check and replacement
+/// functions that integrate the conditions from this contract attribute.
 struct ContractConditionsHandler {
+    /// Information specific to the type of contract attribute we're expanding.
     condition_type: ContractConditionsType,
+    /// The contents of the attribute.
     attr: Expr,
+    /// Body of the function this attribute was found on.
     body: Block,
 }
 
@@ -361,17 +368,17 @@ struct ContractConditionsHandler {
 /// contract attributes.
 enum ContractConditionsType {
     Requires,
-    Ensures { 
+    Ensures {
         /// Translation map from original argument names to names of the copies
         /// we will be emitting.
-        argument_names: HashMap<Ident, Ident> 
+        argument_names: HashMap<Ident, Ident>,
     },
 }
 
 impl ContractConditionsType {
     /// Constructs a [`Self::Ensures`] from the signature of the decorated
     /// function and the contents of the decorating attribute.
-    /// 
+    ///
     /// Renames the [`Ident`]s used in `attr` and stores the translation map in
     /// `argument_names`.
     fn new_ensures(sig: &Signature, attr: &mut Expr) -> Self {
@@ -382,7 +389,8 @@ impl ContractConditionsType {
 }
 
 impl ContractConditionsHandler {
-    /// Initialize the handler. Constructs the required [`ContractConditionsType`]
+    /// Initialize the handler. Constructs the required
+    /// [`ContractConditionsType`] depending on `is_requires`.
     fn new(is_requires: bool, mut attr: Expr, fn_sig: &Signature, fn_body: Block) -> Self {
         let condition_type = if is_requires {
             ContractConditionsType::Requires
@@ -394,6 +402,8 @@ impl ContractConditionsHandler {
     }
 
     /// Create the body of a check function.
+    ///
+    /// Wraps the conditions from this attribute around `self.body`.
     fn make_check_body(&self) -> TokenStream2 {
         let attr = &self.attr;
         let call_to_prior = &self.body;
@@ -403,16 +413,14 @@ impl ContractConditionsHandler {
                 #call_to_prior
             ),
             ContractConditionsType::Ensures { argument_names } => {
-                let arg_names = argument_names.values();
-                let arg_names_2 = arg_names.clone();
-                let argument_names = argument_names.keys();
+                let (arg_copies, copy_clean) = make_unsafe_argument_copies(&argument_names);
                 let attr = &self.attr;
 
                 // The code that enforces the postconditions and cleans up the shallow
                 // argument copies (with `mem::forget`).
                 let exec_postconditions = quote!(
                     kani::assert(#attr, stringify!(#attr));
-                    #(std::mem::forget(#arg_names_2);)*
+                    #copy_clean
                 );
 
                 // We make a copy here because we'll modify it. Technically not
@@ -424,7 +432,7 @@ impl ContractConditionsHandler {
                 let mut inject_conditions = PostconditionInjector(exec_postconditions.clone());
                 inject_conditions.visit_block_mut(&mut call);
                 quote!(
-                    #(let #arg_names = kani::untracked_deref(&#argument_names);)*
+                    #arg_copies
                     let result = #call;
                     #exec_postconditions
                     result
@@ -434,7 +442,7 @@ impl ContractConditionsHandler {
     }
 
     /// Create the body of a stub for this contract.
-    /// 
+    ///
     /// Wraps the conditions from this attribute around a prior call. If
     /// `use_dummy_fn` is `true` the prior call we wrap is `kani::any`,
     /// otherwise `self.body`.
@@ -448,17 +456,34 @@ impl ContractConditionsHandler {
                 #call_to_prior
             ),
             ContractConditionsType::Ensures { argument_names } => {
-                let arg_names = argument_names.values();
-                let arg_values = argument_names.keys();
+                let (arg_copies, copy_clean) = make_unsafe_argument_copies(&argument_names);
                 quote!(
-                    #(let #arg_names = kani::untracked_deref(&#arg_values);)*
+                    #arg_copies
                     let result = #call_to_prior;
                     kani::assume(#attr);
+                    #copy_clean
                     result
                 )
             }
         }
     }
+}
+
+/// We make shallow copies of the argument for the postconditions in both
+/// `requires` and `ensures` clauses and later clean them up.
+///
+/// This function creates the code necessary to both make the copies (first
+/// tuple elem) and to clean them (second tuple elem).
+fn make_unsafe_argument_copies(
+    renaming_map: &HashMap<Ident, Ident>,
+) -> (TokenStream2, TokenStream2) {
+    let arg_names = renaming_map.values();
+    let also_arg_names = renaming_map.values();
+    let arg_values = renaming_map.keys();
+    (
+        quote!(#(let #arg_names = kani::untracked_deref(&#arg_values);)*),
+        quote!(#(std::mem::forget(#also_arg_names);)*),
+    )
 }
 
 /// The main meat of handling requires/ensures contracts.
@@ -514,6 +539,20 @@ impl ContractConditionsHandler {
 ///     std::mem::forget(divisor_renamed);
 ///     result
 /// }
+///
+/// #[allow(dead_code)]
+/// #[allow(unused_variables)]
+/// #[kanitool::is_contract_generated(replace)]
+/// fn div_replace_965916(dividend: u32, divisor: u32) -> u32 {
+///     kani::assert(divisor != 0, "divisor != 0");
+///     let dividend_renamed = kani::untracked_deref(&dividend);
+///     let divisor_renamed = kani::untracked_deref(&divisor);
+///     let result = kani::any();
+///     kani::assume(result <= dividend_renamed, "result <= dividend");
+///     std::mem::forget(dividend_renamed);
+///     std::mem::forget(divisor_renamed);
+///     result
+/// }
 /// ```
 fn requires_ensures_alt(attr: TokenStream, item: TokenStream, is_requires: bool) -> TokenStream {
     let attr = parse_macro_input!(attr as Expr);
@@ -543,9 +582,7 @@ fn requires_ensures_alt(attr: TokenStream, item: TokenStream, is_requires: bool)
     };
 
     let ItemFn { attrs, vis: _, mut sig, block } = item_fn;
-
     let handler = ContractConditionsHandler::new(is_requires, attr, &sig, *block);
-
     let emit_common_header = |output: &mut TokenStream2| {
         if function_state.emit_tag_attr() {
             output.extend(quote!(
@@ -563,9 +600,7 @@ fn requires_ensures_alt(attr: TokenStream, item: TokenStream, is_requires: bool)
             // important so this happens as the last emitted attribute.
             output.extend(quote!(#[kanitool::is_contract_generated(replace)]));
         }
-
         let body = handler.make_replace_body(dummy);
-
         sig.ident = replace_name;
 
         // Finally emit the check function itself.

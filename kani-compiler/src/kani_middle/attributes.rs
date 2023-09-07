@@ -138,7 +138,13 @@ impl<'tcx> KaniAttributes<'tcx> {
         }
     }
 
-    fn use_contract(&self) -> Vec<Result<(Symbol, DefId, Span), ErrorGuaranteed>> {
+    /// Parse, extract and resolve the target of `stub_verified(TARGET)`. The
+    /// returned `Symbol` and `DefId` are respectively the name and id of
+    /// `TARGET`. The `Span` is that of the contents of the attribute and used
+    /// for error reporting.
+    fn interpret_stub_verified_attribute(
+        &self,
+    ) -> Vec<Result<(Symbol, DefId, Span), ErrorGuaranteed>> {
         self.map
             .get(&KaniAttributeKind::StubVerified)
             .map_or([].as_slice(), Vec::as_slice)
@@ -183,7 +189,7 @@ impl<'tcx> KaniAttributes<'tcx> {
 
     /// Extract the name of the sibling function this function's contract is
     /// checked with (if any).
-    /// 
+    ///
     /// `None` indicates this function does not use a contract, `Some(Err(_))`
     /// indicates a contract does exist but an error occurred during resolution.
     pub fn checked_with(&self) -> Option<Result<Symbol, ErrorGuaranteed>> {
@@ -192,8 +198,8 @@ impl<'tcx> KaniAttributes<'tcx> {
     }
 
     /// Extract the name of the sibling function this function's contract is
-    /// stubbed as (if any). 
-    /// 
+    /// stubbed as (if any).
+    ///
     /// `None` indicates this function does not use a contract, `Some(Err(_))`
     /// indicates a contract does exist but an error occurred during resolution.
     pub fn replaced_with(&self) -> Option<Result<Symbol, ErrorGuaranteed>> {
@@ -394,7 +400,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                     harness.stubs.push(self.stub_for_relative_item(name, replacement_name));
                 }
                 KaniAttributeKind::StubVerified => {
-                    for contract in self.use_contract() {
+                    for contract in self.interpret_stub_verified_attribute() {
                         let Ok((name, def_id, _span)) = contract else {
                             continue;
                         };
