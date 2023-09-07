@@ -31,6 +31,8 @@ enum KaniAttributeKind {
     /// Attribute used to mark unstable APIs.
     Unstable,
     Unwind,
+    /// A sound [`Self::Stub`] that replaces a function by a stub generated from
+    /// its contract.
     StubVerified,
     /// A harness, similar to [`Self::Proof`], but for checking a function
     /// contract, e.g. the contract check is substituted for the target function
@@ -39,6 +41,9 @@ enum KaniAttributeKind {
     /// Attribute on a function with a contract that identifies the code
     /// implementing the check for this contract.
     CheckedWith,
+    /// Internal attribute of the contracts implementation that identifies the
+    /// name of the function which was generated as the sound stub from the
+    /// contract of this function.
     ReplacedWith,
     /// Attribute on a function that was auto-generated from expanding a
     /// function contract.
@@ -767,7 +772,7 @@ fn parse_paths(attr: &Attribute) -> Result<Vec<String>, Span> {
         .iter()
         .map(|arg| match arg {
             NestedMetaItem::Lit(item) => Err(item.span),
-            NestedMetaItem::MetaItem(item) => parse_path(&item).ok_or(item.span),
+            NestedMetaItem::MetaItem(item) => parse_path(item).ok_or(item.span),
         })
         .collect()
 }

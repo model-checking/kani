@@ -262,7 +262,7 @@ impl ContractFunctionState {
                 swapped!(&mut item_fn.attrs, &mut attrs, {
                     output.extend(quote!(
                         #(#attrs)*
-                        #[kanitool::inner_check = #check_fn_name_str]
+                        #[kanitool::checked_with = #check_fn_name_str]
                         #[kanitool::replaced_with = #replace_fn_name_str]
                         #item_fn
                     ));
@@ -487,30 +487,51 @@ fn make_unsafe_argument_copies(
 }
 
 /// The main meat of handling requires/ensures contracts.
+/// 
+/// Generates a "check" function used to verify the validity of the contract and
+/// a "replace" function that can be used as a stub, generated from the contract
+/// that can be used instead of the original function.
+/// 
+/// Each clause (requires or ensures) after the first clause will be ignored on
+/// the original function (detected by finding the `kanitool::checked_with`
+/// attribute). On the check function (detected by finding the
+/// `kanitool::is_contract_generated` attribute) it expands into a new layer of
+/// pre- or postconditions. This state machine is also explained in more detail
+/// in comments in the body of this macro.
+/// 
+/// All named arguments of the function are unsafely shallow-copied with the
+/// `kani::untracked_deref` function to circumvent the borrow checker for
+/// postconditions. We must ensure that those copies are not dropped (causing a
+/// double-free) so after the postconditions we call `mem::forget` on each copy.
 ///
+/// ## Check function
+/// 
 /// Generates a `check_<fn_name>_<fn_hash>` function that assumes preconditions
 /// and asserts postconditions. The check function is also marked as generated
 /// with the `#[kanitool::is_contract_generated(check)]` attribute.
-///
+/// 
 /// Decorates the original function with `#[kanitool::checked_by =
-/// "check_<fn_name>_<fn_hash>"]
+/// "check_<fn_name>_<fn_hash>"]`.
 ///
 /// The check function is a copy of the original function with preconditions
 /// added before the body and postconditions after as well as injected before
 /// every `return` (see [`PostconditionInjector`]). Attributes on the original
-/// function are also copied to the check function. Each clause (requires or
-/// ensures) after the first clause will be ignored on the original function
-/// (detected by finding the `kanitool::checked_with` attribute). On the check
-/// function (detected by finding the `kanitool::is_contract_generated`
-/// attribute) it expands into a new layer of pre- or postconditions. This state
-/// machine is also explained in more detail in comments in the body of this
-/// macro.
+/// function are also copied to the check function.
+/// 
+/// ## Replace Function
+/// 
+/// As the mirror to that also generates a `replace_<fn_name>_<fn_hash>`
+/// function that asserts preconditions and assumes postconditions. The replace
+/// function is also marked as generated with the
+/// `#[kanitool::is_contract_generated(replace)]` attribute.
 ///
-/// In the check function all named arguments of the function are unsafely
-/// shallow-copied with the `kani::untracked_deref` function to circumvent the
-/// borrow checker for postconditions. We must ensure that those copies are not
-/// dropped so after the postconditions we call `mem::forget` on each copy.
-///
+/// Decorates the original function with `#[kanitool::replaced_by =
+/// "replace_<fn_name>_<fn_hash>"]`.
+/// 
+/// The replace function has the same signature as the original function but its
+/// body is replaced by `kani::any()`, which generates a non-deterministic
+/// value.
+/// 
 /// # Complete example
 ///
 /// ```rs
@@ -525,6 +546,7 @@ fn make_unsafe_argument_copies(
 ///
 /// ```rs
 /// #[kanitool::checked_with = "div_check_965916"]
+/// #[kanitool::replaced_with = "div_replace_965916"]
 /// fn div(dividend: u32, divisor: u32) -> u32 { dividend / divisor }
 ///
 /// #[allow(dead_code)]
