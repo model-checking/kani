@@ -1,0 +1,4 @@
+assertion\
+- Status: FAILURE\
+- Description: "attempt to divide by zero"\
+arbitrary_requires_fail.rs:7:5

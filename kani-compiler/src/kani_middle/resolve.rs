@@ -90,6 +90,12 @@ pub enum ResolveError<'tcx> {
     UnexpectedType { tcx: TyCtxt<'tcx>, item: DefId, expected: &'static str },
 }
 
+impl<'tcx> fmt::Debug for ResolveError<'tcx> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        std::fmt::Display::fmt(self, f)
+    }
+}
+
 impl<'tcx> fmt::Display for ResolveError<'tcx> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -153,8 +159,10 @@ fn resolve_prefix<'tcx>(
 ) -> Result<Path, ResolveError<'tcx>> {
     debug!(?name, ?current_module, "resolve_prefix");
 
-    // Split the string into segments separated by `::`.
-    let mut segments = name.split("::").map(str::to_string).peekable();
+    // Split the string into segments separated by `::`. Trim the whitespace
+    // since path strings generated from macros sometimes add spaces around
+    // `::`.
+    let mut segments = name.split("::").map(|s| s.trim().to_string()).peekable();
     assert!(segments.peek().is_some(), "expected identifier, found `{name}`");
 
     // Resolve qualifiers `crate`, initial `::`, and `self`. The qualifier

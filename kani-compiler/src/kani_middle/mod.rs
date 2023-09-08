@@ -15,7 +15,7 @@ use rustc_middle::ty::layout::{
     FnAbiError, FnAbiOf, FnAbiOfHelpers, FnAbiRequest, HasParamEnv, HasTyCtxt, LayoutError,
     LayoutOfHelpers, TyAndLayout,
 };
-use rustc_middle::ty::{self, Instance, InstanceDef, Ty, TyCtxt};
+use rustc_middle::ty::{self, Instance, InstanceDef, ParamEnv, Ty, TyCtxt};
 use rustc_session::config::OutputType;
 use rustc_span::source_map::respan;
 use rustc_span::Span;
@@ -66,7 +66,7 @@ pub fn check_crate_items(tcx: TyCtxt, ignore_asm: bool) {
 /// Check that all given items are supported and there's no misconfiguration.
 /// This method will exhaustively print any error / warning and it will abort at the end if any
 /// error was found.
-pub fn check_reachable_items(tcx: TyCtxt, queries: &QueryDb, items: &[MonoItem]) {
+pub fn check_reachable_items<'tcx>(tcx: TyCtxt<'tcx>, queries: &QueryDb, items: &[MonoItem<'tcx>]) {
     // Avoid printing the same error multiple times for different instantiations of the same item.
     let mut def_ids = HashSet::new();
     for item in items.iter().filter(|i| matches!(i, MonoItem::Fn(..) | MonoItem::Static(..))) {
@@ -77,8 +77,99 @@ pub fn check_reachable_items(tcx: TyCtxt, queries: &QueryDb, items: &[MonoItem])
                 .check_unstable_features(&queries.args().unstable_features);
             def_ids.insert(def_id);
         }
+
+        // We don't short circuit here since this is a type check and can shake
+        // out differently depending on generic parameters.
+        if let MonoItem::Fn(instance) = item {
+            if attributes::is_function_contract_generated(tcx, instance.def_id()) {
+                check_is_contract_safe(tcx, *instance);
+            }
+        }
     }
     tcx.sess.abort_if_errors();
+}
+
+/// A basic check that ensures a function with a contract does not receive
+/// mutable pointers in its input and does not return raw pointers of any kind.
+///
+/// This is a temporary safety measure because contracts cannot yet reason
+/// about the heap.
+fn check_is_contract_safe<'tcx>(tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) {
+    use ty::TypeVisitor;
+    struct NoMutPtr<'tcx> {
+        tcx: TyCtxt<'tcx>,
+        is_prohibited: fn(ty::Ty<'tcx>) -> bool,
+        /// Where (top level) did the type we're analyzing come from. Used for
+        /// composing error messages.
+        r#where: &'static str,
+        /// Adjective to describe the kind of pointer we're prohibiting.
+        /// Essentially `is_prohibited` but in English.
+        what: &'static str,
+    }
+
+    impl<'tcx> TypeVisitor<TyCtxt<'tcx>> for NoMutPtr<'tcx> {
+        fn visit_ty(&mut self, t: ty::Ty<'tcx>) -> std::ops::ControlFlow<Self::BreakTy> {
+            use ty::TypeSuperVisitable;
+            if (self.is_prohibited)(t) {
+                // TODO make this more user friendly
+                self.tcx.sess.err(format!("{} contains a {}pointer ({t:?}). This is prohibited for functions with contracts, as they cannot yet reason about the pointer behavior.", self.r#where, self.what));
+            }
+
+            // Rust's type visitor only recurses into type arguments, (e.g.
+            // `generics` in this match). This is enough for many types, but it
+            // won't look at the field types of structs or enums. So we override
+            // it here and do that ourselves.
+            //
+            // Since the field types also must contain in some form all the type
+            // arguments the visitor will see them as it inspects the fields and
+            // we don't need to call back to `super`.
+            if let ty::TyKind::Adt(adt_def, generics) = t.kind() {
+                for variant in adt_def.variants() {
+                    for field in &variant.fields {
+                        let ctrl = self.visit_ty(field.ty(self.tcx, generics));
+                        if ctrl.is_break() {
+                            // Technically we can just ignore this because we
+                            // know this case will never happen, but just to be
+                            // safe.
+                            return ctrl;
+                        }
+                    }
+                }
+                std::ops::ControlFlow::Continue(())
+            } else {
+                // For every other type.
+                t.super_visit_with(self)
+            }
+        }
+    }
+
+    fn is_raw_mutable_ptr(t: ty::Ty) -> bool {
+        matches!(t.kind(), ty::TyKind::RawPtr(tmut) if tmut.mutbl == rustc_ast::Mutability::Mut)
+    }
+
+    let bound_fn_sig = instance.ty(tcx, ParamEnv::reveal_all()).fn_sig(tcx);
+
+    for v in bound_fn_sig.bound_vars() {
+        if let ty::BoundVariableKind::Ty(t) = v {
+            tcx.sess.span_err(
+                tcx.def_span(instance.def_id()),
+                format!("Found a bound type variable {t:?} after monomorphization"),
+            );
+        }
+    }
+
+    let fn_typ = bound_fn_sig.skip_binder();
+
+    for (typ, (is_prohibited, r#where, what)) in fn_typ
+        .inputs()
+        .iter()
+        .copied()
+        .zip(std::iter::repeat((is_raw_mutable_ptr as fn(_) -> _, "This argument", "mutable ")))
+        .chain([(fn_typ.output(), (ty::Ty::is_unsafe_ptr as fn(_) -> _, "The return", ""))])
+    {
+        let mut v = NoMutPtr { tcx, is_prohibited, r#where, what };
+        v.visit_ty(typ);
+    }
 }
 
 /// Print MIR for the reachable items if the `--emit mir` option was provided to rustc.

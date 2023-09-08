@@ -4,6 +4,17 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
+## [0.36.0]
+
+## What's Changed
+
+* Enable `-Z stubbing` and error out instead of ignoring stub by @celinval in https://github.com/model-checking/kani/pull/2678
+* Enable concrete playback for failure of UB checks by @zhassan-aws in https://github.com/model-checking/kani/pull/2727
+* Bump CBMC version to 5.91.0 by @adpaco-aws in https://github.com/model-checking/kani/pull/2733
+* Rust toolchain upgraded to `nightly-2023-09-06` by @celinval @jaisnan @adpaco-aws
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.35.0...kani-0.36.0
+
 ## [0.35.0]
 
 ## What's Changed

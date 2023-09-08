@@ -3,8 +3,6 @@
 name: Kani Performance Benchmarks
 on:
   push:
-    tags:
-      - kani-*
     branches:
       - 'main'
   pull_request:

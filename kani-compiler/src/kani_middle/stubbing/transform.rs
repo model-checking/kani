@@ -19,6 +19,8 @@ use rustc_middle::mir::{
 };
 use rustc_middle::ty::{self, TyCtxt};
 
+use tracing::debug;
+
 /// Returns the `DefId` of the stub for the function/method identified by the
 /// parameter `def_id`, and `None` if the function/method is not stubbed.
 pub fn get_stub(tcx: TyCtxt, def_id: DefId) -> Option<DefId> {
@@ -30,6 +32,11 @@ pub fn get_stub(tcx: TyCtxt, def_id: DefId) -> Option<DefId> {
 /// otherwise, returns the old body.
 pub fn transform<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId, old_body: &'tcx Body<'tcx>) -> Body<'tcx> {
     if let Some(replacement) = get_stub(tcx, def_id) {
+        debug!(
+            original = tcx.def_path_debug_str(def_id),
+            replaced = tcx.def_path_debug_str(replacement),
+            "transform"
+        );
         let new_body = tcx.optimized_mir(replacement).clone();
         if check_compatibility(tcx, def_id, old_body, replacement, &new_body) {
             return new_body;

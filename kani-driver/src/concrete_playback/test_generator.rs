@@ -325,7 +325,7 @@ mod concrete_vals_extractor {
         result_items
             .iter()
             .filter(|prop| {
-                (prop.property_class() == "assertion" && prop.status == CheckStatus::Failure)
+                (prop.property_class() != "unwind" && prop.status == CheckStatus::Failure)
                     || (prop.property_class() == "cover" && prop.status == CheckStatus::Satisfied)
             })
             .map(|property| {
