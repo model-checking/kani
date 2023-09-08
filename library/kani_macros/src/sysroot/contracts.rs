@@ -362,6 +362,8 @@ struct ContractConditionsHandler {
     attr: Expr,
     /// Body of the function this attribute was found on.
     body: Block,
+    /// An unparsed, unmodified copy of `attr`, used in the error messages.
+    attr_copy: TokenStream2,
 }
 
 /// Information needed for generating check and replace handlers for different
@@ -391,14 +393,20 @@ impl ContractConditionsType {
 impl ContractConditionsHandler {
     /// Initialize the handler. Constructs the required
     /// [`ContractConditionsType`] depending on `is_requires`.
-    fn new(is_requires: bool, mut attr: Expr, fn_sig: &Signature, fn_body: Block) -> Self {
+    fn new(
+        is_requires: bool,
+        mut attr: Expr,
+        fn_sig: &Signature,
+        fn_body: Block,
+        attr_copy: TokenStream2,
+    ) -> Self {
         let condition_type = if is_requires {
             ContractConditionsType::Requires
         } else {
             ContractConditionsType::new_ensures(fn_sig, &mut attr)
         };
 
-        Self { condition_type, attr, body: fn_body }
+        Self { condition_type, attr, body: fn_body, attr_copy }
     }
 
     /// Create the body of a check function.
@@ -406,6 +414,7 @@ impl ContractConditionsHandler {
     /// Wraps the conditions from this attribute around `self.body`.
     fn make_check_body(&self) -> TokenStream2 {
         let attr = &self.attr;
+        let attr_copy = &self.attr_copy;
         let call_to_prior = &self.body;
         match &self.condition_type {
             ContractConditionsType::Requires => quote!(
@@ -419,7 +428,7 @@ impl ContractConditionsHandler {
                 // The code that enforces the postconditions and cleans up the shallow
                 // argument copies (with `mem::forget`).
                 let exec_postconditions = quote!(
-                    kani::assert(#attr, stringify!(#attr));
+                    kani::assert(#attr, stringify!(#attr_copy));
                     #copy_clean
                 );
 
@@ -448,11 +457,12 @@ impl ContractConditionsHandler {
     /// otherwise `self.body`.
     fn make_replace_body(&self, use_dummy_fn_call: bool) -> TokenStream2 {
         let attr = &self.attr;
+        let attr_copy = &self.attr_copy;
         let call_to_prior =
             if use_dummy_fn_call { quote!(kani::any()) } else { self.body.to_token_stream() };
         match &self.condition_type {
             ContractConditionsType::Requires => quote!(
-                kani::assert(#attr, stringify!(#attr));
+                kani::assert(#attr, stringify!(#attr_copy));
                 #call_to_prior
             ),
             ContractConditionsType::Ensures { argument_names } => {
@@ -577,6 +587,7 @@ fn make_unsafe_argument_copies(
 /// }
 /// ```
 fn requires_ensures_alt(attr: TokenStream, item: TokenStream, is_requires: bool) -> TokenStream {
+    let attr_copy = TokenStream2::from(attr.clone());
     let attr = parse_macro_input!(attr as Expr);
 
     let mut output = proc_macro2::TokenStream::new();
@@ -604,7 +615,7 @@ fn requires_ensures_alt(attr: TokenStream, item: TokenStream, is_requires: bool)
     };
 
     let ItemFn { attrs, vis: _, mut sig, block } = item_fn;
-    let handler = ContractConditionsHandler::new(is_requires, attr, &sig, *block);
+    let handler = ContractConditionsHandler::new(is_requires, attr, &sig, *block, attr_copy);
     let emit_common_header = |output: &mut TokenStream2| {
         if function_state.emit_tag_attr() {
             output.extend(quote!(
