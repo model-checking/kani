@@ -1,0 +1,5 @@
+- Status: SUCCESS\
+- Description: "(result == x) | (result == y)"\
+in function max
+
+VERIFICATION:- SUCCESSFUL

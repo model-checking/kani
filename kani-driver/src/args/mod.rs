@@ -346,10 +346,16 @@ impl VerificationArgs {
         }
     }
 
+    /// Are experimental function contracts enabled?
+    pub fn is_function_contracts_enabled(&self) -> bool {
+        self.common_args.unstable_features.contains(UnstableFeature::FunctionContracts)
+    }
+
     /// Is experimental stubbing enabled?
     pub fn is_stubbing_enabled(&self) -> bool {
         self.enable_stubbing
             || self.common_args.unstable_features.contains(UnstableFeature::Stubbing)
+            || self.is_function_contracts_enabled()
     }
 }
 

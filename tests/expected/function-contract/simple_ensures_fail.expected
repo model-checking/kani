@@ -1,0 +1,8 @@
+max.assertion\
+- Status: FAILURE\
+- Description: "result == x"\
+in function max
+
+Failed Checks: result == x
+
+VERIFICATION:- FAILED

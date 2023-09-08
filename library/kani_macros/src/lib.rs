@@ -7,6 +7,7 @@
 // downstream crates to enable these features as well.
 // So we have to enable this on the commandline (see kani-rustc) with:
 //   RUSTFLAGS="-Zcrate-attr=feature(register_tool) -Zcrate-attr=register_tool(kanitool)"
+#![feature(proc_macro_diagnostic)]
 
 mod derive;
 
@@ -96,11 +97,80 @@ pub fn derive_arbitrary(item: TokenStream) -> TokenStream {
     derive::expand_derive_arbitrary(item)
 }
 
+///  Add a precondition to this function.
+///
+/// This is part of the function contract API, together with [`ensures`].
+///
+/// The contents of the attribute is a condition over the input values to the
+/// annotated function. All Rust syntax is supported, even calling other
+/// functions, but the computations must be side effect free, e.g. it cannot
+/// perform I/O or use mutable memory.
+///
+/// Kani requires each function that uses a contract (this attribute or
+/// [`ensures`]) to have at least one designated [`proof_for_contract`] harness
+/// for checking the contract.
+///
+/// This attribute is part of the unstable contracts API and requires
+/// `-Zfunction-contracts` flag to be used.
+#[proc_macro_attribute]
+pub fn requires(attr: TokenStream, item: TokenStream) -> TokenStream {
+    attr_impl::requires(attr, item)
+}
+
+/// Add a postcondition to this function.
+///
+/// This is part of the function contract API, together with [`requires`].
+///
+/// The contents of the attribute is a condition over the input values to the
+/// annotated function *and* its return value, accessible as a variable called
+/// `result`. All Rust syntax is supported, even calling other functions, but
+/// the computations must be side effect free, e.g. it cannot perform I/O or use
+/// mutable memory.
+///
+/// Kani requires each function that uses a contract (this attribute or
+/// [`requires`]) to have at least one designated [`proof_for_contract`] harness
+/// for checking the contract.
+///
+/// This attribute is part of the unstable contracts API and requires
+/// `-Zfunction-contracts` flag to be used.
+#[proc_macro_attribute]
+pub fn ensures(attr: TokenStream, item: TokenStream) -> TokenStream {
+    attr_impl::ensures(attr, item)
+}
+
+/// Designates this function as a harness to check a function contract.
+///
+/// The argument to this macro is the relative path (e.g. `foo` or
+/// `super::some_mod::foo` or `crate::SomeStruct::foo`) to the function, the
+/// contract of which should be checked.
+///
+/// The harness is expected to set up the arguments that `foo` should be called
+/// with and initialzied any `static mut` globals that are reachable. All of
+/// these should be initialized to as general value as possible, usually
+/// achieved using `kani::any`. The harness must call e.g. `foo` at least once
+/// and if `foo` has type parameters, only one instantiation of those parameters
+/// is admissible. Violating either results in a compile error.
+///
+/// If any of those types have special invariants you can use `kani::assume` to
+/// enforce them, but other than condition on inputs and checks of outputs
+/// should be in the contract, not the harness for maximum soundness.
+///
+/// This attribute is part of the unstable contracts API and requires
+/// `-Zfunction-contracts` flag to be used.
+#[proc_macro_attribute]
+pub fn proof_for_contract(attr: TokenStream, item: TokenStream) -> TokenStream {
+    attr_impl::proof_for_contract(attr, item)
+}
+
 /// This module implements Kani attributes in a way that only Kani's compiler can understand.
 /// This code should only be activated when pre-building Kani's sysroot.
 #[cfg(kani_sysroot)]
 mod sysroot {
     use proc_macro_error::{abort, abort_call_site};
+
+    mod contracts;
+
+    pub use contracts::{ensures, proof_for_contract, requires};
 
     use super::*;
 
@@ -271,4 +341,7 @@ mod regular {
     no_op!(stub);
     no_op!(unstable);
     no_op!(unwind);
+    no_op!(requires);
+    no_op!(ensures);
+    no_op!(proof_for_contract);
 }
