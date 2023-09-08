@@ -1,4 +1,4 @@
-- **Feature Name:** *Fill me with pretty name and a unique ident [^unstable_feature] (E.g: New Feature (`new_feature`)*
+- **Feature Name:** *Fill me with pretty name and a unique ident [^unstable_feature]. Example: New Feature (`new_feature`)*
 - **Feature Request Issue:** *Link to issue*
 - **RFC PR:** *Link to original PR*
 - **Status:** *One of the following: [Under Review | Unstable | Stable | Cancelled]*
@@ -15,10 +15,10 @@ Short (1-2 sentences) description of the feature. What is this feature about?
 ## User Impact
 
 Imagine this as your elevator pitch directed to users as well as Kani developers.
-Why are we doing this?
-Why should users care about this feature?
-How will this benefit them?
-What is the downside?
+- Why are we doing this?
+- Why should users care about this feature?
+- How will this benefit them?
+- What is the downside?
 
 If this RFC is related to change in the architecture without major user impact,
 think about the long term impact for user.
@@ -65,7 +65,7 @@ This is the section where you discuss the decisions you made.
 
 ## Open questions
 
-List of open questions + an optional link to an issue that capture the work required to address the open question.
+List of open questions + an optional link to an issue that captures the work required to address the open question.
 Capture the details of each open question in their respective issue, not here.
 
 Example:
