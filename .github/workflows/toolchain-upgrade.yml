@@ -27,13 +27,14 @@ jobs:
           os: ubuntu-22.04
 
       - name: Update toolchain config
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           current_toolchain_date=$(grep ^channel rust-toolchain.toml | sed 's/.*nightly-\(.*\)"/\1/')
           echo "current_toolchain_date=$current_toolchain_date" >> $GITHUB_ENV
           current_toolchain_epoch=$(date --date $current_toolchain_date +%s)
           next_toolchain_date=$(date --date "@$(($current_toolchain_epoch + 86400))" +%Y-%m-%d)
           echo "next_toolchain_date=$next_toolchain_date" >> $GITHUB_ENV
-          GH_TOKEN=${{ github.token }}
           if gh issue list -S \
               "Toolchain upgrade to nightly-$next_toolchain_date failed" \
               --json number,title | grep title ; then
