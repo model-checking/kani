@@ -1,0 +1,8 @@
+error: Could not find a contract for stubbing on target of `stub_verified` attribute.
+  |
+8 | #[kani::stub_verified(no_contract)]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+note: Expected a contract on this function.
+  |
+5 | fn no_contract() {}

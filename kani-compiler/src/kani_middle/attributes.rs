@@ -399,24 +399,25 @@ impl<'tcx> KaniAttributes<'tcx> {
                     else {
                         self.tcx
                             .sess
-                            .span_err(span, "Target function for this check has no contract");
+                            .struct_span_err(span, format!("Could not find a contract to check for target of `{}` attribute", kind.as_ref()))
+                            .span_note(self.tcx.def_span(id), "Expected a contract on this function")
+                            .emit();
                         return harness;
                     };
                     harness.stubs.push(self.stub_for_relative_item(name, replacement_name));
                 }
                 KaniAttributeKind::StubVerified => {
                     for contract in self.interpret_stub_verified_attribute() {
-                        let Ok((name, def_id, _span)) = contract else {
+                        let Ok((name, def_id, span)) = contract else {
                             continue;
                         };
-                        let Some(Ok(replacement_name)) =
-                            KaniAttributes::for_item(self.tcx, def_id).replaced_with()
-                        else {
-                            self.tcx.sess.span_err(
-                                self.tcx.def_span(self.item),
-                                format!("Invalid `{}` attribute format", kind.as_ref()),
-                            );
-                            continue;
+                        let replacement_name = match KaniAttributes::for_item(self.tcx, def_id).replaced_with() {
+                            None => {
+                                self.tcx.sess.struct_span_err(span, format!("Could not find a contract for stubbing on target of `{}` attribute.", kind.as_ref())).span_note(self.tcx.def_span(def_id), "Expected a contract on this function.").emit();
+                                continue
+                            },
+                            Some(Ok(replacement_name)) => replacement_name,
+                            Some(Err(_)) => continue,
                         };
                         harness.stubs.push(self.stub_for_relative_item(name, replacement_name))
                     }
