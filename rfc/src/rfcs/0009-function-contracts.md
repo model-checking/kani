@@ -29,7 +29,6 @@ sound[^simple-unsoundness] function abstraction. This is similar to [stubbing]
 but with verification of the abstraction instead of blind trust. This allows for
 modular verification, which paves the way for the following two ambitious goals.
 
-
 - **Scalability:** A function contract is an abstraction (sound
   overapproximation) of a function's behavior. After verifying the contract
   against its implementation we can subsequently use the (cheaper) abstraction
@@ -260,14 +259,10 @@ ranges apply to all invocations of the function. If `targets` is omitted it
 defaults to `{}`, e.g. an empty set of targets meaning under this condition the
 function modifies no mutable memory.
 
-
-
 Because place expressions are restricted to using projections only, Kani must
 break Rusts `pub`/no-`pub` encapsulation here[^assigns-encapsulation-breaking].
 If need be we can reference fields that are usually hidden, without an error
 from the compiler.
-
-
 
 In addition to a place expression, a `MODIFIES_RANGE` can also be terminated
 with more complex *slice* expressions as the last projection. This only applies
@@ -293,7 +288,6 @@ A `#[frees(when = CONDITION, targets = { PLACE, ... })]` clause works similarly
 to `modifies` but denotes memory that is deallocated. Like `modifies` it applies
 only to pointers but unlike modifies it does not admit slice syntax, only
 place expressions, because the whole allocation has to be freed.
-
 
 ### History Expressions
 
@@ -346,7 +340,6 @@ And it will only be recognized as `old(...)`, not as `let old1 = old; old1(...)`
    Kani reports any missing contract harnesses as errors.
 3. Kani verifies all regular harnesses *if* their `stub_verified` contracts
    passed step 1 and 2.
-
 
 When specific harnesses are selected (with `--harness`) contracts are not
 verified.
