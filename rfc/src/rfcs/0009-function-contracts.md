@@ -4,7 +4,7 @@
 - **Status:** Under Review 
 - **Version:** 0
 - **Proof-of-concept:** [features/contracts](https://github.com/model-checking/kani/tree/features/contracts)
-- **Feature Gate:** `-Zcontracts`, enforced by compile time error[^gate]
+- **Feature Gate:** `-Zfunction-contracts`, enforced by compile time error[^gate]
 
 -------------------
 
