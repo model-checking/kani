@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-use crate::{any, assume, Arbitrary};
+use crate::{any, Arbitrary};
 
 /// Generates an arbitrary vector whose length is at most MAX_LENGTH.
 pub fn any_vec<T, const MAX_LENGTH: usize>() -> Vec<T>
@@ -10,8 +10,9 @@ where
 {
     let mut v = exact_vec::<T, MAX_LENGTH>();
     let real_length: usize = any();
-    assume(real_length <= MAX_LENGTH);
-    unsafe { v.set_len(real_length) };
+    if real_length <= MAX_LENGTH {
+        unsafe { v.set_len(real_length) };
+    }
 
     v
 }
