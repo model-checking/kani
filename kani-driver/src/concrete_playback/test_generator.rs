@@ -380,10 +380,22 @@ mod concrete_vals_extractor {
                         next_num.push(next_byte);
                     }
 
-                    return Some(ConcreteVal {
-                        byte_arr: next_num,
-                        interp_val: interp_concrete_val.to_string(),
-                    });
+                    // In ARM64 Linux, CBMC will produce a character instead of a number for
+                    // interpreted values because the char type is unsigned in that platform.
+                    // For example, for the value `101` it will produce `'e'` instead of `101`.
+                    // To correct this, we check if the value starts and ends with `'`, and
+                    // convert the character into its ASCII value in that case.
+                    let interp_val = {
+                        let interp_val_str = interp_concrete_val.to_string();
+                        if interp_val_str.starts_with("\'") && interp_val_str.ends_with("\'") {
+                            let interp_num = interp_val_str.chars().nth(1).unwrap() as u8;
+                            interp_num.to_string()
+                        } else {
+                            interp_val_str
+                        }
+                    };
+
+                    return Some(ConcreteVal { byte_arr: next_num, interp_val: interp_val });
                 }
             }
         }
