@@ -705,6 +705,9 @@ fn new_machine_model(sess: &Session) -> MachineModel {
             let long_long_int_width = 64;
             let short_int_width = 16;
             let single_width = 32;
+            // https://developer.arm.com/documentation/dui0491/i/Compiler-Command-line-Options/--signed-chars----unsigned-chars
+            // https://www.arm.linux.org.uk/docs/faqs/signedchar.php
+            // https://developer.apple.com/documentation/xcode/writing-arm64-code-for-apple-platforms
             let wchar_t_is_unsigned = matches!(os.as_ref(), "linux");
             let wchar_t_width = 32;
 
