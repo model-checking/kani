@@ -1,0 +1,12 @@
+[package]
+name = "hashset"
+version = "0.1.0"
+edition = "2021"
+description = "Verify HashSet basic behavior"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+
+[package.metadata.kani.unstable]
+stubbing = true
