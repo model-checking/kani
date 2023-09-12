@@ -4,10 +4,7 @@
 - **Status:** Under Review 
 - **Version:** 0
 - **Proof-of-concept:** [features/contracts](https://github.com/model-checking/kani/tree/features/contracts)
-- **Feature Gate:** `-Zcontracts`, enforced by compile time error[^gate]
-
-[^gate]: Enforced gates means all uses of constructs (functions, annotations,
-    macros) in this RFC are an error.
+- **Feature Gate:** `-Zfunction-contracts`, enforced by compile time error[^gate]
 
 -------------------
 
@@ -31,13 +28,6 @@ Function contracts provide an interface for a verified,
 sound[^simple-unsoundness] function abstraction. This is similar to [stubbing]
 but with verification of the abstraction instead of blind trust. This allows for
 modular verification, which paves the way for the following two ambitious goals.
-
-[^simple-unsoundness]: The main remaining threat to soundness in the use of
-    contracts, as defined in this proposal, is the reliance on user-supplied
-    harnesses for contract checking (explained in item 2 of [user
-    experience](#user-experience)). A more thorough discussion on the dangers
-    and potential remedies can be found in the [future](#future-possibilities)
-    section.
 
 - **Scalability:** A function contract is an abstraction (sound
   overapproximation) of a function's behavior. After verifying the contract
@@ -230,10 +220,6 @@ encompasses both limits as to what values are acceptable for a given type, such
 as `char` or the possible values of an enum discriminator, as well as lifetime
 constraints.
 
-[^write-set-recursion]: For inductively defined types the write set inference
-    will only add the first "layer" to the write set. If you wish to modify
-    deeper layers of a recursive type an explicit `modifies` clause is required.
-
 While the inferred write set is sound and enough for successful contract
 checking[^inferred-footprint] in many cases this inference is too coarse
 grained. In the case of `pop` every value in this vector will be made
@@ -273,42 +259,10 @@ ranges apply to all invocations of the function. If `targets` is omitted it
 defaults to `{}`, e.g. an empty set of targets meaning under this condition the
 function modifies no mutable memory.
 
-
-[^slice-exprs]: Slice indices can be place expressions referencing function
-    arguments, constants and integer arithmetic expressions. Take for example
-    this vector function (places simplified vs. actual implementation in `std`):
-
-    ```rs
-    impl<T> Vec<T> {
-        #[modifies(self.buf[len..self.len], self.len)]
-        fn truncate(&mut self, len: usize) { ... }
-    }
-    ```
-
-
 Because place expressions are restricted to using projections only, Kani must
 break Rusts `pub`/no-`pub` encapsulation here[^assigns-encapsulation-breaking].
 If need be we can reference fields that are usually hidden, without an error
 from the compiler.
-
-[^assigns-encapsulation-breaking]: Breaking the `pub` encapsulation has
-    unfortunate side effects because it means the contract depends on non-public
-    elements which are not expected to be stable and can drastically change even
-    in minor versions. For instance if your project depends on crate `a` which
-    in turn depends on crate `b`, and `a::foo` has a contract that takes as
-    input a pointer data structure `b::Bar` then `a::foo`s `assigns` contract
-    must reference internal fields of `b::Bar`. Say your project depends on the
-    *replacement* of `a::foo`, if `b` changes the internal representation of
-    `Bar` in a minor version update cargo could bump your version of `b`,
-    breaking the contract of `a::foo` (it now crashes because it e.g. references
-    non-existent fields).
-
-    You cannot easily update the contract for `a::foo`, since it is a
-    third-party crate; in fact even the author of `a` could not properly update
-    to the new contract since their old version specification would still admit
-    the new, broken version of `b`. They would have to yank the old version and
-    explicitly nail down the exact minor version of `b` which defeats the whole
-    purpose of semantic versioning.
 
 In addition to a place expression, a `MODIFIES_RANGE` can also be terminated
 with more complex *slice* expressions as the last projection. This only applies
@@ -334,10 +288,6 @@ A `#[frees(when = CONDITION, targets = { PLACE, ... })]` clause works similarly
 to `modifies` but denotes memory that is deallocated. Like `modifies` it applies
 only to pointers but unlike modifies it does not admit slice syntax, only
 place expressions, because the whole allocation has to be freed.
-
-[^inferred-footprint]: While inferred memory footprints are sound for both safe
-    and unsafe Rust certain features in unsafe rust (e.g. `RefCell`) get
-    inferred incorrectly and will lead to a failing contract check.
 
 ### History Expressions
 
@@ -391,13 +341,6 @@ And it will only be recognized as `old(...)`, not as `let old1 = old; old1(...)`
 3. Kani verifies all regular harnesses *if* their `stub_verified` contracts
    passed step 1 and 2.
 
-[^external-contract-checking-expectations]: Contracts for functions from
-    external crates (crates from outside the workspace, which is not quite the
-    definition of `extern crate` in Rust) are not checked by default. The
-    expectation is that the library author providing the contract has performed
-    this check. See also [open question](#open-questions) for a discussion on
-    defaults and checking external contracts.
-
 When specific harnesses are selected (with `--harness`) contracts are not
 verified.
 
@@ -435,10 +378,6 @@ Kani reports a compile time error if any of the following constraints are violat
 - For mutually recursive functions using `stub_verified`, Kani will check their
   contracts in non-deterministic order and assume each time the respective other
   check succeeded.
-
-[^stubcheck]: Kani cannot report the occurrence of a contract function to check
-    in abstracted functions as errors, because the mechanism is needed to verify
-    mutually recursive functions.
 
 ## Detailed Design
 
@@ -899,3 +838,59 @@ times larger than what they expect the function will touch).
   and then checked for each closure that may be provided. However this does not
   work so long as the user has to provide the harnesses, as they cannot recreate
   the closure type.
+
+---
+
+[^gate]: Enforced gates means all uses of constructs (functions, annotations,
+    macros) in this RFC are an error.
+
+[^simple-unsoundness]: The main remaining threat to soundness in the use of
+    contracts, as defined in this proposal, is the reliance on user-supplied
+    harnesses for contract checking (explained in item 2 of [user
+    experience](#user-experience)). A more thorough discussion on the dangers
+    and potential remedies can be found in the [future](#future-possibilities)
+    section.
+
+[^write-set-recursion]: For inductively defined types the write set inference
+    will only add the first "layer" to the write set. If you wish to modify
+    deeper layers of a recursive type an explicit `modifies` clause is required.
+
+[^inferred-footprint]: While inferred memory footprints are sound for both safe
+    and unsafe Rust certain features in unsafe rust (e.g. `RefCell`) get
+    inferred incorrectly and will lead to a failing contract check.
+
+[^slice-exprs]: Slice indices can be place expressions referencing function
+    arguments, constants and integer arithmetic expressions. Take for example
+    this `Vec` method (places simplified vs. actual implementation in `std`):
+    `fn truncate(&mut self, len: usize)`. A relatively precise contract for this
+    method can be achieved with slice indices like so:
+    `#[modifies(self.buf[len..self.len], self.len)]`
+
+[^assigns-encapsulation-breaking]: Breaking the `pub` encapsulation has
+    unfortunate side effects because it means the contract depends on non-public
+    elements which are not expected to be stable and can drastically change even
+    in minor versions. For instance if your project depends on crate `a` which
+    in turn depends on crate `b`, and `a::foo` has a contract that takes as
+    input a pointer data structure `b::Bar` then `a::foo`s `assigns` contract
+    must reference internal fields of `b::Bar`. Say your project depends on the
+    *replacement* of `a::foo`, if `b` changes the internal representation of
+    `Bar` in a minor version update cargo could bump your version of `b`,
+    breaking the contract of `a::foo` (it now crashes because it e.g. references
+    non-existent fields).
+    You cannot easily update the contract for `a::foo`, since it is a
+    third-party crate; in fact even the author of `a` could not properly update
+    to the new contract since their old version specification would still admit
+    the new, broken version of `b`. They would have to yank the old version and
+    explicitly nail down the exact minor version of `b` which defeats the whole
+    purpose of semantic versioning.
+
+[^external-contract-checking-expectations]: Contracts for functions from
+    external crates (crates from outside the workspace, which is not quite the
+    definition of `extern crate` in Rust) are not checked by default. The
+    expectation is that the library author providing the contract has performed
+    this check. See also [open question](#open-questions) for a discussion on
+    defaults and checking external contracts.
+
+[^stubcheck]: Kani cannot report the occurrence of a contract function to check
+    in abstracted functions as errors, because the mechanism is needed to verify
+    mutually recursive functions.
