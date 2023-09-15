@@ -160,7 +160,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                     self.tcx.sess.span_err(
                         attr.span,
                         format!(
-                            "Sould not resolve replacement function {} because {e}",
+                            "Could not resolve replacement function {}: {e}",
                             name.as_str()
                         ),
                     )
