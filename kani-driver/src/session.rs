@@ -35,8 +35,6 @@ pub struct KaniSession {
     pub kani_compiler: PathBuf,
     /// The location we found 'kani_lib.c'
     pub kani_lib_c: PathBuf,
-    /// The location we found the Kani C stub .c files
-    pub kani_c_stubs: PathBuf,
 
     /// The temporary files we littered that need to be cleaned up at the end of execution
     pub temporaries: Mutex<Vec<PathBuf>>,
@@ -62,7 +60,6 @@ impl KaniSession {
             codegen_tests: false,
             kani_compiler: install.kani_compiler()?,
             kani_lib_c: install.kani_lib_c()?,
-            kani_c_stubs: install.kani_c_stubs()?,
             temporaries: Mutex::new(vec![]),
         })
     }
@@ -337,10 +334,6 @@ impl InstallType {
 
     pub fn kani_lib_c(&self) -> Result<PathBuf> {
         self.base_path_with("library/kani/kani_lib.c")
-    }
-
-    pub fn kani_c_stubs(&self) -> Result<PathBuf> {
-        self.base_path_with("library/kani/stubs/C")
     }
 
     /// A common case is that our repo and release bundle have the same `subpath`
