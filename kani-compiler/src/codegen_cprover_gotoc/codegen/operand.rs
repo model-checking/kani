@@ -128,7 +128,8 @@ impl<'tcx> GotocCtx<'tcx> {
             ConstValue::Slice { data, start, end } => {
                 self.codegen_slice_value(v, lit_ty, span, data.inner(), start, end)
             }
-            ConstValue::ByRef { alloc, offset } => {
+            ConstValue::Indirect { alloc_id, offset } => {
+                let alloc = self.tcx.global_alloc(alloc_id).unwrap_memory();
                 debug!("ConstValue by ref {:?} {:?}", alloc, offset);
                 let mem_var = self.codegen_const_allocation(alloc.inner(), None);
                 mem_var
