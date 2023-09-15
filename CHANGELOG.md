@@ -7,7 +7,7 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 ## [0.37.0]
 
 ### Major Changes
-* Delete obsolete stubs for `Vec`` and related options ([pull request](https://github.com/model-checking/kani/pull/2770) by @zhassan-aws) 
+* Delete obsolete stubs for `Vec` and related options ([pull request](https://github.com/model-checking/kani/pull/2770) by @zhassan-aws) 
 
 ## [0.36.0]
 
