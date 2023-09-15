@@ -320,8 +320,13 @@ impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {
             ConstValue::Scalar(Scalar::Ptr(ptr, _size)) => {
                 self.collected.extend(collect_alloc_items(self.tcx, ptr.provenance).iter());
             }
-            ConstValue::Slice { data: alloc, start: _, end: _ }
-            | ConstValue::ByRef { alloc, .. } => {
+            ConstValue::Slice { data: alloc, start: _, end: _ } => {
+                for id in alloc.inner().provenance().provenances() {
+                    self.collected.extend(collect_alloc_items(self.tcx, id).iter())
+                }
+            }
+            ConstValue::Indirect { alloc_id, .. } => {
+                let alloc = self.tcx.global_alloc(alloc_id).unwrap_memory();
                 for id in alloc.inner().provenance().provenances() {
                     self.collected.extend(collect_alloc_items(self.tcx, id).iter())
                 }
