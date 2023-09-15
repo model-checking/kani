@@ -4,6 +4,11 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
+## [0.37.0]
+
+### Major Changes
+* Delete obsolete stubs for `Vec`` and related options ([pull request](https://github.com/model-checking/kani/pull/2770) by @zhassan-aws) 
+
 ## [0.36.0]
 
 ## What's Changed
