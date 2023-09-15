@@ -384,44 +384,8 @@ impl<'tcx> KaniAttributes<'tcx> {
                     harness.unwind_value = parse_unwind(self.tcx, attributes[0])
                 }
                 KaniAttributeKind::Proof => harness.proof = true,
-                KaniAttributeKind::ProofForContract => {
-                    harness.proof = true;
-                    let Some(Ok((name, id, span))) = self.interpret_the_for_contract_attribute()
-                    else {
-                        self.tcx.sess.span_err(
-                            self.tcx.def_span(self.item),
-                            format!("Invalid `{}` attribute format", kind.as_ref()),
-                        );
-                        return harness;
-                    };
-                    let Some(Ok(replacement_name)) =
-                        KaniAttributes::for_item(self.tcx, id).checked_with()
-                    else {
-                        self.tcx
-                            .sess
-                            .struct_span_err(span, format!("Could not find a contract to check for target of `{}` attribute", kind.as_ref()))
-                            .span_note(self.tcx.def_span(id), "Expected a contract on this function")
-                            .emit();
-                        return harness;
-                    };
-                    harness.stubs.push(self.stub_for_relative_item(name, replacement_name));
-                }
-                KaniAttributeKind::StubVerified => {
-                    for contract in self.interpret_stub_verified_attribute() {
-                        let Ok((name, def_id, span)) = contract else {
-                            continue;
-                        };
-                        let replacement_name = match KaniAttributes::for_item(self.tcx, def_id).replaced_with() {
-                            None => {
-                                self.tcx.sess.struct_span_err(span, format!("Could not find a contract for stubbing on target of `{}` attribute.", kind.as_ref())).span_note(self.tcx.def_span(def_id), "Expected a contract on this function.").emit();
-                                continue
-                            },
-                            Some(Ok(replacement_name)) => replacement_name,
-                            Some(Err(_)) => continue,
-                        };
-                        harness.stubs.push(self.stub_for_relative_item(name, replacement_name))
-                    }
-                }
+                KaniAttributeKind::ProofForContract => self.handle_proof_for_contract(&mut harness),
+                KaniAttributeKind::StubVerified => self.handle_stub_verified(&mut harness),
                 KaniAttributeKind::Unstable => {
                     // Internal attribute which shouldn't exist here.
                     unreachable!()
@@ -434,6 +398,71 @@ impl<'tcx> KaniAttributes<'tcx> {
             };
             harness
         })
+    }
+
+    fn handle_proof_for_contract(&self, harness: &mut HarnessAttributes) {
+        let sess = self.tcx.sess;
+        let (name, id, span) = match self.interpret_the_for_contract_attribute() {
+            None => unreachable!(
+                "impossible, was asked to handle `proof_for_contract` but didn't find such an attribute."
+            ),
+            Some(Err(_)) => return, // This error was already emitted
+            Some(Ok(values)) => values,
+        };
+        let Some(Ok(replacement_name)) = KaniAttributes::for_item(self.tcx, id).checked_with()
+        else {
+            sess.struct_span_err(
+                span,
+                format!(
+                    "Failed to check contract: Function `{}` has no contract.", 
+                    self.item_name(),
+                ),
+            )
+            .span_note(
+                self.tcx.def_span(id),
+                format!(
+                    "Try adding a contract to this function or use the unsound `{}` attribute instead.", 
+                    KaniAttributeKind::Stub.as_ref(),
+                )
+            )
+            .emit();
+            return;
+        };
+        harness.stubs.push(self.stub_for_relative_item(name, replacement_name));
+    }
+
+    fn handle_stub_verified(&self, harness: &mut HarnessAttributes) {
+        let sess = self.tcx.sess;
+        for contract in self.interpret_stub_verified_attribute() {
+            let Ok((name, def_id, span)) = contract else {
+                // This error has already been emitted so we can ignore it now.
+                // Later the session will fail anyway so we can just
+                // optimistically forge on and try to find more errors.
+                continue;
+            };
+            let replacement_name = match KaniAttributes::for_item(self.tcx, def_id).replaced_with()
+            {
+                None => {
+                    sess.struct_span_err(
+                        span,
+                        format!(
+                            "Failed to generate verified stub: Function `{}` has no contract.",
+                            self.item_name(),
+                        ),
+                    )
+                    .span_note(self.tcx.def_span(def_id), "Try adding a contract to this function.")
+                    .emit();
+                    continue;
+                }
+                Some(Ok(replacement_name)) => replacement_name,
+                Some(Err(_)) => continue,
+            };
+            harness.stubs.push(self.stub_for_relative_item(name, replacement_name))
+        }
+    }
+
+    fn item_name(&self) -> Symbol {
+        self.tcx.item_name(self.item)
     }
 
     /// Check that if this item is tagged with a proof_attribute, it is a valid harness.

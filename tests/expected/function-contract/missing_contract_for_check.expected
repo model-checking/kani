@@ -1,8 +1,10 @@
-error: Could not find a contract to check for target of `proof_for_contract` attribute
+error: Failed to check contract: Function `harness` has no contract.
   |
 7 | #[kani::proof_for_contract(no_contract)]
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   |
-note: Expected a contract on this function
+note: Try adding a contract to this function or use the unsound `stub` attribute instead.
   |
 5 | fn no_contract() {}
+  | ^^^^^^^^^^^^^^^^
+  
