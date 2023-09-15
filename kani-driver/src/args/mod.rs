@@ -226,18 +226,6 @@ pub struct VerificationArgs {
     #[arg(short, long, hide = true, requires("enable_unstable"))]
     pub jobs: Option<Option<usize>>,
 
-    // Hide option till https://github.com/model-checking/kani/issues/697 is
-    // fixed.
-    /// Use abstractions for the standard library.
-    /// This is an experimental feature and requires `--enable-unstable` to be used
-    #[arg(long, hide = true, requires("enable_unstable"))]
-    pub use_abs: bool,
-    // Hide option till https://github.com/model-checking/kani/issues/697 is
-    // fixed.
-    /// Choose abstraction for modules of standard library if available
-    #[arg(long, default_value = "std", ignore_case = true, hide = true, value_enum)]
-    pub abs_type: AbstractionType,
-
     /// Enable extra pointer checks such as invalid pointers in relation operations and pointer
     /// arithmetic overflow.
     /// This feature is unstable and it may yield false counter examples. It requires
@@ -372,32 +360,6 @@ pub enum OutputFormat {
     Regular,
     Terse,
     Old,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, ValueEnum)]
-pub enum AbstractionType {
-    Std,
-    Kani,
-    // Clap defaults to `c-ffi`
-    CFfi,
-    // Clap defaults to `no-back`
-    NoBack,
-}
-impl std::fmt::Display for AbstractionType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Std => f.write_str("std"),
-            Self::Kani => f.write_str("kani"),
-            Self::CFfi => f.write_str("c-ffi"),
-            Self::NoBack => f.write_str("no-back"),
-        }
-    }
-}
-#[cfg(test)]
-impl AbstractionType {
-    pub fn variants() -> Vec<&'static str> {
-        vec!["std", "kani", "c-ffi", "no-back"]
-    }
 }
 
 #[derive(Debug, clap::Args)]
@@ -819,18 +781,6 @@ mod tests {
     }
 
     #[test]
-    fn check_abs_type() {
-        // Since we manually implemented this, consistency check it
-        for t in AbstractionType::variants() {
-            assert_eq!(t, format!("{}", AbstractionType::from_str(t, false).unwrap()));
-        }
-        check_opt!("--abs-type std", false, abs_type, AbstractionType::Std);
-        check_opt!("--abs-type kani", false, abs_type, AbstractionType::Kani);
-        check_opt!("--abs-type c-ffi", false, abs_type, AbstractionType::CFfi);
-        check_opt!("--abs-type no-back", false, abs_type, AbstractionType::NoBack);
-    }
-
-    #[test]
     fn check_dry_run_fails() {
         // We don't support --dry-run anymore but we print a friendly reminder for now.
         let args = vec!["kani", "file.rs", "--dry-run"];
@@ -863,11 +813,6 @@ mod tests {
     fn parse_unstable_enabled(args: &str) -> Result<StandaloneArgs, Error> {
         let args = format!("kani --enable-unstable file.rs {args}");
         StandaloneArgs::try_parse_from(args.split(' '))
-    }
-
-    #[test]
-    fn check_abs_unstable() {
-        check_unstable_flag!("--use-abs", use_abs);
     }
 
     #[test]
