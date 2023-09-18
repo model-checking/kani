@@ -159,10 +159,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                 let ok = self.resolve_sibling(name.as_str()).map_err(|e| {
                     self.tcx.sess.span_err(
                         attr.span,
-                        format!(
-                            "Could not resolve replacement function {}: {e}",
-                            name.as_str()
-                        ),
+                        format!("Could not resolve replacement function {}: {e}", name.as_str()),
                     )
                 })?;
                 Ok((name, ok, attr.span))
