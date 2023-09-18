@@ -125,14 +125,6 @@ impl KaniSession {
             ]
             .map(OsString::from),
         );
-        if self.args.use_abs {
-            flags.push("-Z".into());
-            flags.push("force-unstable-if-unmarked=yes".into()); // ??
-            flags.push("--cfg=use_abs".into());
-            flags.push("--cfg".into());
-            let abs_type = format!("abs_type={}", self.args.abs_type.to_string().to_lowercase());
-            flags.push(abs_type.into());
-        }
 
         if let Some(seed_opt) = self.args.randomize_layout {
             flags.push("-Z".into());

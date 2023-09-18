@@ -11,7 +11,7 @@ fn kani_concrete_playback_harness
         vec![155],
         // 0
         vec![0],
-        // 'e'
+        // 101
         vec![101],
         // 127
         vec![127]

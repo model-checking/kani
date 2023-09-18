@@ -387,17 +387,23 @@ fn check_target(session: &Session) {
     // The requirement below is needed to build a valid CBMC machine model
     // in function `machine_model_from_session` from
     // src/kani-compiler/src/codegen_cprover_gotoc/context/goto_ctx.rs
-    let is_linux_target = session.target.llvm_target == "x86_64-unknown-linux-gnu";
+    let is_x86_64_linux_target = session.target.llvm_target == "x86_64-unknown-linux-gnu";
+    let is_arm64_linux_target = session.target.llvm_target == "aarch64-unknown-linux-gnu";
     // Comparison with `x86_64-apple-darwin` does not work well because the LLVM
     // target may become `x86_64-apple-macosx10.7.0` (or similar) and fail
     let is_x86_64_darwin_target = session.target.llvm_target.starts_with("x86_64-apple-");
     // looking for `arm64-apple-*`
     let is_arm64_darwin_target = session.target.llvm_target.starts_with("arm64-apple-");
 
-    if !is_linux_target && !is_x86_64_darwin_target && !is_arm64_darwin_target {
+    if !is_x86_64_linux_target
+        && !is_arm64_linux_target
+        && !is_x86_64_darwin_target
+        && !is_arm64_darwin_target
+    {
         let err_msg = format!(
-            "Kani requires the target platform to be `x86_64-unknown-linux-gnu` or \
-            `x86_64-apple-*` or `arm64-apple-*`, but it is {}",
+            "Kani requires the target platform to be `x86_64-unknown-linux-gnu`, \
+            `aarch64-unknown-linux-gnu`, `x86_64-apple-*` or `arm64-apple-*`, but \
+            it is {}",
             &session.target.llvm_target
         );
         session.err(err_msg);
@@ -623,6 +629,7 @@ fn new_machine_model(sess: &Session) -> MachineModel {
     // `check_target` from src/kani-compiler/src/codegen_cprover_gotoc/compiler_interface.rs
     // and error if it is not any of the ones we expect.
     let architecture = &sess.target.arch;
+    let os = &sess.target.os;
     let pointer_width = sess.target.pointer_width.into();
 
     // The model assumes the following values for session options:
@@ -690,12 +697,18 @@ fn new_machine_model(sess: &Session) -> MachineModel {
             let double_width = 64;
             let float_width = 32;
             let int_width = 32;
-            let long_double_width = 64;
+            let long_double_width = match os.as_ref() {
+                "linux" => 128,
+                _ => 64,
+            };
             let long_int_width = 64;
             let long_long_int_width = 64;
             let short_int_width = 16;
             let single_width = 32;
-            let wchar_t_is_unsigned = false;
+            // https://developer.arm.com/documentation/dui0491/i/Compiler-Command-line-Options/--signed-chars----unsigned-chars
+            // https://www.arm.linux.org.uk/docs/faqs/signedchar.php
+            // https://developer.apple.com/documentation/xcode/writing-arm64-code-for-apple-platforms
+            let wchar_t_is_unsigned = matches!(os.as_ref(), "linux");
             let wchar_t_width = 32;
 
             MachineModel {
