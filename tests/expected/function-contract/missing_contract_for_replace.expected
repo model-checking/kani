@@ -3,7 +3,7 @@ error: Failed to generate verified stub: Function `harness` has no contract.
 8 | #[kani::stub_verified(no_contract)]
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   |
-note: Try adding a contract to this function.
+note: Try adding a contract to this function or use the unsound `stub` attribute instead.
   |
 5 | fn no_contract() {}
   | ^^^^^^^^^^^^^^^^

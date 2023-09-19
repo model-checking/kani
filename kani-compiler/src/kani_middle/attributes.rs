@@ -411,17 +411,11 @@ impl<'tcx> KaniAttributes<'tcx> {
             sess.struct_span_err(
                 span,
                 format!(
-                    "Failed to check contract: Function `{}` has no contract.", 
+                    "Failed to check contract: Function `{}` has no contract.",
                     self.item_name(),
                 ),
             )
-            .span_note(
-                self.tcx.def_span(id),
-                format!(
-                    "Try adding a contract to this function or use the unsound `{}` attribute instead.", 
-                    KaniAttributeKind::Stub.as_ref(),
-                )
-            )
+            .span_note(self.tcx.def_span(id), "Try adding a contract to this function.")
             .emit();
             return;
         };
@@ -447,7 +441,13 @@ impl<'tcx> KaniAttributes<'tcx> {
                             self.item_name(),
                         ),
                     )
-                    .span_note(self.tcx.def_span(def_id), "Try adding a contract to this function.")
+                    .span_note(
+                        self.tcx.def_span(def_id),
+                        format!(
+                            "Try adding a contract to this function or use the unsound `{}` attribute instead.", 
+                            KaniAttributeKind::Stub.as_ref(),
+                        )
+                    )
                     .emit();
                     continue;
                 }
