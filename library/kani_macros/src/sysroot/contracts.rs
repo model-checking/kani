@@ -1,6 +1,9 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-use std::collections::{HashMap, HashSet};
+use std::{
+    borrow::Cow,
+    collections::{HashMap, HashSet},
+};
 
 use proc_macro::TokenStream;
 
@@ -412,10 +415,11 @@ impl ContractConditionsHandler {
     /// Create the body of a check function.
     ///
     /// Wraps the conditions from this attribute around `self.body`.
-    fn make_check_body(&self) -> TokenStream2 {
+    fn make_check_body(&self, sig: &Signature) -> TokenStream2 {
         let attr = &self.attr;
         let attr_copy = &self.attr_copy;
         let call_to_prior = &self.body;
+        let return_type = return_type_to_type(&sig.output);
         match &self.condition_type {
             ContractConditionsType::Requires => quote!(
                 kani::assume(#attr);
@@ -442,7 +446,7 @@ impl ContractConditionsHandler {
                 inject_conditions.visit_block_mut(&mut call);
                 quote!(
                     #arg_copies
-                    let result = #call;
+                    let result : #return_type = #call;
                     #exec_postconditions
                     result
                 )
@@ -455,11 +459,12 @@ impl ContractConditionsHandler {
     /// Wraps the conditions from this attribute around a prior call. If
     /// `use_dummy_fn` is `true` the prior call we wrap is `kani::any`,
     /// otherwise `self.body`.
-    fn make_replace_body(&self, use_dummy_fn_call: bool) -> TokenStream2 {
+    fn make_replace_body(&self, sig: &syn::Signature, use_dummy_fn_call: bool) -> TokenStream2 {
         let attr = &self.attr;
         let attr_copy = &self.attr_copy;
         let call_to_prior =
             if use_dummy_fn_call { quote!(kani::any()) } else { self.body.to_token_stream() };
+        let return_type = return_type_to_type(&sig.output);
         match &self.condition_type {
             ContractConditionsType::Requires => quote!(
                 kani::assert(#attr, stringify!(#attr_copy));
@@ -469,13 +474,23 @@ impl ContractConditionsHandler {
                 let (arg_copies, copy_clean) = make_unsafe_argument_copies(&argument_names);
                 quote!(
                     #arg_copies
-                    let result = #call_to_prior;
+                    let result: #return_type = #call_to_prior;
                     kani::assume(#attr);
                     #copy_clean
                     result
                 )
             }
         }
+    }
+}
+
+fn return_type_to_type(return_type: &syn::ReturnType) -> Cow<syn::Type> {
+    match return_type {
+        syn::ReturnType::Default => Cow::Owned(syn::Type::Tuple(syn::TypeTuple {
+            paren_token: syn::token::Paren::default(),
+            elems: Default::default(),
+        })),
+        syn::ReturnType::Type(_, typ) => Cow::Borrowed(typ.as_ref()),
     }
 }
 
@@ -633,7 +648,7 @@ fn requires_ensures_alt(attr: TokenStream, item: TokenStream, is_requires: bool)
             // important so this happens as the last emitted attribute.
             output.extend(quote!(#[kanitool::is_contract_generated(replace)]));
         }
-        let body = handler.make_replace_body(dummy);
+        let body = handler.make_replace_body(&sig, dummy);
         sig.ident = replace_name;
 
         // Finally emit the check function itself.
@@ -652,7 +667,7 @@ fn requires_ensures_alt(attr: TokenStream, item: TokenStream, is_requires: bool)
             // important so this happens as the last emitted attribute.
             output.extend(quote!(#[kanitool::is_contract_generated(check)]));
         }
-        let body = handler.make_check_body();
+        let body = handler.make_check_body(&sig);
         sig.ident = check_name;
         output.extend(quote!(
             #sig {
