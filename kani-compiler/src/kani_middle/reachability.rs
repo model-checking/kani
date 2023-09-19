@@ -457,11 +457,9 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
                 match self.tcx.const_eval_resolve(ParamEnv::reveal_all(), un_eval, None) {
                     // The `monomorphize` call should have evaluated that constant already.
                     Ok(const_val) => const_val,
-                    Err(ErrorHandled::TooGeneric(span)) => span_bug!(
-                        span,
-                        "Unexpected polymorphic constant: {:?}",
-                        literal
-                    ),
+                    Err(ErrorHandled::TooGeneric(span)) => {
+                        span_bug!(span, "Unexpected polymorphic constant: {:?}", literal)
+                    }
                     Err(error) => {
                         warn!(?error, "Error already reported");
                         return;
