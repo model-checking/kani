@@ -97,9 +97,10 @@ pub fn derive_arbitrary(item: TokenStream) -> TokenStream {
     derive::expand_derive_arbitrary(item)
 }
 
-///  Add a precondition to this function.
+/// Add a precondition to this function.
 ///
-/// This is part of the function contract API, together with [`ensures`].
+/// This is part of the function contract API, for more general information see
+/// the [module-level documentation](../kani/contracts/index.html).
 ///
 /// The contents of the attribute is a condition over the input values to the
 /// annotated function. All Rust syntax is supported, even calling other
@@ -107,11 +108,9 @@ pub fn derive_arbitrary(item: TokenStream) -> TokenStream {
 /// perform I/O or use mutable memory.
 ///
 /// Kani requires each function that uses a contract (this attribute or
-/// [`ensures`]) to have at least one designated [`proof_for_contract`] harness
-/// for checking the contract.
-///
-/// This attribute is part of the unstable contracts API and requires
-/// `-Zfunction-contracts` flag to be used.
+/// [`ensures`][macro@ensures]) to have at least one designated
+/// [`proof_for_contract`][macro@proof_for_contract] harness for checking the
+/// contract.
 #[proc_macro_attribute]
 pub fn requires(attr: TokenStream, item: TokenStream) -> TokenStream {
     attr_impl::requires(attr, item)
@@ -119,7 +118,8 @@ pub fn requires(attr: TokenStream, item: TokenStream) -> TokenStream {
 
 /// Add a postcondition to this function.
 ///
-/// This is part of the function contract API, together with [`requires`].
+/// This is part of the function contract API, for more general information see
+/// the [module-level documentation](../kani/contracts/index.html).
 ///
 /// The contents of the attribute is a condition over the input values to the
 /// annotated function *and* its return value, accessible as a variable called
@@ -128,11 +128,9 @@ pub fn requires(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// mutable memory.
 ///
 /// Kani requires each function that uses a contract (this attribute or
-/// [`requires`]) to have at least one designated [`proof_for_contract`] harness
-/// for checking the contract.
-///
-/// This attribute is part of the unstable contracts API and requires
-/// `-Zfunction-contracts` flag to be used.
+/// [`requires`][macro@requires]) to have at least one designated
+/// [`proof_for_contract`][macro@proof_for_contract] harness for checking the
+/// contract.
 #[proc_macro_attribute]
 pub fn ensures(attr: TokenStream, item: TokenStream) -> TokenStream {
     attr_impl::ensures(attr, item)
@@ -144,39 +142,26 @@ pub fn ensures(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// `super::some_mod::foo` or `crate::SomeStruct::foo`) to the function, the
 /// contract of which should be checked.
 ///
-/// The harness is expected to set up the arguments that `foo` should be called
-/// with and initialzied any `static mut` globals that are reachable. All of
-/// these should be initialized to as general value as possible, usually
-/// achieved using `kani::any`. The harness must call e.g. `foo` at least once
-/// and if `foo` has type parameters, only one instantiation of those parameters
-/// is admissible. Violating either results in a compile error.
-///
-/// If any of those types have special invariants you can use `kani::assume` to
-/// enforce them, but other than condition on inputs and checks of outputs
-/// should be in the contract, not the harness for maximum soundness.
-///
-/// This attribute is part of the unstable contracts API and requires
-/// `-Zfunction-contracts` flag to be used.
+/// This is part of the function contract API, for more general information see
+/// the [module-level documentation](../kani/contracts/index.html).
 #[proc_macro_attribute]
 pub fn proof_for_contract(attr: TokenStream, item: TokenStream) -> TokenStream {
     attr_impl::proof_for_contract(attr, item)
 }
 
-/// `stub_verified(TARGET)` is a harness attribute (to be used on [`proof`] or
-/// [`proof_for_contract`] function) that replaces all occurrences of `TARGET`
-/// reachable from this harness with a stub generated from the contract on
-/// `TARGET`.
+/// `stub_verified(TARGET)` is a harness attribute (to be used on
+/// [`proof`][macro@proof] or [`proof_for_contract`][macro@proof_for_contract]
+/// function) that replaces all occurrences of `TARGET` reachable from this
+/// harness with a stub generated from the contract on `TARGET`.
 ///
-/// To create a contract for `TARGET` you must decorate it with at least one
-/// [`requires`] or [`ensures`] attribute.
+/// The target of `stub_verified` *must* have a contract. More information about
+/// how to specify a contract for your function can be found
+/// [here](../contracts/index.html#specification-attributes-overview).
 ///
 /// You may use multiple `stub_verified` attributes on a single harness.
 ///
-/// For more information see the [function contract
-/// RFC](https://model-checking.github.io/kani/rfc/rfcs/0009-function-contracts.html).
-///
-/// This attribute is part of the unstable contracts API and requires
-/// `-Zfunction-contracts` flag to be used.
+/// This is part of the function contract API, for more general information see
+/// the [module-level documentation](../kani/contracts/index.html).
 #[proc_macro_attribute]
 pub fn stub_verified(attr: TokenStream, item: TokenStream) -> TokenStream {
     attr_impl::stub_verified(attr, item)
