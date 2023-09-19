@@ -7,8 +7,39 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 ## [0.37.0]
 
 ### Major Changes
+
 * Delete obsolete stubs for `Vec` and related options ([pull request](https://github.com/model-checking/kani/pull/2770) by @zhassan-aws) 
 
+## What's Changed
+
+* Function Contracts: Support for defining and checking `requires` and `ensures` clauses by @JustusAdam in https://github.com/model-checking/kani/pull/2655
+* Do not run performance benchmarks for tags by @adpaco-aws in https://github.com/model-checking/kani/pull/2745
+* Upgrade rust toolchain to 2023-09-07 by @tautschnig in https://github.com/model-checking/kani/pull/2743
+* Toolchain upgrade workflow: fix de-duplicating issues by @tautschnig in https://github.com/model-checking/kani/pull/2749
+* Update RFC process by @celinval in https://github.com/model-checking/kani/pull/2716
+* Remove build files generated with `cargo doc` command by @adpaco-aws in https://github.com/model-checking/kani/pull/2750
+* Automatic toolchain upgrade to nightly-2023-09-08 by @github-actions in https://github.com/model-checking/kani/pull/2752
+* Automatic toolchain upgrade to nightly-2023-09-09 by @github-actions in https://github.com/model-checking/kani/pull/2755
+* Fixing the Footnotes and Feature Flag on the Function Contracts RFC by @JustusAdam in https://github.com/model-checking/kani/pull/2754
+* Upgrade to Kissat 3.1.1 by @zhassan-aws in https://github.com/model-checking/kani/pull/2756
+* Fix hashset perf test by @zhassan-aws in https://github.com/model-checking/kani/pull/2758
+* Add support for the ARM64 Linux platform by @adpaco-aws in https://github.com/model-checking/kani/pull/2757
+* Automatic toolchain upgrade to nightly-2023-09-10 by @github-actions in https://github.com/model-checking/kani/pull/2760
+* Automatic toolchain upgrade to nightly-2023-09-11 by @github-actions in https://github.com/model-checking/kani/pull/2764
+* Force any_vec capacity to match length by @celinval in https://github.com/model-checking/kani/pull/2765
+* Fix syntax errors in Kissat checking script by @tautschnig in https://github.com/model-checking/kani/pull/2769
+* Update Rust toolchain to 2023-09-15 by @tautschnig in https://github.com/model-checking/kani/pull/2768
+* Add range demo example by @zhassan-aws in https://github.com/model-checking/kani/pull/2772
+* Bump CBMC version by @zhassan-aws in https://github.com/model-checking/kani/pull/2771
+* Automatic toolchain upgrade to nightly-2023-09-16 by @github-actions in https://github.com/model-checking/kani/pull/2773
+* Automatic toolchain upgrade to nightly-2023-09-17 by @github-actions in https://github.com/model-checking/kani/pull/2774
+* Automatic toolchain upgrade to nightly-2023-09-18 by @github-actions in https://github.com/model-checking/kani/pull/2775
+* Update rust toolchain to nightly-2023-09-19 by @remi-delmas-3000 in https://github.com/model-checking/kani/pull/2778
+* Minor version update of deps using cargo update by @remi-delmas-3000 in https://github.com/model-checking/kani/pull/2779
+* Major version updates by @remi-delmas-3000 in https://github.com/model-checking/kani/pull/2780
+* Fix expected value for pref_align_of under aarch64/macos by @remi-delmas-3000 in https://github.com/model-checking/kani/pull/2782
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.36.0...kani-0.37.0
 ## [0.36.0]
 
 ## What's Changed
