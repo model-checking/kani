@@ -13,15 +13,8 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 
 ## What's Changed
 
-* Function Contracts: Support for defining and checking `requires` and `ensures` clauses by @JustusAdam in https://github.com/model-checking/kani/pull/2655
-* Do not run performance benchmarks for tags by @adpaco-aws in https://github.com/model-checking/kani/pull/2745
-* Update RFC process by @celinval in https://github.com/model-checking/kani/pull/2716
-* Remove build files generated with `cargo doc` command by @adpaco-aws in https://github.com/model-checking/kani/pull/2750
-* Fixing the Footnotes and Feature Flag on the Function Contracts RFC by @JustusAdam in https://github.com/model-checking/kani/pull/2754
-* Upgrade to Kissat 3.1.1 by @zhassan-aws in https://github.com/model-checking/kani/pull/2756
 * Force `any_vec` capacity to match length by @celinval in https://github.com/model-checking/kani/pull/2765
-* Add range demo example by @zhassan-aws in https://github.com/model-checking/kani/pull/2772
-* Bump CBMC version by @zhassan-aws in https://github.com/model-checking/kani/pull/2771
+* Bump CBMC version to 5.92.0 by @zhassan-aws in https://github.com/model-checking/kani/pull/2771
 * Update rust toolchain to nightly-2023-09-19 by @remi-delmas-3000 in https://github.com/model-checking/kani/pull/2778
 
 **Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.36.0...kani-0.37.0
