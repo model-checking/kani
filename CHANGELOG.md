@@ -18,7 +18,7 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 * Fix expected value for `pref_align_of` under aarch64/macos by @remi-delmas-3000 in https://github.com/model-checking/kani/pull/2782
 * Bump CBMC version to 5.92.0 by @zhassan-aws in https://github.com/model-checking/kani/pull/2771
 * Upgrade to Kissat 3.1.1 by @zhassan-aws in https://github.com/model-checking/kani/pull/2756
-* Update Rust toolchain to nightly-2023-09-19 by @remi-delmas-3000 in https://github.com/model-checking/kani/pull/2778
+* Rust toolchain upgraded to `nightly-2023-09-19` by @remi-delmas-3000 @tautschnig 
 
 **Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.36.0...kani-0.37.0
 
