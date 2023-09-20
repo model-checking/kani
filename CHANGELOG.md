@@ -21,6 +21,7 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 * Update Rust toolchain to nightly-2023-09-19 by @remi-delmas-3000 in https://github.com/model-checking/kani/pull/2778
 
 **Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.36.0...kani-0.37.0
+
 ## [0.36.0]
 
 ## What's Changed
