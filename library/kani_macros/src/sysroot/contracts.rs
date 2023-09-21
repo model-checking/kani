@@ -102,19 +102,17 @@
 //! }
 //! ```
 
+use proc_macro::{Diagnostic, TokenStream};
+use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
+use quote::{quote, ToTokens};
 use std::{
     borrow::Cow,
     collections::{HashMap, HashSet},
 };
-
-use proc_macro::{Diagnostic, TokenStream};
-
-use {
-    quote::{quote, ToTokens},
-    syn::{parse_macro_input, spanned::Spanned, visit::Visit, Expr, ItemFn},
+use syn::{
+    parse_macro_input, spanned::Spanned, visit::Visit, visit_mut::VisitMut, Attribute, Expr,
+    ItemFn, PredicateType, ReturnType, Signature, TraitBound, TypeParamBound, WhereClause,
 };
-
-use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
 
 /// Create a unique hash for a token stream (basically a [`std::hash::Hash`]
 /// impl for `proc_macro2::TokenStream`).
@@ -133,8 +131,6 @@ fn hash_of_token_stream<H: std::hash::Hasher>(hasher: &mut H, stream: proc_macro
         }
     }
 }
-
-use syn::{visit_mut::VisitMut, Attribute, Signature};
 
 /// Hash this `TokenStream` and return an integer that is at most digits
 /// long when hex formatted.
@@ -530,7 +526,7 @@ impl<'a> ContractConditionsHandler<'a> {
     ///
     /// See [`Self::make_replace_body`] for the most interesting parts of this
     /// function.
-    fn emit_replace_function(&mut self, replace_function_ident: Ident, use_nondet_result: bool) {
+    fn emit_replace_function(&mut self, replace_function_ident: Ident, is_first_emit: bool) {
         self.emit_common_header();
 
         if self.function_state.emit_tag_attr() {
@@ -539,7 +535,10 @@ impl<'a> ContractConditionsHandler<'a> {
             self.output.extend(quote!(#[kanitool::is_contract_generated(replace)]));
         }
         let mut sig = self.annotated_fn.sig.clone();
-        let body = self.make_replace_body(use_nondet_result);
+        if is_first_emit {
+            attach_require_kani_any(&mut sig);
+        }
+        let body = self.make_replace_body(is_first_emit);
         sig.ident = replace_function_ident;
 
         // Finally emit the check function itself.
@@ -571,6 +570,57 @@ fn return_type_to_type(return_type: &syn::ReturnType) -> Cow<syn::Type> {
         })),
         syn::ReturnType::Type(_, typ) => Cow::Borrowed(typ.as_ref()),
     }
+}
+
+/// Looks complicated but does something very simple: attach a bound for
+/// `kani::Arbitrary` on the return type to the provided signature. Pushes it
+/// onto a preexisting where condition, initializing a new `where` condition if
+/// it doesn't already exist.
+/// 
+/// Very simple example: `fn foo() -> usize { .. }` would be rewritten `fn foo()
+/// -> usize where usize: kani::Arbitrary { .. }`.
+/// 
+/// This is called when we first emit a replace function. Later we can rely on
+/// this bound already being present.
+fn attach_require_kani_any(sig: &mut Signature) {
+    if matches!(sig.output, ReturnType::Default) {
+        // It's the default return type, e.g. `()` so we can skip adding the
+        // constraint.
+        return;
+    }
+    let return_ty = return_type_to_type(&sig.output);
+    let where_clause = sig.generics.where_clause.get_or_insert_with(|| WhereClause {
+        where_token: syn::Token![where](Span::call_site()),
+        predicates: Default::default(),
+    });
+
+    where_clause.predicates.push(syn::WherePredicate::Type(PredicateType {
+        lifetimes: None,
+        bounded_ty: return_ty.into_owned(),
+        colon_token: syn::Token![:](Span::call_site()),
+        bounds: [TypeParamBound::Trait(TraitBound {
+            paren_token: None,
+            modifier: syn::TraitBoundModifier::None,
+            lifetimes: None,
+            path: syn::Path {
+                leading_colon: None,
+                segments: [
+                    syn::PathSegment {
+                        ident: Ident::new("kani", Span::call_site()),
+                        arguments: syn::PathArguments::None,
+                    },
+                    syn::PathSegment {
+                        ident: Ident::new("Arbitrary", Span::call_site()),
+                        arguments: syn::PathArguments::None,
+                    },
+                ]
+                .into_iter()
+                .collect(),
+            },
+        })]
+        .into_iter()
+        .collect(),
+    }))
 }
 
 /// We make shallow copies of the argument for the postconditions in both
@@ -658,8 +708,7 @@ fn requires_ensures_main(attr: TokenStream, item: TokenStream, is_requires: bool
             let item_hash = short_hash_of_token_stream(&item_stream_clone);
 
             let check_fn_name = identifier_for_generated_function(&item_fn, "check", item_hash);
-            let replace_fn_name =
-                identifier_for_generated_function(&item_fn, "replace", item_hash);
+            let replace_fn_name = identifier_for_generated_function(&item_fn, "replace", item_hash);
 
             // Constructing string literals explicitly here, because `stringify!`
             // doesn't work. Let's say we have an identifier `check_fn` and we were

@@ -3,7 +3,7 @@
 // kani-flags: -Zfunction-contracts
 
 #[kani::ensures(result.is_some())]
-fn or_default<T: Default + kani::Arbitrary>(opt: Option<T>) -> Option<T> {
+fn or_default<T: Default>(opt: Option<T>) -> Option<T> {
     opt.or(Some(T::default()))
 }
 
