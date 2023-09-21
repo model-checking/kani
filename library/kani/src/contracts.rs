@@ -5,8 +5,10 @@
 //!
 //! Function contracts are still under development. Using the APIs therefore
 //! requires the unstable `-Zfunction-contracts` flag to be passed. You can join
-//! the discussion on contract design by commenting on [the
-//! RFC](https://model-checking.github.io/kani/rfc/rfcs/0009-function-contracts.html).
+//! the discussion on contract design by reading our
+//! [RFC](https://model-checking.github.io/kani/rfc/rfcs/0009-function-contracts.html)
+//! and [commenting on the tracking
+//! issue](https://github.com/model-checking/kani/issues/2652).
 //!
 //! The function contract API is expressed as proc-macro attributes, and there
 //! are two parts to it.

@@ -655,11 +655,11 @@ fn requires_ensures_main(attr: TokenStream, item: TokenStream, is_requires: bool
 
             // We'll be using this to postfix the generated names for the "check"
             // and "replace" functions.
-            let a_short_hash = short_hash_of_token_stream(&item_stream_clone);
+            let item_hash = short_hash_of_token_stream(&item_stream_clone);
 
-            let check_fn_name = identifier_for_generated_function(&item_fn, "check", a_short_hash);
+            let check_fn_name = identifier_for_generated_function(&item_fn, "check", item_hash);
             let replace_fn_name =
-                identifier_for_generated_function(&item_fn, "replace", a_short_hash);
+                identifier_for_generated_function(&item_fn, "replace", item_hash);
 
             // Constructing string literals explicitly here, because `stringify!`
             // doesn't work. Let's say we have an identifier `check_fn` and we were
