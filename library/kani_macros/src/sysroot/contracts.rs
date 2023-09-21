@@ -576,10 +576,10 @@ fn return_type_to_type(return_type: &syn::ReturnType) -> Cow<syn::Type> {
 /// `kani::Arbitrary` on the return type to the provided signature. Pushes it
 /// onto a preexisting where condition, initializing a new `where` condition if
 /// it doesn't already exist.
-/// 
+///
 /// Very simple example: `fn foo() -> usize { .. }` would be rewritten `fn foo()
 /// -> usize where usize: kani::Arbitrary { .. }`.
-/// 
+///
 /// This is called when we first emit a replace function. Later we can rely on
 /// this bound already being present.
 fn attach_require_kani_any(sig: &mut Signature) {
