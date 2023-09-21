@@ -1,11 +1,113 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! Implementation of the function contracts code generation.
+//!
+//! The most exciting part is the handling of `requires` and `ensures`, the main
+//! entry point to which is [`requires_ensures_main`]. Most of the code
+//! generation for that is implemented on [`ContractConditionsHandler`] with
+//! [`ContractFunctionState`] steering the code generation. The function state
+//! implements a state machine in order to be able to handle multiple attributes
+//! on the same function correctly.
+//!
+//! ## How the handling for `requires` and `ensures` works.
+//!
+//! We generate a "check" function used to verify the validity of the contract
+//! and a "replace" function that can be used as a stub, generated from the
+//! contract that can be used instead of the original function.
+//!
+//! Each clause (requires or ensures) after the first clause will be ignored on
+//! the original function (detected by finding the `kanitool::checked_with`
+//! attribute). On the check function (detected by finding the
+//! `kanitool::is_contract_generated` attribute) it expands into a new layer of
+//! pre- or postconditions. This state machine is also explained in more detail
+//! in code comments.
+//!
+//! All named arguments of the annotated function are unsafely shallow-copied
+//! with the `kani::untracked_deref` function to circumvent the borrow checker
+//! for postconditions. We must ensure that those copies are not dropped
+//! (causing a double-free) so after the postconditions we call `mem::forget` on
+//! each copy.
+//!
+//! ## Check function
+//!
+//! Generates a `check_<fn_name>_<fn_hash>` function that assumes preconditions
+//! and asserts postconditions. The check function is also marked as generated
+//! with the `#[kanitool::is_contract_generated(check)]` attribute.
+//!
+//! Decorates the original function with `#[kanitool::checked_by =
+//! "check_<fn_name>_<fn_hash>"]`.
+//!
+//! The check function is a copy of the original function with preconditions
+//! added before the body and postconditions after as well as injected before
+//! every `return` (see [`PostconditionInjector`]). Attributes on the original
+//! function are also copied to the check function.
+//!
+//! ## Replace Function
+//!
+//! As the mirror to that also generates a `replace_<fn_name>_<fn_hash>`
+//! function that asserts preconditions and assumes postconditions. The replace
+//! function is also marked as generated with the
+//! `#[kanitool::is_contract_generated(replace)]` attribute.
+//!
+//! Decorates the original function with `#[kanitool::replaced_by =
+//! "replace_<fn_name>_<fn_hash>"]`.
+//!
+//! The replace function has the same signature as the original function but its
+//! body is replaced by `kani::any()`, which generates a non-deterministic
+//! value.
+//!
+//! # Complete example
+//!
+//! ```rs
+//! #[kani::requires(divisor != 0)]
+//! #[kani::ensures(result <= dividend)]
+//! fn div(dividend: u32, divisor: u32) -> u32 {
+//!     dividend / divisor
+//! }
+//! ```
+//!
+//! Turns into
+//!
+//! ```rs
+//! #[kanitool::checked_with = "div_check_965916"]
+//! #[kanitool::replaced_with = "div_replace_965916"]
+//! fn div(dividend: u32, divisor: u32) -> u32 { dividend / divisor }
+//!
+//! #[allow(dead_code)]
+//! #[allow(unused_variables)]
+//! #[kanitool::is_contract_generated(check)]
+//! fn div_check_965916(dividend: u32, divisor: u32) -> u32 {
+//!     let dividend_renamed = kani::untracked_deref(&dividend);
+//!     let divisor_renamed = kani::untracked_deref(&divisor);
+//!     let result = { kani::assume(divisor != 0); { dividend / divisor } };
+//!     kani::assert(result <= dividend_renamed, "result <= dividend");
+//!     std::mem::forget(dividend_renamed);
+//!     std::mem::forget(divisor_renamed);
+//!     result
+//! }
+//!
+//! #[allow(dead_code)]
+//! #[allow(unused_variables)]
+//! #[kanitool::is_contract_generated(replace)]
+//! fn div_replace_965916(dividend: u32, divisor: u32) -> u32 {
+//!     kani::assert(divisor != 0, "divisor != 0");
+//!     let dividend_renamed = kani::untracked_deref(&dividend);
+//!     let divisor_renamed = kani::untracked_deref(&divisor);
+//!     let result = kani::any();
+//!     kani::assume(result <= dividend_renamed, "result <= dividend");
+//!     std::mem::forget(dividend_renamed);
+//!     std::mem::forget(divisor_renamed);
+//!     result
+//! }
+//! ```
+
 use std::{
     borrow::Cow,
     collections::{HashMap, HashSet},
 };
 
-use proc_macro::TokenStream;
+use proc_macro::{Diagnostic, TokenStream};
 
 use {
     quote::{quote, ToTokens},
@@ -32,7 +134,7 @@ fn hash_of_token_stream<H: std::hash::Hasher>(hasher: &mut H, stream: proc_macro
     }
 }
 
-use syn::{visit_mut::VisitMut, Attribute, Block, Signature};
+use syn::{visit_mut::VisitMut, Attribute, Signature};
 
 /// Hash this `TokenStream` and return an integer that is at most digits
 /// long when hex formatted.
@@ -53,11 +155,11 @@ fn identifier_for_generated_function(related_function: &ItemFn, purpose: &str, h
 }
 
 pub fn requires(attr: TokenStream, item: TokenStream) -> TokenStream {
-    requires_ensures_alt(attr, item, true)
+    requires_ensures_main(attr, item, true)
 }
 
 pub fn ensures(attr: TokenStream, item: TokenStream) -> TokenStream {
-    requires_ensures_alt(attr, item, false)
+    requires_ensures_main(attr, item, false)
 }
 
 /// Collect all named identifiers used in the argument patterns of a function.
@@ -123,17 +225,6 @@ where
         && path.segments.iter().zip(mtch).all(|(actual, expected)| actual.ident == *expected)
 }
 
-/// Temporarily swap `$src` and `$target` using `std::mem::swap` for the
-/// execution of `$code`, then swap them back.
-macro_rules! swapped {
-    ($src:expr, $target:expr, $code:expr) => {{
-        std::mem::swap($src, $target);
-        let result = $code;
-        std::mem::swap($src, $target);
-        result
-    }};
-}
-
 /// Classifies the state a function is in in the contract handling pipeline.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ContractFunctionState {
@@ -150,134 +241,57 @@ enum ContractFunctionState {
     Replace,
 }
 
-impl ContractFunctionState {
+impl<'a> TryFrom<&'a syn::Attribute> for ContractFunctionState {
+    type Error = Option<Diagnostic>;
+
     /// Find out if this attribute could be describing a "contract handling"
     /// state and if so return it.
-    fn from_attribute(attribute: &syn::Attribute) -> Option<Self> {
+    fn try_from(attribute: &'a syn::Attribute) -> Result<Self, Self::Error> {
         if let syn::Meta::List(lst) = &attribute.meta {
             if matches_path(&lst.path, &["kanitool", "is_contract_generated"]) {
-                match syn::parse2::<Ident>(lst.tokens.clone()) {
-                    Err(e) => {
-                        lst.span().unwrap().error(format!("{e}")).emit();
+                let ident = syn::parse2::<Ident>(lst.tokens.clone())
+                    .map_err(|e| Some(lst.span().unwrap().error(format!("{e}"))))?;
+                let ident_str = ident.to_string();
+                return match ident_str.as_str() {
+                    "check" => Ok(Self::Check),
+                    "replace" => Ok(Self::Replace),
+                    _ => {
+                        Err(Some(lst.span().unwrap().error("Expected `check` or `replace` ident")))
                     }
-                    Ok(ident) => {
-                        let ident_str = ident.to_string();
-                        return match ident_str.as_str() {
-                            "check" => Some(Self::Check),
-                            "replace" => Some(Self::Replace),
-                            _ => {
-                                lst.span()
-                                    .unwrap()
-                                    .error("Expected `check` or `replace` ident")
-                                    .emit();
-                                None
-                            }
-                        };
-                    }
-                }
+                };
             }
         }
         if let syn::Meta::NameValue(nv) = &attribute.meta {
             if matches_path(&nv.path, &["kanitool", "checked_with"]) {
-                return Some(ContractFunctionState::Original);
+                return Ok(ContractFunctionState::Original);
             }
         }
-        None
+        Err(None)
+    }
+}
+
+impl ContractFunctionState {
+    // If we didn't find any other contract handling related attributes we
+    // assume this function has not been touched by a contract before.
+    fn from_attributes(attributes: &[syn::Attribute]) -> Self {
+        attributes
+            .iter()
+            .find_map(|attr| {
+                let state = ContractFunctionState::try_from(attr);
+                if let Err(Some(diag)) = state {
+                    diag.emit();
+                    None
+                } else {
+                    state.ok()
+                }
+            })
+            .unwrap_or(ContractFunctionState::Untouched)
     }
 
     /// Do we need to emit the `is_contract_generated` tag attribute on the
     /// generated function(s)?
     fn emit_tag_attr(self) -> bool {
         matches!(self, ContractFunctionState::Untouched)
-    }
-
-    /// This function decides whether we will be emitting a check function, a
-    /// replace function or both and emit a header into `output` if necessary.
-    ///
-    /// The return of this function essentially configures all the later parts
-    /// of code generation and is structured as follows:
-    /// `Some((Some((replace_function_name, use_dummy_function)),
-    /// Some(check_function_name)))`. Either function name being present tells
-    /// the codegen that that type of function should be emitted with the
-    /// respective name. `use_dummy_function` indicates whether we should use
-    /// the body of this function (`false`) or `kani::any` (`true`) as the
-    /// nested body of the replace function. `kani::any` is only used when we
-    /// generate a replace function for the first time.
-    ///
-    /// The following is going to happen depending on the state of `self`
-    ///
-    /// - On [`ContractFunctionState::Original`] we return an overall [`None`]
-    ///   indicating to short circuit the code generation.
-    /// - On [`ContractFunctionState::Replace`] and
-    ///   [`ContractFunctionState::Check`] we return [`Some`] for one of the
-    ///   tuple fields, indicating that only this type of function should be
-    ///   emitted.
-    /// - On [`ContractFunctionState::Untouched`] we return [`Some`] for both
-    ///   tuple fields, indicating that both functions need to be emitted. We
-    ///   also emit the original function with the `checked_with` and
-    ///   `replaced_with` attributes added.
-    ///
-    /// The only reason the `item_fn` is mutable is I'm using `std::mem::swap`
-    /// to avoid making copies.
-    fn prepare_header(
-        self,
-        item_fn: &mut ItemFn,
-        output: &mut TokenStream2,
-        a_short_hash: u64,
-    ) -> Option<(Option<(Ident, bool)>, Option<Ident>)> {
-        match self {
-            ContractFunctionState::Untouched => {
-                // We are the first time a contract is handled on this function, so
-                // we're responsible for
-                //
-                // 1. Generating a name for the check function
-                // 2. Emitting the original, unchanged item and register the check
-                //    function on it via attribute
-                // 3. Renaming our item to the new name
-                // 4. And (minor point) adding #[allow(dead_code)] and
-                //    #[allow(unused_variables)] to the check function attributes
-
-                let check_fn_name =
-                    identifier_for_generated_function(item_fn, "check", a_short_hash);
-                let replace_fn_name =
-                    identifier_for_generated_function(item_fn, "replace", a_short_hash);
-
-                // Constructing string literals explicitly here, because `stringify!`
-                // doesn't work. Let's say we have an identifier `check_fn` and we were
-                // to do `quote!(stringify!(check_fn))` to try to have it expand to
-                // `"check_fn"` in the generated code. Then when the next macro parses
-                // this it will *not* see the literal `"check_fn"` as you may expect but
-                // instead the *expression* `stringify!(check_fn)`.
-                let replace_fn_name_str =
-                    syn::LitStr::new(&replace_fn_name.to_string(), Span::call_site());
-                let check_fn_name_str =
-                    syn::LitStr::new(&check_fn_name.to_string(), Span::call_site());
-
-                // The order of `attrs` and `kanitool::{checked_with,
-                // is_contract_generated}` is important here, because macros are
-                // expanded outside in. This way other contract annotations in `attrs`
-                // sees those attributes and can use them to determine
-                // `function_state`.
-                //
-                // We're emitting the original here but the same applies later when we
-                // emit the check function.
-                let mut attrs = vec![];
-                swapped!(&mut item_fn.attrs, &mut attrs, {
-                    output.extend(quote!(
-                        #(#attrs)*
-                        #[kanitool::checked_with = #check_fn_name_str]
-                        #[kanitool::replaced_with = #replace_fn_name_str]
-                        #item_fn
-                    ));
-                });
-                Some((Some((replace_fn_name, true)), Some(check_fn_name)))
-            }
-            ContractFunctionState::Original => None,
-            ContractFunctionState::Check => Some((None, Some(item_fn.sig.ident.clone()))),
-            ContractFunctionState::Replace => {
-                Some((Some((item_fn.sig.ident.clone(), false)), None))
-            }
-        }
     }
 }
 
@@ -358,15 +372,18 @@ fn rename_argument_occurrences(sig: &syn::Signature, attr: &mut Expr) -> HashMap
 
 /// The information needed to generate the bodies of check and replacement
 /// functions that integrate the conditions from this contract attribute.
-struct ContractConditionsHandler {
+struct ContractConditionsHandler<'a> {
+    function_state: ContractFunctionState,
     /// Information specific to the type of contract attribute we're expanding.
     condition_type: ContractConditionsType,
     /// The contents of the attribute.
     attr: Expr,
     /// Body of the function this attribute was found on.
-    body: Block,
+    annotated_fn: &'a ItemFn,
     /// An unparsed, unmodified copy of `attr`, used in the error messages.
     attr_copy: TokenStream2,
+    /// The stream to which we should write the generated code
+    output: &'a mut TokenStream2,
 }
 
 /// Information needed for generating check and replace handlers for different
@@ -388,42 +405,42 @@ impl ContractConditionsType {
     /// `argument_names`.
     fn new_ensures(sig: &Signature, attr: &mut Expr) -> Self {
         let argument_names = rename_argument_occurrences(sig, attr);
-
         ContractConditionsType::Ensures { argument_names }
     }
 }
 
-impl ContractConditionsHandler {
+impl<'a> ContractConditionsHandler<'a> {
     /// Initialize the handler. Constructs the required
     /// [`ContractConditionsType`] depending on `is_requires`.
     fn new(
+        function_state: ContractFunctionState,
         is_requires: bool,
         mut attr: Expr,
-        fn_sig: &Signature,
-        fn_body: Block,
+        annotated_fn: &'a ItemFn,
         attr_copy: TokenStream2,
+        output: &'a mut TokenStream2,
     ) -> Self {
         let condition_type = if is_requires {
             ContractConditionsType::Requires
         } else {
-            ContractConditionsType::new_ensures(fn_sig, &mut attr)
+            ContractConditionsType::new_ensures(&annotated_fn.sig, &mut attr)
         };
 
-        Self { condition_type, attr, body: fn_body, attr_copy }
+        Self { function_state, condition_type, attr, annotated_fn, attr_copy, output }
     }
 
     /// Create the body of a check function.
     ///
     /// Wraps the conditions from this attribute around `self.body`.
-    fn make_check_body(&self, sig: &Signature) -> TokenStream2 {
+    fn make_check_body(&self) -> TokenStream2 {
         let attr = &self.attr;
         let attr_copy = &self.attr_copy;
-        let call_to_prior = &self.body;
+        let ItemFn { sig, block, .. } = self.annotated_fn;
         let return_type = return_type_to_type(&sig.output);
         match &self.condition_type {
             ContractConditionsType::Requires => quote!(
                 kani::assume(#attr);
-                #call_to_prior
+                #block
             ),
             ContractConditionsType::Ensures { argument_names } => {
                 let (arg_copies, copy_clean) = make_unsafe_argument_copies(&argument_names);
@@ -440,7 +457,7 @@ impl ContractConditionsHandler {
                 // necessary but could lead to weird results if
                 // `make_replace_body` were called after this if we modified in
                 // place.
-                let mut call = call_to_prior.clone();
+                let mut call = block.clone();
 
                 let mut inject_conditions = PostconditionInjector(exec_postconditions.clone());
                 inject_conditions.visit_block_mut(&mut call);
@@ -457,13 +474,17 @@ impl ContractConditionsHandler {
     /// Create the body of a stub for this contract.
     ///
     /// Wraps the conditions from this attribute around a prior call. If
-    /// `use_dummy_fn` is `true` the prior call we wrap is `kani::any`,
-    /// otherwise `self.body`.
-    fn make_replace_body(&self, sig: &syn::Signature, use_dummy_fn_call: bool) -> TokenStream2 {
+    /// `use_nondet_result` is `true` we will use `kani::any()` to create a
+    /// result, otherwise whatever the `body` of our annotated function was.
+    ///
+    /// `use_nondet_result` will only be true if this is the first time we are
+    /// generating a replace function.
+    fn make_replace_body(&self, use_nondet_result: bool) -> TokenStream2 {
         let attr = &self.attr;
         let attr_copy = &self.attr_copy;
+        let ItemFn { sig, block, .. } = self.annotated_fn;
         let call_to_prior =
-            if use_dummy_fn_call { quote!(kani::any()) } else { self.body.to_token_stream() };
+            if use_nondet_result { quote!(kani::any()) } else { block.to_token_stream() };
         let return_type = return_type_to_type(&sig.output);
         match &self.condition_type {
             ContractConditionsType::Requires => quote!(
@@ -482,8 +503,66 @@ impl ContractConditionsHandler {
             }
         }
     }
+
+    /// Emit the check function into the output stream.
+    ///
+    /// See [`Self::make_check_body`] for the most interesting parts of this
+    /// function.
+    fn emit_check_function(&mut self, check_function_ident: Ident) {
+        self.emit_common_header();
+
+        if self.function_state.emit_tag_attr() {
+            // If it's the first time we also emit this marker. Again, order is
+            // important so this happens as the last emitted attribute.
+            self.output.extend(quote!(#[kanitool::is_contract_generated(check)]));
+        }
+        let body = self.make_check_body();
+        let mut sig = self.annotated_fn.sig.clone();
+        sig.ident = check_function_ident;
+        self.output.extend(quote!(
+            #sig {
+                #body
+            }
+        ))
+    }
+
+    /// Emit the replace funtion into the output stream.
+    ///
+    /// See [`Self::make_replace_body`] for the most interesting parts of this
+    /// function.
+    fn emit_replace_function(&mut self, replace_function_ident: Ident, use_nondet_result: bool) {
+        self.emit_common_header();
+
+        if self.function_state.emit_tag_attr() {
+            // If it's the first time we also emit this marker. Again, order is
+            // important so this happens as the last emitted attribute.
+            self.output.extend(quote!(#[kanitool::is_contract_generated(replace)]));
+        }
+        let mut sig = self.annotated_fn.sig.clone();
+        let body = self.make_replace_body(use_nondet_result);
+        sig.ident = replace_function_ident;
+
+        // Finally emit the check function itself.
+        self.output.extend(quote!(
+            #sig {
+                #body
+            }
+        ));
+    }
+
+    /// Emit attributes common to check or replace function into the output
+    /// stream.
+    fn emit_common_header(&mut self) {
+        if self.function_state.emit_tag_attr() {
+            self.output.extend(quote!(
+                #[allow(dead_code, unused_variables)]
+            ));
+        }
+        self.output.extend(self.annotated_fn.attrs.iter().flat_map(Attribute::to_token_stream));
+    }
 }
 
+/// If an explicit return type was provided it is returned, otherwise `()`.
 fn return_type_to_type(return_type: &syn::ReturnType) -> Cow<syn::Type> {
     match return_type {
         syn::ReturnType::Default => Cow::Owned(syn::Type::Tuple(syn::TypeTuple {
@@ -513,167 +592,106 @@ fn make_unsafe_argument_copies(
 
 /// The main meat of handling requires/ensures contracts.
 ///
-/// Generates a "check" function used to verify the validity of the contract and
-/// a "replace" function that can be used as a stub, generated from the contract
-/// that can be used instead of the original function.
-///
-/// Each clause (requires or ensures) after the first clause will be ignored on
-/// the original function (detected by finding the `kanitool::checked_with`
-/// attribute). On the check function (detected by finding the
-/// `kanitool::is_contract_generated` attribute) it expands into a new layer of
-/// pre- or postconditions. This state machine is also explained in more detail
-/// in comments in the body of this macro.
-///
-/// All named arguments of the function are unsafely shallow-copied with the
-/// `kani::untracked_deref` function to circumvent the borrow checker for
-/// postconditions. We must ensure that those copies are not dropped (causing a
-/// double-free) so after the postconditions we call `mem::forget` on each copy.
-///
-/// ## Check function
-///
-/// Generates a `check_<fn_name>_<fn_hash>` function that assumes preconditions
-/// and asserts postconditions. The check function is also marked as generated
-/// with the `#[kanitool::is_contract_generated(check)]` attribute.
-///
-/// Decorates the original function with `#[kanitool::checked_by =
-/// "check_<fn_name>_<fn_hash>"]`.
-///
-/// The check function is a copy of the original function with preconditions
-/// added before the body and postconditions after as well as injected before
-/// every `return` (see [`PostconditionInjector`]). Attributes on the original
-/// function are also copied to the check function.
-///
-/// ## Replace Function
-///
-/// As the mirror to that also generates a `replace_<fn_name>_<fn_hash>`
-/// function that asserts preconditions and assumes postconditions. The replace
-/// function is also marked as generated with the
-/// `#[kanitool::is_contract_generated(replace)]` attribute.
-///
-/// Decorates the original function with `#[kanitool::replaced_by =
-/// "replace_<fn_name>_<fn_hash>"]`.
-///
-/// The replace function has the same signature as the original function but its
-/// body is replaced by `kani::any()`, which generates a non-deterministic
-/// value.
-///
-/// # Complete example
-///
-/// ```rs
-/// #[kani::requires(divisor != 0)]
-/// #[kani::ensures(result <= dividend)]
-/// fn div(dividend: u32, divisor: u32) -> u32 {
-///     dividend / divisor
-/// }
-/// ```
-///
-/// Turns into
-///
-/// ```rs
-/// #[kanitool::checked_with = "div_check_965916"]
-/// #[kanitool::replaced_with = "div_replace_965916"]
-/// fn div(dividend: u32, divisor: u32) -> u32 { dividend / divisor }
-///
-/// #[allow(dead_code)]
-/// #[allow(unused_variables)]
-/// #[kanitool::is_contract_generated(check)]
-/// fn div_check_965916(dividend: u32, divisor: u32) -> u32 {
-///     let dividend_renamed = kani::untracked_deref(&dividend);
-///     let divisor_renamed = kani::untracked_deref(&divisor);
-///     let result = { kani::assume(divisor != 0); { dividend / divisor } };
-///     kani::assert(result <= dividend_renamed, "result <= dividend");
-///     std::mem::forget(dividend_renamed);
-///     std::mem::forget(divisor_renamed);
-///     result
-/// }
-///
-/// #[allow(dead_code)]
-/// #[allow(unused_variables)]
-/// #[kanitool::is_contract_generated(replace)]
-/// fn div_replace_965916(dividend: u32, divisor: u32) -> u32 {
-///     kani::assert(divisor != 0, "divisor != 0");
-///     let dividend_renamed = kani::untracked_deref(&dividend);
-///     let divisor_renamed = kani::untracked_deref(&divisor);
-///     let result = kani::any();
-///     kani::assume(result <= dividend_renamed, "result <= dividend");
-///     std::mem::forget(dividend_renamed);
-///     std::mem::forget(divisor_renamed);
-///     result
-/// }
-/// ```
-fn requires_ensures_alt(attr: TokenStream, item: TokenStream, is_requires: bool) -> TokenStream {
+/// See the [module level documentation][self] for a description of how the code
+/// generation works.
+fn requires_ensures_main(attr: TokenStream, item: TokenStream, is_requires: bool) -> TokenStream {
     let attr_copy = TokenStream2::from(attr.clone());
     let attr = parse_macro_input!(attr as Expr);
 
     let mut output = proc_macro2::TokenStream::new();
+    let item_stream_clone = item.clone();
+    let item_fn = parse_macro_input!(item as ItemFn);
 
-    let a_short_hash = short_hash_of_token_stream(&item);
-    let mut item_fn = parse_macro_input!(item as ItemFn);
+    let function_state = ContractFunctionState::from_attributes(&item_fn.attrs);
 
-    // If we didn't find any other contract handling related attributes we
-    // assume this function has not been touched by a contract before.
-    let function_state = item_fn
-        .attrs
-        .iter()
-        .find_map(ContractFunctionState::from_attribute)
-        .unwrap_or(ContractFunctionState::Untouched);
-
-    let Some((emit_replace, emit_check)) =
-        function_state.prepare_header(&mut item_fn, &mut output, a_short_hash)
-    else {
+    if matches!(function_state, ContractFunctionState::Original) {
         // If we're the original function that means we're *not* the first time
         // that a contract attribute is handled on this function. This means
         // there must exist a generated check function somewhere onto which the
         // attributes have been copied and where they will be expanded into more
-        // checks. So we just return outselves unchanged.
+        // checks. So we just return ourselves unchanged.
+        //
+        // Since this is the only function state case that doesn't need a
+        // handler to be constructed, we do this match early, separately.
         return item_fn.into_token_stream().into();
-    };
-
-    let ItemFn { attrs, vis: _, mut sig, block } = item_fn;
-    let handler = ContractConditionsHandler::new(is_requires, attr, &sig, *block, attr_copy);
-    let emit_common_header = |output: &mut TokenStream2| {
-        if function_state.emit_tag_attr() {
-            output.extend(quote!(
-                    #[allow(dead_code, unused_variables)]
-            ));
-        }
-        output.extend(attrs.iter().flat_map(Attribute::to_token_stream));
-    };
-
-    if let Some((replace_name, dummy)) = emit_replace {
-        emit_common_header(&mut output);
-
-        if function_state.emit_tag_attr() {
-            // If it's the first time we also emit this marker. Again, order is
-            // important so this happens as the last emitted attribute.
-            output.extend(quote!(#[kanitool::is_contract_generated(replace)]));
-        }
-        let body = handler.make_replace_body(&sig, dummy);
-        sig.ident = replace_name;
-
-        // Finally emit the check function itself.
-        output.extend(quote!(
-            #sig {
-                #body
-            }
-        ));
     }
 
-    if let Some(check_name) = emit_check {
-        emit_common_header(&mut output);
+    let mut handler = ContractConditionsHandler::new(
+        function_state,
+        is_requires,
+        attr,
+        &item_fn,
+        attr_copy,
+        &mut output,
+    );
 
-        if function_state.emit_tag_attr() {
-            // If it's the first time we also emit this marker. Again, order is
-            // important so this happens as the last emitted attribute.
-            output.extend(quote!(#[kanitool::is_contract_generated(check)]));
+    match function_state {
+        ContractFunctionState::Check => {
+            // The easy cases first: If we are on a check or replace function
+            // emit them again but with additional conditions layered on.
+            //
+            // Since we are already on the check function, it will have an
+            // appropriate, unique generated name which we are just going to
+            // pass on.
+            handler.emit_check_function(item_fn.sig.ident.clone());
         }
-        let body = handler.make_check_body(&sig);
-        sig.ident = check_name;
-        output.extend(quote!(
-            #sig {
-                #body
-            }
-        ))
+        ContractFunctionState::Replace => {
+            // Analogous to above
+            handler.emit_replace_function(item_fn.sig.ident.clone(), false);
+        }
+        ContractFunctionState::Original => {
+            unreachable!("Impossible: This is handled via short circuiting earlier.")
+        }
+        ContractFunctionState::Untouched => {
+            // The complex case. We are the first time a contract is handled on this function, so
+            // we're responsible for
+            //
+            // 1. Generating a name for the check function
+            // 2. Emitting the original, unchanged item and register the check
+            //    function on it via attribute
+            // 3. Renaming our item to the new name
+            // 4. And (minor point) adding #[allow(dead_code)] and
+            //    #[allow(unused_variables)] to the check function attributes
+
+            // We'll be using this to postfix the generated names for the "check"
+            // and "replace" functions.
+            let a_short_hash = short_hash_of_token_stream(&item_stream_clone);
+
+            let check_fn_name = identifier_for_generated_function(&item_fn, "check", a_short_hash);
+            let replace_fn_name =
+                identifier_for_generated_function(&item_fn, "replace", a_short_hash);
+
+            // Constructing string literals explicitly here, because `stringify!`
+            // doesn't work. Let's say we have an identifier `check_fn` and we were
+            // to do `quote!(stringify!(check_fn))` to try to have it expand to
+            // `"check_fn"` in the generated code. Then when the next macro parses
+            // this it will *not* see the literal `"check_fn"` as you may expect but
+            // instead the *expression* `stringify!(check_fn)`.
+            let replace_fn_name_str =
+                syn::LitStr::new(&replace_fn_name.to_string(), Span::call_site());
+            let check_fn_name_str = syn::LitStr::new(&check_fn_name.to_string(), Span::call_site());
+
+            // The order of `attrs` and `kanitool::{checked_with,
+            // is_contract_generated}` is important here, because macros are
+            // expanded outside in. This way other contract annotations in `attrs`
+            // sees those attributes and can use them to determine
+            // `function_state`.
+            //
+            // The same care is taken when we emit check and replace functions.
+            // emit the check function.
+            let ItemFn { attrs, vis, sig, block } = &item_fn;
+            handler.output.extend(quote!(
+                #(#attrs)*
+                #[kanitool::checked_with = #check_fn_name_str]
+                #[kanitool::replaced_with = #replace_fn_name_str]
+                #vis #sig {
+                    #block
+                }
+            ));
+
+            handler.emit_check_function(check_fn_name);
+            handler.emit_replace_function(replace_fn_name, true);
+        }
     }
 
     output.into()
