@@ -74,7 +74,6 @@ jobs:
           branch: toolchain-${{ env.next_toolchain_date }}
           delete-branch: true
           title: 'Automatic toolchain upgrade to nightly-${{ env.next_toolchain_date }}'
-          labels: Z-BenchCI
           body: >
             Update Rust toolchain from nightly-${{ env.current_toolchain_date }} to
             nightly-${{ env.next_toolchain_date }} without any other source changes.
