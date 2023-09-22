@@ -13,6 +13,7 @@
 //!   - For every static, collect initializer and drop functions.
 //!
 //! We have kept this module agnostic of any Kani code in case we can contribute this back to rustc.
+use rustc_span::ErrorGuaranteed;
 use tracing::{debug, debug_span, trace, warn};
 
 use rustc_data_structures::fingerprint::Fingerprint;
@@ -26,6 +27,7 @@ use rustc_middle::mir::mono::MonoItem;
 use rustc_middle::mir::visit::Visitor as MirVisitor;
 use rustc_middle::mir::{
     Body, CastKind, Constant, ConstantKind, Location, Rvalue, Terminator, TerminatorKind,
+    UnevaluatedConst,
 };
 use rustc_middle::span_bug;
 use rustc_middle::ty::adjustment::PointerCoercion;
@@ -458,7 +460,21 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
                     // The `monomorphize` call should have evaluated that constant already.
                     Ok(const_val) => const_val,
                     Err(ErrorHandled::TooGeneric(span)) => {
-                        span_bug!(span, "Unexpected polymorphic constant: {:?}", literal)
+                        if let Some(_) = graceful_const_resolution_err(
+                            self.tcx,
+                            &un_eval,
+                            span,
+                            self.instance.def_id(),
+                        ) {
+                            return;
+                        } else {
+                            span_bug!(
+                                span,
+                                "Unexpected polymorphic constant: {:?} {:?}",
+                                literal,
+                                constant.literal
+                            )
+                        }
                     }
                     Err(error) => {
                         warn!(?error, "Error already reported");
@@ -494,6 +510,12 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
                                 // implement the same traits as those in the
                                 // original function/method. A trait mismatch shows
                                 // up here, when we try to resolve a trait method
+
+                                // FIXME: This assumes the type resolving the
+                                // trait is the first argument, but that isn't
+                                // necessarily true. It could be any argument or
+                                // even the return type, for instance for a
+                                // trait like `FromIterator`.
                                 let generic_ty = outer_args[0].ty(self.body, tcx).peel_refs();
                                 let receiver_ty = tcx.subst_and_normalize_erasing_regions(
                                     substs,
@@ -508,7 +530,7 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
                                         "`{receiver_ty}` doesn't implement \
                                         `{trait_}`. The function `{caller}` \
                                         cannot be stubbed by `{}` due to \
-                                        generic bounds not being met.",
+                                        generic bounds not being met. Callee: {callee}",
                                         tcx.def_path_str(stub)
                                     ),
                                 );
@@ -553,6 +575,27 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
 
         self.super_terminator(terminator, location);
     }
+}
+
+fn graceful_const_resolution_err<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    mono_const: &UnevaluatedConst<'tcx>,
+    span: rustc_span::Span,
+    parent_fn: DefId,
+) -> Option<ErrorGuaranteed> {
+    let implementor = match mono_const.args.as_slice() {
+        [one] => one.as_type(),
+        _ => None,
+    }?;
+    let trait_ = tcx.trait_of_item(mono_const.def)?;
+    let msg = format!(
+        "Type `{implementor}` does not implement trait `{}`. \
+        This is likely because `{}` is used as a stub but its \
+        generic bounds are not being met.",
+        tcx.def_path_str(trait_),
+        tcx.def_path_str(parent_fn)
+    );
+    Some(tcx.sess.span_err(span, msg))
 }
 
 /// Convert a `MonoItem` into a stable `Fingerprint` which can be used as a stable hash across
