@@ -460,12 +460,14 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
                     // The `monomorphize` call should have evaluated that constant already.
                     Ok(const_val) => const_val,
                     Err(ErrorHandled::TooGeneric(span)) => {
-                        if let Some(_) = graceful_const_resolution_err(
+                        if graceful_const_resolution_err(
                             self.tcx,
                             &un_eval,
                             span,
                             self.instance.def_id(),
-                        ) {
+                        )
+                        .is_some()
+                        {
                             return;
                         } else {
                             span_bug!(
@@ -578,12 +580,12 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
 }
 
 /// Try to construct a nice error message when const evaluation fails.
-/// 
+///
 /// This function handles the `Trt::CNST` case where there is one trait (`Trt`)
 /// which defined a constant `CNST` that we failed to resolve. As such we expect
 /// that the trait can be resolved from the constant and that only one generic
 /// parameter, the instantiation of `Trt` is present.
-/// 
+///
 /// If these expectations are not met we return `None`. We do not know in what
 /// situation that would be the case and if they are even possible.
 fn graceful_const_resolution_err<'tcx>(
