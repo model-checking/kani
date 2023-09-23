@@ -1,0 +1,1 @@
+error: Type `std::string::String` does not implement trait `Dummy`. This is likely because `original` is used as a stub but its generic bounds are not being met.

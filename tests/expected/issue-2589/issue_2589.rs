@@ -3,13 +3,11 @@
 //
 // kani-flags: -Z stubbing
 
-
 fn original<T>() {}
 
 trait Dummy {
     const TRUE: bool = true;
 }
-
 
 fn stub<T: Dummy>() {
     // Do nothing.
