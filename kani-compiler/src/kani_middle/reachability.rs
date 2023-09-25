@@ -584,7 +584,7 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
 /// This function handles the `Trt::CNST` case where there is one trait (`Trt`)
 /// which defined a constant `CNST` that we failed to resolve. As such we expect
 /// that the trait can be resolved from the constant and that only one generic
-/// parameter, the instantiation of `Trt` is present.
+/// parameter, the instantiation of `Trt`, is present.
 ///
 /// If these expectations are not met we return `None`. We do not know in what
 /// situation that would be the case and if they are even possible.
