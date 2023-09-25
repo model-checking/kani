@@ -11,4 +11,6 @@ Z-BenchCI:
   - kani-dependencies
   - kani-driver/src/call-*
   - Cargo.lock
+  - cprover_bindings/**
+  - library/**
 
