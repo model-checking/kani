@@ -11,23 +11,87 @@
 //! on the same function correctly.
 //!
 //! ## How the handling for `requires` and `ensures` works.
+//! 
+//! Our aim is to generate a "check" function that can be used to verify the
+//! validity of the contract and a "replace" function that can be used as a
+//! stub, generated from the contract that can be used instead of the original
+//! function.
+//! 
+//! Let me first introduce the constraints which we are operating under to
+//! explain why we need the somewhat involved state machine to achieve this.
+//! 
+//! Proc-macros are expanded one-at-a-time, outside-in and they can also be
+//! renamed. Meaning the user can do `use kani::requires as precondition` and
+//! then use `precondition` everywhere.  We want to support this functionality
+//! instead of throwing a hard error but this means we cannot detect if a given
+//! function has further contract attributes placed on it during any given
+//! expansion. As a result every expansion needs to leave the code in a valid
+//! state that could be used for all contract functionality but it must alow
+//! further contract attributes to compose with what was already generated. In
+//! addition we also want to make sure to support non-contract attributes on
+//! functions with contracts.
+//! 
+//! To this end we use a state machine. The initial state is an "untouched"
+//! function with possibly multiple contract attributes, none of which have been
+//! expanded. When we expand the first (outermost) `requires` or `ensures`
+//! attribute on such a function we re-emit the function unchanged but we also
+//! generate fresh "check" and "replace" functions that enforce the condition
+//! carried by the attribute currently being expanded. We copy all additional
+//! attributes from the original function to both the "check" and the "replace".
+//! This allows us to deal both with renaming and also support non-contract
+//! attributes.
+//! 
+//! In addition to copying attributes we also add new marker attributes to
+//! advance the state machine. The "check" function gets a
+//! `kanitool::is_contract_generated(check)` attributes and analogous for
+//! replace. The re-emitted original meanwhile is decorated with
+//! `kanitool::checked_with(name_of_generated_check_function)` and an analogous
+//! `kanittool::replaced_with` attribute also. The next contract attribute that
+//! is expanded will detect the presence of these markers in the attributes of
+//! the item and be able to determine their position in the state machine this
+//! way. If the state is either a "check" or "replace" then the body of the
+//! function is augmented with the additional conditions carried by the macro.
+//! If the state is the "original" function, no changes are performed.
+//! 
+//! We place marker attributes at the bottom of the attribute stack (innermost),
+//! otherwise they would not be visible to the future macro expansions.
 //!
-//! We generate a "check" function used to verify the validity of the contract
-//! and a "replace" function that can be used as a stub, generated from the
-//! contract that can be used instead of the original function.
+//! Below you can see a graphical rendering where boxes are states and each
+//! arrow represents the expansion of a `requires` or `ensures` macro.
 //!
-//! Each clause (requires or ensures) after the first clause will be ignored on
-//! the original function (detected by finding the `kanitool::checked_with`
-//! attribute). On the check function (detected by finding the
-//! `kanitool::is_contract_generated` attribute) it expands into a new layer of
-//! pre- or postconditions. This state machine is also explained in more detail
-//! in code comments.
+//! ```plain
+//!                            v
+//!                      +-----------+
+//!                      | Untouched |
+//!                      | Function  |
+//!                      +-----+-----+
+//!                            |
+//!             Emit           |  Generate + Copy Attributes
+//!          +-----------------+------------------+
+//!          |                 |                  |
+//!          |                 |                  |
+//!          v                 v                  v
+//!   +----------+           +-------+        +---------+
+//!   | Original |<-+        | Check |<-+     | Replace |<-+
+//!   +--+-------+  |        +---+---+  |     +----+----+  |
+//!      |          | Ignore     |      | Augment  |       | Augment
+//!      +----------+            +------+          +-------+
+//! 
+//! |              |       |                              |
+//! +--------------+       +------------------------------+
+//!   Presence of                     Presence of
+//!  "checked_with"             "is_contract_generated"
+//! 
+//!            State is detected via
+//! ```
 //!
 //! All named arguments of the annotated function are unsafely shallow-copied
 //! with the `kani::untracked_deref` function to circumvent the borrow checker
-//! for postconditions. We must ensure that those copies are not dropped
-//! (causing a double-free) so after the postconditions we call `mem::forget` on
-//! each copy.
+//! for postconditions. The case where this is relevant is if you want to return
+//! a mutable borrow from the function which means any immutable borrow in the
+//! postcondition would be illegal. We must ensure that those copies are not
+//! dropped (causing a double-free) so after the postconditions we call
+//! `mem::forget` on each copy.
 //!
 //! ## Check function
 //!
@@ -59,7 +123,7 @@
 //!
 //! # Complete example
 //!
-//! ```rs
+//! ```
 //! #[kani::requires(divisor != 0)]
 //! #[kani::ensures(result <= dividend)]
 //! fn div(dividend: u32, divisor: u32) -> u32 {
@@ -69,7 +133,7 @@
 //!
 //! Turns into
 //!
-//! ```rs
+//! ```
 //! #[kanitool::checked_with = "div_check_965916"]
 //! #[kanitool::replaced_with = "div_replace_965916"]
 //! fn div(dividend: u32, divisor: u32) -> u32 { dividend / divisor }
@@ -193,7 +257,7 @@ impl<'a> VisitMut for Renamer<'a> {
 
     /// This restores shadowing. Without this we would rename all ident
     /// occurrences, but not rebinding location. This is because our
-    /// [`visit_expr_path_mut`] is scope-unaware.
+    /// [`Self::visit_expr_path_mut`] is scope-unaware.
     fn visit_pat_ident_mut(&mut self, i: &mut syn::PatIdent) {
         if let Some(new) = self.0.get(&i.ident) {
             i.ident = new.clone();
