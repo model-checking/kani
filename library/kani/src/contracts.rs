@@ -73,7 +73,7 @@
 //! }
 //! ```
 //!
-//! Once we are finished specifying our contract we can ask kani to check it's
+//! Once we are finished specifying our contract we can ask Kani to check it's
 //! validity. For this we need to provide a proof harness that exercises the
 //! function. The harness is created like any other, e.g. as a test-like
 //! function with inputs and using `kani::any` to create arbitrary values.
@@ -134,7 +134,7 @@
 //! one specification attribute is considered to "have a contract" and any
 //! absent specification type defaults to its most general interpretation
 //! (`true`). All functions with not a single specification attribute are
-//! considered " not to "have a contract" and are ineligible for use as the
+//! considered "not to have a contract" and are ineligible for use as the
 //! target of a [`proof_for_contract`][macro@proof_for_contract] of
 //! [`stub_verified`][macro@stub_verified] attribute.
 //!
