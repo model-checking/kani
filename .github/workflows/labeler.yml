@@ -1,0 +1,30 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+#
+# Auto label PRs based on the files that were changed
+#
+# This PR runs on `pull_request_target` because it needs extra write permission.
+#
+# Thus, we keep this workflow minimal, and the only action used here is from a
+# verified publisher.
+#
+# See <https://github.com/actions/labeler/issues/121> for more details.
+
+name: Auto Label
+on: pull_request_target
+
+jobs:
+  auto-label:
+    permissions:
+      contents: read
+      pull-requests: write
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Kani
+      uses: actions/checkout@v3
+
+    - name: Label PR
+      uses: actions/labeler@v4
+      with:
+        dot: true
+

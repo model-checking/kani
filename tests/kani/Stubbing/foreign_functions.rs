@@ -46,16 +46,16 @@ fn function_pointer_call(function_pointer: unsafe extern "C" fn(c_int) -> c_long
 #[kani::proof]
 #[kani::stub(libc::strlen, stubs::strlen)]
 fn standard() {
-    let str: Box<i8> = Box::new(4);
-    let str_ptr: *const i8 = &*str;
+    let str: Box<c_char> = Box::new(4);
+    let str_ptr: *const c_char = &*str;
     assert_eq!(unsafe { libc::strlen(str_ptr) }, 4);
 }
 
 #[kani::proof]
 #[kani::stub(libc::strlen, stubs::strlen)]
 fn function_pointer_standard() {
-    let str: Box<i8> = Box::new(4);
-    let str_ptr: *const i8 = &*str;
+    let str: Box<c_char> = Box::new(4);
+    let str_ptr: *const c_char = &*str;
     let new_ptr = libc::strlen;
     assert_eq!(unsafe { new_ptr(str_ptr) }, 4);
 }

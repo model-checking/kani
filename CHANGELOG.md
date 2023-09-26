@@ -4,6 +4,24 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
+## [0.37.0]
+
+### Major Changes
+
+* Delete obsolete stubs for `Vec` and related options by @zhassan-aws in https://github.com/model-checking/kani/pull/2770
+* Add support for the ARM64 Linux platform by @adpaco-aws in https://github.com/model-checking/kani/pull/2757
+
+## What's Changed
+
+* Function Contracts: Support for defining and checking `requires` and `ensures` clauses by @JustusAdam in https://github.com/model-checking/kani/pull/2655
+* Force `any_vec` capacity to match length by @celinval in https://github.com/model-checking/kani/pull/2765
+* Fix expected value for `pref_align_of` under aarch64/macos by @remi-delmas-3000 in https://github.com/model-checking/kani/pull/2782
+* Bump CBMC version to 5.92.0 by @zhassan-aws in https://github.com/model-checking/kani/pull/2771
+* Upgrade to Kissat 3.1.1 by @zhassan-aws in https://github.com/model-checking/kani/pull/2756
+* Rust toolchain upgraded to `nightly-2023-09-19` by @remi-delmas-3000 @tautschnig 
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.36.0...kani-0.37.0
+
 ## [0.36.0]
 
 ## What's Changed
