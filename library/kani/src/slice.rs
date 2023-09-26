@@ -47,12 +47,17 @@ fn any_range<const LENGTH: usize>() -> (usize, usize) {
 /// let slice: kani::slice::AnySlice<u8, 5> = kani::slice::any_slice();
 /// foo(&slice); // where foo is a function that takes a slice and verifies a property about it
 /// ```
+#[deprecated(
+    since = "0.38.0",
+    note = "Use `any_slice_of_array` or `any_slice_of_array_mut` instead"
+)]
 pub struct AnySlice<T, const MAX_SLICE_LENGTH: usize> {
     layout: Layout,
     ptr: *mut T,
     slice_len: usize,
 }
 
+#[allow(deprecated)]
 impl<T, const MAX_SLICE_LENGTH: usize> AnySlice<T, MAX_SLICE_LENGTH> {
     fn new() -> Self
     where
@@ -103,6 +108,7 @@ impl<T, const MAX_SLICE_LENGTH: usize> AnySlice<T, MAX_SLICE_LENGTH> {
     }
 }
 
+#[allow(deprecated)]
 impl<T, const MAX_SLICE_LENGTH: usize> Drop for AnySlice<T, MAX_SLICE_LENGTH> {
     fn drop(&mut self) {
         if self.slice_len > 0 {
@@ -114,6 +120,7 @@ impl<T, const MAX_SLICE_LENGTH: usize> Drop for AnySlice<T, MAX_SLICE_LENGTH> {
     }
 }
 
+#[allow(deprecated)]
 impl<T, const MAX_SLICE_LENGTH: usize> Deref for AnySlice<T, MAX_SLICE_LENGTH> {
     type Target = [T];
 
@@ -122,15 +129,22 @@ impl<T, const MAX_SLICE_LENGTH: usize> Deref for AnySlice<T, MAX_SLICE_LENGTH> {
     }
 }
 
+#[allow(deprecated)]
 impl<T, const MAX_SLICE_LENGTH: usize> DerefMut for AnySlice<T, MAX_SLICE_LENGTH> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.get_slice_mut()
     }
 }
 
+#[deprecated(
+    since = "0.38.0",
+    note = "Use `any_slice_of_array` or `any_slice_of_array_mut` instead"
+)]
+#[allow(deprecated)]
 pub fn any_slice<T, const MAX_SLICE_LENGTH: usize>() -> AnySlice<T, MAX_SLICE_LENGTH>
 where
     T: Arbitrary,
 {
+    #[allow(deprecated)]
     AnySlice::<T, MAX_SLICE_LENGTH>::new()
 }

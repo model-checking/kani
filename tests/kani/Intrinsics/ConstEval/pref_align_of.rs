@@ -48,7 +48,7 @@ fn main() {
         #[cfg(target_os = "linux")]
         assert!(unsafe { pref_align_of::<i16>() } == 4);
         #[cfg(target_os = "macos")]
-        assert!(unsafe { pref_align_of::<i16>() } == 1);
+        assert!(unsafe { pref_align_of::<i16>() } == 2);
         assert!(unsafe { pref_align_of::<i32>() } == 4);
         assert!(unsafe { pref_align_of::<i64>() } == 8);
         assert!(unsafe { pref_align_of::<i128>() } == 16);
