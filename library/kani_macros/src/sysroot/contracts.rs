@@ -442,7 +442,7 @@ struct ContractConditionsHandler<'a> {
     annotated_fn: &'a ItemFn,
     /// An unparsed, unmodified copy of `attr`, used in the error messages.
     attr_copy: TokenStream2,
-    /// The stream to which we should write the generated code
+    /// The stream to which we should write the generated code.
     output: &'a mut TokenStream2,
 }
 
