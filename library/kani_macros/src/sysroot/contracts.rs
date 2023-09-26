@@ -312,7 +312,7 @@ impl ContractFunctionState {
 struct PostconditionInjector(TokenStream2);
 
 impl VisitMut for PostconditionInjector {
-    /// We leave this emtpy to stop the recursion here. We don't want to look
+    /// We leave this empty to stop the recursion here. We don't want to look
     /// inside the closure, because the return statements contained within are
     /// for a different function.
     fn visit_expr_closure_mut(&mut self, _: &mut syn::ExprClosure) {}
@@ -429,10 +429,10 @@ impl<'a> ContractConditionsHandler<'a> {
     ///
     /// Wraps the conditions from this attribute around `self.body`.
     fn make_check_body(&self) -> TokenStream2 {
-        let attr = &self.attr;
-        let attr_copy = &self.attr_copy;
+        let Self { attr, attr_copy, .. } = self;
         let ItemFn { sig, block, .. } = self.annotated_fn;
         let return_type = return_type_to_type(&sig.output);
+
         match &self.condition_type {
             ContractConditionsType::Requires => quote!(
                 kani::assume(#attr);
@@ -440,7 +440,6 @@ impl<'a> ContractConditionsHandler<'a> {
             ),
             ContractConditionsType::Ensures { argument_names } => {
                 let (arg_copies, copy_clean) = make_unsafe_argument_copies(&argument_names);
-                let attr = &self.attr;
 
                 // The code that enforces the postconditions and cleans up the shallow
                 // argument copies (with `mem::forget`).
@@ -454,9 +453,9 @@ impl<'a> ContractConditionsHandler<'a> {
                 // `make_replace_body` were called after this if we modified in
                 // place.
                 let mut call = block.clone();
-
                 let mut inject_conditions = PostconditionInjector(exec_postconditions.clone());
                 inject_conditions.visit_block_mut(&mut call);
+
                 quote!(
                     #arg_copies
                     let result : #return_type = #call;
@@ -476,12 +475,12 @@ impl<'a> ContractConditionsHandler<'a> {
     /// `use_nondet_result` will only be true if this is the first time we are
     /// generating a replace function.
     fn make_replace_body(&self, use_nondet_result: bool) -> TokenStream2 {
-        let attr = &self.attr;
-        let attr_copy = &self.attr_copy;
+        let Self { attr, attr_copy, .. } = self;
         let ItemFn { sig, block, .. } = self.annotated_fn;
         let call_to_prior =
             if use_nondet_result { quote!(kani::any()) } else { block.to_token_stream() };
         let return_type = return_type_to_type(&sig.output);
+
         match &self.condition_type {
             ContractConditionsType::Requires => quote!(
                 kani::assert(#attr, stringify!(#attr_copy));
