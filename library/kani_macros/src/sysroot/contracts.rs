@@ -11,15 +11,15 @@
 //! on the same function correctly.
 //!
 //! ## How the handling for `requires` and `ensures` works.
-//! 
+//!
 //! Our aim is to generate a "check" function that can be used to verify the
 //! validity of the contract and a "replace" function that can be used as a
 //! stub, generated from the contract that can be used instead of the original
 //! function.
-//! 
+//!
 //! Let me first introduce the constraints which we are operating under to
 //! explain why we need the somewhat involved state machine to achieve this.
-//! 
+//!
 //! Proc-macros are expanded one-at-a-time, outside-in and they can also be
 //! renamed. Meaning the user can do `use kani::requires as precondition` and
 //! then use `precondition` everywhere.  We want to support this functionality
@@ -30,7 +30,7 @@
 //! further contract attributes to compose with what was already generated. In
 //! addition we also want to make sure to support non-contract attributes on
 //! functions with contracts.
-//! 
+//!
 //! To this end we use a state machine. The initial state is an "untouched"
 //! function with possibly multiple contract attributes, none of which have been
 //! expanded. When we expand the first (outermost) `requires` or `ensures`
@@ -40,7 +40,7 @@
 //! attributes from the original function to both the "check" and the "replace".
 //! This allows us to deal both with renaming and also support non-contract
 //! attributes.
-//! 
+//!
 //! In addition to copying attributes we also add new marker attributes to
 //! advance the state machine. The "check" function gets a
 //! `kanitool::is_contract_generated(check)` attributes and analogous for
@@ -52,7 +52,7 @@
 //! way. If the state is either a "check" or "replace" then the body of the
 //! function is augmented with the additional conditions carried by the macro.
 //! If the state is the "original" function, no changes are performed.
-//! 
+//!
 //! We place marker attributes at the bottom of the attribute stack (innermost),
 //! otherwise they would not be visible to the future macro expansions.
 //!
@@ -76,12 +76,12 @@
 //!   +--+-------+  |        +---+---+  |     +----+----+  |
 //!      |          | Ignore     |      | Augment  |       | Augment
 //!      +----------+            +------+          +-------+
-//! 
+//!
 //! |              |       |                              |
 //! +--------------+       +------------------------------+
 //!   Presence of                     Presence of
 //!  "checked_with"             "is_contract_generated"
-//! 
+//!
 //!            State is detected via
 //! ```
 //!
