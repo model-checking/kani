@@ -303,58 +303,48 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
             }
             (Scalar::Int(_), ty::Adt(adt, subst)) => {
-                if adt.is_struct() || adt.is_union() {
+                if adt.is_struct() {
                     // In this case, we must have a one variant ADT. There are two cases.
                     let variant = adt.non_enum_variant();
                     let overall_type = self.codegen_ty(ty);
                     // If there is no field, then it's just a ZST.
                     if variant.fields.is_empty() {
-                        if adt.is_struct() {
-                            Expr::struct_expr_from_values(overall_type, vec![], &self.symbol_table)
-                        } else {
-                            unimplemented!()
-                        }
+                        Expr::struct_expr_from_values(overall_type, vec![], &self.symbol_table)
                     // Otherwise, there is at least one field associated with the scalar data.
                     // Any additional fields correspond to ZSTs.
                     } else {
-                        if adt.is_struct() {
-                            let field_types: Vec<Ty<'_>> =
-                                variant.fields.iter().map(|f| f.ty(self.tcx, subst)).collect();
-                            // Check that there is a single non-ZST field.
-                            let non_zst_types: Vec<_> =
-                                field_types.iter().filter(|t| !self.is_zst(**t)).collect();
-                            assert!(
-                                non_zst_types.len() == 1,
-                                "error: expected exactly one field whose type is not a ZST"
-                            );
-                            let field_values: Vec<Expr> = field_types
-                                .iter()
-                                .map(|t| {
-                                    if self.is_zst(*t) {
-                                        Expr::init_unit(self.codegen_ty(*t), &self.symbol_table)
-                                    } else {
-                                        self.codegen_scalar(s, *t, span)
-                                    }
-                                })
-                                .collect();
-                            Expr::struct_expr_from_values(
-                                overall_type,
-                                field_values,
-                                &self.symbol_table,
-                            )
-                        } else {
-                            unimplemented!()
-                        }
+                        let field_types: Vec<Ty<'_>> =
+                            variant.fields.iter().map(|f| f.ty(self.tcx, subst)).collect();
+                        // Check that there is a single non-ZST field.
+                        let non_zst_types: Vec<_> =
+                            field_types.iter().filter(|t| !self.is_zst(**t)).collect();
+                        assert!(
+                            non_zst_types.len() == 1,
+                            "error: expected exactly one field whose type is not a ZST"
+                        );
+                        let field_values: Vec<Expr> = field_types
+                            .iter()
+                            .map(|t| {
+                                if self.is_zst(*t) {
+                                    Expr::init_unit(self.codegen_ty(*t), &self.symbol_table)
+                                } else {
+                                    self.codegen_scalar(s, *t, span)
+                                }
+                            })
+                            .collect();
+                        Expr::struct_expr_from_values(
+                            overall_type,
+                            field_values,
+                            &self.symbol_table,
+                        )
                     }
-                } else {
-                    // if it's an enum
+                } else if adt.is_enum() {
                     let layout = self.layout_of(ty);
                     let overall_t = self.codegen_ty(ty);
                     match &layout.variants {
                         Variants::Single { index } => {
                             // here we must have one variant
                             let variant = &adt.variants()[*index];
-
                             match variant.fields.len() {
                                 0 => Expr::struct_expr_from_values(
                                     overall_t,
@@ -418,6 +408,9 @@ impl<'tcx> GotocCtx<'tcx> {
                             }
                         },
                     }
+                } else {
+                    // if it's a union
+                    unimplemented!()
                 }
             }
             (Scalar::Int(int), ty::Tuple(_)) => {
