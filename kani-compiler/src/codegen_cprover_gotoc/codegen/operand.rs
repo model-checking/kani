@@ -304,33 +304,31 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             (Scalar::Int(_), ty::Adt(adt, subst)) => {
                 if adt.is_struct() || adt.is_union() {
-                    // in this case, we must have a one variant ADT. there are two cases
-                    let variant = &adt.variants().raw[0];
-                    // if there is no field, then it's just a ZST
+                    // In this case, we must have a one variant ADT. There are two cases.
+                    let variant = adt.non_enum_variant();
+                    let overall_type = self.codegen_ty(ty);
+                    // If there is no field, then it's just a ZST
                     if variant.fields.is_empty() {
                         if adt.is_struct() {
-                            let overall_t = self.codegen_ty(ty);
-                            Expr::struct_expr_from_values(overall_t, vec![], &self.symbol_table)
+                            Expr::struct_expr_from_values(overall_type, vec![], &self.symbol_table)
                         } else {
                             unimplemented!()
                         }
                     } else {
-                        // otherwise, there is either
-                        //  * just one field, which is stored as the scalar data
-                        //  * multiple fields, but all of them except one are phantom data
-                        let overall_t = self.codegen_ty(ty);
+                        // Otherwise, there is at least one field. Again, there are two cases.
+                        let overall_type = self.codegen_ty(ty);
                         if adt.is_struct() {
                             if variant.fields.len() == 1 {
-                                // the case where there is only one field
-                                let field = &variant.fields[0usize.into()];
-                                let fty = field.ty(self.tcx, subst);
-                                self.codegen_single_variant_single_field(s, span, overall_t, fty)
+                                // There is a single field which we associate with the scalar data.
+                                let field = variant.single_field();
+                                let field_type = field.ty(self.tcx, subst);
+                                self.codegen_single_variant_single_field(s, span, overall_type, field_type)
                             } else {
-                                // the case where there's multiple fields
-                                let fields = &variant.fields;
-                                let field_types: Vec<_> =
-                                    fields.iter().map(|f| f.ty(self.tcx, subst)).collect();
-                                let field_values: Vec<_> = field_types
+                                // There are multiple fields, but only one is related to the scalar data.
+                                // The rest of them correspond to phantom data (ZST).
+                                let field_types: Vec<Ty<'_>> =
+                                    variant.fields.iter().map(|f| f.ty(self.tcx, subst)).collect();
+                                let field_values: Vec<Expr> = field_types
                                     .iter()
                                     .map(|t| {
                                         if t.is_phantom_data() {
@@ -340,7 +338,7 @@ impl<'tcx> GotocCtx<'tcx> {
                                         }
                                     })
                                     .collect();
-                                Expr::struct_expr_from_values(overall_t, field_values, &self.symbol_table)
+                                Expr::struct_expr_from_values(overall_type, field_values, &self.symbol_table)
                             }
                         } else {
                             unimplemented!()
