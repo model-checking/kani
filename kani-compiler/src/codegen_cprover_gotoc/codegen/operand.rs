@@ -307,7 +307,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     // In this case, we must have a one variant ADT. There are two cases.
                     let variant = adt.non_enum_variant();
                     let overall_type = self.codegen_ty(ty);
-                    // If there is no field, then it's just a ZST
+                    // If there is no field, then it's just a ZST.
                     if variant.fields.is_empty() {
                         if adt.is_struct() {
                             Expr::struct_expr_from_values(overall_type, vec![], &self.symbol_table)
@@ -330,20 +330,20 @@ impl<'tcx> GotocCtx<'tcx> {
                                 )
                             } else {
                                 // There are multiple fields, but only one is related to the scalar data.
-                                // The rest of them correspond to phantom data (ZST).
+                                // The rest of them correspond to ZSTs.
                                 let field_types: Vec<Ty<'_>> =
                                     variant.fields.iter().map(|f| f.ty(self.tcx, subst)).collect();
-                                // Check that there is a single non-phantom field
-                                let non_phantom_field_types: Vec<_> =
-                                    field_types.iter().filter(|t| !t.is_phantom_data()).collect();
+                                // Check that there is a single non-ZST field.
+                                let non_zst_types: Vec<_> =
+                                    field_types.iter().filter(|t| !self.is_zst(**t)).collect();
                                 assert!(
-                                    non_phantom_field_types.len() == 1,
-                                    "error: expected exactly one field that is not phantom data"
+                                    non_zst_types.len() == 1,
+                                    "error: expected exactly one field whose type is not a ZST"
                                 );
                                 let field_values: Vec<Expr> = field_types
                                     .iter()
                                     .map(|t| {
-                                        if t.is_phantom_data() {
+                                        if self.is_zst(*t) {
                                             Expr::init_unit(self.codegen_ty(*t), &self.symbol_table)
                                         } else {
                                             self.codegen_scalar(s, *t, span)
