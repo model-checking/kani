@@ -322,7 +322,12 @@ impl<'tcx> GotocCtx<'tcx> {
                                 // There is a single field which we associate with the scalar data.
                                 let field = variant.single_field();
                                 let field_type = field.ty(self.tcx, subst);
-                                self.codegen_single_variant_single_field(s, span, overall_type, field_type)
+                                self.codegen_single_variant_single_field(
+                                    s,
+                                    span,
+                                    overall_type,
+                                    field_type,
+                                )
                             } else {
                                 // There are multiple fields, but only one is related to the scalar data.
                                 // The rest of them correspond to phantom data (ZST).
@@ -338,7 +343,11 @@ impl<'tcx> GotocCtx<'tcx> {
                                         }
                                     })
                                     .collect();
-                                Expr::struct_expr_from_values(overall_type, field_values, &self.symbol_table)
+                                Expr::struct_expr_from_values(
+                                    overall_type,
+                                    field_values,
+                                    &self.symbol_table,
+                                )
                             }
                         } else {
                             unimplemented!()
