@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
 [package]
-name = "phantom-data"
+name = "codegen-scalar-with-phantom"
 version = "0.1.0"
 edition = "2021"
 
