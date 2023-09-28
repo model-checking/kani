@@ -333,6 +333,13 @@ impl<'tcx> GotocCtx<'tcx> {
                                 // The rest of them correspond to phantom data (ZST).
                                 let field_types: Vec<Ty<'_>> =
                                     variant.fields.iter().map(|f| f.ty(self.tcx, subst)).collect();
+                                // Check that there is a single non-phantom field
+                                let non_phantom_field_types: Vec<_> =
+                                    field_types.iter().filter(|t| !t.is_phantom_data()).collect();
+                                assert!(
+                                    non_phantom_field_types.len() == 1,
+                                    "error: expected exactly one field that is not phantom data"
+                                );
                                 let field_values: Vec<Expr> = field_types
                                     .iter()
                                     .map(|t| {
