@@ -315,13 +315,33 @@ impl<'tcx> GotocCtx<'tcx> {
                             unimplemented!()
                         }
                     } else {
-                        // otherwise, there is just one field, which is stored as the scalar data
-                        let field = &variant.fields[0usize.into()];
-                        let fty = field.ty(self.tcx, subst);
-
+                        // otherwise, there is either
+                        //  * just one field, which is stored as the scalar data
+                        //  * multiple fields, but all of them except one are phantom data
                         let overall_t = self.codegen_ty(ty);
                         if adt.is_struct() {
-                            self.codegen_single_variant_single_field(s, span, overall_t, fty)
+                            if variant.fields.len() == 1 {
+                                // the case where there is only one field
+                                let field = &variant.fields[0usize.into()];
+                                let fty = field.ty(self.tcx, subst);
+                                self.codegen_single_variant_single_field(s, span, overall_t, fty)
+                            } else {
+                                // the case where there's multiple fields
+                                let fields = &variant.fields;
+                                let field_types: Vec<_> =
+                                    fields.iter().map(|f| f.ty(self.tcx, subst)).collect();
+                                let field_values: Vec<_> = field_types
+                                    .iter()
+                                    .map(|t| {
+                                        if t.is_phantom_data() {
+                                            Expr::init_unit(self.codegen_ty(*t), &self.symbol_table)
+                                        } else {
+                                            self.codegen_scalar(s, *t, span)
+                                        }
+                                    })
+                                    .collect();
+                                Expr::struct_expr_from_values(overall_t, field_values, &self.symbol_table)
+                            }
                         } else {
                             unimplemented!()
                         }
