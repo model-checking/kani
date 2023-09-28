@@ -7,9 +7,6 @@ pub struct Foo<R> {
 
 #[kani::proof]
 fn main() {
-    const C: Foo<usize> = Foo {
-        x: 0,
-        _t: PhantomData,
-    };
+    const C: Foo<usize> = Foo { x: 0, _t: PhantomData };
     assert_eq!(C.x, 0);
 }
