@@ -1,3 +1,8 @@
+// Copyright Kani Contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! Check that we can codegen structs with scalar and phantom data.
+
 use std::marker::PhantomData;
 
 pub struct Foo<R> {
