@@ -314,48 +314,34 @@ impl<'tcx> GotocCtx<'tcx> {
                         } else {
                             unimplemented!()
                         }
+                    // Otherwise, there is at least one field associated with the scalar data.
+                    // Any additional fields correspond to ZSTs.
                     } else {
-                        // Otherwise, there is at least one field. Again, there are two cases.
-                        let overall_type = self.codegen_ty(ty);
                         if adt.is_struct() {
-                            if variant.fields.len() == 1 {
-                                // There is a single field which we associate with the scalar data.
-                                let field = variant.single_field();
-                                let field_type = field.ty(self.tcx, subst);
-                                self.codegen_single_variant_single_field(
-                                    s,
-                                    span,
-                                    overall_type,
-                                    field_type,
-                                )
-                            } else {
-                                // There are multiple fields, but only one is related to the scalar data.
-                                // The rest of them correspond to ZSTs.
-                                let field_types: Vec<Ty<'_>> =
-                                    variant.fields.iter().map(|f| f.ty(self.tcx, subst)).collect();
-                                // Check that there is a single non-ZST field.
-                                let non_zst_types: Vec<_> =
-                                    field_types.iter().filter(|t| !self.is_zst(**t)).collect();
-                                assert!(
-                                    non_zst_types.len() == 1,
-                                    "error: expected exactly one field whose type is not a ZST"
-                                );
-                                let field_values: Vec<Expr> = field_types
-                                    .iter()
-                                    .map(|t| {
-                                        if self.is_zst(*t) {
-                                            Expr::init_unit(self.codegen_ty(*t), &self.symbol_table)
-                                        } else {
-                                            self.codegen_scalar(s, *t, span)
-                                        }
-                                    })
-                                    .collect();
-                                Expr::struct_expr_from_values(
-                                    overall_type,
-                                    field_values,
-                                    &self.symbol_table,
-                                )
-                            }
+                            let field_types: Vec<Ty<'_>> =
+                                variant.fields.iter().map(|f| f.ty(self.tcx, subst)).collect();
+                            // Check that there is a single non-ZST field.
+                            let non_zst_types: Vec<_> =
+                                field_types.iter().filter(|t| !self.is_zst(**t)).collect();
+                            assert!(
+                                non_zst_types.len() == 1,
+                                "error: expected exactly one field whose type is not a ZST"
+                            );
+                            let field_values: Vec<Expr> = field_types
+                                .iter()
+                                .map(|t| {
+                                    if self.is_zst(*t) {
+                                        Expr::init_unit(self.codegen_ty(*t), &self.symbol_table)
+                                    } else {
+                                        self.codegen_scalar(s, *t, span)
+                                    }
+                                })
+                                .collect();
+                            Expr::struct_expr_from_values(
+                                overall_type,
+                                field_values,
+                                &self.symbol_table,
+                            )
                         } else {
                             unimplemented!()
                         }
