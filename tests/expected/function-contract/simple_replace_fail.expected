@@ -1,0 +1,3 @@
+main.assertion\
+- Status: FAILURE\
+- Description: ""contract doesn't guarantee equality""
