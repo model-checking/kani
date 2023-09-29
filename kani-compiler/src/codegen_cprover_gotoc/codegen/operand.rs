@@ -328,11 +328,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             }
                         })
                         .collect();
-                    Expr::struct_expr_from_values(
-                        overall_type,
-                        field_values,
-                        &self.symbol_table,
-                    )
+                    Expr::struct_expr_from_values(overall_type, field_values, &self.symbol_table)
                 } else if adt.is_enum() {
                     let layout = self.layout_of(ty);
                     let overall_t = self.codegen_ty(ty);
