@@ -303,38 +303,39 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
             }
             (Scalar::Int(_), ty::Adt(adt, subst)) => {
-                if adt.is_struct() || adt.is_union() {
-                    // in this case, we must have a one variant ADT. there are two cases
-                    let variant = &adt.variants().raw[0];
-                    // if there is no field, then it's just a ZST
-                    if variant.fields.is_empty() {
-                        if adt.is_struct() {
-                            let overall_t = self.codegen_ty(ty);
-                            Expr::struct_expr_from_values(overall_t, vec![], &self.symbol_table)
-                        } else {
-                            unimplemented!()
-                        }
-                    } else {
-                        // otherwise, there is just one field, which is stored as the scalar data
-                        let field = &variant.fields[0usize.into()];
-                        let fty = field.ty(self.tcx, subst);
-
-                        let overall_t = self.codegen_ty(ty);
-                        if adt.is_struct() {
-                            self.codegen_single_variant_single_field(s, span, overall_t, fty)
-                        } else {
-                            unimplemented!()
-                        }
-                    }
-                } else {
-                    // if it's an enum
+                if adt.is_struct() {
+                    // In this case, we must have a one variant ADT.
+                    let variant = adt.non_enum_variant();
+                    let overall_type = self.codegen_ty(ty);
+                    // There must be at least one field associated with the scalar data.
+                    // Any additional fields correspond to ZSTs.
+                    let field_types: Vec<Ty<'_>> =
+                        variant.fields.iter().map(|f| f.ty(self.tcx, subst)).collect();
+                    // Check that there is a single non-ZST field.
+                    let non_zst_types: Vec<_> =
+                        field_types.iter().filter(|t| !self.is_zst(**t)).collect();
+                    assert!(
+                        non_zst_types.len() == 1,
+                        "error: expected exactly one field whose type is not a ZST"
+                    );
+                    let field_values: Vec<Expr> = field_types
+                        .iter()
+                        .map(|t| {
+                            if self.is_zst(*t) {
+                                Expr::init_unit(self.codegen_ty(*t), &self.symbol_table)
+                            } else {
+                                self.codegen_scalar(s, *t, span)
+                            }
+                        })
+                        .collect();
+                    Expr::struct_expr_from_values(overall_type, field_values, &self.symbol_table)
+                } else if adt.is_enum() {
                     let layout = self.layout_of(ty);
                     let overall_t = self.codegen_ty(ty);
                     match &layout.variants {
                         Variants::Single { index } => {
                             // here we must have one variant
                             let variant = &adt.variants()[*index];
-
                             match variant.fields.len() {
                                 0 => Expr::struct_expr_from_values(
                                     overall_t,
@@ -398,6 +399,9 @@ impl<'tcx> GotocCtx<'tcx> {
                             }
                         },
                     }
+                } else {
+                    // if it's a union
+                    unimplemented!()
                 }
             }
             (Scalar::Int(int), ty::Tuple(_)) => {
