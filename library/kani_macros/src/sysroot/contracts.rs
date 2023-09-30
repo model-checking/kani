@@ -174,8 +174,8 @@ use std::{
     collections::{HashMap, HashSet},
 };
 use syn::{
-    parse_macro_input, spanned::Spanned, visit::Visit, visit_mut::VisitMut, Attribute, Expr,
-    ItemFn, PredicateType, ReturnType, Signature, TraitBound, TypeParamBound, WhereClause,
+    parse_macro_input, spanned::Spanned, visit::Visit, visit_mut::VisitMut, Attribute, Expr, FnArg,
+    ItemFn, PredicateType, ReturnType, Signature, Token, TraitBound, TypeParamBound, WhereClause,
 };
 
 /// Create a unique hash for a token stream (basically a [`std::hash::Hash`]
@@ -209,8 +209,12 @@ fn short_hash_of_token_stream(stream: &proc_macro::TokenStream) -> u64 {
 /// Makes consistent names for a generated function which was created for
 /// `purpose`, from an attribute that decorates `related_function` with the
 /// hash `hash`.
-fn identifier_for_generated_function(related_function: &ItemFn, purpose: &str, hash: u64) -> Ident {
-    let identifier = format!("{}_{purpose}_{hash:x}", related_function.sig.ident);
+fn identifier_for_generated_function(
+    related_function_name: &Ident,
+    purpose: &str,
+    hash: u64,
+) -> Ident {
+    let identifier = format!("{}_{purpose}_{hash:x}", related_function_name);
     Ident::new(&identifier, proc_macro2::Span::mixed_site())
 }
 
@@ -222,6 +226,7 @@ pub fn ensures(attr: TokenStream, item: TokenStream) -> TokenStream {
     requires_ensures_main(attr, item, 1)
 }
 
+#[allow(dead_code)]
 pub fn modifies(attr: TokenStream, item: TokenStream) -> TokenStream {
     requires_ensures_main(attr, item, 2)
 }
@@ -249,7 +254,6 @@ fn chunks_by<'a, T, C: Default + Extend<T>>(
         (!empty).then_some(new)
     })
 }
-
 
 /// Collect all named identifiers used in the argument patterns of a function.
 struct ArgumentIdentCollector(HashSet<Ident>);
@@ -345,6 +349,7 @@ impl<'a> TryFrom<&'a syn::Attribute> for ContractFunctionState {
                 return match ident_str.as_str() {
                     "check" => Ok(Self::Check),
                     "replace" => Ok(Self::Replace),
+                    "wrapper" => Ok(Self::ModifiesWrapper),
                     _ => {
                         Err(Some(lst.span().unwrap().error("Expected `check` or `replace` ident")))
                     }
@@ -472,6 +477,7 @@ struct ContractConditionsHandler<'a> {
     attr_copy: TokenStream2,
     /// The stream to which we should write the generated code.
     output: &'a mut TokenStream2,
+    hash: Option<u64>,
 }
 
 /// Information needed for generating check and replace handlers for different
@@ -488,7 +494,9 @@ enum ContractConditionsType {
         /// The contents of the attribute.
         attr: Expr,
     },
-    Modifies { attr: Vec<Expr> },
+    Modifies {
+        attr: Vec<Expr>,
+    },
 }
 
 impl ContractConditionsType {
@@ -517,44 +525,46 @@ impl<'a> ContractConditionsHandler<'a> {
         annotated_fn: &'a mut ItemFn,
         attr_copy: TokenStream2,
         output: &'a mut TokenStream2,
+        hash: Option<u64>,
     ) -> Result<Self, syn::Error> {
         let condition_type = match is_requires {
             0 => ContractConditionsType::Requires { attr: syn::parse(attr)? },
             1 => ContractConditionsType::new_ensures(&annotated_fn.sig, syn::parse(attr)?),
-            2 => ContractConditionsType::Modifies { 
+            2 => ContractConditionsType::Modifies {
                 attr: chunks_by(TokenStream2::from(attr), is_token_stream_2_comma)
-                        .map(syn::parse2)
-                        .filter_map(|expr| match expr {
-                            Err(e) => {
-                                output.extend(e.into_compile_error());
-                                None
-                            }
-                            Ok(expr) => Some(expr)
-                        })
-                        .collect()
+                    .map(syn::parse2)
+                    .filter_map(|expr| match expr {
+                        Err(e) => {
+                            output.extend(e.into_compile_error());
+                            None
+                        }
+                        Ok(expr) => Some(expr),
+                    })
+                    .collect(),
             },
             _ => unreachable!(),
         };
 
-        Ok(Self { function_state, condition_type, annotated_fn, attr_copy, output })
+        Ok(Self { function_state, condition_type, annotated_fn, attr_copy, output, hash })
     }
 
     /// Create the body of a check function.
     ///
     /// Wraps the conditions from this attribute around `self.body`.
-    /// 
+    ///
     /// Mutable because a `modifies` clause may need to extend the inner call to
     /// the wrapper with new arguments.
     fn make_check_body(&mut self) -> TokenStream2 {
         let Self { attr_copy, .. } = self;
-        let ItemFn { sig, block, .. } = self.annotated_fn;
-        let return_type = return_type_to_type(&sig.output);
 
         match &self.condition_type {
-            ContractConditionsType::Requires { attr }=> quote!(
-                kani::assume(#attr);
-                #block
-            ),
+            ContractConditionsType::Requires { attr } => {
+                let block = self.create_inner_call([].into_iter());
+                quote!(
+                    kani::assume(#attr);
+                    #(#block)*
+                )
+            }
             ContractConditionsType::Ensures { argument_names, attr } => {
                 let (arg_copies, copy_clean) = make_unsafe_argument_copies(&argument_names);
 
@@ -565,30 +575,35 @@ impl<'a> ContractConditionsHandler<'a> {
                     #copy_clean
                 );
 
-                // We make a copy here because we'll modify it. Technically not
-                // necessary but could lead to weird results if
-                // `make_replace_body` were called after this if we modified in
-                // place.
-                let mut call = block.clone();
-                let mut inject_conditions = PostconditionInjector(exec_postconditions.clone());
-                inject_conditions.visit_block_mut(&mut call);
+                let mut call = self.create_inner_call([].into_iter());
+
+                assert!(matches!(call.pop(), Some(syn::Stmt::Expr(syn::Expr::Path(pexpr), None)) if pexpr.path.get_ident().map_or(false, |id| id == "result")));
 
                 quote!(
                     #arg_copies
-                    let result : #return_type = #call;
+                    #(#call)*
                     #exec_postconditions
                     result
                 )
             }
             ContractConditionsType::Modifies { attr } => {
+                let wrapper_name = self.make_wrapper_name().to_string();
                 let wrapper_args = make_wrapper_args(attr.len());
                 // TODO handle first invocation where this is the actual body.
                 if !self.is_fist_emit() {
-                    if let Some(wrapper_call_args) = 
-                        self.annotated_fn.block.stmts.iter_mut().find_map(try_as_wrapper_call_args) {
-                        wrapper_call_args.extend(wrapper_args.clone().map(|a| Expr::Verbatim(quote!(#a))));
+                    if let Some(wrapper_call_args) = self
+                        .annotated_fn
+                        .block
+                        .stmts
+                        .iter_mut()
+                        .find_map(|stmt| try_as_wrapper_call_args(stmt, &wrapper_name))
+                    {
+                        wrapper_call_args
+                            .extend(wrapper_args.clone().map(|a| Expr::Verbatim(quote!(#a))));
                     } else {
-                        unreachable!("Invariant broken, check function did not contain a call to the wrapper function")
+                        unreachable!(
+                            "Invariant broken, check function did not contain a call to the wrapper function"
+                        )
                     }
                 }
 
@@ -597,24 +612,31 @@ impl<'a> ContractConditionsHandler<'a> {
 
                 quote!(
                     #(let #wrapper_args = kani::untracked_deref(#attr);)*
-                    #inner
+                    #(#inner)*
                 )
             }
         }
     }
 
-    fn create_inner_call(&self, additional_args: impl Iterator<Item=Ident>) -> TokenStream2 {
+    fn make_wrapper_name(&self) -> Ident {
+        if let Some(hash) = self.hash {
+            identifier_for_generated_function(&self.annotated_fn.sig.ident, "wrapper", hash)
+        } else {
+            self.annotated_fn.sig.ident.clone()
+        }
+    }
+
+    fn create_inner_call(&self, additional_args: impl Iterator<Item = Ident>) -> Vec<syn::Stmt> {
+        let wrapper_name = self.make_wrapper_name();
+        let return_type = return_type_to_type(&self.annotated_fn.sig.output);
         if self.is_fist_emit() {
-            let args = self.annotated_fn.sig.inputs.iter().map(pat_to_expr);
-            quote!(
-                let result = #wrapper_name(#(#args,)* #(#additional_args),*);
+            let args = exprs_for_args(&self.annotated_fn.sig.inputs);
+            syn::parse_quote!(
+                let result : #return_type = #wrapper_name(#(#args,)* #(#additional_args),*);
                 result
             )
         } else {
-            let stmts = &self.annotated_fn.block.stmts;
-            quote!(
-                #(#stmts)*
-            )
+            self.annotated_fn.block.stmts.clone()
         }
     }
 
@@ -628,7 +650,7 @@ impl<'a> ContractConditionsHandler<'a> {
     /// generating a replace function.
     fn make_replace_body(&self, use_nondet_result: bool) -> TokenStream2 {
         let Self { attr_copy, .. } = self;
-        let ItemFn { sig, block, .. } = self.annotated_fn;
+        let ItemFn { sig, block, .. } = &*self.annotated_fn;
         let call_to_prior =
             if use_nondet_result { quote!(kani::any()) } else { block.to_token_stream() };
         let return_type = return_type_to_type(&sig.output);
@@ -648,7 +670,9 @@ impl<'a> ContractConditionsHandler<'a> {
                     result
                 )
             }
-            ContractConditionsType::Modifies { attr } => unreachable!("Replacement with modifies not supported"),
+            ContractConditionsType::Modifies { .. } => {
+                quote!(kani::assert(false, "Replacement with modifies is not supported yet."))
+            }
         }
     }
 
@@ -711,6 +735,43 @@ impl<'a> ContractConditionsHandler<'a> {
         }
         self.output.extend(self.annotated_fn.attrs.iter().flat_map(Attribute::to_token_stream));
     }
+
+    fn emit_augmented_modifies_wrapper(&mut self) {
+        if let ContractConditionsType::Modifies { attr } = &self.condition_type {
+            self.annotated_fn.sig.inputs.extend(make_wrapper_args(attr.len()).map(|warg| {
+                FnArg::Typed(syn::PatType {
+                    attrs: vec![],
+                    colon_token: Token![:](Span::call_site()),
+                    pat: Box::new(syn::Pat::Verbatim(quote!(#warg))),
+                    ty: Box::new(syn::Type::Verbatim(quote!(&impl kani::Arbitrary))),
+                })
+            }))
+        }
+        self.emit_common_header();
+
+        if self.function_state.emit_tag_attr() {
+            // If it's the first time we also emit this marker. Again, order is
+            // important so this happens as the last emitted attribute.
+            self.output.extend(quote!(#[kanitool::is_contract_generated(wrapper)]));
+        }
+
+        let name = self.make_wrapper_name();
+        let ItemFn { vis, sig, block, .. } = self.annotated_fn;
+        let mut sig = sig.clone();
+        sig.ident = name;
+        self.output.extend(quote!(
+            #vis #sig #block
+        ));
+    }
+}
+
+fn exprs_for_args<'a, T>(
+    args: &'a syn::punctuated::Punctuated<FnArg, T>,
+) -> impl Iterator<Item = Expr> + Clone + 'a {
+    args.iter().map(|arg| match arg {
+        FnArg::Receiver(_) => Expr::Verbatim(quote!(self)),
+        FnArg::Typed(typed) => pat_to_expr(&typed.pat),
+    })
 }
 
 fn pat_to_expr(pat: &syn::Pat) -> Expr {
@@ -783,48 +844,39 @@ fn pat_to_expr(pat: &syn::Pat) -> Expr {
     }
 }
 
-fn try_as_wrapper_call_args(stmt: &mut syn::Stmt) -> Option<&mut syn::punctuated::Punctuated<syn::Expr, syn::token::Comma>> {
+fn try_as_wrapper_call_args<'a>(
+    stmt: &'a mut syn::Stmt,
+    wrapper_fn_name: &str,
+) -> Option<&'a mut syn::punctuated::Punctuated<syn::Expr, syn::token::Comma>> {
     match stmt {
-                        syn::Stmt::Local(syn::Local {
-                            pat: syn::Pat::Ident(syn::PatIdent {
-                                by_ref: None,
-                                mutability: None,
-                                ident: result_ident,
-                                subpat: None,
-                                ..
-                            }),
-                            init: Some(syn::LocalInit {
-                                diverge: None,
-                                expr: init_expr,
-                                .. 
-                            }),
-                            ..
-                        }) if result_ident == "result" => match init_expr.as_mut() {
-                            Expr::Call(syn::ExprCall {
-                                func: box_func,
-                                args,
-                                ..                                
-                            }) => match box_func.as_ref() {
-                                syn::Expr::Path(syn::ExprPath {
-                                    qself: None,
-                                    path,
-                                    ..
-                                }) if path.get_ident().map_or(false, is_wrapper_fn) => {
-                                    Some(args)
-                                }
-                                _ => None,
-                            }
-                            _ => None,
-                        }
-                        _ => None,
-                    }
+        syn::Stmt::Local(syn::Local {
+            pat:
+                syn::Pat::Ident(syn::PatIdent {
+                    by_ref: None,
+                    mutability: None,
+                    ident: result_ident,
+                    subpat: None,
+                    ..
+                }),
+            init: Some(syn::LocalInit { diverge: None, expr: init_expr, .. }),
+            ..
+        }) if result_ident == "result" => match init_expr.as_mut() {
+            Expr::Call(syn::ExprCall { func: box_func, args, .. }) => match box_func.as_ref() {
+                syn::Expr::Path(syn::ExprPath { qself: None, path, .. })
+                    if path.get_ident().map_or(false, |id| id == wrapper_fn_name) =>
+                {
+                    Some(args)
+                }
+                _ => None,
+            },
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
-fn make_wrapper_args(num: usize) -> impl Iterator<Item=syn::Ident> + Clone {
-}
-
-fn is_wrapper_fn(ident: &syn::Ident) -> bool {
-
+fn make_wrapper_args(num: usize) -> impl Iterator<Item = syn::Ident> + Clone {
+    (0..num).map(|i| Ident::new(&format!("wrapper_arg_{i}"), Span::mixed_site()))
 }
 
 /// If an explicit return type was provided it is returned, otherwise `()`.
@@ -931,6 +983,11 @@ fn requires_ensures_main(attr: TokenStream, item: TokenStream, is_requires: u8) 
         return item_fn.into_token_stream().into();
     }
 
+    let hash = matches!(function_state, ContractFunctionState::Untouched)
+        .then(|| short_hash_of_token_stream(&item_stream_clone));
+
+    let original_function_name = item_fn.sig.ident.clone();
+
     let mut handler = match ContractConditionsHandler::new(
         function_state,
         is_requires,
@@ -938,12 +995,14 @@ fn requires_ensures_main(attr: TokenStream, item: TokenStream, is_requires: u8) 
         &mut item_fn,
         attr_copy,
         &mut output,
+        hash,
     ) {
         Ok(handler) => handler,
         Err(e) => return e.into_compile_error().into(),
     };
 
     match function_state {
+        ContractFunctionState::ModifiesWrapper => handler.emit_augmented_modifies_wrapper(),
         ContractFunctionState::Check => {
             // The easy cases first: If we are on a check or replace function
             // emit them again but with additional conditions layered on.
@@ -951,11 +1010,11 @@ fn requires_ensures_main(attr: TokenStream, item: TokenStream, is_requires: u8) 
             // Since we are already on the check function, it will have an
             // appropriate, unique generated name which we are just going to
             // pass on.
-            handler.emit_check_function(item_fn.sig.ident.clone());
+            handler.emit_check_function(original_function_name);
         }
         ContractFunctionState::Replace => {
             // Analogous to above
-            handler.emit_replace_function(item_fn.sig.ident.clone(), false);
+            handler.emit_replace_function(original_function_name, false);
         }
         ContractFunctionState::Original => {
             unreachable!("Impossible: This is handled via short circuiting earlier.")
@@ -973,10 +1032,12 @@ fn requires_ensures_main(attr: TokenStream, item: TokenStream, is_requires: u8) 
 
             // We'll be using this to postfix the generated names for the "check"
             // and "replace" functions.
-            let item_hash = short_hash_of_token_stream(&item_stream_clone);
+            let item_hash = hash.unwrap();
 
-            let check_fn_name = identifier_for_generated_function(&item_fn, "check", item_hash);
-            let replace_fn_name = identifier_for_generated_function(&item_fn, "replace", item_hash);
+            let check_fn_name =
+                identifier_for_generated_function(&original_function_name, "check", item_hash);
+            let replace_fn_name =
+                identifier_for_generated_function(&original_function_name, "replace", item_hash);
 
             // Constructing string literals explicitly here, because `stringify!`
             // doesn't work. Let's say we have an identifier `check_fn` and we were
@@ -996,18 +1057,20 @@ fn requires_ensures_main(attr: TokenStream, item: TokenStream, is_requires: u8) 
             //
             // The same care is taken when we emit check and replace functions.
             // emit the check function.
-            let ItemFn { attrs, vis, sig, block } = &item_fn;
-            handler.output.extend(quote!(
+            let ItemFn { attrs, vis, sig, block } = &handler.annotated_fn;
+            let reemit_tokens = quote!(
                 #(#attrs)*
                 #[kanitool::checked_with = #check_fn_name_str]
                 #[kanitool::replaced_with = #replace_fn_name_str]
                 #vis #sig {
                     #block
                 }
-            ));
+            );
+            handler.output.extend(reemit_tokens);
 
             handler.emit_check_function(check_fn_name);
             handler.emit_replace_function(replace_fn_name, true);
+            handler.emit_augmented_modifies_wrapper();
         }
     }
 
