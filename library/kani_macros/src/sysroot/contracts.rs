@@ -215,12 +215,41 @@ fn identifier_for_generated_function(related_function: &ItemFn, purpose: &str, h
 }
 
 pub fn requires(attr: TokenStream, item: TokenStream) -> TokenStream {
-    requires_ensures_main(attr, item, true)
+    requires_ensures_main(attr, item, 0)
 }
 
 pub fn ensures(attr: TokenStream, item: TokenStream) -> TokenStream {
-    requires_ensures_main(attr, item, false)
+    requires_ensures_main(attr, item, 1)
 }
+
+pub fn modifies(attr: TokenStream, item: TokenStream) -> TokenStream {
+    requires_ensures_main(attr, item, 2)
+}
+
+fn is_token_stream_2_comma(t: &proc_macro2::TokenTree) -> bool {
+    matches!(t, proc_macro2::TokenTree::Punct(p) if p.as_char() == ',')
+}
+
+fn chunks_by<'a, T, C: Default + Extend<T>>(
+    i: impl IntoIterator<Item = T> + 'a,
+    mut pred: impl FnMut(&T) -> bool + 'a,
+) -> impl Iterator<Item = C> + 'a {
+    let mut iter = i.into_iter();
+    std::iter::from_fn(move || {
+        let mut new = C::default();
+        let mut empty = true;
+        while let Some(tok) = iter.next() {
+            empty = false;
+            if pred(&tok) {
+                break;
+            } else {
+                new.extend([tok])
+            }
+        }
+        (!empty).then_some(new)
+    })
+}
+
 
 /// Collect all named identifiers used in the argument patterns of a function.
 struct ArgumentIdentCollector(HashSet<Ident>);
@@ -299,6 +328,7 @@ enum ContractFunctionState {
     /// This is a replace function that was generated from a previous evaluation
     /// of a contract attribute.
     Replace,
+    ModifiesWrapper,
 }
 
 impl<'a> TryFrom<&'a syn::Attribute> for ContractFunctionState {
@@ -436,10 +466,8 @@ struct ContractConditionsHandler<'a> {
     function_state: ContractFunctionState,
     /// Information specific to the type of contract attribute we're expanding.
     condition_type: ContractConditionsType,
-    /// The contents of the attribute.
-    attr: Expr,
     /// Body of the function this attribute was found on.
-    annotated_fn: &'a ItemFn,
+    annotated_fn: &'a mut ItemFn,
     /// An unparsed, unmodified copy of `attr`, used in the error messages.
     attr_copy: TokenStream2,
     /// The stream to which we should write the generated code.
@@ -449,12 +477,18 @@ struct ContractConditionsHandler<'a> {
 /// Information needed for generating check and replace handlers for different
 /// contract attributes.
 enum ContractConditionsType {
-    Requires,
+    Requires {
+        /// The contents of the attribute.
+        attr: Expr,
+    },
     Ensures {
         /// Translation map from original argument names to names of the copies
         /// we will be emitting.
         argument_names: HashMap<Ident, Ident>,
+        /// The contents of the attribute.
+        attr: Expr,
     },
+    Modifies { attr: Vec<Expr> },
 }
 
 impl ContractConditionsType {
@@ -463,46 +497,65 @@ impl ContractConditionsType {
     ///
     /// Renames the [`Ident`]s used in `attr` and stores the translation map in
     /// `argument_names`.
-    fn new_ensures(sig: &Signature, attr: &mut Expr) -> Self {
-        let argument_names = rename_argument_occurrences(sig, attr);
-        ContractConditionsType::Ensures { argument_names }
+    fn new_ensures(sig: &Signature, mut attr: Expr) -> Self {
+        let argument_names = rename_argument_occurrences(sig, &mut attr);
+        ContractConditionsType::Ensures { argument_names, attr }
     }
 }
 
 impl<'a> ContractConditionsHandler<'a> {
+    fn is_fist_emit(&self) -> bool {
+        matches!(self.function_state, ContractFunctionState::Untouched)
+    }
+
     /// Initialize the handler. Constructs the required
     /// [`ContractConditionsType`] depending on `is_requires`.
     fn new(
         function_state: ContractFunctionState,
-        is_requires: bool,
-        mut attr: Expr,
-        annotated_fn: &'a ItemFn,
+        is_requires: u8,
+        attr: TokenStream,
+        annotated_fn: &'a mut ItemFn,
         attr_copy: TokenStream2,
         output: &'a mut TokenStream2,
-    ) -> Self {
-        let condition_type = if is_requires {
-            ContractConditionsType::Requires
-        } else {
-            ContractConditionsType::new_ensures(&annotated_fn.sig, &mut attr)
+    ) -> Result<Self, syn::Error> {
+        let condition_type = match is_requires {
+            0 => ContractConditionsType::Requires { attr: syn::parse(attr)? },
+            1 => ContractConditionsType::new_ensures(&annotated_fn.sig, syn::parse(attr)?),
+            2 => ContractConditionsType::Modifies { 
+                attr: chunks_by(TokenStream2::from(attr), is_token_stream_2_comma)
+                        .map(syn::parse2)
+                        .filter_map(|expr| match expr {
+                            Err(e) => {
+                                output.extend(e.into_compile_error());
+                                None
+                            }
+                            Ok(expr) => Some(expr)
+                        })
+                        .collect()
+            },
+            _ => unreachable!(),
         };
 
-        Self { function_state, condition_type, attr, annotated_fn, attr_copy, output }
+        Ok(Self { function_state, condition_type, annotated_fn, attr_copy, output })
     }
 
     /// Create the body of a check function.
     ///
     /// Wraps the conditions from this attribute around `self.body`.
-    fn make_check_body(&self) -> TokenStream2 {
-        let Self { attr, attr_copy, .. } = self;
+    /// 
+    /// Mutable because a `modifies` clause may need to extend the inner call to
+    /// the wrapper with new arguments.
+    fn make_check_body(&mut self) -> TokenStream2 {
+        let Self { attr_copy, .. } = self;
         let ItemFn { sig, block, .. } = self.annotated_fn;
         let return_type = return_type_to_type(&sig.output);
 
         match &self.condition_type {
-            ContractConditionsType::Requires => quote!(
+            ContractConditionsType::Requires { attr }=> quote!(
                 kani::assume(#attr);
                 #block
             ),
-            ContractConditionsType::Ensures { argument_names } => {
+            ContractConditionsType::Ensures { argument_names, attr } => {
                 let (arg_copies, copy_clean) = make_unsafe_argument_copies(&argument_names);
 
                 // The code that enforces the postconditions and cleans up the shallow
@@ -527,6 +580,41 @@ impl<'a> ContractConditionsHandler<'a> {
                     result
                 )
             }
+            ContractConditionsType::Modifies { attr } => {
+                let wrapper_args = make_wrapper_args(attr.len());
+                // TODO handle first invocation where this is the actual body.
+                if !self.is_fist_emit() {
+                    if let Some(wrapper_call_args) = 
+                        self.annotated_fn.block.stmts.iter_mut().find_map(try_as_wrapper_call_args) {
+                        wrapper_call_args.extend(wrapper_args.clone().map(|a| Expr::Verbatim(quote!(#a))));
+                    } else {
+                        unreachable!("Invariant broken, check function did not contain a call to the wrapper function")
+                    }
+                }
+
+                let inner = self.create_inner_call(wrapper_args.clone());
+                let wrapper_args = make_wrapper_args(attr.len());
+
+                quote!(
+                    #(let #wrapper_args = kani::untracked_deref(#attr);)*
+                    #inner
+                )
+            }
+        }
+    }
+
+    fn create_inner_call(&self, additional_args: impl Iterator<Item=Ident>) -> TokenStream2 {
+        if self.is_fist_emit() {
+            let args = self.annotated_fn.sig.inputs.iter().map(pat_to_expr);
+            quote!(
+                let result = #wrapper_name(#(#args,)* #(#additional_args),*);
+                result
+            )
+        } else {
+            let stmts = &self.annotated_fn.block.stmts;
+            quote!(
+                #(#stmts)*
+            )
         }
     }
 
@@ -539,18 +627,18 @@ impl<'a> ContractConditionsHandler<'a> {
     /// `use_nondet_result` will only be true if this is the first time we are
     /// generating a replace function.
     fn make_replace_body(&self, use_nondet_result: bool) -> TokenStream2 {
-        let Self { attr, attr_copy, .. } = self;
+        let Self { attr_copy, .. } = self;
         let ItemFn { sig, block, .. } = self.annotated_fn;
         let call_to_prior =
             if use_nondet_result { quote!(kani::any()) } else { block.to_token_stream() };
         let return_type = return_type_to_type(&sig.output);
 
         match &self.condition_type {
-            ContractConditionsType::Requires => quote!(
+            ContractConditionsType::Requires { attr } => quote!(
                 kani::assert(#attr, stringify!(#attr_copy));
                 #call_to_prior
             ),
-            ContractConditionsType::Ensures { argument_names } => {
+            ContractConditionsType::Ensures { attr, argument_names } => {
                 let (arg_copies, copy_clean) = make_unsafe_argument_copies(&argument_names);
                 quote!(
                     #arg_copies
@@ -560,6 +648,7 @@ impl<'a> ContractConditionsHandler<'a> {
                     result
                 )
             }
+            ContractConditionsType::Modifies { attr } => unreachable!("Replacement with modifies not supported"),
         }
     }
 
@@ -622,6 +711,120 @@ impl<'a> ContractConditionsHandler<'a> {
         }
         self.output.extend(self.annotated_fn.attrs.iter().flat_map(Attribute::to_token_stream));
     }
+}
+
+fn pat_to_expr(pat: &syn::Pat) -> Expr {
+    use syn::Pat;
+    let mk_err = |typ| {
+        pat.span()
+            .unwrap()
+            .error(format!("`{typ}` patterns are not supported for functions with contracts"))
+            .emit();
+        unreachable!()
+    };
+    match pat {
+        Pat::Const(c) => Expr::Const(c.clone()),
+        Pat::Ident(id) => Expr::Verbatim(id.ident.to_token_stream()),
+        Pat::Lit(lit) => Expr::Lit(lit.clone()),
+        Pat::Reference(rf) => Expr::Reference(syn::ExprReference {
+            attrs: vec![],
+            and_token: rf.and_token,
+            mutability: rf.mutability,
+            expr: Box::new(pat_to_expr(&rf.pat)),
+        }),
+        Pat::Tuple(tup) => Expr::Tuple(syn::ExprTuple {
+            attrs: vec![],
+            paren_token: tup.paren_token,
+            elems: tup.elems.iter().map(pat_to_expr).collect(),
+        }),
+        Pat::Slice(slice) => Expr::Reference(syn::ExprReference {
+            attrs: vec![],
+            and_token: syn::Token!(&)(Span::call_site()),
+            mutability: None,
+            expr: Box::new(Expr::Array(syn::ExprArray {
+                attrs: vec![],
+                bracket_token: slice.bracket_token,
+                elems: slice.elems.iter().map(pat_to_expr).collect(),
+            })),
+        }),
+        Pat::Path(pth) => Expr::Path(pth.clone()),
+        Pat::Or(_) => mk_err("or"),
+        Pat::Rest(_) => mk_err("rest"),
+        Pat::Wild(_) => mk_err("wildcard"),
+        Pat::Paren(inner) => pat_to_expr(&inner.pat),
+        Pat::Range(_) => mk_err("range"),
+        Pat::Struct(strct) => {
+            if strct.rest.is_some() {
+                mk_err("..");
+            }
+            Expr::Struct(syn::ExprStruct {
+                attrs: vec![],
+                path: strct.path.clone(),
+                brace_token: strct.brace_token,
+                dot2_token: None,
+                rest: None,
+                qself: strct.qself.clone(),
+                fields: strct
+                    .fields
+                    .iter()
+                    .map(|field_pat| syn::FieldValue {
+                        attrs: vec![],
+                        member: field_pat.member.clone(),
+                        colon_token: field_pat.colon_token,
+                        expr: pat_to_expr(&field_pat.pat),
+                    })
+                    .collect(),
+            })
+        }
+        Pat::Verbatim(_) => mk_err("verbatim"),
+        Pat::Type(_) => mk_err("type"),
+        Pat::TupleStruct(_) => mk_err("tuple struct"),
+        _ => mk_err("unknown"),
+    }
+}
+
+fn try_as_wrapper_call_args(stmt: &mut syn::Stmt) -> Option<&mut syn::punctuated::Punctuated<syn::Expr, syn::token::Comma>> {
+    match stmt {
+                        syn::Stmt::Local(syn::Local {
+                            pat: syn::Pat::Ident(syn::PatIdent {
+                                by_ref: None,
+                                mutability: None,
+                                ident: result_ident,
+                                subpat: None,
+                                ..
+                            }),
+                            init: Some(syn::LocalInit {
+                                diverge: None,
+                                expr: init_expr,
+                                .. 
+                            }),
+                            ..
+                        }) if result_ident == "result" => match init_expr.as_mut() {
+                            Expr::Call(syn::ExprCall {
+                                func: box_func,
+                                args,
+                                ..                                
+                            }) => match box_func.as_ref() {
+                                syn::Expr::Path(syn::ExprPath {
+                                    qself: None,
+                                    path,
+                                    ..
+                                }) if path.get_ident().map_or(false, is_wrapper_fn) => {
+                                    Some(args)
+                                }
+                                _ => None,
+                            }
+                            _ => None,
+                        }
+                        _ => None,
+                    }
+}
+
+fn make_wrapper_args(num: usize) -> impl Iterator<Item=syn::Ident> + Clone {
+}
+
+fn is_wrapper_fn(ident: &syn::Ident) -> bool {
+
 }
 
 /// If an explicit return type was provided it is returned, otherwise `()`.
@@ -707,13 +910,12 @@ fn make_unsafe_argument_copies(
 ///
 /// See the [module level documentation][self] for a description of how the code
 /// generation works.
-fn requires_ensures_main(attr: TokenStream, item: TokenStream, is_requires: bool) -> TokenStream {
+fn requires_ensures_main(attr: TokenStream, item: TokenStream, is_requires: u8) -> TokenStream {
     let attr_copy = TokenStream2::from(attr.clone());
-    let attr = parse_macro_input!(attr as Expr);
 
     let mut output = proc_macro2::TokenStream::new();
     let item_stream_clone = item.clone();
-    let item_fn = parse_macro_input!(item as ItemFn);
+    let mut item_fn = parse_macro_input!(item as ItemFn);
 
     let function_state = ContractFunctionState::from_attributes(&item_fn.attrs);
 
@@ -729,14 +931,17 @@ fn requires_ensures_main(attr: TokenStream, item: TokenStream, is_requires: bool
         return item_fn.into_token_stream().into();
     }
 
-    let mut handler = ContractConditionsHandler::new(
+    let mut handler = match ContractConditionsHandler::new(
         function_state,
         is_requires,
         attr,
-        &item_fn,
+        &mut item_fn,
         attr_copy,
         &mut output,
-    );
+    ) {
+        Ok(handler) => handler,
+        Err(e) => return e.into_compile_error().into(),
+    };
 
     match function_state {
         ContractFunctionState::Check => {
