@@ -175,48 +175,8 @@ use std::{
 };
 use syn::{
     parse_macro_input, spanned::Spanned, visit::Visit, visit_mut::VisitMut, Attribute, Expr, FnArg,
-    ItemFn, PredicateType, ReturnType, Signature, Token, TraitBound, TypeParamBound, WhereClause,
+    ItemFn, PredicateType, ReturnType, Signature, Token, TraitBound, TypeParamBound, WhereClause, GenericArgument,
 };
-
-/// Create a unique hash for a token stream (basically a [`std::hash::Hash`]
-/// impl for `proc_macro2::TokenStream`).
-fn hash_of_token_stream<H: std::hash::Hasher>(hasher: &mut H, stream: proc_macro2::TokenStream) {
-    use proc_macro2::TokenTree;
-    use std::hash::Hash;
-    for token in stream {
-        match token {
-            TokenTree::Ident(i) => i.hash(hasher),
-            TokenTree::Punct(p) => p.as_char().hash(hasher),
-            TokenTree::Group(g) => {
-                std::mem::discriminant(&g.delimiter()).hash(hasher);
-                hash_of_token_stream(hasher, g.stream());
-            }
-            TokenTree::Literal(lit) => lit.to_string().hash(hasher),
-        }
-    }
-}
-
-/// Hash this `TokenStream` and return an integer that is at most digits
-/// long when hex formatted.
-fn short_hash_of_token_stream(stream: &proc_macro::TokenStream) -> u64 {
-    use std::hash::Hasher;
-    let mut hasher = std::collections::hash_map::DefaultHasher::default();
-    hash_of_token_stream(&mut hasher, proc_macro2::TokenStream::from(stream.clone()));
-    let long_hash = hasher.finish();
-    long_hash % 0x1_000_000 // six hex digits
-}
-
-/// Makes consistent names for a generated function which was created for
-/// `purpose`, from an attribute that decorates `related_function` with the
-/// hash `hash`.
-fn identifier_for_generated_function(
-    related_function_name: &Ident,
-    purpose: &str,
-    hash: u64,
-) -> Ident {
-    let identifier = format!("{}_{purpose}_{hash:x}", related_function_name);
-    Ident::new(&identifier, proc_macro2::Span::mixed_site())
-}
 
 pub fn requires(attr: TokenStream, item: TokenStream) -> TokenStream {
     requires_ensures_main(attr, item, 0)
@@ -226,97 +186,31 @@ pub fn ensures(attr: TokenStream, item: TokenStream) -> TokenStream {
     requires_ensures_main(attr, item, 1)
 }
 
-#[allow(dead_code)]
-pub fn modifies(attr: TokenStream, item: TokenStream) -> TokenStream {
-    requires_ensures_main(attr, item, 2)
-}
-
-fn is_token_stream_2_comma(t: &proc_macro2::TokenTree) -> bool {
-    matches!(t, proc_macro2::TokenTree::Punct(p) if p.as_char() == ',')
-}
-
-fn chunks_by<'a, T, C: Default + Extend<T>>(
-    i: impl IntoIterator<Item = T> + 'a,
-    mut pred: impl FnMut(&T) -> bool + 'a,
-) -> impl Iterator<Item = C> + 'a {
-    let mut iter = i.into_iter();
-    std::iter::from_fn(move || {
-        let mut new = C::default();
-        let mut empty = true;
-        while let Some(tok) = iter.next() {
-            empty = false;
-            if pred(&tok) {
-                break;
+/// This is very similar to the kani_attribute macro, but it instead creates
+/// key-value style attributes which I find a little easier to parse.
+macro_rules! passthrough {
+    ($name:ident, $allow_dead_code:ident) => {
+        pub fn $name(attr: TokenStream, item: TokenStream) -> TokenStream {
+            let args = proc_macro2::TokenStream::from(attr);
+            let fn_item = proc_macro2::TokenStream::from(item);
+            let name = Ident::new(stringify!($name), proc_macro2::Span::call_site());
+            let extra_attrs = if $allow_dead_code {
+                quote!(#[allow(dead_code)])
             } else {
-                new.extend([tok])
-            }
-        }
-        (!empty).then_some(new)
-    })
-}
-
-/// Collect all named identifiers used in the argument patterns of a function.
-struct ArgumentIdentCollector(HashSet<Ident>);
-
-impl ArgumentIdentCollector {
-    fn new() -> Self {
-        Self(HashSet::new())
-    }
-}
-
-impl<'ast> Visit<'ast> for ArgumentIdentCollector {
-    fn visit_pat_ident(&mut self, i: &'ast syn::PatIdent) {
-        self.0.insert(i.ident.clone());
-        syn::visit::visit_pat_ident(self, i)
-    }
-    fn visit_receiver(&mut self, _: &'ast syn::Receiver) {
-        self.0.insert(Ident::new("self", proc_macro2::Span::call_site()));
-    }
-}
-
-/// Applies the contained renaming (key renamed to value) to every ident pattern
-/// and ident expr visited.
-struct Renamer<'a>(&'a HashMap<Ident, Ident>);
-
-impl<'a> VisitMut for Renamer<'a> {
-    fn visit_expr_path_mut(&mut self, i: &mut syn::ExprPath) {
-        if i.path.segments.len() == 1 {
-            i.path
-                .segments
-                .first_mut()
-                .and_then(|p| self.0.get(&p.ident).map(|new| p.ident = new.clone()));
-        }
-    }
-
-    /// This restores shadowing. Without this we would rename all ident
-    /// occurrences, but not rebinding location. This is because our
-    /// [`Self::visit_expr_path_mut`] is scope-unaware.
-    fn visit_pat_ident_mut(&mut self, i: &mut syn::PatIdent) {
-        if let Some(new) = self.0.get(&i.ident) {
-            i.ident = new.clone();
+                quote!()
+            };
+            quote!(
+                #extra_attrs
+                #[kanitool::#name = stringify!(#args)]
+                #fn_item
+            )
+            .into()
         }
     }
 }
 
-/// Does the provided path have the same chain of identifiers as `mtch` (match)
-/// and no arguments anywhere?
-///
-/// So for instance (using some pseudo-syntax for the [`syn::Path`]s)
-/// `matches_path(std::vec::Vec, &["std", "vec", "Vec"]) == true` but
-/// `matches_path(std::Vec::<bool>::contains, &["std", "Vec", "contains"]) !=
-/// true`.
-///
-/// This is intended to be used to match the internal `kanitool` family of
-/// attributes which we know to have a regular structure and no arguments.
-fn matches_path<E>(path: &syn::Path, mtch: &[E]) -> bool
-where
-    Ident: std::cmp::PartialEq<E>,
-{
-    path.segments.len() == mtch.len()
-        && path.segments.iter().all(|s| s.arguments.is_empty())
-        && path.leading_colon.is_none()
-        && path.segments.iter().zip(mtch).all(|(actual, expected)| actual.ident == *expected)
-}
+passthrough!(stub_verified, false);
+passthrough!(proof_for_contract, true);
 
 /// Classifies the state a function is in in the contract handling pipeline.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -390,80 +284,6 @@ impl ContractFunctionState {
     }
 }
 
-/// A visitor which injects a copy of the token stream it holds before every
-/// `return` expression.
-///
-/// This is intended to be used with postconditions and for that purpose it also
-/// performs a rewrite where the return value is first bound to `result` so the
-/// postconditions can access it.
-///
-/// # Example
-///
-/// The expression `return x;` turns into
-///
-/// ```rs
-/// { // Always opens a new block
-///     let result = x;
-///     <injected tokenstream>
-///     return result;
-/// }
-/// ```
-struct PostconditionInjector(TokenStream2);
-
-impl VisitMut for PostconditionInjector {
-    /// We leave this empty to stop the recursion here. We don't want to look
-    /// inside the closure, because the return statements contained within are
-    /// for a different function.
-    fn visit_expr_closure_mut(&mut self, _: &mut syn::ExprClosure) {}
-
-    fn visit_expr_mut(&mut self, i: &mut Expr) {
-        if let syn::Expr::Return(r) = i {
-            let tokens = self.0.clone();
-            let mut output = TokenStream2::new();
-            if let Some(expr) = &mut r.expr {
-                // In theory the return expression can contain itself a `return`
-                // so we need to recurse here.
-                self.visit_expr_mut(expr);
-                output.extend(quote!(let result = #expr;));
-                *expr = Box::new(Expr::Verbatim(quote!(result)));
-            }
-            *i = syn::Expr::Verbatim(quote!({
-                #output
-                #tokens
-                #i
-            }))
-        } else {
-            syn::visit_mut::visit_expr_mut(self, i)
-        }
-    }
-}
-
-/// A supporting function for creating shallow, unsafe copies of the arguments
-/// for the postconditions.
-///
-/// This function:
-/// - Collects all [`Ident`]s found in the argument patterns;
-/// - Creates new names for them;
-/// - Replaces all occurrences of those idents in `attrs` with the new names and;
-/// - Returns the mapping of old names to new names.
-fn rename_argument_occurrences(sig: &syn::Signature, attr: &mut Expr) -> HashMap<Ident, Ident> {
-    let mut arg_ident_collector = ArgumentIdentCollector::new();
-    arg_ident_collector.visit_signature(&sig);
-
-    let mk_new_ident_for = |id: &Ident| Ident::new(&format!("{}_renamed", id), Span::mixed_site());
-    let arg_idents = arg_ident_collector
-        .0
-        .into_iter()
-        .map(|i| {
-            let new = mk_new_ident_for(&i);
-            (i, new)
-        })
-        .collect::<HashMap<_, _>>();
-
-    let mut ident_rewriter = Renamer(&arg_idents);
-    ident_rewriter.visit_expr_mut(attr);
-    arg_idents
-}
 
 /// The information needed to generate the bodies of check and replacement
 /// functions that integrate the conditions from this contract attribute.
@@ -738,14 +558,33 @@ impl<'a> ContractConditionsHandler<'a> {
 
     fn emit_augmented_modifies_wrapper(&mut self) {
         if let ContractConditionsType::Modifies { attr } = &self.condition_type {
-            self.annotated_fn.sig.inputs.extend(make_wrapper_args(attr.len()).map(|warg| {
-                FnArg::Typed(syn::PatType {
-                    attrs: vec![],
-                    colon_token: Token![:](Span::call_site()),
-                    pat: Box::new(syn::Pat::Verbatim(quote!(#warg))),
-                    ty: Box::new(syn::Type::Verbatim(quote!(&impl kani::Arbitrary))),
-                })
-            }))
+            let wrapper_args = make_wrapper_args(attr.len());
+            let sig = &mut self.annotated_fn.sig;
+            for arg in wrapper_args.clone() {
+                let lifetime = syn::Lifetime {
+                    apostrophe: Span::call_site(),
+                    ident: arg.clone(),
+                };
+                sig.inputs.push(
+                    FnArg::Typed(syn::PatType {
+                        attrs: vec![],
+                        colon_token: Token![:](Span::call_site()),
+                        pat: Box::new(syn::Pat::Verbatim(quote!(#arg))),
+                        ty: Box::new(syn::Type::Verbatim(quote!(&#lifetime impl kani::Arbitrary))),
+                    })
+                );
+                sig.generics.params.push(
+                    syn::GenericParam::Lifetime(syn::LifetimeParam {
+                        lifetime,
+                        colon_token: None,
+                        bounds: Default::default(),
+                        attrs: vec![],
+                    })
+                );
+            }
+            self.output.extend(
+                quote!(#[kanitool::modifies(#(#wrapper_args),*)])
+            )
         }
         self.emit_common_header();
 
@@ -753,10 +592,11 @@ impl<'a> ContractConditionsHandler<'a> {
             // If it's the first time we also emit this marker. Again, order is
             // important so this happens as the last emitted attribute.
             self.output.extend(quote!(#[kanitool::is_contract_generated(wrapper)]));
-        }
-
+        } 
+        
         let name = self.make_wrapper_name();
         let ItemFn { vis, sig, block, .. } = self.annotated_fn;
+
         let mut sig = sig.clone();
         sig.ident = name;
         self.output.extend(quote!(
@@ -1077,28 +917,164 @@ fn requires_ensures_main(attr: TokenStream, item: TokenStream, is_requires: u8) 
     output.into()
 }
 
-/// This is very similar to the kani_attribute macro, but it instead creates
-/// key-value style attributes which I find a little easier to parse.
-macro_rules! passthrough {
-    ($name:ident, $allow_dead_code:ident) => {
-        pub fn $name(attr: TokenStream, item: TokenStream) -> TokenStream {
-            let args = proc_macro2::TokenStream::from(attr);
-            let fn_item = proc_macro2::TokenStream::from(item);
-            let name = Ident::new(stringify!($name), proc_macro2::Span::call_site());
-            let extra_attrs = if $allow_dead_code {
-                quote!(#[allow(dead_code)])
-            } else {
-                quote!()
-            };
-            quote!(
-                #extra_attrs
-                #[kanitool::#name = stringify!(#args)]
-                #fn_item
-            )
-            .into()
+
+
+/// Create a unique hash for a token stream (basically a [`std::hash::Hash`]
+/// impl for `proc_macro2::TokenStream`).
+fn hash_of_token_stream<H: std::hash::Hasher>(hasher: &mut H, stream: proc_macro2::TokenStream) {
+    use proc_macro2::TokenTree;
+    use std::hash::Hash;
+    for token in stream {
+        match token {
+            TokenTree::Ident(i) => i.hash(hasher),
+            TokenTree::Punct(p) => p.as_char().hash(hasher),
+            TokenTree::Group(g) => {
+                std::mem::discriminant(&g.delimiter()).hash(hasher);
+                hash_of_token_stream(hasher, g.stream());
+            }
+            TokenTree::Literal(lit) => lit.to_string().hash(hasher),
         }
     }
 }
 
-passthrough!(stub_verified, false);
-passthrough!(proof_for_contract, true);
+/// Hash this `TokenStream` and return an integer that is at most digits
+/// long when hex formatted.
+fn short_hash_of_token_stream(stream: &proc_macro::TokenStream) -> u64 {
+    use std::hash::Hasher;
+    let mut hasher = std::collections::hash_map::DefaultHasher::default();
+    hash_of_token_stream(&mut hasher, proc_macro2::TokenStream::from(stream.clone()));
+    let long_hash = hasher.finish();
+    long_hash % 0x1_000_000 // six hex digits
+}
+
+/// Makes consistent names for a generated function which was created for
+/// `purpose`, from an attribute that decorates `related_function` with the
+/// hash `hash`.
+fn identifier_for_generated_function(
+    related_function_name: &Ident,
+    purpose: &str,
+    hash: u64,
+) -> Ident {
+    let identifier = format!("{}_{purpose}_{hash:x}", related_function_name);
+    Ident::new(&identifier, proc_macro2::Span::mixed_site())
+}
+
+#[allow(dead_code)]
+pub fn modifies(attr: TokenStream, item: TokenStream) -> TokenStream {
+    requires_ensures_main(attr, item, 2)
+}
+
+fn is_token_stream_2_comma(t: &proc_macro2::TokenTree) -> bool {
+    matches!(t, proc_macro2::TokenTree::Punct(p) if p.as_char() == ',')
+}
+
+fn chunks_by<'a, T, C: Default + Extend<T>>(
+    i: impl IntoIterator<Item = T> + 'a,
+    mut pred: impl FnMut(&T) -> bool + 'a,
+) -> impl Iterator<Item = C> + 'a {
+    let mut iter = i.into_iter();
+    std::iter::from_fn(move || {
+        let mut new = C::default();
+        let mut empty = true;
+        while let Some(tok) = iter.next() {
+            empty = false;
+            if pred(&tok) {
+                break;
+            } else {
+                new.extend([tok])
+            }
+        }
+        (!empty).then_some(new)
+    })
+}
+
+/// Collect all named identifiers used in the argument patterns of a function.
+struct ArgumentIdentCollector(HashSet<Ident>);
+
+impl ArgumentIdentCollector {
+    fn new() -> Self {
+        Self(HashSet::new())
+    }
+}
+
+impl<'ast> Visit<'ast> for ArgumentIdentCollector {
+    fn visit_pat_ident(&mut self, i: &'ast syn::PatIdent) {
+        self.0.insert(i.ident.clone());
+        syn::visit::visit_pat_ident(self, i)
+    }
+    fn visit_receiver(&mut self, _: &'ast syn::Receiver) {
+        self.0.insert(Ident::new("self", proc_macro2::Span::call_site()));
+    }
+}
+
+/// Applies the contained renaming (key renamed to value) to every ident pattern
+/// and ident expr visited.
+struct Renamer<'a>(&'a HashMap<Ident, Ident>);
+
+impl<'a> VisitMut for Renamer<'a> {
+    fn visit_expr_path_mut(&mut self, i: &mut syn::ExprPath) {
+        if i.path.segments.len() == 1 {
+            i.path
+                .segments
+                .first_mut()
+                .and_then(|p| self.0.get(&p.ident).map(|new| p.ident = new.clone()));
+        }
+    }
+
+    /// This restores shadowing. Without this we would rename all ident
+    /// occurrences, but not rebinding location. This is because our
+    /// [`Self::visit_expr_path_mut`] is scope-unaware.
+    fn visit_pat_ident_mut(&mut self, i: &mut syn::PatIdent) {
+        if let Some(new) = self.0.get(&i.ident) {
+            i.ident = new.clone();
+        }
+    }
+}
+
+/// A supporting function for creating shallow, unsafe copies of the arguments
+/// for the postconditions.
+///
+/// This function:
+/// - Collects all [`Ident`]s found in the argument patterns;
+/// - Creates new names for them;
+/// - Replaces all occurrences of those idents in `attrs` with the new names and;
+/// - Returns the mapping of old names to new names.
+fn rename_argument_occurrences(sig: &syn::Signature, attr: &mut Expr) -> HashMap<Ident, Ident> {
+    let mut arg_ident_collector = ArgumentIdentCollector::new();
+    arg_ident_collector.visit_signature(&sig);
+
+    let mk_new_ident_for = |id: &Ident| Ident::new(&format!("{}_renamed", id), Span::mixed_site());
+    let arg_idents = arg_ident_collector
+        .0
+        .into_iter()
+        .map(|i| {
+            let new = mk_new_ident_for(&i);
+            (i, new)
+        })
+        .collect::<HashMap<_, _>>();
+
+    let mut ident_rewriter = Renamer(&arg_idents);
+    ident_rewriter.visit_expr_mut(attr);
+    arg_idents
+}
+
+/// Does the provided path have the same chain of identifiers as `mtch` (match)
+/// and no arguments anywhere?
+///
+/// So for instance (using some pseudo-syntax for the [`syn::Path`]s)
+/// `matches_path(std::vec::Vec, &["std", "vec", "Vec"]) == true` but
+/// `matches_path(std::Vec::<bool>::contains, &["std", "Vec", "contains"]) !=
+/// true`.
+///
+/// This is intended to be used to match the internal `kanitool` family of
+/// attributes which we know to have a regular structure and no arguments.
+fn matches_path<E>(path: &syn::Path, mtch: &[E]) -> bool
+where
+    Ident: std::cmp::PartialEq<E>,
+{
+    path.segments.len() == mtch.len()
+        && path.segments.iter().all(|s| s.arguments.is_empty())
+        && path.leading_colon.is_none()
+        && path.segments.iter().zip(mtch).all(|(actual, expected)| actual.ident == *expected)
+}
+
