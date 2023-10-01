@@ -57,7 +57,15 @@ impl<'sess, 'pr> HarnessRunner<'sess, 'pr> {
                     let report_dir = self.project.outdir.join(format!("report-{harness_filename}"));
                     let goto_file =
                         self.project.get_harness_artifact(&harness, ArtifactType::Goto).unwrap();
-                    self.sess.instrument_model(goto_file, goto_file, &self.project, &harness)?;
+                    let contract_info = self.get_contract_info(harness)?;
+
+                    self.sess.instrument_model(
+                        goto_file,
+                        goto_file,
+                        &self.project,
+                        &harness,
+                        contract_info,
+                    )?;
 
                     if self.sess.args.synthesize_loop_contracts {
                         self.sess.synthesize_loop_contracts(goto_file, &goto_file, &harness)?;
@@ -70,6 +78,14 @@ impl<'sess, 'pr> HarnessRunner<'sess, 'pr> {
         })?;
 
         Ok(results)
+    }
+
+    fn get_contract_info(&self, harness: &'pr HarnessMetadata) -> Result<Option<String>> {
+        let contract_info_artifact =
+            self.project.get_harness_artifact(&harness, ArtifactType::ContractMetadata).unwrap();
+
+        let reader = std::io::BufReader::new(std::fs::File::open(contract_info_artifact)?);
+        Ok(serde_json::from_reader(reader)?)
     }
 
     /// Return an error if the user is trying to verify a harness with stubs without enabling the

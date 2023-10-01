@@ -4,10 +4,10 @@
 //! This file contains functions related to codegenning MIR functions into gotoc
 
 use crate::codegen_cprover_gotoc::GotocCtx;
-use cbmc::goto_program::{Expr, Stmt, Symbol};
+use cbmc::goto_program::{Expr, FunctionContract, Stmt, Symbol};
 use cbmc::InternString;
 use rustc_middle::mir::traversal::reverse_postorder;
-use rustc_middle::mir::{Body, HasLocalDecls, Local};
+use rustc_middle::mir::{self, Body, HasLocalDecls, Local};
 use rustc_middle::ty::{self, Instance};
 use std::collections::BTreeMap;
 use std::iter::FromIterator;
@@ -220,6 +220,96 @@ impl<'tcx> GotocCtx<'tcx> {
             Some(marshalled_tuple_value),
             loc,
         );
+    }
+
+    /// Convert the Kani level contract into a CBMC level contract by creating a
+    /// lambda that calls the contract implementation function.
+    ///
+    /// For instance say we are processing a contract on `f`
+    ///
+    /// ```rs
+    /// as_goto_contract(..., GFnContract { requires: <contact_impl_fn>, .. })
+    ///     = FunctionContract {
+    ///         requires: [
+    ///             Lambda {
+    ///                 arguments: <return arg, args of f...>,
+    ///                 body: Call(codegen_fn_expr(contract_impl_fn), [args of f..., return arg])
+    ///             }
+    ///         ],
+    ///         ...
+    ///     }
+    /// ```
+    ///
+    /// A spec lambda in GOTO receives as its first argument the return value of
+    /// the annotated function. However at the top level we must receive `self`
+    /// as first argument, because rust requires it. As a result the generated
+    /// lambda takes the return value as first argument and then immediately
+    /// calls the generated spec function, but passing the return value as the
+    /// last argument.
+    fn as_goto_contract(&mut self, assigns_contract: Vec<Local>) -> FunctionContract {
+        use cbmc::goto_program::Lambda;
+
+        let goto_annotated_fn_name = self.current_fn().name();
+        let goto_annotated_fn_typ = self
+            .symbol_table
+            .lookup(&goto_annotated_fn_name)
+            .unwrap_or_else(|| panic!("Function '{goto_annotated_fn_name}' is not declared"))
+            .typ
+            .clone();
+
+        let assigns = assigns_contract
+            .into_iter()
+            .map(|local| {
+                Lambda::as_contract_for(
+                    &goto_annotated_fn_typ,
+                    None,
+                    self.codegen_place(&local.into()).unwrap().goto_expr.dereference(),
+                )
+            })
+            .collect();
+
+        FunctionContract::new(assigns)
+    }
+
+    /// Convert the contract to a CBMC contract, then attach it to `instance`.
+    /// `instance` must have previously been declared.
+    ///
+    /// This does not overwrite prior contracts but merges with them.
+    pub fn attach_contract(&mut self, instance: Instance<'tcx>, contract: Vec<Local>) {
+        // This should be safe, since the contract is pretty much evaluated as
+        // though it was the first (or last) assertion in the function.
+        self.set_current_fn(instance);
+        let goto_contract = self.as_goto_contract(contract);
+        let name = self.current_fn().name();
+
+        // CBMC has two ways of attaching the contract and it seems the
+        // difference is whether dfcc is used or not. With dfcc it's stored in
+        // `contract::<fn name>`, otherwise directly on the type of the
+        // function.
+        //
+        // Actually the issue sees to haver been something else and ataching to
+        // the symbol directly seems ot also work if dfcc is used.
+        let create_separate_contract_sym = false;
+
+        let contract_target_name = if create_separate_contract_sym {
+            let contract_sym_name = format!("contract::{}", name);
+            self.ensure(&contract_sym_name, |ctx, fname| {
+                Symbol::function(
+                    fname,
+                    ctx.fn_typ(),
+                    None,
+                    format!("contract::{}", ctx.current_fn().readable_name()),
+                    ctx.codegen_span(&ctx.current_fn().mir().span),
+                )
+                .with_is_property(true)
+            });
+            contract_sym_name
+        } else {
+            name
+        };
+
+        self.symbol_table.attach_contract(contract_target_name, goto_contract);
+        self.reset_current_fn()
     }
 
     pub fn declare_function(&mut self, instance: Instance<'tcx>) {

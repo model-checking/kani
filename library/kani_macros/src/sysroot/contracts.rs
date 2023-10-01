@@ -175,7 +175,8 @@ use std::{
 };
 use syn::{
     parse_macro_input, spanned::Spanned, visit::Visit, visit_mut::VisitMut, Attribute, Expr, FnArg,
-    ItemFn, PredicateType, ReturnType, Signature, Token, TraitBound, TypeParamBound, WhereClause, GenericArgument,
+    GenericArgument, ItemFn, PredicateType, ReturnType, Signature, Token, TraitBound,
+    TypeParamBound, WhereClause,
 };
 
 pub fn requires(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -283,7 +284,6 @@ impl ContractFunctionState {
         matches!(self, ContractFunctionState::Untouched)
     }
 }
-
 
 /// The information needed to generate the bodies of check and replacement
 /// functions that integrate the conditions from this contract attribute.
@@ -397,7 +397,9 @@ impl<'a> ContractConditionsHandler<'a> {
 
                 let mut call = self.create_inner_call([].into_iter());
 
-                assert!(matches!(call.pop(), Some(syn::Stmt::Expr(syn::Expr::Path(pexpr), None)) if pexpr.path.get_ident().map_or(false, |id| id == "result")));
+                assert!(
+                    matches!(call.pop(), Some(syn::Stmt::Expr(syn::Expr::Path(pexpr), None)) if pexpr.path.get_ident().map_or(false, |id| id == "result"))
+                );
 
                 quote!(
                     #arg_copies
@@ -561,30 +563,21 @@ impl<'a> ContractConditionsHandler<'a> {
             let wrapper_args = make_wrapper_args(attr.len());
             let sig = &mut self.annotated_fn.sig;
             for arg in wrapper_args.clone() {
-                let lifetime = syn::Lifetime {
-                    apostrophe: Span::call_site(),
-                    ident: arg.clone(),
-                };
-                sig.inputs.push(
-                    FnArg::Typed(syn::PatType {
-                        attrs: vec![],
-                        colon_token: Token![:](Span::call_site()),
-                        pat: Box::new(syn::Pat::Verbatim(quote!(#arg))),
-                        ty: Box::new(syn::Type::Verbatim(quote!(&#lifetime impl kani::Arbitrary))),
-                    })
-                );
-                sig.generics.params.push(
-                    syn::GenericParam::Lifetime(syn::LifetimeParam {
-                        lifetime,
-                        colon_token: None,
-                        bounds: Default::default(),
-                        attrs: vec![],
-                    })
-                );
+                let lifetime = syn::Lifetime { apostrophe: Span::call_site(), ident: arg.clone() };
+                sig.inputs.push(FnArg::Typed(syn::PatType {
+                    attrs: vec![],
+                    colon_token: Token![:](Span::call_site()),
+                    pat: Box::new(syn::Pat::Verbatim(quote!(#arg))),
+                    ty: Box::new(syn::Type::Verbatim(quote!(&#lifetime impl kani::Arbitrary))),
+                }));
+                sig.generics.params.push(syn::GenericParam::Lifetime(syn::LifetimeParam {
+                    lifetime,
+                    colon_token: None,
+                    bounds: Default::default(),
+                    attrs: vec![],
+                }));
             }
-            self.output.extend(
-                quote!(#[kanitool::modifies(#(#wrapper_args),*)])
-            )
+            self.output.extend(quote!(#[kanitool::modifies(#(#wrapper_args),*)]))
         }
         self.emit_common_header();
 
@@ -592,8 +585,8 @@ impl<'a> ContractConditionsHandler<'a> {
             // If it's the first time we also emit this marker. Again, order is
             // important so this happens as the last emitted attribute.
             self.output.extend(quote!(#[kanitool::is_contract_generated(wrapper)]));
-        } 
-        
+        }
+
         let name = self.make_wrapper_name();
         let ItemFn { vis, sig, block, .. } = self.annotated_fn;
 
@@ -917,8 +910,6 @@ fn requires_ensures_main(attr: TokenStream, item: TokenStream, is_requires: u8) 
     output.into()
 }
 
-
-
 /// Create a unique hash for a token stream (basically a [`std::hash::Hash`]
 /// impl for `proc_macro2::TokenStream`).
 fn hash_of_token_stream<H: std::hash::Hasher>(hasher: &mut H, stream: proc_macro2::TokenStream) {
@@ -1077,4 +1068,3 @@ where
         && path.leading_colon.is_none()
         && path.segments.iter().zip(mtch).all(|(actual, expected)| actual.ident == *expected)
 }
-

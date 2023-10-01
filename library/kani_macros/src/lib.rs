@@ -169,7 +169,7 @@ pub fn stub_verified(attr: TokenStream, item: TokenStream) -> TokenStream {
 
 /// This module implements Kani attributes in a way that only Kani's compiler can understand.
 /// This code should only be activated when pre-building Kani's sysroot.
-#[cfg(kani_sysroot)]
+//#[cfg(kani_sysroot)]
 mod sysroot {
     use proc_macro_error::{abort, abort_call_site};
 

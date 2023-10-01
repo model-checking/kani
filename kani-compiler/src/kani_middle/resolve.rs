@@ -52,7 +52,7 @@ pub fn resolve_fn<'tcx>(
 /// paths.
 ///
 /// Note: This function was written to be generic, however, it has only been tested for functions.
-fn resolve_path<'tcx>(
+pub(crate) fn resolve_path<'tcx>(
     tcx: TyCtxt<'tcx>,
     current_module: LocalDefId,
     path_str: &str,

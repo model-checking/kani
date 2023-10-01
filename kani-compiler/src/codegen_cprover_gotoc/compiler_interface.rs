@@ -6,7 +6,7 @@
 use crate::args::ReachabilityType;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::analysis;
-use crate::kani_middle::attributes::is_test_harness_description;
+use crate::kani_middle::attributes::{is_test_harness_description, KaniAttributes};
 use crate::kani_middle::metadata::gen_test_metadata;
 use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{
@@ -31,14 +31,14 @@ use rustc_codegen_ssa::{CodegenResults, CrateInfo};
 use rustc_data_structures::fx::{FxHashMap, FxIndexMap};
 use rustc_data_structures::temp_dir::MaybeTempDir;
 use rustc_errors::{ErrorGuaranteed, DEFAULT_LOCALE_RESOURCE};
-use rustc_hir::def_id::LOCAL_CRATE;
+use rustc_hir::def_id::{DefId, LOCAL_CRATE};
 use rustc_hir::definitions::DefPathHash;
 use rustc_metadata::fs::{emit_wrapper_file, METADATA_FILENAME};
 use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
 use rustc_middle::mir::mono::MonoItem;
 use rustc_middle::query::{ExternProviders, Providers};
-use rustc_middle::ty::TyCtxt;
+use rustc_middle::ty::{Instance, InstanceDef, ParamEnv, TyCtxt};
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::cstore::MetadataLoaderDyn;
 use rustc_session::output::out_filename;
@@ -82,6 +82,7 @@ impl GotocCodegenBackend {
         starting_items: &[MonoItem<'tcx>],
         symtab_goto: &Path,
         machine_model: &MachineModel,
+        check_contract: Option<DefId>,
     ) -> (GotocCtx<'tcx>, Vec<MonoItem<'tcx>>) {
         let items = with_timer(
             || collect_reachable_items(tcx, starting_items),
@@ -94,7 +95,7 @@ impl GotocCodegenBackend {
         let mut gcx = GotocCtx::new(tcx, (*self.queries.lock().unwrap()).clone(), machine_model);
         check_reachable_items(gcx.tcx, &gcx.queries, &items);
 
-        with_timer(
+        let contract_info = with_timer(
             || {
                 // we first declare all items
                 for item in &items {
@@ -144,6 +145,47 @@ impl GotocCodegenBackend {
                         MonoItem::GlobalAsm(_) => {} // We have already warned above
                     }
                 }
+
+                // Attaching the contract gets its own loop, because the
+                // functions used in the contract expressions must have been
+                // declared and created before since we rip out the
+                // implementation from the contract function
+                let mut contract_info = None;
+                for item in &items {
+                    if let MonoItem::Fn(instance @ Instance { def: InstanceDef::Item(did), .. }) =
+                        item
+                    {
+                        if check_contract == Some(*did) {
+                            let attrs = KaniAttributes::for_item(tcx, *did);
+                            let assigns_contract =
+                                attrs.modifies_contract().unwrap_or_else(Vec::new);
+
+                            let get_instance = |did| {
+                                Instance::expect_resolve(
+                                    tcx,
+                                    ParamEnv::reveal_all(),
+                                    did,
+                                    instance.args,
+                                )
+                            };
+                            let gcx = &mut gcx;
+                            let mut attach_contract =
+                                |target| gcx.attach_contract(target, assigns_contract);
+                            let name_for_inst = |inst| tcx.symbol_name(inst).to_string();
+
+                            let Ok(inner_check_id) = attrs.inner_check().unwrap() else {
+                                continue;
+                            };
+                            let inner_check_inst = get_instance(inner_check_id);
+                            attach_contract(inner_check_inst);
+                            assert!(
+                                contract_info.replace(name_for_inst(inner_check_inst)).is_none()
+                            );
+                        }
+                    }
+                }
+                assert_eq!(contract_info.is_some(), check_contract.is_some());
+                contract_info
             },
             "codegen",
         );
@@ -178,10 +220,20 @@ impl GotocCodegenBackend {
             if let Some(restrictions) = vtable_restrictions {
                 write_file(&symtab_goto, ArtifactType::VTableRestriction, &restrictions, pretty);
             }
+
+            write_file(symtab_goto, ArtifactType::ContractMetadata, &contract_info, pretty);
         }
 
         (gcx, items)
     }
+}
+
+fn contract_metadata_for_harness(
+    tcx: TyCtxt,
+    def_id: DefId,
+) -> Result<Option<DefId>, ErrorGuaranteed> {
+    let attrs = KaniAttributes::for_item(tcx, def_id);
+    Ok(attrs.interpret_the_for_contract_attribute().transpose()?.map(|(_, id, _)| id))
 }
 
 impl CodegenBackend for GotocCodegenBackend {
@@ -239,8 +291,18 @@ impl CodegenBackend for GotocCodegenBackend {
                 for harness in harnesses {
                     let model_path =
                         queries.harness_model_path(&tcx.def_path_hash(harness.def_id())).unwrap();
-                    let (gcx, items) =
-                        self.codegen_items(tcx, &[harness], model_path, &results.machine_model);
+                    let Ok(contract_metadata) =
+                        contract_metadata_for_harness(tcx, harness.def_id())
+                    else {
+                        continue;
+                    };
+                    let (gcx, items) = self.codegen_items(
+                        tcx,
+                        &[harness],
+                        model_path,
+                        &results.machine_model,
+                        contract_metadata,
+                    );
                     results.extend(gcx, items, None);
                 }
             }
@@ -262,8 +324,13 @@ impl CodegenBackend for GotocCodegenBackend {
                 // We will be able to remove this once we optimize all calls to CBMC utilities.
                 // https://github.com/model-checking/kani/issues/1971
                 let model_path = base_filename.with_extension(ArtifactType::SymTabGoto);
-                let (gcx, items) =
-                    self.codegen_items(tcx, &harnesses, &model_path, &results.machine_model);
+                let (gcx, items) = self.codegen_items(
+                    tcx,
+                    &harnesses,
+                    &model_path,
+                    &results.machine_model,
+                    Default::default(),
+                );
                 results.extend(gcx, items, None);
 
                 for (test_fn, test_desc) in harnesses.iter().zip(descriptions.iter()) {
@@ -287,8 +354,13 @@ impl CodegenBackend for GotocCodegenBackend {
                         || entry_fn == Some(def_id)
                 });
                 let model_path = base_filename.with_extension(ArtifactType::SymTabGoto);
-                let (gcx, items) =
-                    self.codegen_items(tcx, &local_reachable, &model_path, &results.machine_model);
+                let (gcx, items) = self.codegen_items(
+                    tcx,
+                    &local_reachable,
+                    &model_path,
+                    &results.machine_model,
+                    Default::default(),
+                );
                 results.extend(gcx, items, None);
             }
         }
