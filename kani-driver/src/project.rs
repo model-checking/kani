@@ -130,10 +130,12 @@ impl Project {
 
                 // All other harness artifacts that may have been generated as part of the build.
                 artifacts.extend(
-                    [SymTab, TypeMap, VTableRestriction, PrettyNameMap].iter().filter_map(|typ| {
-                        let artifact = Artifact::try_from(&symtab_out, *typ).ok()?;
-                        Some(artifact)
-                    }),
+                    [SymTab, TypeMap, VTableRestriction, PrettyNameMap, ContractMetadata]
+                        .iter()
+                        .filter_map(|typ| {
+                            let artifact = Artifact::try_from(&symtab_out, *typ).ok()?;
+                            Some(artifact)
+                        }),
                 );
                 artifacts.push(symtab_out);
                 artifacts.push(goto);

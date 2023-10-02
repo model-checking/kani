@@ -169,7 +169,7 @@ impl GotocCodegenBackend {
                                 )
                             };
                             let gcx = &mut gcx;
-                            let mut attach_contract =
+                            let attach_contract =
                                 |target| gcx.attach_contract(target, assigns_contract);
                             let name_for_inst = |inst| tcx.symbol_name(inst).to_string();
 

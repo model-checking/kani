@@ -1,0 +1,7 @@
+assigns\
+- Status: FAILURE\
+- Description: "Check that *ptr is assignable"
+
+Failed Checks: Check that *ptr is assignable
+
+VERIFICATION:- FAILED

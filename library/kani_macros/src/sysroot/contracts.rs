@@ -433,7 +433,7 @@ impl<'a> ContractConditionsHandler<'a> {
                 let wrapper_args = make_wrapper_args(attr.len());
 
                 quote!(
-                    #(let #wrapper_args = kani::untracked_deref(#attr);)*
+                    #(let #wrapper_args = kani::untracked_deref(&#attr);)*
                     #(#inner)*
                 )
             }
@@ -444,7 +444,13 @@ impl<'a> ContractConditionsHandler<'a> {
         if let Some(hash) = self.hash {
             identifier_for_generated_function(&self.annotated_fn.sig.ident, "wrapper", hash)
         } else {
-            self.annotated_fn.sig.ident.clone()
+            let str_name = self.annotated_fn.sig.ident.to_string();
+            let splits = str_name.rsplitn(3, '_').collect::<Vec<_>>();
+            let [hash, _, base] = splits.as_slice() else {
+                unreachable!("Odd name for function {str_name}, splits were {}", splits.len());
+            };
+
+            Ident::new(&format!("{base}_wrapper_{hash}"), Span::call_site())
         }
     }
 
@@ -681,35 +687,40 @@ fn try_as_wrapper_call_args<'a>(
     stmt: &'a mut syn::Stmt,
     wrapper_fn_name: &str,
 ) -> Option<&'a mut syn::punctuated::Punctuated<syn::Expr, syn::token::Comma>> {
+    println!("Checking statement {stmt:?}");
     match stmt {
         syn::Stmt::Local(syn::Local {
-            pat:
-                syn::Pat::Ident(syn::PatIdent {
-                    by_ref: None,
-                    mutability: None,
-                    ident: result_ident,
-                    subpat: None,
-                    ..
-                }),
+            pat: syn::Pat::Type(syn::PatType { pat: inner_pat, .. }),
             init: Some(syn::LocalInit { diverge: None, expr: init_expr, .. }),
             ..
-        }) if result_ident == "result" => match init_expr.as_mut() {
-            Expr::Call(syn::ExprCall { func: box_func, args, .. }) => match box_func.as_ref() {
-                syn::Expr::Path(syn::ExprPath { qself: None, path, .. })
-                    if path.get_ident().map_or(false, |id| id == wrapper_fn_name) =>
-                {
-                    Some(args)
-                }
+        }) if matches!(inner_pat.as_ref(),
+          syn::Pat::Ident(syn::PatIdent {
+                        by_ref: None,
+                        mutability: None,
+                        ident: result_ident,
+                        subpat: None,
+                        ..
+                    }) if result_ident == "result"
+        ) =>
+        {
+            match init_expr.as_mut() {
+                Expr::Call(syn::ExprCall { func: box_func, args, .. }) => match box_func.as_ref() {
+                    syn::Expr::Path(syn::ExprPath { qself: None, path, .. })
+                        if path.get_ident().map_or(false, |id| id == wrapper_fn_name) =>
+                    {
+                        Some(args)
+                    }
+                    _ => None,
+                },
                 _ => None,
-            },
-            _ => None,
-        },
+            }
+        }
         _ => None,
     }
 }
 
 fn make_wrapper_args(num: usize) -> impl Iterator<Item = syn::Ident> + Clone {
-    (0..num).map(|i| Ident::new(&format!("wrapper_arg_{i}"), Span::mixed_site()))
+    (0..num).map(|i| Ident::new(&format!("_wrapper_arg_{i}"), Span::mixed_site()))
 }
 
 /// If an explicit return type was provided it is returned, otherwise `()`.
@@ -881,6 +892,8 @@ fn requires_ensures_main(attr: TokenStream, item: TokenStream, is_requires: u8) 
             let replace_fn_name_str =
                 syn::LitStr::new(&replace_fn_name.to_string(), Span::call_site());
             let check_fn_name_str = syn::LitStr::new(&check_fn_name.to_string(), Span::call_site());
+            let wrapper_fn_name_str =
+                syn::LitStr::new(&handler.make_wrapper_name().to_string(), Span::call_site());
 
             // The order of `attrs` and `kanitool::{checked_with,
             // is_contract_generated}` is important here, because macros are
@@ -895,6 +908,7 @@ fn requires_ensures_main(attr: TokenStream, item: TokenStream, is_requires: u8) 
                 #(#attrs)*
                 #[kanitool::checked_with = #check_fn_name_str]
                 #[kanitool::replaced_with = #replace_fn_name_str]
+                #[kanitool::inner_check = #wrapper_fn_name_str]
                 #vis #sig {
                     #block
                 }
