@@ -16,11 +16,11 @@ mod cmd;
 mod os_hacks;
 mod setup;
 
-use std::env;
 use std::ffi::OsString;
 use std::os::unix::prelude::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::{env, fs};
 
 use anyhow::{bail, Context, Result};
 
@@ -33,6 +33,41 @@ pub fn proxy(bin: &str) -> Result<()> {
             fail_if_in_dev_environment()?;
             if !setup::appears_setup() {
                 setup::setup(None)?;
+            } else {
+                // Just because the folder is there, does not mean setup was complete
+                // What could solve this? create the folder only after setup is complete
+                // Check if conditions for crash are met, or conditions for completion are met
+                let x = setup::kani_dir()?;
+                let y = x.parent().unwrap().to_path_buf();
+                println!("{:?}", x);
+                let mut z = false;
+                if let Ok(entries) = fs::read_dir(y.clone()) {
+                    for entry in entries.flatten() {
+                        if let Ok(file_type) = entry.file_type() {
+                            if file_type.is_file() {
+                                if let Some(file_name) = entry.file_name().to_str() {
+                                    if file_name.ends_with(".tar.gz") {
+                                        // Found a .tar.gz file
+                                        println!("Found .tar.gz file: {}", file_name);
+                                        let full_path = y.join(file_name);
+                                        let os_string: OsString =
+                                            full_path.clone().into_os_string();
+                                        setup::setup(Some(os_string))?;
+                                        let _ = fs::remove_file(full_path);
+                                        z = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    println!("Failed to read directory: {:?}", y);
+                }
+                if z {
+                    println!("tar file time found");
+                } else {
+                    println!("tar file time not found, probably removed :)");
+                }
             }
             exec(bin)
         }

@@ -50,6 +50,7 @@ fn default_kani_dir() -> Result<PathBuf> {
 
 /// Fast check to see if we look setup already
 pub fn appears_setup() -> bool {
+    // add check here
     kani_dir().expect("couldn't find kani directory").exists()
 }
 
