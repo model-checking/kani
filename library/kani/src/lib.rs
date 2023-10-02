@@ -294,5 +294,7 @@ macro_rules! cover {
     };
 }
 
-/// Kani proc macros must be in a separate crate
+// Kani proc macros must be in a separate crate
 pub use kani_macros::*;
+
+pub mod contracts;

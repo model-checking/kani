@@ -1,0 +1,9 @@
+div.assertion\
+- Status: SUCCESS\
+- Description: "divisor != 0"
+
+main.assertion\
+- Status: SUCCESS\
+- Description: ""contract guarantees smallness""
+
+VERIFICATION:- SUCCESSFUL

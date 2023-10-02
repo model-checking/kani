@@ -1,0 +1,16 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+#
+# Configuration for auto-labeling PRs
+#
+# Note that we enable dot, so "**" matches all files in a folder
+
+Z-BenchCI:
+  - kani-compiler/**
+  - rust-toolchain.toml
+  - kani-dependencies
+  - kani-driver/src/call-*
+  - Cargo.lock
+  - cprover_bindings/**
+  - library/**
+
