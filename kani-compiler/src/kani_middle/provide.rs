@@ -13,12 +13,12 @@ use rustc_hir::def_id::{DefId, LocalDefId};
 use rustc_interface;
 use rustc_middle::{
     mir::Body,
-    query::{queries, ExternProviders, Providers},
+    query::{queries, Providers},
     ty::TyCtxt,
 };
 
 /// Sets up rustc's query mechanism to apply Kani's custom queries to code from
-/// the present crate.
+/// a crate.
 pub fn provide(providers: &mut Providers, queries: &QueryDb) {
     let args = queries.args();
     if should_override(args) {
@@ -31,25 +31,8 @@ pub fn provide(providers: &mut Providers, queries: &QueryDb) {
     }
 }
 
-/// Sets up rustc's query mechanism to apply Kani's custom queries to code from
-/// external crates.
-pub fn provide_extern(providers: &mut ExternProviders, queries: &QueryDb) {
-    if should_override(queries.args()) {
-        // Don't override queries if we are only compiling our dependencies.
-        providers.optimized_mir = run_mir_passes_extern;
-    }
-}
-
 fn should_override(args: &Arguments) -> bool {
     args.reachability_analysis != ReachabilityType::None && !args.build_std
-}
-
-/// Returns the optimized code for the external function associated with `def_id` by
-/// running rustc's optimization passes followed by Kani-specific passes.
-fn run_mir_passes_extern(tcx: TyCtxt, def_id: DefId) -> &Body {
-    tracing::debug!(?def_id, "run_mir_passes_extern");
-    let body = (rustc_interface::DEFAULT_EXTERN_QUERY_PROVIDERS.optimized_mir)(tcx, def_id);
-    run_kani_mir_passes(tcx, def_id, body)
 }
 
 /// Returns the optimized code for the local function associated with `def_id` by

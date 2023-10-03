@@ -424,7 +424,7 @@ impl<'tcx> GotocCtx<'tcx> {
     {
         // Instance is Some(..) only when current codegen unit is a function.
         if let Some(current_fn) = &self.current_fn {
-            current_fn.instance().subst_mir_and_normalize_erasing_regions(
+            current_fn.instance().instantiate_mir_and_normalize_erasing_regions(
                 self.tcx,
                 ty::ParamEnv::reveal_all(),
                 ty::EarlyBinder::bind(value),
@@ -813,11 +813,7 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Bound(_, _) | ty::Param(_) => unreachable!("monomorphization bug"),
 
             // type checking remnants which shouldn't be reachable
-            ty::GeneratorWitness(_)
-            | ty::GeneratorWitnessMIR(_, _)
-            | ty::Infer(_)
-            | ty::Placeholder(_)
-            | ty::Error(_) => {
+            ty::GeneratorWitness(_, _) | ty::Infer(_) | ty::Placeholder(_) | ty::Error(_) => {
                 unreachable!("remnants of type checking")
             }
         }
@@ -1254,8 +1250,7 @@ impl<'tcx> GotocCtx<'tcx> {
             // For soundness, hold off on generating them till we have test-cases.
             ty::Bound(_, _) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Error(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
-            ty::GeneratorWitness(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
-            ty::GeneratorWitnessMIR(_, _) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
+            ty::GeneratorWitness(_, _) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Infer(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Param(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Placeholder(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),

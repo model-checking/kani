@@ -260,7 +260,6 @@ impl<'tcx> GotocCtx<'tcx> {
                     | ty::Never
                     | ty::FnDef(..)
                     | ty::GeneratorWitness(..)
-                    | ty::GeneratorWitnessMIR(..)
                     | ty::Foreign(..)
                     | ty::Dynamic(..)
                     | ty::Bound(..)

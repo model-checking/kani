@@ -37,8 +37,8 @@ use rustc_metadata::fs::{emit_wrapper_file, METADATA_FILENAME};
 use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
 use rustc_middle::mir::mono::MonoItem;
-use rustc_middle::query::{ExternProviders, Providers};
 use rustc_middle::ty::TyCtxt;
+use rustc_middle::util::Providers;
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::cstore::MetadataLoaderDyn;
 use rustc_session::output::out_filename;
@@ -191,10 +191,6 @@ impl CodegenBackend for GotocCodegenBackend {
 
     fn provide(&self, providers: &mut Providers) {
         provide::provide(providers, &self.queries.lock().unwrap());
-    }
-
-    fn provide_extern(&self, providers: &mut ExternProviders) {
-        provide::provide_extern(providers, &self.queries.lock().unwrap());
     }
 
     fn print_version(&self) {
