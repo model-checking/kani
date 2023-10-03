@@ -53,7 +53,7 @@ pub fn appears_setup() -> bool {
     kani_dir().expect("couldn't find kani directory").exists()
 }
 
-// Ensure that the tar file does not exist, essentially using it's presence
+// Ensure that the tar file does not exist, essentially using its presence
 // to detect setup completion as if it were a lock file.
 pub fn appears_incomplete() -> Option<PathBuf> {
     let kani_dir = kani_dir().expect("couldn't find kani directory");
@@ -110,7 +110,7 @@ fn setup_kani_bundle(kani_dir: &Path, use_local_bundle: Option<OsString>) -> Res
             .current_dir(&kani_dir)
             .run()
             .context(
-                "Failed to extract tar file, try removing Kani setup and restarting the setup step",
+                "Failed to extract tar file, try removing Kani setup located in .kani in your home directory and restarting",
             )?;
     } else {
         let filename = download_filename();
