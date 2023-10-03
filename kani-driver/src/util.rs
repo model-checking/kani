@@ -84,7 +84,7 @@ pub mod tempfile {
             }
 
             if !self.renamed {
-                if let Err(_e) = fs::remove_file(&self.temp_path.clone()) {
+                if let Err(_e) = fs::remove_file(self.temp_path.clone()) {
                     util::warning(&format!("Error removing file {}", self.temp_path.display()));
                 }
             }

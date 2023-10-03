@@ -91,7 +91,7 @@ fn setup_kani_bundle(kani_dir: &Path, use_local_bundle: Option<OsString>) -> Res
             .arg("--strip-components=1")
             .arg("-zxf")
             .arg(&path)
-            .current_dir(&kani_dir)
+            .current_dir(kani_dir)
             .run()?;
     } else {
         let filename = download_filename();
@@ -99,7 +99,7 @@ fn setup_kani_bundle(kani_dir: &Path, use_local_bundle: Option<OsString>) -> Res
         fail_if_unsupported_target()?;
         let bundle = base_dir.join(filename);
         Command::new("curl")
-            .args(&["-sSLf", "-o"])
+            .args(["-sSLf", "-o"])
             .arg(&bundle)
             .arg(download_url())
             .run()
@@ -124,7 +124,7 @@ fn setup_rust_toolchain(kani_dir: &Path) -> Result<String> {
     // Currently this means we require the bundle to have been unpacked first!
     let toolchain_version = get_rust_toolchain_version(kani_dir)?;
     println!("[3/5] Installing rust toolchain version: {}", &toolchain_version);
-    Command::new("rustup").args(&["toolchain", "install", &toolchain_version]).run()?;
+    Command::new("rustup").args(["toolchain", "install", &toolchain_version]).run()?;
 
     let toolchain = home::rustup_home()?.join("toolchains").join(&toolchain_version);
 
@@ -146,7 +146,7 @@ fn setup_python_deps(kani_dir: &Path, os: &os_info::Info) -> Result<()> {
     }
 
     Command::new("python3")
-        .args(&["-m", "pip", "install", "--target"])
+        .args(["-m", "pip", "install", "--target"])
         .arg(&pyroot)
         .args(pkg_versions)
         .run()?;

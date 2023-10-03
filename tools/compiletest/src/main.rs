@@ -467,7 +467,7 @@ fn collect_rs_tests_from_dir(
     // tests themselves, they race for the privilege of
     // creating the directories and sometimes fail randomly.
     let build_dir = output_relative_path(config, relative_dir_path);
-    fs::create_dir_all(&build_dir).unwrap();
+    fs::create_dir_all(build_dir).unwrap();
 
     // Add each `.rs` file as a test, and recurse further on any
     // subdirectories we find, except for `aux` directories.
@@ -571,7 +571,7 @@ fn make_test_name(config: &Config, testpaths: &TestPaths) -> test::TestName {
     //    ui/foo/bar/baz.rs
     let path = PathBuf::from(config.src_base.file_name().unwrap())
         .join(&testpaths.relative_dir)
-        .join(&testpaths.file.file_name().unwrap());
+        .join(testpaths.file.file_name().unwrap());
 
     test::DynTestName(format!("[{}] {}", config.mode, path.display()))
 }

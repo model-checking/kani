@@ -725,7 +725,7 @@ mod debug {
                 debug!(?target, "dump_dot");
                 let outputs = tcx.output_filenames(());
                 let path = outputs.output_path(OutputType::Metadata).with_extension("dot");
-                let out_file = File::create(&path)?;
+                let out_file = File::create(path)?;
                 let mut writer = BufWriter::new(out_file);
                 writeln!(writer, "digraph ReachabilityGraph {{")?;
                 if target.is_empty() {
