@@ -561,7 +561,7 @@ impl<'tcx> GotocCtx<'tcx> {
         }
 
         let mem_place =
-            self.symbol_table.lookup(&self.alloc_map.get(&alloc).unwrap()).unwrap().to_expr();
+            self.symbol_table.lookup(self.alloc_map.get(&alloc).unwrap()).unwrap().to_expr();
         mem_place.address_of()
     }
 
@@ -579,16 +579,16 @@ impl<'tcx> GotocCtx<'tcx> {
         // initializers. For example, for a boolean static variable, the variable will have type
         // CBool and the initializer will be a single byte (a one-character array) representing the
         // bit pattern for the boolean value.
-        let alloc_typ_ref = self.ensure_struct(&struct_name, &struct_name, |ctx, _| {
+        let alloc_typ_ref = self.ensure_struct(struct_name, struct_name, |ctx, _| {
             ctx.codegen_allocation_data(alloc)
                 .iter()
                 .enumerate()
                 .map(|(i, d)| match d {
                     AllocData::Bytes(bytes) => DatatypeComponent::field(
-                        &i.to_string(),
+                        i.to_string(),
                         Type::unsigned_int(8).array_of(bytes.len()),
                     ),
-                    AllocData::Expr(e) => DatatypeComponent::field(&i.to_string(), e.typ().clone()),
+                    AllocData::Expr(e) => DatatypeComponent::field(i.to_string(), e.typ().clone()),
                 })
                 .collect()
         });

@@ -329,7 +329,7 @@ impl BuiltinFn {
 /// Converters: build symbols and expressions from Builtins
 impl BuiltinFn {
     pub fn as_symbol(&self) -> Symbol {
-        Symbol::builtin_function(&self.to_string(), self.param_types(), self.return_type())
+        Symbol::builtin_function(self.to_string(), self.param_types(), self.return_type())
     }
 
     pub fn as_expr(&self) -> Expr {
