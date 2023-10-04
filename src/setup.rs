@@ -53,6 +53,22 @@ pub fn appears_setup() -> bool {
     kani_dir().expect("couldn't find kani directory").exists()
 }
 
+// Ensure that the tar file does not exist, essentially using its presence
+// to detect setup completion as if it were a lock file.
+pub fn appears_incomplete() -> Option<PathBuf> {
+    let kani_dir = kani_dir().expect("couldn't find kani directory");
+    let kani_dir_parent = kani_dir.parent().unwrap();
+
+    for entry in std::fs::read_dir(&kani_dir_parent).ok()?.flatten() {
+        if let Some(file_name) = entry.file_name().to_str() {
+            if file_name.ends_with(".tar.gz") {
+                return Some(kani_dir_parent.join(file_name));
+            }
+        }
+    }
+    None
+}
+
 /// Sets up Kani by unpacking/installing to `~/.kani/kani-VERSION`
 pub fn setup(use_local_bundle: Option<OsString>) -> Result<()> {
     let kani_dir = kani_dir()?;
@@ -92,7 +108,10 @@ fn setup_kani_bundle(kani_dir: &Path, use_local_bundle: Option<OsString>) -> Res
             .arg("-zxf")
             .arg(&path)
             .current_dir(kani_dir)
-            .run()?;
+            .run()
+            .context(
+                "Failed to extract tar file, try removing Kani setup located in .kani in your home directory and restarting",
+            )?;
     } else {
         let filename = download_filename();
         println!("[2/5] Downloading Kani release bundle: {}", &filename);
