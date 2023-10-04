@@ -56,7 +56,7 @@ pub fn convert_type(path: &Path, from: ArtifactType, to: ArtifactType) -> PathBu
     match from {
         // Artifact types that has only one extension.
         ArtifactType::Goto => {
-            result.set_extension(&to);
+            result.set_extension(to);
         }
         // Artifact types that has two extensions.
         ArtifactType::Metadata
@@ -66,7 +66,7 @@ pub fn convert_type(path: &Path, from: ArtifactType, to: ArtifactType) -> PathBu
         | ArtifactType::VTableRestriction
         | ArtifactType::PrettyNameMap => {
             result.set_extension("");
-            result.set_extension(&to);
+            result.set_extension(to);
         }
     }
     result

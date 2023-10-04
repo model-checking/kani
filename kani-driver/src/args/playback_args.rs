@@ -74,7 +74,7 @@ impl ValidateArgs for KaniPlaybackArgs {
         if !self.input.is_file() {
             return Err(Error::raw(
                 ErrorKind::InvalidValue,
-                &format!(
+                format!(
                     "Invalid argument: Input invalid. `{}` is not a regular file.",
                     self.input.display()
                 ),
