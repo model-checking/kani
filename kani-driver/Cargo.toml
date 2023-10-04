@@ -29,6 +29,7 @@ rayon = "1.5.3"
 comfy-table = "7.0.1"
 strum = {version = "0.25.0"}
 strum_macros = {version = "0.25.2"}
+tempfile = "3"
 tracing = {version = "0.1", features = ["max_level_trace", "release_max_level_debug"]}
 tracing-subscriber = {version = "0.3.8", features = ["env-filter", "json", "fmt"]}
 rand = "0.8"
