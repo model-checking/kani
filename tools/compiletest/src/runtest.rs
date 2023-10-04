@@ -57,7 +57,7 @@ pub fn run(config: Config, testpaths: &TestPaths) {
     let props = TestProps::from_file(&testpaths.file, &config);
 
     let cx = TestCx { config: &config, props: &props, testpaths };
-    create_dir_all(&cx.output_base_dir()).unwrap();
+    create_dir_all(cx.output_base_dir()).unwrap();
     cx.run();
     cx.create_stamp();
 }
@@ -97,7 +97,7 @@ impl<'test> TestCx<'test> {
             env::split_paths(&env::var_os(dylib_env_var()).unwrap_or_default()).collect::<Vec<_>>();
 
         // Add the new dylib search path var
-        let newpath = env::join_paths(&path).unwrap();
+        let newpath = env::join_paths(path).unwrap();
         command.env(dylib_env_var(), newpath);
 
         let mut child = disable_error_reporting(|| command.spawn())
@@ -136,7 +136,7 @@ impl<'test> TestCx<'test> {
 
     fn dump_output_file(&self, out: &str, extension: &str) {
         let outfile = self.make_out_name(extension);
-        fs::write(&outfile, out).unwrap();
+        fs::write(outfile, out).unwrap();
     }
 
     /// Creates a filename for output with the given extension.
@@ -273,7 +273,7 @@ impl<'test> TestCx<'test> {
             .arg("kani")
             .arg("--target-dir")
             .arg(self.output_base_dir().join("target"))
-            .current_dir(&parent_dir)
+            .current_dir(parent_dir)
             .args(&self.config.extra_args);
         if test {
             cargo.arg("--tests");
@@ -321,7 +321,7 @@ impl<'test> TestCx<'test> {
             kani.env("RUSTFLAGS", self.props.compile_flags.join(" "));
         }
         kani.arg(&self.testpaths.file).args(&self.props.kani_flags);
-        kani.arg("--coverage").args(&["-Z", "line-coverage"]);
+        kani.arg("--coverage").args(["-Z", "line-coverage"]);
 
         if !self.props.cbmc_flags.is_empty() {
             kani.arg("--cbmc-args").args(&self.props.cbmc_flags);
@@ -506,7 +506,7 @@ impl<'test> TestCx<'test> {
 
     fn create_stamp(&self) {
         let stamp = crate::stamp(self.config, self.testpaths);
-        fs::write(&stamp, "we only support one configuration").unwrap();
+        fs::write(stamp, "we only support one configuration").unwrap();
     }
 }
 

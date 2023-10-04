@@ -88,7 +88,7 @@ pub struct SessionError {
 /// If given the argument to so do, write the assess metadata to the target file.
 pub(crate) fn write_metadata(args: &AssessArgs, metadata: AssessMetadata) -> Result<()> {
     if let Some(path) = &args.emit_metadata {
-        let out_file = File::create(&path)?;
+        let out_file = File::create(path)?;
         let writer = BufWriter::new(out_file);
         // use pretty for now to keep things readable and debuggable, but this should change eventually
         serde_json::to_writer_pretty(writer, &metadata)?;

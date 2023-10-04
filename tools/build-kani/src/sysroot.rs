@@ -151,7 +151,7 @@ fn build_kani_lib(
 /// Copy all the artifacts to their correct place to generate a valid sysroot.
 fn copy_artifacts(artifacts: &[Artifact], sysroot_lib: &Path, target: &str) -> Result<()> {
     // Create sysroot folder hierarchy.
-    sysroot_lib.exists().then(|| fs::remove_dir_all(&sysroot_lib));
+    sysroot_lib.exists().then(|| fs::remove_dir_all(sysroot_lib));
     let std_path = path_buf!(&sysroot_lib, "rustlib", target, "lib");
     fs::create_dir_all(&std_path).expect(&format!("Failed to create {std_path:?}"));
 

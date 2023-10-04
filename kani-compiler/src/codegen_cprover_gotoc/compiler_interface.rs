@@ -271,7 +271,7 @@ impl CodegenBackend for GotocCodegenBackend {
                         if let MonoItem::Fn(instance) = test_fn { instance } else { continue };
                     let metadata = gen_test_metadata(tcx, *test_desc, *instance, &base_filename);
                     let test_model_path = &metadata.goto_file.as_ref().unwrap();
-                    std::fs::copy(&model_path, &test_model_path).expect(&format!(
+                    std::fs::copy(&model_path, test_model_path).expect(&format!(
                         "Failed to copy {} to {}",
                         model_path.display(),
                         test_model_path.display()

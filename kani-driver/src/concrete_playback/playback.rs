@@ -84,7 +84,7 @@ fn build_test(install: &InstallType, args: &KaniPlaybackArgs) -> Result<PathBuf>
         rustc_args.push("--error-format=json".into());
     }
 
-    let mut cmd = Command::new(&install.kani_compiler()?);
+    let mut cmd = Command::new(install.kani_compiler()?);
     cmd.args(rustc_args);
 
     session::run_terminal(&args.playback.common_opts, cmd)?;
