@@ -176,7 +176,9 @@ impl KaniSession {
                 }
             }
 
-            // Renames are usually automic, so we won't corrupt the user's source file during a crash.
+            // Renames are usually automic, so we won't corrupt the user's source file during a
+            // crash; but first flush all updates to disk, which persist wouldn't take care of.
+            temp_file.as_file().sync_all()?;
             temp_file.persist(source_path).expect("Could not rename file");
         }
 
