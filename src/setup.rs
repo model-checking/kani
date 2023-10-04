@@ -59,7 +59,7 @@ pub fn appears_incomplete() -> Option<PathBuf> {
     let kani_dir = kani_dir().expect("couldn't find kani directory");
     let kani_dir_parent = kani_dir.parent().unwrap();
 
-    for entry in std::fs::read_dir(&kani_dir_parent).ok()?.flatten() {
+    for entry in std::fs::read_dir(kani_dir_parent).ok()?.flatten() {
         if let Some(file_name) = entry.file_name().to_str() {
             if file_name.ends_with(".tar.gz") {
                 return Some(kani_dir_parent.join(file_name));
