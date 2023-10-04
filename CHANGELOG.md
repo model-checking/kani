@@ -8,7 +8,7 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 
 ### Major Changes
 
-* Deprecate any_slice by @zhassan-aws in https://github.com/model-checking/kani/pull/2789
+* Deprecate `any_slice` by @zhassan-aws in https://github.com/model-checking/kani/pull/2789
 
 ### What's Changed
 
