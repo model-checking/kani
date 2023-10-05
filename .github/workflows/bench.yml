@@ -9,6 +9,7 @@
 #  - Invoked by the labeler workflow after a PR update.
 #    - Adding 'Z-BenchCI' is not enough. For more details see:
 #      https://github.com/model-checking/kani/issues/2606#issuecomment-1749706887
+#    - In this case, payload is the same as the callee workflow.
 name: Kani Performance Benchmarks
 on:
   push:
@@ -19,22 +20,13 @@ on:
       - labeled
   # Allow call after labeler job
   workflow_call:
-    inputs:
-      base:
-        description: 'The original reference used as base of comparison'
-        required: true
-        type: string
-      head:
-        description: 'The head reference used as the target commit of the comparison'
-        required: true
-        type: string
 
 jobs:
   perf-benchcomp:
     runs-on: ubuntu-20.04
     if: ${{ github.event_name != 'pull_request'
-          || (github.event.action == 'labeled'
-            && github.event.label.name == 'Z-BenchCI') }}
+          || github.event.action != 'labeled'
+          || github.event.label.name == 'Z-BenchCI' }}
     steps:
       - name: Save push event HEAD and HEAD~ to environment variables
         if: ${{ github.event_name == 'push' }}
@@ -43,16 +35,10 @@ jobs:
           echo "OLD_REF=${{ github.event.before }}" | tee -a "$GITHUB_ENV"
 
       - name: Save pull request HEAD and base to environment variables
-        if: ${{ github.event_name == 'pull_request' }}
+        if: ${{ contains(fromJSON('["pull_request", "pull_request_target"]'), github.event_name) }}
         run: |
           echo "OLD_REF=${{ github.event.pull_request.base.sha }}" | tee -a "$GITHUB_ENV"
           echo "NEW_REF=${{ github.event.pull_request.head.sha }}" | tee -a "$GITHUB_ENV"
-
-      - name: Save input head and base to environment variables
-        if: ${{ contains(fromJSON('["workflow_call", "workflow_dispatch"]'), github.event_name) }}
-        run: |
-          echo "OLD_REF=${{ inputs.base }}" | tee -a "$GITHUB_ENV"
-          echo "NEW_REF=${{ inputs.head }}" | tee -a "$GITHUB_ENV"
 
       - name: Check out Kani (old variant)
         uses: actions/checkout@v3

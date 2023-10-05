@@ -18,6 +18,9 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+    outputs:
+      all-labels: ${{ steps.labeler.outputs.all-labels }}
+      new-labels: ${{ steps.labeler.outputs.new-labels }}
     runs-on: ubuntu-latest
     steps:
     - name: Checkout Kani
@@ -29,11 +32,9 @@ jobs:
       with:
         dot: true
 
-    - name: Trigger Benchmarks
-      # Use restrictive permissions.
-      permissions: {}
-      if: contains(steps.labeler.outputs.all-labels, 'Z-BenchCI')
-      uses: ./.github/workflows/bench.yml
-      with:
-        base: ${{ github.event.pull_request.base.sha }}
-        head: ${{ github.event.pull_request.head.sha }}
+  trigger-bench:
+    # Use restrictive permissions.
+    permissions: {}
+    needs: auto-label
+    if: contains(needs.auto-label.outputs.all-labels, 'Z-BenchCI')
+    uses: ./.github/workflows/bench.yml
