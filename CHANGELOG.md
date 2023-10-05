@@ -16,7 +16,9 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 * Simple Stubbing with Contracts by @JustusAdam in https://github.com/model-checking/kani/pull/2746
 * Avoid mismatch when generating structs that represent scalar data but also include ZSTs by @adpaco-aws in https://github.com/model-checking/kani/pull/2794
 * Prevent kani crash during setup for first time by @jaisnan in https://github.com/model-checking/kani/pull/2799
+* Create concrete playback temp files in source directory by @tautschnig in https://github.com/model-checking/kani/pull/2804
 * Bump CBMC version by @zhassan-aws in https://github.com/model-checking/kani/pull/2796
+* Update Rust toolchain to 2023-09-23 by @tautschnig in https://github.com/model-checking/kani/pull/2806
 
 **Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.37.0...kani-0.38.0
 
