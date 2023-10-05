@@ -13,3 +13,5 @@ Frac::check_equals.assertion\
 gcd.assertion\
 - Status: SUCCESS\
 - Description: "x != 0 && y != 0"
+
+VERIFICATION:- SUCCESSFUL

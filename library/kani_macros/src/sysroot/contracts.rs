@@ -839,12 +839,12 @@ fn requires_ensures_main(attr: TokenStream, item: TokenStream, is_requires: bool
     output.into()
 }
 
-fn pats_to_idents<P>(sig: &mut syn::punctuated::Punctuated<syn::FnArg, P>) -> impl Iterator<Item=Ident> + '_ {
+fn pats_to_idents<P>(
+    sig: &mut syn::punctuated::Punctuated<syn::FnArg, P>,
+) -> impl Iterator<Item = Ident> + '_ {
     sig.iter_mut().enumerate().map(|(i, arg)| match arg {
         syn::FnArg::Receiver(_) => Ident::new("self", Span::call_site()),
-        syn::FnArg::Typed(syn::PatType {
-            pat, ..
-        }) => {
+        syn::FnArg::Typed(syn::PatType { pat, .. }) => {
             let ident = Ident::new(&format!("arg{i}"), Span::mixed_site());
             *pat.as_mut() = syn::Pat::Ident(syn::PatIdent {
                 attrs: vec![],
