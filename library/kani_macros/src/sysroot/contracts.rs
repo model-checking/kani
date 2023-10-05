@@ -60,29 +60,31 @@
 //! arrow represents the expansion of a `requires` or `ensures` macro.
 //!
 //! ```plain
-//!                            v
-//!                      +-----------+
-//!                      | Untouched |
-//!                      | Function  |
-//!                      +-----+-----+
-//!                            |
-//!             Emit           |  Generate + Copy Attributes
-//!          +-----------------+------------------+
-//!          |                 |                  |
-//!          |                 |                  |
-//!          v                 v                  v
-//!   +----------+           +-------+        +---------+
-//!   | Original |<-+        | Check |<-+     | Replace |<-+
-//!   +--+-------+  |        +---+---+  |     +----+----+  |
-//!      |          | Ignore     |      | Augment  |       | Augment
-//!      +----------+            +------+          +-------+
-//!
-//! |              |       |                              |
-//! +--------------+       +------------------------------+
-//!   Presence of                     Presence of
-//!  "checked_with"             "is_contract_generated"
-//!
-//!            State is detected via
+//!                           │ Start
+//!                           ▼
+//!                     ┌───────────┐
+//!                     │ Untouched │
+//!                     │ Function  │
+//!                     └─────┬─────┘
+//!                           │
+//!            Emit           │  Generate      + Copy Attributes
+//!         ┌─────────────────┴─────┬──────────┬─────────────────┐
+//!         │                       │          │                 │
+//!         │                       │          │                 │
+//!         ▼                       ▼          ▼                 ▼
+//!  ┌──────────┐           ┌───────────┐  ┌───────┐        ┌─────────┐
+//!  │ Original │◄─┐        │ Recursion │  │ Check │◄─┐     │ Replace │◄─┐
+//!  └──┬───────┘  │        │ Wrapper   │  └───┬───┘  │     └────┬────┘  │
+//!     │          │ Ignore └───────────┘      │      │ Augment  │       │ Augment
+//!     └──────────┘                           └──────┘          └───────┘
+//! 
+//! │               │       │                                             │
+//! └───────────────┘       └─────────────────────────────────────────────┘
+//! 
+//!     Presence of                            Presence of
+//!    "checked_with"                    "is_contract_generated"
+//! 
+//!                        State is detected via
 //! ```
 //!
 //! All named arguments of the annotated function are unsafely shallow-copied
@@ -95,12 +97,12 @@
 //!
 //! ## Check function
 //!
-//! Generates a `check_<fn_name>_<fn_hash>` function that assumes preconditions
+//! Generates a `<fn_name>_check_<fn_hash>` function that assumes preconditions
 //! and asserts postconditions. The check function is also marked as generated
 //! with the `#[kanitool::is_contract_generated(check)]` attribute.
 //!
 //! Decorates the original function with `#[kanitool::checked_by =
-//! "check_<fn_name>_<fn_hash>"]`.
+//! "<fn_name>_check_<fn_hash>"]`.
 //!
 //! The check function is a copy of the original function with preconditions
 //! added before the body and postconditions after as well as injected before
@@ -109,17 +111,63 @@
 //!
 //! ## Replace Function
 //!
-//! As the mirror to that also generates a `replace_<fn_name>_<fn_hash>`
+//! As the mirror to that also generates a `<fn_name>_replace_<fn_hash>`
 //! function that asserts preconditions and assumes postconditions. The replace
 //! function is also marked as generated with the
 //! `#[kanitool::is_contract_generated(replace)]` attribute.
 //!
 //! Decorates the original function with `#[kanitool::replaced_by =
-//! "replace_<fn_name>_<fn_hash>"]`.
+//! "<fn_name>_replace_<fn_hash>"]`.
 //!
 //! The replace function has the same signature as the original function but its
 //! body is replaced by `kani::any()`, which generates a non-deterministic
 //! value.
+//! 
+//! ## Inductive Verification
+//! 
+//! To to efficiently check recursive functions we verify them inductively. To
+//! be able to do this we need both the check and replace functions we have seen
+//! before.
+//! 
+//! Inductive verification is comprised of a hypothesis and an induction step.
+//! The hypothesis in this case is the replace function. It represents the
+//! assumption that the contracts holds if the preconditions are satisfied. The
+//! induction step is the check function, which ensures that the contract holds,
+//! assuming the preconditions hold.
+//! 
+//! Since the induction revolves around the recursive call we can simply set it
+//! up upon entry into the body of the function under verification. We use a
+//! global variable that tracks whether we are re-entering the function
+//! recursively and starts off as `false`. On entry to the function we flip the
+//! variable to `true` and dispatch to the check (induction step). if the check
+//! recursively calls our function our re-entry tracker now reads `true` and we
+//! dispatch to the replacement (application of induction hypothesis). Because
+//! the replacement function only checks the conditions and does not perform
+//! other computation we will only ever go "one recursion level deep", making
+//! inductive verification very efficient. Once the check function returns we
+//! flip the tracker variable back to `false` in case the function is called
+//! more than one in it's harness.
+//! 
+//! To facilitate all this we generate a `<fn_name>_recursion_wrapper_<fn_hash>`
+//! function with the following shape:
+//! 
+//! ```ignored
+//! fn recursion_wrapper_...(fn args ...) {
+//!     static REENTRY: bool = false;
+//! 
+//!     if unsafe { REENTRY } {
+//!         call_replace(fn args...)
+//!     } else {
+//!         unsafe { reentry = true };
+//!         let result = call_check(fn args...);
+//!         unsafe { reentry = false };
+//!         result
+//!     }
+//! }
+//! ```
+//! 
+//! We register this function as `#[kanitool::checked_with =
+//! "recursion_wrapper_..."]` instead of the check function.
 //!
 //! # Complete example
 //!
@@ -134,7 +182,7 @@
 //! Turns into
 //!
 //! ```
-//! #[kanitool::checked_with = "div_check_965916"]
+//! #[kanitool::checked_with = "div_recursion_wrapper_965916"]
 //! #[kanitool::replaced_with = "div_replace_965916"]
 //! fn div(dividend: u32, divisor: u32) -> u32 { dividend / divisor }
 //!
@@ -163,6 +211,22 @@
 //!     std::mem::forget(dividend_renamed);
 //!     std::mem::forget(divisor_renamed);
 //!     result
+//! }
+//! 
+//! #[allow(dead_code)]
+//! #[allow(unused_variables)]
+//! #[kanitool::is_contract_generated(recursion_wrapper)]
+//! fn div_recursion_wrapper_965916(dividend: u32, divisor: u32) -> u32 {
+//!     static REENTRY: bool = false;
+//! 
+//!     if unsafe { REENTRY } {
+//!         div_replace_965916(dividend, divisor)
+//!     } else {
+//!         unsafe { reentry = true };
+//!         let result = div_check_965916(dividend, divisor);
+//!         unsafe { reentry = false };
+//!         result
+//!     }
 //! }
 //! ```
 
@@ -195,6 +259,7 @@ fn hash_of_token_stream<H: std::hash::Hasher>(hasher: &mut H, stream: proc_macro
         }
     }
 }
+
 
 /// Hash this `TokenStream` and return an integer that is at most digits
 /// long when hex formatted.
