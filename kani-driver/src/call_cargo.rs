@@ -320,7 +320,11 @@ fn packages_to_verify<'b>(
             .collect()
     } else if !args.cargo.exclude.is_empty() {
         validate_package_names(&args.cargo.exclude, &metadata.packages)?;
-        metadata.packages.iter().filter(|pkg| !args.cargo.exclude.contains(&pkg.name)).collect()
+        metadata
+            .workspace_packages()
+            .into_iter()
+            .filter(|pkg| !args.cargo.exclude.contains(&pkg.name))
+            .collect()
     } else {
         match (args.cargo.workspace, metadata.root_package()) {
             (true, _) | (_, None) => metadata.workspace_packages(),
