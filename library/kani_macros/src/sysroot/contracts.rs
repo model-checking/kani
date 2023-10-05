@@ -869,6 +869,7 @@ fn requires_ensures_main(attr: TokenStream, item: TokenStream, is_requires: bool
             ));
 
             let mut wrapper_sig = sig.clone();
+            attach_require_kani_any(&mut wrapper_sig);
             wrapper_sig.ident = recursion_wrapper_name;
 
             let args = pats_to_idents(&mut wrapper_sig.inputs).collect::<Vec<_>>();
