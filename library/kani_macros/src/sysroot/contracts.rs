@@ -77,13 +77,13 @@
 //!  └──┬───────┘  │        │ Wrapper   │  └───┬───┘  │     └────┬────┘  │
 //!     │          │ Ignore └───────────┘      │      │ Augment  │       │ Augment
 //!     └──────────┘                           └──────┘          └───────┘
-//! 
+//!
 //! │               │       │                                             │
 //! └───────────────┘       └─────────────────────────────────────────────┘
-//! 
+//!
 //!     Presence of                            Presence of
 //!    "checked_with"                    "is_contract_generated"
-//! 
+//!
 //!                        State is detected via
 //! ```
 //!
@@ -122,19 +122,19 @@
 //! The replace function has the same signature as the original function but its
 //! body is replaced by `kani::any()`, which generates a non-deterministic
 //! value.
-//! 
+//!
 //! ## Inductive Verification
-//! 
+//!
 //! To to efficiently check recursive functions we verify them inductively. To
 //! be able to do this we need both the check and replace functions we have seen
 //! before.
-//! 
+//!
 //! Inductive verification is comprised of a hypothesis and an induction step.
 //! The hypothesis in this case is the replace function. It represents the
 //! assumption that the contracts holds if the preconditions are satisfied. The
 //! induction step is the check function, which ensures that the contract holds,
 //! assuming the preconditions hold.
-//! 
+//!
 //! Since the induction revolves around the recursive call we can simply set it
 //! up upon entry into the body of the function under verification. We use a
 //! global variable that tracks whether we are re-entering the function
@@ -147,14 +147,14 @@
 //! inductive verification very efficient. Once the check function returns we
 //! flip the tracker variable back to `false` in case the function is called
 //! more than one in it's harness.
-//! 
+//!
 //! To facilitate all this we generate a `<fn_name>_recursion_wrapper_<fn_hash>`
 //! function with the following shape:
-//! 
+//!
 //! ```ignored
 //! fn recursion_wrapper_...(fn args ...) {
 //!     static REENTRY: bool = false;
-//! 
+//!
 //!     if unsafe { REENTRY } {
 //!         call_replace(fn args...)
 //!     } else {
@@ -165,7 +165,7 @@
 //!     }
 //! }
 //! ```
-//! 
+//!
 //! We register this function as `#[kanitool::checked_with =
 //! "recursion_wrapper_..."]` instead of the check function.
 //!
@@ -212,13 +212,13 @@
 //!     std::mem::forget(divisor_renamed);
 //!     result
 //! }
-//! 
+//!
 //! #[allow(dead_code)]
 //! #[allow(unused_variables)]
 //! #[kanitool::is_contract_generated(recursion_wrapper)]
 //! fn div_recursion_wrapper_965916(dividend: u32, divisor: u32) -> u32 {
 //!     static REENTRY: bool = false;
-//! 
+//!
 //!     if unsafe { REENTRY } {
 //!         div_replace_965916(dividend, divisor)
 //!     } else {
