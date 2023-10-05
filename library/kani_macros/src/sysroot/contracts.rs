@@ -260,7 +260,6 @@ fn hash_of_token_stream<H: std::hash::Hasher>(hasher: &mut H, stream: proc_macro
     }
 }
 
-
 /// Hash this `TokenStream` and return an integer that is at most digits
 /// long when hex formatted.
 fn short_hash_of_token_stream(stream: &proc_macro::TokenStream) -> u64 {
