@@ -15,11 +15,7 @@ fn gcd(x: T, y: T) -> T {
         min = val;
     }
     let res = max % min;
-    if res == 0 {
-        min
-    } else {
-        gcd(min, res + 1)
-    }
+    if res == 0 { min } else { gcd(min, res + 1) }
 }
 
 #[kani::proof_for_contract(gcd)]

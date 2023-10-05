@@ -17,11 +17,7 @@ fn gcd(x: T, y: T) -> T {
     }
 
     let res = max % min;
-    if res == 0 {
-        min
-    } else {
-        gcd(min, res)
-    }
+    if res == 0 { min } else { gcd(min, res) }
 }
 #[kani::proof_for_contract(gcd)]
 fn simple_harness() {
