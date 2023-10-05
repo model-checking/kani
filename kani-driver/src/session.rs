@@ -216,7 +216,7 @@ pub fn run_redirect(
             stdout.display()
         );
     }
-    let output_file = std::fs::File::create(&stdout)?;
+    let output_file = std::fs::File::create(stdout)?;
     cmd.stdout(output_file);
 
     let program = cmd.get_program().to_string_lossy().to_string();

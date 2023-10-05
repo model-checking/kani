@@ -206,7 +206,7 @@ pub fn add_verification_job(litani: &mut Litani, test_props: &TestProps) {
     // Add `--function main` so we can run these without having to amend them to add `#[kani::proof]`.
     // Some of test_props.kani_args will contains `--cbmc-args` so we should always put that last.
     kani.arg(&test_props.path)
-        .args(&["--enable-unstable", "--function", "main"])
+        .args(["--enable-unstable", "--function", "main"])
         .args(&test_props.kani_args);
     if !test_props.rustc_args.is_empty() {
         kani.env("RUSTFLAGS", test_props.rustc_args.join(" "));
