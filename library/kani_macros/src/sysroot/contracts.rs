@@ -772,6 +772,8 @@ fn requires_ensures_main(attr: TokenStream, item: TokenStream, is_requires: bool
 
             let check_fn_name = identifier_for_generated_function(&item_fn, "check", item_hash);
             let replace_fn_name = identifier_for_generated_function(&item_fn, "replace", item_hash);
+            let recursion_wrapper_name =
+                identifier_for_generated_function(&item_fn, "recursion_wrapper", item_hash);
 
             // Constructing string literals explicitly here, because `stringify!`
             // doesn't work. Let's say we have an identifier `check_fn` and we were
@@ -781,7 +783,8 @@ fn requires_ensures_main(attr: TokenStream, item: TokenStream, is_requires: bool
             // instead the *expression* `stringify!(check_fn)`.
             let replace_fn_name_str =
                 syn::LitStr::new(&replace_fn_name.to_string(), Span::call_site());
-            let check_fn_name_str = syn::LitStr::new(&check_fn_name.to_string(), Span::call_site());
+            let recursion_wrapper_name_str =
+                syn::LitStr::new(&recursion_wrapper_name.to_string(), Span::call_site());
 
             // The order of `attrs` and `kanitool::{checked_with,
             // is_contract_generated}` is important here, because macros are
@@ -794,10 +797,37 @@ fn requires_ensures_main(attr: TokenStream, item: TokenStream, is_requires: bool
             let ItemFn { attrs, vis, sig, block } = &item_fn;
             handler.output.extend(quote!(
                 #(#attrs)*
-                #[kanitool::checked_with = #check_fn_name_str]
+                #[kanitool::checked_with = #recursion_wrapper_name_str]
                 #[kanitool::replaced_with = #replace_fn_name_str]
                 #vis #sig {
                     #block
+                }
+            ));
+
+            let mut wrapper_sig = sig.clone();
+            wrapper_sig.ident = recursion_wrapper_name;
+
+            let args = pats_to_idents(&mut wrapper_sig.inputs).collect::<Vec<_>>();
+            let also_args = args.iter();
+            let (call_check, call_replace) = if is_probably_impl_fn(sig) {
+                (quote!(Self::#check_fn_name), quote!(Self::#replace_fn_name))
+            } else {
+                (quote!(#check_fn_name), quote!(#replace_fn_name))
+            };
+
+            handler.output.extend(quote!(
+                #[allow(dead_code, unused_variables)]
+                #[kanitool::is_contract_generated(recursion_wrapper)]
+                #wrapper_sig {
+                    static mut REENTRY: bool = false;
+                    if unsafe { REENTRY } {
+                        #call_replace(#(#args),*)
+                    } else {
+                        unsafe { REENTRY = true };
+                        let result = #call_check(#(#also_args),*);
+                        unsafe { REENTRY = false };
+                        result
+                    }
                 }
             ));
 
@@ -807,6 +837,40 @@ fn requires_ensures_main(attr: TokenStream, item: TokenStream, is_requires: bool
     }
 
     output.into()
+}
+
+fn pats_to_idents<P>(sig: &mut syn::punctuated::Punctuated<syn::FnArg, P>) -> impl Iterator<Item=Ident> + '_ {
+    sig.iter_mut().enumerate().map(|(i, arg)| match arg {
+        syn::FnArg::Receiver(_) => Ident::new("self", Span::call_site()),
+        syn::FnArg::Typed(syn::PatType {
+            pat, ..
+        }) => {
+            let ident = Ident::new(&format!("arg{i}"), Span::mixed_site());
+            *pat.as_mut() = syn::Pat::Ident(syn::PatIdent {
+                attrs: vec![],
+                by_ref: None,
+                mutability: None,
+                ident: ident.clone(),
+                subpat: None,
+            });
+            ident
+        }
+    })
+}
+
+struct SelfDetector(bool);
+
+impl<'ast> Visit<'ast> for SelfDetector {
+    fn visit_path(&mut self, i: &'ast syn::Path) {
+        self.0 |= i.get_ident().map_or(false, |i| i == "self")
+            || i.get_ident().map_or(false, |i| i == "Self")
+    }
+}
+
+fn is_probably_impl_fn(sig: &Signature) -> bool {
+    let mut self_detector = SelfDetector(false);
+    self_detector.visit_signature(sig);
+    self_detector.0
 }
 
 /// This is very similar to the kani_attribute macro, but it instead creates
