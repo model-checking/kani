@@ -3,9 +3,9 @@
 #
 # Auto label PRs based on the files that were changed
 #
-# This PR runs on `pull_request_target` because it needs extra write permission.
+# This workflow runs on `pull_request_target` because it needs extra write permission.
 #
-# Thus, we keep this workflow minimal, and the only action used here is from a
+# Thus, we keep this workflow minimal, and the only actions used here are from the same
 # verified publisher.
 #
 # See <https://github.com/actions/labeler/issues/121> for more details.
@@ -24,7 +24,16 @@ jobs:
       uses: actions/checkout@v3
 
     - name: Label PR
+      id: labeler
       uses: actions/labeler@v4
       with:
         dot: true
 
+    - name: Trigger Benchmarks
+      # Use restrictive permissions.
+      permissions: {}
+      if: contains(steps.labeler.outputs.all-labels, 'Z-BenchCI')
+      uses: ./.github/workflows/bench.yml
+      with:
+        base: ${{ github.event.pull_request.base.sha }}
+        head: ${{ github.event.pull_request.head.sha }}
