@@ -242,7 +242,7 @@ impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {
         T: TypeFoldable<TyCtxt<'tcx>>,
     {
         trace!(instance=?self.instance, ?value, "monomorphize");
-        self.instance.subst_mir_and_normalize_erasing_regions(
+        self.instance.instantiate_mir_and_normalize_erasing_regions(
             self.tcx,
             ParamEnv::reveal_all(),
             EarlyBinder::bind(value),
@@ -519,7 +519,7 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
                                 // even the return type, for instance for a
                                 // trait like `FromIterator`.
                                 let generic_ty = outer_args[0].ty(self.body, tcx).peel_refs();
-                                let receiver_ty = tcx.subst_and_normalize_erasing_regions(
+                                let receiver_ty = tcx.instantiate_and_normalize_erasing_regions(
                                     substs,
                                     ParamEnv::reveal_all(),
                                     EarlyBinder::bind(generic_ty),

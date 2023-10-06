@@ -201,7 +201,7 @@ impl<'tcx> GotocHook<'tcx> for Panic {
     fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
         let def_id = instance.def.def_id();
         Some(def_id) == tcx.lang_items().panic_fn()
-            || Some(def_id) == tcx.lang_items().panic_display()
+            || tcx.has_attr(def_id, rustc_span::sym::rustc_const_panic_str)
             || Some(def_id) == tcx.lang_items().panic_fmt()
             || Some(def_id) == tcx.lang_items().begin_panic_fn()
             || matches_function(tcx, instance, "KaniPanic")
