@@ -427,7 +427,7 @@ fn check_no_cargo_opt(is_set: bool, name: &str) -> Result<(), Error> {
     if is_set {
         Err(Error::raw(
             ErrorKind::UnknownArgument,
-            &format!("argument `{}` cannot be used with standalone Kani.", name),
+            format!("argument `{}` cannot be used with standalone Kani.", name),
         ))
     } else {
         Ok(())
@@ -453,7 +453,7 @@ impl ValidateArgs for StandaloneArgs {
             if !input.is_file() {
                 return Err(Error::raw(
                     ErrorKind::InvalidValue,
-                    &format!(
+                    format!(
                         "Invalid argument: Input invalid. `{}` is not a regular file.",
                         input.display()
                     ),
@@ -583,7 +583,7 @@ impl ValidateArgs for VerificationArgs {
             if out_dir.exists() && !out_dir.is_dir() {
                 return Err(Error::raw(
                     ErrorKind::InvalidValue,
-                    &format!(
+                    format!(
                         "Invalid argument: `--target-dir` argument `{}` is not a directory",
                         out_dir.display()
                     ),

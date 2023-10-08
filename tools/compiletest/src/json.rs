@@ -63,7 +63,7 @@ pub fn extract_rendered(output: &str) -> String {
                                 String::new(),
                                 |mut output, item| {
                                     use std::fmt::Write;
-                                    let _ = write!(output, "Future breakage diagnostic:\n");
+                                    let _ = writeln!(output, "Future breakage diagnostic:");
                                     let s = item
                                         .diagnostic
                                         .rendered

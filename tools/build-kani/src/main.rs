@@ -83,7 +83,7 @@ fn bundle_kani(dir: &Path) -> Result<()> {
 
     // 2. Kani scripts
     let scripts = dir.join("scripts");
-    std::fs::create_dir(&scripts)?;
+    std::fs::create_dir(scripts)?;
 
     // 3. Kani libraries
     let library = dir.join("library");
@@ -148,7 +148,7 @@ fn bundle_kissat(dir: &Path) -> Result<()> {
 /// This should include all files as `dir/<path>` in the tarball.
 /// e.g. `kani-1.0/bin/kani-compiler` not just `bin/kani-compiler`.
 fn create_release_bundle(dir: &Path, bundle: &str) -> Result<()> {
-    Command::new("tar").args(&["zcf", bundle]).arg(dir).run()
+    Command::new("tar").args(["zcf", bundle]).arg(dir).run()
 }
 
 /// Helper trait to fallibly run commands

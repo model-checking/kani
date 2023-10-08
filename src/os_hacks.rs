@@ -61,8 +61,8 @@ pub fn setup_python_deps_on_ubuntu_18_04(pyroot: &Path, pkg_versions: &[&str]) -
 
     // Step 1: use `--system --prefix pyroot`. This disables the broken behavior, and creates `bin` but...
     Command::new("python3")
-        .args(&["-m", "pip", "install", "--system", "--prefix"])
-        .arg(&pyroot)
+        .args(["-m", "pip", "install", "--system", "--prefix"])
+        .arg(pyroot)
         .args(pkg_versions)
         .run()?;
 
@@ -128,7 +128,7 @@ fn setup_nixos_patchelf(kani_dir: &Path) -> Result<()> {
     // Find the correct path to link C++ stdlib:
     // `rpath=$(nix-instantiate --eval -E "(import <nixpkgs> {}).stdenv.cc.cc.lib.outPath")/lib`
     let rpath_output = Command::new("nix-instantiate")
-        .args(&["--eval", "-E", "(import <nixpkgs> {}).stdenv.cc.cc.lib.outPath"])
+        .args(["--eval", "-E", "(import <nixpkgs> {}).stdenv.cc.cc.lib.outPath"])
         .output()?;
     if !rpath_output.status.success() {
         bail!("Failed to find C++ standard library with `nix-instantiate`");
@@ -139,10 +139,10 @@ fn setup_nixos_patchelf(kani_dir: &Path) -> Result<()> {
     let rpath = format!("{rpath_prefix}/lib");
 
     let patch_interp = |file: &Path| -> Result<()> {
-        Command::new("patchelf").args(&["--set-interpreter", interp]).arg(file).run()
+        Command::new("patchelf").args(["--set-interpreter", interp]).arg(file).run()
     };
     let patch_rpath = |file: &Path| -> Result<()> {
-        Command::new("patchelf").args(&["--set-rpath", &rpath]).arg(file).run()
+        Command::new("patchelf").args(["--set-rpath", &rpath]).arg(file).run()
     };
 
     let bin = kani_dir.join("bin");

@@ -37,8 +37,8 @@ use rustc_metadata::fs::{emit_wrapper_file, METADATA_FILENAME};
 use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
 use rustc_middle::mir::mono::MonoItem;
-use rustc_middle::query::{ExternProviders, Providers};
 use rustc_middle::ty::TyCtxt;
+use rustc_middle::util::Providers;
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::cstore::MetadataLoaderDyn;
 use rustc_session::output::out_filename;
@@ -193,10 +193,6 @@ impl CodegenBackend for GotocCodegenBackend {
         provide::provide(providers, &self.queries.lock().unwrap());
     }
 
-    fn provide_extern(&self, providers: &mut ExternProviders) {
-        provide::provide_extern(providers, &self.queries.lock().unwrap());
-    }
-
     fn print_version(&self) {
         println!("Kani-goto version: {}", env!("CARGO_PKG_VERSION"));
     }
@@ -271,7 +267,7 @@ impl CodegenBackend for GotocCodegenBackend {
                         if let MonoItem::Fn(instance) = test_fn { instance } else { continue };
                     let metadata = gen_test_metadata(tcx, *test_desc, *instance, &base_filename);
                     let test_model_path = &metadata.goto_file.as_ref().unwrap();
-                    std::fs::copy(&model_path, &test_model_path).expect(&format!(
+                    std::fs::copy(&model_path, test_model_path).expect(&format!(
                         "Failed to copy {} to {}",
                         model_path.display(),
                         test_model_path.display()

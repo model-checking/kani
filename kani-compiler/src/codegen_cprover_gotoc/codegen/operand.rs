@@ -6,10 +6,8 @@ use crate::unwrap_or_return_codegen_unimplemented;
 use cbmc::btree_string_map;
 use cbmc::goto_program::{DatatypeComponent, Expr, ExprValue, Location, Stmt, Symbol, Type};
 use rustc_ast::ast::Mutability;
-use rustc_middle::mir::interpret::{
-    read_target_uint, AllocId, Allocation, ConstValue, GlobalAlloc, Scalar,
-};
-use rustc_middle::mir::{Constant, ConstantKind, Operand, UnevaluatedConst};
+use rustc_middle::mir::interpret::{read_target_uint, AllocId, Allocation, GlobalAlloc, Scalar};
+use rustc_middle::mir::{Const as mirConst, ConstOperand, ConstValue, Operand, UnevaluatedConst};
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{self, Const, ConstKind, FloatTy, Instance, IntTy, Ty, Uint, UintTy};
 use rustc_span::def_id::DefId;
@@ -56,13 +54,13 @@ impl<'tcx> GotocCtx<'tcx> {
     /// 1. `Ty` means e.g. that it's a const generic parameter. (See `codegen_const`)
     /// 2. `Val` means it's a constant value of various kinds. (See `codegen_const_value`)
     /// 3. `Unevaluated` means we need to run the interpreter, to get a `ConstValue`. (See `codegen_const_unevaluated`)
-    fn codegen_constant(&mut self, c: &Constant<'tcx>) -> Expr {
+    fn codegen_constant(&mut self, c: &ConstOperand<'tcx>) -> Expr {
         trace!(constant=?c, "codegen_constant");
         let span = Some(&c.span);
-        match self.monomorphize(c.literal) {
-            ConstantKind::Ty(ct) => self.codegen_const(ct, span),
-            ConstantKind::Val(val, ty) => self.codegen_const_value(val, ty, span),
-            ConstantKind::Unevaluated(unevaluated, ty) => {
+        match self.monomorphize(c.const_) {
+            mirConst::Ty(ct) => self.codegen_const(ct, span),
+            mirConst::Val(val, ty) => self.codegen_const_value(val, ty, span),
+            mirConst::Unevaluated(unevaluated, ty) => {
                 self.codegen_const_unevaluated(unevaluated, ty, span)
             }
         }
@@ -125,8 +123,8 @@ impl<'tcx> GotocCtx<'tcx> {
         trace!(val=?v, ?lit_ty, "codegen_const_value");
         match v {
             ConstValue::Scalar(s) => self.codegen_scalar(s, lit_ty, span),
-            ConstValue::Slice { data, start, end } => {
-                self.codegen_slice_value(v, lit_ty, span, data.inner(), start, end)
+            ConstValue::Slice { data, meta } => {
+                self.codegen_slice_value(v, lit_ty, span, data.inner(), meta.try_into().unwrap())
             }
             ConstValue::Indirect { alloc_id, offset } => {
                 let alloc = self.tcx.global_alloc(alloc_id).unwrap_memory();
@@ -155,15 +153,12 @@ impl<'tcx> GotocCtx<'tcx> {
         lit_ty: Ty<'tcx>,
         span: Option<&Span>,
         data: &'tcx Allocation,
-        start: usize,
-        end: usize,
+        size: usize,
     ) -> Expr {
         if let ty::Ref(_, ref_ty, _) = lit_ty.kind() {
             match ref_ty.kind() {
                 ty::Str => {
                     // a string literal
-                    // These seem to always start at 0
-                    assert_eq!(start, 0);
                     // Create a static variable that holds its value
                     let mem_var = self.codegen_const_allocation(data, None);
 
@@ -179,7 +174,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     };
 
                     // Extract the actual string literal
-                    let slice = data.inspect_with_uninit_and_ptr_outside_interpreter(start..end);
+                    let slice = data.inspect_with_uninit_and_ptr_outside_interpreter(0..size);
                     let s = ::std::str::from_utf8(slice).expect("non utf8 str from miri");
 
                     // Store the identifier to the string literal in the goto context
@@ -187,7 +182,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
                     // Codegen as a fat pointer
                     let data_expr = mem_var.cast_to(Type::unsigned_int(8).to_pointer());
-                    let len_expr = Expr::int_constant(end - start, Type::size_t());
+                    let len_expr = Expr::int_constant(size, Type::size_t());
                     return slice_fat_ptr(
                         self.codegen_ty(lit_ty),
                         data_expr,
@@ -198,8 +193,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 ty::Slice(slice_ty) => {
                     if let Uint(UintTy::U8) = slice_ty.kind() {
                         let mem_var = self.codegen_const_allocation(data, None);
-                        let slice =
-                            data.inspect_with_uninit_and_ptr_outside_interpreter(start..end);
+                        let slice = data.inspect_with_uninit_and_ptr_outside_interpreter(0..size);
                         let len = slice.len();
                         let data_expr = mem_var.cast_to(Type::unsigned_int(8).to_pointer());
                         let len_expr = Expr::int_constant(len, Type::size_t());
@@ -561,7 +555,7 @@ impl<'tcx> GotocCtx<'tcx> {
         }
 
         let mem_place =
-            self.symbol_table.lookup(&self.alloc_map.get(&alloc).unwrap()).unwrap().to_expr();
+            self.symbol_table.lookup(self.alloc_map.get(&alloc).unwrap()).unwrap().to_expr();
         mem_place.address_of()
     }
 
@@ -579,16 +573,16 @@ impl<'tcx> GotocCtx<'tcx> {
         // initializers. For example, for a boolean static variable, the variable will have type
         // CBool and the initializer will be a single byte (a one-character array) representing the
         // bit pattern for the boolean value.
-        let alloc_typ_ref = self.ensure_struct(&struct_name, &struct_name, |ctx, _| {
+        let alloc_typ_ref = self.ensure_struct(struct_name, struct_name, |ctx, _| {
             ctx.codegen_allocation_data(alloc)
                 .iter()
                 .enumerate()
                 .map(|(i, d)| match d {
                     AllocData::Bytes(bytes) => DatatypeComponent::field(
-                        &i.to_string(),
+                        i.to_string(),
                         Type::unsigned_int(8).array_of(bytes.len()),
                     ),
-                    AllocData::Expr(e) => DatatypeComponent::field(&i.to_string(), e.typ().clone()),
+                    AllocData::Expr(e) => DatatypeComponent::field(i.to_string(), e.typ().clone()),
                 })
                 .collect()
         });

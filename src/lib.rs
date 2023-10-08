@@ -16,11 +16,11 @@ mod cmd;
 mod os_hacks;
 mod setup;
 
-use std::env;
 use std::ffi::OsString;
 use std::os::unix::prelude::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::{env, fs};
 
 use anyhow::{bail, Context, Result};
 
@@ -33,6 +33,15 @@ pub fn proxy(bin: &str) -> Result<()> {
             fail_if_in_dev_environment()?;
             if !setup::appears_setup() {
                 setup::setup(None)?;
+            } else {
+                // This handles cases where the setup was left incomplete due to an interrupt
+                // For example - https://github.com/model-checking/kani/issues/1545
+                if let Some(path_to_bundle) = setup::appears_incomplete() {
+                    setup::setup(Some(path_to_bundle.clone().into_os_string()))?;
+                    // Suppress warning with unused assignment
+                    // and remove the bundle if it still exists
+                    let _ = fs::remove_file(path_to_bundle);
+                }
             }
             exec(bin)
         }

@@ -22,11 +22,11 @@ use rustc_data_structures::stable_hasher::{HashStable, StableHasher};
 use rustc_hir::def::DefKind;
 use rustc_hir::def_id::DefId;
 use rustc_hir::ItemId;
-use rustc_middle::mir::interpret::{AllocId, ConstValue, ErrorHandled, GlobalAlloc, Scalar};
+use rustc_middle::mir::interpret::{AllocId, ErrorHandled, GlobalAlloc, Scalar};
 use rustc_middle::mir::mono::MonoItem;
 use rustc_middle::mir::visit::Visitor as MirVisitor;
 use rustc_middle::mir::{
-    Body, CastKind, Constant, ConstantKind, Location, Rvalue, Terminator, TerminatorKind,
+    Body, CastKind, Const, ConstOperand, ConstValue, Location, Rvalue, Terminator, TerminatorKind,
     UnevaluatedConst,
 };
 use rustc_middle::span_bug;
@@ -242,7 +242,7 @@ impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {
         T: TypeFoldable<TyCtxt<'tcx>>,
     {
         trace!(instance=?self.instance, ?value, "monomorphize");
-        self.instance.subst_mir_and_normalize_erasing_regions(
+        self.instance.instantiate_mir_and_normalize_erasing_regions(
             self.tcx,
             ParamEnv::reveal_all(),
             EarlyBinder::bind(value),
@@ -322,7 +322,7 @@ impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {
             ConstValue::Scalar(Scalar::Ptr(ptr, _size)) => {
                 self.collected.extend(collect_alloc_items(self.tcx, ptr.provenance).iter());
             }
-            ConstValue::Slice { data: alloc, start: _, end: _ } => {
+            ConstValue::Slice { data: alloc, .. } => {
                 for id in alloc.inner().provenance().provenances() {
                     self.collected.extend(collect_alloc_items(self.tcx, id).iter())
                 }
@@ -435,12 +435,12 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
     }
 
     /// Collect constants that are represented as static variables.
-    fn visit_constant(&mut self, constant: &Constant<'tcx>, location: Location) {
-        let literal = self.monomorphize(constant.literal);
-        debug!(?constant, ?location, ?literal, "visit_constant");
-        let val = match literal {
-            ConstantKind::Val(const_val, _) => const_val,
-            ConstantKind::Ty(ct) => match ct.kind() {
+    fn visit_constant(&mut self, constant: &ConstOperand<'tcx>, location: Location) {
+        let const_ = self.monomorphize(constant.const_);
+        debug!(?constant, ?location, ?const_, "visit_constant");
+        let val = match const_ {
+            Const::Val(const_val, _) => const_val,
+            Const::Ty(ct) => match ct.kind() {
                 ConstKind::Value(v) => self.tcx.valtree_to_const_val((ct.ty(), v)),
                 ConstKind::Unevaluated(_) => unreachable!(),
                 // Nothing to do
@@ -454,7 +454,7 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
                     unreachable!("Unexpected constant type {:?} ({:?})", ct, ct.kind())
                 }
             },
-            ConstantKind::Unevaluated(un_eval, _) => {
+            Const::Unevaluated(un_eval, _) => {
                 // Thread local fall into this category.
                 match self.tcx.const_eval_resolve(ParamEnv::reveal_all(), un_eval, None) {
                     // The `monomorphize` call should have evaluated that constant already.
@@ -473,8 +473,8 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
                             span_bug!(
                                 span,
                                 "Unexpected polymorphic constant: {:?} {:?}",
-                                literal,
-                                constant.literal
+                                const_,
+                                constant.const_
                             )
                         }
                     }
@@ -519,7 +519,7 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
                                 // even the return type, for instance for a
                                 // trait like `FromIterator`.
                                 let generic_ty = outer_args[0].ty(self.body, tcx).peel_refs();
-                                let receiver_ty = tcx.subst_and_normalize_erasing_regions(
+                                let receiver_ty = tcx.instantiate_and_normalize_erasing_regions(
                                     substs,
                                     ParamEnv::reveal_all(),
                                     EarlyBinder::bind(generic_ty),
@@ -725,7 +725,7 @@ mod debug {
                 debug!(?target, "dump_dot");
                 let outputs = tcx.output_filenames(());
                 let path = outputs.output_path(OutputType::Metadata).with_extension("dot");
-                let out_file = File::create(&path)?;
+                let out_file = File::create(path)?;
                 let mut writer = BufWriter::new(out_file);
                 writeln!(writer, "digraph ReachabilityGraph {{")?;
                 if target.is_empty() {

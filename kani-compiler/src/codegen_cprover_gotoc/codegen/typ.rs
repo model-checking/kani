@@ -424,7 +424,7 @@ impl<'tcx> GotocCtx<'tcx> {
     {
         // Instance is Some(..) only when current codegen unit is a function.
         if let Some(current_fn) = &self.current_fn {
-            current_fn.instance().subst_mir_and_normalize_erasing_regions(
+            current_fn.instance().instantiate_mir_and_normalize_erasing_regions(
                 self.tcx,
                 ty::ParamEnv::reveal_all(),
                 ty::EarlyBinder::bind(value),
@@ -813,11 +813,7 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Bound(_, _) | ty::Param(_) => unreachable!("monomorphization bug"),
 
             // type checking remnants which shouldn't be reachable
-            ty::GeneratorWitness(_)
-            | ty::GeneratorWitnessMIR(_, _)
-            | ty::Infer(_)
-            | ty::Placeholder(_)
-            | ty::Error(_) => {
+            ty::GeneratorWitness(_, _) | ty::Infer(_) | ty::Placeholder(_) | ty::Error(_) => {
                 unreachable!("remnants of type checking")
             }
         }
@@ -864,7 +860,7 @@ impl<'tcx> GotocCtx<'tcx> {
             // We need to pad to the next offset
             let padding_size = next_offset - current_offset;
             let name = format!("$pad{idx}");
-            Some(DatatypeComponent::padding(&name, padding_size.bits()))
+            Some(DatatypeComponent::padding(name, padding_size.bits()))
         } else {
             None
         }
@@ -1254,8 +1250,7 @@ impl<'tcx> GotocCtx<'tcx> {
             // For soundness, hold off on generating them till we have test-cases.
             ty::Bound(_, _) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Error(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
-            ty::GeneratorWitness(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
-            ty::GeneratorWitnessMIR(_, _) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
+            ty::GeneratorWitness(_, _) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Infer(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Param(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Placeholder(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
@@ -1378,7 +1373,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 .iter()
                 .map(|f| {
                     DatatypeComponent::field(
-                        &f.name.to_string(),
+                        f.name.to_string(),
                         ctx.codegen_ty(f.ty(ctx.tcx, subst)),
                     )
                 })
@@ -1641,7 +1636,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     None
                 } else {
                     Some(DatatypeComponent::field(
-                        &case.name.to_string(),
+                        case.name.to_string(),
                         self.codegen_enum_case_struct(
                             name,
                             pretty_name,

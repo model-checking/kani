@@ -260,7 +260,6 @@ impl<'tcx> GotocCtx<'tcx> {
                     | ty::Never
                     | ty::FnDef(..)
                     | ty::GeneratorWitness(..)
-                    | ty::GeneratorWitnessMIR(..)
                     | ty::Foreign(..)
                     | ty::Dynamic(..)
                     | ty::Bound(..)
@@ -268,8 +267,10 @@ impl<'tcx> GotocCtx<'tcx> {
                     | ty::Param(_)
                     | ty::Infer(_)
                     | ty::Error(_) => unreachable!("type {parent_ty:?} does not have a field"),
-                    ty::Tuple(_) => Ok(parent_expr
-                        .member(&Self::tuple_fld_name(field.index()), &self.symbol_table)),
+                    ty::Tuple(_) => {
+                        Ok(parent_expr
+                            .member(Self::tuple_fld_name(field.index()), &self.symbol_table))
+                    }
                     ty::Adt(def, _) if def.repr().simd() => Ok(self.codegen_simd_field(
                         parent_expr,
                         *field,
@@ -278,10 +279,10 @@ impl<'tcx> GotocCtx<'tcx> {
                     // if we fall here, then we are handling either a struct or a union
                     ty::Adt(def, _) => {
                         let field = &def.variants().raw[0].fields[*field];
-                        Ok(parent_expr.member(&field.name.to_string(), &self.symbol_table))
+                        Ok(parent_expr.member(field.name.to_string(), &self.symbol_table))
                     }
                     ty::Closure(..) => {
-                        Ok(parent_expr.member(&field.index().to_string(), &self.symbol_table))
+                        Ok(parent_expr.member(field.index().to_string(), &self.symbol_table))
                     }
                     ty::Generator(..) => {
                         let field_name = self.generator_field_name(field.as_usize());
@@ -299,7 +300,7 @@ impl<'tcx> GotocCtx<'tcx> {
             // if we fall here, then we are handling an enum
             TypeOrVariant::Variant(parent_var) => {
                 let field = &parent_var.fields[*field];
-                Ok(parent_expr.member(&field.name.to_string(), &self.symbol_table))
+                Ok(parent_expr.member(field.name.to_string(), &self.symbol_table))
             }
             TypeOrVariant::GeneratorVariant(_var_idx) => {
                 let field_name = self.generator_field_name(field.index());
@@ -603,13 +604,15 @@ impl<'tcx> GotocCtx<'tcx> {
                     self,
                 )
             }
-            ProjectionElem::OpaqueCast(ty) => ProjectedPlace::try_new(
-                before.goto_expr.cast_to(self.codegen_ty(ty)),
-                TypeOrVariant::Type(ty),
-                before.fat_ptr_goto_expr,
-                before.fat_ptr_mir_typ,
-                self,
-            ),
+            ProjectionElem::OpaqueCast(ty) | ProjectionElem::Subtype(ty) => {
+                ProjectedPlace::try_new(
+                    before.goto_expr.cast_to(self.codegen_ty(self.monomorphize(ty))),
+                    TypeOrVariant::Type(ty),
+                    before.fat_ptr_goto_expr,
+                    before.fat_ptr_mir_typ,
+                    self,
+                )
+            }
         }
     }
 
