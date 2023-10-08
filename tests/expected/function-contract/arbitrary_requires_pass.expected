@@ -1,4 +1,4 @@
-div.arithmetic_overflow\
+arithmetic_overflow\
 - Status: SUCCESS\
 - Description: "attempt to divide by zero"\
 in function div
