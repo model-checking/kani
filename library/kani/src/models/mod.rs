@@ -157,7 +157,7 @@ mod test {
     #[test]
     #[should_panic(expected = "Expected size of return type and mask lanes to match")]
     fn test_invalid_generics() {
-        let mask = unsafe { mask32x16::splat(false) };
+        let mask = mask32x16::splat(false);
         assert_eq!(unsafe { kani_intrinsic::simd_bitmask::<_, u16, i32, 2>(mask) }, u16::MAX);
     }
 
