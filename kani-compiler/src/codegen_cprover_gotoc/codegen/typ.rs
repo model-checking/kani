@@ -20,8 +20,8 @@ use rustc_middle::ty::{
 use rustc_middle::ty::{List, TypeFoldable};
 use rustc_span::def_id::DefId;
 use rustc_target::abi::{
-    Abi::Vector, FieldsShape, Integer, LayoutS, Primitive, Size, TagEncoding, TyAndLayout,
-    VariantIdx, Variants,
+    Abi::Vector, FieldIdx, FieldsShape, Integer, LayoutS, Primitive, Size, TagEncoding,
+    TyAndLayout, VariantIdx, Variants,
 };
 use rustc_target::spec::abi::Abi;
 use std::iter;
@@ -870,7 +870,7 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_alignment_padding(
         &self,
         size: Size,
-        layout: &LayoutS,
+        layout: &LayoutS<FieldIdx, VariantIdx>,
         idx: usize,
     ) -> Option<DatatypeComponent> {
         let align = Size::from_bits(layout.align.abi.bits());
@@ -895,7 +895,7 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_struct_fields(
         &mut self,
         flds: Vec<(String, Ty<'tcx>)>,
-        layout: &LayoutS,
+        layout: &LayoutS<FieldIdx, VariantIdx>,
         initial_offset: Size,
     ) -> Vec<DatatypeComponent> {
         match &layout.fields {
@@ -1352,7 +1352,7 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         variant: &VariantDef,
         subst: &'tcx GenericArgsRef<'tcx>,
-        layout: &LayoutS,
+        layout: &LayoutS<FieldIdx, VariantIdx>,
         initial_offset: Size,
     ) -> Vec<DatatypeComponent> {
         let flds: Vec<_> =
@@ -1521,7 +1521,7 @@ impl<'tcx> GotocCtx<'tcx> {
         ty: Ty<'tcx>,
         adtdef: &'tcx AdtDef,
         subst: &'tcx GenericArgsRef<'tcx>,
-        variants: &IndexVec<VariantIdx, LayoutS>,
+        variants: &IndexVec<VariantIdx, LayoutS<FieldIdx, VariantIdx>>,
     ) -> Type {
         let non_zst_count = variants.iter().filter(|layout| layout.size.bytes() > 0).count();
         let mangled_name = self.ty_mangled_name(ty);
@@ -1540,7 +1540,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     pub(crate) fn variant_min_offset(
         &self,
-        variants: &IndexVec<VariantIdx, LayoutS>,
+        variants: &IndexVec<VariantIdx, LayoutS<FieldIdx, VariantIdx>>,
     ) -> Option<Size> {
         variants
             .iter()
@@ -1625,7 +1625,7 @@ impl<'tcx> GotocCtx<'tcx> {
         pretty_name: InternedString,
         def: &'tcx AdtDef,
         subst: &'tcx GenericArgsRef<'tcx>,
-        layouts: &IndexVec<VariantIdx, LayoutS>,
+        layouts: &IndexVec<VariantIdx, LayoutS<FieldIdx, VariantIdx>>,
         initial_offset: Size,
     ) -> Vec<DatatypeComponent> {
         def.variants()
@@ -1657,7 +1657,7 @@ impl<'tcx> GotocCtx<'tcx> {
         pretty_name: InternedString,
         case: &VariantDef,
         subst: &'tcx GenericArgsRef<'tcx>,
-        variant: &LayoutS,
+        variant: &LayoutS<FieldIdx, VariantIdx>,
         initial_offset: Size,
     ) -> Type {
         let case_name = format!("{name}::{}", case.name);
