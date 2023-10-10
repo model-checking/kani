@@ -125,7 +125,7 @@
 //!
 //! ## Inductive Verification
 //!
-//! To to efficiently check recursive functions we verify them inductively. To
+//! To efficiently check recursive functions we verify them inductively. To
 //! be able to do this we need both the check and replace functions we have seen
 //! before.
 //!
@@ -153,7 +153,7 @@
 //!
 //! ```ignored
 //! fn recursion_wrapper_...(fn args ...) {
-//!     static REENTRY: bool = false;
+//!     static mut REENTRY: bool = false;
 //!
 //!     if unsafe { REENTRY } {
 //!         call_replace(fn args...)
@@ -217,7 +217,7 @@
 //! #[allow(unused_variables)]
 //! #[kanitool::is_contract_generated(recursion_wrapper)]
 //! fn div_recursion_wrapper_965916(dividend: u32, divisor: u32) -> u32 {
-//!     static REENTRY: bool = false;
+//!     static mut REENTRY: bool = false;
 //!
 //!     if unsafe { REENTRY } {
 //!         div_replace_965916(dividend, divisor)
