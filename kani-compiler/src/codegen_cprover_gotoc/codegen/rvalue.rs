@@ -17,13 +17,12 @@ use cbmc::goto_program::{
 use cbmc::MachineModel;
 use cbmc::{btree_string_map, InternString, InternedString};
 use num::bigint::BigInt;
-use rustc_abi::FieldIdx;
 use rustc_index::IndexVec;
 use rustc_middle::mir::{AggregateKind, BinOp, CastKind, NullOp, Operand, Place, Rvalue, UnOp};
 use rustc_middle::ty::adjustment::PointerCoercion;
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{self, Instance, IntTy, Ty, TyCtxt, UintTy, VtblEntry};
-use rustc_target::abi::{FieldsShape, Size, TagEncoding, VariantIdx, Variants};
+use rustc_target::abi::{FieldIdx, FieldsShape, Size, TagEncoding, VariantIdx, Variants};
 use std::collections::BTreeMap;
 use tracing::{debug, trace, warn};
 

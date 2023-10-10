@@ -989,7 +989,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// This is an intrinsic that was added in
-    /// https://github.com/rust-lang/rust/pull/114382 that is essentially the
+    /// <https://github.com/rust-lang/rust/pull/114382> that is essentially the
     /// same as memcmp: it compares two slices up to the specified length.
     /// The implementation is the same as the hook for `memcmp`.
     pub fn codegen_compare_bytes(
