@@ -139,14 +139,14 @@
 //! up upon entry into the body of the function under verification. We use a
 //! global variable that tracks whether we are re-entering the function
 //! recursively and starts off as `false`. On entry to the function we flip the
-//! variable to `true` and dispatch to the check (induction step). if the check
+//! variable to `true` and dispatch to the check (induction step). If the check
 //! recursively calls our function our re-entry tracker now reads `true` and we
 //! dispatch to the replacement (application of induction hypothesis). Because
 //! the replacement function only checks the conditions and does not perform
 //! other computation we will only ever go "one recursion level deep", making
 //! inductive verification very efficient. Once the check function returns we
 //! flip the tracker variable back to `false` in case the function is called
-//! more than one in it's harness.
+//! more than once in its harness.
 //!
 //! To facilitate all this we generate a `<fn_name>_recursion_wrapper_<fn_hash>`
 //! function with the following shape:
