@@ -16,3 +16,19 @@ fn harness() {
     let first = fail_on_two(0);
     let _ = fail_on_two(first);
 }
+
+#[kani::ensures(result < 3)]
+fn fail_on_two_in_postcondition(i: i32) -> i32 {
+    let j = i + 1;
+    if i < 2 {
+        fail_on_two_in_postcondition(j)
+    } else {
+        j
+    }
+}
+
+#[kani::proof_for_contract(fail_on_two_in_postcondition)]
+fn harness2() {
+    let first = fail_on_two_in_postcondition(1);
+    let _ = fail_on_two_in_postcondition(first);
+}
