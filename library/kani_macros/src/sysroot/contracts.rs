@@ -858,6 +858,7 @@ fn requires_ensures_main(attr: TokenStream, item: TokenStream, is_requires: bool
             //
             // The same care is taken when we emit check and replace functions.
             // emit the check function.
+            let is_impl_fn = is_probably_impl_fn(&item_fn);
             let ItemFn { attrs, vis, sig, block } = &item_fn;
             handler.output.extend(quote!(
                 #(#attrs)*
@@ -874,7 +875,7 @@ fn requires_ensures_main(attr: TokenStream, item: TokenStream, is_requires: bool
 
             let args = pats_to_idents(&mut wrapper_sig.inputs).collect::<Vec<_>>();
             let also_args = args.iter();
-            let (call_check, call_replace) = if is_probably_impl_fn(sig) {
+            let (call_check, call_replace) = if is_impl_fn {
                 (quote!(Self::#check_fn_name), quote!(Self::#replace_fn_name))
             } else {
                 (quote!(#check_fn_name), quote!(#replace_fn_name))
@@ -926,8 +927,8 @@ fn pats_to_idents<P>(
 struct SelfDetector(bool);
 
 impl<'ast> Visit<'ast> for SelfDetector {
-    fn visit_path(&mut self, i: &'ast syn::Path) {
-        self.0 |= i.is_ident(&Ident::from(syn::Token![Self](Span::call_site())))
+    fn visit_ident(&mut self, i: &'ast syn::Ident) {
+        self.0 |= i == &Ident::from(syn::Token![Self](Span::mixed_site()))
     }
 
     fn visit_receiver(&mut self, _node: &'ast syn::Receiver) {
@@ -935,9 +936,9 @@ impl<'ast> Visit<'ast> for SelfDetector {
     }
 }
 
-fn is_probably_impl_fn(sig: &Signature) -> bool {
+fn is_probably_impl_fn(fun: &ItemFn) -> bool {
     let mut self_detector = SelfDetector(false);
-    self_detector.visit_signature(sig);
+    self_detector.visit_item_fn(fun);
     self_detector.0
 }
 
@@ -966,3 +967,58 @@ macro_rules! passthrough {
 
 passthrough!(stub_verified, false);
 passthrough!(proof_for_contract, true);
+
+#[cfg(test)]
+mod test {
+    macro_rules! detect_impl_fn {
+        ($expect_pass:expr, $($tt:tt)*) => {{
+            let syntax = stringify!($($tt)*);
+            let ast = syn::parse_str(syntax).unwrap();
+            assert!($expect_pass == super::is_probably_impl_fn(&ast),
+                "Incorrect detection.\nExpected is_impl_fun: {}\nInput Expr; {}\nParsed: {:?}",
+                $expect_pass,
+                syntax,
+                ast
+            );
+        }}
+    }
+
+    #[test]
+    fn detect_impl_fn_by_receiver() {
+        detect_impl_fn!(true, fn self_by_ref(&self, u: usize) -> bool {});
+
+        detect_impl_fn!(true, fn self_by_self(self, u: usize) -> bool {});
+    }
+
+    #[test]
+    fn detect_impl_fn_by_self_ty() {
+        detect_impl_fn!(true, fn self_by_construct(u: usize) -> Self {});
+        detect_impl_fn!(true, fn self_by_wrapped_construct(u: usize) -> Arc<Self> {});
+
+        detect_impl_fn!(true, fn self_by_other_arg(u: usize, slf: Self) {});
+
+        detect_impl_fn!(true, fn self_by_other_wrapped_arg(u: usize, slf: Vec<Self>) {})
+    }
+
+    #[test]
+    fn detect_impl_fn_by_qself() {
+        detect_impl_fn!(
+            true,
+            fn self_by_mention(u: usize) {
+                Self::other(u)
+            }
+        );
+    }
+
+    #[test]
+    fn detect_no_impl_fn() {
+        detect_impl_fn!(
+            false,
+            fn self_by_mention(u: usize) {
+                let self_name = 18;
+                let self_lit = "self";
+                let self_lit = "Self";
+            }
+        );
+    }
+}
