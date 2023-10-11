@@ -2,6 +2,20 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zfunction-contracts
 
+//! The test cases try to ensure applying the hypothesis is only done in
+//! inductive verification of a function call. E.g. on every second encounter of
+//! the called function in its own call stack rather than globally in the
+//! program.
+//!
+//! In each case we have a recursive function that is called and we expect that
+//! the recursive call within the first call has the hypothesis applied. (That's
+//! not actually tested here but separately.)
+//!
+//! Then we call the function again and we've set up the cases such that *if*
+//! the actual body is used then that call with fail (once because of panic,
+//! once because the postcondition is violated). If instead the hypothesis (e.g.
+//! contract replacement) is used we'd expect the verification to succeed.
+
 #[kani::ensures(result < 3)]
 fn fail_on_two(i: i32) -> i32 {
     match i {
