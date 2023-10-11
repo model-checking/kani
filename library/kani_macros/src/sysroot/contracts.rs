@@ -908,7 +908,7 @@ fn pats_to_idents<P>(
     sig: &mut syn::punctuated::Punctuated<syn::FnArg, P>,
 ) -> impl Iterator<Item = Ident> + '_ {
     sig.iter_mut().enumerate().map(|(i, arg)| match arg {
-        syn::FnArg::Receiver(_) => Ident::new("self", Span::call_site()),
+        syn::FnArg::Receiver(_) => Ident::from(syn::Token![self](Span::call_site())),
         syn::FnArg::Typed(syn::PatType { pat, .. }) => {
             let ident = Ident::new(&format!("arg{i}"), Span::mixed_site());
             *pat.as_mut() = syn::Pat::Ident(syn::PatIdent {
@@ -927,8 +927,11 @@ struct SelfDetector(bool);
 
 impl<'ast> Visit<'ast> for SelfDetector {
     fn visit_path(&mut self, i: &'ast syn::Path) {
-        self.0 |= i.get_ident().map_or(false, |i| i == "self")
-            || i.get_ident().map_or(false, |i| i == "Self")
+        self.0 |= i.is_ident(&Ident::from(syn::Token![Self](Span::call_site())))
+    }
+
+    fn visit_receiver(&mut self, node: &'ast Receiver) {
+        self.0 = true;
     }
 }
 
