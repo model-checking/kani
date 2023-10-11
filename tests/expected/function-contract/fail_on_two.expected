@@ -1,0 +1,5 @@
+assertion\
+- Status: FAILURE\
+- Description: "internal error: entered unreachable code: fail on two"
+
+Failed Checks: internal error: entered unreachable code: fail on two
