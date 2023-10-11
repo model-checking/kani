@@ -930,7 +930,7 @@ impl<'ast> Visit<'ast> for SelfDetector {
         self.0 |= i.is_ident(&Ident::from(syn::Token![Self](Span::call_site())))
     }
 
-    fn visit_receiver(&mut self, node: &'ast Receiver) {
+    fn visit_receiver(&mut self, _node: &'ast Receiver) {
         self.0 = true;
     }
 }
