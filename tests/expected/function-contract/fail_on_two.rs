@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zfunction-contracts
 
-
 #[kani::ensures(result < 3)]
 fn fail_on_two(i: i32) -> i32 {
     match i {
