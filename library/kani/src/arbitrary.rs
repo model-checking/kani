@@ -174,7 +174,8 @@ where
 impl Arbitrary for std::time::Duration {
     fn any() -> Self {
         const NANOS_PER_SEC: u32 = 1_000_000_000;
-        let nanos = u32::any() % NANOS_PER_SEC;
+        let nanos = u32::any();
+        crate::assume(nanos < NANOS_PER_SEC);
         std::time::Duration::new(u64::any(), nanos)
     }
 }
