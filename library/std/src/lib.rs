@@ -180,7 +180,10 @@ macro_rules! panic {
     // The argument is a literal that represents the error message, i.e.:
     // `panic!("Error message")`
     ($msg:literal $(,)?) => ({
-        kani::panic(concat!($msg));
+        if false {
+            __kani__workaround_core_assert!(true, $msg);
+        }
+        kani::panic(concat!($msg))
     });
     // The argument is an expression, such as a variable.
     // ```
