@@ -5,11 +5,12 @@ use std::io::Write;
 
 use crate::kani_queries::QueryDb;
 use boogie_ast::boogie_program::{BinaryOp, BoogieProgram, Expr, Literal, Procedure, Stmt, Type};
-use rustc_middle::mir::interpret::{ConstValue, Scalar};
+use rustc_middle::mir::interpret::Scalar;
 use rustc_middle::mir::traversal::reverse_postorder;
 use rustc_middle::mir::{
-    BasicBlock, BasicBlockData, BinOp, Constant, ConstantKind, HasLocalDecls, Local, LocalDecls,
-    Operand, Place, Rvalue, Statement, StatementKind, Terminator, TerminatorKind,
+    BasicBlock, BasicBlockData, BinOp, Const as mirConst, ConstOperand, ConstValue, HasLocalDecls,
+    Local, LocalDecls, Operand, Place, Rvalue, Statement, StatementKind, Terminator,
+    TerminatorKind,
 };
 use rustc_middle::span_bug;
 use rustc_middle::ty::layout::{
@@ -279,11 +280,11 @@ impl<'tcx> BoogieCtx<'tcx> {
         Expr::Symbol { name: format!("{local:?}") }
     }
 
-    fn codegen_constant(&self, c: &Constant<'tcx>) -> Expr {
+    fn codegen_constant(&self, c: &ConstOperand<'tcx>) -> Expr {
         trace!(constant=?c, "codegen_constant");
         // TODO: monomorphize
-        match c.literal {
-            ConstantKind::Val(val, ty) => self.codegen_constant_value(val, ty),
+        match c.const_ {
+            mirConst::Val(val, ty) => self.codegen_constant_value(val, ty),
             _ => todo!(),
         }
     }
