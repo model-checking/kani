@@ -79,3 +79,14 @@ fn check_any_bool() {
 
     assert!(!all_true || !all_false);
 }
+
+#[kani::proof]
+fn check_duration() {
+    let durations: [Duration; 10] = kani::any();
+    let (max, zero): (usize, usize) = kani::any();
+    kani::assume(max < durations.len() && zero < durations.len());
+    kani::assume(durations[max] == Duration::MAX);
+    kani::assume(durations[zero] == Duration::ZERO);
+    assert_eq!(durations.iter().min(), Some(&Duration::ZERO));
+    assert_eq!(durations.iter().max(), Some(&Duration::MAX));
+}
