@@ -18,9 +18,16 @@ KANI_DIR=$SCRIPT_DIR/..
 # TODO: We should add a more robust mechanism to detect python unexpected behavior.
 export KANI_FAIL_ON_UNEXPECTED_DESCRIPTION="true"
 
-# Required dependencies
-check-cbmc-version.py --major 5 --minor 93
-check-cbmc-viewer-version.py --major 3 --minor 8
+# Gather dependencies version from top `kani-dependencies` file.
+source "${KANI_DIR}/kani-dependencies"
+# Sanity check dependencies values.
+[[ "${CBMC_MAJOR}.${CBMC_MINOR}" == "${CBMC_VERSION%.*}" ]] || \
+    (echo "Conflicting CBMC versions"; exit 1)
+[[ "${CBMC_VIEWER_MAJOR}.${CBMC_VIEWER_MINOR}" == "${CBMC_VIEWER_VERSION}" ]] || \
+    (echo "Conflicting CBMC viewer versions"; exit 1)
+# Check if installed versions are correct.
+check-cbmc-version.py --major ${CBMC_MAJOR} --minor ${CBMC_MINOR}
+check-cbmc-viewer-version.py --major ${CBMC_VIEWER_MAJOR} --minor ${CBMC_VIEWER_MINOR}
 check_kissat_version.sh
 
 # Formatting check
