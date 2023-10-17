@@ -1,0 +1,25 @@
+Checking harness check_limits...
+
+Status: SATISFIED\
+Description: "Zero Duration"
+
+Status: SATISFIED\
+Description: "MAX Duration"
+
+Status: SATISFIED\
+Description: "Max Secs"
+
+Status: SATISFIED\
+Description: "Max millis"
+
+Status: SATISFIED\
+Description: "Max micros"
+
+Status: SATISFIED\
+Description: "Max nanos"
+
+Status: SUCCESS\
+Description: ""Is Zero""
+
+6 of 6 cover properties satisfied
+1 successfully verified harnesses, 0 failures

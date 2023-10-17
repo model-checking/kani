@@ -3,7 +3,7 @@
 
 [package]
 name = "build-kani"
-version = "0.38.0"
+version = "0.39.0"
 edition = "2021"
 description = "Builds Kani, Sysroot and release bundle."
 license = "MIT OR Apache-2.0"

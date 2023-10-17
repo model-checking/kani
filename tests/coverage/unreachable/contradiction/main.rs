@@ -3,9 +3,10 @@
 #[kani::proof]
 fn contradiction() {
     let x: u8 = kani::any();
+    let mut y: u8 = 0;
     if x > 5 {
         if x < 2 {
-            let y = x;
+            y = x;
         }
     } else {
         assert!(x < 10);
