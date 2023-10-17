@@ -943,7 +943,7 @@ impl<'ast> Visit<'ast> for SelfDetector {
 /// Try to determine if this function is part of an `impl`.
 ///
 /// Detects *methods* by the presence of a receiver argument. Heuristically
-/// detects *associated functions* buy the use of `Self` anywhere.
+/// detects *associated functions* by the use of `Self` anywhere.
 ///
 /// Why do we need this? It's because if we want to call this `fn`, or any other
 /// `fn` we generate into the same context we need to use `foo()` or

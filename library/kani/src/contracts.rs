@@ -175,13 +175,13 @@
 //!
 //! Function contracts by default use inductive verification to efficiently
 //! verify recursive functions. In inductive verification a recursive function
-//! is executed once and every recursive call is instead uses the contract
-//! replacement. In this way a great many recursive calls can be checked with a
+//! is executed once and every recursive call instead uses the contract
+//! replacement. In this way many recursive calls can be checked with a
 //! single verification pass.
 //!
 //! The downside of inductive verification is that the return value of a
 //! contracted function must implement `kani::Arbitrary`. Due to restrictions to
-//! code generation in proc macros the contract macros cannot determine reliably
+//! code generation in proc macros, the contract macros cannot determine reliably
 //! in all cases whether a given function with a contract is recursive. As a
 //! result it conservatively sets up inductive verification for every function
 //! and requires the `kani::Arbitrary` constraint for contract checks.
