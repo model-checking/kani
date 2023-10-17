@@ -905,6 +905,8 @@ fn requires_ensures_main(attr: TokenStream, item: TokenStream, is_requires: bool
     output.into()
 }
 
+/// Convert every use of a pattern in this signature to a simple, fresh, binding-only
+/// argument ([`syn::PatIdent`]) and return the [`Ident`] that was generated.
 fn pats_to_idents<P>(
     sig: &mut syn::punctuated::Punctuated<syn::FnArg, P>,
 ) -> impl Iterator<Item = Ident> + '_ {
@@ -924,6 +926,8 @@ fn pats_to_idents<P>(
     })
 }
 
+/// The visitor used by [`is_probably_impl_fn`]. See function documentation for
+/// more information.
 struct SelfDetector(bool);
 
 impl<'ast> Visit<'ast> for SelfDetector {
@@ -936,6 +940,56 @@ impl<'ast> Visit<'ast> for SelfDetector {
     }
 }
 
+/// Try to determine if this function is part of an `impl`.
+///
+/// Detects *methods* by the presence of a receiver argument. Heuristically
+/// detects *associated functions* buy the use of `Self` anywhere.
+///
+/// Why do we need this? It's because if we want to call this `fn`, or any other
+/// `fn` we generate into the same context we need to use `foo()` or
+/// `Self::foo()` respectively depending on whether this is a plain or
+/// associated function or Rust will complain. For the contract machinery we
+/// need to generate and then call various functions we generate as well as the
+/// original contracted function and so we need to determine how to call them
+/// correctly.
+///
+/// We can only solve this heuristically. The fundamental problem with Rust
+/// macros is that they only see the syntax that's given to them and no other
+/// context. It is however that context (of an `impl` block) that definitively
+/// determines whether the `fn` is a plain function or an associated function.
+///
+/// The heuristic itself is flawed, but it's the best we can do. For instance
+/// this is perfectly legal
+///
+/// ```
+/// struct S;
+/// impl S {
+///     #[i_want_to_call_you]
+///     fn helper(u: usize) -> bool {
+///       u < 8
+///     }
+///   }
+/// ```
+///
+/// This function would have to be called `S::helper()` but to the
+/// `#[i_want_to_call_you]` attribute this function looks just like a bare
+/// function because it never mentions `self` or `Self`. While this is a rare
+/// case, the following is much more likely and suffers from the same problem,
+/// because we can't know that `Vec == Self`.
+///
+/// ```
+/// impl<T> Vec<T> {
+///   fn new() -> Vec<T> {
+///     Vec { cap: 0, buf: NonNull::dangling() }
+///   }
+/// }
+/// ```
+///
+/// **Side note:** You may be tempted to suggest that we could try and parse
+/// `syn::ImplItemFn` and distinguish that from `syn::ItemFn` to distinguish
+/// associated function from plain functions. However parsing in an attribute
+/// placed on *any* `fn` will always succeed for *both* `syn::ImplItemFn` and
+/// `syn::ItemFn`, thus not letting us distinguish between the two.
 fn is_probably_impl_fn(fun: &ItemFn) -> bool {
     let mut self_detector = SelfDetector(false);
     self_detector.visit_item_fn(fun);

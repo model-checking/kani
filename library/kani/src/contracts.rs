@@ -134,8 +134,8 @@
 //! one specification attribute is considered to "have a contract" and any
 //! absent specification type defaults to its most general interpretation
 //! (`true`). All functions with not a single specification attribute are
-//! considered "not to have a contract" and are ineligible for use as the
-//! target of a [`proof_for_contract`][macro@proof_for_contract] of
+//! considered "not to have a contract" and are ineligible for use as the target
+//! of a [`proof_for_contract`][macro@proof_for_contract] of
 //! [`stub_verified`][macro@stub_verified] attribute.
 //!
 //! ## Contract Use Attributes Overview
@@ -170,4 +170,23 @@
 //!
 //! Unlike `proof_for_contract` multiple `stub_verified` attributes are allowed
 //! on the same proof harness though they must target different functions.
+//!
+//! ## Inductive Verification
+//!
+//! Function contracts by default use inductive verification to efficiently
+//! verify recursive functions. In inductive verification a recursive function
+//! is executed once and every recursive call is instead uses the contract
+//! replacement. In this way a great many recursive calls can be checked with a
+//! single verification pass.
+//!
+//! The downside of inductive verification is that the return value of a
+//! contracted function must implement `kani::Arbitrary`. Due to restrictions to
+//! code generation in proc macros the contract macros cannot determine reliably
+//! in all cases whether a given function with a contract is recursive. As a
+//! result it conservatively sets up inductive verification for every function
+//! and requires the `kani::Arbitrary` constraint for contract checks.
+//!
+//! If you feel strongly about this issue you can join the discussion on issue
+//! [#2823](https://github.com/model-checking/kani/issues/2823) to enable
+//! opt-out of inductive verification.
 pub use super::{ensures, proof_for_contract, requires, stub_verified};
