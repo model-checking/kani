@@ -42,6 +42,9 @@ cargo test -p kani-compiler
 cargo test -p kani-driver
 cargo test -p kani_metadata
 cargo test -p kani --lib # skip doc tests.
+# Test the actual macros, skipping doc tests and enabling extra traits for "syn"
+# so we can debug print AST
+RUSTFLAGS=--cfg=kani_sysroot cargo test -p kani_macros --features syn/extra-traits --lib
 
 # Declare testing suite information (suite and mode)
 TESTS=(

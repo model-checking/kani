@@ -1,0 +1,17 @@
+Frac::check_equals.assertion\
+- Status: SUCCESS\
+- Description: "assertion failed: self.num % f2.num == 0"
+
+Frac::check_equals.assertion\
+- Status: SUCCESS\
+- Description: "assertion failed: self.den % f2.den == 0"
+
+Frac::check_equals.assertion\
+- Status: SUCCESS\
+- Description: "assertion failed: gcd1 == gcd2"
+
+gcd.assertion\
+- Status: SUCCESS\
+- Description: "x != 0 && y != 0"
+
+VERIFICATION:- SUCCESSFUL

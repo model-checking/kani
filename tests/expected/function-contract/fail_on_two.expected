@@ -1,0 +1,12 @@
+assertion\
+- Status: FAILURE\
+- Description: "internal error: entered unreachable code: fail on two"
+
+Failed Checks: internal error: entered unreachable code: fail on two
+
+
+assertion\
+- Status: FAILURE\
+- Description: "result < 3"
+
+Failed Checks: result < 3
