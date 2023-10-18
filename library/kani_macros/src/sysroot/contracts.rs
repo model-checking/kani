@@ -60,29 +60,31 @@
 //! arrow represents the expansion of a `requires` or `ensures` macro.
 //!
 //! ```plain
-//!                            v
-//!                      +-----------+
-//!                      | Untouched |
-//!                      | Function  |
-//!                      +-----+-----+
-//!                            |
-//!             Emit           |  Generate + Copy Attributes
-//!          +-----------------+------------------+
-//!          |                 |                  |
-//!          |                 |                  |
-//!          v                 v                  v
-//!   +----------+           +-------+        +---------+
-//!   | Original |<-+        | Check |<-+     | Replace |<-+
-//!   +--+-------+  |        +---+---+  |     +----+----+  |
-//!      |          | Ignore     |      | Augment  |       | Augment
-//!      +----------+            +------+          +-------+
+//!                           │ Start
+//!                           ▼
+//!                     ┌───────────┐
+//!                     │ Untouched │
+//!                     │ Function  │
+//!                     └─────┬─────┘
+//!                           │
+//!            Emit           │  Generate      + Copy Attributes
+//!         ┌─────────────────┴─────┬──────────┬─────────────────┐
+//!         │                       │          │                 │
+//!         │                       │          │                 │
+//!         ▼                       ▼          ▼                 ▼
+//!  ┌──────────┐           ┌───────────┐  ┌───────┐        ┌─────────┐
+//!  │ Original │◄─┐        │ Recursion │  │ Check │◄─┐     │ Replace │◄─┐
+//!  └──┬───────┘  │        │ Wrapper   │  └───┬───┘  │     └────┬────┘  │
+//!     │          │ Ignore └───────────┘      │      │ Augment  │       │ Augment
+//!     └──────────┘                           └──────┘          └───────┘
 //!
-//! |              |       |                              |
-//! +--------------+       +------------------------------+
-//!   Presence of                     Presence of
-//!  "checked_with"             "is_contract_generated"
+//! │               │       │                                             │
+//! └───────────────┘       └─────────────────────────────────────────────┘
 //!
-//!            State is detected via
+//!     Presence of                            Presence of
+//!    "checked_with"                    "is_contract_generated"
+//!
+//!                        State is detected via
 //! ```
 //!
 //! All named arguments of the annotated function are unsafely shallow-copied
@@ -95,12 +97,12 @@
 //!
 //! ## Check function
 //!
-//! Generates a `check_<fn_name>_<fn_hash>` function that assumes preconditions
+//! Generates a `<fn_name>_check_<fn_hash>` function that assumes preconditions
 //! and asserts postconditions. The check function is also marked as generated
 //! with the `#[kanitool::is_contract_generated(check)]` attribute.
 //!
 //! Decorates the original function with `#[kanitool::checked_by =
-//! "check_<fn_name>_<fn_hash>"]`.
+//! "<fn_name>_check_<fn_hash>"]`.
 //!
 //! The check function is a copy of the original function with preconditions
 //! added before the body and postconditions after as well as injected before
@@ -109,17 +111,63 @@
 //!
 //! ## Replace Function
 //!
-//! As the mirror to that also generates a `replace_<fn_name>_<fn_hash>`
+//! As the mirror to that also generates a `<fn_name>_replace_<fn_hash>`
 //! function that asserts preconditions and assumes postconditions. The replace
 //! function is also marked as generated with the
 //! `#[kanitool::is_contract_generated(replace)]` attribute.
 //!
 //! Decorates the original function with `#[kanitool::replaced_by =
-//! "replace_<fn_name>_<fn_hash>"]`.
+//! "<fn_name>_replace_<fn_hash>"]`.
 //!
 //! The replace function has the same signature as the original function but its
 //! body is replaced by `kani::any()`, which generates a non-deterministic
 //! value.
+//!
+//! ## Inductive Verification
+//!
+//! To efficiently check recursive functions we verify them inductively. To
+//! be able to do this we need both the check and replace functions we have seen
+//! before.
+//!
+//! Inductive verification is comprised of a hypothesis and an induction step.
+//! The hypothesis in this case is the replace function. It represents the
+//! assumption that the contracts holds if the preconditions are satisfied. The
+//! induction step is the check function, which ensures that the contract holds,
+//! assuming the preconditions hold.
+//!
+//! Since the induction revolves around the recursive call we can simply set it
+//! up upon entry into the body of the function under verification. We use a
+//! global variable that tracks whether we are re-entering the function
+//! recursively and starts off as `false`. On entry to the function we flip the
+//! variable to `true` and dispatch to the check (induction step). If the check
+//! recursively calls our function our re-entry tracker now reads `true` and we
+//! dispatch to the replacement (application of induction hypothesis). Because
+//! the replacement function only checks the conditions and does not perform
+//! other computation we will only ever go "one recursion level deep", making
+//! inductive verification very efficient. Once the check function returns we
+//! flip the tracker variable back to `false` in case the function is called
+//! more than once in its harness.
+//!
+//! To facilitate all this we generate a `<fn_name>_recursion_wrapper_<fn_hash>`
+//! function with the following shape:
+//!
+//! ```ignored
+//! fn recursion_wrapper_...(fn args ...) {
+//!     static mut REENTRY: bool = false;
+//!
+//!     if unsafe { REENTRY } {
+//!         call_replace(fn args...)
+//!     } else {
+//!         unsafe { reentry = true };
+//!         let result = call_check(fn args...);
+//!         unsafe { reentry = false };
+//!         result
+//!     }
+//! }
+//! ```
+//!
+//! We register this function as `#[kanitool::checked_with =
+//! "recursion_wrapper_..."]` instead of the check function.
 //!
 //! # Complete example
 //!
@@ -134,7 +182,7 @@
 //! Turns into
 //!
 //! ```
-//! #[kanitool::checked_with = "div_check_965916"]
+//! #[kanitool::checked_with = "div_recursion_wrapper_965916"]
 //! #[kanitool::replaced_with = "div_replace_965916"]
 //! fn div(dividend: u32, divisor: u32) -> u32 { dividend / divisor }
 //!
@@ -163,6 +211,22 @@
 //!     std::mem::forget(dividend_renamed);
 //!     std::mem::forget(divisor_renamed);
 //!     result
+//! }
+//!
+//! #[allow(dead_code)]
+//! #[allow(unused_variables)]
+//! #[kanitool::is_contract_generated(recursion_wrapper)]
+//! fn div_recursion_wrapper_965916(dividend: u32, divisor: u32) -> u32 {
+//!     static mut REENTRY: bool = false;
+//!
+//!     if unsafe { REENTRY } {
+//!         div_replace_965916(dividend, divisor)
+//!     } else {
+//!         unsafe { reentry = true };
+//!         let result = div_check_965916(dividend, divisor);
+//!         unsafe { reentry = false };
+//!         result
+//!     }
 //! }
 //! ```
 
@@ -772,6 +836,8 @@ fn requires_ensures_main(attr: TokenStream, item: TokenStream, is_requires: bool
 
             let check_fn_name = identifier_for_generated_function(&item_fn, "check", item_hash);
             let replace_fn_name = identifier_for_generated_function(&item_fn, "replace", item_hash);
+            let recursion_wrapper_name =
+                identifier_for_generated_function(&item_fn, "recursion_wrapper", item_hash);
 
             // Constructing string literals explicitly here, because `stringify!`
             // doesn't work. Let's say we have an identifier `check_fn` and we were
@@ -781,7 +847,8 @@ fn requires_ensures_main(attr: TokenStream, item: TokenStream, is_requires: bool
             // instead the *expression* `stringify!(check_fn)`.
             let replace_fn_name_str =
                 syn::LitStr::new(&replace_fn_name.to_string(), Span::call_site());
-            let check_fn_name_str = syn::LitStr::new(&check_fn_name.to_string(), Span::call_site());
+            let recursion_wrapper_name_str =
+                syn::LitStr::new(&recursion_wrapper_name.to_string(), Span::call_site());
 
             // The order of `attrs` and `kanitool::{checked_with,
             // is_contract_generated}` is important here, because macros are
@@ -791,13 +858,42 @@ fn requires_ensures_main(attr: TokenStream, item: TokenStream, is_requires: bool
             //
             // The same care is taken when we emit check and replace functions.
             // emit the check function.
+            let is_impl_fn = is_probably_impl_fn(&item_fn);
             let ItemFn { attrs, vis, sig, block } = &item_fn;
             handler.output.extend(quote!(
                 #(#attrs)*
-                #[kanitool::checked_with = #check_fn_name_str]
+                #[kanitool::checked_with = #recursion_wrapper_name_str]
                 #[kanitool::replaced_with = #replace_fn_name_str]
                 #vis #sig {
                     #block
+                }
+            ));
+
+            let mut wrapper_sig = sig.clone();
+            attach_require_kani_any(&mut wrapper_sig);
+            wrapper_sig.ident = recursion_wrapper_name;
+
+            let args = pats_to_idents(&mut wrapper_sig.inputs).collect::<Vec<_>>();
+            let also_args = args.iter();
+            let (call_check, call_replace) = if is_impl_fn {
+                (quote!(Self::#check_fn_name), quote!(Self::#replace_fn_name))
+            } else {
+                (quote!(#check_fn_name), quote!(#replace_fn_name))
+            };
+
+            handler.output.extend(quote!(
+                #[allow(dead_code, unused_variables)]
+                #[kanitool::is_contract_generated(recursion_wrapper)]
+                #wrapper_sig {
+                    static mut REENTRY: bool = false;
+                    if unsafe { REENTRY } {
+                        #call_replace(#(#args),*)
+                    } else {
+                        unsafe { REENTRY = true };
+                        let result = #call_check(#(#also_args),*);
+                        unsafe { REENTRY = false };
+                        result
+                    }
                 }
             ));
 
@@ -807,6 +903,97 @@ fn requires_ensures_main(attr: TokenStream, item: TokenStream, is_requires: bool
     }
 
     output.into()
+}
+
+/// Convert every use of a pattern in this signature to a simple, fresh, binding-only
+/// argument ([`syn::PatIdent`]) and return the [`Ident`] that was generated.
+fn pats_to_idents<P>(
+    sig: &mut syn::punctuated::Punctuated<syn::FnArg, P>,
+) -> impl Iterator<Item = Ident> + '_ {
+    sig.iter_mut().enumerate().map(|(i, arg)| match arg {
+        syn::FnArg::Receiver(_) => Ident::from(syn::Token![self](Span::call_site())),
+        syn::FnArg::Typed(syn::PatType { pat, .. }) => {
+            let ident = Ident::new(&format!("arg{i}"), Span::mixed_site());
+            *pat.as_mut() = syn::Pat::Ident(syn::PatIdent {
+                attrs: vec![],
+                by_ref: None,
+                mutability: None,
+                ident: ident.clone(),
+                subpat: None,
+            });
+            ident
+        }
+    })
+}
+
+/// The visitor used by [`is_probably_impl_fn`]. See function documentation for
+/// more information.
+struct SelfDetector(bool);
+
+impl<'ast> Visit<'ast> for SelfDetector {
+    fn visit_ident(&mut self, i: &'ast syn::Ident) {
+        self.0 |= i == &Ident::from(syn::Token![Self](Span::mixed_site()))
+    }
+
+    fn visit_receiver(&mut self, _node: &'ast syn::Receiver) {
+        self.0 = true;
+    }
+}
+
+/// Try to determine if this function is part of an `impl`.
+///
+/// Detects *methods* by the presence of a receiver argument. Heuristically
+/// detects *associated functions* by the use of `Self` anywhere.
+///
+/// Why do we need this? It's because if we want to call this `fn`, or any other
+/// `fn` we generate into the same context we need to use `foo()` or
+/// `Self::foo()` respectively depending on whether this is a plain or
+/// associated function or Rust will complain. For the contract machinery we
+/// need to generate and then call various functions we generate as well as the
+/// original contracted function and so we need to determine how to call them
+/// correctly.
+///
+/// We can only solve this heuristically. The fundamental problem with Rust
+/// macros is that they only see the syntax that's given to them and no other
+/// context. It is however that context (of an `impl` block) that definitively
+/// determines whether the `fn` is a plain function or an associated function.
+///
+/// The heuristic itself is flawed, but it's the best we can do. For instance
+/// this is perfectly legal
+///
+/// ```
+/// struct S;
+/// impl S {
+///     #[i_want_to_call_you]
+///     fn helper(u: usize) -> bool {
+///       u < 8
+///     }
+///   }
+/// ```
+///
+/// This function would have to be called `S::helper()` but to the
+/// `#[i_want_to_call_you]` attribute this function looks just like a bare
+/// function because it never mentions `self` or `Self`. While this is a rare
+/// case, the following is much more likely and suffers from the same problem,
+/// because we can't know that `Vec == Self`.
+///
+/// ```
+/// impl<T> Vec<T> {
+///   fn new() -> Vec<T> {
+///     Vec { cap: 0, buf: NonNull::dangling() }
+///   }
+/// }
+/// ```
+///
+/// **Side note:** You may be tempted to suggest that we could try and parse
+/// `syn::ImplItemFn` and distinguish that from `syn::ItemFn` to distinguish
+/// associated function from plain functions. However parsing in an attribute
+/// placed on *any* `fn` will always succeed for *both* `syn::ImplItemFn` and
+/// `syn::ItemFn`, thus not letting us distinguish between the two.
+fn is_probably_impl_fn(fun: &ItemFn) -> bool {
+    let mut self_detector = SelfDetector(false);
+    self_detector.visit_item_fn(fun);
+    self_detector.0
 }
 
 /// This is very similar to the kani_attribute macro, but it instead creates
@@ -834,3 +1021,58 @@ macro_rules! passthrough {
 
 passthrough!(stub_verified, false);
 passthrough!(proof_for_contract, true);
+
+#[cfg(test)]
+mod test {
+    macro_rules! detect_impl_fn {
+        ($expect_pass:expr, $($tt:tt)*) => {{
+            let syntax = stringify!($($tt)*);
+            let ast = syn::parse_str(syntax).unwrap();
+            assert!($expect_pass == super::is_probably_impl_fn(&ast),
+                "Incorrect detection.\nExpected is_impl_fun: {}\nInput Expr; {}\nParsed: {:?}",
+                $expect_pass,
+                syntax,
+                ast
+            );
+        }}
+    }
+
+    #[test]
+    fn detect_impl_fn_by_receiver() {
+        detect_impl_fn!(true, fn self_by_ref(&self, u: usize) -> bool {});
+
+        detect_impl_fn!(true, fn self_by_self(self, u: usize) -> bool {});
+    }
+
+    #[test]
+    fn detect_impl_fn_by_self_ty() {
+        detect_impl_fn!(true, fn self_by_construct(u: usize) -> Self {});
+        detect_impl_fn!(true, fn self_by_wrapped_construct(u: usize) -> Arc<Self> {});
+
+        detect_impl_fn!(true, fn self_by_other_arg(u: usize, slf: Self) {});
+
+        detect_impl_fn!(true, fn self_by_other_wrapped_arg(u: usize, slf: Vec<Self>) {})
+    }
+
+    #[test]
+    fn detect_impl_fn_by_qself() {
+        detect_impl_fn!(
+            true,
+            fn self_by_mention(u: usize) {
+                Self::other(u)
+            }
+        );
+    }
+
+    #[test]
+    fn detect_no_impl_fn() {
+        detect_impl_fn!(
+            false,
+            fn self_by_mention(u: usize) {
+                let self_name = 18;
+                let self_lit = "self";
+                let self_lit = "Self";
+            }
+        );
+    }
+}
