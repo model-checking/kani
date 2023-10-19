@@ -11,7 +11,7 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 * Limit --exclude to workspace packages by @tautschnig in https://github.com/model-checking/kani/pull/2808
 * Fix panic warning and add arbitrary Duration by @celinval in https://github.com/model-checking/kani/pull/2820
 * Update CBMC version to 5.94 by @celinval in https://github.com/model-checking/kani/pull/2821
-* Rust toolchain upgraded to `nightly-2023-10-16` by @celinval @tautschnig 
+* Rust toolchain upgraded to `nightly-2023-10-17` by @celinval @tautschnig
 
 **Full Changelog**:
 https://github.com/model-checking/kani/compare/kani-0.38.0...kani-0.39.0
