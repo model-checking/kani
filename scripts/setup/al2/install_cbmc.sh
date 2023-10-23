@@ -24,8 +24,8 @@ pushd "${WORK_DIR}"
 mkdir build
 git submodule update --init
 
-cmake -S . -Bbuild -DWITH_JBMC=OFF -Dsat_impl="minisat2;cadical"
-make -C build -j$(nproc)
+cmake3 -S . -Bbuild -DWITH_JBMC=OFF -Dsat_impl="minisat2;cadical"
+cmake3 --build build -- -j$(nproc)
 sudo make -C build install
 
 popd
