@@ -15,7 +15,7 @@ fi
 # Binaries are not released for AL2, so build from source
 WORK_DIR=$(mktemp -d)
 git clone \
-  --branch develop --depth 1 \
+  --branch cbmc-${CBMC_VERSION} --depth 1 \
   https://github.com/diffblue/cbmc \
   "${WORK_DIR}"
 
