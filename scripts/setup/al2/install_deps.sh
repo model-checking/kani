@@ -33,3 +33,4 @@ ${SCRIPT_DIR}/install_cbmc.sh
 ${SCRIPT_DIR}/install_viewer.sh
 # The Kissat installation script is platform-independent, so is placed one level up
 ${SCRIPT_DIR}/../install_kissat.sh
+${SCRIPT_DIR}/../install_rustup.sh
