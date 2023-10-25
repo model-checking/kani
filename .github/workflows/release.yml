@@ -52,7 +52,7 @@ jobs:
   MacOs-Bundle:
     name: MacOs-Bundle
     needs: Release
-    runs-on: macos-11
+    runs-on: macos-12
     permissions:
       contents: write
     steps:
@@ -62,7 +62,7 @@ jobs:
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
         with:
-          os: macos-11
+          os: macos-12
 
       - name: Build release bundle
         run: |

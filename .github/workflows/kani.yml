@@ -17,7 +17,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-11, ubuntu-20.04, ubuntu-22.04]
+        os: [macos-12, ubuntu-20.04, ubuntu-22.04]
     steps:
       - name: Checkout Kani
         uses: actions/checkout@v3
@@ -149,9 +149,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-11]
+        os: [macos-12]
         include:
-          - os: macos-11
+          - os: macos-12
             artifact: kani-latest-x86_64-apple-darwin.tar.gz
     steps:
       - name: Checkout Kani
@@ -170,7 +170,7 @@ jobs:
       # We can't run macos in a container, so we can only test locally.
       # Hopefully any dependency issues won't be unique to macos.
       - name: Local install test
-        if: ${{ matrix.os == 'macos-11' }}
+        if: ${{ matrix.os == 'macos-12' }}
         run: |
           cargo install --path ./target/package/kani-verifier-*[^e]
           cargo-kani setup --use-local-bundle ./${{ matrix.artifact }}
