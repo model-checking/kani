@@ -145,7 +145,6 @@ jobs:
   # For now, we only test for Ubuntu-18.04 so we don't bother using matrix to configure the platform.
   test_alt_platform:
     name: TestAlternativePlatforms
-    if: ${{ github.event_name == 'push' }}
     needs: [build_bundle_linux]
     runs-on: ubuntu-22.04
     env:

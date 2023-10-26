@@ -30,23 +30,24 @@ runs:
 
     - name: Export tag version
       shell: bash
-      if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+      if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/kani-') }}
       run: |
-        echo "VERSION=${TAG_VERSION}" >> $GITHUB_ENV
+        # GITHUB_REF is refs/tags/kani-0.1.0
+        echo "VERSION=$(echo ${{ github.ref }} | cut -d "-" -f 2)" >> $GITHUB_ENV
 
     - name: Check Version
       shell: bash
-      if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+      if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/kani-') }}
       run: |
         # Validate git tag & Cargo.toml are in sync on version number
-        if [[ ${{ env.CRATE_VERSION }} != ${{ env.TAG_VERSION }} ]]; then
-          echo "Git tag ${{env.TAG_VERSION}} did not match crate version ${{env.CRATE_VERSION}}"
+        if [[ ${{ env.CRATE_VERSION }} != ${{ env.VERSION }} ]]; then
+          echo "Git tag ${{env.VERSION}} did not match crate version ${{env.CRATE_VERSION}}"
           exit 1
         fi
 
     - name: Export latest version
       shell: bash
-      if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+      if: ${{ !startsWith(github.ref, 'refs/tags/kani-') }}
       run: |
         echo "VERSION=latest" >> $GITHUB_ENV
 
