@@ -567,7 +567,7 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MonoItemsFnCollector<'a, 'tcx> {
             | TerminatorKind::UnwindResume
             | TerminatorKind::Return
             | TerminatorKind::Unreachable => {}
-            TerminatorKind::GeneratorDrop
+            TerminatorKind::CoroutineDrop
             | TerminatorKind::Yield { .. }
             | TerminatorKind::FalseEdge { .. }
             | TerminatorKind::FalseUnwind { .. } => {

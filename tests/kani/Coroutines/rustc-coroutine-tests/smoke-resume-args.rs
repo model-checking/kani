@@ -1,5 +1,5 @@
 // Copyright rustc Contributors
-// Adapted from rustc: https://github.com/rust-lang/rust/tree/5f98537eb7b5f42c246a52c550813c3cff336069/src/test/ui/generator/smoke-resume-args.rs
+// Adapted from rustc: https://github.com/rust-lang/rust/tree/5f98537eb7b5f42c246a52c550813c3cff336069/src/test/ui/coroutine/smoke-resume-args.rs
 //
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
@@ -11,20 +11,20 @@
 // revisions: default nomiropt
 //[nomiropt]compile-flags: -Z mir-opt-level=0
 
-#![feature(generators, generator_trait)]
+#![feature(coroutines, coroutine_trait)]
 
 use std::fmt::Debug;
 use std::marker::Unpin;
 use std::ops::{
-    Generator,
-    GeneratorState::{self, *},
+    Coroutine,
+    CoroutineState::{self, *},
 };
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-fn drain<G: Generator<R, Yield = Y> + Unpin, R, Y>(
+fn drain<G: Coroutine<R, Yield = Y> + Unpin, R, Y>(
     gen: &mut G,
-    inout: Vec<(R, GeneratorState<Y, G::Return>)>,
+    inout: Vec<(R, CoroutineState<Y, G::Return>)>,
 ) where
     Y: Debug + PartialEq,
     G::Return: Debug + PartialEq,

@@ -1,13 +1,13 @@
 // Copyright rustc Contributors
-// Adapted from rustc: https://github.com/rust-lang/rust/tree/5f98537eb7b5f42c246a52c550813c3cff336069/src/test/ui/generator/size-moved-locals.rs
+// Adapted from rustc: https://github.com/rust-lang/rust/tree/5f98537eb7b5f42c246a52c550813c3cff336069/src/test/ui/coroutine/size-moved-locals.rs
 //
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
 // Modifications Copyright Kani Contributors
 // See GitHub history for details.
 
-//! Tests the size of generators
-//! Note that the size of generators can depend on the panic strategy.
+//! Tests the size of coroutines
+//! Note that the size of coroutines can depend on the panic strategy.
 //! This is the case here (see the bottom of the file).
 //! In particular, running rustc with default options on this file will fail an assertion.
 //! Since Kani uses "panic=abort", you need to run rustc with `-C panic=abort`
@@ -20,7 +20,7 @@
 // `complex` below.)
 //
 // The exact sizes here can change (we'd like to know when they do). What we
-// don't want to see is the `complex` generator size being upwards of 2048 bytes
+// don't want to see is the `complex` coroutine size being upwards of 2048 bytes
 // (which would indicate it is reserving space for two copies of Foo.)
 //
 // See issue https://github.com/rust-lang/rust/issues/59123 for a full explanation.
@@ -29,9 +29,9 @@
 // ignore-wasm32 issue #62807
 // ignore-asmjs issue #62807
 
-#![feature(generators, generator_trait)]
+#![feature(coroutines, coroutine_trait)]
 
-use std::ops::Generator;
+use std::ops::Coroutine;
 
 const FOO_SIZE: usize = 1024;
 struct Foo([u8; FOO_SIZE]);
@@ -40,7 +40,7 @@ impl Drop for Foo {
     fn drop(&mut self) {}
 }
 
-fn move_before_yield() -> impl Generator<Yield = (), Return = ()> {
+fn move_before_yield() -> impl Coroutine<Yield = (), Return = ()> {
     static || {
         let first = Foo([0; FOO_SIZE]);
         let _second = first;
@@ -51,7 +51,7 @@ fn move_before_yield() -> impl Generator<Yield = (), Return = ()> {
 
 fn noop() {}
 
-fn move_before_yield_with_noop() -> impl Generator<Yield = (), Return = ()> {
+fn move_before_yield_with_noop() -> impl Coroutine<Yield = (), Return = ()> {
     static || {
         let first = Foo([0; FOO_SIZE]);
         noop();
@@ -63,7 +63,7 @@ fn move_before_yield_with_noop() -> impl Generator<Yield = (), Return = ()> {
 
 // Today we don't have NRVO (we allocate space for both `first` and `second`,)
 // but we can overlap `first` with `_third`.
-fn overlap_move_points() -> impl Generator<Yield = (), Return = ()> {
+fn overlap_move_points() -> impl Coroutine<Yield = (), Return = ()> {
     static || {
         let first = Foo([0; FOO_SIZE]);
         yield;
@@ -74,7 +74,7 @@ fn overlap_move_points() -> impl Generator<Yield = (), Return = ()> {
     }
 }
 
-fn overlap_x_and_y() -> impl Generator<Yield = (), Return = ()> {
+fn overlap_x_and_y() -> impl Coroutine<Yield = (), Return = ()> {
     static || {
         let x = Foo([0; FOO_SIZE]);
         yield;

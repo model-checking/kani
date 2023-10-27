@@ -7,7 +7,7 @@ Description: "unexpected yield from resume"\
 in function main
 
 UNREACHABLE\
-Description: "generator resumed after completion"
+Description: "coroutine resumed after completion"
 in function main::{closure#0}
 
 VERIFICATION:- SUCCESSFUL

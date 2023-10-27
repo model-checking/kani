@@ -1,5 +1,5 @@
 // Copyright rustc Contributors
-// Adapted from rustc: https://github.com/rust-lang/rust/tree/5f98537eb7b5f42c246a52c550813c3cff336069/src/test/ui/generator/yield-in-box.rs
+// Adapted from rustc: https://github.com/rust-lang/rust/tree/5f98537eb7b5f42c246a52c550813c3cff336069/src/test/ui/coroutine/yield-in-box.rs
 
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
@@ -9,16 +9,16 @@
 // run-pass
 // Test that box-statements with yields in them work.
 
-#![feature(generators, generator_trait)]
-use std::ops::Generator;
-use std::ops::GeneratorState;
+#![feature(coroutines, coroutine_trait)]
+use std::ops::Coroutine;
+use std::ops::CoroutineState;
 use std::pin::Pin;
 
 #[kani::proof]
 fn main() {
     let x = 0i32;
     || {
-        //~ WARN unused generator that must be used
+        //~ WARN unused coroutine that must be used
         let y = 2u32;
         {
             let _t = Box::new((&x, yield 0, &y));
@@ -29,6 +29,6 @@ fn main() {
     };
 
     let mut g = |_| Box::new(yield);
-    assert_eq!(Pin::new(&mut g).resume(1), GeneratorState::Yielded(()));
-    assert_eq!(Pin::new(&mut g).resume(2), GeneratorState::Complete(Box::new(2)));
+    assert_eq!(Pin::new(&mut g).resume(1), CoroutineState::Yielded(()));
+    assert_eq!(Pin::new(&mut g).resume(2), CoroutineState::Complete(Box::new(2)));
 }
