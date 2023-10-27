@@ -4,7 +4,7 @@
 # Note: this file is intended only for testing the kani release bundle
 # This docker assumes the following locations:
 # - ./kani_src/: Kani source code
-# - ./kani-*tar.bz/: The Kani release bundle. E.g. `kani-0.39.0-x86_64-unknown-linux-gnu.tar.gz`
+# - ./kani-*tar.gz/: The Kani release bundle. E.g. `kani-0.39.0-x86_64-unknown-linux-gnu.tar.gz`
 # - ./linux-kani-verifier.crate: The kani-verifier package
 
 FROM ubuntu:18.04
