@@ -216,8 +216,8 @@ impl<'tcx> MonoItemsCollector<'tcx> {
 
         // Collect initialization.
         let alloc = self.tcx.eval_static_initializer(def_id).unwrap();
-        for id in alloc.inner().provenance().provenances() {
-            next_items.extend(collect_alloc_items(self.tcx, id).iter());
+        for id in alloc.inner().provenance().ptrs().values() {
+            next_items.extend(collect_alloc_items(self.tcx, *id).iter());
         }
 
         next_items
