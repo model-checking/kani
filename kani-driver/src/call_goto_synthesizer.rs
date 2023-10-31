@@ -35,7 +35,18 @@ impl KaniSession {
             output.to_owned().into_os_string(), // output
         ];
 
+        // goto-synthesizer should take the same backend options as cbmc.
+        // Backend options include
+        // 1. solver options
         self.handle_solver_args(&harness_metadata.attributes.solver, &mut args)?;
+        // 2. object-bits option
+        if let Some(object_bits) = self.args.cbmc_object_bits() {
+            args.push("--object-bits".into());
+            args.push(object_bits.to_string().into());
+        }
+        // 3. and array-as-uninterpreted-functions options, which should be included
+        //    in the cbmc_args.
+        args.extend(self.args.cbmc_args.iter().cloned());
 
         let mut cmd = Command::new("goto-synthesizer");
         cmd.args(args);
