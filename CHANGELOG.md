@@ -4,9 +4,20 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
+## [0.40.0]
+
+### What's Changed
+
+* Ease setup in Amazon Linux 2 by @adpaco-aws in https://github.com/model-checking/kani/pull/2833
+* Propogate backend options into goto-synthesizer by @qinheping in https://github.com/model-checking/kani/pull/2643
+* Update CBMC version to 5.95.1 by @adpaco-aws in https://github.com/model-checking/kani/pull/2844
+* Fix issues and Update toolchain 10-26 by @jaisnan in https://github.com/model-checking/kani/pull/2843
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.39.0...kani-0.40.0
+
 ## [0.39.0]
 
-## What's Changed
+### What's Changed
 
 * Limit --exclude to workspace packages by @tautschnig in https://github.com/model-checking/kani/pull/2808
 * Fix panic warning and add arbitrary Duration by @celinval in https://github.com/model-checking/kani/pull/2820
