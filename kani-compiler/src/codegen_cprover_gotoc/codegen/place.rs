@@ -26,7 +26,7 @@ use tracing::{debug, trace, warn};
 pub enum TypeOrVariant<'tcx> {
     Type(Ty<'tcx>),
     Variant(&'tcx VariantDef),
-    GeneratorVariant(VariantIdx),
+    CoroutineVariant(VariantIdx),
 }
 
 /// A struct for storing the data for passing to `codegen_unimplemented`
@@ -132,7 +132,7 @@ impl<'tcx> ProjectedPlace<'tcx> {
                 }
             }
             // TODO: handle Variant https://github.com/model-checking/kani/issues/448
-            TypeOrVariant::Variant(_) | TypeOrVariant::GeneratorVariant(_) => None,
+            TypeOrVariant::Variant(_) | TypeOrVariant::CoroutineVariant(_) => None,
         }
     }
 
@@ -205,7 +205,7 @@ impl<'tcx> TypeOrVariant<'tcx> {
     pub fn monomorphize(self, ctx: &GotocCtx<'tcx>) -> Self {
         match self {
             TypeOrVariant::Type(t) => TypeOrVariant::Type(ctx.monomorphize(t)),
-            TypeOrVariant::Variant(_) | TypeOrVariant::GeneratorVariant(_) => self,
+            TypeOrVariant::Variant(_) | TypeOrVariant::CoroutineVariant(_) => self,
         }
     }
 }
@@ -215,8 +215,8 @@ impl<'tcx> TypeOrVariant<'tcx> {
         match self {
             TypeOrVariant::Type(t) => *t,
             TypeOrVariant::Variant(v) => panic!("expect a type but variant is found: {v:?}"),
-            TypeOrVariant::GeneratorVariant(v) => {
-                panic!("expect a type but generator variant is found: {v:?}")
+            TypeOrVariant::CoroutineVariant(v) => {
+                panic!("expect a type but coroutine variant is found: {v:?}")
             }
         }
     }
@@ -226,8 +226,8 @@ impl<'tcx> TypeOrVariant<'tcx> {
         match self {
             TypeOrVariant::Type(t) => panic!("expect a variant but type is found: {t:?}"),
             TypeOrVariant::Variant(v) => v,
-            TypeOrVariant::GeneratorVariant(v) => {
-                panic!("expect a variant but generator variant found {v:?}")
+            TypeOrVariant::CoroutineVariant(v) => {
+                panic!("expect a variant but coroutine variant found {v:?}")
             }
         }
     }
@@ -236,7 +236,7 @@ impl<'tcx> TypeOrVariant<'tcx> {
 impl<'tcx> GotocCtx<'tcx> {
     /// Codegen field access for types that allow direct field projection.
     ///
-    /// I.e.: Algebraic data types, closures, and generators.
+    /// I.e.: Algebraic data types, closures, and coroutines.
     ///
     /// Other composite types such as array only support index projection.
     fn codegen_field(
@@ -258,7 +258,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     | ty::FnPtr(_)
                     | ty::Never
                     | ty::FnDef(..)
-                    | ty::GeneratorWitness(..)
+                    | ty::CoroutineWitness(..)
                     | ty::Foreign(..)
                     | ty::Dynamic(..)
                     | ty::Bound(..)
@@ -283,8 +283,8 @@ impl<'tcx> GotocCtx<'tcx> {
                     ty::Closure(..) => {
                         Ok(parent_expr.member(field.index().to_string(), &self.symbol_table))
                     }
-                    ty::Generator(..) => {
-                        let field_name = self.generator_field_name(field.as_usize());
+                    ty::Coroutine(..) => {
+                        let field_name = self.coroutine_field_name(field.as_usize());
                         Ok(parent_expr
                             .member("direct_fields", &self.symbol_table)
                             .member(field_name, &self.symbol_table))
@@ -301,8 +301,8 @@ impl<'tcx> GotocCtx<'tcx> {
                 let field = &parent_var.fields[*field];
                 Ok(parent_expr.member(field.name.to_string(), &self.symbol_table))
             }
-            TypeOrVariant::GeneratorVariant(_var_idx) => {
-                let field_name = self.generator_field_name(field.index());
+            TypeOrVariant::CoroutineVariant(_var_idx) => {
+                let field_name = self.coroutine_field_name(field.index());
                 Ok(parent_expr.member(field_name, &self.symbol_table))
             }
         }
@@ -570,11 +570,11 @@ impl<'tcx> GotocCtx<'tcx> {
                         let variant = def.variant(idx);
                         (variant.name.as_str().into(), TypeOrVariant::Variant(variant))
                     }
-                    ty::Generator(..) => {
-                        (self.generator_variant_name(idx), TypeOrVariant::GeneratorVariant(idx))
+                    ty::Coroutine(..) => {
+                        (self.coroutine_variant_name(idx), TypeOrVariant::CoroutineVariant(idx))
                     }
                     _ => unreachable!(
-                        "cannot downcast {:?} to a variant (only enums and generators can)",
+                        "cannot downcast {:?} to a variant (only enums and coroutines can)",
                         &t.kind()
                     ),
                 };
@@ -583,7 +583,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     Variants::Single { .. } => before.goto_expr,
                     Variants::Multiple { tag_encoding, .. } => match tag_encoding {
                         TagEncoding::Direct => {
-                            let cases = if t.is_generator() {
+                            let cases = if t.is_coroutine() {
                                 before.goto_expr
                             } else {
                                 before.goto_expr.member("cases", &self.symbol_table)

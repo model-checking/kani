@@ -1,5 +1,5 @@
 // Copyright rustc Contributors
-// Adapted from rustc: https://github.com/rust-lang/rust/tree/5f98537eb7b5f42c246a52c550813c3cff336069/src/test/ui/generator/resume-live-across-yield.rs
+// Adapted from rustc: https://github.com/rust-lang/rust/tree/5f98537eb7b5f42c246a52c550813c3cff336069/src/test/ui/coroutine/resume-live-across-yield.rs
 //
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
@@ -8,9 +8,9 @@
 
 // run-pass
 
-#![feature(generators, generator_trait)]
+#![feature(coroutines, coroutine_trait)]
 
-use std::ops::{Generator, GeneratorState};
+use std::ops::{Coroutine, CoroutineState};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -37,11 +37,11 @@ fn main() {
 
     assert_eq!(
         g.as_mut().resume(Dropper(String::from("Hello world!"))),
-        GeneratorState::Yielded(())
+        CoroutineState::Yielded(())
     );
     assert_eq!(DROP.load(Ordering::Acquire), 0);
     match g.as_mut().resume(Dropper(String::from("Number Two"))) {
-        GeneratorState::Complete(dropper) => {
+        CoroutineState::Complete(dropper) => {
             assert_eq!(DROP.load(Ordering::Acquire), 1);
             assert_eq!(dropper.0, "Number Two");
             drop(dropper);

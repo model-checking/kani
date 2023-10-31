@@ -1,5 +1,5 @@
 // Copyright rustc Contributors
-// Adapted from rustc: https://github.com/rust-lang/rust/tree/5f98537eb7b5f42c246a52c550813c3cff336069/src/test/ui/generator/overlap-locals.rs
+// Adapted from rustc: https://github.com/rust-lang/rust/tree/5f98537eb7b5f42c246a52c550813c3cff336069/src/test/ui/coroutine/overlap-locals.rs
 //
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
@@ -8,7 +8,7 @@
 
 // run-pass
 
-#![feature(generators)]
+#![feature(coroutines)]
 
 #[kani::proof]
 fn main() {
@@ -35,6 +35,6 @@ fn main() {
         }
     };
 
-    // FIXME: size of generators does not work reliably (https://github.com/model-checking/kani/issues/1395)
+    // FIXME: size of coroutines does not work reliably (https://github.com/model-checking/kani/issues/1395)
     assert_eq!(8, std::mem::size_of_val(&a));
 }

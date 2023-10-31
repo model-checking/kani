@@ -1,5 +1,5 @@
 // Copyright rustc Contributors
-// Adapted from rustc: https://github.com/rust-lang/rust/tree/5f98537eb7b5f42c246a52c550813c3cff336069/src/test/ui/generator/control-flow.rs
+// Adapted from rustc: https://github.com/rust-lang/rust/tree/5f98537eb7b5f42c246a52c550813c3cff336069/src/test/ui/coroutine/control-flow.rs
 //
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
@@ -11,20 +11,20 @@
 // revisions: default nomiropt
 //[nomiropt]compile-flags: -Z mir-opt-level=0
 
-#![feature(generators, generator_trait)]
+#![feature(coroutines, coroutine_trait)]
 
 use std::marker::Unpin;
-use std::ops::{Generator, GeneratorState};
+use std::ops::{Coroutine, CoroutineState};
 use std::pin::Pin;
 
 fn finish<T>(mut amt: usize, mut t: T) -> T::Return
 where
-    T: Generator<(), Yield = ()> + Unpin,
+    T: Coroutine<(), Yield = ()> + Unpin,
 {
     loop {
         match Pin::new(&mut t).resume(()) {
-            GeneratorState::Yielded(()) => amt = amt.checked_sub(1).unwrap(),
-            GeneratorState::Complete(ret) => {
+            CoroutineState::Yielded(()) => amt = amt.checked_sub(1).unwrap(),
+            CoroutineState::Complete(ret) => {
                 assert_eq!(amt, 0);
                 return ret;
             }

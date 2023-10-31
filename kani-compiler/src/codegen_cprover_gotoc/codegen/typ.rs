@@ -14,7 +14,7 @@ use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::print::FmtPrinter;
 use rustc_middle::ty::GenericArgsRef;
 use rustc_middle::ty::{
-    self, AdtDef, Const, FloatTy, GeneratorArgs, Instance, IntTy, PolyFnSig, Ty, TyCtxt, TyKind,
+    self, AdtDef, Const, CoroutineArgs, FloatTy, Instance, IntTy, PolyFnSig, Ty, TyCtxt, TyKind,
     UintTy, VariantDef, VtblEntry,
 };
 use rustc_middle::ty::{List, TypeFoldable};
@@ -326,13 +326,13 @@ impl<'tcx> GotocCtx<'tcx> {
     // Adapted from `fn_sig_for_fn_abi` in
     // https://github.com/rust-lang/rust/blob/739d68a76e35b22341d9930bb6338bf202ba05ba/compiler/rustc_ty_utils/src/abi.rs#L88
     // Code duplication tracked here: https://github.com/model-checking/kani/issues/1365
-    fn generator_sig(
+    fn coroutine_sig(
         &self,
         did: &DefId,
         ty: Ty<'tcx>,
         args: ty::GenericArgsRef<'tcx>,
     ) -> ty::PolyFnSig<'tcx> {
-        let sig = args.as_generator().poly_sig();
+        let sig = args.as_coroutine().poly_sig();
 
         let bound_vars = self.tcx.mk_bound_variable_kinds_from_iter(
             sig.bound_vars().iter().chain(iter::once(ty::BoundVariableKind::Region(ty::BrEnv))),
@@ -350,12 +350,12 @@ impl<'tcx> GotocCtx<'tcx> {
         let env_ty = Ty::new_adt(self.tcx, pin_adt_ref, pin_args);
 
         let sig = sig.skip_binder();
-        // The `FnSig` and the `ret_ty` here is for a generators main
-        // `Generator::resume(...) -> GeneratorState` function in case we
-        // have an ordinary generator, or the `Future::poll(...) -> Poll`
-        // function in case this is a special generator backing an async construct.
+        // The `FnSig` and the `ret_ty` here is for a coroutines main
+        // `coroutine::resume(...) -> CoroutineState` function in case we
+        // have an ordinary coroutine, or the `Future::poll(...) -> Poll`
+        // function in case this is a special coroutine backing an async construct.
         let tcx = self.tcx;
-        let (resume_ty, ret_ty) = if tcx.generator_is_async(*did) {
+        let (resume_ty, ret_ty) = if tcx.coroutine_is_async(*did) {
             // The signature should be `Future::poll(_, &mut Context<'_>) -> Poll<Output>`
             let poll_did = tcx.require_lang_item(LangItem::Poll, None);
             let poll_adt_ref = tcx.adt_def(poll_did);
@@ -378,8 +378,8 @@ impl<'tcx> GotocCtx<'tcx> {
 
             (context_mut_ref, ret_ty)
         } else {
-            // The signature should be `Generator::resume(_, Resume) -> GeneratorState<Yield, Return>`
-            let state_did = tcx.require_lang_item(LangItem::GeneratorState, None);
+            // The signature should be `Coroutine::resume(_, Resume) -> CoroutineState<Yield, Return>`
+            let state_did = tcx.require_lang_item(LangItem::CoroutineState, None);
             let state_adt_ref = tcx.adt_def(state_did);
             let state_args = tcx.mk_args(&[sig.yield_ty.into(), sig.return_ty.into()]);
             let ret_ty = Ty::new_adt(tcx, state_adt_ref, state_args);
@@ -411,7 +411,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
                 sig
             }
-            ty::Generator(did, args, _) => self.generator_sig(did, fntyp, args),
+            ty::Coroutine(did, args, _) => self.coroutine_sig(did, fntyp, args),
             _ => unreachable!("Can't get function signature of type: {:?}", fntyp),
         })
     }
@@ -632,16 +632,17 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     pub fn ty_pretty_name(&self, t: Ty<'tcx>) -> InternedString {
+        use crate::rustc_middle::ty::print::Print;
         use rustc_hir::def::Namespace;
-        use rustc_middle::ty::print::Printer;
-        let printer = FmtPrinter::new(self.tcx, Namespace::TypeNS);
+        let mut printer = FmtPrinter::new(self.tcx, Namespace::TypeNS);
 
         // Monomorphizing the type ensures we get a cannonical form for dynamic trait
         // objects with auto traits, such as:
         //   StructTag("tag-std::boxed::Box<(dyn std::error::Error + std::marker::Send + std::marker::Sync)>") }
         //   StructTag("tag-std::boxed::Box<dyn std::error::Error + std::marker::Send + std::marker::Sync>") }
         let t = self.monomorphize(t);
-        with_no_trimmed_paths!(printer.print_type(t).unwrap().into_buffer()).intern()
+        t.print(&mut printer).unwrap();
+        with_no_trimmed_paths!(printer.into_buffer()).intern()
     }
 
     pub fn ty_mangled_name(&self, t: Ty<'tcx>) -> InternedString {
@@ -790,7 +791,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             ty::FnPtr(sig) => self.codegen_function_sig(*sig).to_pointer(),
             ty::Closure(_, subst) => self.codegen_ty_closure(ty, subst),
-            ty::Generator(..) => self.codegen_ty_generator(ty),
+            ty::Coroutine(..) => self.codegen_ty_coroutine(ty),
             ty::Never => self.ensure_struct(NEVER_TYPE_EMPTY_STRUCT_NAME, "!", |_, _| vec![]),
             ty::Tuple(ts) => {
                 if ts.is_empty() {
@@ -813,7 +814,7 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Bound(_, _) | ty::Param(_) => unreachable!("monomorphization bug"),
 
             // type checking remnants which shouldn't be reachable
-            ty::GeneratorWitness(_, _) | ty::Infer(_) | ty::Placeholder(_) | ty::Error(_) => {
+            ty::CoroutineWitness(_, _) | ty::Infer(_) | ty::Placeholder(_) | ty::Error(_) => {
                 unreachable!("remnants of type checking")
             }
         }
@@ -981,9 +982,9 @@ impl<'tcx> GotocCtx<'tcx> {
         })
     }
 
-    /// Translate a generator type similarly to an enum with a variant for each suspend point.
+    /// Translate a coroutine type similarly to an enum with a variant for each suspend point.
     ///
-    /// Consider the following generator:
+    /// Consider the following coroutine:
     /// ```
     /// || {
     ///     let a = true;
@@ -995,13 +996,13 @@ impl<'tcx> GotocCtx<'tcx> {
     /// ```
     ///
     /// Rustc compiles this to something similar to the following enum (but there are differences, see below!),
-    /// as described at the top of <https://github.com/rust-lang/rust/blob/master/compiler/rustc_mir_transform/src/generator.rs>:
+    /// as described at the top of <https://github.com/rust-lang/rust/blob/master/compiler/rustc_mir_transform/src/coroutine.rs>:
     ///
     /// ```ignore
-    /// enum GeneratorEnum {
-    ///     Unresumed,                        // initial state of the generator
-    ///     Returned,                         // generator has returned
-    ///     Panicked,                         // generator has panicked
+    /// enum CoroutineEnum {
+    ///     Unresumed,                        // initial state of the coroutine
+    ///     Returned,                         // coroutine has returned
+    ///     Panicked,                         // coroutine has panicked
     ///     Suspend0 { b: &bool, a: bool },   // state after suspending (`yield`ing) for the first time
     ///     Suspend1,                         // state after suspending (`yield`ing) for the second time
     /// }
@@ -1014,12 +1015,12 @@ impl<'tcx> GotocCtx<'tcx> {
     /// This means that we CANNOT use the enum translation, which would be roughly as follows:
     ///
     /// ```ignore
-    /// struct GeneratorEnum {
+    /// struct CoroutineEnum {
     ///     int case; // discriminant
-    ///     union GeneratorEnum-union cases; // variant
+    ///     union CoroutineEnum-union cases; // variant
     /// }
     ///
-    /// union GeneratorEnum-union {
+    /// union CoroutineEnum-union {
     ///     struct Unresumed variant0;
     ///     struct Returned variant1;
     ///     // ...
@@ -1029,10 +1030,10 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Instead, we use the following translation:
     ///
     /// ```ignore
-    /// union GeneratorEnum {
+    /// union CoroutineEnum {
     ///     struct DirectFields direct_fields;
-    ///     struct Unresumed generator_variant_Unresumed;
-    ///     struct Returned generator_variant_Returned;
+    ///     struct Unresumed coroutine_variant_Unresumed;
+    ///     struct Returned coroutine_variant_Returned;
     ///     // ...
     /// }
     ///
@@ -1049,17 +1050,17 @@ impl<'tcx> GotocCtx<'tcx> {
     /// // ...
     ///
     /// struct Suspend0 {
-    ///     bool *generator_field_0; // variable b in the generator code above
+    ///     bool *coroutine_field_0; // variable b in the coroutine code above
     ///     // padding (for char case in DirectFields)
-    ///     bool generator_field_1; // variable a in the generator code above
+    ///     bool coroutine_field_1; // variable a in the coroutine code above
     /// }
     /// ```
     ///
-    /// Of course, if the generator has any other top-level/direct fields, they'd be included in the `DirectFields` struct as well.
-    fn codegen_ty_generator(&mut self, ty: Ty<'tcx>) -> Type {
-        let generator_name = self.ty_mangled_name(ty);
+    /// Of course, if the coroutine has any other top-level/direct fields, they'd be included in the `DirectFields` struct as well.
+    fn codegen_ty_coroutine(&mut self, ty: Ty<'tcx>) -> Type {
+        let coroutine_name = self.ty_mangled_name(ty);
         let pretty_name = self.ty_pretty_name(ty);
-        debug!(?pretty_name, "codeged_ty_generator");
+        debug!(?pretty_name, "codeged_ty_coroutine");
         self.ensure_union(self.ty_mangled_name(ty), pretty_name, |ctx, _| {
             let type_and_layout = ctx.layout_of(ty);
             let (discriminant_field, variants) = match &type_and_layout.variants {
@@ -1069,13 +1070,13 @@ impl<'tcx> GotocCtx<'tcx> {
                     variants,
                     ..
                 } => (tag_field, variants),
-                _ => unreachable!("Generators have more than one variant and use direct encoding"),
+                _ => unreachable!("Coroutines have more than one variant and use direct encoding"),
             };
             // generate a struct for the direct fields of the layout (fields that don't occur in the variants)
             let direct_fields = DatatypeComponent::Field {
                 name: "direct_fields".into(),
-                typ: ctx.codegen_generator_variant_struct(
-                    generator_name,
+                typ: ctx.codegen_coroutine_variant_struct(
+                    coroutine_name,
                     pretty_name,
                     type_and_layout,
                     "DirectFields".into(),
@@ -1084,11 +1085,11 @@ impl<'tcx> GotocCtx<'tcx> {
             };
             let mut fields = vec![direct_fields];
             for var_idx in variants.indices() {
-                let variant_name = GeneratorArgs::variant_name(var_idx).into();
+                let variant_name = CoroutineArgs::variant_name(var_idx).into();
                 fields.push(DatatypeComponent::Field {
-                    name: ctx.generator_variant_name(var_idx),
-                    typ: ctx.codegen_generator_variant_struct(
-                        generator_name,
+                    name: ctx.coroutine_variant_name(var_idx),
+                    typ: ctx.codegen_coroutine_variant_struct(
+                        coroutine_name,
                         pretty_name,
                         type_and_layout.for_variant(ctx, var_idx),
                         variant_name,
@@ -1100,22 +1101,22 @@ impl<'tcx> GotocCtx<'tcx> {
         })
     }
 
-    /// Generates a struct for a variant of the generator.
+    /// Generates a struct for a variant of the coroutine.
     ///
-    /// The field `discriminant_field` should be `Some(idx)` when generating the variant for the direct (top-[evel) fields of the generator.
+    /// The field `discriminant_field` should be `Some(idx)` when generating the variant for the direct (top-[evel) fields of the coroutine.
     /// Then the field with the index `idx` will be treated as the discriminant and will be given a special name to work with the rest of the code.
-    /// The field `discriminant_field` should be `None` when generating an actual variant of the generator because those don't contain the discriminant as a field.
-    fn codegen_generator_variant_struct(
+    /// The field `discriminant_field` should be `None` when generating an actual variant of the coroutine because those don't contain the discriminant as a field.
+    fn codegen_coroutine_variant_struct(
         &mut self,
-        generator_name: InternedString,
-        pretty_generator_name: InternedString,
+        coroutine_name: InternedString,
+        pretty_coroutine_name: InternedString,
         type_and_layout: TyAndLayout<'tcx, Ty<'tcx>>,
         variant_name: InternedString,
         discriminant_field: Option<usize>,
     ) -> Type {
-        let struct_name = format!("{generator_name}::{variant_name}");
-        let pretty_struct_name = format!("{pretty_generator_name}::{variant_name}");
-        debug!(?pretty_struct_name, "codeged_generator_variant_struct");
+        let struct_name = format!("{coroutine_name}::{variant_name}");
+        let pretty_struct_name = format!("{pretty_coroutine_name}::{variant_name}");
+        debug!(?pretty_struct_name, "codeged_coroutine_variant_struct");
         self.ensure_struct(struct_name, pretty_struct_name, |ctx, _| {
             let mut offset = Size::ZERO;
             let mut fields = vec![];
@@ -1125,7 +1126,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let field_name = if Some(idx) == discriminant_field {
                     "case".into()
                 } else {
-                    ctx.generator_field_name(idx)
+                    ctx.coroutine_field_name(idx)
                 };
                 let field_ty = type_and_layout.field(ctx, idx).ty;
                 let field_offset = type_and_layout.fields.offset(idx);
@@ -1148,12 +1149,12 @@ impl<'tcx> GotocCtx<'tcx> {
         })
     }
 
-    pub fn generator_variant_name(&self, var_idx: VariantIdx) -> InternedString {
-        format!("generator_variant_{}", GeneratorArgs::variant_name(var_idx)).into()
+    pub fn coroutine_variant_name(&self, var_idx: VariantIdx) -> InternedString {
+        format!("coroutine_variant_{}", CoroutineArgs::variant_name(var_idx)).into()
     }
 
-    pub fn generator_field_name(&self, field_idx: usize) -> InternedString {
-        format!("generator_field_{field_idx}").into()
+    pub fn coroutine_field_name(&self, field_idx: usize) -> InternedString {
+        format!("coroutine_field_{field_idx}").into()
     }
 
     /// Codegen "fat pointers" to the given `pointee_type`. These are pointers with metadata.
@@ -1230,7 +1231,7 @@ impl<'tcx> GotocCtx<'tcx> {
             | ty::Closure(..)
             | ty::Float(_)
             | ty::Foreign(_)
-            | ty::Generator(..)
+            | ty::Coroutine(..)
             | ty::Int(_)
             | ty::RawPtr(_)
             | ty::Ref(..)
@@ -1250,7 +1251,7 @@ impl<'tcx> GotocCtx<'tcx> {
             // For soundness, hold off on generating them till we have test-cases.
             ty::Bound(_, _) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Error(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
-            ty::GeneratorWitness(_, _) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
+            ty::CoroutineWitness(_, _) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Infer(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Param(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Placeholder(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
@@ -1441,9 +1442,9 @@ impl<'tcx> GotocCtx<'tcx> {
                 })
             }
             Variants::Multiple { tag_encoding, variants, tag_field, .. } => {
-                // Contrary to generators, currently enums have only one field (the discriminant), the rest are in the variants:
+                // Contrary to coroutines, currently enums have only one field (the discriminant), the rest are in the variants:
                 assert!(layout.fields.count() <= 1);
-                // Contrary to generators, the discriminant is the first (and only) field for enums:
+                // Contrary to coroutines, the discriminant is the first (and only) field for enums:
                 assert_eq!(*tag_field, 0);
                 match tag_encoding {
                     TagEncoding::Direct => {

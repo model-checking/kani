@@ -152,7 +152,7 @@ impl<'tcx> From<&Terminator<'tcx>> for Key {
             TerminatorKind::Assert { .. } => Key("Assert"),
             TerminatorKind::Call { .. } => Key("Call"),
             TerminatorKind::Drop { .. } => Key("Drop"),
-            TerminatorKind::GeneratorDrop => Key("GeneratorDrop"),
+            TerminatorKind::CoroutineDrop => Key("CoroutineDrop"),
             TerminatorKind::Goto { .. } => Key("Goto"),
             TerminatorKind::FalseEdge { .. } => Key("FalseEdge"),
             TerminatorKind::FalseUnwind { .. } => Key("FalseUnwind"),

@@ -1,8 +1,8 @@
 // Copyright rustc Contributors
-// Adapted from rustc: https://github.com/rust-lang/rust/tree/5f98537eb7b5f42c246a52c550813c3cff336069/src/test/ui/generator/env-drop.rs
-//
+// Adapted from rustc: https://github.com/rust-lang/rust/tree/5f98537eb7b5f42c246a52c550813c3cff336069/src/test/ui/coroutine/conditional-drop.rs
+
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-//
+
 // Modifications Copyright Kani Contributors
 // See GitHub history for details.
 
@@ -11,9 +11,9 @@
 // revisions: default nomiropt
 //[nomiropt]compile-flags: -Z mir-opt-level=0
 
-#![feature(generators, generator_trait)]
+#![feature(coroutines, coroutine_trait)]
 
-use std::ops::Generator;
+use std::ops::Coroutine;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -27,49 +27,47 @@ impl Drop for B {
     }
 }
 
+fn test() -> bool {
+    true
+}
+fn test2() -> bool {
+    false
+}
+
 #[kani::proof]
 fn main() {
     t1();
     t2();
-    t3();
 }
 
 fn t1() {
-    let b = B;
-    let mut foo = || {
+    let mut a = || {
+        let b = B;
+        if test() {
+            drop(b);
+        }
         yield;
-        drop(b);
     };
 
     let n = A.load(Ordering::SeqCst);
-    drop(Pin::new(&mut foo).resume(()));
-    assert_eq!(A.load(Ordering::SeqCst), n);
-    drop(foo);
+    Pin::new(&mut a).resume(());
+    assert_eq!(A.load(Ordering::SeqCst), n + 1);
+    Pin::new(&mut a).resume(());
     assert_eq!(A.load(Ordering::SeqCst), n + 1);
 }
 
 fn t2() {
-    let b = B;
-    let mut foo = || {
-        yield b;
-    };
-
-    let n = A.load(Ordering::SeqCst);
-    drop(Pin::new(&mut foo).resume(()));
-    assert_eq!(A.load(Ordering::SeqCst), n + 1);
-    drop(foo);
-    assert_eq!(A.load(Ordering::SeqCst), n + 1);
-}
-
-fn t3() {
-    let b = B;
-    let foo = || {
+    let mut a = || {
+        let b = B;
+        if test2() {
+            drop(b);
+        }
         yield;
-        drop(b);
     };
 
     let n = A.load(Ordering::SeqCst);
+    Pin::new(&mut a).resume(());
     assert_eq!(A.load(Ordering::SeqCst), n);
-    drop(foo);
+    Pin::new(&mut a).resume(());
     assert_eq!(A.load(Ordering::SeqCst), n + 1);
 }

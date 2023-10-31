@@ -383,7 +383,7 @@ impl<'tcx> GotocCtx<'tcx> {
                                 assert_eq!(
                                     fields[0].name().to_string(),
                                     "case",
-                                    "Unexpected field in enum/generator. Please report your failing case at https://github.com/model-checking/kani/issues/1465"
+                                    "Unexpected field in enum/coroutine. Please report your failing case at https://github.com/model-checking/kani/issues/1465"
                                 );
                                 Expr::struct_expr_with_nondet_fields(
                                     cgt,
