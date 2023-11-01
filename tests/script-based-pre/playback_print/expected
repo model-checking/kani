@@ -1,0 +1,13 @@
+internal error: entered unreachable code: oops
+
+assertion `left == right` failed: Found 1 != 0
+left: 1
+right: 0
+
+assertion `left == right` failed
+left: 0
+right: 1
+
+Found value 2
+
+test result: FAILED. 0 passed; 4 failed
