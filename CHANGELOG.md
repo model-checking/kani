@@ -9,9 +9,9 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 ### What's Changed
 
 * Ease setup in Amazon Linux 2 by @adpaco-aws in https://github.com/model-checking/kani/pull/2833
-* Propogate backend options into goto-synthesizer by @qinheping in https://github.com/model-checking/kani/pull/2643
+* Propagate backend options into goto-synthesizer by @qinheping in https://github.com/model-checking/kani/pull/2643
 * Update CBMC version to 5.95.1 by @adpaco-aws in https://github.com/model-checking/kani/pull/2844
-* Fix issues and Update toolchain 10-26 by @jaisnan in https://github.com/model-checking/kani/pull/2843
+* Rust toolchain upgraded to `nightly-2023-10-31` by @jaisnan @adpaco-aws
 
 **Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.39.0...kani-0.40.0
 
