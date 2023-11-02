@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Copyright Kani Contributors
 # SPDX-License-Identifier: Apache-2.0 OR MIT
-# Test that concrete playback -Z concrete-playback does not override std print
-# functions
+
+# Test that concrete playback does not override std print functions
 
 set -o nounset
 
