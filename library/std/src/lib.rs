@@ -15,9 +15,11 @@ pub use std::*;
 // Bind `core::assert` to a different name to avoid possible name conflicts if a
 // crate uses `extern crate std as core`. See
 // https://github.com/model-checking/kani/issues/1949
+#[cfg(not(feature = "concrete_playback"))]
 #[allow(unused_imports)]
 use core::assert as __kani__workaround_core_assert;
 
+#[cfg(not(feature = "concrete_playback"))]
 // Override process calls with stubs.
 pub mod process;
 
@@ -41,6 +43,7 @@ pub mod process;
 /// ```
 /// the assert message will be:
 /// "The sum of {} and {} is {}", a, b, c
+#[cfg(not(feature = "concrete_playback"))]
 #[macro_export]
 macro_rules! assert {
     ($cond:expr $(,)?) => {
@@ -77,6 +80,7 @@ macro_rules! assert {
 //    (see https://github.com/model-checking/kani/issues/13)
 // 3. Call kani::assert so that any instrumentation that it does (e.g. injecting
 //    reachability checks) is done for assert_eq and assert_ne
+#[cfg(not(feature = "concrete_playback"))]
 #[macro_export]
 macro_rules! assert_eq {
     ($left:expr, $right:expr $(,)?) => ({
@@ -89,6 +93,7 @@ macro_rules! assert_eq {
     });
 }
 
+#[cfg(not(feature = "concrete_playback"))]
 #[macro_export]
 macro_rules! assert_ne {
     ($left:expr, $right:expr $(,)?) => ({
@@ -102,16 +107,19 @@ macro_rules! assert_ne {
 }
 
 // Treat the debug assert macros same as non-debug ones
+#[cfg(not(feature = "concrete_playback"))]
 #[macro_export]
 macro_rules! debug_assert {
     ($($x:tt)*) => ({ $crate::assert!($($x)*); })
 }
 
+#[cfg(not(feature = "concrete_playback"))]
 #[macro_export]
 macro_rules! debug_assert_eq {
     ($($x:tt)*) => ({ $crate::assert_eq!($($x)*); })
 }
 
+#[cfg(not(feature = "concrete_playback"))]
 #[macro_export]
 macro_rules! debug_assert_ne {
     ($($x:tt)*) => ({ $crate::assert_ne!($($x)*); })
@@ -119,28 +127,33 @@ macro_rules! debug_assert_ne {
 
 // Override the print macros to skip all the printing functionality (which
 // is not relevant for verification)
+#[cfg(not(feature = "concrete_playback"))]
 #[macro_export]
 macro_rules! print {
     ($($x:tt)*) => {{ let _ = format_args!($($x)*); }};
 }
 
+#[cfg(not(feature = "concrete_playback"))]
 #[macro_export]
 macro_rules! eprint {
     ($($x:tt)*) => {{ let _ = format_args!($($x)*); }};
 }
 
+#[cfg(not(feature = "concrete_playback"))]
 #[macro_export]
 macro_rules! println {
     () => { };
     ($($x:tt)*) => {{ let _ = format_args!($($x)*); }};
 }
 
+#[cfg(not(feature = "concrete_playback"))]
 #[macro_export]
 macro_rules! eprintln {
     () => { };
     ($($x:tt)*) => {{ let _ = format_args!($($x)*); }};
 }
 
+#[cfg(not(feature = "concrete_playback"))]
 #[macro_export]
 macro_rules! unreachable {
     // The argument, if present, is a literal that represents the error message, i.e.:
@@ -171,6 +184,7 @@ macro_rules! unreachable {
         stringify!($fmt, $($arg)*)))}};
 }
 
+#[cfg(not(feature = "concrete_playback"))]
 #[macro_export]
 macro_rules! panic {
     // No argument is given.
