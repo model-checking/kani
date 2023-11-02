@@ -687,7 +687,6 @@ fn try_as_wrapper_call_args<'a>(
     stmt: &'a mut syn::Stmt,
     wrapper_fn_name: &str,
 ) -> Option<&'a mut syn::punctuated::Punctuated<syn::Expr, syn::token::Comma>> {
-    println!("Checking statement {stmt:?}");
     match stmt {
         syn::Stmt::Local(syn::Local {
             pat: syn::Pat::Type(syn::PatType { pat: inner_pat, .. }),

@@ -38,7 +38,7 @@ use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
 use rustc_middle::mir::mono::MonoItem;
 use rustc_middle::query::{ExternProviders, Providers};
-use rustc_middle::ty::{Instance, InstanceDef, ParamEnv, TyCtxt};
+use rustc_middle::ty::{Instance, InstanceDef, TyCtxt};
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::cstore::MetadataLoaderDyn;
 use rustc_session::output::out_filename;
@@ -82,7 +82,7 @@ impl GotocCodegenBackend {
         starting_items: &[MonoItem<'tcx>],
         symtab_goto: &Path,
         machine_model: &MachineModel,
-        check_contract: Option<DefId>,
+        mut check_contract: Option<DefId>,
     ) -> (GotocCtx<'tcx>, Vec<MonoItem<'tcx>>) {
         let items = with_timer(
             || collect_reachable_items(tcx, starting_items),
@@ -146,6 +146,11 @@ impl GotocCodegenBackend {
                     }
                 }
 
+                if let Some(did) = &mut check_contract {
+                    let attrs = KaniAttributes::for_item(tcx, *did);
+                    *did = attrs.inner_check().unwrap().unwrap()
+                }
+
                 // Attaching the contract gets its own loop, because the
                 // functions used in the contract expressions must have been
                 // declared and created before since we rip out the
@@ -157,29 +162,12 @@ impl GotocCodegenBackend {
                     {
                         if check_contract == Some(*did) {
                             let attrs = KaniAttributes::for_item(tcx, *did);
-                            let assigns_contract =
-                                attrs.modifies_contract().unwrap_or_else(Vec::new);
-
-                            let get_instance = |did| {
-                                Instance::expect_resolve(
-                                    tcx,
-                                    ParamEnv::reveal_all(),
-                                    did,
-                                    instance.args,
-                                )
-                            };
-                            let gcx = &mut gcx;
-                            let attach_contract =
-                                |target| gcx.attach_contract(target, assigns_contract);
-                            let name_for_inst = |inst| tcx.symbol_name(inst).to_string();
-
-                            let Ok(inner_check_id) = attrs.inner_check().unwrap() else {
-                                continue;
-                            };
-                            let inner_check_inst = get_instance(inner_check_id);
-                            attach_contract(inner_check_inst);
+                            let assigns_contract = attrs.modifies_contract().unwrap();
+                            gcx.attach_contract(*instance, assigns_contract);
                             assert!(
-                                contract_info.replace(name_for_inst(inner_check_inst)).is_none()
+                                contract_info
+                                    .replace(tcx.symbol_name(*instance).to_string())
+                                    .is_none()
                             );
                         }
                     }

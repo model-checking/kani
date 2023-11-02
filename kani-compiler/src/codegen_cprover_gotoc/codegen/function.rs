@@ -7,7 +7,7 @@ use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{Expr, FunctionContract, Stmt, Symbol};
 use cbmc::InternString;
 use rustc_middle::mir::traversal::reverse_postorder;
-use rustc_middle::mir::{self, Body, HasLocalDecls, Local};
+use rustc_middle::mir::{Body, HasLocalDecls, Local};
 use rustc_middle::ty::{self, Instance};
 use std::collections::BTreeMap;
 use std::iter::FromIterator;
