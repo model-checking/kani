@@ -1,8 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-// compile-flags: --edition 2021
-// kani-flags: playback
+// Harness used to test that playback do not override assertion and panic functions.
 
 #[kani::proof]
 pub fn harness() {
