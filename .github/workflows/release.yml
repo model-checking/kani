@@ -215,6 +215,7 @@ jobs:
             echo "Git tag ${{env.TAG_VERSION}} did not match crate version ${{env.CRATE_VERSION}}"
             exit 1
           fi
+          echo "version=${{ env.TAG_VERSION }}" >> $GITHUB_OUTPUT
 
       - name: Download MacOS bundle
         uses: actions/download-artifact@v3
