@@ -332,7 +332,7 @@ impl ContractConditionsType {
 }
 
 impl<'a> ContractConditionsHandler<'a> {
-    fn is_fist_emit(&self) -> bool {
+    fn is_first_emit(&self) -> bool {
         matches!(self.function_state, ContractFunctionState::Untouched)
     }
 
@@ -412,7 +412,7 @@ impl<'a> ContractConditionsHandler<'a> {
                 let wrapper_name = self.make_wrapper_name().to_string();
                 let wrapper_args = make_wrapper_args(attr.len());
                 // TODO handle first invocation where this is the actual body.
-                if !self.is_fist_emit() {
+                if !self.is_first_emit() {
                     if let Some(wrapper_call_args) = self
                         .annotated_fn
                         .block
@@ -433,7 +433,7 @@ impl<'a> ContractConditionsHandler<'a> {
                 let wrapper_args = make_wrapper_args(attr.len());
 
                 quote!(
-                    #(let #wrapper_args = kani::untracked_deref(&#attr);)*
+                    #(let #wrapper_args = unsafe { kani::DecoupleLifetime::decouple_lifetime(&#attr) };)*
                     #(#inner)*
                 )
             }
@@ -457,7 +457,7 @@ impl<'a> ContractConditionsHandler<'a> {
     fn create_inner_call(&self, additional_args: impl Iterator<Item = Ident>) -> Vec<syn::Stmt> {
         let wrapper_name = self.make_wrapper_name();
         let return_type = return_type_to_type(&self.annotated_fn.sig.output);
-        if self.is_fist_emit() {
+        if self.is_first_emit() {
             let args = exprs_for_args(&self.annotated_fn.sig.inputs);
             syn::parse_quote!(
                 let result : #return_type = #wrapper_name(#(#args,)* #(#additional_args),*);

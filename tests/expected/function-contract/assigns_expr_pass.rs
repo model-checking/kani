@@ -3,9 +3,9 @@
 // kani-flags: -Zfunction-contracts
 
 #[kani::requires(**ptr < 100)]
-#[kani::modifies((*ptr).as_ref())]
+#[kani::modifies(*ptr.as_ref())]
 fn modify(ptr: &mut Box<u32>) {
-    *ptr += 1;
+    *ptr.as_mut() += 1;
 }
 
 #[kani::proof_for_contract(modify)]

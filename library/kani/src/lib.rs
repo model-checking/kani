@@ -92,6 +92,40 @@ macro_rules! implies {
     };
 }
 
+#[doc(hidden)]
+pub trait DecoupleLifetime<'a> {
+    type Inner;
+    unsafe fn decouple_lifetime(self) -> &'a Self::Inner;
+}
+
+impl<'a, 'b, T> DecoupleLifetime<'a> for &'b T {
+    type Inner = T;
+    unsafe fn decouple_lifetime(self) -> &'a Self::Inner {
+        std::mem::transmute(self)
+    }
+}
+
+impl<'a, 'b, T> DecoupleLifetime<'a> for &'b mut T {
+    type Inner = T;
+    unsafe fn decouple_lifetime(self) -> &'a Self::Inner {
+        std::mem::transmute(self)
+    }
+}
+
+impl<'a, T> DecoupleLifetime<'a> for *const T {
+    type Inner = T;
+    unsafe fn decouple_lifetime(self) -> &'a Self::Inner {
+        &*self as &'a T
+    }
+}
+
+impl<'a, T> DecoupleLifetime<'a> for *mut T {
+    type Inner = T;
+    unsafe fn decouple_lifetime(self) -> &'a Self::Inner {
+        &*self as &'a T
+    }
+}
+
 /// A way to break the ownerhip rules. Only used by contracts where we can
 /// guarantee it is done safely.
 #[inline(never)]
