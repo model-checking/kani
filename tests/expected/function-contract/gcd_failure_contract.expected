@@ -1,4 +1,4 @@
-gcd.assertion\
+assertion\
 - Status: FAILURE\
 - Description: "result != 0 && x % result == 1 && y % result == 0"\
 in function gcd\

@@ -14,8 +14,7 @@ use rustc_data_structures::fingerprint::Fingerprint;
 use rustc_hir::{def_id::DefId, definitions::DefPathHash};
 use rustc_index::IndexVec;
 use rustc_middle::mir::{
-    interpret::ConstValue, visit::MutVisitor, Body, ConstantKind, Local, LocalDecl, Location,
-    Operand,
+    visit::MutVisitor, Body, Const, ConstValue, Local, LocalDecl, Location, Operand,
 };
 use rustc_middle::ty::{self, TyCtxt};
 
@@ -79,7 +78,7 @@ impl<'tcx> MutVisitor<'tcx> for ForeignFunctionTransformer<'tcx> {
                     let Operand::Constant(function_definition) = operand else {
                         return;
                     };
-                    function_definition.literal = ConstantKind::from_value(
+                    function_definition.const_ = Const::from_value(
                         ConstValue::ZeroSized,
                         self.tcx.type_of(stub).instantiate(self.tcx, arguments),
                     );

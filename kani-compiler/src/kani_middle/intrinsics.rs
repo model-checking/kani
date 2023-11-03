@@ -3,7 +3,7 @@
 //! This module contains a MIR pass that replaces some intrinsics by rust intrinsics models as
 //! well as validation logic that can only be added during monomorphization.
 use rustc_index::IndexVec;
-use rustc_middle::mir::{interpret::ConstValue, Body, ConstantKind, Operand, TerminatorKind};
+use rustc_middle::mir::{Body, Const as mirConst, ConstValue, Operand, TerminatorKind};
 use rustc_middle::mir::{Local, LocalDecl};
 use rustc_middle::ty::{self, Ty, TyCtxt};
 use rustc_middle::ty::{Const, GenericArgsRef};
@@ -69,7 +69,7 @@ impl<'tcx> ModelIntrinsics<'tcx> {
             new_gen_args.push(len.into());
 
             let Operand::Constant(fn_def) = func else { unreachable!() };
-            fn_def.literal = ConstantKind::from_value(
+            fn_def.const_ = mirConst::from_value(
                 ConstValue::ZeroSized,
                 tcx.type_of(stub_id).instantiate(tcx, &new_gen_args),
             );

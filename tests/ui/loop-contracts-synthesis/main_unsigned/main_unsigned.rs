@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// kani-flags: --enable-unstable --synthesize-loop-contracts
+// kani-flags: --enable-unstable --synthesize-loop-contracts --cbmc-args --object-bits 4
 
 // Check if goto-synthesizer is correctly called, and synthesizes the required
 // loop invariants.

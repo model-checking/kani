@@ -4,6 +4,47 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
+## [0.40.0]
+
+### What's Changed
+
+* Ease setup in Amazon Linux 2 by @adpaco-aws in https://github.com/model-checking/kani/pull/2833
+* Propagate backend options into goto-synthesizer by @qinheping in https://github.com/model-checking/kani/pull/2643
+* Update CBMC version to 5.95.1 by @adpaco-aws in https://github.com/model-checking/kani/pull/2844
+* Rust toolchain upgraded to `nightly-2023-10-31` by @jaisnan @adpaco-aws
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.39.0...kani-0.40.0
+
+## [0.39.0]
+
+### What's Changed
+
+* Limit --exclude to workspace packages by @tautschnig in https://github.com/model-checking/kani/pull/2808
+* Fix panic warning and add arbitrary Duration by @celinval in https://github.com/model-checking/kani/pull/2820
+* Update CBMC version to 5.94 by @celinval in https://github.com/model-checking/kani/pull/2821
+* Rust toolchain upgraded to `nightly-2023-10-17` by @celinval @tautschnig
+
+**Full Changelog**:
+https://github.com/model-checking/kani/compare/kani-0.38.0...kani-0.39.0
+
+## [0.38.0]
+
+### Major Changes
+
+* Deprecate `any_slice` by @zhassan-aws in https://github.com/model-checking/kani/pull/2789
+
+### What's Changed
+
+* Provide better error message for invalid stubs by @JustusAdam in https://github.com/model-checking/kani/pull/2787
+* Simple Stubbing with Contracts by @JustusAdam in https://github.com/model-checking/kani/pull/2746
+* Avoid mismatch when generating structs that represent scalar data but also include ZSTs by @adpaco-aws in https://github.com/model-checking/kani/pull/2794
+* Prevent kani crash during setup for first time by @jaisnan in https://github.com/model-checking/kani/pull/2799
+* Create concrete playback temp files in source directory by @tautschnig in https://github.com/model-checking/kani/pull/2804
+* Bump CBMC version by @zhassan-aws in https://github.com/model-checking/kani/pull/2796
+* Update Rust toolchain to 2023-09-23 by @tautschnig in https://github.com/model-checking/kani/pull/2806
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.37.0...kani-0.38.0
+
 ## [0.37.0]
 
 ### Major Changes
@@ -11,7 +52,7 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 * Delete obsolete stubs for `Vec` and related options by @zhassan-aws in https://github.com/model-checking/kani/pull/2770
 * Add support for the ARM64 Linux platform by @adpaco-aws in https://github.com/model-checking/kani/pull/2757
 
-## What's Changed
+### What's Changed
 
 * Function Contracts: Support for defining and checking `requires` and `ensures` clauses by @JustusAdam in https://github.com/model-checking/kani/pull/2655
 * Force `any_vec` capacity to match length by @celinval in https://github.com/model-checking/kani/pull/2765
@@ -24,7 +65,7 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 
 ## [0.36.0]
 
-## What's Changed
+### What's Changed
 
 * Enable `-Z stubbing` and error out instead of ignoring stub by @celinval in https://github.com/model-checking/kani/pull/2678
 * Enable concrete playback for failure of UB checks by @zhassan-aws in https://github.com/model-checking/kani/pull/2727
@@ -35,7 +76,7 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 
 ## [0.35.0]
 
-## What's Changed
+### What's Changed
 
 * Add support to `simd_bitmask` by @celinval in https://github.com/model-checking/kani/pull/2677
 * Add integer overflow checking for `simd_div` and `simd_rem` by @reisnera in https://github.com/model-checking/kani/pull/2645
@@ -52,7 +93,7 @@ By default, Kani will now run CBMC with CaDiCaL, since this solver has outperfor
 User's should still be able to select Minisat (or a different solver) either by using `#[solver]` harness attribute,
 or by passing `--solver=<SOLVER>` command line option.
 
-## What's Changed
+### What's Changed
 
 * Allow specifying the scheduling strategy in #[kani_proof] for async functions by @fzaiser in https://github.com/model-checking/kani/pull/1661
 * Support for stubbing out foreign functions by @feliperodri in https://github.com/model-checking/kani/pull/2658
@@ -67,7 +108,7 @@ or by passing `--solver=<SOLVER>` command line option.
 
 ## [0.33.0]
 
-## What's Changed
+### What's Changed
 * Add support for sysconf by @feliperodri in https://github.com/model-checking/kani/pull/2557
 * Print Kani version by @adpaco-aws in https://github.com/model-checking/kani/pull/2619
 * Upgrade Rust toolchain to nightly-2023-07-01 by @qinheping in https://github.com/model-checking/kani/pull/2616
@@ -77,7 +118,7 @@ or by passing `--solver=<SOLVER>` command line option.
 
 ## [0.32.0]
 
-## What's Changed
+### What's Changed
 
 * Add kani::spawn and an executor to the Kani library by @fzaiser in https://github.com/model-checking/kani/pull/1659
 * Add "kani" configuration key to enable conditional compilation in build scripts by @celinval in https://github.com/model-checking/kani/pull/2297
@@ -91,7 +132,7 @@ or by passing `--solver=<SOLVER>` command line option.
 
 ## [0.31.0]
 
-## What's Changed
+### What's Changed
 * Add `--exact` flag by @jaisnan in https://github.com/model-checking/kani/pull/2527
 * Build the verification libraries using Kani compiler by @celinval in https://github.com/model-checking/kani/pull/2534
 * Verify all Kani attributes in all crate items upfront by @celinval in https://github.com/model-checking/kani/pull/2536
@@ -102,7 +143,7 @@ or by passing `--solver=<SOLVER>` command line option.
 
 ## [0.30.0]
 
-## What's Changed
+### What's Changed
 * Remove --harness requirement from stubbing by @celinval in https://github.com/model-checking/kani/pull/2495
 * Add target selection for cargo kani by @celinval in https://github.com/model-checking/kani/pull/2507
 * Generate Multiple playback harnesses when multiple crashes exist in a single harness. by @YoshikiTakashima in https://github.com/model-checking/kani/pull/2496

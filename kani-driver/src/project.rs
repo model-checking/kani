@@ -366,6 +366,6 @@ fn metadata_with_function(
 // Note: `out_dir` is already on canonical form, so no need to invoke `try_new()`.
 fn standalone_artifact(out_dir: &Path, crate_name: &String, typ: ArtifactType) -> Artifact {
     let mut path = out_dir.join(crate_name);
-    let _ = path.set_extension(&typ);
+    let _ = path.set_extension(typ);
     Artifact { path, typ }
 }

@@ -532,10 +532,14 @@ fn build_failure_message(description: String, trace: &Option<Vec<TraceItem>>) ->
 /// to `--object-bits` being too low. The message is edited to show Kani
 /// options.
 fn postprocess_error_message(message: ParserItem) -> ParserItem {
-    if let ParserItem::Message { ref message_text, message_type: _ } = message && message_text.contains("use the `--object-bits n` option") {
+    if let ParserItem::Message { ref message_text, message_type: _ } = message
+        && message_text.contains("use the `--object-bits n` option")
+    {
         ParserItem::Message {
-            message_text: message_text.replace("--object-bits ", "--enable-unstable --cbmc-args --object-bits "),
-            message_type: String::from("ERROR") }
+            message_text: message_text
+                .replace("--object-bits ", "--enable-unstable --cbmc-args --object-bits "),
+            message_type: String::from("ERROR"),
+        }
     } else {
         message
     }
@@ -619,7 +623,10 @@ fn modify_undefined_function_checks(mut properties: Vec<Property>) -> (Vec<Prope
         {
             // Missing functions come with mangled names.
             // `demangle` produces the demangled version if it's a mangled name.
-            let modified_description = format!("Function `{:#}` with missing definition is unreachable", demangle(function));
+            let modified_description = format!(
+                "Function `{:#}` with missing definition is unreachable",
+                demangle(function)
+            );
             prop.description = modified_description;
             if prop.status == CheckStatus::Failure {
                 has_unknown_location_checks = true;

@@ -130,7 +130,7 @@ enum InvocationType {
 
 /// Peeks at command line arguments to determine if we're being invoked as 'kani' or 'cargo-kani'
 fn determine_invocation_type(mut args: Vec<OsString>) -> InvocationType {
-    let exe = util::executable_basename(&args.get(0));
+    let exe = util::executable_basename(&args.first());
 
     // Case 1: if 'kani' is our first real argument, then we're being invoked as cargo-kani
     // 'cargo kani ...' will cause cargo to run 'cargo-kani kani ...' preserving argv1

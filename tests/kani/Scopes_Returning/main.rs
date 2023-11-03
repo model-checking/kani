@@ -34,8 +34,6 @@ fn main() {
     assert!(e == d || e == 10);
 
     let g: u32 = kani::any();
-    let h = {
-        if g < 10 { g } else { 10 }
-    };
+    let h = { if g < 10 { g } else { 10 } };
     assert!(h == g || h == 10);
 }

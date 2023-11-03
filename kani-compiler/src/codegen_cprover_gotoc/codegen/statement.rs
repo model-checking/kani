@@ -195,7 +195,7 @@ impl<'tcx> GotocCtx<'tcx> {
             TerminatorKind::FalseEdge { .. } | TerminatorKind::FalseUnwind { .. } => {
                 unreachable!("drop elaboration removes these TerminatorKind")
             }
-            TerminatorKind::Yield { .. } | TerminatorKind::GeneratorDrop => {
+            TerminatorKind::Yield { .. } | TerminatorKind::CoroutineDrop => {
                 unreachable!("we should not hit these cases") // why?
             }
             TerminatorKind::InlineAsm { .. } => self.codegen_unimplemented_stmt(

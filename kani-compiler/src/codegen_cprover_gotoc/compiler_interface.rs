@@ -37,7 +37,7 @@ use rustc_metadata::fs::{emit_wrapper_file, METADATA_FILENAME};
 use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
 use rustc_middle::mir::mono::MonoItem;
-use rustc_middle::query::{ExternProviders, Providers};
+use rustc_middle::util::Providers;
 use rustc_middle::ty::{Instance, InstanceDef, TyCtxt};
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::cstore::MetadataLoaderDyn;
@@ -151,31 +151,20 @@ impl GotocCodegenBackend {
                     *did = attrs.inner_check().unwrap().unwrap()
                 }
 
-                // Attaching the contract gets its own loop, because the
-                // functions used in the contract expressions must have been
-                // declared and created before since we rip out the
-                // implementation from the contract function
-                let mut contract_info = None;
-                for item in &items {
-                    if let MonoItem::Fn(instance @ Instance { def: InstanceDef::Item(did), .. }) =
-                        item
-                    {
-                        if check_contract == Some(*did) {
-                            let attrs = KaniAttributes::for_item(tcx, *did);
-                            let Some(assigns_contract) = attrs.modifies_contract() else {
-                                debug!(?instance, "had no assigns contract specified");
-                                continue;
-                            };
-                            gcx.attach_contract(*instance, assigns_contract);
-                            assert!(
-                                contract_info
-                                    .replace(tcx.symbol_name(*instance).to_string())
-                                    .is_none()
-                            );
-                        }
-                    }
-                }
-                contract_info
+                let mut instances_of_check = items.iter().copied().filter_map(|i| match i {
+                    MonoItem::Fn(instance @ Instance { def: InstanceDef::Item(did), .. }) => (check_contract == Some(did)).then_some(instance),
+                    _ => None
+                });
+                let instance_of_check = instances_of_check.next().unwrap();
+                assert!(instances_of_check.next().is_none());
+                let attrs = KaniAttributes::for_item(tcx, instance_of_check.def_id());
+                let assigns_contract = attrs.modifies_contract().unwrap_or_else(|| {
+                    debug!(?instance_of_check, "had no assigns contract specified");
+                    vec![]
+                });
+                gcx.attach_contract(instance_of_check, assigns_contract);
+
+                tcx.symbol_name(instance_of_check).to_string()
             },
             "codegen",
         );
@@ -233,10 +222,6 @@ impl CodegenBackend for GotocCodegenBackend {
 
     fn provide(&self, providers: &mut Providers) {
         provide::provide(providers, &self.queries.lock().unwrap());
-    }
-
-    fn provide_extern(&self, providers: &mut ExternProviders) {
-        provide::provide_extern(providers, &self.queries.lock().unwrap());
     }
 
     fn print_version(&self) {
@@ -328,7 +313,7 @@ impl CodegenBackend for GotocCodegenBackend {
                         if let MonoItem::Fn(instance) = test_fn { instance } else { continue };
                     let metadata = gen_test_metadata(tcx, *test_desc, *instance, &base_filename);
                     let test_model_path = &metadata.goto_file.as_ref().unwrap();
-                    std::fs::copy(&model_path, &test_model_path).expect(&format!(
+                    std::fs::copy(&model_path, test_model_path).expect(&format!(
                         "Failed to copy {} to {}",
                         model_path.display(),
                         test_model_path.display()

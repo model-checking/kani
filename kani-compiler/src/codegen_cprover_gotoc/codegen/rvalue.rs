@@ -17,13 +17,12 @@ use cbmc::goto_program::{
 use cbmc::MachineModel;
 use cbmc::{btree_string_map, InternString, InternedString};
 use num::bigint::BigInt;
-use rustc_abi::FieldIdx;
 use rustc_index::IndexVec;
 use rustc_middle::mir::{AggregateKind, BinOp, CastKind, NullOp, Operand, Place, Rvalue, UnOp};
 use rustc_middle::ty::adjustment::PointerCoercion;
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{self, Instance, IntTy, Ty, TyCtxt, UintTy, VtblEntry};
-use rustc_target::abi::{FieldsShape, Size, TagEncoding, VariantIdx, Variants};
+use rustc_target::abi::{FieldIdx, FieldsShape, Size, TagEncoding, VariantIdx, Variants};
 use std::collections::BTreeMap;
 use tracing::{debug, trace, warn};
 
@@ -499,8 +498,8 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    /// Create an initializer for a generator struct.
-    fn codegen_rvalue_generator(
+    /// Create an initializer for a coroutine struct.
+    fn codegen_rvalue_coroutine(
         &mut self,
         operands: &IndexVec<FieldIdx, Operand<'tcx>>,
         ty: Ty<'tcx>,
@@ -509,7 +508,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let discriminant_field = match &layout.variants {
             Variants::Multiple { tag_encoding: TagEncoding::Direct, tag_field, .. } => tag_field,
             _ => unreachable!(
-                "Expected generators to have multiple variants and direct encoding, but found: {layout:?}"
+                "Expected coroutines to have multiple variants and direct encoding, but found: {layout:?}"
             ),
         };
         let overall_t = self.codegen_ty(ty);
@@ -665,7 +664,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     &self.symbol_table,
                 )
             }
-            AggregateKind::Generator(_, _, _) => self.codegen_rvalue_generator(&operands, res_ty),
+            AggregateKind::Coroutine(_, _, _) => self.codegen_rvalue_coroutine(&operands, res_ty),
         }
     }
 
@@ -785,8 +784,8 @@ impl<'tcx> GotocCtx<'tcx> {
             ),
             "discriminant field (`case`) only exists for multiple variants and direct encoding"
         );
-        let expr = if ty.is_generator() {
-            // Generators are translated somewhat differently from enums (see [`GotoCtx::codegen_ty_generator`]).
+        let expr = if ty.is_coroutine() {
+            // Coroutines are translated somewhat differently from enums (see [`GotoCtx::codegen_ty_coroutine`]).
             // As a consequence, the discriminant is accessed as `.direct_fields.case` instead of just `.case`.
             place.member("direct_fields", &self.symbol_table)
         } else {
