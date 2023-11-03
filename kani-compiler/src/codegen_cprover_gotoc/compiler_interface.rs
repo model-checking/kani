@@ -162,7 +162,10 @@ impl GotocCodegenBackend {
                     {
                         if check_contract == Some(*did) {
                             let attrs = KaniAttributes::for_item(tcx, *did);
-                            let assigns_contract = attrs.modifies_contract().unwrap();
+                            let Some(assigns_contract) = attrs.modifies_contract() else {
+                                debug!(?instance, "had no assigns contract specified");
+                                continue;
+                            };
                             gcx.attach_contract(*instance, assigns_contract);
                             assert!(
                                 contract_info
@@ -172,7 +175,6 @@ impl GotocCodegenBackend {
                         }
                     }
                 }
-                assert_eq!(contract_info.is_some(), check_contract.is_some());
                 contract_info
             },
             "codegen",
