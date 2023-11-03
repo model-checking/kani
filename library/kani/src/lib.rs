@@ -95,34 +95,34 @@ macro_rules! implies {
 #[doc(hidden)]
 pub trait DecoupleLifetime<'a> {
     type Inner;
-    unsafe fn decouple_lifetime(self) -> &'a Self::Inner;
+    unsafe fn decouple_lifetime(&self) -> &'a Self::Inner;
 }
 
 impl<'a, 'b, T> DecoupleLifetime<'a> for &'b T {
     type Inner = T;
-    unsafe fn decouple_lifetime(self) -> &'a Self::Inner {
-        std::mem::transmute(self)
+    unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
+        std::mem::transmute(*self)
     }
 }
 
 impl<'a, 'b, T> DecoupleLifetime<'a> for &'b mut T {
     type Inner = T;
-    unsafe fn decouple_lifetime(self) -> &'a Self::Inner {
-        std::mem::transmute(self)
+    unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
+        *std::mem::transmute::<&'_ &'b mut T, &'_ &'a T>(self)
     }
 }
 
 impl<'a, T> DecoupleLifetime<'a> for *const T {
     type Inner = T;
-    unsafe fn decouple_lifetime(self) -> &'a Self::Inner {
-        &*self as &'a T
+    unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
+        &**self as &'a T
     }
 }
 
 impl<'a, T> DecoupleLifetime<'a> for *mut T {
     type Inner = T;
-    unsafe fn decouple_lifetime(self) -> &'a Self::Inner {
-        &*self as &'a T
+    unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
+        &**self as &'a T
     }
 }
 
