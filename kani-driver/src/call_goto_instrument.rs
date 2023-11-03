@@ -22,7 +22,7 @@ impl KaniSession {
         output: &Path,
         project: &Project,
         harness: &HarnessMetadata,
-        contract_info: Option<String>,
+        contract_info: Option<(String, String)>,
     ) -> Result<()> {
         // We actually start by calling goto-cc to start the specialization:
         self.specialize_to_proof_harness(input, output, &harness.mangled_name)?;
@@ -168,7 +168,7 @@ impl KaniSession {
         &self,
         harness: &HarnessMetadata,
         file: &Path,
-        check: Option<String>,
+        check: Option<(String, String)>,
     ) -> Result<()> {
         if check.is_none() {
             return Ok(());
@@ -177,9 +177,14 @@ impl KaniSession {
         let mut args: Vec<std::ffi::OsString> =
             vec!["--dfcc".into(), (&harness.mangled_name).into()];
 
-        if let Some(function) = check {
+        if let Some((function, recursion_tracker)) = check {
             println!("enforcing function contract for {function}");
-            args.extend(["--enforce-contract".into(), function.into()]);
+            args.extend([
+                "--enforce-contract".into(),
+                function.into(),
+                "--nondet-static-exclude".into(),
+                recursion_tracker.into(),
+            ]);
         }
 
         args.extend([file.into(), file.into()]);

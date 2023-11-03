@@ -60,6 +60,7 @@ enum KaniAttributeKind {
     IsContractGenerated,
     Modifies,
     InnerCheck,
+    RecursionTracker,
 }
 
 impl KaniAttributeKind {
@@ -77,6 +78,7 @@ impl KaniAttributeKind {
             | KaniAttributeKind::ReplacedWith
             | KaniAttributeKind::CheckedWith
             | KaniAttributeKind::Modifies
+            | KaniAttributeKind::RecursionTracker
             | KaniAttributeKind::InnerCheck
             | KaniAttributeKind::IsContractGenerated => false,
         }
@@ -222,6 +224,10 @@ impl<'tcx> KaniAttributes<'tcx> {
             .map(|target| expect_key_string_value(self.tcx.sess, target))
     }
 
+    pub fn recursion_tracker(&self) -> Option<Result<DefId, ErrorGuaranteed>> {
+        self.eval_sibling_attribute(KaniAttributeKind::RecursionTracker)
+    }
+
     fn eval_sibling_attribute(
         &self,
         kind: KaniAttributeKind,
@@ -340,6 +346,9 @@ impl<'tcx> KaniAttributes<'tcx> {
                 KaniAttributeKind::InnerCheck => {
                     self.inner_check();
                 }
+                KaniAttributeKind::RecursionTracker => {
+                    self.recursion_tracker();
+                }
             }
         }
     }
@@ -443,6 +452,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                 | KaniAttributeKind::IsContractGenerated
                 | KaniAttributeKind::Modifies
                 | KaniAttributeKind::InnerCheck
+                | KaniAttributeKind::RecursionTracker
                 | KaniAttributeKind::ReplacedWith => {
                     self.tcx.sess.span_err(self.tcx.def_span(self.item), format!("Contracts are not supported on harnesses. (Found the kani-internal contract attribute `{}`)", kind.as_ref()));
                 }
@@ -498,7 +508,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                     .span_note(
                         self.tcx.def_span(def_id),
                         format!(
-                            "Try adding a contract to this function or use the unsound `{}` attribute instead.", 
+                            "Try adding a contract to this function or use the unsound `{}` attribute instead.",
                             KaniAttributeKind::Stub.as_ref(),
                         )
                     )

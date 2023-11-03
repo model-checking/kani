@@ -37,8 +37,8 @@ use rustc_metadata::fs::{emit_wrapper_file, METADATA_FILENAME};
 use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
 use rustc_middle::mir::mono::MonoItem;
+use rustc_middle::ty::{self, Instance, InstanceDef, ParamEnv, TyCtxt};
 use rustc_middle::util::Providers;
-use rustc_middle::ty::{Instance, InstanceDef, TyCtxt};
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::cstore::MetadataLoaderDyn;
 use rustc_session::output::out_filename;
@@ -82,7 +82,7 @@ impl GotocCodegenBackend {
         starting_items: &[MonoItem<'tcx>],
         symtab_goto: &Path,
         machine_model: &MachineModel,
-        mut check_contract: Option<DefId>,
+        check_contract: Option<DefId>,
     ) -> (GotocCtx<'tcx>, Vec<MonoItem<'tcx>>) {
         let items = with_timer(
             || collect_reachable_items(tcx, starting_items),
@@ -146,25 +146,38 @@ impl GotocCodegenBackend {
                     }
                 }
 
-                if let Some(did) = &mut check_contract {
-                    let attrs = KaniAttributes::for_item(tcx, *did);
-                    *did = attrs.inner_check().unwrap().unwrap()
-                }
+                check_contract.map(|check_contract_def| {
+                    let check_contract_attrs = KaniAttributes::for_item(tcx, check_contract_def);
+                    let wrapper_def = check_contract_attrs.inner_check().unwrap().unwrap();
 
-                let mut instances_of_check = items.iter().copied().filter_map(|i| match i {
-                    MonoItem::Fn(instance @ Instance { def: InstanceDef::Item(did), .. }) => (check_contract == Some(did)).then_some(instance),
-                    _ => None
-                });
-                let instance_of_check = instances_of_check.next().unwrap();
-                assert!(instances_of_check.next().is_none());
-                let attrs = KaniAttributes::for_item(tcx, instance_of_check.def_id());
-                let assigns_contract = attrs.modifies_contract().unwrap_or_else(|| {
-                    debug!(?instance_of_check, "had no assigns contract specified");
-                    vec![]
-                });
-                gcx.attach_contract(instance_of_check, assigns_contract);
+                    let mut instances_of_check = items.iter().copied().filter_map(|i| match i {
+                        MonoItem::Fn(instance @ Instance { def: InstanceDef::Item(did), .. }) => {
+                            (wrapper_def == did).then_some(instance)
+                        }
+                        _ => None,
+                    });
+                    let instance_of_check = instances_of_check.next().unwrap();
+                    assert!(instances_of_check.next().is_none());
+                    let attrs = KaniAttributes::for_item(tcx, instance_of_check.def_id());
+                    let assigns_contract = attrs.modifies_contract().unwrap_or_else(|| {
+                        debug!(?instance_of_check, "had no assigns contract specified");
+                        vec![]
+                    });
+                    gcx.attach_contract(instance_of_check, assigns_contract);
 
-                tcx.symbol_name(instance_of_check).to_string()
+                    let tracker_def = check_contract_attrs.recursion_tracker().unwrap().unwrap();
+                    let tracker_instance = Instance::expect_resolve(
+                        tcx,
+                        ParamEnv::reveal_all(),
+                        tracker_def,
+                        ty::List::empty(),
+                    );
+
+                    (
+                        tcx.symbol_name(instance_of_check).to_string(),
+                        tcx.symbol_name(tracker_instance).to_string(),
+                    )
+                })
             },
             "codegen",
         );

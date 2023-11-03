@@ -80,7 +80,7 @@ impl<'sess, 'pr> HarnessRunner<'sess, 'pr> {
         Ok(results)
     }
 
-    fn get_contract_info(&self, harness: &'pr HarnessMetadata) -> Result<Option<String>> {
+    fn get_contract_info(&self, harness: &'pr HarnessMetadata) -> Result<Option<(String, String)>> {
         let contract_info_artifact =
             self.project.get_harness_artifact(&harness, ArtifactType::ContractMetadata).unwrap();
 
