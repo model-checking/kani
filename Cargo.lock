@@ -443,6 +443,7 @@ name = "kani"
 version = "0.40.0"
 dependencies = [
  "kani_macros",
+ "libc",
 ]
 
 [[package]]
