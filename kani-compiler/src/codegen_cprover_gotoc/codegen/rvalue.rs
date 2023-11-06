@@ -727,7 +727,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         .with_size_of_annotation(self.codegen_ty(t)),
                     NullOp::AlignOf => Expr::int_constant(layout.align.abi.bytes(), Type::size_t()),
                     NullOp::OffsetOf(fields) => Expr::int_constant(
-                        layout.offset_of_subfield(self, fields.iter().map(|f| f.index())).bytes(),
+                        layout.offset_of_subfield(self, fields.iter()).bytes(),
                         Type::size_t(),
                     ),
                 }
