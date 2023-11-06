@@ -3,7 +3,7 @@
 
 //! Checks that verfication fails when `#[kani::should_panic]` is used but not
 //! all failures encountered are panics.
-#![feature(unchecked_math)]
+#![feature(unchecked_shifts)]
 
 fn trigger_overflow() {
     let x: u32 = kani::any();
