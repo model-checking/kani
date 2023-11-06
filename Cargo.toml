@@ -67,4 +67,6 @@ exclude = [
   "tests/slow",
   "tests/assess-scan-test-scaffold",
   "tests/script-based-pre",
+  "tests/script-based-pre/build-cache-bin/target/new_dep",
+  "tests/script-based-pre/build-cache-dirty/target/new_dep",
 ]
