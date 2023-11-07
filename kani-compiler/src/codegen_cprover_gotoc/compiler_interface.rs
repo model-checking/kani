@@ -5,13 +5,13 @@
 
 use crate::args::ReachabilityType;
 use crate::codegen_cprover_gotoc::GotocCtx;
-use crate::kani_middle::analysis;
 use crate::kani_middle::attributes::{is_test_harness_description, KaniAttributes};
 use crate::kani_middle::metadata::gen_test_metadata;
 use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{
     collect_reachable_items, filter_const_crate_items, filter_crate_items,
 };
+use crate::kani_middle::{analysis, SourceLocation};
 use crate::kani_middle::{check_reachable_items, dump_mir_items};
 use crate::kani_queries::QueryDb;
 use cbmc::goto_program::Location;
@@ -166,17 +166,12 @@ impl GotocCodegenBackend {
                     gcx.attach_contract(instance_of_check, assigns_contract);
 
                     let tracker_def = check_contract_attrs.recursion_tracker().unwrap().unwrap();
-                    let tracker_instance = Instance::expect_resolve(
-                        tcx,
-                        ParamEnv::reveal_all(),
-                        tracker_def,
-                        ty::List::empty(),
-                    );
 
-                    (
-                        tcx.symbol_name(instance_of_check).to_string(),
-                        tcx.symbol_name(tracker_instance).to_string(),
-                    )
+                    let span = tcx.def_span(tracker_def);
+                    let location = SourceLocation::new(tcx, &span);
+                    let full_name = format!("{}:{}", location.filename, tcx.item_name(tracker_def));
+
+                    (tcx.symbol_name(instance_of_check).to_string(), full_name)
                 })
             },
             "codegen",
