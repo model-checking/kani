@@ -194,7 +194,10 @@ fn download_url() -> String {
 fn fail_if_unsupported_target() -> Result<()> {
     // This is basically going to be reduced to a compile-time constant
     match TARGET {
-        "x86_64-unknown-linux-gnu" | "x86_64-apple-darwin" | "aarch64-apple-darwin" => Ok(()),
+        "x86_64-unknown-linux-gnu"
+        | "x86_64-apple-darwin"
+        | "aarch64-unknown-linux-gnu"
+        | "aarch64-apple-darwin" => Ok(()),
         _ => bail!("Kani does not support this platform (Rust target {})", TARGET),
     }
 }
