@@ -4,6 +4,12 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
+## [0.41.0]
+
+### Breaking Changes
+
+* Delete `any_slice` which has been deprecated since Kani 0.38.0. by @zhassan-aws in https://github.com/model-checking/kani/pull/2860
+
 ## [0.40.0]
 
 ### What's Changed
