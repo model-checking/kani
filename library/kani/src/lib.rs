@@ -146,7 +146,7 @@ pub const fn assert(cond: bool, msg: &'static str) {
 ///
 #[inline(never)]
 #[rustc_diagnostic_item = "KaniCover"]
-pub fn cover(_cond: bool, _msg: &'static str) {}
+pub const fn cover(_cond: bool, _msg: &'static str) {}
 
 /// This creates an symbolic *valid* value of type `T`. You can assign the return value of this
 /// function to a variable that you want to make symbolic.
