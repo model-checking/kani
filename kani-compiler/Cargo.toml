@@ -30,6 +30,7 @@ tracing-subscriber = {version = "0.3.8", features = ["env-filter", "json", "fmt"
 default = ['cprover']
 cprover = ['cbmc', 'num', 'serde']
 write_json_symtab = []
+stable_mir = []
 
 [package.metadata.rust-analyzer]
 # This package uses rustc crates.

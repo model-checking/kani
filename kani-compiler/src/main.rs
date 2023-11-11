@@ -26,8 +26,10 @@ extern crate rustc_interface;
 extern crate rustc_metadata;
 extern crate rustc_middle;
 extern crate rustc_session;
+extern crate rustc_smir;
 extern crate rustc_span;
 extern crate rustc_target;
+extern crate stable_mir;
 // We can't add this directly as a dependency because we need the version to match rustc
 extern crate tempfile;
 
