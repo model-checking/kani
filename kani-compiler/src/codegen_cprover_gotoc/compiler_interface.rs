@@ -37,7 +37,7 @@ use rustc_metadata::fs::{emit_wrapper_file, METADATA_FILENAME};
 use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
 use rustc_middle::mir::mono::MonoItem;
-use rustc_middle::ty::{self, Instance, InstanceDef, ParamEnv, TyCtxt};
+use rustc_middle::ty::{Instance, InstanceDef, TyCtxt};
 use rustc_middle::util::Providers;
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::cstore::MetadataLoaderDyn;
