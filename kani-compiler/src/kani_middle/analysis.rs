@@ -25,16 +25,15 @@ use std::fmt::Display;
 ///  - Total number of MIR instructions.
 pub fn print_stats<'tcx>(tcx: TyCtxt<'tcx>, items: &[InternalMonoItem<'tcx>]) {
     rustc_internal::run(tcx, || {
+        let items: Vec<MonoItem> = items.iter().map(rustc_internal::stable).collect();
         let item_types = items.iter().collect::<Counter>();
         let visitor = items
             .iter()
-            .filter_map(|&mono| {
-                if let MonoItem::Fn(instance) = rustc_internal::stable(&mono) {
-                    Some(instance)
-                } else {
-                    None
-                }
-            })
+            .filter_map(
+                |mono| {
+                    if let MonoItem::Fn(instance) = mono { Some(instance) } else { None }
+                },
+            )
             .fold(StatsVisitor::default(), |mut visitor, body| {
                 visitor.visit_body(&body.body());
                 visitor
@@ -120,12 +119,12 @@ impl<T: Into<Key>> FromIterator<T> for Counter {
 #[derive(Debug, Eq, Hash, PartialEq)]
 struct Key(pub &'static str);
 
-impl<'tcx> From<&InternalMonoItem<'tcx>> for Key {
-    fn from(value: &InternalMonoItem) -> Self {
+impl From<&MonoItem> for Key {
+    fn from(value: &stable_mir::mir::mono::MonoItem) -> Self {
         match value {
-            InternalMonoItem::Fn(_) => Key("function"),
-            InternalMonoItem::GlobalAsm(_) => Key("global assembly"),
-            InternalMonoItem::Static(_) => Key("static item"),
+            MonoItem::Fn(_) => Key("function"),
+            MonoItem::GlobalAsm(_) => Key("global assembly"),
+            MonoItem::Static(_) => Key("static item"),
         }
     }
 }
