@@ -10,9 +10,9 @@
 use rustc_middle::mir::mono::MonoItem as InternalMonoItem;
 use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
+use stable_mir::mir::mono::MonoItem;
 use stable_mir::mir::{
-    visit::Location, MirVisitor, Rvalue, Statement,
-    StatementKind, Terminator, TerminatorKind,
+    visit::Location, MirVisitor, Rvalue, Statement, StatementKind, Terminator, TerminatorKind,
 };
 use std::collections::HashMap;
 use std::fmt::Display;
@@ -24,29 +24,30 @@ use std::fmt::Display;
 ///  - Number of instructions per type.
 ///  - Total number of MIR instructions.
 pub fn print_stats<'tcx>(tcx: TyCtxt<'tcx>, items: &[InternalMonoItem<'tcx>]) {
-    let item_types = items.iter().collect::<Counter>();
-    let visitor = items
-        .iter()
-        .filter_map(|&mono| {
-            if let InternalMonoItem::Fn(instance) = mono {
-                Some(tcx.instance_mir(instance.def))
-            } else {
-                None
-            }
-        })
-        .fold(StatsVisitor::default(), |mut visitor, body| {
-            let body = rustc_internal::stable(body);
-            visitor.visit_body(&body);
-            visitor
-        });
-    eprintln!("====== Reachability Analysis Result =======");
-    eprintln!("Total # items: {}", item_types.total());
-    eprintln!("Total # statements: {}", visitor.stmts.total());
-    eprintln!("Total # expressions: {}", visitor.exprs.total());
-    eprintln!("\nReachable Items:\n{item_types}");
-    eprintln!("Statements:\n{}", visitor.stmts);
-    eprintln!("Expressions:\n{}", visitor.exprs);
-    eprintln!("-------------------------------------------")
+    rustc_internal::run(tcx, || {
+        let item_types = items.iter().collect::<Counter>();
+        let visitor = items
+            .iter()
+            .filter_map(|&mono| {
+                if let MonoItem::Fn(instance) = rustc_internal::stable(&mono) {
+                    Some(instance)
+                } else {
+                    None
+                }
+            })
+            .fold(StatsVisitor::default(), |mut visitor, body| {
+                visitor.visit_body(&body.body());
+                visitor
+            });
+        eprintln!("====== Reachability Analysis Result =======");
+        eprintln!("Total # items: {}", item_types.total());
+        eprintln!("Total # statements: {}", visitor.stmts.total());
+        eprintln!("Total # expressions: {}", visitor.exprs.total());
+        eprintln!("\nReachable Items:\n{item_types}");
+        eprintln!("Statements:\n{}", visitor.stmts);
+        eprintln!("Expressions:\n{}", visitor.exprs);
+        eprintln!("-------------------------------------------")
+    });
 }
 
 #[derive(Default)]
@@ -58,7 +59,7 @@ struct StatsVisitor {
     exprs: Counter,
 }
 
-impl<'tcx> MirVisitor for StatsVisitor {
+impl MirVisitor for StatsVisitor {
     fn visit_statement(&mut self, statement: &Statement, location: Location) {
         self.stmts.add(statement);
         // Also visit the type of expression.
@@ -129,7 +130,7 @@ impl<'tcx> From<&InternalMonoItem<'tcx>> for Key {
     }
 }
 
-impl<'tcx> From<&Statement> for Key {
+impl From<&Statement> for Key {
     fn from(value: &Statement) -> Self {
         match value.kind {
             StatementKind::Assign(..) => Key("Assign"),
@@ -150,7 +151,7 @@ impl<'tcx> From<&Statement> for Key {
     }
 }
 
-impl<'tcx> From<&Terminator> for Key {
+impl From<&Terminator> for Key {
     fn from(value: &Terminator) -> Self {
         match value.kind {
             TerminatorKind::Abort => Key("Abort"),
@@ -168,7 +169,7 @@ impl<'tcx> From<&Terminator> for Key {
     }
 }
 
-impl<'tcx> From<&Rvalue> for Key {
+impl From<&Rvalue> for Key {
     fn from(value: &Rvalue) -> Self {
         match value {
             Rvalue::Use(_) => Key("Use"),
