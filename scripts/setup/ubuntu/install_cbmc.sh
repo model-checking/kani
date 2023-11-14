@@ -15,7 +15,7 @@ fi
 UBUNTU_VERSION=$(lsb_release -rs)
 MAJOR=${UBUNTU_VERSION%.*}
 
-if [[ "${MAJOR}" -gt "18" ]]
+if [[ "${MAJOR}" -gt "18" ]] && [[ $(uname -m) = "x86_64" ]]
 then
   FILE="ubuntu-${UBUNTU_VERSION}-cbmc-${CBMC_VERSION}-Linux.deb"
   URL="https://github.com/diffblue/cbmc/releases/download/cbmc-${CBMC_VERSION}/$FILE"
@@ -29,7 +29,7 @@ then
   exit 0
 fi
 
-# Binaries are no longer released for 18.04, so build from source
+# There are no binaries for 18.04 or for non-x86_64, so build from source
 
 WORK_DIR=$(mktemp -d)
 git clone \
