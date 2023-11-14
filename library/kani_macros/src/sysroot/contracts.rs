@@ -536,6 +536,9 @@ impl<'a> ContractConditionsHandler<'a> {
         }
     }
 
+    /// Create a new name for the assigns wrapper function *or* get the name of
+    /// the wrapper we must have already generated. This is so that we can
+    /// recognize a call to that wrapper inside the check function.
     fn make_wrapper_name(&self) -> Ident {
         if let Some(hash) = self.hash {
             identifier_for_generated_function(&self.annotated_fn.sig.ident, "wrapper", hash)
@@ -599,8 +602,12 @@ impl<'a> ContractConditionsHandler<'a> {
                     result
                 )
             }
-            ContractConditionsData::Modifies { .. } => {
-                quote!(kani::assert(false, "Replacement with modifies is not supported yet."))
+            ContractConditionsData::Modifies { attr } => {
+                let args = make_wrapper_args(attr.len());
+                quote!(
+                    let result = #call_to_prior;
+                    #(*#args = kani::any();)*
+                )
             }
         }
     }
@@ -665,6 +672,11 @@ impl<'a> ContractConditionsHandler<'a> {
         self.output.extend(self.annotated_fn.attrs.iter().flat_map(Attribute::to_token_stream));
     }
 
+    /// Emit a modifies wrapper, possibly augmenting a prior, existing one.
+    ///
+    /// We only augment if this clause is a `modifies` clause. In that case we
+    /// expand its signature with one new argument of type `&impl Arbitrary` for
+    /// each expression in the clause.
     fn emit_augmented_modifies_wrapper(&mut self) {
         if let ContractConditionsData::Modifies { attr } = &self.condition_type {
             let wrapper_args = make_wrapper_args(attr.len());
