@@ -75,10 +75,14 @@ jobs:
           apt-get update
           apt-get install -y software-properties-common apt-utils
           add-apt-repository ppa:git-core/ppa
+          add-apt-repository ppa:deadsnakes/ppa
           apt-get update
           apt-get install -y \
             build-essential bash-completion curl lsb-release sudo g++ gcc flex \
-            bison make patch git
+            bison make patch git python3.7 python3.7-dev python3.7-distutils
+          curl -s https://bootstrap.pypa.io/get-pip.py -o get-pip.py
+          python3 get-pip.py --force-reinstall
+          rm get-pip.py
 
       - name: Checkout Kani
         uses: actions/checkout@v3
