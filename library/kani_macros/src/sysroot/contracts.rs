@@ -492,7 +492,11 @@ impl<'a> ContractConditionsHandler<'a> {
                 let mut call = self.create_inner_call([].into_iter());
 
                 assert!(
-                    matches!(call.pop(), Some(syn::Stmt::Expr(syn::Expr::Path(pexpr), None)) if pexpr.path.get_ident().map_or(false, |id| id == "result"))
+                    matches!(
+                        call.pop(),
+                        Some(syn::Stmt::Expr(syn::Expr::Path(pexpr), None))
+                            if pexpr.path.get_ident().map_or(false, |id| id == "result")
+                    )
                 );
 
                 quote!(
@@ -553,8 +557,13 @@ impl<'a> ContractConditionsHandler<'a> {
         let return_type = return_type_to_type(&self.annotated_fn.sig.output);
         if self.is_first_emit() {
             let args = exprs_for_args(&self.annotated_fn.sig.inputs);
+            let wrapper_call = if is_probably_impl_fn(self.annotated_fn) {
+                quote!(Self::#wrapper_name)
+            } else {
+                quote!(#wrapper_name)
+            };
             syn::parse_quote!(
-                let result : #return_type = #wrapper_name(#(#args,)* #(#additional_args),*);
+                let result : #return_type = #wrapper_call(#(#args,)* #(#additional_args),*);
                 result
             )
         } else {
