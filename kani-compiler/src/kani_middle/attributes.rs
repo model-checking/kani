@@ -224,8 +224,35 @@ impl<'tcx> KaniAttributes<'tcx> {
             .map(|target| expect_key_string_value(self.tcx.sess, target))
     }
 
+    /// Retrieves the global, static recursion tracker variable.
     pub fn recursion_tracker(&self) -> Option<Result<DefId, ErrorGuaranteed>> {
-        self.eval_sibling_attribute(KaniAttributeKind::RecursionTracker)
+        self.expect_maybe_one(KaniAttributeKind::RecursionTracker).map(|target| {
+            let name = expect_key_string_value(self.tcx.sess, target)?;
+            let all_items = self.tcx.hir_crate_items(());
+            let hir_map = self.tcx.hir();
+
+            // I don't like the way this is currently implemented. I search
+            // through all items defined in the crate for one with the correct
+            // name. That works but this should do something better like
+            // `eval_sibling_attribute`, which is less likely to have any
+            // conflicts or alternatively use resolution for a path.
+            //
+            // The efficient thing to do is figure out where (relative to the
+            // annotated item) rustc actually stores the tracker (which `mod`)
+            // and the retrieve it (like `eval_sibling_attribute` does).
+
+            let owner = all_items
+                .items()
+                .find(|it| hir_map.opt_name(it.hir_id()) == Some(name))
+                .ok_or_else(|| {
+                    self.tcx.sess.span_err(
+                        self.tcx.def_span(self.item),
+                        format!("Could not find recursion tracker '{name}' in crate"),
+                    )
+                })?;
+
+            Ok(owner.owner_id.def_id.to_def_id())
+        })
     }
 
     fn eval_sibling_attribute(

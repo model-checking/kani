@@ -491,13 +491,11 @@ impl<'a> ContractConditionsHandler<'a> {
 
                 let mut call = self.create_inner_call([].into_iter());
 
-                assert!(
-                    matches!(
-                        call.pop(),
-                        Some(syn::Stmt::Expr(syn::Expr::Path(pexpr), None))
-                            if pexpr.path.get_ident().map_or(false, |id| id == "result")
-                    )
-                );
+                assert!(matches!(
+                    call.pop(),
+                    Some(syn::Stmt::Expr(syn::Expr::Path(pexpr), None))
+                        if pexpr.path.get_ident().map_or(false, |id| id == "result")
+                ));
 
                 quote!(
                     #arg_copies
@@ -1048,11 +1046,10 @@ fn requires_ensures_main(
             };
 
             handler.output.extend(quote!(
-
-                static mut #recursion_tracker_name: bool = false;
                 #[allow(dead_code, unused_variables)]
                 #[kanitool::is_contract_generated(recursion_wrapper)]
                 #wrapper_sig {
+                    static mut #recursion_tracker_name: bool = false;
                     if unsafe { #recursion_tracker_name } {
                         #call_replace(#(#args),*)
                     } else {
