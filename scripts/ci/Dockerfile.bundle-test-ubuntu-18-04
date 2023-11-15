@@ -14,7 +14,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 RUN apt-get update && \
     apt-get install --no-install-recommends -y build-essential software-properties-common && \
     add-apt-repository -y ppa:deadsnakes/ppa && \
-    apt install --no-install-recommends -y python3.7 python3.7-dev python3.7-distutils curl ctags && \
+    apt install --no-install-recommends -y python3.7 python3.7-dev python3.7-distutils curl ctags
 
 RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.7 1
 
