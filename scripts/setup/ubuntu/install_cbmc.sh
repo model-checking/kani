@@ -15,7 +15,7 @@ fi
 UBUNTU_VERSION=$(lsb_release -rs)
 MAJOR=${UBUNTU_VERSION%.*}
 
-if [[ "${MAJOR}" -gt "18" ]] && [[ $(uname -m) = "x86_64" ]]
+if [[ "${MAJOR}" -gt "18" ]] && [[ $(dpkg --print-architecture) = "amd64" ]]
 then
   FILE="ubuntu-${UBUNTU_VERSION}-cbmc-${CBMC_VERSION}-Linux.deb"
   URL="https://github.com/diffblue/cbmc/releases/download/cbmc-${CBMC_VERSION}/$FILE"
