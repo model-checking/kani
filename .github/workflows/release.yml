@@ -68,9 +68,9 @@ jobs:
           df -h
 
       # This is required before checkout because the container does not
-      # have Git installed, so cannot run checkout action. T
+      # have Git installed, so cannot run checkout action.
       # The checkout action requires Git >=2.18 and python 3.7, so use the Git maintainers' PPA.
-      # and the "deadsnakes" PPA, as the default version of python on ubuntu is 3.11.
+      # and the "deadsnakes" PPA, as the default version of python on ubuntu 22.04 is Python 3.10
       - name: Install system dependencies
         run: |
           apt-get update
