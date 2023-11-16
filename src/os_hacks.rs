@@ -5,7 +5,6 @@
 //! "flow" of code in setup.rs, this module contains all functions that implement os-specific
 //! workarounds.
 
-use std::ffi::OsString;
 use std::path::Path;
 use std::process::Command;
 
@@ -14,72 +13,45 @@ use os_info::Info;
 
 use crate::cmd::AutoRun;
 
-pub fn should_apply_ubuntu_18_04_python_hack(os: &os_info::Info) -> Result<bool> {
-    if os.os_type() != os_info::Type::Ubuntu {
-        return Ok(false);
+pub fn check_minimum_python_version(output: &str) -> Result<bool> {
+    // Split the string by whitespace and get the second element
+    let version_number = output.split_whitespace().nth(1).unwrap_or("Version number not found");
+    let parts: Vec<&str> = version_number.split('.').take(2).collect();
+    let system_python_version = parts.join(".");
+
+    // The minimum version is set to be 3.7 for now
+    // TODO: Maybe read from some config file instead of a local variable?
+    let base_version = "3.7";
+
+    match compare_versions(&system_python_version, base_version) {
+        Ok(ordering) => match ordering {
+            std::cmp::Ordering::Less => Ok(false),
+            std::cmp::Ordering::Equal => Ok(true),
+            std::cmp::Ordering::Greater => Ok(true),
+        },
+        Err(_e) => Ok(false)
     }
-    // Check both versions: https://github.com/stanislav-tkach/os_info/issues/318
-    if *os.version() != os_info::Version::Semantic(18, 4, 0)
-        && *os.version() != os_info::Version::Custom("18.04".into())
-    {
-        return Ok(false);
-    }
-    // It's not enough to check that we're on Ubuntu 18.04 because the user may have
-    // manually updated to a newer version of Python instead of using what the OS ships.
-    // So check if it looks like the OS-shipped version as best we can.
-    let cmd = Command::new("python3").args(["-m", "pip", "--version"]).output()?;
-    let output = std::str::from_utf8(&cmd.stdout)?;
-    // The problem version looks like:
-    //    'pip 9.0.1 from /usr/lib/python3/dist-packages (python 3.6)'
-    // So we'll test for version 9.
-    Ok(pip_major_version(output)? == 9)
 }
 
-/// Unit testable parsing function for extracting pip version numbers, from strings that look like:
-///    'pip 9.0.1 from /usr/lib/python3/dist-packages (python 3.6)'
-fn pip_major_version(output: &str) -> Result<u32> {
-    // We don't want dependencies so parse with stdlib string functions as best we can.
-    let mut words = output.split_whitespace();
-    let _pip = words.next().context("No pip output")?;
-    let version = words.next().context("No pip version")?;
+// Given two semver strings, compare them and return an std::Ordering result
+fn compare_versions(version1: &str, version2: &str) -> Result<std::cmp::Ordering, String> {
+    let v1_parts: Vec<i32> = version1.split('.').map(|s| s.parse::<i32>().unwrap()).collect();
+    let v2_parts: Vec<i32> = version2.split('.').map(|s| s.parse::<i32>().unwrap()).collect();
 
-    let mut versions = version.split('.');
-    let major = versions.next().context("No pip major version")?;
+    let max_len = std::cmp::max(v1_parts.len(), v2_parts.len());
 
-    Ok(major.parse()?)
-}
+    // Compare semver strings by comparing each individual substring
+    // to corresponding counterpart. i.e major version vs major version and so on
+    for i in 0..max_len {
+        let part_v1 = *v1_parts.get(i).unwrap_or(&0);
+        let part_v2 = *v2_parts.get(i).unwrap_or(&0);
 
-/// See [`crate::setup::setup_python_deps`]
-pub fn setup_python_deps_on_ubuntu_18_04(pyroot: &Path, pkg_versions: &[&str]) -> Result<()> {
-    println!("Applying a workaround for 18.04...");
-    // https://github.com/pypa/pip/issues/3826
-    // Ubuntu 18.04 has a patched-to-be-broken version of pip that just straight-up makes `--target` not work.
-    // Worse still, there is no apparent way to replicate the correct behavior cleanly.
+        if part_v1 != part_v2 {
+            return Ok(part_v1.cmp(&part_v2));
+        }
+    }
 
-    // This is a really awful hack to simulate getting the same result. I can find no other solution.
-    // Example failed approach: `--system --target pyroot` fails to create a `pyroot/bin` with binaries.
-
-    // Step 1: use `--system --prefix pyroot`. This disables the broken behavior, and creates `bin` but...
-    Command::new("python3")
-        .args(["-m", "pip", "install", "--system", "--prefix"])
-        .arg(pyroot)
-        .args(pkg_versions)
-        .run()?;
-
-    // Step 2: move `pyroot/lib/python3.6/site-packages/*` up to `pyroot`
-    // This seems to successfully replicate the behavior of `--target`
-    // "mv" is not idempotent however so we need to do "cp -r" then delete
-    let mut cp_cmd = OsString::new();
-    cp_cmd.push("cp -r ");
-    cp_cmd.push(pyroot.as_os_str());
-    cp_cmd.push("/lib/python*/site-packages/* ");
-    cp_cmd.push(pyroot.as_os_str());
-    Command::new("bash").arg("-c").arg(cp_cmd).run()?;
-
-    // `lib` is the directory `--prefix` creates that `--target` does not.
-    std::fs::remove_dir_all(pyroot.join("lib"))?;
-
-    Ok(())
+    Ok(std::cmp::Ordering::Equal)
 }
 
 /// This is the final step of setup, where we look for OSes that require additional setup steps
@@ -158,26 +130,4 @@ fn setup_nixos_patchelf(kani_dir: &Path) -> Result<()> {
     }
 
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn check_pip_major_version() -> Result<()> {
-        // These read a lot better formatted on one line, so shorten them:
-        use pip_major_version as p;
-        // 18.04 example: (with extra newline to test whitespace handling)
-        assert_eq!(p("pip 9.0.1 from /usr/lib/python3/dist-packages (python 3.6)\n")?, 9);
-        // a mac
-        assert_eq!(p("pip 21.1.1 from /usr/local/python3.9/site-packages/pip (python 3.9)")?, 21);
-        // 20.04
-        assert_eq!(p("pip 20.0.2 from /usr/lib/python3/dist-packages/pip (python 3.8)")?, 20);
-        // How mangled can we get and still "work"?
-        assert_eq!(p("pip 1")?, 1);
-        assert_eq!(p("p 1")?, 1);
-        assert_eq!(p("\n\n p 1 p")?, 1);
-        Ok(())
-    }
 }

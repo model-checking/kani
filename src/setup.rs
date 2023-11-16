@@ -83,7 +83,7 @@ pub fn setup(use_local_bundle: Option<OsString>) -> Result<()> {
 
     setup_rust_toolchain(&kani_dir)?;
 
-    setup_python_deps(&kani_dir, &os)?;
+    setup_python_deps(&kani_dir)?;
 
     os_hacks::setup_os_hacks(&kani_dir, &os)?;
 
@@ -152,16 +152,19 @@ fn setup_rust_toolchain(kani_dir: &Path) -> Result<String> {
 }
 
 /// Install into the pyroot the python dependencies we need
-fn setup_python_deps(kani_dir: &Path, os: &os_info::Info) -> Result<()> {
+fn setup_python_deps(kani_dir: &Path) -> Result<()> {
     println!("[4/5] Installing Kani python dependencies...");
     let pyroot = kani_dir.join("pyroot");
 
     // TODO: this is a repetition of versions from kani/kani-dependencies
     let pkg_versions = &["cbmc-viewer==3.8"];
 
-    if os_hacks::should_apply_ubuntu_18_04_python_hack(os)? {
-        os_hacks::setup_python_deps_on_ubuntu_18_04(&pyroot, pkg_versions)?;
-        return Ok(());
+    let cmd_python = Command::new("python3").args(["--version"]).output()?;
+    let output_python = std::str::from_utf8(&cmd_python.stdout)?;
+
+    // Check for minimum version of python=3.7 in the system and bail if not present
+    if !os_hacks::check_minimum_python_version(output_python)? {
+        bail!("Python version detected is 3.6 or lower. Please upgrade to Python 3.7 to setup Kani.");
     }
 
     Command::new("python3")
