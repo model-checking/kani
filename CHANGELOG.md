@@ -12,9 +12,12 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 * Delete `any_slice` which has been deprecated since Kani 0.38.0. by @zhassan-aws in https://github.com/model-checking/kani/pull/2860
 
 ### What's Changed
+
+* Make `cover` const by @jswrenn in https://github.com/model-checking/kani/pull/2867
+* Change `expect()` from taking formatted strings to use `unwrap_or_else()` by @matthiaskrgr in https://github.com/model-checking/kani/pull/2865
 * Fix setup for `aarch64-unknown-linux-gnu` platform by @adpaco-aws in https://github.com/model-checking/kani/pull/2864
 * Do not override `std` library during playback by @celinval in https://github.com/model-checking/kani/pull/2852
-* Automatic toolchain upgrade to nightly-2023-11-11 by @github-actions in https://github.com/model-checking/kani/pull/2870
+* Update Rust toolchain to 2023-11-06 by @zhassan-aws in https://github.com/model-checking/kani/pull/2858
 
 **Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.40.0...kani-0.41.0
 
