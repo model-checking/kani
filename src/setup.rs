@@ -159,16 +159,6 @@ fn setup_python_deps(kani_dir: &Path) -> Result<()> {
     // TODO: this is a repetition of versions from kani/kani-dependencies
     let pkg_versions = &["cbmc-viewer==3.8"];
 
-    let cmd_python = Command::new("python3").args(["--version"]).output()?;
-    let output_python = std::str::from_utf8(&cmd_python.stdout)?;
-
-    // Check for minimum version of python=3.7 in the system and bail if not present
-    if !os_hacks::check_minimum_python_version(output_python)? {
-        bail!(
-            "Python version detected is 3.6 or lower. Please upgrade to Python 3.7 to setup Kani."
-        );
-    }
-
     Command::new("python3")
         .args(["-m", "pip", "install", "--target"])
         .arg(&pyroot)

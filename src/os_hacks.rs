@@ -13,47 +13,6 @@ use os_info::Info;
 
 use crate::cmd::AutoRun;
 
-pub fn check_minimum_python_version(output: &str) -> Result<bool> {
-    // Split the string by whitespace and get the second element
-    let version_number = output.split_whitespace().nth(1).unwrap_or("Version number not found");
-    let parts: Vec<&str> = version_number.split('.').take(2).collect();
-    let system_python_version = parts.join(".");
-
-    // The minimum version is set to be 3.7 for now
-    // TODO: Maybe read from some config file instead of a local variable?
-    let base_version = "3.7";
-
-    match compare_versions(&system_python_version, base_version) {
-        Ok(ordering) => match ordering {
-            std::cmp::Ordering::Less => Ok(false),
-            std::cmp::Ordering::Equal => Ok(true),
-            std::cmp::Ordering::Greater => Ok(true),
-        },
-        Err(_e) => Ok(false),
-    }
-}
-
-// Given two semver strings, compare them and return an std::Ordering result
-fn compare_versions(version1: &str, version2: &str) -> Result<std::cmp::Ordering, String> {
-    let v1_parts: Vec<i32> = version1.split('.').map(|s| s.parse::<i32>().unwrap()).collect();
-    let v2_parts: Vec<i32> = version2.split('.').map(|s| s.parse::<i32>().unwrap()).collect();
-
-    let max_len = std::cmp::max(v1_parts.len(), v2_parts.len());
-
-    // Compare semver strings by comparing each individual substring
-    // to corresponding counterpart. i.e major version vs major version and so on
-    for i in 0..max_len {
-        let part_v1 = *v1_parts.get(i).unwrap_or(&0);
-        let part_v2 = *v2_parts.get(i).unwrap_or(&0);
-
-        if part_v1 != part_v2 {
-            return Ok(part_v1.cmp(&part_v2));
-        }
-    }
-
-    Ok(std::cmp::Ordering::Equal)
-}
-
 /// This is the final step of setup, where we look for OSes that require additional setup steps
 /// beyond the usual ones that we have done already.
 pub fn setup_os_hacks(kani_dir: &Path, os: &Info) -> Result<()> {
@@ -130,29 +89,4 @@ fn setup_nixos_patchelf(kani_dir: &Path) -> Result<()> {
     }
 
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn version_greater() {
-        assert_eq!(compare_versions("3.7.1", "3.6.3"), Ok(std::cmp::Ordering::Greater));
-    }
-
-    #[test]
-    fn version_less() {
-        assert_eq!(compare_versions("3.7.1", "3.7.3"), Ok(std::cmp::Ordering::Less));
-    }
-
-    #[test]
-    fn version_equal() {
-        assert_eq!(compare_versions("3.6.3", "3.6.3"), Ok(std::cmp::Ordering::Equal));
-    }
-
-    #[test]
-    fn version_different_len() {
-        assert_eq!(compare_versions("4.0", "4.0.0"), Ok(std::cmp::Ordering::Equal));
-    }
 }
