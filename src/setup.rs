@@ -164,7 +164,9 @@ fn setup_python_deps(kani_dir: &Path) -> Result<()> {
 
     // Check for minimum version of python=3.7 in the system and bail if not present
     if !os_hacks::check_minimum_python_version(output_python)? {
-        bail!("Python version detected is 3.6 or lower. Please upgrade to Python 3.7 to setup Kani.");
+        bail!(
+            "Python version detected is 3.6 or lower. Please upgrade to Python 3.7 to setup Kani."
+        );
     }
 
     Command::new("python3")

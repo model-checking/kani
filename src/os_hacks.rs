@@ -29,7 +29,7 @@ pub fn check_minimum_python_version(output: &str) -> Result<bool> {
             std::cmp::Ordering::Equal => Ok(true),
             std::cmp::Ordering::Greater => Ok(true),
         },
-        Err(_e) => Ok(false)
+        Err(_e) => Ok(false),
     }
 }
 
