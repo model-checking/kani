@@ -131,3 +131,28 @@ fn setup_nixos_patchelf(kani_dir: &Path) -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn version_greater() {
+        assert_eq!(compare_versions("3.7.1", "3.6.3"), Ok(std::cmp::Ordering::Greater));
+    }
+
+    #[test]
+    fn version_less() {
+        assert_eq!(compare_versions("3.7.1", "3.7.3"), Ok(std::cmp::Ordering::Less));
+    }
+
+    #[test]
+    fn version_equal() {
+        assert_eq!(compare_versions("3.6.3", "3.6.3"), Ok(std::cmp::Ordering::Equal));
+    }
+
+    #[test]
+    fn version_different_len() {
+        assert_eq!(compare_versions("4.0", "4.0.0"), Ok(std::cmp::Ordering::Equal));
+    }
+}
