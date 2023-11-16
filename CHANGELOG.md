@@ -17,7 +17,7 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 * Change `expect()` from taking formatted strings to use `unwrap_or_else()` by @matthiaskrgr in https://github.com/model-checking/kani/pull/2865
 * Fix setup for `aarch64-unknown-linux-gnu` platform by @adpaco-aws in https://github.com/model-checking/kani/pull/2864
 * Do not override `std` library during playback by @celinval in https://github.com/model-checking/kani/pull/2852
-* Rust toolchain upgraded to `nightly-2023-11-11` by @zhassan-aws in https://github.com/model-checking/kani/pull/2858
+* Rust toolchain upgraded to `nightly-2023-11-11` by @zhassan-aws
 
 **Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.40.0...kani-0.41.0
 
