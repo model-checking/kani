@@ -6,19 +6,17 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 
 ## [0.41.0]
 
-## What's Changed
-* Fix setup for `aarch64-unknown-linux-gnu` platform by @adpaco-aws in https://github.com/model-checking/kani/pull/2864
-* Do not override `std` library during playback by @celinval in https://github.com/model-checking/kani/pull/2852
-* Fix docker build step in release workflow by @adpaco-aws in https://github.com/model-checking/kani/pull/2854
-* Fix path-dependent failures in `assess-artifacts` test by @adpaco-aws in https://github.com/model-checking/kani/pull/2849
-* Automatic toolchain upgrade to nightly-2023-11-11 by @github-actions in https://github.com/model-checking/kani/pull/2870
-
-**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.40.0...kani-0.41.0
-
 ### Breaking Changes
 
 * Set minimum python to 3.7 in docker container and release action by @remi-delmas-3000 in https://github.com/model-checking/kani/pull/2879
 * Delete `any_slice` which has been deprecated since Kani 0.38.0. by @zhassan-aws in https://github.com/model-checking/kani/pull/2860
+
+### What's Changed
+* Fix setup for `aarch64-unknown-linux-gnu` platform by @adpaco-aws in https://github.com/model-checking/kani/pull/2864
+* Do not override `std` library during playback by @celinval in https://github.com/model-checking/kani/pull/2852
+* Automatic toolchain upgrade to nightly-2023-11-11 by @github-actions in https://github.com/model-checking/kani/pull/2870
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.40.0...kani-0.41.0
 
 ## [0.40.0]
 
