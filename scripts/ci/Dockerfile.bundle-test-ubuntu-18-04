@@ -10,9 +10,19 @@
 FROM ubuntu:18.04
 ENV DEBIAN_FRONTEND=noninteractive \
     DEBCONF_NONINTERACTIVE_SEEN=true
+
 RUN apt-get update && \
-    apt-get install -y python3 python3-pip curl ctags && \
-    curl -sSf https://sh.rustup.rs | sh -s -- -y
+    apt-get install --no-install-recommends -y build-essential software-properties-common && \
+    add-apt-repository -y ppa:deadsnakes/ppa && \
+    apt install --no-install-recommends -y python3.7 python3.7-dev python3.7-distutils curl ctags
+
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.7 1
+
+RUN curl -s https://bootstrap.pypa.io/get-pip.py -o get-pip.py && \
+    python3 get-pip.py --force-reinstall && \
+    rm get-pip.py
+
+RUN curl -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
 
 WORKDIR /tmp/kani
