@@ -44,7 +44,8 @@ git submodule update --init
 
 cmake -S . -Bbuild -DWITH_JBMC=OFF -Dsat_impl="minisat2;cadical"
 make -C build -j$(nproc)
-sudo make -C build install
+cpack -G DEB --config build/CPackConfig.cmake
+sudo dpkg -i ./cbmc-*.deb
 
 popd
 rm -rf "${WORK_DIR}"
