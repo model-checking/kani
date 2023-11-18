@@ -15,7 +15,7 @@ fi
 UBUNTU_VERSION=$(lsb_release -rs)
 MAJOR=${UBUNTU_VERSION%.*}
 
-if [[ "${MAJOR}" -gt "18" ]]
+if [[ "${MAJOR}" -gt "18" ]] && [[ $(dpkg --print-architecture) = "amd64" ]]
 then
   FILE="ubuntu-${UBUNTU_VERSION}-cbmc-${CBMC_VERSION}-Linux.deb"
   URL="https://github.com/diffblue/cbmc/releases/download/cbmc-${CBMC_VERSION}/$FILE"
@@ -29,7 +29,7 @@ then
   exit 0
 fi
 
-# Binaries are no longer released for 18.04, so build from source
+# There are no binaries for 18.04 or for non-x86_64, so build from source
 
 WORK_DIR=$(mktemp -d)
 git clone \
@@ -44,7 +44,8 @@ git submodule update --init
 
 cmake -S . -Bbuild -DWITH_JBMC=OFF -Dsat_impl="minisat2;cadical"
 make -C build -j$(nproc)
-sudo make -C build install
+cpack -G DEB --config build/CPackConfig.cmake
+sudo dpkg -i ./cbmc-*.deb
 
 popd
 rm -rf "${WORK_DIR}"
