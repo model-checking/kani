@@ -8,7 +8,18 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 
 ### Breaking Changes
 
+* Set minimum python to 3.7 in docker container and release action by @remi-delmas-3000 in https://github.com/model-checking/kani/pull/2879
 * Delete `any_slice` which has been deprecated since Kani 0.38.0. by @zhassan-aws in https://github.com/model-checking/kani/pull/2860
+
+### What's Changed
+
+* Make `cover` const by @jswrenn in https://github.com/model-checking/kani/pull/2867
+* Change `expect()` from taking formatted strings to use `unwrap_or_else()` by @matthiaskrgr in https://github.com/model-checking/kani/pull/2865
+* Fix setup for `aarch64-unknown-linux-gnu` platform by @adpaco-aws in https://github.com/model-checking/kani/pull/2864
+* Do not override `std` library during playback by @celinval in https://github.com/model-checking/kani/pull/2852
+* Rust toolchain upgraded to `nightly-2023-11-11` by @zhassan-aws
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.40.0...kani-0.41.0
 
 ## [0.40.0]
 
@@ -65,7 +76,7 @@ https://github.com/model-checking/kani/compare/kani-0.38.0...kani-0.39.0
 * Fix expected value for `pref_align_of` under aarch64/macos by @remi-delmas-3000 in https://github.com/model-checking/kani/pull/2782
 * Bump CBMC version to 5.92.0 by @zhassan-aws in https://github.com/model-checking/kani/pull/2771
 * Upgrade to Kissat 3.1.1 by @zhassan-aws in https://github.com/model-checking/kani/pull/2756
-* Rust toolchain upgraded to `nightly-2023-09-19` by @remi-delmas-3000 @tautschnig 
+* Rust toolchain upgraded to `nightly-2023-09-19` by @remi-delmas-3000 @tautschnig
 
 **Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.36.0...kani-0.37.0
 
