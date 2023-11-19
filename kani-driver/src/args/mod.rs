@@ -784,8 +784,7 @@ mod tests {
     fn check_dry_run_fails() {
         // We don't support --dry-run anymore but we print a friendly reminder for now.
         let args = vec!["kani", "file.rs", "--dry-run"];
-        let err =
-            StandaloneArgs::try_parse_from(args).unwrap().verify_opts.validate().unwrap_err();
+        let err = StandaloneArgs::try_parse_from(args).unwrap().verify_opts.validate().unwrap_err();
         assert_eq!(err.kind(), ErrorKind::ValueValidation);
     }
 
