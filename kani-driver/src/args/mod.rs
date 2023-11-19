@@ -725,7 +725,7 @@ mod tests {
     #[test]
     fn check_multiple_harnesses() {
         let args =
-            StandaloneArgs::try_parse_from("kani input.rs --harness a --harness b".split(" "))
+            StandaloneArgs::try_parse_from("kani input.rs --harness a --harness b".split(' '))
                 .unwrap();
         assert_eq!(args.verify_opts.harnesses, vec!["a".to_owned(), "b".to_owned()]);
     }
@@ -733,7 +733,7 @@ mod tests {
     #[test]
     fn check_multiple_harnesses_without_flag_fail() {
         let result = StandaloneArgs::try_parse_from(
-            "kani input.rs --harness harness_1 harness_2".split(" "),
+            "kani input.rs --harness harness_1 harness_2".split(' '),
         );
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
@@ -785,7 +785,7 @@ mod tests {
         // We don't support --dry-run anymore but we print a friendly reminder for now.
         let args = vec!["kani", "file.rs", "--dry-run"];
         let err =
-            StandaloneArgs::try_parse_from(&args).unwrap().verify_opts.validate().unwrap_err();
+            StandaloneArgs::try_parse_from(args).unwrap().verify_opts.validate().unwrap_err();
         assert_eq!(err.kind(), ErrorKind::ValueValidation);
     }
 
@@ -793,7 +793,7 @@ mod tests {
     #[test]
     fn check_invalid_input_fails() {
         let args = vec!["kani", "."];
-        let err = StandaloneArgs::try_parse_from(&args).unwrap().validate().unwrap_err();
+        let err = StandaloneArgs::try_parse_from(args).unwrap().validate().unwrap_err();
         assert_eq!(err.kind(), ErrorKind::InvalidValue);
     }
 

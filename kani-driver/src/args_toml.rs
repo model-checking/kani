@@ -312,6 +312,6 @@ mod tests {
     #[test]
     fn check_unstable_entry_invalid() {
         let name = String::from("feature");
-        assert!(matches!(unstable_entry(&name, &Value::String("".to_string())), Err(_)));
+        assert!(unstable_entry(&name, &Value::String("".to_string())).is_err());
     }
 }
