@@ -327,8 +327,17 @@ impl VerificationResult {
             }
             Err(exit_status) => {
                 let verification_result = console::style("FAILED").red();
+                let explanation = if exit_status == 137 {
+                    "CBMC appears to have run out of memory. You may want to rerun your proof in \
+                    an environment with additional memory or use stubbing to reduce the size of the \
+                    code the verifier reasons about.\n"
+                } else {
+                    ""
+                };
                 format!(
-                    "\nCBMC failed with status {exit_status}\nVERIFICATION:- {verification_result}\n",
+                    "\nCBMC failed with status {exit_status}\n\
+                    VERIFICATION:- {verification_result}\n\
+                    {explanation}",
                 )
             }
         }
