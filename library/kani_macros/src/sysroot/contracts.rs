@@ -603,10 +603,10 @@ impl<'a> ContractConditionsHandler<'a> {
                 )
             }
             ContractConditionsData::Modifies { attr } => {
-                let args = make_wrapper_args(attr.len());
                 quote!(
                     let result = #call_to_prior;
-                    #(*#args = kani::any();)*
+                    #(*#attr = kani::any();)*
+                    result
                 )
             }
         }
