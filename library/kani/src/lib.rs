@@ -119,7 +119,7 @@ impl<'a, 'b, T> Pointer<'a> for &'b mut T {
 
     #[allow(clippy::transmute_ptr_to_ref)]
     unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
-        *std::mem::transmute::<_, &&'a T>(self)
+        std::mem::transmute::<_, &&'a T>(self)
     }
 
     unsafe fn assignable(self) -> &'a mut Self::Inner {
