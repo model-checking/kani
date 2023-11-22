@@ -105,6 +105,7 @@ impl<'a, 'b, T> Pointer<'a> for &'b T {
         std::mem::transmute(self)
     }
 
+    #[allow(clippy::transmute_ptr_to_ref)]
     unsafe fn assignable(self) -> &'a mut Self::Inner {
         std::mem::transmute(self as *const T)
     }
@@ -112,6 +113,8 @@ impl<'a, 'b, T> Pointer<'a> for &'b T {
 
 impl<'a, 'b, T> Pointer<'a> for &'b mut T {
     type Inner = T;
+
+    #[allow(clippy::transmute_ptr_to_ref)]
     unsafe fn decouple_lifetime(self) -> &'a Self::Inner {
         std::mem::transmute(self as *mut T)
     }
@@ -127,6 +130,7 @@ impl<'a, T> Pointer<'a> for *const T {
         &*self as &'a T
     }
 
+    #[allow(clippy::transmute_ptr_to_ref)]
     unsafe fn assignable(self) -> &'a mut Self::Inner {
         std::mem::transmute(self)
     }
@@ -138,6 +142,7 @@ impl<'a, T> Pointer<'a> for *mut T {
         &*self as &'a T
     }
 
+    #[allow(clippy::transmute_ptr_to_ref)]
     unsafe fn assignable(self) -> &'a mut Self::Inner {
         std::mem::transmute(self)
     }
