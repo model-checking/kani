@@ -178,7 +178,7 @@ impl KaniSession {
             vec!["--dfcc".into(), (&harness.mangled_name).into()];
 
         if let Some((function, recursion_tracker)) = check {
-            println!("enforcing function contract for {function}");
+            println!("enforcing function contract for {function} with tracker {recursion_tracker}");
             args.extend([
                 "--enforce-contract".into(),
                 function.into(),

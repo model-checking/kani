@@ -1003,11 +1003,6 @@ fn requires_ensures_main(
                 "recursion_wrapper",
                 item_hash,
             );
-            let recursion_tracker_name = identifier_for_generated_function(
-                &original_function_name,
-                "recursion_tracker",
-                item_hash,
-            );
 
             // Constructing string literals explicitly here, because `stringify!`
             // doesn't work. Let's say we have an identifier `check_fn` and we were
@@ -1021,8 +1016,6 @@ fn requires_ensures_main(
                 syn::LitStr::new(&handler.make_wrapper_name().to_string(), Span::call_site());
             let recursion_wrapper_name_str =
                 syn::LitStr::new(&recursion_wrapper_name.to_string(), Span::call_site());
-            let recursion_tracker_name_str =
-                syn::LitStr::new(&recursion_tracker_name.to_string(), Span::call_site());
 
             // The order of `attrs` and `kanitool::{checked_with,
             // is_contract_generated}` is important here, because macros are
@@ -1039,7 +1032,6 @@ fn requires_ensures_main(
                 #[kanitool::checked_with = #recursion_wrapper_name_str]
                 #[kanitool::replaced_with = #replace_fn_name_str]
                 #[kanitool::inner_check = #wrapper_fn_name_str]
-                #[kanitool::recursion_tracker = #recursion_tracker_name_str]
                 #vis #sig {
                     #block
                 }
@@ -1061,13 +1053,13 @@ fn requires_ensures_main(
                 #[allow(dead_code, unused_variables)]
                 #[kanitool::is_contract_generated(recursion_wrapper)]
                 #wrapper_sig {
-                    static mut #recursion_tracker_name: bool = false;
-                    if unsafe { #recursion_tracker_name } {
+                    static mut REENTRY: bool = false;
+                    if unsafe { REENTRY } {
                         #call_replace(#(#args),*)
                     } else {
-                        unsafe { #recursion_tracker_name = true };
+                        unsafe { REENTRY = true };
                         let result = #call_check(#(#also_args),*);
-                        unsafe { #recursion_tracker_name = false };
+                        unsafe { REENTRY = false };
                         result
                     }
                 }

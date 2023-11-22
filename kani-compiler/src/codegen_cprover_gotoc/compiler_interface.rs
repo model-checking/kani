@@ -61,6 +61,7 @@ use tempfile::Builder as TempFileBuilder;
 use tracing::{debug, error, info};
 
 pub type UnsupportedConstructs = FxHashMap<InternedString, Vec<Location>>;
+
 #[derive(Clone)]
 pub struct GotocCodegenBackend {
     /// The query is shared with `KaniCompiler` and it is initialized as part of `rustc`
@@ -146,33 +147,7 @@ impl GotocCodegenBackend {
                     }
                 }
 
-                check_contract.map(|check_contract_def| {
-                    let check_contract_attrs = KaniAttributes::for_item(tcx, check_contract_def);
-                    let wrapper_def = check_contract_attrs.inner_check().unwrap().unwrap();
-
-                    let mut instances_of_check = items.iter().copied().filter_map(|i| match i {
-                        MonoItem::Fn(instance @ Instance { def: InstanceDef::Item(did), .. }) => {
-                            (wrapper_def == did).then_some(instance)
-                        }
-                        _ => None,
-                    });
-                    let instance_of_check = instances_of_check.next().unwrap();
-                    assert!(instances_of_check.next().is_none());
-                    let attrs = KaniAttributes::for_item(tcx, instance_of_check.def_id());
-                    let assigns_contract = attrs.modifies_contract().unwrap_or_else(|| {
-                        debug!(?instance_of_check, "had no assigns contract specified");
-                        vec![]
-                    });
-                    gcx.attach_contract(instance_of_check, assigns_contract);
-
-                    let tracker_def = check_contract_attrs.recursion_tracker().unwrap().unwrap();
-
-                    let span = tcx.def_span(tracker_def);
-                    let location = SourceLocation::new(tcx, &span);
-                    let full_name = format!("{}:{}", location.filename, tcx.item_name(tracker_def));
-
-                    (tcx.symbol_name(instance_of_check).to_string(), full_name)
-                })
+                check_contract.map(|check_id| gcx.handle_check_contract(check_id, &items))
             },
             "codegen",
         );
@@ -212,6 +187,51 @@ impl GotocCodegenBackend {
         }
 
         (gcx, items)
+    }
+}
+
+impl<'tcx> GotocCtx<'tcx> {
+    fn handle_check_contract(
+        &mut self,
+        function_under_contract: DefId,
+        items: &[MonoItem<'tcx>],
+    ) -> (String, String) {
+        let tcx = self.tcx;
+        let function_under_contract_attrs = KaniAttributes::for_item(tcx, function_under_contract);
+        let wrapped_fn = function_under_contract_attrs.inner_check().unwrap().unwrap();
+
+        let mut instance_under_contract = items.iter().copied().filter_map(|i| match i {
+            MonoItem::Fn(instance @ Instance { def: InstanceDef::Item(did), .. }) => {
+                (wrapped_fn == did).then_some(instance)
+            }
+            _ => None,
+        });
+        let instance_of_check = instance_under_contract.next().unwrap();
+        assert!(
+            instance_under_contract.next().is_none(),
+            "Only one instance of a checked function may be in scope"
+        );
+        let attrs_of_wrapped_fn = KaniAttributes::for_item(tcx, wrapped_fn);
+        let assigns_contract = attrs_of_wrapped_fn.modifies_contract().unwrap_or_else(|| {
+            debug!(?instance_of_check, "had no assigns contract specified");
+            vec![]
+        });
+        self.attach_contract(instance_of_check, assigns_contract);
+
+        let wrapper_name = tcx.symbol_name(instance_of_check).to_string();
+
+        let recursion_wrapper_id =
+            function_under_contract_attrs.checked_with_id().unwrap().unwrap();
+        let span_of_recursion_wrapper = tcx.def_span(recursion_wrapper_id);
+        let location_of_recursion_wrapper = SourceLocation::new(tcx, &span_of_recursion_wrapper);
+
+        let full_name = format!(
+            "{}:{}::REENTRY",
+            location_of_recursion_wrapper.filename,
+            tcx.item_name(recursion_wrapper_id),
+        );
+
+        (wrapper_name, full_name)
     }
 }
 
@@ -317,8 +337,11 @@ impl CodegenBackend for GotocCodegenBackend {
                 results.extend(gcx, items, None);
 
                 for (test_fn, test_desc) in harnesses.iter().zip(descriptions.iter()) {
-                    let instance =
-                        if let MonoItem::Fn(instance) = test_fn { instance } else { continue };
+                    let instance = if let MonoItem::Fn(instance) = test_fn {
+                        instance
+                    } else {
+                        continue;
+                    };
                     let metadata = gen_test_metadata(tcx, *test_desc, *instance, &base_filename);
                     let test_model_path = &metadata.goto_file.as_ref().unwrap();
                     std::fs::copy(&model_path, test_model_path).expect(&format!(
