@@ -93,36 +93,54 @@ macro_rules! implies {
 }
 
 #[doc(hidden)]
-pub trait DecoupleLifetime<'a> {
+pub trait Pointer<'a> {
     type Inner;
-    unsafe fn decouple_lifetime(&self) -> &'a Self::Inner;
+    unsafe fn decouple_lifetime(self) -> &'a Self::Inner;
+    
+    unsafe fn assignable(self) -> &'a mut Self::Inner;
 }
 
-impl<'a, 'b, T> DecoupleLifetime<'a> for &'b T {
+impl<'a, 'b, T> Pointer<'a> for &'b T {
     type Inner = T;
-    unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
-        std::mem::transmute(*self)
+    unsafe fn decouple_lifetime(self) -> &'a Self::Inner {
+        std::mem::transmute(self)
+    }
+
+    unsafe fn assignable(self) -> &'a mut Self::Inner {
+        std::mem::transmute(self as *const T)
     }
 }
 
-impl<'a, 'b, T> DecoupleLifetime<'a> for &'b mut T {
+impl<'a, 'b, T> Pointer<'a> for &'b mut T {
     type Inner = T;
-    unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
-        *std::mem::transmute::<&'_ &'b mut T, &'_ &'a T>(self)
+    unsafe fn decouple_lifetime(self) -> &'a Self::Inner {
+        std::mem::transmute(self as *mut T)
+    }
+
+    unsafe fn assignable(self) -> &'a mut Self::Inner {
+        std::mem::transmute(self)
     }
 }
 
-impl<'a, T> DecoupleLifetime<'a> for *const T {
+impl<'a, T> Pointer<'a> for *const T {
     type Inner = T;
-    unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
-        &**self as &'a T
+    unsafe fn decouple_lifetime(self) -> &'a Self::Inner {
+        &*self as &'a T
+    }
+
+    unsafe fn assignable(self) -> &'a mut Self::Inner {
+        std::mem::transmute(self)
     }
 }
 
-impl<'a, T> DecoupleLifetime<'a> for *mut T {
+impl<'a, T> Pointer<'a> for *mut T {
     type Inner = T;
-    unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
-        &**self as &'a T
+    unsafe fn decouple_lifetime(self) -> &'a Self::Inner {
+        &*self as &'a T
+    }
+
+    unsafe fn assignable(self) -> &'a mut Self::Inner {
+        std::mem::transmute(self)
     }
 }
 

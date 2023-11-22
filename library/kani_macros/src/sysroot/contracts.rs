@@ -529,7 +529,7 @@ impl<'a> ContractConditionsHandler<'a> {
                 let wrapper_args = make_wrapper_args(attr.len());
 
                 quote!(
-                    #(let #wrapper_args = unsafe { kani::DecoupleLifetime::decouple_lifetime(&#attr) };)*
+                    #(let #wrapper_args = unsafe { kani::Pointer::decouple_lifetime(#attr) };)*
                     #(#inner)*
                 )
             }
@@ -605,7 +605,7 @@ impl<'a> ContractConditionsHandler<'a> {
             ContractConditionsData::Modifies { attr } => {
                 quote!(
                     let result = #call_to_prior;
-                    #(*#attr = kani::any();)*
+                    #(*unsafe { kani::Pointer::assignable(#attr) } = kani::any();)*
                     result
                 )
             }
