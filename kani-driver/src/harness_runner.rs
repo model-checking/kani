@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use kani_metadata::{ArtifactType, HarnessMetadata};
 use rayon::prelude::*;
 use std::path::Path;
@@ -81,8 +81,12 @@ impl<'sess, 'pr> HarnessRunner<'sess, 'pr> {
     }
 
     fn get_contract_info(&self, harness: &'pr HarnessMetadata) -> Result<Option<(String, String)>> {
-        let contract_info_artifact =
-            self.project.get_harness_artifact(&harness, ArtifactType::ContractMetadata).unwrap();
+        let contract_info_artifact = self
+            .project
+            .get_harness_artifact(&harness, ArtifactType::ContractMetadata)
+            .ok_or_else(|| {
+                anyhow!("no contract metadata file is present for harness {}", harness.pretty_name)
+            })?;
 
         let reader = std::io::BufReader::new(std::fs::File::open(contract_info_artifact)?);
         Ok(serde_json::from_reader(reader)?)
