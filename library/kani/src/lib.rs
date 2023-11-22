@@ -96,7 +96,6 @@ macro_rules! implies {
 pub trait Pointer<'a> {
     type Inner;
     unsafe fn decouple_lifetime(self) -> &'a Self::Inner;
-    
     unsafe fn assignable(self) -> &'a mut Self::Inner;
 }
 
