@@ -529,7 +529,7 @@ impl<'a> ContractConditionsHandler<'a> {
                 let wrapper_args = make_wrapper_args(attr.len());
 
                 quote!(
-                    #(let #wrapper_args = unsafe { kani::Pointer::decouple_lifetime(#attr) };)*
+                    #(let #wrapper_args = unsafe { kani::Pointer::decouple_lifetime(&#attr) };)*
                     #(#inner)*
                 )
             }
