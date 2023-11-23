@@ -34,6 +34,12 @@ pub struct Parameter {
     typ: Type,
 }
 
+impl Parameter {
+    pub fn new(name: String, typ: Type) -> Self {
+        Self { name, typ }
+    }
+}
+
 /// Literal types
 pub enum Literal {
     /// Boolean values: `true`/`false`
@@ -188,8 +194,27 @@ impl Procedure {
 /// Function definition
 /// A function in Boogie is a mathematical function (deterministic, has no side
 /// effects, and whose body is an expression)
-struct Function {}
+pub struct Function {
+    name: String,
+    parameters: Vec<Parameter>,
+    return_type: Type,
+    // a body is optional (e.g. SMT built-ins)
+    body: Option<Expr>,
+    // Boogie attributes, e.g. `{:bvbuiltin "bvnot}`
+    attributes: Vec<String>,
+}
 
+impl Function {
+    pub fn new(
+        name: String,
+        parameters: Vec<Parameter>,
+        return_type: Type,
+        body: Option<Expr>,
+        attributes: Vec<String>,
+    ) -> Self {
+        Function { name, parameters, return_type, body, attributes }
+    }
+}
 /// A boogie program
 pub struct BoogieProgram {
     type_declarations: Vec<TypeDeclaration>,
@@ -214,5 +239,9 @@ impl BoogieProgram {
 
     pub fn add_procedure(&mut self, procedure: Procedure) {
         self.procedures.push(procedure);
+    }
+
+    pub fn add_function(&mut self, function: Function) {
+        self.functions.push(function);
     }
 }
