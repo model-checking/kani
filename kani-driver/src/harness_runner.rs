@@ -57,7 +57,10 @@ impl<'sess, 'pr> HarnessRunner<'sess, 'pr> {
                     let report_dir = self.project.outdir.join(format!("report-{harness_filename}"));
                     let goto_file =
                         self.project.get_harness_artifact(&harness, ArtifactType::Goto).unwrap();
-                    let contract_info = self.get_contract_info(harness)?;
+                    // TODO: Fix upstream.
+                    // This error is ignored for now, because it fails on cargo kani projects.
+                    // I suspect that the metadata file is just not being registered correctly.
+                    let contract_info = self.get_contract_info(harness).ok().flatten();
 
                     self.sess.instrument_model(
                         goto_file,

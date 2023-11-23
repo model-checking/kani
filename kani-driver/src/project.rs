@@ -227,6 +227,7 @@ pub fn cargo_project(session: &KaniSession, keep_going: bool) -> Result<Project>
             .iter()
             .map(|artifact| convert_type(&artifact, Metadata, SymTabGoto))
             .collect::<Vec<_>>();
+        artifacts.push(Artifact::try_new(goto.as_path(), ContractMetadata)?);
         session.link_goto_binary(&all_gotos, &goto)?;
         let goto_artifact = Artifact::try_new(&goto, Goto)?;
 
