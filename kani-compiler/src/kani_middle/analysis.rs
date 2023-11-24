@@ -35,7 +35,7 @@ pub fn print_stats<'tcx>(tcx: TyCtxt<'tcx>, items: &[InternalMonoItem<'tcx>]) {
                 },
             )
             .fold(StatsVisitor::default(), |mut visitor, body| {
-                visitor.visit_body(&body.body());
+                visitor.visit_body(&body.body().unwrap());
                 visitor
             });
         eprintln!("====== Reachability Analysis Result =======");
@@ -46,7 +46,8 @@ pub fn print_stats<'tcx>(tcx: TyCtxt<'tcx>, items: &[InternalMonoItem<'tcx>]) {
         eprintln!("Statements:\n{}", visitor.stmts);
         eprintln!("Expressions:\n{}", visitor.exprs);
         eprintln!("-------------------------------------------")
-    });
+    })
+    .unwrap();
 }
 
 #[derive(Default)]

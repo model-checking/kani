@@ -300,7 +300,7 @@ impl<'tcx> GotocCtx<'tcx> {
             var: ty::BoundVar::from_usize(bound_vars.len() - 1),
             kind: ty::BoundRegionKind::BrEnv,
         };
-        let env_region = ty::Region::new_late_bound(self.tcx, ty::INNERMOST, br);
+        let env_region = ty::Region::new_bound(self.tcx, ty::INNERMOST, br);
         let env_ty = self.tcx.closure_env_ty(def_id, args, env_region).unwrap();
 
         let sig = sig.skip_binder();
@@ -341,7 +341,7 @@ impl<'tcx> GotocCtx<'tcx> {
             var: ty::BoundVar::from_usize(bound_vars.len() - 1),
             kind: ty::BoundRegionKind::BrEnv,
         };
-        let env_region = ty::ReLateBound(ty::INNERMOST, br);
+        let env_region = ty::ReBound(ty::INNERMOST, br);
         let env_ty = Ty::new_mut_ref(self.tcx, ty::Region::new_from_kind(self.tcx, env_region), ty);
 
         let pin_did = self.tcx.require_lang_item(LangItem::Pin, None);
