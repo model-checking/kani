@@ -85,14 +85,11 @@ where
             .iter()
             .filter_map(|item| {
                 // Only collect monomorphic items.
-                Instance::try_from(*item)
-                    .ok()
-                    .map(|instance| {
-                        let def_id = rustc_internal::internal(item);
-                        predicate(tcx, def_id)
-                            .then_some(InternalMonoItem::Fn(rustc_internal::internal(&instance)))
-                    })
-                    .flatten()
+                Instance::try_from(*item).ok().and_then(|instance| {
+                    let def_id = rustc_internal::internal(item);
+                    predicate(tcx, def_id)
+                        .then_some(InternalMonoItem::Fn(rustc_internal::internal(&instance)))
+                })
             })
             .collect::<Vec<_>>()
     })
@@ -500,7 +497,7 @@ fn to_fingerprint(tcx: TyCtxt, item: &InternalMonoItem) -> Fingerprint {
 }
 
 /// Return whether we should include the item into codegen.
-fn should_codegen_locally<'tcx>(instance: &Instance) -> bool {
+fn should_codegen_locally(instance: &Instance) -> bool {
     !instance.is_foreign_item()
 }
 

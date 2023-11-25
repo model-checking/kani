@@ -92,27 +92,24 @@ impl<'tcx> MirVisitor for StubConstChecker<'tcx> {
             Const::Val(..) | Const::Ty(..) => {}
             Const::Unevaluated(un_eval, _) => {
                 // Thread local fall into this category.
-                match self.tcx.const_eval_resolve(ParamEnv::reveal_all(), un_eval, None) {
+                if self.tcx.const_eval_resolve(ParamEnv::reveal_all(), un_eval, None).is_err() {
                     // The `monomorphize` call should have evaluated that constant already.
-                    Err(_) => {
-                        let tcx = self.tcx;
-                        let mono_const = &un_eval;
-                        let implementor = match mono_const.args.as_slice() {
-                            [one] => one.as_type().unwrap(),
-                            _ => unreachable!(),
-                        };
-                        let trait_ = tcx.trait_of_item(mono_const.def).unwrap();
-                        let msg = format!(
-                            "Type `{implementor}` does not implement trait `{}`. \
+                    let tcx = self.tcx;
+                    let mono_const = &un_eval;
+                    let implementor = match mono_const.args.as_slice() {
+                        [one] => one.as_type().unwrap(),
+                        _ => unreachable!(),
+                    };
+                    let trait_ = tcx.trait_of_item(mono_const.def).unwrap();
+                    let msg = format!(
+                        "Type `{implementor}` does not implement trait `{}`. \
         This is likely because `{}` is used as a stub but its \
         generic bounds are not being met.",
-                            tcx.def_path_str(trait_),
-                            self.source.name()
-                        );
-                        tcx.sess.span_err(rustc_internal::internal(location.span()), msg);
-                        self.is_valid = false;
-                    }
-                    _ => {}
+                        tcx.def_path_str(trait_),
+                        self.source.name()
+                    );
+                    tcx.sess.span_err(rustc_internal::internal(location.span()), msg);
+                    self.is_valid = false;
                 }
             }
         };
