@@ -27,15 +27,18 @@ use rustc_middle::ty::{TyCtxt, VtblEntry};
 use rustc_smir::rustc_internal;
 use stable_mir::mir::alloc::{AllocId, GlobalAlloc};
 use stable_mir::mir::mono::{Instance, InstanceKind, MonoItem, StaticDef};
+use stable_mir::mir::pretty::pretty_ty;
 use stable_mir::mir::{
     visit::Location, Body, CastKind, Constant, MirVisitor, PointerCoercion, Rvalue, Terminator,
     TerminatorKind,
 };
 use stable_mir::ty::{Allocation, ClosureKind, ConstantKind, RigidTy, Ty, TyKind};
+use stable_mir::CrateDef;
 use stable_mir::{self, CrateItem};
 
 use crate::kani_middle::coercion;
 use crate::kani_middle::coercion::CoercionBase;
+use crate::kani_middle::stubbing::{get_stub, validate_instance};
 
 /// Collect all reachable items starting from the given starting points.
 pub fn collect_reachable_items<'tcx>(
@@ -114,8 +117,12 @@ where
                 let def_id = rustc_internal::internal(&item);
                 if predicate(tcx, def_id) {
                     let body = instance.body().unwrap();
-                    let mut collector =
-                        MonoItemsFnCollector { tcx, body: &body, collected: FxHashSet::default() };
+                    let mut collector = MonoItemsFnCollector {
+                        tcx,
+                        body: &body,
+                        collected: FxHashSet::default(),
+                        instance: &instance,
+                    };
                     collector.visit_body(&body);
                     roots.extend(collector.collected.iter().map(rustc_internal::internal));
                 }
@@ -182,11 +189,19 @@ impl<'tcx> MonoItemsCollector<'tcx> {
     /// Visit a function and collect all mono-items reachable from its instructions.
     fn visit_fn(&mut self, instance: Instance) -> Vec<MonoItem> {
         let _guard = debug_span!("visit_fn", function=?instance).entered();
-        let body = instance.body().unwrap();
-        let mut collector =
-            MonoItemsFnCollector { tcx: self.tcx, collected: FxHashSet::default(), body: &body };
-        collector.visit_body(&body);
-        collector.collected.into_iter().collect()
+        if validate_instance(self.tcx, instance) {
+            let body = instance.body().unwrap();
+            let mut collector = MonoItemsFnCollector {
+                tcx: self.tcx,
+                collected: FxHashSet::default(),
+                body: &body,
+                instance: &instance,
+            };
+            collector.visit_body(&body);
+            collector.collected.into_iter().collect()
+        } else {
+            vec![]
+        }
     }
 
     /// Visit a static object and collect drop / initialization functions.
@@ -218,6 +233,7 @@ struct MonoItemsFnCollector<'a, 'tcx> {
     tcx: TyCtxt<'tcx>,
     collected: FxHashSet<MonoItem>,
     body: &'a Body,
+    instance: &'a Instance,
 }
 
 impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {
@@ -386,13 +402,50 @@ impl<'a, 'tcx> MirVisitor for MonoItemsFnCollector<'a, 'tcx> {
         trace!(?terminator, ?location, "visit_terminator");
 
         match terminator.kind {
-            TerminatorKind::Call { ref func, args: ref _outer_args, .. } => {
+            TerminatorKind::Call { ref func, .. } => {
                 let fn_ty = func.ty(self.body.locals()).unwrap();
                 if let TyKind::RigidTy(RigidTy::FnDef(fn_def, args)) = fn_ty.kind() {
                     let instance_opt = Instance::resolve(fn_def, &args).ok();
                     match instance_opt {
                         None => {
-                            todo!("stubbing error. see original..");
+                            let caller = CrateItem::try_from(*self.instance).unwrap().name();
+                            let callee = fn_def.name();
+                            // Check if the current function has been stubbed.
+                            if let Some(stub) =
+                                get_stub(self.tcx, rustc_internal::internal(self.instance).def_id())
+                            {
+                                // During the MIR stubbing transformation, we do not
+                                // force type variables in the stub's signature to
+                                // implement the same traits as those in the
+                                // original function/method. A trait mismatch shows
+                                // up here, when we try to resolve a trait method
+
+                                // FIXME: This assumes the type resolving the
+                                // trait is the first argument, but that isn't
+                                // necessarily true. It could be any argument or
+                                // even the return type, for instance for a
+                                // trait like `FromIterator`.
+                                let receiver_ty = args.0[0].expect_ty();
+                                trace!(?receiver_ty, ?callee, "**** receiver:");
+                                let sep = callee.rfind("::").unwrap();
+                                let trait_ = &callee[..sep];
+                                self.tcx.sess.span_err(
+                                    rustc_internal::internal(terminator.span),
+                                    format!(
+                                        "`{}` doesn't implement \
+                                        `{}`. The function `{}` \
+                                        cannot be stubbed by `{}` due to \
+                                        generic bounds not being met. Callee: {}",
+                                        pretty_ty(receiver_ty.kind()),
+                                        trait_,
+                                        caller,
+                                        self.tcx.def_path_str(stub),
+                                        callee,
+                                    ),
+                                );
+                            } else {
+                                panic!("unable to resolve call to `{callee}` in `{caller}`")
+                            }
                         }
                         Some(instance) => self.collect_instance(instance, true),
                     };
