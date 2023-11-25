@@ -33,15 +33,9 @@ pub mod coercion;
 mod intrinsics;
 pub mod metadata;
 pub mod provide;
-#[cfg(not(feature = "stable_mir"))]
 pub mod reachability;
-#[cfg(feature = "stable_mir")]
-pub mod reachability_smir;
 pub mod resolve;
 pub mod stubbing;
-
-#[cfg(feature = "stable_mir")]
-pub use reachability_smir as reachability;
 
 /// Check that all crate items are supported and there's no misconfiguration.
 /// This method will exhaustively print any error / warning and it will abort at the end if any
