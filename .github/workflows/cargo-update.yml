@@ -1,0 +1,47 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+name: Attempt cargo update
+
+on:
+  schedule:
+    - cron: "30 3 * * Mon" # Run this every Monday at 03:30 UTC
+  workflow_dispatch:     # Allow manual dispatching for a custom branch / tag.
+
+permissions:
+  checks: write
+  contents: write
+  pull-requests: write
+
+jobs:
+  create-cargo-update-pr:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout Kani
+        uses: actions/checkout@v3
+
+      - name: Setup Kani Dependencies
+        uses: ./.github/actions/setup
+        with:
+          os: ubuntu-22.04
+
+      - name: Run cargo update
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          today=$(date +%Y-%m-%d)
+          echo "today=$today" >> $GITHUB_ENV
+          if ! git ls-remote --exit-code origin cargo-update-$today ; then
+            cargo update
+            cargo build-dev
+            git diff
+          fi
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          commit-message: Upgrade cargo dependencies to ${{ env.today }}
+          branch: cargo-update-${{ env.today }}
+          delete-branch: true
+          title: 'Automatic cargo update to ${{ env.today }}'
+          body: >
+            Dependency upgrade resulting from `cargo update`.
