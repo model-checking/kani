@@ -4,6 +4,14 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
+### What's Changed
+
+* Build CBMC from source and install as package on non-x86_64 by @bennofs in https://github.com/model-checking/kani/pull/2877 and https://github.com/model-checking/kani/pull/2878
+* Emit suggestions and an explanation when CBMC runs out of memory by @JustusAdam in https://github.com/model-checking/kani/pull/2885
+* Rust toolchain upgraded to `nightly-2023-11-21` by @celinval
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.41.0...kani-0.42.0
+
 ## [0.41.0]
 
 ### Breaking Changes
