@@ -1,2 +1,2 @@
 expected return type with length 2 (same as input type `u64x2`), found `u32x4` with length 4
-error: aborting due to previous error
+error: aborting due to 1 previous error
