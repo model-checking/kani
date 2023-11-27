@@ -200,7 +200,7 @@ pub struct Function {
     return_type: Type,
     // a body is optional (e.g. SMT built-ins)
     body: Option<Expr>,
-    // Boogie attributes, e.g. `{:bvbuiltin "bvnot}`
+    // Boogie attributes, e.g. `{:bvbuiltin "bvnot"}`
     attributes: Vec<String>,
 }
 
