@@ -190,7 +190,7 @@ fn resolve_prefix<'tcx>(
         CRATE => {
             segments.next();
             // Find the module at the root of the crate.
-            let current_module_hir_id = tcx.hir().local_def_id_to_hir_id(current_module);
+            let current_module_hir_id = tcx.local_def_id_to_hir_id(current_module);
             let crate_root = match tcx.hir().parent_iter(current_module_hir_id).last() {
                 None => current_module,
                 Some((hir_id, _)) => hir_id.owner.def_id,
@@ -229,7 +229,7 @@ fn resolve_super<'tcx, I>(
 where
     I: Iterator<Item = String>,
 {
-    let current_module_hir_id = tcx.hir().local_def_id_to_hir_id(current_module);
+    let current_module_hir_id = tcx.local_def_id_to_hir_id(current_module);
     let mut parents = tcx.hir().parent_iter(current_module_hir_id);
     let mut base_module = current_module;
     while segments.next_if(|segment| segment == SUPER).is_some() {
