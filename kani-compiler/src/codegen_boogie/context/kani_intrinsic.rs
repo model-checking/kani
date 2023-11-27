@@ -5,11 +5,11 @@
 //! is defined in the Kani compiler. These items are defined in the `kani`
 //! library and are annotated with a `rustc_diagnostic_item`.
 
-use crate::codegen_boogie::BoogieCtx;
+use super::boogie_ctx::FunctionCtx;
 
 use boogie_ast::boogie_program::{Expr, Stmt};
 use rustc_middle::mir::{BasicBlock, Place};
-use rustc_middle::ty::Instance;
+use rustc_middle::ty::{Instance, TyCtxt};
 use rustc_span::Span;
 use std::str::FromStr;
 use strum::VariantNames;
@@ -26,23 +26,25 @@ pub enum KaniIntrinsic {
     KaniAssume,
 }
 
-impl<'tcx> BoogieCtx<'tcx> {
-    /// If provided function is a Kani intrinsic (e.g. assert, assume, cover), returns it
-    // TODO: move this function up to `kani_middle` along with the enum
-    pub fn kani_intrinsic(&self, instance: Instance<'tcx>) -> Option<KaniIntrinsic> {
-        let intrinsics = KaniIntrinsic::VARIANTS;
-        for intrinsic in intrinsics {
-            let attr_sym = rustc_span::symbol::Symbol::intern(intrinsic);
-            if let Some(attr_id) = self.tcx.all_diagnostic_items(()).name_to_id.get(&attr_sym) {
-                if instance.def.def_id() == *attr_id {
-                    debug!("matched: {:?} {:?}", attr_id, attr_sym);
-                    return Some(KaniIntrinsic::from_str(intrinsic).unwrap());
-                }
+/// If provided function is a Kani intrinsic (e.g. assert, assume, cover), returns it
+// TODO: move this function up to `kani_middle` along with the enum
+pub fn get_kani_intrinsic<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    instance: Instance<'tcx>,
+) -> Option<KaniIntrinsic> {
+    for intrinsic in KaniIntrinsic::VARIANTS {
+        let attr_sym = rustc_span::symbol::Symbol::intern(intrinsic);
+        if let Some(attr_id) = tcx.all_diagnostic_items(()).name_to_id.get(&attr_sym) {
+            if instance.def.def_id() == *attr_id {
+                debug!("matched: {:?} {:?}", attr_id, attr_sym);
+                return Some(KaniIntrinsic::from_str(intrinsic).unwrap());
             }
         }
-        None
     }
+    None
+}
 
+impl<'a, 'tcx> FunctionCtx<'a, 'tcx> {
     pub fn codegen_kani_intrinsic(
         &self,
         intrinsic: KaniIntrinsic,
