@@ -118,8 +118,8 @@ impl BoogieProgram {
         }
         if !self.functions.is_empty() {
             writeln!(writer, "// Functions:")?;
-            for _f in &self.functions {
-                todo!()
+            for f in &self.functions {
+                f.write_to(&mut writer)?;
             }
         }
         if !self.procedures.is_empty() {
@@ -128,6 +128,41 @@ impl BoogieProgram {
                 p.write_to(&mut writer)?;
             }
         }
+        Ok(())
+    }
+}
+
+impl Function {
+    fn write_to<T: Write>(&self, writer: &mut Writer<T>) -> std::io::Result<()> {
+        // signature
+        write!(writer, "function ")?;
+        // attributes
+        for attr in &self.attributes {
+            write!(writer, "{{{attr}}} ")?;
+        }
+        write!(writer, "{}(", self.name)?;
+        for (i, param) in self.parameters.iter().enumerate() {
+            if i > 0 {
+                write!(writer, ", ")?;
+            }
+            write!(writer, "{}: ", param.name)?;
+            param.typ.write_to(writer)?;
+        }
+        write!(writer, ") returns (")?;
+        self.return_type.write_to(writer)?;
+        write!(writer, ")")?;
+        if let Some(body) = &self.body {
+            writeln!(writer, " {{")?;
+            writer.increase_indent();
+            writer.indent()?;
+            body.write_to(writer)?;
+            writer.decrease_indent();
+            writer.newline()?;
+            writeln!(writer, "}}")?;
+        } else {
+            writeln!(writer, ";")?;
+        }
+        writer.newline()?;
         Ok(())
     }
 }
@@ -395,7 +430,29 @@ mod tests {
             const_declarations: Vec::new(),
             var_declarations: Vec::new(),
             axioms: Vec::new(),
-            functions: Vec::new(),
+            functions: vec![
+                Function::new(
+                    "isZero".into(),
+                    vec![Parameter::new("x".into(), Type::Int)],
+                    Type::Bool,
+                    Some(Expr::BinaryOp {
+                        op: BinaryOp::Eq,
+                        left: Box::new(Expr::Symbol { name: "x".into() }),
+                        right: Box::new(Expr::Literal(Literal::Int(0.into()))),
+                    }),
+                    vec![":inline".into()],
+                ),
+                Function::new(
+                    "$BvAnd".into(),
+                    vec![
+                        Parameter::new("lhs".into(), Type::Bv(32)),
+                        Parameter::new("rhs".into(), Type::Bv(32)),
+                    ],
+                    Type::Bv(32),
+                    None,
+                    vec![":bvbuiltin \"bvand\"".into()],
+                ),
+            ],
             procedures: vec![Procedure {
                 name: "main".to_string(),
                 parameters: Vec::new(),
@@ -461,6 +518,13 @@ mod tests {
 
         let expected = String::from(
             "\
+// Functions:
+function {:inline} isZero(x: int) returns (bool) {
+  (x == 0)
+}
+
+function {:bvbuiltin \"bvand\"} $BvAnd(lhs: bv32, rhs: bv32) returns (bv32);
+
 // Procedures:
 procedure main() returns (z: bool)
   ensures (z == true);
