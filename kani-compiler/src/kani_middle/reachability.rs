@@ -241,8 +241,8 @@ impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {
         let concrete_kind = concrete_ty.kind();
         let trait_kind = trait_ty.kind();
 
-        assert!(!concrete_kind.is_trait(), "Expected a concrete type, but found: {concrete_ty:?}");
-        assert!(trait_kind.is_trait(), "Expected a trait: {trait_ty:?}");
+        assert!(!concrete_kind.is_trait(), "expected a concrete type, but found `{concrete_ty:?}`");
+        assert!(trait_kind.is_trait(), "expected a trait `{trait_ty:?}`");
         if let Some(principal) = trait_kind.trait_principal() {
             // A trait object type can have multiple trait bounds but up to one non-auto-trait
             // bound. This non-auto-trait, named principal, is the only one that can have methods.

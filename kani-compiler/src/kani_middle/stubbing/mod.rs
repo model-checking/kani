@@ -41,7 +41,7 @@ pub fn harness_stub_map(
 /// Stubbing may cause an instance to not be correctly instantiated since we delay checking its
 /// generic bounds.
 ///
-/// In stable mir, trying to retrieve an Instance::body() will ICE if we cannot evaluate a
+/// In stable MIR, trying to retrieve an `Instance::body()` will ICE if we cannot evaluate a
 /// constant as expected. For now, use internal APIs to anticipate this issue.
 pub fn validate_instance(tcx: TyCtxt, instance: Instance) -> bool {
     let internal_instance = rustc_internal::internal(instance);
