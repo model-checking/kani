@@ -33,7 +33,7 @@ tempfile = "3"
 tracing = {version = "0.1", features = ["max_level_trace", "release_max_level_debug"]}
 tracing-subscriber = {version = "0.3.8", features = ["env-filter", "json", "fmt"]}
 rand = "0.8"
-which = "4.4.0"
+which = "5.0.0"
 
 # A good set of suggested dependencies can be found in rustup:
 # https://github.com/rust-lang/rustup/blob/master/Cargo.toml
