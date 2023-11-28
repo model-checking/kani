@@ -26,19 +26,24 @@ jobs:
         with:
           os: ubuntu-22.04
 
-      - name: Compare CBMC versions
+      - name: Compare CBMC versions and determine next step
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           grep ^CBMC_VERSION kani-dependencies >> $GITHUB_ENV
           CBMC_LATEST=$(gh -R diffblue/cbmc release list | grep Latest | awk '{print $1}' | cut -f2 -d-)
           echo "CBMC_LATEST=$CBMC_LATEST" >> $GITHUB_ENV
+          # check whether the version has changed at all
           if [ x$CBMC_LATEST = x$CBMC_VERSION ] ; then
             echo "next_step=none" >> $GITHUB_ENV
+          # check whether we already have an existing issue for a failing
+          # upgrade
           elif gh issue list -S \
               "CBMC upgrade to $CBMC_LATEST failed" \
               --json number,title | grep title ; then
             echo "next_step=none" >> $GITHUB_ENV
+          # check whether we already have a branch (and thus: a PR) for a
+          # successful upgrade
           elif ! git ls-remote --exit-code origin cbmc-$CBMC_LATEST ; then
             CBMC_LATEST_MAJOR=$(echo $CBMC_LATEST | cut -f1 -d.)
             CBMC_LATEST_MINOR=$(echo $CBMC_LATEST | cut -f2 -d.)
@@ -46,13 +51,12 @@ jobs:
             sed -i "s/^CBMC_MINOR=.*/CBMC_MINOR=\"$CBMC_MINOR\"/" kani-dependencies
             sed -i "s/^CBMC_VERSION=.*/CBMC_VERSION=\"$CBMC_LATEST\"/" kani-dependencies
             git diff
-            if ! cargo build-dev ; then
-              echo "next_step=create_issue" >> $GITHUB_ENV
-            elif ! ./scripts/kani-regression.sh ; then
+            if ! ./scripts/kani-regression.sh ; then
               echo "next_step=create_issue" >> $GITHUB_ENV
             else
               echo "next_step=create_pr" >> $GITHUB_ENV
             fi
+          # we already have a PR, nothing to be done
           else
             echo "next_step=none" >> $GITHUB_ENV
           fi
