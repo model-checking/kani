@@ -71,6 +71,7 @@ jobs:
           title: 'Automatic upgrade of CBMC from ${{ env.CBMC_VERSION }} to ${{ env.CBMC_LATEST }}'
           body: >
             Upgrade CBMC to its latest release.
+
       - name: Create Issue
         if: ${{ env.next_step == 'create_issue' }}
         uses: dacbd/create-issue-action@main
