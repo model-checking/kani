@@ -302,11 +302,16 @@ impl CodegenBackend for GotocCodegenBackend {
                             .unwrap();
                         let Ok(contract_metadata) =
                             contract_metadata_for_harness(tcx, harness.def_id())
-                            else {
-                                continue;
-                            };
-                        let (gcx, items, contract_info) =
-                            self.codegen_items(tcx, &[harness], model_path, &results.machine_model, contract_metadata);
+                        else {
+                            continue;
+                        };
+                        let (gcx, items, contract_info) = self.codegen_items(
+                            tcx,
+                            &[harness],
+                            model_path,
+                            &results.machine_model,
+                            contract_metadata,
+                        );
                         results.extend(gcx, items, None);
                         if let Some(assigns_contract) = contract_info {
                             self.contract_channel
@@ -333,8 +338,13 @@ impl CodegenBackend for GotocCodegenBackend {
                     // We will be able to remove this once we optimize all calls to CBMC utilities.
                     // https://github.com/model-checking/kani/issues/1971
                     let model_path = base_filename.with_extension(ArtifactType::SymTabGoto);
-                    let (gcx, items, contract_info) =
-                        self.codegen_items(tcx, &harnesses, &model_path, &results.machine_model, Default::default());
+                    let (gcx, items, contract_info) = self.codegen_items(
+                        tcx,
+                        &harnesses,
+                        &model_path,
+                        &results.machine_model,
+                        Default::default(),
+                    );
                     results.extend(gcx, items, None);
 
                     assert!(contract_info.is_none());
