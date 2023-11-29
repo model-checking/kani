@@ -12,7 +12,7 @@ use crate::metadata::collect_and_link_function_pointer_restrictions;
 use crate::project::Project;
 use crate::session::KaniSession;
 use crate::util::alter_extension;
-use kani_metadata::{ArtifactType, AssignsContract, HarnessMetadata};
+use kani_metadata::{ArtifactType, HarnessMetadata};
 
 impl KaniSession {
     /// Instrument and optimize a goto binary in-place.
