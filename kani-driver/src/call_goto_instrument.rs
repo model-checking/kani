@@ -12,7 +12,7 @@ use crate::metadata::collect_and_link_function_pointer_restrictions;
 use crate::project::Project;
 use crate::session::KaniSession;
 use crate::util::alter_extension;
-use kani_metadata::{ArtifactType, HarnessMetadata};
+use kani_metadata::{ArtifactType, AssignsContract, HarnessMetadata};
 
 impl KaniSession {
     /// Instrument and optimize a goto binary in-place.
@@ -22,7 +22,6 @@ impl KaniSession {
         output: &Path,
         project: &Project,
         harness: &HarnessMetadata,
-        contract_info: Option<(String, String)>,
     ) -> Result<()> {
         // We actually start by calling goto-cc to start the specialization:
         self.specialize_to_proof_harness(input, output, &harness.mangled_name)?;
@@ -38,7 +37,7 @@ impl KaniSession {
             self.goto_sanity_check(output)?;
         }
 
-        self.instrument_contracts(harness, output, contract_info)?;
+        self.instrument_contracts(harness, output)?;
 
         if self.args.checks.undefined_function_on() {
             self.add_library(output)?;
@@ -164,12 +163,8 @@ impl KaniSession {
     }
 
     /// Make CBMC enforce a function contract.
-    pub fn instrument_contracts(
-        &self,
-        harness: &HarnessMetadata,
-        file: &Path,
-        check: Option<(String, String)>,
-    ) -> Result<()> {
+    pub fn instrument_contracts(&self, harness: &HarnessMetadata, file: &Path) -> Result<()> {
+        let check = harness.contract.as_ref();
         if check.is_none() {
             return Ok(());
         }
@@ -177,13 +172,13 @@ impl KaniSession {
         let mut args: Vec<std::ffi::OsString> =
             vec!["--dfcc".into(), (&harness.mangled_name).into()];
 
-        if let Some((function, recursion_tracker)) = check {
-            println!("enforcing function contract for {function} with tracker {recursion_tracker}");
+        if let Some(assigns) = check {
+            println!("enforcing function contract for {assigns:?}");
             args.extend([
                 "--enforce-contract".into(),
-                function.into(),
+                assigns.contracted_function_name.as_str().into(),
                 "--nondet-static-exclude".into(),
-                recursion_tracker.into(),
+                assigns.recursion_tracker.as_str().into(),
             ]);
         }
 

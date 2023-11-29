@@ -57,18 +57,8 @@ impl<'sess, 'pr> HarnessRunner<'sess, 'pr> {
                     let report_dir = self.project.outdir.join(format!("report-{harness_filename}"));
                     let goto_file =
                         self.project.get_harness_artifact(&harness, ArtifactType::Goto).unwrap();
-                    // TODO: Fix upstream.
-                    // This error is ignored for now, because it fails on cargo kani projects.
-                    // I suspect that the metadata file is just not being registered correctly.
-                    let contract_info = self.get_contract_info(harness).ok().flatten();
 
-                    self.sess.instrument_model(
-                        goto_file,
-                        goto_file,
-                        &self.project,
-                        &harness,
-                        contract_info,
-                    )?;
+                    self.sess.instrument_model(goto_file, goto_file, &self.project, &harness)?;
 
                     if self.sess.args.synthesize_loop_contracts {
                         self.sess.synthesize_loop_contracts(goto_file, &goto_file, &harness)?;
@@ -81,18 +71,6 @@ impl<'sess, 'pr> HarnessRunner<'sess, 'pr> {
         })?;
 
         Ok(results)
-    }
-
-    fn get_contract_info(&self, harness: &'pr HarnessMetadata) -> Result<Option<(String, String)>> {
-        let contract_info_artifact = self
-            .project
-            .get_harness_artifact(&harness, ArtifactType::ContractMetadata)
-            .ok_or_else(|| {
-                anyhow!("no contract metadata file is present for harness {}", harness.pretty_name)
-            })?;
-
-        let reader = std::io::BufReader::new(std::fs::File::open(contract_info_artifact)?);
-        Ok(serde_json::from_reader(reader)?)
     }
 
     /// Return an error if the user is trying to verify a harness with stubs without enabling the

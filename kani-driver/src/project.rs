@@ -130,12 +130,10 @@ impl Project {
 
                 // All other harness artifacts that may have been generated as part of the build.
                 artifacts.extend(
-                    [SymTab, TypeMap, VTableRestriction, PrettyNameMap, ContractMetadata]
-                        .iter()
-                        .filter_map(|typ| {
-                            let artifact = Artifact::try_from(&symtab_out, *typ).ok()?;
-                            Some(artifact)
-                        }),
+                    [SymTab, TypeMap, VTableRestriction, PrettyNameMap].iter().filter_map(|typ| {
+                        let artifact = Artifact::try_from(&symtab_out, *typ).ok()?;
+                        Some(artifact)
+                    }),
                 );
                 artifacts.push(symtab_out);
                 artifacts.push(goto);
@@ -227,7 +225,7 @@ pub fn cargo_project(session: &KaniSession, keep_going: bool) -> Result<Project>
             .iter()
             .map(|artifact| convert_type(&artifact, Metadata, SymTabGoto))
             .collect::<Vec<_>>();
-        artifacts.push(Artifact::try_new(goto.as_path(), ContractMetadata)?);
+
         session.link_goto_binary(&all_gotos, &goto)?;
         let goto_artifact = Artifact::try_new(&goto, Goto)?;
 

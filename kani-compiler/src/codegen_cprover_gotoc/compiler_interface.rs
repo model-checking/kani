@@ -19,9 +19,9 @@ use cbmc::irep::goto_binary_serde::write_goto_binary_file;
 use cbmc::RoundingMode;
 use cbmc::{InternedString, MachineModel};
 use kani_metadata::artifact::convert_type;
-use kani_metadata::CompilerArtifactStub;
 use kani_metadata::UnsupportedFeature;
 use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata};
+use kani_metadata::{AssignsContract, CompilerArtifactStub};
 use rustc_codegen_ssa::back::archive::{
     get_native_object_symbols, ArArchiveBuilder, ArchiveBuilder,
 };
@@ -62,6 +62,8 @@ use tracing::{debug, error, info};
 
 pub type UnsupportedConstructs = FxHashMap<InternedString, Vec<Location>>;
 
+pub type ContractInfoChannel = std::sync::mpsc::Sender<(DefPathHash, AssignsContract)>;
+
 #[derive(Clone)]
 pub struct GotocCodegenBackend {
     /// The query is shared with `KaniCompiler` and it is initialized as part of `rustc`
@@ -69,11 +71,13 @@ pub struct GotocCodegenBackend {
     /// Since we don't have any guarantees on when the compiler creates the Backend object, neither
     /// in which thread it will be used, we prefer to explicitly synchronize any query access.
     queries: Arc<Mutex<QueryDb>>,
+
+    contract_channel: ContractInfoChannel,
 }
 
 impl GotocCodegenBackend {
-    pub fn new(queries: Arc<Mutex<QueryDb>>) -> Self {
-        GotocCodegenBackend { queries }
+    pub fn new(queries: Arc<Mutex<QueryDb>>, contract_channel: ContractInfoChannel) -> Self {
+        GotocCodegenBackend { queries, contract_channel }
     }
 
     /// Generate code that is reachable from the given starting points.
@@ -84,7 +88,7 @@ impl GotocCodegenBackend {
         symtab_goto: &Path,
         machine_model: &MachineModel,
         check_contract: Option<DefId>,
-    ) -> (GotocCtx<'tcx>, Vec<MonoItem<'tcx>>) {
+    ) -> (GotocCtx<'tcx>, Vec<MonoItem<'tcx>>, Option<AssignsContract>) {
         let items = with_timer(
             || collect_reachable_items(tcx, starting_items),
             "codegen reachability analysis",
@@ -182,11 +186,9 @@ impl GotocCodegenBackend {
             if let Some(restrictions) = vtable_restrictions {
                 write_file(&symtab_goto, ArtifactType::VTableRestriction, &restrictions, pretty);
             }
-
-            write_file(symtab_goto, ArtifactType::ContractMetadata, &contract_info, pretty);
         }
 
-        (gcx, items)
+        (gcx, items, contract_info)
     }
 }
 
@@ -195,7 +197,7 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         function_under_contract: DefId,
         items: &[MonoItem<'tcx>],
-    ) -> (String, String) {
+    ) -> AssignsContract {
         let tcx = self.tcx;
         let function_under_contract_attrs = KaniAttributes::for_item(tcx, function_under_contract);
         let wrapped_fn = function_under_contract_attrs.inner_check().unwrap().unwrap();
@@ -231,7 +233,7 @@ impl<'tcx> GotocCtx<'tcx> {
             tcx.item_name(recursion_wrapper_id),
         );
 
-        (wrapper_name, full_name)
+        AssignsContract { recursion_tracker: full_name, contracted_function_name: wrapper_name }
     }
 }
 
@@ -299,7 +301,7 @@ impl CodegenBackend for GotocCodegenBackend {
                     else {
                         continue;
                     };
-                    let (gcx, items) = self.codegen_items(
+                    let (gcx, items, contract_info) = self.codegen_items(
                         tcx,
                         &[harness],
                         model_path,
@@ -307,6 +309,11 @@ impl CodegenBackend for GotocCodegenBackend {
                         contract_metadata,
                     );
                     results.extend(gcx, items, None);
+                    if let Some(assigns_contract) = contract_info {
+                        self.contract_channel
+                            .send((tcx.def_path_hash(harness.def_id()), assigns_contract))
+                            .unwrap();
+                    }
                 }
             }
             ReachabilityType::Tests => {
@@ -327,7 +334,7 @@ impl CodegenBackend for GotocCodegenBackend {
                 // We will be able to remove this once we optimize all calls to CBMC utilities.
                 // https://github.com/model-checking/kani/issues/1971
                 let model_path = base_filename.with_extension(ArtifactType::SymTabGoto);
-                let (gcx, items) = self.codegen_items(
+                let (gcx, items, contract_info) = self.codegen_items(
                     tcx,
                     &harnesses,
                     &model_path,
@@ -335,6 +342,8 @@ impl CodegenBackend for GotocCodegenBackend {
                     Default::default(),
                 );
                 results.extend(gcx, items, None);
+
+                assert!(contract_info.is_none());
 
                 for (test_fn, test_desc) in harnesses.iter().zip(descriptions.iter()) {
                     let instance = if let MonoItem::Fn(instance) = test_fn {
@@ -360,13 +369,14 @@ impl CodegenBackend for GotocCodegenBackend {
                         || entry_fn == Some(def_id)
                 });
                 let model_path = base_filename.with_extension(ArtifactType::SymTabGoto);
-                let (gcx, items) = self.codegen_items(
+                let (gcx, items, contract_info) = self.codegen_items(
                     tcx,
                     &local_reachable,
                     &model_path,
                     &results.machine_model,
                     Default::default(),
                 );
+                assert!(contract_info.is_none());
                 results.extend(gcx, items, None);
             }
         }

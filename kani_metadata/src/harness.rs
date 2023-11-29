@@ -5,6 +5,12 @@ use crate::CbmcSolver;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct AssignsContract {
+    pub contracted_function_name: String,
+    pub recursion_tracker: String,
+}
+
 /// We emit this structure for each annotated proof harness (`#[kani::proof]`) we find.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct HarnessMetadata {
@@ -24,6 +30,8 @@ pub struct HarnessMetadata {
     pub goto_file: Option<PathBuf>,
     /// The `#[kani::<>]` attributes added to a harness.
     pub attributes: HarnessAttributes,
+    ///
+    pub contract: Option<AssignsContract>,
 }
 
 /// The attributes added by the user to control how a harness is executed.

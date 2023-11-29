@@ -3,6 +3,7 @@
 //! This module handles Kani metadata generation. For example, generating HarnessMetadata for a
 //! given function.
 
+use std::default::Default;
 use std::path::Path;
 
 use crate::kani_middle::attributes::test_harness_name;
@@ -39,6 +40,7 @@ pub fn gen_proof_metadata(tcx: TyCtxt, def_id: DefId, base_name: &Path) -> Harne
         attributes,
         // TODO: This no longer needs to be an Option.
         goto_file: Some(model_file),
+        contract: Default::default(),
     }
 }
 
@@ -67,5 +69,6 @@ pub fn gen_test_metadata<'tcx>(
         attributes: HarnessAttributes::default(),
         // TODO: This no longer needs to be an Option.
         goto_file: Some(model_file),
+        contract: Default::default(),
     }
 }
