@@ -95,7 +95,6 @@ impl<'a, 'tcx> FunctionCtx<'a, 'tcx> {
                 VarDebugInfoContents::Const(_) => false,
             });
             let name = if let Some(debug_info) = debug_info {
-                //let base_name = format!("{}", debug_info.name);
                 let base_name = format!("{}", debug_info.name);
                 let entry = name_occurrences.entry(base_name.clone());
                 let name = match entry {
