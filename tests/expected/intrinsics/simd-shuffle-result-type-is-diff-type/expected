@@ -1,2 +1,2 @@
 expected return element type `i64` (element of input `i64x2`), found `f64x2` with element type `f64`
-error: aborting due to previous error
+error: aborting due to 1 previous error

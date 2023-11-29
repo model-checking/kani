@@ -716,8 +716,8 @@ impl<'tcx> GotocCtx<'tcx> {
             trace!(func=?instance, "codegen_func_symbol");
             let func = self.symbol_name(instance);
             self.symbol_table
-                .lookup(func)
-                .expect("Function `{func}` should've been declared before usage")
+                .lookup(&func)
+                .unwrap_or_else(|| panic!("Function `{func}` should've been declared before usage"))
         };
         (sym, funct)
     }

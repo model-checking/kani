@@ -235,7 +235,7 @@ impl<'tcx> KaniAttributes<'tcx> {
         self.expect_maybe_one(kind).map(|target| {
             let name = expect_key_string_value(self.tcx.sess, target)?;
             let hir_map = self.tcx.hir();
-            let hir_id = hir_map.local_def_id_to_hir_id(self.item.expect_local());
+            let hir_id = self.tcx.local_def_id_to_hir_id(self.item.expect_local());
             let find_in_mod = |md: &Mod<'_>| {
                 md.item_ids
                     .iter()

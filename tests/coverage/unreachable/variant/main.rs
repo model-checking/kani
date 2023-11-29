@@ -16,9 +16,9 @@ fn print_direction(dir: Direction) {
         Direction::Up => println!("Going up!"),
         Direction::Down => println!("Going down!"),
         Direction::Left => println!("Going left!"),
-        Direction::Right => println!("Going right!"),
+        Direction::Right if 1 == 1 => println!("Going right!"),
         // This part is unreachable since we cover all variants in the match.
-        _ => {}
+        _ => println!("Not going anywhere!"),
     }
 }
 

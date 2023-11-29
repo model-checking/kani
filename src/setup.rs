@@ -83,7 +83,7 @@ pub fn setup(use_local_bundle: Option<OsString>) -> Result<()> {
 
     setup_rust_toolchain(&kani_dir)?;
 
-    setup_python_deps(&kani_dir, &os)?;
+    setup_python_deps(&kani_dir)?;
 
     os_hacks::setup_os_hacks(&kani_dir, &os)?;
 
@@ -152,17 +152,12 @@ fn setup_rust_toolchain(kani_dir: &Path) -> Result<String> {
 }
 
 /// Install into the pyroot the python dependencies we need
-fn setup_python_deps(kani_dir: &Path, os: &os_info::Info) -> Result<()> {
+fn setup_python_deps(kani_dir: &Path) -> Result<()> {
     println!("[4/5] Installing Kani python dependencies...");
     let pyroot = kani_dir.join("pyroot");
 
     // TODO: this is a repetition of versions from kani/kani-dependencies
     let pkg_versions = &["cbmc-viewer==3.8"];
-
-    if os_hacks::should_apply_ubuntu_18_04_python_hack(os)? {
-        os_hacks::setup_python_deps_on_ubuntu_18_04(&pyroot, pkg_versions)?;
-        return Ok(());
-    }
 
     Command::new("python3")
         .args(["-m", "pip", "install", "--target"])
@@ -194,7 +189,10 @@ fn download_url() -> String {
 fn fail_if_unsupported_target() -> Result<()> {
     // This is basically going to be reduced to a compile-time constant
     match TARGET {
-        "x86_64-unknown-linux-gnu" | "x86_64-apple-darwin" | "aarch64-apple-darwin" => Ok(()),
+        "x86_64-unknown-linux-gnu"
+        | "x86_64-apple-darwin"
+        | "aarch64-unknown-linux-gnu"
+        | "aarch64-apple-darwin" => Ok(()),
         _ => bail!("Kani does not support this platform (Rust target {})", TARGET),
     }
 }

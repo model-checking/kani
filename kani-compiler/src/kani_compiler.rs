@@ -282,7 +282,7 @@ impl KaniCompiler {
         let mut compiler = RunCompiler::new(args, self);
         let (send, receive) = std::sync::mpsc::channel();
         compiler.set_make_codegen_backend(Some(Box::new(move |_cfg| backend(queries, send))));
-        compiler.run();
+        compiler.run()?;
         Ok(receive.iter().collect())
     }
 

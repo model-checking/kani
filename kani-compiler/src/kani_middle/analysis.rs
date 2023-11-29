@@ -7,10 +7,13 @@
 //! This module will perform all the analyses requested. Callers are responsible for selecting
 //! when the cost of these analyses are worth it.
 
-use rustc_middle::mir::mono::MonoItem;
-use rustc_middle::mir::visit::Visitor as MirVisitor;
-use rustc_middle::mir::{Location, Rvalue, Statement, StatementKind, Terminator, TerminatorKind};
+use rustc_middle::mir::mono::MonoItem as InternalMonoItem;
 use rustc_middle::ty::TyCtxt;
+use rustc_smir::rustc_internal;
+use stable_mir::mir::mono::MonoItem;
+use stable_mir::mir::{
+    visit::Location, MirVisitor, Rvalue, Statement, StatementKind, Terminator, TerminatorKind,
+};
 use std::collections::HashMap;
 use std::fmt::Display;
 
@@ -20,19 +23,14 @@ use std::fmt::Display;
 ///  - Number of items per type (Function / Constant / Shims)
 ///  - Number of instructions per type.
 ///  - Total number of MIR instructions.
-pub fn print_stats<'tcx>(tcx: TyCtxt<'tcx>, items: &[MonoItem<'tcx>]) {
+pub fn print_stats<'tcx>(_tcx: TyCtxt<'tcx>, items: &[InternalMonoItem<'tcx>]) {
+    let items: Vec<MonoItem> = items.iter().map(rustc_internal::stable).collect();
     let item_types = items.iter().collect::<Counter>();
     let visitor = items
         .iter()
-        .filter_map(|&mono| {
-            if let MonoItem::Fn(instance) = mono {
-                Some(tcx.instance_mir(instance.def))
-            } else {
-                None
-            }
-        })
+        .filter_map(|mono| if let MonoItem::Fn(instance) = mono { Some(instance) } else { None })
         .fold(StatsVisitor::default(), |mut visitor, body| {
-            visitor.visit_body(body);
+            visitor.visit_body(&body.body().unwrap());
             visitor
         });
     eprintln!("====== Reachability Analysis Result =======");
@@ -54,20 +52,20 @@ struct StatsVisitor {
     exprs: Counter,
 }
 
-impl<'tcx> MirVisitor<'tcx> for StatsVisitor {
-    fn visit_statement(&mut self, statement: &Statement<'tcx>, location: Location) {
+impl MirVisitor for StatsVisitor {
+    fn visit_statement(&mut self, statement: &Statement, location: Location) {
         self.stmts.add(statement);
         // Also visit the type of expression.
         self.super_statement(statement, location);
     }
 
-    fn visit_terminator(&mut self, terminator: &Terminator<'tcx>, _location: Location) {
+    fn visit_terminator(&mut self, terminator: &Terminator, _location: Location) {
         self.stmts.add(terminator);
         // Stop here since we don't care today about the information inside the terminator.
         // self.super_terminator(terminator, location);
     }
 
-    fn visit_rvalue(&mut self, rvalue: &Rvalue<'tcx>, _location: Location) {
+    fn visit_rvalue(&mut self, rvalue: &Rvalue, _location: Location) {
         self.exprs.add(rvalue);
         // Stop here since we don't care today about the information inside the rvalue.
         // self.super_rvalue(rvalue, location);
@@ -115,8 +113,8 @@ impl<T: Into<Key>> FromIterator<T> for Counter {
 #[derive(Debug, Eq, Hash, PartialEq)]
 struct Key(pub &'static str);
 
-impl<'tcx> From<&MonoItem<'tcx>> for Key {
-    fn from(value: &MonoItem) -> Self {
+impl From<&MonoItem> for Key {
+    fn from(value: &stable_mir::mir::mono::MonoItem) -> Self {
         match value {
             MonoItem::Fn(_) => Key("function"),
             MonoItem::GlobalAsm(_) => Key("global assembly"),
@@ -125,18 +123,18 @@ impl<'tcx> From<&MonoItem<'tcx>> for Key {
     }
 }
 
-impl<'tcx> From<&Statement<'tcx>> for Key {
-    fn from(value: &Statement<'tcx>) -> Self {
+impl From<&Statement> for Key {
+    fn from(value: &Statement) -> Self {
         match value.kind {
-            StatementKind::Assign(_) => Key("Assign"),
+            StatementKind::Assign(..) => Key("Assign"),
             StatementKind::Deinit(_) => Key("Deinit"),
             StatementKind::Intrinsic(_) => Key("Intrinsic"),
             StatementKind::SetDiscriminant { .. } => Key("SetDiscriminant"),
             // For now, we don't care about the ones below.
-            StatementKind::AscribeUserType(_, _)
+            StatementKind::AscribeUserType { .. }
             | StatementKind::Coverage(_)
             | StatementKind::ConstEvalCounter
-            | StatementKind::FakeRead(_)
+            | StatementKind::FakeRead(..)
             | StatementKind::Nop
             | StatementKind::PlaceMention(_)
             | StatementKind::Retag(_, _)
@@ -146,29 +144,26 @@ impl<'tcx> From<&Statement<'tcx>> for Key {
     }
 }
 
-impl<'tcx> From<&Terminator<'tcx>> for Key {
-    fn from(value: &Terminator<'tcx>) -> Self {
+impl From<&Terminator> for Key {
+    fn from(value: &Terminator) -> Self {
         match value.kind {
+            TerminatorKind::Abort => Key("Abort"),
             TerminatorKind::Assert { .. } => Key("Assert"),
             TerminatorKind::Call { .. } => Key("Call"),
             TerminatorKind::Drop { .. } => Key("Drop"),
             TerminatorKind::CoroutineDrop => Key("CoroutineDrop"),
             TerminatorKind::Goto { .. } => Key("Goto"),
-            TerminatorKind::FalseEdge { .. } => Key("FalseEdge"),
-            TerminatorKind::FalseUnwind { .. } => Key("FalseUnwind"),
             TerminatorKind::InlineAsm { .. } => Key("InlineAsm"),
-            TerminatorKind::UnwindResume => Key("UnwindResume"),
+            TerminatorKind::Resume { .. } => Key("Resume"),
             TerminatorKind::Return => Key("Return"),
             TerminatorKind::SwitchInt { .. } => Key("SwitchInt"),
-            TerminatorKind::UnwindTerminate(_) => Key("UnwindTerminate"),
             TerminatorKind::Unreachable => Key("Unreachable"),
-            TerminatorKind::Yield { .. } => Key("Yield"),
         }
     }
 }
 
-impl<'tcx> From<&Rvalue<'tcx>> for Key {
-    fn from(value: &Rvalue<'tcx>) -> Self {
+impl From<&Rvalue> for Key {
+    fn from(value: &Rvalue) -> Self {
         match value {
             Rvalue::Use(_) => Key("Use"),
             Rvalue::Repeat(_, _) => Key("Repeat"),
@@ -177,8 +172,8 @@ impl<'tcx> From<&Rvalue<'tcx>> for Key {
             Rvalue::AddressOf(_, _) => Key("AddressOf"),
             Rvalue::Len(_) => Key("Len"),
             Rvalue::Cast(_, _, _) => Key("Cast"),
-            Rvalue::BinaryOp(_, _) => Key("BinaryOp"),
-            Rvalue::CheckedBinaryOp(_, _) => Key("CheckedBinaryOp"),
+            Rvalue::BinaryOp(..) => Key("BinaryOp"),
+            Rvalue::CheckedBinaryOp(..) => Key("CheckedBinaryOp"),
             Rvalue::NullaryOp(_, _) => Key("NullaryOp"),
             Rvalue::UnaryOp(_, _) => Key("UnaryOp"),
             Rvalue::Discriminant(_) => Key("Discriminant"),
