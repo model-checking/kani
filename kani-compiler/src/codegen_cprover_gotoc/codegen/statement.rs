@@ -15,6 +15,7 @@ use rustc_middle::mir::{
 use rustc_middle::ty;
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{Instance, InstanceDef, Ty};
+use rustc_smir::rustc_internal;
 use rustc_span::Span;
 use rustc_target::abi::VariantIdx;
 use rustc_target::abi::{FieldsShape, Primitive, TagEncoding, Variants};
@@ -531,8 +532,16 @@ impl<'tcx> GotocCtx<'tcx> {
                     self.codegen_untupled_args(instance, &mut fargs, args.last());
                 }
 
-                if let Some(hk) = self.hooks.hook_applies(self.tcx, instance) {
-                    return hk.handle(self, instance, fargs, *destination, *target, Some(span));
+                let stable_instance = rustc_internal::stable(instance);
+                if let Some(hk) = self.hooks.hook_applies(self.tcx, stable_instance) {
+                    return hk.handle(
+                        self,
+                        stable_instance,
+                        fargs,
+                        rustc_internal::stable(destination),
+                        target.map(BasicBlock::as_usize),
+                        Some(rustc_internal::stable(span)),
+                    );
                 }
 
                 let mut stmts: Vec<Stmt> = match instance.def {

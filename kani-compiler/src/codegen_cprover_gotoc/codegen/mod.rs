@@ -17,7 +17,9 @@ mod statement;
 mod static_var;
 
 // Visible for all codegen module.
+mod ty_stable;
 pub(super) mod typ;
 
 pub use assert::PropertyClass;
+pub use block::bb_label;
 pub use typ::TypeExt;

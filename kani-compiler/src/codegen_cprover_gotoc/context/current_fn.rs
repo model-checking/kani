@@ -3,26 +3,26 @@
 
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::Stmt;
-use rustc_middle::mir::BasicBlock;
-use rustc_middle::mir::Body;
-use rustc_middle::ty::Instance;
-use rustc_middle::ty::PolyFnSig;
+use rustc_middle::mir::{BasicBlock, Body as InternalBody};
+use rustc_middle::ty::{Instance as InternalInstance, PolyFnSig};
+use rustc_smir::rustc_internal;
+use stable_mir::mir::mono::Instance;
+use stable_mir::mir::Body;
+use stable_mir::CrateDef;
 
 /// This structure represents useful data about the function we are currently compiling.
 #[derive(Debug)]
 pub struct CurrentFnCtx<'tcx> {
     /// The GOTO block we are compiling into
     block: Vec<Stmt>,
-    /// The current MIR basic block
-    current_bb: Option<BasicBlock>,
     /// The codegen instance for the current function
-    instance: Instance<'tcx>,
+    instance: Instance,
     /// The crate this function is from
     krate: String,
-    /// The goto labels for all blocks
-    labels: Vec<String>,
-    /// The mir for the current instance
-    mir: &'tcx Body<'tcx>,
+    /// The mir for the current instance. This is using the internal representation.
+    mir: &'tcx InternalBody<'tcx>,
+    /// The mir for the current instance.
+    body: Body,
     /// The symbol name of the current function
     name: String,
     /// A human readable pretty name for the current function
@@ -35,17 +35,17 @@ pub struct CurrentFnCtx<'tcx> {
 
 /// Constructor
 impl<'tcx> CurrentFnCtx<'tcx> {
-    pub fn new(instance: Instance<'tcx>, gcx: &GotocCtx<'tcx>, labels: Vec<String>) -> Self {
+    pub fn new(instance: Instance, gcx: &GotocCtx<'tcx>) -> Self {
+        let internal_instance = rustc_internal::internal(instance);
         Self {
             block: vec![],
-            current_bb: None,
             instance,
-            krate: gcx.get_crate(instance),
-            labels,
-            mir: gcx.tcx.instance_mir(instance.def),
-            name: gcx.symbol_name(instance),
-            readable_name: gcx.readable_instance_name(instance),
-            sig: gcx.fn_sig_of_instance(instance),
+            mir: gcx.tcx.instance_mir(internal_instance.def),
+            krate: instance.def.krate().name,
+            body: instance.body().unwrap(),
+            name: instance.mangled_name(),
+            readable_name: instance.name(),
+            sig: gcx.fn_sig_of_instance(internal_instance),
             temp_var_counter: 0,
         }
     }
@@ -67,20 +67,17 @@ impl<'tcx> CurrentFnCtx<'tcx> {
     pub fn push_onto_block(&mut self, s: Stmt) {
         self.block.push(s)
     }
-
-    pub fn reset_current_bb(&mut self) {
-        self.current_bb = None;
-    }
-
-    pub fn set_current_bb(&mut self, bb: BasicBlock) {
-        self.current_bb = Some(bb);
-    }
 }
 
 /// Getters
 impl<'tcx> CurrentFnCtx<'tcx> {
     /// The function we are currently compiling
-    pub fn instance(&self) -> Instance<'tcx> {
+    pub fn instance(&self) -> InternalInstance<'tcx> {
+        rustc_internal::internal(self.instance)
+    }
+
+    /// Retrieve the stable instance
+    pub fn instance_stable(&self) -> Instance {
         self.instance
     }
 
@@ -89,8 +86,8 @@ impl<'tcx> CurrentFnCtx<'tcx> {
         self.krate.to_string()
     }
 
-    /// The MIR for the function we are currently compiling
-    pub fn mir(&self) -> &'tcx Body<'tcx> {
+    /// The MIR for the function we are currently compiling using internal APIs.
+    pub fn mir(&self) -> &'tcx InternalBody<'tcx> {
         self.mir
     }
 
@@ -108,6 +105,11 @@ impl<'tcx> CurrentFnCtx<'tcx> {
     pub fn sig(&self) -> PolyFnSig<'tcx> {
         self.sig
     }
+
+    /// The body of the function.
+    pub fn body(&self) -> &Body {
+        &self.body
+    }
 }
 
 /// Utility functions
@@ -118,6 +120,6 @@ impl CurrentFnCtx<'_> {
     }
 
     pub fn find_label(&self, bb: &BasicBlock) -> String {
-        self.labels[bb.index()].clone()
+        format!("{bb:?}")
     }
 }
