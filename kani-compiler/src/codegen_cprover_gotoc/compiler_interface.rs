@@ -43,6 +43,7 @@ use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::cstore::MetadataLoaderDyn;
 use rustc_session::output::out_filename;
 use rustc_session::Session;
+use rustc_smir::rustc_internal;
 use rustc_target::abi::Endian;
 use rustc_target::spec::PanicStrategy;
 use std::any::Any;
@@ -208,105 +209,115 @@ impl CodegenBackend for GotocCodegenBackend {
         rustc_metadata: EncodedMetadata,
         _need_metadata_module: bool,
     ) -> Box<dyn Any> {
-        super::utils::init();
+        let ret_val = rustc_internal::run(tcx, || {
+            super::utils::init();
 
-        // Queries shouldn't change today once codegen starts.
-        let queries = self.queries.lock().unwrap().clone();
-        check_target(tcx.sess);
-        check_options(tcx.sess);
+            // Queries shouldn't change today once codegen starts.
+            let queries = self.queries.lock().unwrap().clone();
+            check_target(tcx.sess);
+            check_options(tcx.sess);
 
-        // Codegen all items that need to be processed according to the selected reachability mode:
-        //
-        // - Harnesses: Generate one model per local harnesses (marked with `kani::proof` attribute).
-        // - Tests: Generate one model per test harnesses.
-        // - PubFns: Generate code for all reachable logic starting from the local public functions.
-        // - None: Don't generate code. This is used to compile dependencies.
-        let base_filename = tcx.output_filenames(()).output_path(OutputType::Object);
-        let reachability = queries.args().reachability_analysis;
-        let mut results = GotoCodegenResults::new(tcx, reachability);
-        match reachability {
-            ReachabilityType::Harnesses => {
-                // Cross-crate collecting of all items that are reachable from the crate harnesses.
-                let harnesses = queries.target_harnesses();
-                let mut items: HashSet<DefPathHash> = HashSet::with_capacity(harnesses.len());
-                items.extend(harnesses);
-                let harnesses =
-                    filter_crate_items(tcx, |_, def_id| items.contains(&tcx.def_path_hash(def_id)));
-                for harness in harnesses {
-                    let model_path =
-                        queries.harness_model_path(&tcx.def_path_hash(harness.def_id())).unwrap();
+            // Codegen all items that need to be processed according to the selected reachability mode:
+            //
+            // - Harnesses: Generate one model per local harnesses (marked with `kani::proof` attribute).
+            // - Tests: Generate one model per test harnesses.
+            // - PubFns: Generate code for all reachable logic starting from the local public functions.
+            // - None: Don't generate code. This is used to compile dependencies.
+            let base_filename = tcx.output_filenames(()).output_path(OutputType::Object);
+            let reachability = queries.args().reachability_analysis;
+            let mut results = GotoCodegenResults::new(tcx, reachability);
+            match reachability {
+                ReachabilityType::Harnesses => {
+                    // Cross-crate collecting of all items that are reachable from the crate harnesses.
+                    let harnesses = queries.target_harnesses();
+                    let mut items: HashSet<DefPathHash> = HashSet::with_capacity(harnesses.len());
+                    items.extend(harnesses);
+                    let harnesses = filter_crate_items(tcx, |_, def_id| {
+                        items.contains(&tcx.def_path_hash(def_id))
+                    });
+                    for harness in harnesses {
+                        let model_path = queries
+                            .harness_model_path(&tcx.def_path_hash(harness.def_id()))
+                            .unwrap();
+                        let (gcx, items) =
+                            self.codegen_items(tcx, &[harness], model_path, &results.machine_model);
+                        results.extend(gcx, items, None);
+                    }
+                }
+                ReachabilityType::Tests => {
+                    // We're iterating over crate items here, so what we have to codegen is the "test description" containing the
+                    // test closure that we want to execute
+                    // TODO: Refactor this code so we can guarantee that the pair (test_fn, test_desc) actually match.
+                    let mut descriptions = vec![];
+                    let harnesses = filter_const_crate_items(tcx, |_, def_id| {
+                        if is_test_harness_description(tcx, def_id) {
+                            descriptions.push(def_id);
+                            true
+                        } else {
+                            false
+                        }
+                    });
+                    // Codegen still takes a considerable amount, thus, we only generate one model for
+                    // all harnesses and copy them for each harness.
+                    // We will be able to remove this once we optimize all calls to CBMC utilities.
+                    // https://github.com/model-checking/kani/issues/1971
+                    let model_path = base_filename.with_extension(ArtifactType::SymTabGoto);
                     let (gcx, items) =
-                        self.codegen_items(tcx, &[harness], model_path, &results.machine_model);
+                        self.codegen_items(tcx, &harnesses, &model_path, &results.machine_model);
+                    results.extend(gcx, items, None);
+
+                    for (test_fn, test_desc) in harnesses.iter().zip(descriptions.iter()) {
+                        let instance =
+                            if let MonoItem::Fn(instance) = test_fn { instance } else { continue };
+                        let metadata =
+                            gen_test_metadata(tcx, *test_desc, *instance, &base_filename);
+                        let test_model_path = &metadata.goto_file.as_ref().unwrap();
+                        std::fs::copy(&model_path, test_model_path).expect(&format!(
+                            "Failed to copy {} to {}",
+                            model_path.display(),
+                            test_model_path.display()
+                        ));
+                        results.harnesses.push(metadata);
+                    }
+                }
+                ReachabilityType::None => {}
+                ReachabilityType::PubFns => {
+                    let entry_fn = tcx.entry_fn(()).map(|(id, _)| id);
+                    let local_reachable = filter_crate_items(tcx, |_, def_id| {
+                        (tcx.is_reachable_non_generic(def_id) && tcx.def_kind(def_id).is_fn_like())
+                            || entry_fn == Some(def_id)
+                    });
+                    let model_path = base_filename.with_extension(ArtifactType::SymTabGoto);
+                    let (gcx, items) = self.codegen_items(
+                        tcx,
+                        &local_reachable,
+                        &model_path,
+                        &results.machine_model,
+                    );
                     results.extend(gcx, items, None);
                 }
             }
-            ReachabilityType::Tests => {
-                // We're iterating over crate items here, so what we have to codegen is the "test description" containing the
-                // test closure that we want to execute
-                // TODO: Refactor this code so we can guarantee that the pair (test_fn, test_desc) actually match.
-                let mut descriptions = vec![];
-                let harnesses = filter_const_crate_items(tcx, |_, def_id| {
-                    if is_test_harness_description(tcx, def_id) {
-                        descriptions.push(def_id);
-                        true
-                    } else {
-                        false
-                    }
-                });
-                // Codegen still takes a considerable amount, thus, we only generate one model for
-                // all harnesses and copy them for each harness.
-                // We will be able to remove this once we optimize all calls to CBMC utilities.
-                // https://github.com/model-checking/kani/issues/1971
-                let model_path = base_filename.with_extension(ArtifactType::SymTabGoto);
-                let (gcx, items) =
-                    self.codegen_items(tcx, &harnesses, &model_path, &results.machine_model);
-                results.extend(gcx, items, None);
 
-                for (test_fn, test_desc) in harnesses.iter().zip(descriptions.iter()) {
-                    let instance =
-                        if let MonoItem::Fn(instance) = test_fn { instance } else { continue };
-                    let metadata = gen_test_metadata(tcx, *test_desc, *instance, &base_filename);
-                    let test_model_path = &metadata.goto_file.as_ref().unwrap();
-                    std::fs::copy(&model_path, test_model_path).expect(&format!(
-                        "Failed to copy {} to {}",
-                        model_path.display(),
-                        test_model_path.display()
-                    ));
-                    results.harnesses.push(metadata);
+            if reachability != ReachabilityType::None {
+                // Print compilation report.
+                results.print_report(tcx);
+
+                if reachability != ReachabilityType::Harnesses {
+                    // In a workspace, cargo seems to be using the same file prefix to build a crate that is
+                    // a package lib and also a dependency of another package.
+                    // To avoid overriding the metadata for its verification, we skip this step when
+                    // reachability is None, even because there is nothing to record.
+                    write_file(
+                        &base_filename,
+                        ArtifactType::Metadata,
+                        &results.generate_metadata(),
+                        queries.args().output_pretty_json,
+                    );
                 }
             }
-            ReachabilityType::None => {}
-            ReachabilityType::PubFns => {
-                let entry_fn = tcx.entry_fn(()).map(|(id, _)| id);
-                let local_reachable = filter_crate_items(tcx, |_, def_id| {
-                    (tcx.is_reachable_non_generic(def_id) && tcx.def_kind(def_id).is_fn_like())
-                        || entry_fn == Some(def_id)
-                });
-                let model_path = base_filename.with_extension(ArtifactType::SymTabGoto);
-                let (gcx, items) =
-                    self.codegen_items(tcx, &local_reachable, &model_path, &results.machine_model);
-                results.extend(gcx, items, None);
-            }
-        }
-
-        if reachability != ReachabilityType::None {
-            // Print compilation report.
-            results.print_report(tcx);
-
-            if reachability != ReachabilityType::Harnesses {
-                // In a workspace, cargo seems to be using the same file prefix to build a crate that is
-                // a package lib and also a dependency of another package.
-                // To avoid overriding the metadata for its verification, we skip this step when
-                // reachability is None, even because there is nothing to record.
-                write_file(
-                    &base_filename,
-                    ArtifactType::Metadata,
-                    &results.generate_metadata(),
-                    queries.args().output_pretty_json,
-                );
-            }
-        }
-        codegen_results(tcx, rustc_metadata, &results.machine_model)
+            codegen_results(tcx, rustc_metadata, &results.machine_model)
+        });
+        ret_val.unwrap()
     }
 
     fn join_codegen(

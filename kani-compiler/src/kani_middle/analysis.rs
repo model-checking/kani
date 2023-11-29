@@ -23,31 +23,24 @@ use std::fmt::Display;
 ///  - Number of items per type (Function / Constant / Shims)
 ///  - Number of instructions per type.
 ///  - Total number of MIR instructions.
-pub fn print_stats<'tcx>(tcx: TyCtxt<'tcx>, items: &[InternalMonoItem<'tcx>]) {
-    rustc_internal::run(tcx, || {
-        let items: Vec<MonoItem> = items.iter().map(rustc_internal::stable).collect();
-        let item_types = items.iter().collect::<Counter>();
-        let visitor = items
-            .iter()
-            .filter_map(
-                |mono| {
-                    if let MonoItem::Fn(instance) = mono { Some(instance) } else { None }
-                },
-            )
-            .fold(StatsVisitor::default(), |mut visitor, body| {
-                visitor.visit_body(&body.body().unwrap());
-                visitor
-            });
-        eprintln!("====== Reachability Analysis Result =======");
-        eprintln!("Total # items: {}", item_types.total());
-        eprintln!("Total # statements: {}", visitor.stmts.total());
-        eprintln!("Total # expressions: {}", visitor.exprs.total());
-        eprintln!("\nReachable Items:\n{item_types}");
-        eprintln!("Statements:\n{}", visitor.stmts);
-        eprintln!("Expressions:\n{}", visitor.exprs);
-        eprintln!("-------------------------------------------")
-    })
-    .unwrap();
+pub fn print_stats<'tcx>(_tcx: TyCtxt<'tcx>, items: &[InternalMonoItem<'tcx>]) {
+    let items: Vec<MonoItem> = items.iter().map(rustc_internal::stable).collect();
+    let item_types = items.iter().collect::<Counter>();
+    let visitor = items
+        .iter()
+        .filter_map(|mono| if let MonoItem::Fn(instance) = mono { Some(instance) } else { None })
+        .fold(StatsVisitor::default(), |mut visitor, body| {
+            visitor.visit_body(&body.body().unwrap());
+            visitor
+        });
+    eprintln!("====== Reachability Analysis Result =======");
+    eprintln!("Total # items: {}", item_types.total());
+    eprintln!("Total # statements: {}", visitor.stmts.total());
+    eprintln!("Total # expressions: {}", visitor.exprs.total());
+    eprintln!("\nReachable Items:\n{item_types}");
+    eprintln!("Statements:\n{}", visitor.stmts);
+    eprintln!("Expressions:\n{}", visitor.exprs);
+    eprintln!("-------------------------------------------")
 }
 
 #[derive(Default)]
