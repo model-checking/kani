@@ -22,6 +22,7 @@ use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{Expr, Location, Stmt, Type};
 use cbmc::InternedString;
 use rustc_span::Span;
+use stable_mir::ty::Span as SpanStable;
 use std::convert::AsRef;
 use strum_macros::{AsRefStr, EnumString};
 use tracing::debug;
@@ -138,8 +139,8 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Generate code to cover the given condition at the current location
-    pub fn codegen_cover(&self, cond: Expr, msg: &str, span: Option<Span>) -> Stmt {
-        let loc = self.codegen_caller_span(&span);
+    pub fn codegen_cover(&self, cond: Expr, msg: &str, span: SpanStable) -> Stmt {
+        let loc = self.codegen_caller_span_stable(span);
         // Should use Stmt::cover, but currently this doesn't work with CBMC
         // unless it is run with '--cover cover' (see
         // https://github.com/diffblue/cbmc/issues/6613). So for now use
@@ -172,12 +173,8 @@ impl<'tcx> GotocCtx<'tcx> {
     /// reachability check.
     /// If reachability checks are disabled, the function returns the message
     /// unmodified and an empty (skip) statement.
-    pub fn codegen_reachability_check(
-        &mut self,
-        msg: String,
-        span: Option<Span>,
-    ) -> (String, Stmt) {
-        let loc = self.codegen_caller_span(&span);
+    pub fn codegen_reachability_check(&mut self, msg: String, span: SpanStable) -> (String, Stmt) {
+        let loc = self.codegen_caller_span_stable(span);
         if self.queries.args().check_assertion_reachability {
             // Generate a unique ID for the assert
             let assert_id = self.next_check_id();
@@ -224,7 +221,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Kani hooks function calls to `panic` and calls this intead.
-    pub fn codegen_panic(&self, span: Option<Span>, fargs: Vec<Expr>) -> Stmt {
+    pub fn codegen_panic(&self, span: SpanStable, fargs: Vec<Expr>) -> Stmt {
         // CBMC requires that the argument to the assertion must be a string constant.
         // If there is one in the MIR, use it; otherwise, explain that we can't.
         assert!(!fargs.is_empty(), "Panic requires a string message");
@@ -232,7 +229,8 @@ impl<'tcx> GotocCtx<'tcx> {
             "This is a placeholder message; Kani doesn't support message formatted at runtime",
         ));
 
-        self.codegen_fatal_error(PropertyClass::Assertion, &msg, span)
+        let loc = self.codegen_caller_span_stable(span);
+        self.codegen_assert_assume_false(PropertyClass::Assertion, &msg, loc)
     }
 
     /// Kani does not currently support all MIR constructs.

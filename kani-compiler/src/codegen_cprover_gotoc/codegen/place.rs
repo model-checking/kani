@@ -18,6 +18,7 @@ use rustc_middle::{
     ty::{self, Ty, TypeAndMut, VariantDef},
 };
 use rustc_target::abi::{FieldIdx, TagEncoding, VariantIdx, Variants};
+use stable_mir::mir::Place as PlaceStable;
 use tracing::{debug, trace, warn};
 
 /// A projection in Kani can either be to a type (the normal case),
@@ -652,6 +653,13 @@ impl<'tcx> GotocCtx<'tcx> {
     /// This function follows the MIR projection to get the final useable lvalue.
     /// If it passes through a fat pointer along the way, it stores info about it,
     /// which can be useful in reconstructing fat pointer operations.
+    pub fn codegen_place_stable(
+        &mut self,
+        _p: &PlaceStable,
+    ) -> Result<ProjectedPlace<'tcx>, UnimplementedData> {
+        todo!()
+    }
+
     pub fn codegen_place(
         &mut self,
         p: &Place<'tcx>,

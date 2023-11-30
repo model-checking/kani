@@ -176,8 +176,10 @@ impl<'tcx> GotocCtx<'tcx> {
                     msg.description()
                 };
 
-                let (msg_str, reach_stmt) =
-                    self.codegen_reachability_check(msg.to_owned(), Some(term.source_info.span));
+                let (msg_str, reach_stmt) = self.codegen_reachability_check(
+                    msg.to_owned(),
+                    rustc_internal::stable(term.source_info.span),
+                );
 
                 Stmt::block(
                     vec![
@@ -540,7 +542,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         fargs,
                         rustc_internal::stable(destination),
                         target.map(BasicBlock::as_usize),
-                        Some(rustc_internal::stable(span)),
+                        rustc_internal::stable(span),
                     );
                 }
 

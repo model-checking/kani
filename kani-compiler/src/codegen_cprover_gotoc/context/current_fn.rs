@@ -76,11 +76,6 @@ impl<'tcx> CurrentFnCtx<'tcx> {
         rustc_internal::internal(self.instance)
     }
 
-    /// Retrieve the stable instance
-    pub fn instance_stable(&self) -> Instance {
-        self.instance
-    }
-
     /// The crate that function came from
     pub fn krate(&self) -> String {
         self.krate.to_string()

@@ -7,11 +7,17 @@
 //! `typ.rs`.
 
 use crate::codegen_cprover_gotoc::GotocCtx;
+use cbmc::goto_program::Type;
+use rustc_smir::rustc_internal;
 use stable_mir::mir::Place;
 use stable_mir::ty::Ty;
 
 impl<'tcx> GotocCtx<'tcx> {
     pub fn place_ty_stable(&self, place: &Place) -> Ty {
         place.ty(self.current_fn().body().locals()).unwrap()
+    }
+
+    pub fn codegen_ty_stable(&mut self, ty: Ty) -> Type {
+        self.codegen_ty(rustc_internal::internal(ty))
     }
 }

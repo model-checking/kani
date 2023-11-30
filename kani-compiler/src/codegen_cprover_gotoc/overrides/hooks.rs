@@ -31,14 +31,14 @@ pub trait GotocHook {
         fargs: Vec<Expr>,
         assign_to: Place,
         target: Option<BasicBlockIdx>,
-        span: Option<Span>,
+        span: Span,
     ) -> Stmt;
 }
 
 fn matches_function(tcx: TyCtxt, instance: Instance, attr_name: &str) -> bool {
     let attr_sym = rustc_span::symbol::Symbol::intern(attr_name);
     if let Some(attr_id) = tcx.all_diagnostic_items(()).name_to_id.get(&attr_sym) {
-        if rustc_internal::internal(instance.def.def_id()) == attr_id {
+        if rustc_internal::internal(instance.def.def_id()) == *attr_id {
             debug!("matched: {:?} {:?}", attr_id, attr_sym);
             return true;
         }
@@ -67,14 +67,14 @@ impl GotocHook for Cover {
         mut fargs: Vec<Expr>,
         _assign_to: Place,
         target: Option<BasicBlockIdx>,
-        span: Option<Span>,
+        span: Span,
     ) -> Stmt {
         assert_eq!(fargs.len(), 2);
         let cond = fargs.remove(0).cast_to(Type::bool());
         let msg = fargs.remove(0);
         let msg = gcx.extract_const_message(&msg).unwrap();
         let target = target.unwrap();
-        let caller_loc = gcx.codegen_caller_span(&span);
+        let caller_loc = gcx.codegen_caller_span_stable(span);
 
         let (msg, reach_stmt) = gcx.codegen_reachability_check(msg, span);
 
@@ -102,12 +102,12 @@ impl GotocHook for Assume {
         mut fargs: Vec<Expr>,
         _assign_to: Place,
         target: Option<BasicBlockIdx>,
-        span: Option<Span>,
+        span: Span,
     ) -> Stmt {
         assert_eq!(fargs.len(), 1);
         let cond = fargs.remove(0).cast_to(Type::bool());
         let target = target.unwrap();
-        let loc = gcx.codegen_span_option(span);
+        let loc = gcx.codegen_span_stable(span);
 
         Stmt::block(vec![gcx.codegen_assume(cond, loc), Stmt::goto(bb_label(target), loc)], loc)
     }
@@ -126,14 +126,14 @@ impl GotocHook for Assert {
         mut fargs: Vec<Expr>,
         _assign_to: Place,
         target: Option<BasicBlockIdx>,
-        span: Option<Span>,
+        span: Span,
     ) -> Stmt {
         assert_eq!(fargs.len(), 2);
         let cond = fargs.remove(0).cast_to(Type::bool());
         let msg = fargs.remove(0);
         let msg = gcx.extract_const_message(&msg).unwrap();
         let target = target.unwrap();
-        let caller_loc = gcx.codegen_caller_span(&span);
+        let caller_loc = gcx.codegen_caller_span_stable(span);
 
         let (msg, reach_stmt) = gcx.codegen_reachability_check(msg, span);
 
@@ -167,21 +167,23 @@ impl GotocHook for Nondet {
         fargs: Vec<Expr>,
         assign_to: Place,
         target: Option<BasicBlockIdx>,
-        span: Option<Span>,
+        span: Span,
     ) -> Stmt {
         assert!(fargs.is_empty());
-        let loc = gcx.codegen_span_option(span);
+        let loc = gcx.codegen_span_stable(span);
         let target = target.unwrap();
         let pt = gcx.place_ty_stable(&assign_to);
-        if pt.is_unit() {
+        if pt.kind().is_unit() {
             Stmt::goto(bb_label(target), loc)
         } else {
-            let pe =
-                unwrap_or_return_codegen_unimplemented_stmt!(gcx, gcx.codegen_place(&assign_to))
-                    .goto_expr;
+            let pe = unwrap_or_return_codegen_unimplemented_stmt!(
+                gcx,
+                gcx.codegen_place_stable(&assign_to)
+            )
+            .goto_expr;
             Stmt::block(
                 vec![
-                    pe.assign(gcx.codegen_ty(pt).nondet(), loc),
+                    pe.assign(gcx.codegen_ty_stable(pt).nondet(), loc),
                     Stmt::goto(bb_label(target), loc),
                 ],
                 loc,
@@ -209,7 +211,7 @@ impl GotocHook for Panic {
         fargs: Vec<Expr>,
         _assign_to: Place,
         _target: Option<BasicBlockIdx>,
-        span: Option<Span>,
+        span: Span,
     ) -> Stmt {
         gcx.codegen_panic(span, fargs)
     }
@@ -219,7 +221,7 @@ struct RustAlloc;
 // Removing this hook causes regression failures.
 // https://github.com/model-checking/kani/issues/1170
 impl GotocHook for RustAlloc {
-    fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
+    fn hook_applies(&self, _tcx: TyCtxt, instance: Instance) -> bool {
         let full_name = instance.name();
         full_name == "alloc::alloc::exchange_malloc"
     }
@@ -231,22 +233,25 @@ impl GotocHook for RustAlloc {
         mut fargs: Vec<Expr>,
         assign_to: Place,
         target: Option<BasicBlockIdx>,
-        span: Option<Span>,
+        span: Span,
     ) -> Stmt {
         debug!(?instance, "Replace allocation");
-        let loc = gcx.codegen_span_option(span);
+        let loc = gcx.codegen_span_stable(span);
         let target = target.unwrap();
         let size = fargs.remove(0);
         Stmt::block(
             vec![
-                unwrap_or_return_codegen_unimplemented_stmt!(gcx, gcx.codegen_place(&assign_to))
-                    .goto_expr
-                    .assign(
-                        BuiltinFn::Malloc
-                            .call(vec![size], loc)
-                            .cast_to(Type::unsigned_int(8).to_pointer()),
-                        loc,
-                    ),
+                unwrap_or_return_codegen_unimplemented_stmt!(
+                    gcx,
+                    gcx.codegen_place_stable(&assign_to)
+                )
+                .goto_expr
+                .assign(
+                    BuiltinFn::Malloc
+                        .call(vec![size], loc)
+                        .cast_to(Type::unsigned_int(8).to_pointer()),
+                    loc,
+                ),
                 Stmt::goto(bb_label(target), Location::none()),
             ],
             Location::none(),
@@ -279,9 +284,9 @@ impl GotocHook for MemCmp {
         mut fargs: Vec<Expr>,
         assign_to: Place,
         target: Option<BasicBlockIdx>,
-        span: Option<Span>,
+        span: Span,
     ) -> Stmt {
-        let loc = gcx.codegen_span_option(span);
+        let loc = gcx.codegen_span_stable(span);
         let target = target.unwrap();
         let first = fargs.remove(0);
         let second = fargs.remove(0);
@@ -299,11 +304,11 @@ impl GotocHook for MemCmp {
         let is_second_ok = second_var.clone().is_nonnull();
         let should_skip_pointer_checks = is_count_zero.and(is_first_ok).and(is_second_ok);
         let place_expr =
-            unwrap_or_return_codegen_unimplemented_stmt!(gcx, gcx.codegen_place(&assign_to))
+            unwrap_or_return_codegen_unimplemented_stmt!(gcx, gcx.codegen_place_stable(&assign_to))
                 .goto_expr;
         let rhs = should_skip_pointer_checks.ternary(
             Expr::int_constant(0, place_expr.typ().clone()), // zero bytes are always equal (as long as pointers are nonnull and aligned)
-            gcx.codegen_func_expr(instance, span.as_ref())
+            gcx.codegen_func_expr_stable(instance, span)
                 .call(vec![first_var, second_var, count_var]),
         );
         let code = place_expr.assign(rhs, loc).with_location(loc);
@@ -335,7 +340,7 @@ impl GotocHook for UntrackedDeref {
         mut fargs: Vec<Expr>,
         assign_to: Place,
         _target: Option<BasicBlockIdx>,
-        span: Option<Span>,
+        span: Span,
     ) -> Stmt {
         assert_eq!(
             fargs.len(),
@@ -344,11 +349,14 @@ impl GotocHook for UntrackedDeref {
             This function should only be called from code generated by kani macros, \
             as such this is likely a code-generation error."
         );
-        let loc = gcx.codegen_span_option(span);
+        let loc = gcx.codegen_span_stable(span);
         Stmt::block(
             vec![Stmt::assign(
-                unwrap_or_return_codegen_unimplemented_stmt!(gcx, gcx.codegen_place(&assign_to))
-                    .goto_expr,
+                unwrap_or_return_codegen_unimplemented_stmt!(
+                    gcx,
+                    gcx.codegen_place_stable(&assign_to)
+                )
+                .goto_expr,
                 fargs.pop().unwrap().dereference(),
                 loc,
             )],
