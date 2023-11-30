@@ -187,7 +187,7 @@ impl KaniCompiler {
             debug!(next=?self.stage, "run");
             match &self.stage {
                 CompilationStage::Init => {
-                    self.run_compilation_session(&orig_args)?;
+                    assert!(self.run_compilation_session(&orig_args)?.is_empty());
                 }
                 CompilationStage::CodegenNoStubs { .. } => {
                     unreachable!("This stage should always run in the same session as Init");

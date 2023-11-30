@@ -5,13 +5,13 @@
 
 use crate::args::ReachabilityType;
 use crate::codegen_cprover_gotoc::GotocCtx;
+use crate::kani_middle::analysis;
 use crate::kani_middle::attributes::{is_test_harness_description, KaniAttributes};
 use crate::kani_middle::metadata::gen_test_metadata;
 use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{
     collect_reachable_items, filter_const_crate_items, filter_crate_items,
 };
-use crate::kani_middle::{analysis, SourceLocation};
 use crate::kani_middle::{check_reachable_items, dump_mir_items};
 use crate::kani_queries::QueryDb;
 use cbmc::goto_program::Location;
@@ -226,11 +226,13 @@ impl<'tcx> GotocCtx<'tcx> {
         let recursion_wrapper_id =
             function_under_contract_attrs.checked_with_id().unwrap().unwrap();
         let span_of_recursion_wrapper = tcx.def_span(recursion_wrapper_id);
-        let location_of_recursion_wrapper = SourceLocation::new(tcx, &span_of_recursion_wrapper);
+        let location_of_recursion_wrapper = self.codegen_span(&span_of_recursion_wrapper);
 
         let full_name = format!(
             "{}:{}::REENTRY",
-            location_of_recursion_wrapper.filename,
+            location_of_recursion_wrapper
+                .filename()
+                .expect("recursion location wrapper should have a file name"),
             tcx.item_name(recursion_wrapper_id),
         );
 
