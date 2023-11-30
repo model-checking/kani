@@ -45,31 +45,27 @@ pub fn collect_reachable_items<'tcx>(
     tcx: TyCtxt<'tcx>,
     starting_points: &[InternalMonoItem<'tcx>],
 ) -> Vec<InternalMonoItem<'tcx>> {
-    rustc_smir::rustc_internal::run(tcx, || {
-        // For each harness, collect items using the same collector.
-        // I.e.: This will return any item that is reachable from one or more of the starting points.
-        let mut collector = MonoItemsCollector::new(tcx);
-        for item in starting_points {
-            collector.collect(rustc_internal::stable(item));
-        }
+    // For each harness, collect items using the same collector.
+    // I.e.: This will return any item that is reachable from one or more of the starting points.
+    let mut collector = MonoItemsCollector::new(tcx);
+    for item in starting_points {
+        collector.collect(rustc_internal::stable(item));
+    }
 
-        #[cfg(debug_assertions)]
-        collector
-            .call_graph
-            .dump_dot(tcx)
-            .unwrap_or_else(|e| tracing::error!("Failed to dump call graph: {e}"));
+    #[cfg(debug_assertions)]
+    collector
+        .call_graph
+        .dump_dot(tcx)
+        .unwrap_or_else(|e| tracing::error!("Failed to dump call graph: {e}"));
 
-        tcx.sess.abort_if_errors();
-
-        // Sort the result so code generation follows deterministic order.
-        // This helps us to debug the code, but it also provides the user a good experience since the
-        // order of the errors and warnings is stable.
-        let mut sorted_items: Vec<_> =
-            collector.collected.iter().map(rustc_internal::internal).collect();
-        sorted_items.sort_by_cached_key(|item| to_fingerprint(tcx, item));
-        sorted_items
-    })
-    .unwrap()
+    tcx.sess.abort_if_errors();
+    // Sort the result so code generation follows deterministic order.
+    // This helps us to debug the code, but it also provides the user a good experience since the
+    // order of the errors and warnings is stable.
+    let mut sorted_items: Vec<_> =
+        collector.collected.iter().map(rustc_internal::internal).collect();
+    sorted_items.sort_by_cached_key(|item| to_fingerprint(tcx, item));
+    sorted_items
 }
 
 /// Collect all (top-level) items in the crate that matches the given predicate.
@@ -78,22 +74,19 @@ pub fn filter_crate_items<F>(tcx: TyCtxt, predicate: F) -> Vec<InternalMonoItem>
 where
     F: Fn(TyCtxt, DefId) -> bool,
 {
-    rustc_smir::rustc_internal::run(tcx, || {
-        let crate_items = stable_mir::all_local_items();
-        // Filter regular items.
-        crate_items
-            .iter()
-            .filter_map(|item| {
-                // Only collect monomorphic items.
-                Instance::try_from(*item).ok().and_then(|instance| {
-                    let def_id = rustc_internal::internal(item);
-                    predicate(tcx, def_id)
-                        .then_some(InternalMonoItem::Fn(rustc_internal::internal(&instance)))
-                })
+    let crate_items = stable_mir::all_local_items();
+    // Filter regular items.
+    crate_items
+        .iter()
+        .filter_map(|item| {
+            // Only collect monomorphic items.
+            Instance::try_from(*item).ok().and_then(|instance| {
+                let def_id = rustc_internal::internal(item);
+                predicate(tcx, def_id)
+                    .then_some(InternalMonoItem::Fn(rustc_internal::internal(&instance)))
             })
-            .collect::<Vec<_>>()
-    })
-    .unwrap()
+        })
+        .collect::<Vec<_>>()
 }
 
 /// Use a predicate to find `const` declarations, then extract all items reachable from them.
@@ -104,30 +97,27 @@ pub fn filter_const_crate_items<F>(tcx: TyCtxt, mut predicate: F) -> Vec<Interna
 where
     F: FnMut(TyCtxt, DefId) -> bool,
 {
-    rustc_smir::rustc_internal::run(tcx, || {
-        let crate_items = stable_mir::all_local_items();
-        let mut roots = Vec::new();
-        // Filter regular items.
-        for item in crate_items {
-            // Only collect monomorphic items.
-            if let Ok(instance) = Instance::try_from(item) {
-                let def_id = rustc_internal::internal(&item);
-                if predicate(tcx, def_id) {
-                    let body = instance.body().unwrap();
-                    let mut collector = MonoItemsFnCollector {
-                        tcx,
-                        body: &body,
-                        collected: FxHashSet::default(),
-                        instance: &instance,
-                    };
-                    collector.visit_body(&body);
-                    roots.extend(collector.collected.iter().map(rustc_internal::internal));
-                }
+    let crate_items = stable_mir::all_local_items();
+    let mut roots = Vec::new();
+    // Filter regular items.
+    for item in crate_items {
+        // Only collect monomorphic items.
+        if let Ok(instance) = Instance::try_from(item) {
+            let def_id = rustc_internal::internal(&item);
+            if predicate(tcx, def_id) {
+                let body = instance.body().unwrap();
+                let mut collector = MonoItemsFnCollector {
+                    tcx,
+                    body: &body,
+                    collected: FxHashSet::default(),
+                    instance: &instance,
+                };
+                collector.visit_body(&body);
+                roots.extend(collector.collected.iter().map(rustc_internal::internal));
             }
         }
-        roots
-    })
-    .unwrap()
+    }
+    roots
 }
 
 struct MonoItemsCollector<'tcx> {
@@ -141,7 +131,6 @@ struct MonoItemsCollector<'tcx> {
     call_graph: debug::CallGraph,
 }
 
-// TODO: Need to figure out how to handle stubbing errors.
 impl<'tcx> MonoItemsCollector<'tcx> {
     pub fn new(tcx: TyCtxt<'tcx>) -> Self {
         MonoItemsCollector {
@@ -423,7 +412,6 @@ impl<'a, 'tcx> MirVisitor for MonoItemsFnCollector<'a, 'tcx> {
                                 // even the return type, for instance for a
                                 // trait like `FromIterator`.
                                 let receiver_ty = args.0[0].expect_ty();
-                                trace!(?receiver_ty, ?callee, "**** receiver:");
                                 let sep = callee.rfind("::").unwrap();
                                 let trait_ = &callee[..sep];
                                 self.tcx.sess.span_err(
