@@ -469,7 +469,7 @@ impl<'a> ContractConditionsHandler<'a> {
     /// Mutable because a `modifies` clause may need to extend the inner call to
     /// the wrapper with new arguments.
     fn make_check_body(&mut self) -> TokenStream2 {
-        let mut inner = self.ensure_inner_call();
+        let mut inner = self.ensure_bootstrapped_check_body();
         let Self { attr_copy, .. } = self;
 
         match &self.condition_type {
@@ -506,9 +506,8 @@ impl<'a> ContractConditionsHandler<'a> {
                 let wrapper_name = self.make_wrapper_name().to_string();
                 let wrapper_args = make_wrapper_args(attr.len());
 
-                if let Some(wrapper_call_args) = inner
-                    .iter_mut()
-                    .find_map(|stmt| try_as_wrapper_call_args(stmt, &wrapper_name))
+                if let Some(wrapper_call_args) =
+                    inner.iter_mut().find_map(|stmt| try_as_wrapper_call_args(stmt, &wrapper_name))
                 {
                     wrapper_call_args
                         .extend(wrapper_args.clone().map(|a| Expr::Verbatim(quote!(#a))));
@@ -545,7 +544,7 @@ impl<'a> ContractConditionsHandler<'a> {
         }
     }
 
-    fn ensure_inner_call(&self) -> Vec<syn::Stmt> {
+    fn ensure_bootstrapped_check_body(&self) -> Vec<syn::Stmt> {
         let wrapper_name = self.make_wrapper_name();
         let return_type = return_type_to_type(&self.annotated_fn.sig.output);
         if self.is_first_emit() {
@@ -564,6 +563,49 @@ impl<'a> ContractConditionsHandler<'a> {
         }
     }
 
+    /// Split an existing replace body of the form
+    ///
+    /// ```ignore
+    /// // multiple preconditions and argument copies like like
+    /// kani::assert(.. precondition);
+    /// let arg_name = kani::untracked_deref(&arg_value);
+    /// // single result havoc
+    /// let result : ResultType = kani::any();
+    ///
+    /// // multiple argument havockings
+    /// *unsafe { kani::Pointer::assignable(argument) } = kani::any();
+    /// // multiple postconditions
+    /// kani::assume(postcond);
+    /// // multiple argument copy (used in postconditions) cleanups
+    /// std::mem::forget(arg_name);
+    /// // single return
+    /// result
+    /// ```
+    ///
+    /// Such that the first vector contains everything up to and including the single result havoc
+    /// and the second one the rest, excluding the return.
+    ///
+    /// If this is the first time we're emitting replace we create the return havoc and nothing else.
+    fn ensure_bootstrapped_replace_body(&self) -> (Vec<syn::Stmt>, Vec<syn::Stmt>) {
+        if self.is_first_emit() {
+            let return_type = return_type_to_type(&self.annotated_fn.sig.output);
+            (vec![syn::parse_quote!(let result : #return_type = kani::any();)], vec![])
+        } else {
+            let stmts = &self.annotated_fn.block.stmts;
+            let idx = stmts
+                .iter()
+                .enumerate()
+                .find_map(|(i, elem)| is_replace_return_havoc(elem).then_some(i))
+                .unwrap_or_else(|| {
+                    panic!("ICE: Could not find result let binding in statement sequence {stmts:?}")
+                });
+            // We want the result assign statement to end up as the last statement in the first
+            // vector, hence the `+1`.
+            let (before, after) = stmts.split_at(idx + 1);
+            (before.to_vec(), after.split_last().unwrap().1.to_vec())
+        }
+    }
+
     /// Create the body of a stub for this contract.
     ///
     /// Wraps the conditions from this attribute around a prior call. If
@@ -572,23 +614,25 @@ impl<'a> ContractConditionsHandler<'a> {
     ///
     /// `use_nondet_result` will only be true if this is the first time we are
     /// generating a replace function.
-    fn make_replace_body(&self, use_nondet_result: bool) -> TokenStream2 {
-        let Self { attr_copy, .. } = self;
-        let ItemFn { sig, block, .. } = &*self.annotated_fn;
-        let call_to_prior =
-            if use_nondet_result { quote!(kani::any()) } else { block.to_token_stream() };
-        let return_type = return_type_to_type(&sig.output);
+    fn make_replace_body(&self) -> TokenStream2 {
+        let (before, after) = self.ensure_bootstrapped_replace_body();
 
         match &self.condition_type {
-            ContractConditionsData::Requires { attr } => quote!(
-                kani::assert(#attr, stringify!(#attr_copy));
-                #call_to_prior
-            ),
+            ContractConditionsData::Requires { attr } => {
+                let Self { attr_copy, .. } = self;
+                quote!(
+                    kani::assert(#attr, stringify!(#attr_copy));
+                    #(#before)*
+                    #(#after)*
+                    result
+                )
+            },
             ContractConditionsData::Ensures { attr, argument_names } => {
                 let (arg_copies, copy_clean) = make_unsafe_argument_copies(&argument_names);
                 quote!(
                     #arg_copies
-                    let result: #return_type = #call_to_prior;
+                    #(#before)*
+                    #(#after)*
                     kani::assume(#attr);
                     #copy_clean
                     result
@@ -596,8 +640,9 @@ impl<'a> ContractConditionsHandler<'a> {
             }
             ContractConditionsData::Modifies { attr } => {
                 quote!(
-                    let result = #call_to_prior;
+                    #(#before)*
                     #(*unsafe { kani::Pointer::assignable(#attr) } = kani::any();)*
+                    #(#after)*
                     result
                 )
             }
@@ -630,7 +675,7 @@ impl<'a> ContractConditionsHandler<'a> {
     ///
     /// See [`Self::make_replace_body`] for the most interesting parts of this
     /// function.
-    fn emit_replace_function(&mut self, replace_function_ident: Ident, is_first_emit: bool) {
+    fn emit_replace_function(&mut self, replace_function_ident: Ident) {
         self.emit_common_header();
 
         if self.function_state.emit_tag_attr() {
@@ -639,10 +684,10 @@ impl<'a> ContractConditionsHandler<'a> {
             self.output.extend(quote!(#[kanitool::is_contract_generated(replace)]));
         }
         let mut sig = self.annotated_fn.sig.clone();
-        if is_first_emit {
+        if self.is_first_emit() {
             attach_require_kani_any(&mut sig);
         }
-        let body = self.make_replace_body(is_first_emit);
+        let body = self.make_replace_body();
         sig.ident = replace_function_ident;
 
         // Finally emit the check function itself.
@@ -707,6 +752,77 @@ impl<'a> ContractConditionsHandler<'a> {
             #vis #sig #block
         ));
     }
+}
+
+/// Used as the "single source of truth" for [`try_as_result_assign`] and [`try_as_result_assign_mut`]
+/// since we can't abstract over mutability. Input is the object to match on and the name of the
+/// function used to convert an `Option<LocalInit>` into the result type (e.g. `as_ref` and `as_mut`
+/// respectively).
+///
+/// We start with a `match` as a top-level here, since if we made this a pattern macro (the "clean"
+/// thing to do) then we cant use the `if` inside there which we need because box patterns are
+/// unstable.
+macro_rules! try_as_result_assign_pat {
+    ($input:expr, $convert:ident) => {
+        match $input {
+            syn::Stmt::Local(syn::Local {
+                pat: syn::Pat::Type(syn::PatType {
+                    pat: inner_pat,
+                    attrs,
+                    ..
+                }),
+                init,
+                ..
+            }) if attrs.is_empty()
+            && matches!(
+                inner_pat.as_ref(),
+                syn::Pat::Ident(syn::PatIdent {
+                    by_ref: None,
+                    mutability: None,
+                    ident: result_ident,
+                    subpat: None,
+                    ..
+                }) if result_ident == "result"
+            ) => init.$convert(),
+            _ => None,
+        }
+    };
+}
+
+fn try_as_result_assign(stmt: &syn::Stmt) -> Option<&syn::LocalInit> {
+    try_as_result_assign_pat!(stmt, as_ref)
+}
+
+fn try_as_result_assign_mut(stmt: &mut syn::Stmt) -> Option<&mut syn::LocalInit> {
+    try_as_result_assign_pat!(stmt, as_mut)
+}
+
+fn is_replace_return_havoc(stmt: &syn::Stmt) -> bool {
+    let Some(syn::LocalInit { diverge: None, expr: e, .. }) = try_as_result_assign(stmt) else {
+        return false;
+    };
+
+    matches!(
+        e.as_ref(),
+        Expr::Call(syn::ExprCall {
+            func,
+            args,
+            ..
+        })
+        if args.is_empty()
+        && matches!(
+            func.as_ref(),
+            Expr::Path(syn::ExprPath {
+                qself: None,
+                path,
+                attrs,
+            })
+            if path.segments.len() == 2
+            && path.segments[0].ident == "kani"
+            && path.segments[1].ident == "any"
+            && attrs.is_empty()
+        )
+    )
 }
 
 fn exprs_for_args<'a, T>(
@@ -787,38 +903,23 @@ fn pat_to_expr(pat: &syn::Pat) -> Expr {
         _ => mk_err("unknown"),
     }
 }
-
 fn try_as_wrapper_call_args<'a>(
     stmt: &'a mut syn::Stmt,
     wrapper_fn_name: &str,
 ) -> Option<&'a mut syn::punctuated::Punctuated<syn::Expr, syn::token::Comma>> {
-    match stmt {
-        syn::Stmt::Local(syn::Local {
-            pat: syn::Pat::Type(syn::PatType { pat: inner_pat, .. }),
-            init: Some(syn::LocalInit { diverge: None, expr: init_expr, .. }),
-            ..
-        }) if matches!(inner_pat.as_ref(),
-          syn::Pat::Ident(syn::PatIdent {
-                        by_ref: None,
-                        mutability: None,
-                        ident: result_ident,
-                        subpat: None,
-                        ..
-                    }) if result_ident == "result"
-        ) =>
-        {
-            match init_expr.as_mut() {
-                Expr::Call(syn::ExprCall { func: box_func, args, .. }) => match box_func.as_ref() {
-                    syn::Expr::Path(syn::ExprPath { qself: None, path, .. })
-                        if path.get_ident().map_or(false, |id| id == wrapper_fn_name) =>
-                    {
-                        Some(args)
-                    }
-                    _ => None,
-                },
-                _ => None,
+    let syn::LocalInit { diverge: None, expr: init_expr, .. } = try_as_result_assign_mut(stmt)? else {
+        return None;
+    };
+
+    match init_expr.as_mut() {
+        Expr::Call(syn::ExprCall { func: box_func, args, .. }) => match box_func.as_ref() {
+            syn::Expr::Path(syn::ExprPath { qself: None, path, .. })
+                if path.get_ident().map_or(false, |id| id == wrapper_fn_name) =>
+            {
+                Some(args)
             }
-        }
+            _ => None,
+        },
         _ => None,
     }
 }
@@ -966,7 +1067,7 @@ fn requires_ensures_main(
         }
         ContractFunctionState::Replace => {
             // Analogous to above
-            handler.emit_replace_function(original_function_name, false);
+            handler.emit_replace_function(original_function_name);
         }
         ContractFunctionState::Original => {
             unreachable!("Impossible: This is handled via short circuiting earlier.")
@@ -1058,7 +1159,7 @@ fn requires_ensures_main(
             ));
 
             handler.emit_check_function(check_fn_name);
-            handler.emit_replace_function(replace_fn_name, true);
+            handler.emit_replace_function(replace_fn_name);
             handler.emit_augmented_modifies_wrapper();
         }
     }
