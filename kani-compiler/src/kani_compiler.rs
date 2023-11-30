@@ -34,6 +34,7 @@ use rustc_hir::definitions::DefPathHash;
 use rustc_interface::Config;
 use rustc_middle::ty::TyCtxt;
 use rustc_session::config::{ErrorOutputType, OutputType};
+use rustc_smir::rustc_internal;
 use rustc_span::ErrorGuaranteed;
 use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
@@ -400,9 +401,12 @@ impl Callbacks for KaniCompiler {
     ) -> Compilation {
         if self.stage.is_init() {
             self.stage = rustc_queries.global_ctxt().unwrap().enter(|tcx| {
-                check_crate_items(tcx, self.queries.lock().unwrap().args().ignore_global_asm);
-                self.process_harnesses(tcx)
-            });
+                rustc_internal::run(tcx, || {
+                    check_crate_items(tcx, self.queries.lock().unwrap().args().ignore_global_asm);
+                    self.process_harnesses(tcx)
+                })
+                .unwrap()
+            })
         }
 
         self.prepare_codegen()
