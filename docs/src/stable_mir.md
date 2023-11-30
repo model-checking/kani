@@ -25,10 +25,10 @@ For example:
    while `StaticDef` is the definition of a static variable.
    - Note that the same `DefId` may be mapped to different definitions according to its context.
      For example, an `InstanceDef` and a `FnDef` may represent the same function definition.
-3. Methods that were used to be exposed as part of `TyCtxt` are now part of a type.
+3. Methods that used to be exposed as part of `TyCtxt` are now part of a type.
    Example, the function `TyCtxt.instance_mir` is now `Instance::body`.
 4. There is no need for explicit instantiation (monomorphization) of items from an`Instance::body`.
-   This method already instantiate all types and resolve all constants before converting
+   This method already instantiates all types and resolves all constants before converting
    it to stable APIs.
 
 
@@ -36,7 +36,7 @@ For example:
 
 Since the new APIs require converting internal data to a stable representation,
 the APIs were also designed to avoid needless conversions,
-and to allow extra information to be retrieved by demand.
+and to allow extra information to be retrieved on demand.
 
 For example, `Ty` is just an identifier, while `TyKind` is a structure that can be retrieved via `Ty::kind` method.
 The `TyKind` is a more structured object, thus,
@@ -68,7 +68,7 @@ The conversion is not implemented for all items, and some conversions may be inc
 Please proceed with caution when using these methods.
 
 Besides that, do not invoke any other `rustc_smir` methods, except for `run`.
-This crate methods are not meant to be invoked externally.
+This crate's methods are not meant to be invoked externally.
 Note that, the method `run` will also eventually be replaced by a Stable driver.
 
 ### Creating and modifying StableMIR items
