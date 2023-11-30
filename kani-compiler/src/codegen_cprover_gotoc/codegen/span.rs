@@ -3,16 +3,21 @@
 
 //! MIR Span related functions
 
-use crate::{codegen_cprover_gotoc::GotocCtx, kani_middle::SourceLocation};
+use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::Location;
 use rustc_middle::mir::{Local, VarDebugInfo, VarDebugInfoContents};
+use rustc_smir::rustc_internal;
 use rustc_span::Span;
 
 impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_span(&self, sp: &Span) -> Location {
-        let loc = SourceLocation::new(self.tcx, sp);
+        self.stable_codegen_span(&rustc_internal::stable(sp))
+    }
+
+    pub fn stable_codegen_span(&self, sp: &stable_mir::ty::Span) -> Location {
+        let loc = sp.get_lines();
         Location::new(
-            loc.filename,
+            sp.get_filename().to_string(),
             self.current_fn.as_ref().map(|x| x.readable_name().to_string()),
             loc.start_line,
             Some(loc.start_col),
