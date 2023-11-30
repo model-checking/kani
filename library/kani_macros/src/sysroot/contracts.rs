@@ -469,14 +469,14 @@ impl<'a> ContractConditionsHandler<'a> {
     /// Mutable because a `modifies` clause may need to extend the inner call to
     /// the wrapper with new arguments.
     fn make_check_body(&mut self) -> TokenStream2 {
+        let mut inner = self.ensure_inner_call();
         let Self { attr_copy, .. } = self;
 
         match &self.condition_type {
             ContractConditionsData::Requires { attr } => {
-                let block = self.create_inner_call([].into_iter());
                 quote!(
                     kani::assume(#attr);
-                    #(#block)*
+                    #(#inner)*
                 )
             }
             ContractConditionsData::Ensures { argument_names, attr } => {
@@ -489,17 +489,15 @@ impl<'a> ContractConditionsHandler<'a> {
                     #copy_clean
                 );
 
-                let mut call = self.create_inner_call([].into_iter());
-
                 assert!(matches!(
-                    call.pop(),
+                    inner.pop(),
                     Some(syn::Stmt::Expr(syn::Expr::Path(pexpr), None))
                         if pexpr.path.get_ident().map_or(false, |id| id == "result")
                 ));
 
                 quote!(
                     #arg_copies
-                    #(#call)*
+                    #(#inner)*
                     #exec_postconditions
                     result
                 )
@@ -507,25 +505,19 @@ impl<'a> ContractConditionsHandler<'a> {
             ContractConditionsData::Modifies { attr } => {
                 let wrapper_name = self.make_wrapper_name().to_string();
                 let wrapper_args = make_wrapper_args(attr.len());
-                // TODO handle first invocation where this is the actual body.
-                if !self.is_first_emit() {
-                    if let Some(wrapper_call_args) = self
-                        .annotated_fn
-                        .block
-                        .stmts
-                        .iter_mut()
-                        .find_map(|stmt| try_as_wrapper_call_args(stmt, &wrapper_name))
-                    {
-                        wrapper_call_args
-                            .extend(wrapper_args.clone().map(|a| Expr::Verbatim(quote!(#a))));
-                    } else {
-                        unreachable!(
-                            "Invariant broken, check function did not contain a call to the wrapper function"
-                        )
-                    }
+
+                if let Some(wrapper_call_args) = inner
+                    .iter_mut()
+                    .find_map(|stmt| try_as_wrapper_call_args(stmt, &wrapper_name))
+                {
+                    wrapper_call_args
+                        .extend(wrapper_args.clone().map(|a| Expr::Verbatim(quote!(#a))));
+                } else {
+                    unreachable!(
+                        "Invariant broken, check function did not contain a call to the wrapper function"
+                    )
                 }
 
-                let inner = self.create_inner_call(wrapper_args.clone());
                 let wrapper_args = make_wrapper_args(attr.len());
 
                 quote!(
@@ -553,7 +545,7 @@ impl<'a> ContractConditionsHandler<'a> {
         }
     }
 
-    fn create_inner_call(&self, additional_args: impl Iterator<Item = Ident>) -> Vec<syn::Stmt> {
+    fn ensure_inner_call(&self) -> Vec<syn::Stmt> {
         let wrapper_name = self.make_wrapper_name();
         let return_type = return_type_to_type(&self.annotated_fn.sig.output);
         if self.is_first_emit() {
@@ -564,7 +556,7 @@ impl<'a> ContractConditionsHandler<'a> {
                 quote!(#wrapper_name)
             };
             syn::parse_quote!(
-                let result : #return_type = #wrapper_call(#(#args,)* #(#additional_args),*);
+                let result : #return_type = #wrapper_call(#(#args),*);
                 result
             )
         } else {
