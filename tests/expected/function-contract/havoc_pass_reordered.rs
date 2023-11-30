@@ -9,7 +9,6 @@ fn copy(src: u32, dst: &mut u32) {
     *dst = src;
 }
 
-
 #[kani::proof_for_contract(copy)]
 fn copy_harness() {
     copy(kani::any(), &mut kani::any());

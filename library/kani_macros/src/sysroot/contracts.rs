@@ -626,7 +626,7 @@ impl<'a> ContractConditionsHandler<'a> {
                     #(#after)*
                     result
                 )
-            },
+            }
             ContractConditionsData::Ensures { attr, argument_names } => {
                 let (arg_copies, copy_clean) = make_unsafe_argument_copies(&argument_names);
                 quote!(
@@ -907,7 +907,8 @@ fn try_as_wrapper_call_args<'a>(
     stmt: &'a mut syn::Stmt,
     wrapper_fn_name: &str,
 ) -> Option<&'a mut syn::punctuated::Punctuated<syn::Expr, syn::token::Comma>> {
-    let syn::LocalInit { diverge: None, expr: init_expr, .. } = try_as_result_assign_mut(stmt)? else {
+    let syn::LocalInit { diverge: None, expr: init_expr, .. } = try_as_result_assign_mut(stmt)?
+    else {
         return None;
     };
 
