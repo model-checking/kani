@@ -223,29 +223,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Convert the Kani level contract into a CBMC level contract by creating a
-    /// lambda that calls the contract implementation function.
-    ///
-    /// For instance say we are processing a contract on `f`
-    ///
-    /// ```rs
-    /// as_goto_contract(..., GFnContract { requires: <contact_impl_fn>, .. })
-    ///     = FunctionContract {
-    ///         requires: [
-    ///             Lambda {
-    ///                 arguments: <return arg, args of f...>,
-    ///                 body: Call(codegen_fn_expr(contract_impl_fn), [args of f..., return arg])
-    ///             }
-    ///         ],
-    ///         ...
-    ///     }
-    /// ```
-    ///
-    /// A spec lambda in GOTO receives as its first argument the return value of
-    /// the annotated function. However at the top level we must receive `self`
-    /// as first argument, because rust requires it. As a result the generated
-    /// lambda takes the return value as first argument and then immediately
-    /// calls the generated spec function, but passing the return value as the
-    /// last argument.
+    /// CBMC lambda.
     fn as_goto_contract(&mut self, assigns_contract: Vec<Local>) -> FunctionContract {
         use cbmc::goto_program::Lambda;
 
@@ -274,7 +252,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Convert the contract to a CBMC contract, then attach it to `instance`.
     /// `instance` must have previously been declared.
     ///
-    /// This does not overwrite prior contracts but merges with them.
+    /// This merges with any previously attached contracts.
     pub fn attach_contract(&mut self, instance: Instance<'tcx>, contract: Vec<Local>) {
         // This should be safe, since the contract is pretty much evaluated as
         // though it was the first (or last) assertion in the function.

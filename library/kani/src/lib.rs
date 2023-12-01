@@ -92,13 +92,21 @@ macro_rules! implies {
     };
 }
 
+/// Helper trait for code generation for `modifies` contracts.
+///
+/// We allow the user to provide us with a pointer-like object that we convert as needed.
 #[doc(hidden)]
 pub trait Pointer<'a> {
+    /// Type of the pointed-to data
     type Inner;
 
+    /// Used for checking assigns contracts where we pass immutable references to the function.
+    ///
     /// We're using a reference to self here, because the user can use just a plain function
     /// argument, for instance one of type `&mut _`, in the `modifies` clause which would move it.
     unsafe fn decouple_lifetime(&self) -> &'a Self::Inner;
+
+    /// used for havocking on replecement of a `modifies` clause.
     unsafe fn assignable(self) -> &'a mut Self::Inner;
 }
 

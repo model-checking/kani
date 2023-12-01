@@ -82,6 +82,8 @@ impl GotocCodegenBackend {
     }
 
     /// Generate code that is reachable from the given starting points.
+    ///
+    /// Invariant: iff `check_contract.is_some()` then `return.2.is_some()`
     fn codegen_items<'tcx>(
         &self,
         tcx: TyCtxt<'tcx>,
@@ -194,6 +196,21 @@ impl GotocCodegenBackend {
 }
 
 impl<'tcx> GotocCtx<'tcx> {
+    /// Given the `proof_for_contract` target `function_under_contract` and the reachable `items`,
+    /// find or create the `AssignsContract` that needs to be enforced and attach it to the symbol
+    /// for which it needs to be enforced.
+    ///
+    /// 1. Gets the `#[kanitool::inner_check = "..."]` target, then resolves exactly one instance
+    ///    of it. Panics there are more or less than one instance.
+    /// 2. Expects that a `#[kanitool::modifies(...)]` is placed on the `inner_check` function,
+    ///    turns it into a CBMC contract and attaches it to the symbol for the previously resolved
+    ///    instance.
+    /// 3. Returns the mangled of the symbol it attached the contract to.
+    /// 4. Resolves the `#[kanitool::checked_with = "..."]` target from `function_under_contract`
+    ///    which has `static mut REENTRY : bool` declared inside.
+    /// 5. Returns the full path to this constant that `--nondet-static-exclude` expects which is
+    ///    comprised of the file path that `checked_with` is located in, the name of the
+    ///    `checked_with` function and the name of the constant (`REENTRY`).
     fn handle_check_contract(
         &mut self,
         function_under_contract: DefId,

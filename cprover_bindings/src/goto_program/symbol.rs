@@ -83,9 +83,9 @@ impl Lambda {
     }
 }
 
-/// The CBMC representation of a function contract with three types of clauses.
-/// See https://diffblue.github.io/cbmc/contracts-user.html for the meaning of
-/// each type of clause.
+/// The CBMC representation of a function contract. Represents
+/// https://diffblue.github.io/cbmc/contracts-user.html but currently only assigns clauses are
+/// supported.
 #[derive(Clone, Debug)]
 pub struct FunctionContract {
     pub(crate) assigns: Vec<Lambda>,
@@ -386,6 +386,7 @@ impl Symbol {
         self
     }
 
+    /// Set `is_property` to true.
     pub fn with_is_property(mut self, v: bool) -> Self {
         self.is_property = v;
         self

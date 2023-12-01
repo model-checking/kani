@@ -227,6 +227,11 @@ impl<'tcx> KaniAttributes<'tcx> {
         self.eval_sibling_attribute(KaniAttributeKind::CheckedWith)
     }
 
+    /// Find the `mod` that `self.item` is defined in, then search in the items defined in this
+    /// `mod` for an item that is named after the `name` in the `#[kanitool::<kind> = "<name>"]`
+    /// annotation on `self.item`.
+    ///
+    /// This is similar to [`resolve_fn`] but more efficient since it only looks inside one `mod`.
     fn eval_sibling_attribute(
         &self,
         kind: KaniAttributeKind,
@@ -550,6 +555,8 @@ impl<'tcx> KaniAttributes<'tcx> {
         Stub { original: original_str.to_string(), replacement }
     }
 
+    /// Parse and interpret the `kanitool::modifies(var1, var2, ...)` annotation into the vector
+    /// `[var1, var2, ...]`.
     pub fn modifies_contract(&self) -> Option<Vec<Local>> {
         let local_def_id = self.item.expect_local();
         self.map.get(&KaniAttributeKind::Modifies).map(|attr| {
@@ -565,12 +572,16 @@ impl<'tcx> KaniAttributes<'tcx> {
     }
 }
 
+/// Pattern macro for the comma token used in attributes.
 macro_rules! comma_tok {
     () => {
         TokenTree::Token(Token { kind: TokenKind::Comma, .. }, _)
     };
 }
 
+/// Parse the a token stream inside an attribute (like `kanitool::modifies`) as a comma separated
+/// sequence of function parameter names on `local_def_id` (must refer to a function). Then
+/// translates the names into [`Local`]s.
 fn parse_modify_values<'a>(
     tcx: TyCtxt<'a>,
     local_def_id: LocalDefId,
