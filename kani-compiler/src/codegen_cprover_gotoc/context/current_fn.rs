@@ -37,14 +37,18 @@ pub struct CurrentFnCtx<'tcx> {
 impl<'tcx> CurrentFnCtx<'tcx> {
     pub fn new(instance: Instance, gcx: &GotocCtx<'tcx>) -> Self {
         let internal_instance = rustc_internal::internal(instance);
+        let body = instance.body().unwrap();
+        let readable_name = instance.name();
+        let name =
+            if &readable_name == "main" { readable_name.clone() } else { instance.mangled_name() };
         Self {
             block: vec![],
             instance,
             mir: gcx.tcx.instance_mir(internal_instance.def),
             krate: instance.def.krate().name,
-            body: instance.body().unwrap(),
-            name: instance.mangled_name(),
-            readable_name: instance.name(),
+            body,
+            name,
+            readable_name,
             sig: gcx.fn_sig_of_instance(internal_instance),
             temp_var_counter: 0,
         }

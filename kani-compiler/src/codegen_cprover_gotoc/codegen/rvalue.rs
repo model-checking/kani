@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use super::typ::pointee_type;
-use crate::codegen_cprover_gotoc::codegen::place::{ProjectedPlace, TypeOrVariant};
+use crate::codegen_cprover_gotoc::codegen::place::ProjectedPlace;
 use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::codegen_cprover_gotoc::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
@@ -22,6 +22,7 @@ use rustc_middle::mir::{AggregateKind, BinOp, CastKind, NullOp, Operand, Place, 
 use rustc_middle::ty::adjustment::PointerCoercion;
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{self, Instance, IntTy, Ty, TyCtxt, UintTy, VtblEntry};
+use rustc_smir::rustc_internal;
 use rustc_target::abi::{FieldIdx, FieldsShape, Size, TagEncoding, VariantIdx, Variants};
 use std::collections::BTreeMap;
 use tracing::{debug, trace, warn};
@@ -552,15 +553,10 @@ impl<'tcx> GotocCtx<'tcx> {
         stmts.push(decl);
         if !operands.is_empty() {
             // 2- Initialize the members of the temporary variant.
-            let initial_projection = ProjectedPlace::try_new(
-                temp_var.clone(),
-                TypeOrVariant::Type(res_ty),
-                None,
-                None,
-                self,
-            )
-            .unwrap();
-            let variant_proj = self.codegen_variant_lvalue(initial_projection, variant_index);
+            let initial_projection =
+                ProjectedPlace::try_new_internal(temp_var.clone(), res_ty, self).unwrap();
+            let variant_proj = self
+                .codegen_variant_lvalue(initial_projection, rustc_internal::stable(variant_index));
             let variant_expr = variant_proj.goto_expr.clone();
             let layout = self.layout_of(res_ty);
             let fields = match &layout.variants {

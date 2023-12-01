@@ -7,7 +7,7 @@ use stable_mir::mir::BasicBlockIdx;
 use tracing::debug;
 
 pub fn bb_label(bb: BasicBlockIdx) -> String {
-    format!("{bb}")
+    format!("bb{bb}")
 }
 
 impl<'tcx> GotocCtx<'tcx> {

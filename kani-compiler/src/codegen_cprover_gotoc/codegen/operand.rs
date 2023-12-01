@@ -15,7 +15,7 @@ use rustc_span::def_id::DefId;
 use rustc_span::Span;
 use rustc_target::abi::{Size, TagEncoding, Variants};
 use stable_mir::mir::mono::Instance as InstanceStable;
-use stable_mir::ty::Span as SpanStable;
+use stable_mir::ty::{FnDef, GenericArgs, Span as SpanStable};
 use tracing::{debug, trace};
 
 enum AllocData<'a> {
@@ -701,6 +701,19 @@ impl<'tcx> GotocCtx<'tcx> {
         let instance =
             Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), d, args).unwrap().unwrap();
         self.codegen_fn_item(instance, span)
+    }
+
+    pub fn codegen_fndef_stable(
+        &mut self,
+        def: FnDef,
+        args: &GenericArgs,
+        span: Option<SpanStable>,
+    ) -> Expr {
+        let instance = InstanceStable::resolve(def, args).unwrap();
+        self.codegen_fn_item(
+            rustc_internal::internal(instance),
+            rustc_internal::internal(span).as_ref(),
+        )
     }
 
     /// Ensure that the given instance is in the symbol table, returning the symbol.
