@@ -608,7 +608,7 @@ impl<'a> ContractConditionsHandler<'a> {
                 .enumerate()
                 .find_map(|(i, elem)| is_replace_return_havoc(elem).then_some(i))
                 .unwrap_or_else(|| {
-                    panic!("ICE: Could not find result let binding in statement sequence {stmts:?}")
+                    panic!("ICE: Could not find result let binding in statement sequence")
                 });
             // We want the result assign statement to end up as the last statement in the first
             // vector, hence the `+1`.
