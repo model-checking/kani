@@ -11,12 +11,10 @@ fn two_pointers(a: &mut u32, b: &mut u32) {
     *b = 2;
 }
 
-
 #[kani::proof_for_contract(two_pointers)]
 fn test_contract() {
     two_pointers(&mut kani::any(), &mut kani::any());
 }
-
 
 #[kani::proof]
 #[kani::stub_verified(two_pointers)]
