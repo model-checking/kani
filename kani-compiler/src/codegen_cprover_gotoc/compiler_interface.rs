@@ -40,7 +40,7 @@ use rustc_middle::mir::mono::MonoItem;
 use rustc_middle::ty::TyCtxt;
 use rustc_middle::util::Providers;
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
-use rustc_session::cstore::MetadataLoaderDyn;
+use rustc_metadata::creader::MetadataLoaderDyn;
 use rustc_session::output::out_filename;
 use rustc_session::Session;
 use rustc_smir::rustc_internal;
