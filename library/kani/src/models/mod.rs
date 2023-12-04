@@ -185,8 +185,10 @@ mod test {
     }
 
     /// Compare the value returned by our model and the portable simd representation.
-    fn check_portable_bitmask<T, E, const LANES: usize>(mask: T)
+    fn check_portable_bitmask<T, E, const LANES: usize>(mask: Mask<T, LANES>)
     where
+        T: std::simd::MaskElement,
+        LaneCount<LANES>: SupportedLaneCount,
         E: kani_intrinsic::MaskElement,
         [u8; kani_intrinsic::mask_len(LANES)]: Sized,
     {
