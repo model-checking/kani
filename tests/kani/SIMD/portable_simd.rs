@@ -4,7 +4,7 @@
 //! Ensure we have basic support of portable SIMD.
 #![feature(portable_simd)]
 
-use std::simd::{mask32x4, u64x16, ToBitMask};
+use std::simd::{mask32x4, u64x16};
 
 #[kani::proof]
 fn check_sum_any() {
