@@ -171,7 +171,7 @@ impl BoogieCodegenBackend {
         if !tcx.sess.opts.unstable_opts.no_codegen && tcx.sess.opts.output_types.should_codegen() {
             let mut pb = boogie_file.to_path_buf();
             pb.set_extension("bpl");
-            println!("Writing Boogie file to {}", pb.display());
+            info!("Writing Boogie file to {}", pb.display());
             let file = File::create(&pb).unwrap();
             let mut writer = BufWriter::new(file);
             bcx.write(&mut writer).unwrap();
