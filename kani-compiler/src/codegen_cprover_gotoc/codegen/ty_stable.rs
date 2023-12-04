@@ -10,10 +10,10 @@ use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::Type;
 use rustc_middle::mir;
 use rustc_middle::mir::visit::{MutVisitor, NonUseContext, PlaceContext};
-use rustc_middle::mir::Place as PlaceInternal;
+use rustc_middle::mir::{Operand as OperandInternal, Place as PlaceInternal};
 use rustc_middle::ty::{Ty as TyInternal, TyCtxt};
 use rustc_smir::rustc_internal;
-use stable_mir::mir::{Local, Place};
+use stable_mir::mir::{Local, Operand, Place};
 use stable_mir::ty::{RigidTy, Ty, TyKind};
 
 impl<'tcx> GotocCtx<'tcx> {
@@ -58,6 +58,12 @@ impl<'a, 'tcx> StableConverter<'a, 'tcx> {
             mir::Location::START,
         );
         rustc_internal::stable(place)
+    }
+
+    pub fn convert_operand(gcx: &'a GotocCtx<'tcx>, mut operand: OperandInternal<'tcx>) -> Operand {
+        let mut converter = StableConverter { gcx };
+        converter.visit_operand(&mut operand, mir::Location::START);
+        rustc_internal::stable(operand)
     }
 }
 
