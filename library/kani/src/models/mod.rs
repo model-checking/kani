@@ -187,13 +187,11 @@ mod test {
     /// Compare the value returned by our model and the portable simd representation.
     fn check_portable_bitmask<T, E, const LANES: usize>(mask: T)
     where
-        T: ToBitMask + Clone,
-        T::BitMask: Debug + PartialEq,
         E: kani_intrinsic::MaskElement,
         [u8; kani_intrinsic::mask_len(LANES)]: Sized,
     {
         assert_eq!(
-            unsafe { kani_intrinsic::simd_bitmask::<_, T::BitMask, E, LANES>(mask.clone()) },
+            unsafe { kani_intrinsic::simd_bitmask::<_, u64, E, LANES>(mask.clone()) },
             mask.to_bitmask()
         );
     }
