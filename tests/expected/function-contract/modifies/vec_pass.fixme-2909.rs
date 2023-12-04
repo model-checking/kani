@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zfunction-contracts
 
-#[kani::requires(v.len() > 1)]
+#[kani::requires(v.len() > 0)]
 #[kani::modifies(&v[0])]
 #[kani::ensures(v[0] == src)]
 fn modify(v: &mut Vec<u32>, src: u32) {
@@ -24,9 +24,10 @@ fn main() {
 #[kani::proof]
 #[kani::stub_verified(modify)]
 fn modify_replace() {
-    let v_len = kani::any_where(|i| *i < 4);
-    let mut v: Vec<u32> = vec![kani::any()];
-    let mut compare = vec![];
+    let v_len : usize = kani::any_where(|i| *i < 4);
+    let mut v: Vec<u32> = Vec::with_capacity(v_len + 1);
+    v.push(kani::any());
+    let mut compare = Vec::with_capacity(v_len);
     for _ in 0..v_len {
         let elem = kani::any();
         v.push(elem);
