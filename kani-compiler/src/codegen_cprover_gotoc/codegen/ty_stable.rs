@@ -8,6 +8,10 @@
 
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::Type;
+use rustc_middle::mir;
+use rustc_middle::mir::visit::{MutVisitor, NonUseContext, PlaceContext};
+use rustc_middle::mir::Place as PlaceInternal;
+use rustc_middle::ty::{Ty as TyInternal, TyCtxt};
 use rustc_smir::rustc_internal;
 use stable_mir::mir::{Local, Place};
 use stable_mir::ty::{RigidTy, Ty, TyKind};
@@ -31,5 +35,38 @@ pub fn pointee_type(mir_type: Ty) -> Option<Ty> {
         TyKind::RigidTy(RigidTy::Ref(_, pointee_type, _)) => Some(pointee_type),
         TyKind::RigidTy(RigidTy::RawPtr(ty, ..)) => Some(ty),
         _ => None,
+    }
+}
+
+/// Convert internal rustc's structs into StableMIR ones.
+///
+/// The body of a StableMIR instance already comes monomorphized, which is different from rustc's
+/// internal representation. To allow us to migrate parts of the code generation stage with
+/// smaller PRs, we have to instantiate rustc's components when converting them to stable.
+///
+/// Once we finish migrating the entire function code generation, we can remove this code.
+pub struct StableConverter<'a, 'tcx> {
+    gcx: &'a GotocCtx<'tcx>,
+}
+
+impl<'a, 'tcx> StableConverter<'a, 'tcx> {
+    pub fn convert_place(gcx: &'a GotocCtx<'tcx>, mut place: PlaceInternal<'tcx>) -> Place {
+        let mut converter = StableConverter { gcx };
+        converter.visit_place(
+            &mut place,
+            PlaceContext::NonUse(NonUseContext::VarDebugInfo),
+            mir::Location::START,
+        );
+        rustc_internal::stable(place)
+    }
+}
+
+impl<'a, 'tcx> MutVisitor<'tcx> for StableConverter<'a, 'tcx> {
+    fn tcx(&self) -> TyCtxt<'tcx> {
+        self.gcx.tcx
+    }
+
+    fn visit_ty(&mut self, ty: &mut TyInternal<'tcx>, _: mir::visit::TyContext) {
+        *ty = self.gcx.monomorphize(*ty);
     }
 }

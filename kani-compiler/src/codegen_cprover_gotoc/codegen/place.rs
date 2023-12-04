@@ -6,7 +6,7 @@
 //! in [GotocCtx::codegen_place] below.
 
 use super::typ::TypeExt;
-use crate::codegen_cprover_gotoc::codegen::ty_stable::pointee_type;
+use crate::codegen_cprover_gotoc::codegen::ty_stable::{pointee_type, StableConverter};
 use crate::codegen_cprover_gotoc::codegen::typ::{
     pointee_type as pointee_type_internal, std_pointee_type,
 };
@@ -14,11 +14,8 @@ use crate::codegen_cprover_gotoc::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::unwrap_or_return_codegen_unimplemented;
 use cbmc::goto_program::{Expr, Location, Type};
-use rustc_middle::mir::visit::{MutVisitor, NonUseContext, PlaceContext};
 use rustc_middle::ty::layout::LayoutOf;
-use rustc_middle::ty::TyCtxt;
 use rustc_middle::{
-    mir,
     mir::{Local as LocalInternal, Place as PlaceInternal},
     ty::Ty as TyInternal,
 };
@@ -706,7 +703,7 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         place: &PlaceInternal<'tcx>,
     ) -> Result<ProjectedPlace, UnimplementedData> {
-        self.codegen_place_stable(&PlaceConverter::convert(self, *place))
+        self.codegen_place_stable(&StableConverter::convert_place(self, *place))
     }
 
     /// Given a projection, generate an lvalue that represents the given variant index.
@@ -803,32 +800,6 @@ fn projection_data_ptr(projection: &ProjectedPlace) -> Expr {
         proj_expr.array_to_ptr()
     } else {
         proj_expr.address_of()
-    }
-}
-
-struct PlaceConverter<'a, 'tcx> {
-    gcx: &'a GotocCtx<'tcx>,
-}
-
-impl<'a, 'tcx> PlaceConverter<'a, 'tcx> {
-    pub fn convert(gcx: &'a GotocCtx<'tcx>, mut place: PlaceInternal<'tcx>) -> Place {
-        let mut converter = PlaceConverter { gcx };
-        converter.visit_place(
-            &mut place,
-            PlaceContext::NonUse(NonUseContext::VarDebugInfo),
-            mir::Location::START,
-        );
-        rustc_internal::stable(place)
-    }
-}
-
-impl<'a, 'tcx> MutVisitor<'tcx> for PlaceConverter<'a, 'tcx> {
-    fn tcx(&self) -> TyCtxt<'tcx> {
-        self.gcx.tcx
-    }
-
-    fn visit_ty(&mut self, ty: &mut TyInternal<'tcx>, _: mir::visit::TyContext) {
-        *ty = self.gcx.monomorphize(*ty);
     }
 }
 
