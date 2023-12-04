@@ -5,12 +5,13 @@ use std::io::Write;
 
 use crate::kani_queries::QueryDb;
 use boogie_ast::boogie_program::{BinaryOp, BoogieProgram, Expr, Literal, Procedure, Stmt, Type};
+use rustc_data_structures::fx::FxHashMap;
 use rustc_middle::mir::interpret::Scalar;
 use rustc_middle::mir::traversal::reverse_postorder;
 use rustc_middle::mir::{
     BasicBlock, BasicBlockData, BinOp, Body, Const as mirConst, ConstOperand, ConstValue,
     HasLocalDecls, Local, Operand, Place, Rvalue, Statement, StatementKind, Terminator,
-    TerminatorKind,
+    TerminatorKind, VarDebugInfoContents,
 };
 use rustc_middle::span_bug;
 use rustc_middle::ty::layout::{
@@ -19,6 +20,7 @@ use rustc_middle::ty::layout::{
 use rustc_middle::ty::{self, Instance, IntTy, Ty, TyCtxt, UintTy};
 use rustc_span::Span;
 use rustc_target::abi::{HasDataLayout, TargetDataLayout};
+use std::collections::hash_map::Entry;
 use tracing::{debug, debug_span, trace};
 
 use super::kani_intrinsic::get_kani_intrinsic;
@@ -74,26 +76,64 @@ impl<'tcx> BoogieCtx<'tcx> {
 
 pub(crate) struct FunctionCtx<'a, 'tcx> {
     bcx: &'a BoogieCtx<'tcx>,
+    instance: Instance<'tcx>,
     mir: &'a Body<'tcx>,
+    /// Maps from local to the name of the corresponding Boogie variable.
+    local_names: FxHashMap<Local, String>,
 }
 
 impl<'a, 'tcx> FunctionCtx<'a, 'tcx> {
     pub fn new(bcx: &'a BoogieCtx<'tcx>, instance: Instance<'tcx>) -> FunctionCtx<'a, 'tcx> {
-        Self { bcx, mir: bcx.tcx.instance_mir(instance.def) }
+        // create names for all locals
+        let mut local_names = FxHashMap::default();
+        let mut name_occurrences: FxHashMap<String, usize> = FxHashMap::default();
+        let mir = bcx.tcx.instance_mir(instance.def);
+        let ldecls = mir.local_decls();
+        for local in ldecls.indices() {
+            let debug_info = mir.var_debug_info.iter().find(|info| match info.value {
+                VarDebugInfoContents::Place(p) => p.local == local && p.projection.len() == 0,
+                VarDebugInfoContents::Const(_) => false,
+            });
+            let name = if let Some(debug_info) = debug_info {
+                let base_name = format!("{}", debug_info.name);
+                let entry = name_occurrences.entry(base_name.clone());
+                let name = match entry {
+                    Entry::Occupied(mut o) => {
+                        let occ = o.get_mut();
+                        let index = *occ;
+                        *occ += 1;
+                        format!("{base_name}_{}", index)
+                    }
+                    Entry::Vacant(v) => {
+                        v.insert(1);
+                        base_name
+                    }
+                };
+                name
+            } else {
+                format!("{local:?}")
+            };
+            local_names.insert(local, name);
+        }
+        Self { bcx, instance, mir, local_names }
     }
 
     fn codegen_declare_variables(&self) -> Vec<Stmt> {
         let ldecls = self.mir.local_decls();
         let decls: Vec<Stmt> = ldecls
             .indices()
-            .enumerate()
-            .filter_map(|(_idx, lc)| {
-                let typ = ldecls[lc].ty;
+            .filter_map(|lc| {
+                let typ = self.instance.instantiate_mir_and_normalize_erasing_regions(
+                    self.tcx(),
+                    ty::ParamEnv::reveal_all(),
+                    ty::EarlyBinder::bind(ldecls[lc].ty),
+                );
+                // skip ZSTs
                 if self.layout_of(typ).is_zst() {
                     return None;
                 }
                 debug!(?lc, ?typ, "codegen_declare_variables");
-                let name = format!("{lc:?}");
+                let name = self.local_name(lc).clone();
                 let boogie_type = self.codegen_type(typ);
                 Some(Stmt::Decl { name, typ: boogie_type })
             })
@@ -143,8 +183,9 @@ impl<'a, 'tcx> FunctionCtx<'a, 'tcx> {
             StatementKind::Assign(box (place, rvalue)) => {
                 debug!(?place, ?rvalue, "codegen_statement");
                 let rv = self.codegen_rvalue(rvalue);
+                let place_name = self.local_name(place.local).clone();
                 // assignment statement
-                let asgn = Stmt::Assignment { target: format!("{:?}", place.local), value: rv.1 };
+                let asgn = Stmt::Assignment { target: place_name, value: rv.1 };
                 // add it to other statements generated while creating the rvalue (if any)
                 add_statement(rv.0, asgn)
             }
@@ -277,7 +318,11 @@ impl<'a, 'tcx> FunctionCtx<'a, 'tcx> {
 
     fn codegen_local(&self, local: Local) -> Expr {
         // TODO: handle function definitions
-        Expr::Symbol { name: format!("{local:?}") }
+        Expr::Symbol { name: self.local_name(local).clone() }
+    }
+
+    fn local_name(&self, local: Local) -> &String {
+        &self.local_names[&local]
     }
 
     fn codegen_constant(&self, c: &ConstOperand<'tcx>) -> Expr {
