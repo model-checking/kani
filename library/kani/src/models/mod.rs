@@ -69,11 +69,11 @@ mod intrinsics {
     }
 
     #[cfg(target_endian = "little")]
-    unsafe fn simd_bitmask_impl<T, const LANES: usize>(input: &[T; LANES]) -> [u8; mask_len(LANES)]
+    unsafe fn simd_bitmask_impl<T, const LANES: usize, const MASK_LEN: usize>(input: &[T; LANES]) -> [u8; MASK_LEN]
     where
         T: MaskElement,
     {
-        let mut mask_array = [0; mask_len(LANES)];
+        let mut mask_array = [0; MASK_LEN];
         for lane in (0..input.len()).rev() {
             let byte = lane / 8;
             let mask = &mut mask_array[byte];
@@ -99,14 +99,13 @@ mod intrinsics {
     #[rustc_diagnostic_item = "KaniModelSimdBitmask"]
     pub(super) unsafe fn simd_bitmask<T, U, E, const LANES: usize>(input: T) -> U
     where
-        [u8; mask_len(LANES)]: Sized,
+        [u8; size_of::<U>()]: Sized,
         E: MaskElement,
     {
         // These checks are compiler sanity checks to ensure we are not doing anything invalid.
-        assert_eq!(
-            size_of::<U>(),
-            size_of::<[u8; mask_len(LANES)]>(),
-            "Expected size of return type and mask lanes to match",
+        assert!(
+            size_of::<U>() >= mask_len(LANES),
+            "Expected size of return type to be greater or equal to the mask lanes",
         );
         assert_eq!(
             size_of::<T>(),
@@ -115,8 +114,8 @@ mod intrinsics {
         );
 
         let data = &*(&input as *const T as *const [E; LANES]);
-        let mask = simd_bitmask_impl(data);
-        (&mask as *const [u8; mask_len(LANES)] as *const U).read()
+        let mask = simd_bitmask_impl::<E, LANES, { size_of::<U>() }>(data);
+        (&mask as *const [u8; size_of::<U>()] as *const U).read()
     }
 
     /// Structure used for sanity check our parameters.
@@ -127,7 +126,7 @@ mod intrinsics {
 #[cfg(test)]
 mod test {
     use super::intrinsics as kani_intrinsic;
-    use std::{fmt::Debug, simd::*};
+    use std::{fmt::Debug, simd::*, mem::size_of};
 
     extern "platform-intrinsic" {
         fn simd_bitmask<T, U>(x: T) -> U;
@@ -155,10 +154,10 @@ mod test {
     /// Tests that the model correctly fails if the size parameter of the mask doesn't match the
     /// expected number of bytes in the representation.
     #[test]
-    #[should_panic(expected = "Expected size of return type and mask lanes to match")]
+    #[should_panic(expected = "Expected size of return type to be greater or equal to the mask lanes")]
     fn test_invalid_generics() {
-        let mask = mask32x16::splat(false);
-        assert_eq!(unsafe { kani_intrinsic::simd_bitmask::<_, u16, i32, 2>(mask) }, u16::MAX);
+        let mask = mask32x32::splat(false);
+        assert_eq!(unsafe { kani_intrinsic::simd_bitmask::<_, u8, i32, 32>(mask) }, u8::MAX);
     }
 
     /// Test that the `simd_bitmask` model is equivalent to the intrinsic for a few random values.
@@ -190,7 +189,6 @@ mod test {
         T: std::simd::MaskElement,
         LaneCount<LANES>: SupportedLaneCount,
         E: kani_intrinsic::MaskElement,
-        [u8; kani_intrinsic::mask_len(LANES)]: Sized,
     {
         assert_eq!(
             unsafe { kani_intrinsic::simd_bitmask::<_, u64, E, LANES>(mask.clone()) },
@@ -204,7 +202,7 @@ mod test {
         T: Clone,
         U: PartialEq + Debug,
         E: kani_intrinsic::MaskElement,
-        [u8; kani_intrinsic::mask_len(LANES)]: Sized,
+        [u8; size_of::<U>()]: Sized,
     {
         assert_eq!(
             unsafe { kani_intrinsic::simd_bitmask::<_, U, E, LANES>(mask.clone()) },
