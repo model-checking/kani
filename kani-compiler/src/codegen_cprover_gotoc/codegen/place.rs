@@ -23,8 +23,8 @@ use rustc_middle::{
     ty::Ty as TyInternal,
 };
 use rustc_smir::rustc_internal;
-use rustc_target::abi::{FieldIdx, TagEncoding, Variants};
-use stable_mir::mir::{Local, Mutability, Place, ProjectionElem};
+use rustc_target::abi::{TagEncoding, Variants};
+use stable_mir::mir::{FieldIdx, Local, Mutability, Place, ProjectionElem};
 use stable_mir::ty::{RigidTy, Ty, TyKind, VariantDef, VariantIdx};
 use tracing::{debug, trace, warn};
 
@@ -245,7 +245,7 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         parent_expr: Expr,
         parent_ty_or_var: TypeOrVariant,
-        field: &FieldIdx,
+        field_idx: FieldIdx,
         field_ty_or_var: TypeOrVariant,
     ) -> Result<Expr, UnimplementedData> {
         match parent_ty_or_var {
@@ -268,29 +268,28 @@ impl<'tcx> GotocCtx<'tcx> {
                         unreachable!("type {parent_ty:?} does not have a field")
                     }
                     TyKind::RigidTy(RigidTy::Tuple(_)) => {
-                        Ok(parent_expr
-                            .member(Self::tuple_fld_name(field.index()), &self.symbol_table))
+                        Ok(parent_expr.member(Self::tuple_fld_name(field_idx), &self.symbol_table))
                     }
                     TyKind::RigidTy(RigidTy::Adt(def, _))
                         if rustc_internal::internal(def).repr().simd() =>
                     {
                         Ok(self.codegen_simd_field(
                             parent_expr,
-                            *field,
+                            field_idx,
                             field_ty_or_var.expect_type(),
                         ))
                     }
                     // if we fall here, then we are handling either a struct or a union
                     TyKind::RigidTy(RigidTy::Adt(def, _)) => {
-                        let field = &rustc_internal::internal(def.variants_iter().next().unwrap())
-                            .fields[*field];
+                        let fields = def.variants_iter().next().unwrap().fields();
+                        let field = &fields[field_idx];
                         Ok(parent_expr.member(field.name.to_string(), &self.symbol_table))
                     }
                     TyKind::RigidTy(RigidTy::Closure(..)) => {
-                        Ok(parent_expr.member(field.index().to_string(), &self.symbol_table))
+                        Ok(parent_expr.member(field_idx.to_string(), &self.symbol_table))
                     }
                     TyKind::RigidTy(RigidTy::Coroutine(..)) => {
-                        let field_name = self.coroutine_field_name(field.as_usize());
+                        let field_name = self.coroutine_field_name(field_idx);
                         Ok(parent_expr
                             .member("direct_fields", &self.symbol_table)
                             .member(field_name, &self.symbol_table))
@@ -308,11 +307,12 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             // if we fall here, then we are handling an enum
             TypeOrVariant::Variant(parent_var) => {
-                let field = &rustc_internal::internal(parent_var).fields[*field];
+                let fields = parent_var.fields();
+                let field = &fields[field_idx];
                 Ok(parent_expr.member(field.name.to_string(), &self.symbol_table))
             }
             TypeOrVariant::CoroutineVariant(_var_idx) => {
-                let field_name = self.coroutine_field_name(field.index());
+                let field_name = self.coroutine_field_name(field_idx);
                 Ok(parent_expr.member(field_name, &self.symbol_table))
             }
         }
@@ -347,12 +347,12 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_simd_field(&mut self, parent_expr: Expr, field: FieldIdx, field_ty: Ty) -> Expr {
         if matches!(field_ty.kind(), TyKind::RigidTy(RigidTy::Array { .. })) {
             // Array based
-            assert_eq!(field.index(), 0);
+            assert_eq!(field, 0);
             let field_typ = self.codegen_ty_stable(field_ty);
             parent_expr.reinterpret_cast(field_typ)
         } else {
             // Return the given field.
-            let index_expr = Expr::int_constant(field.index(), Type::size_t());
+            let index_expr = Expr::int_constant(field, Type::size_t());
             parent_expr.index_array(index_expr)
         }
     }
@@ -488,14 +488,10 @@ impl<'tcx> GotocCtx<'tcx> {
                 let typ = TypeOrVariant::Type(inner_mir_typ);
                 ProjectedPlace::try_new(expr, typ, fat_ptr_goto_expr, fat_ptr_mir_typ, self)
             }
-            ProjectionElem::Field(f, t) => {
-                let typ = TypeOrVariant::Type(*t);
-                let expr = self.codegen_field(
-                    before.goto_expr,
-                    before.mir_typ_or_variant,
-                    &FieldIdx::from(*f),
-                    typ,
-                )?;
+            ProjectionElem::Field(idx, ty) => {
+                let typ = TypeOrVariant::Type(*ty);
+                let expr =
+                    self.codegen_field(before.goto_expr, before.mir_typ_or_variant, *idx, typ)?;
                 ProjectedPlace::try_new(
                     expr,
                     typ,
