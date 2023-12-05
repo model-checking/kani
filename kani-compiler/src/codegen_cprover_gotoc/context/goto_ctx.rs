@@ -24,7 +24,6 @@ use cbmc::utils::aggr_tag;
 use cbmc::{InternedString, MachineModel};
 use kani_metadata::HarnessMetadata;
 use rustc_data_structures::fx::FxHashMap;
-use rustc_middle::mir::interpret::Allocation;
 use rustc_middle::span_bug;
 use rustc_middle::ty::layout::{
     FnAbiError, FnAbiOfHelpers, FnAbiRequest, HasParamEnv, HasTyCtxt, LayoutError, LayoutOfHelpers,
@@ -36,6 +35,7 @@ use rustc_span::source_map::respan;
 use rustc_span::Span;
 use rustc_target::abi::call::FnAbi;
 use rustc_target::abi::{HasDataLayout, TargetDataLayout};
+use stable_mir::ty::Allocation;
 
 pub struct GotocCtx<'tcx> {
     /// the typing context
@@ -51,7 +51,7 @@ pub struct GotocCtx<'tcx> {
     /// a global counter for generating unique names for global variables
     pub global_var_count: u64,
     /// map a global allocation to a name in the symbol table
-    pub alloc_map: FxHashMap<&'tcx Allocation, String>,
+    pub alloc_map: FxHashMap<Allocation, String>,
     /// map (trait, method) pairs to possible implementations
     pub vtable_ctx: VtableCtx,
     pub current_fn: Option<CurrentFnCtx<'tcx>>,

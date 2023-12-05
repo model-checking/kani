@@ -162,7 +162,7 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_rvalue_len(&mut self, p: &Place<'tcx>) -> Expr {
         let pt = self.place_ty(p);
         match pt.kind() {
-            ty::Array(_, sz) => self.codegen_const(*sz, None),
+            ty::Array(_, sz) => self.codegen_const_internal(*sz, None),
             ty::Slice(_) => unwrap_or_return_codegen_unimplemented!(self, self.codegen_place(p))
                 .fat_ptr_goto_expr
                 .unwrap()
@@ -761,7 +761,7 @@ impl<'tcx> GotocCtx<'tcx> {
             Rvalue::ThreadLocalRef(def_id) => {
                 // Since Kani is single-threaded, we treat a thread local like a static variable:
                 self.store_concurrent_construct("thread local (replaced by static variable)", loc);
-                self.codegen_static_pointer(*def_id, true)
+                self.codegen_thread_local_pointer(*def_id)
             }
             // A CopyForDeref is equivalent to a read from a place at the codegen level.
             // https://github.com/rust-lang/rust/blob/1673f1450eeaf4a5452e086db0fe2ae274a0144f/compiler/rustc_middle/src/mir/syntax.rs#L1055
@@ -1006,7 +1006,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             .unwrap();
                     // We need to handle this case in a special way because `codegen_operand` compiles FnDefs to dummy structs.
                     // (cf. the function documentation)
-                    self.codegen_func_expr(instance, None).address_of()
+                    self.codegen_func_expr_internal(instance, None).address_of()
                 }
                 _ => unreachable!(),
             },
@@ -1017,7 +1017,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         Instance::resolve_closure(self.tcx, *def_id, args, ty::ClosureKind::FnOnce)
                             .expect("failed to normalize and resolve closure during codegen")
                             .polymorphize(self.tcx);
-                    self.codegen_func_expr(instance, None).address_of()
+                    self.codegen_func_expr_internal(instance, None).address_of()
                 } else {
                     unreachable!("{:?} cannot be cast to a fn ptr", operand)
                 }
@@ -1384,7 +1384,7 @@ impl<'tcx> GotocCtx<'tcx> {
             (ty::Array(src_elt_type, src_elt_count), ty::Slice(dst_elt_type)) => {
                 // Cast to a slice fat pointer.
                 assert_eq!(src_elt_type, dst_elt_type);
-                let dst_goto_len = self.codegen_const(*src_elt_count, None);
+                let dst_goto_len = self.codegen_const_internal(*src_elt_count, None);
                 let src_pointee_ty = pointee_type(coerce_info.src_ty).unwrap();
                 let dst_data_expr = if src_pointee_ty.is_array() {
                     src_goto_expr.cast_to(self.codegen_ty(*src_elt_type).to_pointer())

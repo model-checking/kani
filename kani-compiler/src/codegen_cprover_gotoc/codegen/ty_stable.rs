@@ -11,10 +11,12 @@ use cbmc::goto_program::Type;
 use rustc_middle::mir;
 use rustc_middle::mir::visit::{MutVisitor, NonUseContext, PlaceContext};
 use rustc_middle::mir::{Operand as OperandInternal, Place as PlaceInternal};
-use rustc_middle::ty::{Ty as TyInternal, TyCtxt};
+use rustc_middle::ty::layout::{LayoutOf, TyAndLayout};
+use rustc_middle::ty::{self, Const as ConstInternal, Ty as TyInternal, TyCtxt};
 use rustc_smir::rustc_internal;
+use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{Local, Operand, Place};
-use stable_mir::ty::{RigidTy, Ty, TyKind};
+use stable_mir::ty::{Const, RigidTy, Ty, TyKind};
 
 impl<'tcx> GotocCtx<'tcx> {
     pub fn place_ty_stable(&self, place: &Place) -> Ty {
@@ -27,6 +29,39 @@ impl<'tcx> GotocCtx<'tcx> {
 
     pub fn local_ty_stable(&mut self, local: Local) -> Ty {
         self.current_fn().body().local_decl(local).unwrap().ty
+    }
+
+    pub fn operand_ty_stable(&mut self, operand: &Operand) -> Ty {
+        operand.ty(self.current_fn().body().locals()).unwrap()
+    }
+
+    pub fn is_zst_stable(&self, ty: Ty) -> bool {
+        self.is_zst(rustc_internal::internal(ty))
+    }
+
+    pub fn layout_of_stable(&self, ty: Ty) -> TyAndLayout<'tcx> {
+        self.layout_of(rustc_internal::internal(ty))
+    }
+
+    pub fn codegen_enum_discr_typ_stable(&self, ty: Ty) -> Ty {
+        rustc_internal::stable(self.codegen_enum_discr_typ(rustc_internal::internal(ty)))
+    }
+
+    pub fn codegen_fndef_type_stable(&mut self, instance: Instance) -> Type {
+        let func = self.symbol_name_stable(instance);
+        self.ensure_struct(
+            format!("{func}::FnDefStruct"),
+            format!("{}::FnDefStruct", instance.name()),
+            |_, _| vec![],
+        )
+    }
+
+    pub fn fn_sig_of_instance_stable(&self, instance: Instance) -> ty::PolyFnSig<'tcx> {
+        self.fn_sig_of_instance(rustc_internal::internal(instance))
+    }
+
+    pub fn use_fat_pointer_stable(&self, pointer_ty: Ty) -> bool {
+        self.use_fat_pointer(rustc_internal::internal(pointer_ty))
     }
 }
 /// If given type is a Ref / Raw ref, return the pointee type.
@@ -65,6 +100,12 @@ impl<'a, 'tcx> StableConverter<'a, 'tcx> {
         converter.visit_operand(&mut operand, mir::Location::START);
         rustc_internal::stable(operand)
     }
+
+    pub fn convert_constant(gcx: &'a GotocCtx<'tcx>, mut constant: ConstInternal<'tcx>) -> Const {
+        let mut converter = StableConverter { gcx };
+        converter.visit_ty_const(&mut constant, mir::Location::START);
+        rustc_internal::stable(constant)
+    }
 }
 
 impl<'a, 'tcx> MutVisitor<'tcx> for StableConverter<'a, 'tcx> {
@@ -74,5 +115,23 @@ impl<'a, 'tcx> MutVisitor<'tcx> for StableConverter<'a, 'tcx> {
 
     fn visit_ty(&mut self, ty: &mut TyInternal<'tcx>, _: mir::visit::TyContext) {
         *ty = self.gcx.monomorphize(*ty);
+    }
+
+    fn visit_ty_const(&mut self, ct: &mut ty::Const<'tcx>, _location: mir::Location) {
+        *ct = self.gcx.monomorphize(*ct);
+    }
+
+    fn visit_constant(&mut self, constant: &mut mir::ConstOperand<'tcx>, location: mir::Location) {
+        let const_ = self.gcx.monomorphize(constant.const_);
+        let val = match const_.eval(self.gcx.tcx, ty::ParamEnv::reveal_all(), None) {
+            Ok(v) => v,
+            Err(mir::interpret::ErrorHandled::Reported(..)) => return,
+            Err(mir::interpret::ErrorHandled::TooGeneric(..)) => {
+                unreachable!("Failed to evaluate instance constant: {:?}", const_)
+            }
+        };
+        let ty = constant.ty();
+        constant.const_ = mir::Const::Val(val, ty);
+        self.super_constant(constant, location);
     }
 }

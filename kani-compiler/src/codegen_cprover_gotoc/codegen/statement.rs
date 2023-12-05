@@ -18,6 +18,7 @@ use rustc_smir::rustc_internal;
 use rustc_span::Span;
 use rustc_target::abi::VariantIdx;
 use rustc_target::abi::{FieldsShape, Primitive, TagEncoding, Variants};
+use stable_mir::mir::Place as PlaceStable;
 use tracing::{debug, debug_span, trace};
 
 impl<'tcx> GotocCtx<'tcx> {
@@ -346,7 +347,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         // Non-virtual, direct drop_in_place call
                         assert!(!matches!(drop_instance.def, InstanceDef::Virtual(_, _)));
 
-                        let func = self.codegen_func_expr(drop_instance, None);
+                        let func = self.codegen_func_expr_internal(drop_instance, None);
                         // The only argument should be a self reference
                         let args = vec![place_ref];
 
@@ -567,7 +568,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     | InstanceDef::CloneShim(..) => {
                         // We need to handle FnDef items in a special way because `codegen_operand` compiles them to dummy structs.
                         // (cf. the function documentation)
-                        let func_exp = self.codegen_func_expr(instance, None);
+                        let func_exp = self.codegen_func_expr_internal(instance, None);
                         vec![
                             self.codegen_expr_to_place(destination, func_exp.call(fargs))
                                 .with_location(loc),
@@ -697,6 +698,16 @@ impl<'tcx> GotocCtx<'tcx> {
     /// A MIR [Place] is an L-value (i.e. the LHS of an assignment).
     ///
     /// In Kani, we slightly optimize the special case for Unit and don't assign anything.
+    pub(crate) fn codegen_expr_to_place_stable(&mut self, p: &PlaceStable, e: Expr) -> Stmt {
+        if e.typ().is_unit() {
+            e.as_stmt(Location::none())
+        } else {
+            unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place_stable(p))
+                .goto_expr
+                .assign(e, Location::none())
+        }
+    }
+
     pub(crate) fn codegen_expr_to_place(&mut self, p: &Place<'tcx>, e: Expr) -> Stmt {
         if self.place_ty(p).is_unit() {
             e.as_stmt(Location::none())
