@@ -1,0 +1,19 @@
+function {:bvbuiltin "bvslt"} $BvSignedLessThan<T>(lhs: T, rhs: T) returns (bool);
+
+function {:bvbuiltin "bvsgt"} $BvSignedGreaterThan<T>(lhs: T, rhs: T) returns (bool);
+
+function {:bvbuiltin "bvor"} $BvOr<T>(lhs: T, rhs: T) returns (T);
+
+procedure
+  var _1: bv32;
+  var _2: bv32;
+  var _4: bool;
+  var z: bv32;
+  var _7: bool;
+  _1 := 1bv32;
+  _2 := 2bv32;
+  _4 := $BvSignedGreaterThan(_2, _1);
+  assert _4;
+  z := $BvOr(_1, _2);
+  _7 := $BvSignedLessThan(_1, z);
+  assert _7;
