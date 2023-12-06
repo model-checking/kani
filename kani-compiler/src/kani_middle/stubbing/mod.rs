@@ -51,7 +51,7 @@ pub fn validate_instance(tcx: TyCtxt, instance: Instance) -> bool {
         checker.visit_body(&item.body());
         checker.is_valid()
     } else {
-        instance.body().is_some()
+        true
     }
 }
 
