@@ -72,6 +72,9 @@ package-lock.json
 ## Rustdoc GUI tests
 tests/rustdoc-gui/src/**.lock
 
+## Boogie files
+*.bpl
+
 # Before adding new lines, see the comment at the top.
 /.litani_cache_dir
 /.ninja_deps

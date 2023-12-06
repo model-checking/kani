@@ -59,6 +59,7 @@ TESTS=(
     "smack kani"
     "cargo-kani cargo-kani"
     "cargo-ui cargo-kani"
+    "script-based-boogie exec"
     "kani-docs cargo-kani"
     "kani-fixme kani-fixme"
 )
