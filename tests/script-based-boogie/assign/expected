@@ -1,0 +1,7 @@
+procedure
+  var x: bv32;
+  var y: bv32;
+  x := 1bv32;
+  y := x;
+  x := 2bv32;
+  assert
