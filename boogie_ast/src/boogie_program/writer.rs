@@ -46,6 +46,8 @@
 //! ...
 //!
 //! ```
+use num_bigint::Sign;
+
 use crate::boogie_program::*;
 
 use std::io::Write;
@@ -140,7 +142,20 @@ impl Function {
         for attr in &self.attributes {
             write!(writer, "{{{attr}}} ")?;
         }
-        write!(writer, "{}(", self.name)?;
+        write!(writer, "{}", self.name)?;
+        // generics
+        if !self.generics.is_empty() {
+            write!(writer, "<")?;
+            for (i, name) in self.generics.iter().enumerate() {
+                if i > 0 {
+                    write!(writer, ", ")?;
+                }
+                write!(writer, "{name}")?;
+            }
+            write!(writer, ">")?;
+        }
+        // parameters
+        write!(writer, "(")?;
         for (i, param) in self.parameters.iter().enumerate() {
             if i > 0 {
                 write!(writer, ", ")?;
@@ -229,6 +244,16 @@ impl Expr {
                 op.write_to(writer)?;
                 write!(writer, " ")?;
                 right.write_to(writer)?;
+                write!(writer, ")")?;
+            }
+            Expr::FunctionCall { symbol, arguments } => {
+                write!(writer, "{symbol}(")?;
+                for (i, a) in arguments.iter().enumerate() {
+                    if i > 0 {
+                        write!(writer, ", ")?;
+                    }
+                    a.write_to(writer)?;
+                }
                 write!(writer, ")")?;
             }
         }
@@ -366,6 +391,7 @@ impl Type {
                 write!(writer, "]")?;
                 value.write_to(writer)?;
             }
+            Type::Parameter { name } => write!(writer, "{name}")?,
         }
         Ok(())
     }
@@ -378,7 +404,11 @@ impl Literal {
                 write!(writer, "{}", value)?;
             }
             Literal::Bv { width, value } => {
-                write!(writer, "{value}bv{width}")?;
+                if value.sign() != Sign::Minus {
+                    write!(writer, "{value}bv{width}")?;
+                } else {
+                    todo!("Handle negative integers");
+                }
             }
             Literal::Int(value) => {
                 write!(writer, "{}", value)?;
@@ -433,6 +463,7 @@ mod tests {
             functions: vec![
                 Function::new(
                     "isZero".into(),
+                    Vec::new(),
                     vec![Parameter::new("x".into(), Type::Int)],
                     Type::Bool,
                     Some(Expr::BinaryOp {
@@ -444,11 +475,12 @@ mod tests {
                 ),
                 Function::new(
                     "$BvAnd".into(),
+                    vec!["T".into()],
                     vec![
-                        Parameter::new("lhs".into(), Type::Bv(32)),
-                        Parameter::new("rhs".into(), Type::Bv(32)),
+                        Parameter::new("lhs".into(), Type::parameter("T".into())),
+                        Parameter::new("rhs".into(), Type::parameter("T".into())),
                     ],
-                    Type::Bv(32),
+                    Type::parameter("T".into()),
                     None,
                     vec![":bvbuiltin \"bvand\"".into()],
                 ),
@@ -523,7 +555,7 @@ function {:inline} isZero(x: int) returns (bool) {
   (x == 0)
 }
 
-function {:bvbuiltin \"bvand\"} $BvAnd(lhs: bv32, rhs: bv32) returns (bv32);
+function {:bvbuiltin \"bvand\"} $BvAnd<T>(lhs: T, rhs: T) returns (T);
 
 // Procedures:
 procedure main() returns (z: bool)
