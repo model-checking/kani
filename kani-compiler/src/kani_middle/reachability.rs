@@ -485,7 +485,10 @@ fn to_fingerprint(tcx: TyCtxt, item: &InternalMonoItem) -> Fingerprint {
 
 /// Return whether we should include the item into codegen.
 fn should_codegen_locally(instance: &Instance) -> bool {
-    !instance.is_foreign_item()
+    // TODO: This should only check is_foreign_item() or even `has_body()`.
+    // We need https://github.com/rust-lang/rust/pull/118681 to land first.
+    //!instance.is_foreign_item()
+    instance.body().is_some()
 }
 
 fn collect_alloc_items(alloc_id: AllocId) -> Vec<MonoItem> {
