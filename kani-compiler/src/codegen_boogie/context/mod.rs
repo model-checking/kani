@@ -6,5 +6,6 @@
 
 mod boogie_ctx;
 mod kani_intrinsic;
+mod smt_builtins;
 
 pub use boogie_ctx::BoogieCtx;

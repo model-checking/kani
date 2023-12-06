@@ -4,14 +4,16 @@
 use std::io::Write;
 
 use crate::kani_queries::QueryDb;
-use boogie_ast::boogie_program::{BinaryOp, BoogieProgram, Expr, Literal, Procedure, Stmt, Type};
+use boogie_ast::boogie_program::{
+    BinaryOp, BoogieProgram, Expr, Literal, Procedure, Stmt, Type, UnaryOp,
+};
 use rustc_data_structures::fx::FxHashMap;
 use rustc_middle::mir::interpret::Scalar;
 use rustc_middle::mir::traversal::reverse_postorder;
 use rustc_middle::mir::{
     BasicBlock, BasicBlockData, BinOp, Body, Const as mirConst, ConstOperand, ConstValue,
     HasLocalDecls, Local, Operand, Place, Rvalue, Statement, StatementKind, Terminator,
-    TerminatorKind, VarDebugInfoContents,
+    TerminatorKind, UnOp, VarDebugInfoContents,
 };
 use rustc_middle::span_bug;
 use rustc_middle::ty::layout::{
@@ -21,9 +23,11 @@ use rustc_middle::ty::{self, Instance, IntTy, Ty, TyCtxt, UintTy};
 use rustc_span::Span;
 use rustc_target::abi::{HasDataLayout, TargetDataLayout};
 use std::collections::hash_map::Entry;
+use strum::IntoEnumIterator;
 use tracing::{debug, debug_span, trace};
 
 use super::kani_intrinsic::get_kani_intrinsic;
+use super::smt_builtins::{smt_builtin_binop, SmtBvBuiltin};
 
 /// A context that provides the main methods for translating MIR constructs to
 /// Boogie and stores what has been codegen so far
@@ -39,7 +43,23 @@ pub struct BoogieCtx<'tcx> {
 
 impl<'tcx> BoogieCtx<'tcx> {
     pub fn new(tcx: TyCtxt<'tcx>, queries: QueryDb) -> BoogieCtx<'tcx> {
-        BoogieCtx { tcx, queries, program: BoogieProgram::new() }
+        let mut program = BoogieProgram::new();
+
+        // TODO: The current functions in the preamble should be added lazily instead
+        Self::add_preamble(&mut program);
+
+        BoogieCtx { tcx, queries, program }
+    }
+
+    fn add_preamble(program: &mut BoogieProgram) {
+        // Add SMT bv builtins
+        for bv_builtin in SmtBvBuiltin::iter() {
+            program.add_function(smt_builtin_binop(
+                &bv_builtin,
+                bv_builtin.smt_op_name(),
+                bv_builtin.is_predicate(),
+            ));
+        }
     }
 
     /// Codegen a function into a Boogie procedure.
@@ -145,7 +165,8 @@ impl<'a, 'tcx> FunctionCtx<'a, 'tcx> {
         trace!(typ=?ty, "codegen_type");
         match ty.kind() {
             ty::Bool => Type::Bool,
-            ty::Int(_ity) => Type::Int, // TODO: use Bv
+            ty::Int(ity) => Type::Bv(ity.bit_width().unwrap_or(64).try_into().unwrap()),
+            ty::Uint(uty) => Type::Bv(uty.bit_width().unwrap_or(64).try_into().unwrap()),
             _ => todo!(),
         }
     }
@@ -210,9 +231,23 @@ impl<'a, 'tcx> FunctionCtx<'a, 'tcx> {
         debug!(rvalue=?rvalue, "codegen_rvalue");
         match rvalue {
             Rvalue::Use(operand) => (None, self.codegen_operand(operand)),
+            Rvalue::UnaryOp(op, operand) => self.codegen_unary_op(op, operand),
             Rvalue::BinaryOp(binop, box (lhs, rhs)) => self.codegen_binary_op(binop, lhs, rhs),
             _ => todo!(),
         }
+    }
+
+    fn codegen_unary_op(&self, op: &UnOp, operand: &Operand<'tcx>) -> (Option<Stmt>, Expr) {
+        debug!(op=?op, operand=?operand, "codegen_unary_op");
+        let o = self.codegen_operand(operand);
+        let expr = match op {
+            UnOp::Not => {
+                // TODO: can this be used for bit-level inversion as well?
+                Expr::UnaryOp { op: UnaryOp::Not, operand: Box::new(o) }
+            }
+            UnOp::Neg => todo!(),
+        };
+        (None, expr)
     }
 
     fn codegen_binary_op(
@@ -221,12 +256,63 @@ impl<'a, 'tcx> FunctionCtx<'a, 'tcx> {
         lhs: &Operand<'tcx>,
         rhs: &Operand<'tcx>,
     ) -> (Option<Stmt>, Expr) {
+        debug!(binop=?binop, "codegen_binary_op");
+        let left = Box::new(self.codegen_operand(lhs));
+        let right = Box::new(self.codegen_operand(rhs));
         let expr = match binop {
-            BinOp::Eq => Expr::BinaryOp {
-                op: BinaryOp::Eq,
-                left: Box::new(self.codegen_operand(lhs)),
-                right: Box::new(self.codegen_operand(rhs)),
-            },
+            BinOp::Eq => Expr::BinaryOp { op: BinaryOp::Eq, left, right },
+            BinOp::AddUnchecked | BinOp::Add => {
+                let left_type = self.operand_ty(lhs);
+                if self.operand_ty(rhs) != left_type {
+                    todo!("Addition of different types is not yet supported");
+                } else {
+                    let bv_func = match left_type.kind() {
+                        ty::Int(_) | ty::Uint(_) => SmtBvBuiltin::Add,
+                        _ => todo!(),
+                    };
+                    Expr::function_call(bv_func.as_ref().to_owned(), vec![*left, *right])
+                }
+            }
+            BinOp::Lt | BinOp::Ge => {
+                let left_type = self.operand_ty(lhs);
+                assert_eq!(left_type, self.operand_ty(rhs));
+                let bv_func = match left_type.kind() {
+                    ty::Int(_) => SmtBvBuiltin::SignedLessThan,
+                    ty::Uint(_) => SmtBvBuiltin::UnsignedLessThan,
+                    _ => todo!(),
+                };
+                let call = Expr::function_call(bv_func.as_ref().to_owned(), vec![*left, *right]);
+                if let BinOp::Lt = binop { call } else { !call }
+            }
+            BinOp::Gt | BinOp::Le => {
+                let left_type = self.operand_ty(lhs);
+                assert_eq!(left_type, self.operand_ty(rhs));
+                let bv_func = match left_type.kind() {
+                    ty::Int(_) => SmtBvBuiltin::SignedGreaterThan,
+                    ty::Uint(_) => SmtBvBuiltin::UnsignedGreaterThan,
+                    _ => todo!(),
+                };
+                let call = Expr::function_call(bv_func.as_ref().to_owned(), vec![*left, *right]);
+                if let BinOp::Gt = binop { call } else { !call }
+            }
+            BinOp::BitAnd => {
+                Expr::function_call(SmtBvBuiltin::And.as_ref().to_owned(), vec![*left, *right])
+            }
+            BinOp::BitOr => {
+                Expr::function_call(SmtBvBuiltin::Or.as_ref().to_owned(), vec![*left, *right])
+            }
+            BinOp::Shr => {
+                let left_ty = self.operand_ty(lhs);
+                let right_ty = self.operand_ty(lhs);
+                debug!(?left_ty, ?right_ty, "codegen_binary_op_shr");
+                Expr::function_call(SmtBvBuiltin::Shr.as_ref().to_owned(), vec![*left, *right])
+            }
+            BinOp::Shl => {
+                let left_ty = self.operand_ty(lhs);
+                let right_ty = self.operand_ty(lhs);
+                debug!(?left_ty, ?right_ty, "codegen_binary_op_shl");
+                Expr::function_call(SmtBvBuiltin::Shl.as_ref().to_owned(), vec![*left, *right])
+            }
             _ => todo!(),
         };
         (None, expr)
@@ -343,26 +429,29 @@ impl<'a, 'tcx> FunctionCtx<'a, 'tcx> {
     }
 
     fn codegen_scalar(&self, s: Scalar, ty: Ty<'tcx>) -> Expr {
+        debug!(kind=?ty.kind(), "codegen_scalar");
         match (s, ty.kind()) {
             (Scalar::Int(_), ty::Bool) => Expr::Literal(Literal::Bool(s.to_bool().unwrap())),
             (Scalar::Int(_), ty::Int(it)) => match it {
-                IntTy::I8 => Expr::Literal(Literal::Int(s.to_i8().unwrap().into())),
-                IntTy::I16 => Expr::Literal(Literal::Int(s.to_i16().unwrap().into())),
-                IntTy::I32 => Expr::Literal(Literal::Int(s.to_i32().unwrap().into())),
-                IntTy::I64 => Expr::Literal(Literal::Int(s.to_i64().unwrap().into())),
-                IntTy::I128 => Expr::Literal(Literal::Int(s.to_i128().unwrap().into())),
+                IntTy::I8 => Expr::Literal(Literal::bv(8, s.to_i8().unwrap().into())),
+                IntTy::I16 => Expr::Literal(Literal::bv(16, s.to_i16().unwrap().into())),
+                IntTy::I32 => Expr::Literal(Literal::bv(32, s.to_i32().unwrap().into())),
+                IntTy::I64 => Expr::Literal(Literal::bv(64, s.to_i64().unwrap().into())),
+                IntTy::I128 => Expr::Literal(Literal::bv(128, s.to_i128().unwrap().into())),
                 IntTy::Isize => {
-                    Expr::Literal(Literal::Int(s.to_target_isize(self).unwrap().into()))
+                    // TODO: get target width
+                    Expr::Literal(Literal::bv(64, s.to_target_isize(self).unwrap().into()))
                 }
             },
             (Scalar::Int(_), ty::Uint(it)) => match it {
-                UintTy::U8 => Expr::Literal(Literal::Int(s.to_u8().unwrap().into())),
-                UintTy::U16 => Expr::Literal(Literal::Int(s.to_u16().unwrap().into())),
-                UintTy::U32 => Expr::Literal(Literal::Int(s.to_u32().unwrap().into())),
-                UintTy::U64 => Expr::Literal(Literal::Int(s.to_u64().unwrap().into())),
-                UintTy::U128 => Expr::Literal(Literal::Int(s.to_u128().unwrap().into())),
+                UintTy::U8 => Expr::Literal(Literal::bv(8, s.to_u8().unwrap().into())),
+                UintTy::U16 => Expr::Literal(Literal::bv(16, s.to_u16().unwrap().into())),
+                UintTy::U32 => Expr::Literal(Literal::bv(32, s.to_u32().unwrap().into())),
+                UintTy::U64 => Expr::Literal(Literal::bv(64, s.to_u64().unwrap().into())),
+                UintTy::U128 => Expr::Literal(Literal::bv(128, s.to_u128().unwrap().into())),
                 UintTy::Usize => {
-                    Expr::Literal(Literal::Int(s.to_target_isize(self).unwrap().into()))
+                    // TODO: get target width
+                    Expr::Literal(Literal::bv(64, s.to_target_usize(self).unwrap().into()))
                 }
             },
             _ => todo!(),
