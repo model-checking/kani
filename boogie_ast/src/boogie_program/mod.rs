@@ -6,7 +6,8 @@
 
 mod writer;
 
-use num_bigint::{BigInt, BigUint};
+use num_bigint::BigInt;
+use std::ops::Not;
 
 struct TypeDeclaration {}
 struct ConstDeclaration {}
@@ -14,6 +15,7 @@ struct VarDeclaration {}
 struct Axiom {}
 
 /// Boogie types
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Type {
     /// Boolean
     Bool,
@@ -26,6 +28,23 @@ pub enum Type {
 
     /// Map type, e.g. `[int]bool`
     Map { key: Box<Type>, value: Box<Type> },
+
+    /// Generic type parameter, e.g. `T`
+    Parameter { name: String },
+}
+
+impl Type {
+    pub fn bv(width: usize) -> Self {
+        Self::Bv(width)
+    }
+
+    pub fn parameter(name: String) -> Self {
+        Self::Parameter { name }
+    }
+
+    pub fn map(key: Type, value: Type) -> Self {
+        Self::Map { key: Box::new(key), value: Box::new(value) }
+    }
 }
 
 /// Function and procedure parameters
@@ -46,10 +65,16 @@ pub enum Literal {
     Bool(bool),
 
     /// Bit-vector values, e.g. `5bv8`
-    Bv { width: usize, value: BigUint },
+    Bv { width: usize, value: BigInt },
 
     /// Unbounded integer values, e.g. `1000` or `-456789`
     Int(BigInt),
+}
+
+impl Literal {
+    pub fn bv(width: usize, value: BigInt) -> Self {
+        Self::Bv { width, value }
+    }
 }
 
 /// Unary operators
@@ -115,6 +140,27 @@ pub enum Expr {
 
     /// Binary operation
     BinaryOp { op: BinaryOp, left: Box<Expr>, right: Box<Expr> },
+
+    /// Function call
+    FunctionCall { symbol: String, arguments: Vec<Expr> },
+}
+
+impl Expr {
+    pub fn literal(l: Literal) -> Self {
+        Expr::Literal(l)
+    }
+
+    pub fn function_call(symbol: String, arguments: Vec<Expr>) -> Self {
+        Expr::FunctionCall { symbol, arguments }
+    }
+}
+
+impl Not for Expr {
+    type Output = Self;
+
+    fn not(self) -> Self::Output {
+        Expr::UnaryOp { op: UnaryOp::Not, operand: Box::new(self) }
+    }
 }
 
 /// Statement types
@@ -196,6 +242,7 @@ impl Procedure {
 /// effects, and whose body is an expression)
 pub struct Function {
     name: String,
+    generics: Vec<String>,
     parameters: Vec<Parameter>,
     return_type: Type,
     // a body is optional (e.g. SMT built-ins)
@@ -207,12 +254,13 @@ pub struct Function {
 impl Function {
     pub fn new(
         name: String,
+        generics: Vec<String>,
         parameters: Vec<Parameter>,
         return_type: Type,
         body: Option<Expr>,
         attributes: Vec<String>,
     ) -> Self {
-        Function { name, parameters, return_type, body, attributes }
+        Function { name, generics, parameters, return_type, body, attributes }
     }
 }
 /// A boogie program
