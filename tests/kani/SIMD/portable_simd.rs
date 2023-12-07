@@ -29,5 +29,4 @@ fn check_resize() {
     let x = u32x4::from_array([0, 1, 2, 3]);
     assert_eq!(x.resize::<8>(9).to_array(), [0, 1, 2, 3, 9, 9, 9, 9]);
     assert_eq!(x.resize::<2>(9).to_array(), [0, 1]);
-
 }

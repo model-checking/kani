@@ -223,8 +223,8 @@ mod test {
         let bitmask = mask.to_bitmask();
         assert_eq!(bitmask, 0b1010);
 
-        let kani_mask = unsafe { u64::from(kani_intrinsic::simd_bitmask::<_, u8, u32, 4>(mask.clone())) };
+        let kani_mask =
+            unsafe { u64::from(kani_intrinsic::simd_bitmask::<_, u8, u32, 4>(mask.clone())) };
         assert_eq!(kani_mask, bitmask);
     }
-
 }
