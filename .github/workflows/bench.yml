@@ -30,14 +30,14 @@ jobs:
           echo "NEW_REF=${{ github.event.pull_request.head.sha }}" | tee -a "$GITHUB_ENV"
 
       - name: Check out Kani (old variant)
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           path: ./old
           ref: ${{ env.OLD_REF }}
           fetch-depth: 2
 
       - name: Check out Kani (new variant)
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           path: ./new
           ref: ${{ env.NEW_REF }}
