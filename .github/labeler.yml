@@ -6,11 +6,8 @@
 # Note that we enable dot, so "**" matches all files in a folder
 
 Z-BenchCI:
-  - kani-compiler/**
-  - rust-toolchain.toml
-  - kani-dependencies
-  - kani-driver/src/call-*
-  - Cargo.lock
-  - cprover_bindings/**
-  - library/**
-
+- any:
+  - changed-files:
+    - any-glob-to-any-file: ['kani-compiler/**', 'kani-driver/src/call-*', 'cprover_bindings/**', 'library/**']
+    - any-glob-to-any-file: ['rust-toolchain.toml', 'Cargo.lock']
+    - any-glob-to-any-file: ['kani-dependencies']
