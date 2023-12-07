@@ -37,7 +37,7 @@ jobs:
 
     - name: Label PR
       id: labeler
-      uses: actions/labeler@v5
+      uses: actions/labeler@v4
       with:
         dot: true
 
