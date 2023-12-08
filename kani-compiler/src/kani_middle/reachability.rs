@@ -153,7 +153,7 @@ impl<'tcx> MonoItemsCollector<'tcx> {
     /// instruction looking for the items that should be included in the compilation.
     fn reachable_items(&mut self) {
         while let Some(to_visit) = self.queue.pop() {
-            if !self.tcx.is_foreign_item(rustc_internal::internal(to_visit.clone()).def_id()) {
+            if !self.collected.contains(&to_visit) {
                 self.collected.insert(to_visit.clone());
                 let next_items = match &to_visit {
                     MonoItem::Fn(instance) => self.visit_fn(*instance),
