@@ -153,7 +153,11 @@ impl<'tcx> MonoItemsCollector<'tcx> {
     /// instruction looking for the items that should be included in the compilation.
     fn reachable_items(&mut self) {
         while let Some(to_visit) = self.queue.pop() {
-            if !self.collected.contains(&to_visit) {
+            // TODO: This should only check is_foreign_item() or even `has_body()`.
+            // We need https://github.com/rust-lang/rust/pull/118681 to land first.
+            if !self.collected.contains(&to_visit)
+                && !self.tcx.is_foreign_item(rustc_internal::internal(to_visit.clone()).def_id())
+            {
                 self.collected.insert(to_visit.clone());
                 let next_items = match &to_visit {
                     MonoItem::Fn(instance) => self.visit_fn(*instance),
@@ -266,7 +270,7 @@ impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {
     /// Collect an instance depending on how it is used (invoked directly or via fn_ptr).
     fn collect_instance(&mut self, instance: Instance, is_direct_call: bool) {
         let should_collect = match instance.kind {
-            InstanceKind::Virtual | InstanceKind::Intrinsic => {
+            InstanceKind::Virtual { .. } | InstanceKind::Intrinsic => {
                 // Instance definition has no body.
                 assert!(is_direct_call, "Expected direct call {instance:?}");
                 false
@@ -453,8 +457,7 @@ impl<'a, 'tcx> MirVisitor for MonoItemsFnCollector<'a, 'tcx> {
             TerminatorKind::Abort { .. } | TerminatorKind::Assert { .. } => {
                 // We generate code for this without invoking any lang item.
             }
-            TerminatorKind::CoroutineDrop { .. }
-            | TerminatorKind::Goto { .. }
+            TerminatorKind::Goto { .. }
             | TerminatorKind::SwitchInt { .. }
             | TerminatorKind::Resume
             | TerminatorKind::Return
