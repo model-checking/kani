@@ -339,7 +339,6 @@ impl<'a, 'tcx> FunctionCtx<'a, 'tcx> {
         span: Span,
     ) -> Stmt {
         debug!(?func, ?args, ?destination, ?span, "codegen_funcall");
-        let fargs = self.codegen_funcall_args(args);
         let funct = self.operand_ty(func);
         // TODO: Only Kani intrinsics are handled currently
         match &funct.kind() {
@@ -355,12 +354,13 @@ impl<'a, 'tcx> FunctionCtx<'a, 'tcx> {
                     return self.codegen_kani_intrinsic(
                         intrinsic,
                         instance,
-                        fargs,
+                        args,
                         *destination,
                         *target,
                         Some(span),
                     );
                 }
+                let _fargs = self.codegen_funcall_args(args);
                 todo!()
             }
             _ => todo!(),
@@ -383,7 +383,7 @@ impl<'a, 'tcx> FunctionCtx<'a, 'tcx> {
             .collect()
     }
 
-    fn codegen_operand(&self, o: &Operand<'tcx>) -> Expr {
+    pub(crate) fn codegen_operand(&self, o: &Operand<'tcx>) -> Expr {
         trace!(operand=?o, "codegen_operand");
         // A MIR operand is either a constant (literal or `const` declaration)
         // or a place (being moved or copied for this operation).
