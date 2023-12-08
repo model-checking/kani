@@ -46,6 +46,7 @@ pub fn harness_stub_map(
 pub fn validate_instance(tcx: TyCtxt, instance: Instance) -> bool {
     let internal_instance = rustc_internal::internal(instance);
     if get_stub(tcx, internal_instance.def_id()).is_some() {
+        debug!(?instance, "validate_instance");
         let item = CrateItem::try_from(instance).unwrap();
         let mut checker = StubConstChecker::new(tcx, internal_instance, item);
         checker.visit_body(&item.body());
