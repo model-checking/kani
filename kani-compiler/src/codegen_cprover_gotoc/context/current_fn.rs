@@ -19,9 +19,9 @@ pub struct CurrentFnCtx<'tcx> {
     instance: Instance,
     /// The crate this function is from
     krate: String,
-    /// The mir for the current instance. This is using the internal representation.
+    /// The MIR for the current instance. This is using the internal representation.
     mir: &'tcx InternalBody<'tcx>,
-    /// The mir for the current instance.
+    /// The MIR for the current instance.
     body: Body,
     /// The symbol name of the current function
     name: String,
