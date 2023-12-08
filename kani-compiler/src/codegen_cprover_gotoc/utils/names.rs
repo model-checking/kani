@@ -22,7 +22,7 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_var_base_name(&self, l: &Local) -> String {
         match self.find_debug_info(l) {
             None => format!("var_{}", l.index()),
-            Some(info) => format!("{}", info.name),
+            Some(info) => info.name,
         }
     }
 

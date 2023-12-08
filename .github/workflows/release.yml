@@ -271,7 +271,7 @@ jobs:
           cargo package -p kani-verifier
 
       - name: 'Login to GitHub Container Registry'
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -284,7 +284,7 @@ jobs:
           OWNER: '${{ github.repository_owner }}'
 
       - name: Build and push
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v5
         with:
           context: .
           file: scripts/ci/Dockerfile.bundle-release-20-04

@@ -332,11 +332,11 @@ impl<'tcx> GotocCtx<'tcx> {
         ty: Ty<'tcx>,
         args: ty::GenericArgsRef<'tcx>,
     ) -> ty::PolyFnSig<'tcx> {
-        let sig = args.as_coroutine().poly_sig();
+        let sig = args.as_coroutine().sig();
 
-        let bound_vars = self.tcx.mk_bound_variable_kinds_from_iter(
-            sig.bound_vars().iter().chain(iter::once(ty::BoundVariableKind::Region(ty::BrEnv))),
-        );
+        let bound_vars = self.tcx.mk_bound_variable_kinds_from_iter(iter::once(
+            ty::BoundVariableKind::Region(ty::BrEnv),
+        ));
         let br = ty::BoundRegion {
             var: ty::BoundVar::from_usize(bound_vars.len() - 1),
             kind: ty::BoundRegionKind::BrEnv,
@@ -349,7 +349,6 @@ impl<'tcx> GotocCtx<'tcx> {
         let pin_args = self.tcx.mk_args(&[env_ty.into()]);
         let env_ty = Ty::new_adt(self.tcx, pin_adt_ref, pin_args);
 
-        let sig = sig.skip_binder();
         // The `FnSig` and the `ret_ty` here is for a coroutines main
         // `coroutine::resume(...) -> CoroutineState` function in case we
         // have an ordinary coroutine, or the `Future::poll(...) -> Poll`

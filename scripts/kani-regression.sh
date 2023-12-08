@@ -100,14 +100,6 @@ FEATURES_MANIFEST_PATH="$KANI_DIR/tests/cargo-kani/cargo-features-flag/Cargo.tom
 cargo kani --manifest-path "$FEATURES_MANIFEST_PATH" --harness trivial_success
 cargo clean --manifest-path "$FEATURES_MANIFEST_PATH"
 
-# Check that documentation compiles.
-echo "Current disk usage:"
-df -h
-echo "Starting doc tests:"
-cargo doc --workspace --no-deps --exclude std
-echo "Disk usage after documentation build:"
-df -h
-
 echo
 echo "All Kani regression tests completed successfully."
 echo

@@ -266,7 +266,7 @@ impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {
     /// Collect an instance depending on how it is used (invoked directly or via fn_ptr).
     fn collect_instance(&mut self, instance: Instance, is_direct_call: bool) {
         let should_collect = match instance.kind {
-            InstanceKind::Virtual | InstanceKind::Intrinsic => {
+            InstanceKind::Virtual { .. } | InstanceKind::Intrinsic => {
                 // Instance definition has no body.
                 assert!(is_direct_call, "Expected direct call {instance:?}");
                 false
@@ -453,8 +453,7 @@ impl<'a, 'tcx> MirVisitor for MonoItemsFnCollector<'a, 'tcx> {
             TerminatorKind::Abort { .. } | TerminatorKind::Assert { .. } => {
                 // We generate code for this without invoking any lang item.
             }
-            TerminatorKind::CoroutineDrop { .. }
-            | TerminatorKind::Goto { .. }
+            TerminatorKind::Goto { .. }
             | TerminatorKind::SwitchInt { .. }
             | TerminatorKind::Resume
             | TerminatorKind::Return
