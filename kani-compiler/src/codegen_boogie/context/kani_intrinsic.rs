@@ -7,8 +7,8 @@
 
 use super::boogie_ctx::FunctionCtx;
 
-use boogie_ast::boogie_program::{Expr, Stmt};
-use rustc_middle::mir::{BasicBlock, Place};
+use boogie_ast::boogie_program::Stmt;
+use rustc_middle::mir::{BasicBlock, Operand, Place};
 use rustc_middle::ty::{Instance, TyCtxt};
 use rustc_span::Span;
 use std::str::FromStr;
@@ -49,17 +49,17 @@ impl<'a, 'tcx> FunctionCtx<'a, 'tcx> {
         &self,
         intrinsic: KaniIntrinsic,
         instance: Instance<'tcx>,
-        fargs: Vec<Expr>,
+        args: &[Operand<'tcx>],
         assign_to: Place<'tcx>,
         target: Option<BasicBlock>,
         span: Option<Span>,
     ) -> Stmt {
         match intrinsic {
             KaniIntrinsic::KaniAssert => {
-                self.codegen_kani_assert(instance, fargs, assign_to, target, span)
+                self.codegen_kani_assert(instance, args, assign_to, target, span)
             }
             KaniIntrinsic::KaniAssume => {
-                self.codegen_kani_assume(instance, fargs, assign_to, target, span)
+                self.codegen_kani_assume(instance, args, assign_to, target, span)
             }
         }
     }
@@ -67,14 +67,14 @@ impl<'a, 'tcx> FunctionCtx<'a, 'tcx> {
     pub fn codegen_kani_assert(
         &self,
         _instance: Instance<'tcx>,
-        mut fargs: Vec<Expr>,
+        args: &[Operand<'tcx>],
         _assign_to: Place<'tcx>,
         _target: Option<BasicBlock>,
         _span: Option<Span>,
     ) -> Stmt {
         // TODO: ignoring the `'static str` argument for now
-        assert_eq!(fargs.len(), 1); // 2);
-        let cond = fargs.remove(0);
+        assert_eq!(args.len(), 2);
+        let cond = self.codegen_operand(&args[0]);
         // TODO: handle message
         // TODO: handle location
 
@@ -89,13 +89,13 @@ impl<'a, 'tcx> FunctionCtx<'a, 'tcx> {
     pub fn codegen_kani_assume(
         &self,
         _instance: Instance<'tcx>,
-        mut fargs: Vec<Expr>,
+        args: &[Operand<'tcx>],
         _assign_to: Place<'tcx>,
         _target: Option<BasicBlock>,
         _span: Option<Span>,
     ) -> Stmt {
-        assert_eq!(fargs.len(), 1);
-        let cond = fargs.remove(0);
+        assert_eq!(args.len(), 1);
+        let cond = self.codegen_operand(&args[0]);
         // TODO: handle location
 
         Stmt::Block {
