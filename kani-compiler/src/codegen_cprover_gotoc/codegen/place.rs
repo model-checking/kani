@@ -14,11 +14,8 @@ use crate::codegen_cprover_gotoc::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::unwrap_or_return_codegen_unimplemented;
 use cbmc::goto_program::{Expr, Location, Type};
+use rustc_middle::mir::{Local as LocalInternal, Place as PlaceInternal};
 use rustc_middle::ty::layout::LayoutOf;
-use rustc_middle::{
-    mir::{Local as LocalInternal, Place as PlaceInternal},
-    ty::Ty as TyInternal,
-};
 use rustc_smir::rustc_internal;
 use rustc_target::abi::{TagEncoding, Variants};
 use stable_mir::mir::{FieldIdx, Local, Mutability, Place, ProjectionElem};
@@ -152,13 +149,12 @@ impl ProjectedPlace {
         }
     }
 
-    pub fn try_new_internal<'tcx>(
+    pub fn try_from_ty(
         goto_expr: Expr,
-        ty: TyInternal<'tcx>,
-        ctx: &mut GotocCtx<'tcx>,
+        ty: Ty,
+        ctx: &mut GotocCtx,
     ) -> Result<Self, UnimplementedData> {
-        let ty = ctx.monomorphize(ty);
-        Self::try_new(goto_expr, TypeOrVariant::Type(rustc_internal::stable(ty)), None, None, ctx)
+        Self::try_new(goto_expr, TypeOrVariant::Type(ty), None, None, ctx)
     }
 
     pub fn try_new(

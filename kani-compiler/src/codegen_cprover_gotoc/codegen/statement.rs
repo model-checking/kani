@@ -242,7 +242,8 @@ impl<'tcx> GotocCtx<'tcx> {
                     // The discr.ty doesn't always match the tag type. Explicitly cast if needed.
                     let discr_expr = Expr::int_constant(discr.val, self.codegen_ty(discr.ty))
                         .cast_to(self.codegen_ty(discr_t));
-                    self.codegen_discriminant_field(dest_expr, dest_ty).assign(discr_expr, location)
+                    self.codegen_discriminant_field(dest_expr, rustc_internal::stable(dest_ty))
+                        .assign(discr_expr, location)
                 }
                 TagEncoding::Niche { untagged_variant, niche_variants, niche_start } => {
                     if *untagged_variant != variant_index {
@@ -262,7 +263,8 @@ impl<'tcx> GotocCtx<'tcx> {
                         } else {
                             Expr::int_constant(niche_value, discr_ty.clone())
                         };
-                        self.codegen_get_niche(dest_expr, offset, discr_ty).assign(value, location)
+                        self.codegen_get_niche(dest_expr, offset.bytes() as usize, discr_ty)
+                            .assign(value, location)
                     } else {
                         Stmt::skip(location)
                     }
