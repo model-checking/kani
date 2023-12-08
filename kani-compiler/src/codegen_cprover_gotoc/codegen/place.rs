@@ -340,15 +340,15 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// Since the goto representation for both is the same, we use the expected type to decide
     /// what to return.
-    fn codegen_simd_field(&mut self, parent_expr: Expr, field: FieldIdx, field_ty: Ty) -> Expr {
+    fn codegen_simd_field(&mut self, parent_expr: Expr, field_idx: FieldIdx, field_ty: Ty) -> Expr {
         if matches!(field_ty.kind(), TyKind::RigidTy(RigidTy::Array { .. })) {
             // Array based
-            assert_eq!(field, 0);
+            assert_eq!(field_idx, 0);
             let field_typ = self.codegen_ty_stable(field_ty);
             parent_expr.reinterpret_cast(field_typ)
         } else {
             // Return the given field.
-            let index_expr = Expr::int_constant(field, Type::size_t());
+            let index_expr = Expr::int_constant(field_idx, Type::size_t());
             parent_expr.index_array(index_expr)
         }
     }
@@ -378,7 +378,9 @@ impl<'tcx> GotocCtx<'tcx> {
             // A local can be a boxed function pointer
             TyKind::RigidTy(RigidTy::Adt(def, args)) if def.is_box() => {
                 let boxed_ty = self.codegen_ty_stable(ty);
-                self.codegen_local_fndef(*args.0[0].ty().unwrap())
+                // The type of `T` for `Box<T>` can be derived from the first definition args.
+                let inner_ty = args.0[0].ty().unwrap();
+                self.codegen_local_fndef(*inner_ty)
                     .map(|f| self.box_value(f.address_of(), boxed_ty))
             }
             _ => None,
@@ -603,12 +605,11 @@ impl<'tcx> GotocCtx<'tcx> {
                     Variants::Single { .. } => before.goto_expr,
                     Variants::Multiple { tag_encoding, .. } => match tag_encoding {
                         TagEncoding::Direct => {
-                            let cases =
-                                if matches!(ty_kind, TyKind::RigidTy(RigidTy::Coroutine(..))) {
-                                    before.goto_expr
-                                } else {
-                                    before.goto_expr.member("cases", &self.symbol_table)
-                                };
+                            let cases = if is_coroutine(ty_kind) {
+                                before.goto_expr
+                            } else {
+                                before.goto_expr.member("cases", &self.symbol_table)
+                            };
                             cases.member(case_name, &self.symbol_table)
                         }
                         TagEncoding::Niche { .. } => {
@@ -782,6 +783,10 @@ impl<'tcx> GotocCtx<'tcx> {
 
 fn is_box(ty: Ty) -> bool {
     matches!(ty.kind(), TyKind::RigidTy(RigidTy::Adt(def, _)) if def.is_box())
+}
+
+fn is_coroutine(ty_kind: TyKind) -> bool {
+    matches!(ty_kind, TyKind::RigidTy(RigidTy::Coroutine(..)))
 }
 
 /// Extract the data pointer from a projection.

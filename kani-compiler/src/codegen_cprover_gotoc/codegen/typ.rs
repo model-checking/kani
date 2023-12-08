@@ -437,19 +437,19 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     pub fn local_ty(&self, l: Local) -> Ty<'tcx> {
-        self.monomorphize(self.current_fn().mir().local_decls()[l].ty)
+        self.monomorphize(self.current_fn().body_internal().local_decls()[l].ty)
     }
 
     pub fn rvalue_ty(&self, rv: &Rvalue<'tcx>) -> Ty<'tcx> {
-        self.monomorphize(rv.ty(self.current_fn().mir().local_decls(), self.tcx))
+        self.monomorphize(rv.ty(self.current_fn().body_internal().local_decls(), self.tcx))
     }
 
     pub fn operand_ty(&self, o: &Operand<'tcx>) -> Ty<'tcx> {
-        self.monomorphize(o.ty(self.current_fn().mir().local_decls(), self.tcx))
+        self.monomorphize(o.ty(self.current_fn().body_internal().local_decls(), self.tcx))
     }
 
     pub fn place_ty(&self, p: &Place<'tcx>) -> Ty<'tcx> {
-        self.monomorphize(p.ty(self.current_fn().mir().local_decls(), self.tcx).ty)
+        self.monomorphize(p.ty(self.current_fn().body_internal().local_decls(), self.tcx).ty)
     }
 
     /// Is the MIR type a zero-sized type.
@@ -1711,7 +1711,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     // components as parameters with a special naming convention
                     // so that we can "retuple" them in the function prelude.
                     // See: compiler/rustc_codegen_llvm/src/gotoc/mod.rs:codegen_function_prelude
-                    if let Some(spread) = self.current_fn().mir().spread_arg {
+                    if let Some(spread) = self.current_fn().body_internal().spread_arg {
                         if lc.index() >= spread.index() {
                             let (name, _) = self.codegen_spread_arg_name(&lc);
                             ident = name;

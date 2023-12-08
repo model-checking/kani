@@ -85,8 +85,8 @@ impl<'tcx> CurrentFnCtx<'tcx> {
         self.krate.to_string()
     }
 
-    /// The MIR for the function we are currently compiling using internal APIs.
-    pub fn mir(&self) -> &'tcx InternalBody<'tcx> {
+    /// The internal MIR for the function we are currently compiling using internal APIs.
+    pub fn body_internal(&self) -> &'tcx InternalBody<'tcx> {
         self.mir
     }
 

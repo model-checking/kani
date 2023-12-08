@@ -16,6 +16,7 @@ use rustc_span::Span;
 use rustc_target::abi::{Size, TagEncoding, Variants};
 use stable_mir::mir::mono::Instance as InstanceStable;
 use stable_mir::ty::{FnDef, GenericArgs, Span as SpanStable};
+use stable_mir::CrateDef;
 use tracing::{debug, trace};
 
 enum AllocData<'a> {
@@ -709,7 +710,8 @@ impl<'tcx> GotocCtx<'tcx> {
         args: &GenericArgs,
         span: Option<SpanStable>,
     ) -> Expr {
-        let instance = InstanceStable::resolve(def, args).unwrap();
+        let instance = InstanceStable::resolve(def, args)
+            .expect(&format!("Failed to instantiate `{}` with `{args:?}`", def.name()));
         self.codegen_fn_item(
             rustc_internal::internal(instance),
             rustc_internal::internal(span).as_ref(),
