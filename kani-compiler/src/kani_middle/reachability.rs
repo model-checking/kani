@@ -153,11 +153,7 @@ impl<'tcx> MonoItemsCollector<'tcx> {
     /// instruction looking for the items that should be included in the compilation.
     fn reachable_items(&mut self) {
         while let Some(to_visit) = self.queue.pop() {
-            // TODO: This should only check is_foreign_item() or even `has_body()`.
-            // We need https://github.com/rust-lang/rust/pull/118681 to land first.
-            if !self.collected.contains(&to_visit)
-                && !self.tcx.is_foreign_item(rustc_internal::internal(to_visit.clone()).def_id())
-            {
+            if !self.collected.contains(&to_visit) {
                 self.collected.insert(to_visit.clone());
                 let next_items = match &to_visit {
                     MonoItem::Fn(instance) => self.visit_fn(*instance),
