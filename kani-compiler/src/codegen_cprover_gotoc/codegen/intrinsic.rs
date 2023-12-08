@@ -1729,7 +1729,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // [u32; n]: translated wrapped in a struct
         let indexes = fargs.remove(0);
 
-        let (_, vec_subtype) = rust_arg_types[0].simd_size_and_type(self.tcx);
+        let (in_type_len, vec_subtype) = rust_arg_types[0].simd_size_and_type(self.tcx);
         let (ret_type_len, ret_type_subtype) = rust_ret_type.simd_size_and_type(self.tcx);
         if ret_type_len != n {
             let err_msg = format!(
@@ -1749,7 +1749,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // An unsigned type here causes an invariant violation in CBMC.
         // Issue: https://github.com/diffblue/cbmc/issues/6298
         let st_rep = Type::ssize_t();
-        let n_rep = Expr::int_constant(n, st_rep.clone());
+        let n_rep = Expr::int_constant(in_type_len, st_rep.clone());
 
         // P = indexes.expanded_map(v -> if v < N then vec1[v] else vec2[v-N])
         let elems = (0..n)
