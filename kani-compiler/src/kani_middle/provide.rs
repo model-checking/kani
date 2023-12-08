@@ -76,11 +76,14 @@ fn collect_and_partition_mono_items(
     tcx: TyCtxt,
     key: (),
 ) -> queries::collect_and_partition_mono_items::ProvidedValue {
-    let entry_fn = tcx.entry_fn(()).map(|(id, _)| id);
-    let local_reachable = filter_crate_items(tcx, |_, def_id| {
-        tcx.is_reachable_non_generic(def_id) || entry_fn == Some(def_id)
-    });
-    // We do not actually need the value returned here.
-    collect_reachable_items(tcx, &local_reachable);
+    rustc_smir::rustc_internal::run(tcx, || {
+        let entry_fn = tcx.entry_fn(()).map(|(id, _)| id);
+        let local_reachable = filter_crate_items(tcx, |_, def_id| {
+            tcx.is_reachable_non_generic(def_id) || entry_fn == Some(def_id)
+        });
+        // We do not actually need the value returned here.
+        collect_reachable_items(tcx, &local_reachable);
+    })
+    .unwrap();
     (rustc_interface::DEFAULT_QUERY_PROVIDERS.collect_and_partition_mono_items)(tcx, key)
 }
