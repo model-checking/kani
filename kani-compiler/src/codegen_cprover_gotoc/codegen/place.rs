@@ -168,7 +168,6 @@ impl ProjectedPlace {
         fat_ptr_mir_typ: Option<Ty>,
         ctx: &mut GotocCtx,
     ) -> Result<Self, UnimplementedData> {
-        let fat_ptr_mir_typ = fat_ptr_mir_typ;
         if let Some(fat_ptr) = &fat_ptr_goto_expr {
             assert!(
                 fat_ptr.typ().is_rust_fat_ptr(&ctx.symbol_table),
