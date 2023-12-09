@@ -1,61 +1,6 @@
-check_always_out_bounds::check_0.pointer_dereference\
-Status: FAILURE\
-Description: "dereference failure: pointer NULL"\
-function check_always_out_bounds::check_0
+Checking harness check_always_out_bounds...
 
-check_always_out_bounds::check_0.pointer_dereference\
-Status: FAILURE\
-Description: "dereference failure: pointer outside object bounds"\
-function check_always_out_bounds::check_0
+Failed Checks: assumption failed
+in <usize as std::slice::SliceIndex<[u8]>>::get_unchecked
 
-check_always_out_bounds::check_0.pointer_dereference\
-Status: FAILURE\
-Description: "dereference failure: invalid integer address"\
-function check_always_out_bounds::check_0
-
-check_always_out_bounds::check_1.pointer_dereference\
-Status: FAILURE\
-Description: "dereference failure: pointer outside object bounds"\
-function check_always_out_bounds::check_1
-
-check_always_out_bounds::check_2.pointer_dereference\
-Status: FAILURE\
-Description: "dereference failure: pointer outside object bounds"\
-function check_always_out_bounds::check_2
-
-check_always_out_bounds::check_3.pointer_dereference\
-Status: FAILURE\
-Description: "dereference failure: pointer outside object bounds"\
-function check_always_out_bounds::check_3
-
-check_always_out_bounds::check_4.pointer_dereference\
-Status: FAILURE\
-Description: "dereference failure: pointer outside object bounds"\
-function check_always_out_bounds::check_4
-
-check_always_out_bounds::check_5.pointer_dereference\
-Status: FAILURE\
-Description: "dereference failure: pointer outside object bounds"\
-function check_always_out_bounds::check_5
-
-check_always_out_bounds::check_6.pointer_dereference\
-Status: FAILURE\
-Description: "dereference failure: pointer outside object bounds"\
-function check_always_out_bounds::check_6
-
-check_always_out_bounds::check_7.pointer_dereference\
-Status: FAILURE\
-Description: "dereference failure: pointer outside object bounds"\
-function check_always_out_bounds::check_7
-
-check_always_out_bounds::check_8.pointer_dereference\
-Status: FAILURE\
-Description: "dereference failure: pointer outside object bounds"\
-function check_always_out_bounds::check_8
-
-check_always_out_bounds::check_9.cover\
-Status: UNREACHABLE\
-Description: "cover condition: *val == 0"\
-function check_always_out_bounds::check_9
-
-
+Verification failed for - check_always_out_bounds

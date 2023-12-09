@@ -151,7 +151,6 @@ impl From<&Terminator> for Key {
             TerminatorKind::Assert { .. } => Key("Assert"),
             TerminatorKind::Call { .. } => Key("Call"),
             TerminatorKind::Drop { .. } => Key("Drop"),
-            TerminatorKind::CoroutineDrop => Key("CoroutineDrop"),
             TerminatorKind::Goto { .. } => Key("Goto"),
             TerminatorKind::InlineAsm { .. } => Key("InlineAsm"),
             TerminatorKind::Resume { .. } => Key("Resume"),

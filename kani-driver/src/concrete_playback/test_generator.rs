@@ -163,7 +163,7 @@ impl KaniSession {
             let mut curr_line_num = 0;
 
             // Use a buffered reader/writer to generate the unit test line by line
-            for line in source_reader.lines().flatten() {
+            for line in source_reader.lines().map_while(Result::ok) {
                 curr_line_num += 1;
                 writeln!(temp_file, "{line}")?;
                 if curr_line_num == proof_harness_end_line {
