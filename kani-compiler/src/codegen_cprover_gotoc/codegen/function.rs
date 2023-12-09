@@ -28,7 +28,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// - Indices [1, N] represent the function parameters where N is the number of parameters.
     /// - Indices that are greater than N represent local variables.
     fn codegen_declare_variables(&mut self) {
-        let mir = self.current_fn().mir();
+        let mir = self.current_fn().body_internal();
         let ldecls = mir.local_decls();
         let num_args = self.get_params_size();
         ldecls.indices().enumerate().for_each(|(idx, lc)| {
@@ -76,7 +76,7 @@ impl<'tcx> GotocCtx<'tcx> {
             debug!("Double codegen of {:?}", old_sym);
         } else {
             assert!(old_sym.is_function());
-            let mir = self.current_fn().mir();
+            let mir = self.current_fn().body_internal();
             self.print_instance(instance, mir);
             self.codegen_function_prelude();
             self.codegen_declare_variables();
@@ -94,7 +94,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Codegen changes required due to the function ABI.
     /// We currently untuple arguments for RustCall ABI where the `spread_arg` is set.
     fn codegen_function_prelude(&mut self) {
-        let mir = self.current_fn().mir();
+        let mir = self.current_fn().body_internal();
         if let Some(spread_arg) = mir.spread_arg {
             self.codegen_spread_arg(mir, spread_arg);
         }
@@ -228,7 +228,7 @@ impl<'tcx> GotocCtx<'tcx> {
         debug!(krate = self.current_fn().krate().as_str());
         debug!(is_std = self.current_fn().is_std());
         self.ensure(&self.current_fn().name(), |ctx, fname| {
-            let mir = ctx.current_fn().mir();
+            let mir = ctx.current_fn().body_internal();
             Symbol::function(
                 fname,
                 ctx.fn_typ(),

@@ -10,9 +10,13 @@ use rustc_middle::mir::interpret::{read_target_uint, AllocId, Allocation, Global
 use rustc_middle::mir::{Const as mirConst, ConstOperand, ConstValue, Operand, UnevaluatedConst};
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{self, Const, ConstKind, FloatTy, Instance, IntTy, Ty, Uint, UintTy};
+use rustc_smir::rustc_internal;
 use rustc_span::def_id::DefId;
 use rustc_span::Span;
 use rustc_target::abi::{Size, TagEncoding, Variants};
+use stable_mir::mir::mono::Instance as InstanceStable;
+use stable_mir::ty::{FnDef, GenericArgs, Span as SpanStable};
+use stable_mir::CrateDef;
 use tracing::{debug, trace};
 
 enum AllocData<'a> {
@@ -702,6 +706,20 @@ impl<'tcx> GotocCtx<'tcx> {
         self.codegen_fn_item(instance, span)
     }
 
+    pub fn codegen_fndef_stable(
+        &mut self,
+        def: FnDef,
+        args: &GenericArgs,
+        span: Option<SpanStable>,
+    ) -> Expr {
+        let instance = InstanceStable::resolve(def, args)
+            .expect(&format!("Failed to instantiate `{}` with `{args:?}`", def.name()));
+        self.codegen_fn_item(
+            rustc_internal::internal(instance),
+            rustc_internal::internal(span).as_ref(),
+        )
+    }
+
     /// Ensure that the given instance is in the symbol table, returning the symbol.
     ///
     /// FIXME: The function should not have to return the type of the function symbol as well
@@ -733,6 +751,12 @@ impl<'tcx> GotocCtx<'tcx> {
         let (func_symbol, func_typ) = self.codegen_func_symbol(instance);
         Expr::symbol_expression(func_symbol.name, func_typ)
             .with_location(self.codegen_span_option(span.cloned()))
+    }
+
+    pub fn codegen_func_expr_stable(&mut self, instance: InstanceStable, span: SpanStable) -> Expr {
+        let (func_symbol, func_typ) = self.codegen_func_symbol(rustc_internal::internal(instance));
+        Expr::symbol_expression(func_symbol.name, func_typ)
+            .with_location(self.codegen_span_stable(span))
     }
 
     /// Generate a goto expression referencing the singleton value for a MIR "function item".

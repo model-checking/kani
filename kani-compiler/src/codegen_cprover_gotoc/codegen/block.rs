@@ -3,7 +3,12 @@
 
 use crate::codegen_cprover_gotoc::GotocCtx;
 use rustc_middle::mir::{BasicBlock, BasicBlockData};
+use stable_mir::mir::BasicBlockIdx;
 use tracing::debug;
+
+pub fn bb_label(bb: BasicBlockIdx) -> String {
+    format!("bb{bb}")
+}
 
 impl<'tcx> GotocCtx<'tcx> {
     /// Generates Goto-C for a basic block.
@@ -14,7 +19,6 @@ impl<'tcx> GotocCtx<'tcx> {
     /// `self.current_fn_mut().push_onto_block(...)`
     pub fn codegen_block(&mut self, bb: BasicBlock, bbd: &BasicBlockData<'tcx>) {
         debug!(?bb, "Codegen basicblock");
-        self.current_fn_mut().set_current_bb(bb);
         let label: String = self.current_fn().find_label(&bb);
         let check_coverage = self.queries.args().check_coverage;
         // the first statement should be labelled. if there is no statements, then the
@@ -67,6 +71,5 @@ impl<'tcx> GotocCtx<'tcx> {
                 self.current_fn_mut().push_onto_block(tcode);
             }
         }
-        self.current_fn_mut().reset_current_bb();
     }
 }
