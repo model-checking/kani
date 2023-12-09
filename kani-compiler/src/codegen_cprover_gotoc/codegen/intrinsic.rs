@@ -429,7 +429,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let e = self.codegen_get_discriminant(
                     fargs.remove(0).dereference(),
                     rustc_internal::stable(ty),
-                    ret_ty,
+                    rustc_internal::stable(ret_ty),
                 );
                 self.codegen_expr_to_place(p, e)
             }

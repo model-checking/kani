@@ -16,7 +16,7 @@
 use rustc_hir::lang_items::LangItem;
 use rustc_middle::traits::{ImplSource, ImplSourceUserDefinedData};
 use rustc_middle::ty::adjustment::CustomCoerceUnsized;
-use rustc_middle::ty::{self, ParamEnv, Ty, TyCtxt};
+use rustc_middle::ty::{ParamEnv, Ty, TyCtxt};
 use rustc_middle::ty::{TraitRef, TypeAndMut};
 use rustc_smir::rustc_internal;
 use stable_mir::ty::{RigidTy, Ty as TyStable, TyKind};
@@ -202,10 +202,10 @@ impl<'tcx> Iterator for CoerceUnsizedIterator<'tcx> {
         // the conversion.
         let src_ty = self.src_ty.take().unwrap();
         let dst_ty = self.dst_ty.take().unwrap();
-        let field = match (&src_ty.kind(), &dst_ty.kind()) {
+        let field = match (src_ty.kind(), dst_ty.kind()) {
             (
-                &TyKind::RigidTy(RigidTy::Adt(src_def, src_args)),
-                &TyKind::RigidTy(RigidTy::Adt(dst_def, dst_args)),
+                TyKind::RigidTy(RigidTy::Adt(src_def, ref src_args)),
+                TyKind::RigidTy(RigidTy::Adt(dst_def, ref dst_args)),
             ) => {
                 // Handle smart pointers by using CustomCoerceUnsized to find the field being
                 // coerced.
@@ -262,6 +262,6 @@ fn custom_coerce_unsize_info<'tcx>(
 }
 
 /// Extract pointee type from builtin pointer types.
-fn extract_pointee(typ: TyStable) -> Option<Ty> {
+fn extract_pointee<'tcx>(typ: TyStable) -> Option<Ty<'tcx>> {
     rustc_internal::internal(typ).builtin_deref(true).map(|TypeAndMut { ty, .. }| ty)
 }

@@ -11,13 +11,16 @@ use cbmc::goto_program::Type;
 use rustc_middle::mir;
 use rustc_middle::mir::visit::{MutVisitor, NonUseContext, PlaceContext};
 use rustc_middle::mir::{
-    Operand as OperandInternal, Place as PlaceInternal, Rvalue as RvalueInternal,
+    Location, Operand as OperandInternal, Place as PlaceInternal, Rvalue as RvalueInternal,
 };
-use rustc_middle::ty::{self, Const as ConstInternal, Ty as TyInternal, TyCtxt};
+use rustc_middle::ty::layout::{LayoutOf, TyAndLayout};
+use rustc_middle::ty::{self, Const as ConstInternal, GenericArgsRef, Ty as TyInternal, TyCtxt};
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{Local, Operand, Place, Rvalue};
 use stable_mir::ty::{Const, RigidTy, Ty, TyKind};
+
+pub use self::ty_utils::*;
 
 impl<'tcx> GotocCtx<'tcx> {
     pub fn place_ty_stable(&self, place: &Place) -> Ty {
@@ -26,6 +29,10 @@ impl<'tcx> GotocCtx<'tcx> {
 
     pub fn codegen_ty_stable(&mut self, ty: Ty) -> Type {
         self.codegen_ty(rustc_internal::internal(ty))
+    }
+
+    pub fn codegen_ty_ref_stable(&mut self, ty: Ty) -> Type {
+        self.codegen_ty_ref(rustc_internal::internal(ty))
     }
 
     pub fn local_ty_stable(&mut self, local: Local) -> Ty {
@@ -38,6 +45,10 @@ impl<'tcx> GotocCtx<'tcx> {
 
     pub fn is_zst_stable(&self, ty: Ty) -> bool {
         self.is_zst(rustc_internal::internal(ty))
+    }
+
+    pub fn layout_of_stable(&self, ty: Ty) -> TyAndLayout<'tcx> {
+        self.layout_of(rustc_internal::internal(ty))
     }
 
     pub fn codegen_fndef_type_stable(&mut self, instance: Instance) -> Type {
@@ -57,12 +68,20 @@ impl<'tcx> GotocCtx<'tcx> {
         self.use_fat_pointer(rustc_internal::internal(pointer_ty))
     }
 
+    pub fn use_thin_pointer_stable(&self, pointer_ty: Ty) -> bool {
+        self.use_thin_pointer(rustc_internal::internal(pointer_ty))
+    }
+
     pub fn is_fat_pointer_stable(&self, pointer_ty: Ty) -> bool {
         self.is_fat_pointer(rustc_internal::internal(pointer_ty))
     }
 
     pub fn is_vtable_fat_pointer_stable(&self, pointer_ty: Ty) -> bool {
         self.is_vtable_fat_pointer(rustc_internal::internal(pointer_ty))
+    }
+
+    pub fn use_vtable_fat_pointer_stable(&self, pointer_ty: Ty) -> bool {
+        self.use_vtable_fat_pointer(rustc_internal::internal(pointer_ty))
     }
 
     pub fn vtable_name_stable(&self, ty: Ty) -> String {
@@ -125,8 +144,8 @@ impl<'a, 'tcx> StableConverter<'a, 'tcx> {
 
 pub fn pointee_type_stable(ty: Ty) -> Option<Ty> {
     match ty.kind() {
-        TyKind::RigidTy(RigidTy::Ref(_, pointee_type, _))
-        | TyKind::RigidTy(RigidTy::RawPtr(ty, ..)) => Some(pointee_type),
+        TyKind::RigidTy(RigidTy::Ref(_, pointee_ty, _))
+        | TyKind::RigidTy(RigidTy::RawPtr(pointee_ty, ..)) => Some(pointee_ty),
         _ => None,
     }
 }
@@ -144,6 +163,10 @@ impl<'a, 'tcx> MutVisitor<'tcx> for StableConverter<'a, 'tcx> {
         *ct = self.gcx.monomorphize(*ct);
     }
 
+    fn visit_args(&mut self, args: &mut GenericArgsRef<'tcx>, _: Location) {
+        *args = self.gcx.monomorphize(*args);
+    }
+
     fn visit_constant(&mut self, constant: &mut mir::ConstOperand<'tcx>, location: mir::Location) {
         let const_ = self.gcx.monomorphize(constant.const_);
         let val = match const_.eval(self.gcx.tcx, ty::ParamEnv::reveal_all(), None) {
@@ -156,5 +179,51 @@ impl<'a, 'tcx> MutVisitor<'tcx> for StableConverter<'a, 'tcx> {
         let ty = constant.ty();
         constant.const_ = mir::Const::Val(val, ty);
         self.super_constant(constant, location);
+    }
+}
+
+/// Utility methods for types that we expect to be incorporated into StableMIR.
+pub mod ty_utils {
+    use rustc_smir::rustc_internal;
+    use stable_mir::ty::{RigidTy, TyKind};
+
+    pub fn is_signed(kind: &TyKind) -> bool {
+        matches!(kind, TyKind::RigidTy(RigidTy::Int(..)))
+    }
+
+    pub fn is_integral(kind: &TyKind) -> bool {
+        matches!(kind, TyKind::RigidTy(RigidTy::Int(..) | RigidTy::Uint(..)))
+    }
+
+    pub fn is_array(kind: &TyKind) -> bool {
+        matches!(kind, TyKind::RigidTy(RigidTy::Array(..)))
+    }
+
+    pub fn is_adt(kind: &TyKind) -> bool {
+        matches!(kind, TyKind::RigidTy(RigidTy::Adt(..)))
+    }
+
+    pub fn is_char(kind: &TyKind) -> bool {
+        matches!(kind, TyKind::RigidTy(RigidTy::Char))
+    }
+
+    pub fn is_float(kind: &TyKind) -> bool {
+        matches!(kind, TyKind::RigidTy(RigidTy::Float(..)))
+    }
+
+    pub fn is_numeric(kind: &TyKind) -> bool {
+        is_integral(kind) || is_float(kind)
+    }
+
+    pub fn is_coroutine(kind: &TyKind) -> bool {
+        matches!(kind, TyKind::RigidTy(RigidTy::Coroutine(..)))
+    }
+
+    pub fn is_simd(kind: &TyKind) -> bool {
+        matches!(kind, TyKind::RigidTy(RigidTy::Adt(def, ..)) if rustc_internal::internal(def).repr().simd() )
+    }
+
+    pub fn is_box(kind: &TyKind) -> bool {
+        matches!(kind, TyKind::RigidTy(RigidTy::Adt(def, _)) if def.is_box())
     }
 }
