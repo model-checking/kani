@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use super::typ::pointee_type;
-use crate::codegen_cprover_gotoc::codegen::place::{ProjectedPlace, TypeOrVariant};
+use crate::codegen_cprover_gotoc::codegen::place::ProjectedPlace;
 use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::codegen_cprover_gotoc::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
@@ -11,7 +11,7 @@ use crate::kani_middle::coercion::{
 };
 use crate::unwrap_or_return_codegen_unimplemented;
 use cbmc::goto_program::{
-    arithmetic_overflow_result_type, BinaryOperator, Expr, Location, Stmt, Symbol, Type,
+    arithmetic_overflow_result_type, BinaryOperator, Expr, Location, Stmt, Type,
     ARITH_OVERFLOW_OVERFLOWED_FIELD, ARITH_OVERFLOW_RESULT_FIELD,
 };
 use cbmc::MachineModel;
@@ -22,6 +22,7 @@ use rustc_middle::mir::{AggregateKind, BinOp, CastKind, NullOp, Operand, Place, 
 use rustc_middle::ty::adjustment::PointerCoercion;
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{self, Instance, IntTy, Ty, TyCtxt, UintTy, VtblEntry};
+use rustc_smir::rustc_internal;
 use rustc_target::abi::{FieldIdx, FieldsShape, Size, TagEncoding, VariantIdx, Variants};
 use std::collections::BTreeMap;
 use tracing::{debug, trace, warn};
@@ -552,15 +553,10 @@ impl<'tcx> GotocCtx<'tcx> {
         stmts.push(decl);
         if !operands.is_empty() {
             // 2- Initialize the members of the temporary variant.
-            let initial_projection = ProjectedPlace::try_new(
-                temp_var.clone(),
-                TypeOrVariant::Type(res_ty),
-                None,
-                None,
-                self,
-            )
-            .unwrap();
-            let variant_proj = self.codegen_variant_lvalue(initial_projection, variant_index);
+            let initial_projection =
+                ProjectedPlace::try_new_internal(temp_var.clone(), res_ty, self).unwrap();
+            let variant_proj = self
+                .codegen_variant_lvalue(initial_projection, rustc_internal::stable(variant_index));
             let variant_expr = variant_proj.goto_expr.clone();
             let layout = self.layout_of(res_ty);
             let fields = match &layout.variants {
@@ -1169,7 +1165,7 @@ impl<'tcx> GotocCtx<'tcx> {
         idx: usize,
     ) -> Expr {
         debug!(?instance, typ=?t, %idx, "codegen_vtable_method_field");
-        let vtable_field_name = self.vtable_field_name(instance.def_id(), idx);
+        let vtable_field_name = self.vtable_field_name(idx);
         let vtable_type = Type::struct_tag(self.vtable_name(t));
         let field_type =
             vtable_type.lookup_field_type(vtable_field_name, &self.symbol_table).unwrap();
@@ -1232,34 +1228,10 @@ impl<'tcx> GotocCtx<'tcx> {
                 .address_of()
                 .cast_to(trait_fn_ty)
         } else {
-            // We skip an entire submodule of the standard library, so drop is missing
-            // for it. Build and insert a function that just calls an unimplemented block
-            // to maintain soundness.
-            let drop_sym_name = format!("drop_unimplemented_{}", self.symbol_name(drop_instance));
-            let pretty_name =
-                format!("drop_unimplemented<{}>", self.readable_instance_name(drop_instance));
-            let drop_sym = self.ensure(&drop_sym_name, |ctx, name| {
-                // Function body
-                let unimplemented = ctx.codegen_unimplemented_stmt(
-                    format!("drop_in_place for {drop_instance}").as_str(),
-                    Location::none(),
-                    "https://github.com/model-checking/kani/issues/281",
-                );
-
-                // Declare symbol for the single, self parameter
-                let param_typ = ctx.codegen_ty(trait_ty).to_pointer();
-                let param_sym = ctx.gen_function_parameter(0, &drop_sym_name, param_typ);
-
-                // Build and insert the function itself
-                Symbol::function(
-                    name,
-                    Type::code(vec![param_sym.to_function_parameter()], Type::empty()),
-                    Some(Stmt::block(vec![unimplemented], Location::none())),
-                    pretty_name,
-                    Location::none(),
-                )
-            });
-            drop_sym.to_expr().address_of().cast_to(trait_fn_ty)
+            unreachable!(
+                "Missing drop implementation for {}",
+                self.readable_instance_name(drop_instance)
+            );
         }
     }
 

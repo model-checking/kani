@@ -6,7 +6,6 @@ use super::PropertyClass;
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::{Expr, Location, Stmt, Type};
-use rustc_hir::def_id::DefId;
 use rustc_middle::mir;
 use rustc_middle::mir::{
     AssertKind, BasicBlock, NonDivergingIntrinsic, Operand, Place, Statement, StatementKind,
@@ -15,6 +14,7 @@ use rustc_middle::mir::{
 use rustc_middle::ty;
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{Instance, InstanceDef, Ty};
+use rustc_smir::rustc_internal;
 use rustc_span::Span;
 use rustc_target::abi::VariantIdx;
 use rustc_target::abi::{FieldsShape, Primitive, TagEncoding, Variants};
@@ -175,8 +175,10 @@ impl<'tcx> GotocCtx<'tcx> {
                     msg.description()
                 };
 
-                let (msg_str, reach_stmt) =
-                    self.codegen_reachability_check(msg.to_owned(), Some(term.source_info.span));
+                let (msg_str, reach_stmt) = self.codegen_reachability_check(
+                    msg.to_owned(),
+                    rustc_internal::stable(term.source_info.span),
+                );
 
                 Stmt::block(
                     vec![
@@ -531,8 +533,16 @@ impl<'tcx> GotocCtx<'tcx> {
                     self.codegen_untupled_args(instance, &mut fargs, args.last());
                 }
 
-                if let Some(hk) = self.hooks.hook_applies(self.tcx, instance) {
-                    return hk.handle(self, instance, fargs, *destination, *target, Some(span));
+                let stable_instance = rustc_internal::stable(instance);
+                if let Some(hk) = self.hooks.hook_applies(self.tcx, stable_instance) {
+                    return hk.handle(
+                        self,
+                        stable_instance,
+                        fargs,
+                        rustc_internal::stable(destination),
+                        target.map(BasicBlock::as_usize),
+                        rustc_internal::stable(span),
+                    );
                 }
 
                 let mut stmts: Vec<Stmt> = match instance.def {
@@ -541,16 +551,9 @@ impl<'tcx> GotocCtx<'tcx> {
                         return Stmt::goto(self.current_fn().find_label(&target.unwrap()), loc);
                     }
                     // Handle a virtual function call via a vtable lookup
-                    InstanceDef::Virtual(def_id, idx) => {
+                    InstanceDef::Virtual(_, idx) => {
                         let self_ty = self.operand_ty(&args[0]);
-                        self.codegen_virtual_funcall(
-                            self_ty,
-                            def_id,
-                            idx,
-                            destination,
-                            &mut fargs,
-                            loc,
-                        )
+                        self.codegen_virtual_funcall(self_ty, idx, destination, &mut fargs, loc)
                     }
                     // Normal, non-virtual function calls
                     InstanceDef::Item(..)
@@ -623,13 +626,12 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_virtual_funcall(
         &mut self,
         self_ty: Ty<'tcx>,
-        def_id: DefId,
         idx: usize,
         place: &Place<'tcx>,
         fargs: &mut [Expr],
         loc: Location,
     ) -> Vec<Stmt> {
-        let vtable_field_name = self.vtable_field_name(def_id, idx);
+        let vtable_field_name = self.vtable_field_name(idx);
         trace!(?self_ty, ?place, ?vtable_field_name, "codegen_virtual_funcall");
         debug!(?fargs, "codegen_virtual_funcall");
 
