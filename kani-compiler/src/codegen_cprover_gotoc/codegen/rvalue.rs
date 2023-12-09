@@ -11,7 +11,7 @@ use crate::kani_middle::coercion::{
 };
 use crate::unwrap_or_return_codegen_unimplemented;
 use cbmc::goto_program::{
-    arithmetic_overflow_result_type, BinaryOperator, Expr, Location, Stmt, Symbol, Type,
+    arithmetic_overflow_result_type, BinaryOperator, Expr, Location, Stmt, Type,
     ARITH_OVERFLOW_OVERFLOWED_FIELD, ARITH_OVERFLOW_RESULT_FIELD,
 };
 use cbmc::MachineModel;
@@ -1165,7 +1165,7 @@ impl<'tcx> GotocCtx<'tcx> {
         idx: usize,
     ) -> Expr {
         debug!(?instance, typ=?t, %idx, "codegen_vtable_method_field");
-        let vtable_field_name = self.vtable_field_name(instance.def_id(), idx);
+        let vtable_field_name = self.vtable_field_name(idx);
         let vtable_type = Type::struct_tag(self.vtable_name(t));
         let field_type =
             vtable_type.lookup_field_type(vtable_field_name, &self.symbol_table).unwrap();
@@ -1228,34 +1228,10 @@ impl<'tcx> GotocCtx<'tcx> {
                 .address_of()
                 .cast_to(trait_fn_ty)
         } else {
-            // We skip an entire submodule of the standard library, so drop is missing
-            // for it. Build and insert a function that just calls an unimplemented block
-            // to maintain soundness.
-            let drop_sym_name = format!("drop_unimplemented_{}", self.symbol_name(drop_instance));
-            let pretty_name =
-                format!("drop_unimplemented<{}>", self.readable_instance_name(drop_instance));
-            let drop_sym = self.ensure(&drop_sym_name, |ctx, name| {
-                // Function body
-                let unimplemented = ctx.codegen_unimplemented_stmt(
-                    format!("drop_in_place for {drop_instance}").as_str(),
-                    Location::none(),
-                    "https://github.com/model-checking/kani/issues/281",
-                );
-
-                // Declare symbol for the single, self parameter
-                let param_typ = ctx.codegen_ty(trait_ty).to_pointer();
-                let param_sym = ctx.gen_function_parameter(0, &drop_sym_name, param_typ);
-
-                // Build and insert the function itself
-                Symbol::function(
-                    name,
-                    Type::code(vec![param_sym.to_function_parameter()], Type::empty()),
-                    Some(Stmt::block(vec![unimplemented], Location::none())),
-                    pretty_name,
-                    Location::none(),
-                )
-            });
-            drop_sym.to_expr().address_of().cast_to(trait_fn_ty)
+            unreachable!(
+                "Missing drop implementation for {}",
+                self.readable_instance_name(drop_instance)
+            );
         }
     }
 

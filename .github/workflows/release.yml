@@ -30,7 +30,7 @@ jobs:
       crate_version: ${{ steps.bundle.outputs.crate_version }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
@@ -135,7 +135,7 @@ jobs:
           cargo kani setup --use-local-bundle ./${{ matrix.prev_job.bundle }}
 
       - name: Checkout tests
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Run tests
         # TODO: Customize compiletest to run custom kani. For now, just run a few cargo kani tests.
@@ -160,7 +160,7 @@ jobs:
       KANI_SRC: ./kani_src
     steps:
       - name: Checkout Kani
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           path: ${{ env.KANI_SRC }}
 
@@ -204,7 +204,7 @@ jobs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Get version
         run: |
@@ -235,7 +235,7 @@ jobs:
 
       - name: Create release
         id: create_release
-        uses: ncipollo/release-action@v1.12.0
+        uses: ncipollo/release-action@v1.13.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -258,7 +258,7 @@ jobs:
       target: x86_64-unknown-linux-gnu
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
@@ -271,7 +271,7 @@ jobs:
           cargo package -p kani-verifier
 
       - name: 'Login to GitHub Container Registry'
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}

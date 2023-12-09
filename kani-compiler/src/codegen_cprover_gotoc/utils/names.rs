@@ -5,7 +5,6 @@
 
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::InternedString;
-use rustc_hir::def_id::DefId;
 use rustc_hir::def_id::LOCAL_CRATE;
 use rustc_middle::mir::mono::CodegenUnitNameBuilder;
 use rustc_middle::mir::Local;
@@ -83,12 +82,8 @@ impl<'tcx> GotocCtx<'tcx> {
     /// The name for the struct field on a vtable for a given function. Because generic
     /// functions can share the same name, we need to use the index of the entry in the
     /// vtable. This is the same index that will be passed in virtual function calls as
-    /// InstanceDef::Virtual(def_id, idx). We could use solely the index as a key into
-    /// the vtable struct, but we add the method name for debugging readability.
-    ///     Example: 3_vol
-    pub fn vtable_field_name(&self, _def_id: DefId, idx: usize) -> InternedString {
-        // format!("{}_{}", idx, with_no_trimmed_paths!(|| self.tcx.item_name(def_id)))
-        // TODO: use def_id https://github.com/model-checking/kani/issues/364
+    /// InstanceDef::Virtual(def_id, idx).
+    pub fn vtable_field_name(&self, idx: usize) -> InternedString {
         idx.to_string().into()
     }
 
