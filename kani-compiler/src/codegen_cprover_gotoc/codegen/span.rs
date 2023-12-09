@@ -9,13 +9,14 @@ use rustc_middle::mir::{Local, VarDebugInfoContents};
 use rustc_smir::rustc_internal;
 use rustc_span::Span;
 use stable_mir::mir::VarDebugInfo;
+use stable_mir::ty::Span as SpanStable;
 
 impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_span(&self, sp: &Span) -> Location {
-        self.stable_codegen_span(&rustc_internal::stable(sp))
+        self.codegen_span_stable(rustc_internal::stable(sp))
     }
 
-    pub fn stable_codegen_span(&self, sp: &stable_mir::ty::Span) -> Location {
+    pub fn codegen_span_stable(&self, sp: SpanStable) -> Location {
         let loc = sp.get_lines();
         Location::new(
             sp.get_filename().to_string(),
@@ -25,6 +26,9 @@ impl<'tcx> GotocCtx<'tcx> {
             loc.end_line,
             Some(loc.end_col),
         )
+    }
+    pub fn codegen_caller_span_stable(&self, sp: SpanStable) -> Location {
+        self.codegen_caller_span(&Some(rustc_internal::internal(sp)))
     }
 
     /// Get the location of the caller. This will attempt to reach the macro caller.
@@ -45,11 +49,11 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     pub fn find_debug_info(&self, l: &Local) -> Option<VarDebugInfo> {
-        rustc_internal::stable(self.current_fn().mir().var_debug_info.iter().find(|info| {
-            match info.value {
+        rustc_internal::stable(self.current_fn().body_internal().var_debug_info.iter().find(
+            |info| match info.value {
                 VarDebugInfoContents::Place(p) => p.local == *l && p.projection.len() == 0,
                 VarDebugInfoContents::Const(_) => false,
-            }
-        }))
+            },
+        ))
     }
 }
