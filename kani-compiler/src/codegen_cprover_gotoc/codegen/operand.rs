@@ -421,7 +421,8 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             (Scalar::Ptr(ptr, _size), _) => {
                 let res_t = self.codegen_ty(ty);
-                let (alloc_id, offset) = ptr.into_parts();
+                let (prov, offset) = ptr.into_parts();
+                let alloc_id = prov.alloc_id();
                 self.codegen_alloc_pointer(res_t, alloc_id, offset, span)
             }
             _ => unimplemented!(),
@@ -646,7 +647,8 @@ impl<'tcx> GotocCtx<'tcx> {
             Size::from_bytes(self.symbol_table.machine_model().pointer_width_in_bytes());
 
         let mut next_offset = Size::ZERO;
-        for &(offset, alloc_id) in alloc.provenance().ptrs().iter() {
+        for &(offset, prov) in alloc.provenance().ptrs().iter() {
+            let alloc_id = prov.alloc_id();
             if offset > next_offset {
                 let bytes = alloc.inspect_with_uninit_and_ptr_outside_interpreter(
                     next_offset.bytes_usize()..offset.bytes_usize(),

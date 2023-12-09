@@ -5,9 +5,10 @@
 
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::Location;
-use rustc_middle::mir::{Local, VarDebugInfo, VarDebugInfoContents};
+use rustc_middle::mir::{Local, VarDebugInfoContents};
 use rustc_smir::rustc_internal;
 use rustc_span::Span;
+use stable_mir::mir::VarDebugInfo;
 
 impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_span(&self, sp: &Span) -> Location {
@@ -43,10 +44,12 @@ impl<'tcx> GotocCtx<'tcx> {
         sp.map_or(Location::none(), |x| self.codegen_span(&x))
     }
 
-    pub fn find_debug_info(&self, l: &Local) -> Option<&VarDebugInfo<'tcx>> {
-        self.current_fn().mir().var_debug_info.iter().find(|info| match info.value {
-            VarDebugInfoContents::Place(p) => p.local == *l && p.projection.len() == 0,
-            VarDebugInfoContents::Const(_) => false,
-        })
+    pub fn find_debug_info(&self, l: &Local) -> Option<VarDebugInfo> {
+        rustc_internal::stable(self.current_fn().mir().var_debug_info.iter().find(|info| {
+            match info.value {
+                VarDebugInfoContents::Place(p) => p.local == *l && p.projection.len() == 0,
+                VarDebugInfoContents::Const(_) => false,
+            }
+        }))
     }
 }
