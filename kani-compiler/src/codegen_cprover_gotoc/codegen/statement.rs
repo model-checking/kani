@@ -6,7 +6,6 @@ use super::PropertyClass;
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::{Expr, Location, Stmt, Type};
-use rustc_hir::def_id::DefId;
 use rustc_middle::mir;
 use rustc_middle::mir::{
     AssertKind, BasicBlock, NonDivergingIntrinsic, Operand, Place, Statement, StatementKind,
@@ -541,16 +540,9 @@ impl<'tcx> GotocCtx<'tcx> {
                         return Stmt::goto(self.current_fn().find_label(&target.unwrap()), loc);
                     }
                     // Handle a virtual function call via a vtable lookup
-                    InstanceDef::Virtual(def_id, idx) => {
+                    InstanceDef::Virtual(_, idx) => {
                         let self_ty = self.operand_ty(&args[0]);
-                        self.codegen_virtual_funcall(
-                            self_ty,
-                            def_id,
-                            idx,
-                            destination,
-                            &mut fargs,
-                            loc,
-                        )
+                        self.codegen_virtual_funcall(self_ty, idx, destination, &mut fargs, loc)
                     }
                     // Normal, non-virtual function calls
                     InstanceDef::Item(..)
@@ -623,13 +615,12 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_virtual_funcall(
         &mut self,
         self_ty: Ty<'tcx>,
-        def_id: DefId,
         idx: usize,
         place: &Place<'tcx>,
         fargs: &mut [Expr],
         loc: Location,
     ) -> Vec<Stmt> {
-        let vtable_field_name = self.vtable_field_name(def_id, idx);
+        let vtable_field_name = self.vtable_field_name(idx);
         trace!(?self_ty, ?place, ?vtable_field_name, "codegen_virtual_funcall");
         debug!(?fargs, "codegen_virtual_funcall");
 
