@@ -4,14 +4,12 @@ use crate::codegen_cprover_gotoc::codegen::ty_stable::StableConverter;
 use crate::codegen_cprover_gotoc::utils::slice_fat_ptr;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::unwrap_or_return_codegen_unimplemented;
-use cbmc::btree_string_map;
 use cbmc::goto_program::{DatatypeComponent, Expr, ExprValue, Location, Stmt, Symbol, Type};
 use rustc_middle::mir::Operand as OperandInternal;
 use rustc_middle::ty::{Const as ConstInternal, Instance as InstanceInternal};
 use rustc_smir::rustc_internal;
 use rustc_span::def_id::DefId;
 use rustc_span::Span as SpanInternal;
-use rustc_target::abi::{TagEncoding, Variants};
 use stable_mir::mir::alloc::{AllocId, GlobalAlloc};
 use stable_mir::mir::mono::{Instance, StaticDef};
 use stable_mir::mir::Operand;
@@ -127,7 +125,7 @@ impl<'tcx> GotocCtx<'tcx> {
         ty: Ty,
         span: Option<Span>,
     ) -> Option<Expr> {
-        debug!(?alloc, "try_codegen_constant");
+        debug!(?alloc, ?ty, "try_codegen_constant");
         match ty.kind() {
             TyKind::RigidTy(RigidTy::Int(it)) => {
                 let val = alloc.read_int().unwrap();
@@ -189,7 +187,6 @@ impl<'tcx> GotocCtx<'tcx> {
             TyKind::RigidTy(RigidTy::Adt(adt, args)) if adt.kind().is_struct() => {
                 // Structs only have one variant.
                 let variant = adt.variants_iter().next().unwrap();
-                let overall_type = self.codegen_ty_stable(ty);
                 // There must be at least one field associated with the scalar data.
                 // Any additional fields correspond to ZSTs.
                 let field_types: Vec<_> =
@@ -197,7 +194,12 @@ impl<'tcx> GotocCtx<'tcx> {
                 // Check that there is a single non-ZST field.
                 let non_zst_types: Vec<_> =
                     field_types.iter().filter(|t| !self.is_zst_stable(**t)).collect();
+                debug!(len=?non_zst_types.len(), "non_zst_types");
                 if non_zst_types.len() == 1 {
+                    // Only try to directly expand the constant if only one field has data.
+                    // We could eventually expand this, but keep it simple for now. See:
+                    // https://github.com/model-checking/kani/issues/2936
+                    let overall_type = self.codegen_ty_stable(ty);
                     let field_values: Vec<Expr> = field_types
                         .iter()
                         .map(|t| {
@@ -218,74 +220,6 @@ impl<'tcx> GotocCtx<'tcx> {
                     ))
                 } else {
                     None
-                }
-            }
-            TyKind::RigidTy(RigidTy::Adt(adt, args)) if adt.kind().is_enum() => {
-                let layout = self.layout_of_stable(ty);
-                let overall_t = self.codegen_ty_stable(ty);
-                match &layout.variants {
-                    Variants::Single { index } => {
-                        // here we must have one variant
-                        let variant = adt.variant(rustc_internal::stable(index)).unwrap();
-                        match variant.fields().as_slice() {
-                            [] => unreachable!("ZST do not get encoded as an Allocation"),
-                            [field] => {
-                                let fty = field.ty_with_args(&args);
-                                Some(Expr::struct_expr_from_values(
-                                    overall_t,
-                                    vec![self.try_codegen_constant(alloc, fty, span)?],
-                                    &self.symbol_table,
-                                ))
-                            }
-                            _ => None,
-                        }
-                    }
-                    Variants::Multiple { tag_encoding, tag_field, .. } => match tag_encoding {
-                        TagEncoding::Niche { .. } => {
-                            let niche_offset = layout.fields.offset(*tag_field);
-                            assert_eq!(
-                                niche_offset.bytes(),
-                                0,
-                                "nonzero offset for niche in scalar"
-                            );
-                            let discr_ty = self.codegen_enum_discr_typ_stable(ty);
-                            let niche_val = self.try_codegen_constant(alloc, discr_ty, span)?;
-                            let result_type = self.codegen_ty_stable(ty);
-                            let niche_type = niche_val.typ().clone();
-                            assert_eq!(
-                                niche_type.sizeof_in_bits(&self.symbol_table),
-                                result_type.sizeof_in_bits(&self.symbol_table),
-                                "niche type and enum have different size in scalar"
-                            );
-                            Some(niche_val.transmute_to(result_type, &self.symbol_table))
-                        }
-
-                        TagEncoding::Direct => {
-                            // then the scalar field stores the discriminant
-                            let discr_ty = self.codegen_enum_discr_typ_stable(ty);
-                            let init = self.try_codegen_constant(alloc, discr_ty, span)?;
-                            let cgt = self.codegen_ty_stable(ty);
-                            let fields = cgt.get_non_empty_components(&self.symbol_table).unwrap();
-                            // TagEncoding::Direct makes a constant with a tag but no data.
-                            // Check our understanding that that the Enum must have one field,
-                            // which is the tag, and no data field.
-                            assert_eq!(
-                                fields.len(),
-                                1,
-                                "TagEncoding::Direct encountered for enum with non-empty variants"
-                            );
-                            assert_eq!(
-                                fields[0].name().to_string(),
-                                "case",
-                                "Unexpected field in enum/coroutine. Please report your failing case at https://github.com/model-checking/kani/issues/1465"
-                            );
-                            Some(Expr::struct_expr_with_nondet_fields(
-                                cgt,
-                                btree_string_map![("case", init)],
-                                &self.symbol_table,
-                            ))
-                        }
-                    },
                 }
             }
             TyKind::RigidTy(RigidTy::Tuple(tys)) if tys.len() == 1 => {
@@ -343,62 +277,60 @@ impl<'tcx> GotocCtx<'tcx> {
                     // Codegen as a fat pointer
                     let data_expr = mem_var.cast_to(Type::unsigned_int(8).to_pointer());
                     let len_expr = Expr::int_constant(bytes.len(), Type::size_t());
-                    return slice_fat_ptr(
+                    slice_fat_ptr(
                         self.codegen_ty_stable(ty),
                         data_expr,
                         len_expr,
                         &self.symbol_table,
-                    );
+                    )
                 }
                 TyKind::RigidTy(RigidTy::Slice(inner_ty)) => {
-                    if let TyKind::RigidTy(RigidTy::Uint(UintTy::U8)) = inner_ty.kind() {
-                        // a string literal
-                        // Create a static variable that holds its value
-                        assert_eq!(
-                            alloc.provenance.ptrs.len(),
-                            1,
-                            "Expected `&str` to point to a str buffer"
-                        );
-                        let alloc_id = alloc.provenance.ptrs[0].1.0;
-                        let GlobalAlloc::Memory(data) = GlobalAlloc::from(alloc_id) else {
-                            unreachable!()
-                        };
-                        let mem_var = self.codegen_const_allocation(&data, None);
-                        let len = data.bytes.len();
-                        let data_expr = mem_var.cast_to(Type::unsigned_int(8).to_pointer());
-                        let len_expr = Expr::int_constant(len, Type::size_t());
-                        return slice_fat_ptr(
-                            self.codegen_ty_stable(ty),
-                            data_expr,
-                            len_expr,
-                            &self.symbol_table,
-                        );
-                    } else {
-                        // TODO: Handle cases with other types such as tuples and larger integers.
-                        let loc = self.codegen_span_option_stable(span);
-                        let typ = self.codegen_ty_stable(ty);
-                        let operation_name = format!("Constant slice for type {inner_ty:?}");
-                        return self.codegen_unimplemented_expr(
-                            &operation_name,
-                            typ,
-                            loc,
-                            "https://github.com/model-checking/kani/issues/1339",
-                        );
-                    }
+                    // Create a static variable that holds its value
+                    assert_eq!(
+                        alloc.provenance.ptrs.len(),
+                        1,
+                        "Expected `&[T]` to point to a single buffer"
+                    );
+                    let alloc_id = alloc.provenance.ptrs[0].1.0;
+                    let GlobalAlloc::Memory(data) = GlobalAlloc::from(alloc_id) else {
+                        unreachable!()
+                    };
+                    let mem_var = self.codegen_const_allocation(&data, None);
+                    let inner_typ = self.codegen_ty_stable(inner_ty);
+                    let len = data.bytes.len() / inner_typ.sizeof(&self.symbol_table) as usize;
+                    let data_expr = mem_var.cast_to(inner_typ.to_pointer());
+                    let len_expr = Expr::int_constant(len, Type::size_t());
+                    slice_fat_ptr(
+                        self.codegen_ty_stable(ty),
+                        data_expr,
+                        len_expr,
+                        &self.symbol_table,
+                    )
                 }
                 _ => unreachable!("{inner_ty:?}"),
             }
         } else if !alloc.provenance.ptrs.is_empty() {
+            // Codegen the provenance pointer.
+            trace!("codegen_const_ptr with_prov");
             let ptr = alloc.provenance.ptrs[0];
             let alloc_id = ptr.1.0;
             let typ = self.codegen_ty_stable(ty);
             self.codegen_alloc_pointer(typ, alloc_id, ptr.0, span)
         } else {
-            Expr::int_constant(
-                alloc.read_uint().unwrap(),
-                Type::unsigned_int(self.symbol_table.machine_model().pointer_width),
-            )
-            .cast_to(self.codegen_ty_stable(ty))
+            // If there's no provenance, just codegen the pointer address.
+            trace!("codegen_const_ptr no_prov");
+            let expr = if self.symbol_table.machine_model().pointer_width == 32 {
+                Expr::int_constant(
+                    alloc.read_uint().unwrap() as u32,
+                    Type::unsigned_int(self.symbol_table.machine_model().pointer_width),
+                )
+            } else {
+                Expr::int_constant(
+                    alloc.read_uint().unwrap() as u64,
+                    Type::unsigned_int(self.symbol_table.machine_model().pointer_width),
+                )
+            };
+            expr.cast_to(self.codegen_ty_stable(ty))
         }
     }
 

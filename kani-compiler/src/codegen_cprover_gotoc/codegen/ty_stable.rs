@@ -11,7 +11,6 @@ use cbmc::goto_program::Type;
 use rustc_middle::mir;
 use rustc_middle::mir::visit::{MutVisitor, NonUseContext, PlaceContext};
 use rustc_middle::mir::{Operand as OperandInternal, Place as PlaceInternal};
-use rustc_middle::ty::layout::{LayoutOf, TyAndLayout};
 use rustc_middle::ty::{self, Const as ConstInternal, Ty as TyInternal, TyCtxt};
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
@@ -37,14 +36,6 @@ impl<'tcx> GotocCtx<'tcx> {
 
     pub fn is_zst_stable(&self, ty: Ty) -> bool {
         self.is_zst(rustc_internal::internal(ty))
-    }
-
-    pub fn layout_of_stable(&self, ty: Ty) -> TyAndLayout<'tcx> {
-        self.layout_of(rustc_internal::internal(ty))
-    }
-
-    pub fn codegen_enum_discr_typ_stable(&self, ty: Ty) -> Ty {
-        rustc_internal::stable(self.codegen_enum_discr_typ(rustc_internal::internal(ty)))
     }
 
     pub fn codegen_fndef_type_stable(&mut self, instance: Instance) -> Type {
