@@ -10,6 +10,7 @@ use rustc_middle::mir::mono::CodegenUnitNameBuilder;
 use rustc_middle::mir::Local;
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{Instance, TyCtxt};
+use stable_mir::mir::mono::Instance as InstanceStable;
 use tracing::debug;
 
 impl<'tcx> GotocCtx<'tcx> {
@@ -72,6 +73,15 @@ impl<'tcx> GotocCtx<'tcx> {
         // Make main function a special case in order to support `--function main`
         // TODO: Get rid of this: https://github.com/model-checking/kani/issues/2129
         if pretty == "main" { pretty } else { llvm_mangled }
+    }
+
+    /// Return the mangled name to be used in the symbol table.
+    ///
+    /// We special case main function in order to support `--function main`.
+    // TODO: Get rid of this: https://github.com/model-checking/kani/issues/2129
+    pub fn symbol_name_stable(&self, instance: InstanceStable) -> String {
+        let pretty = instance.name();
+        if pretty == "main" { pretty } else { instance.mangled_name() }
     }
 
     /// The name for a tuple field

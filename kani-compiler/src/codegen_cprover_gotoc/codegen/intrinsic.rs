@@ -12,6 +12,7 @@ use rustc_middle::mir::{BasicBlock, Operand, Place};
 use rustc_middle::ty::layout::{LayoutOf, ValidityRequirement};
 use rustc_middle::ty::{self, Ty};
 use rustc_middle::ty::{Instance, InstanceDef};
+use rustc_smir::rustc_internal;
 use rustc_span::Span;
 use tracing::debug;
 
@@ -233,14 +234,14 @@ impl<'tcx> GotocCtx<'tcx> {
         // Intrinsics which encode a value known during compilation
         macro_rules! codegen_intrinsic_const {
             () => {{
-                let value = self
-                    .tcx
-                    .const_eval_instance(ty::ParamEnv::reveal_all(), instance, span)
-                    .unwrap();
+                let place = rustc_internal::stable(p);
+                let place_ty = self.place_ty_stable(&place);
+                let stable_instance = rustc_internal::stable(instance);
+                let alloc = stable_instance.try_const_eval(place_ty).unwrap();
                 // We assume that the intrinsic has type checked at this point, so
                 // we can use the place type as the expression type.
-                let e = self.codegen_const_value(value, self.place_ty(p), span.as_ref());
-                self.codegen_expr_to_place(p, e)
+                let e = self.codegen_allocation(&alloc, place_ty, rustc_internal::stable(span));
+                self.codegen_expr_to_place_stable(&place, e)
             }};
         }
 

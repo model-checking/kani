@@ -16,7 +16,9 @@ use cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
 use cbmc::{InternString, InternedString};
 use lazy_static::lazy_static;
 use rustc_middle::ty::Instance;
+use rustc_smir::rustc_internal;
 use rustc_target::abi::call::Conv;
+use stable_mir::mir::mono::Instance as InstanceStable;
 use tracing::{debug, trace};
 
 lazy_static! {
@@ -44,8 +46,9 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// For other foreign items, we declare a shim and add to the list of foreign shims to be
     /// handled later.
-    pub fn codegen_foreign_fn(&mut self, instance: Instance<'tcx>) -> &Symbol {
+    pub fn codegen_foreign_fn(&mut self, instance: InstanceStable) -> &Symbol {
         debug!(?instance, "codegen_foreign_function");
+        let instance = rustc_internal::internal(instance);
         let fn_name = self.symbol_name(instance).intern();
         if self.symbol_table.contains(fn_name) {
             // Symbol has been added (either a built-in CBMC function or a Rust allocation function).

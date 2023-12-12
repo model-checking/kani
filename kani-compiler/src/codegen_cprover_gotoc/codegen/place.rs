@@ -369,7 +369,7 @@ impl<'tcx> GotocCtx<'tcx> {
         match ty.kind() {
             // A local that is itself a FnDef, like Fn::call_once
             TyKind::RigidTy(RigidTy::FnDef(def, args)) => {
-                Some(self.codegen_fndef_stable(def, &args, None))
+                Some(self.codegen_fndef(def, &args, None))
             }
             // A local can be pointer to a FnDef, like Fn::call and Fn::call_mut
             TyKind::RigidTy(RigidTy::RawPtr(inner, _)) => self

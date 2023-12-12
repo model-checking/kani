@@ -308,7 +308,7 @@ impl GotocHook for MemCmp {
                 .goto_expr;
         let rhs = should_skip_pointer_checks.ternary(
             Expr::int_constant(0, place_expr.typ().clone()), // zero bytes are always equal (as long as pointers are nonnull and aligned)
-            gcx.codegen_func_expr_stable(instance, span)
+            gcx.codegen_func_expr(instance, Some(span))
                 .call(vec![first_var, second_var, count_var]),
         );
         let code = place_expr.assign(rhs, loc).with_location(loc);
