@@ -75,7 +75,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// There are two possible constants included in the body of an instance:
     /// - Allocated: It will have its byte representation already defined. We try to eagerly
     ///   generate code for it as simple literals or constants if possible. Otherwise, we create
-    ///   a memory allocation for them an access them indirectly.
+    ///   a memory allocation for them and access them indirectly.
     /// - ZeroSized: These are ZST constants and they just need to match the right type.
     fn codegen_const(&mut self, constant: &Const, span: Option<Span>) -> Expr {
         trace!(?constant, "codegen_constant");
