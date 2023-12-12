@@ -22,7 +22,10 @@ use tracing::{debug, trace};
 
 #[derive(Clone, Debug)]
 enum AllocData<'a> {
+    /// The data is represented as a slice of optional bytes, where None represents uninitialized
+    /// bytes.
     Bytes(&'a [Option<u8>]),
+    /// The allocation has been translated to an expression.
     Expr(Expr),
 }
 
@@ -130,13 +133,7 @@ impl<'tcx> GotocCtx<'tcx> {
             TyKind::RigidTy(RigidTy::Int(it)) => {
                 let val = alloc.read_int().unwrap();
                 Some(match it {
-                    IntTy::Isize => {
-                        if self.symbol_table.machine_model().pointer_width == 32 {
-                            Expr::int_constant(val as i32, Type::ssize_t())
-                        } else {
-                            Expr::int_constant(val as i64, Type::ssize_t())
-                        }
-                    }
+                    IntTy::Isize => Expr::ssize_constant(val, &self.symbol_table),
                     IntTy::I8 => Expr::int_constant(val as i8, Type::signed_int(8)),
                     IntTy::I16 => Expr::int_constant(val as i16, Type::signed_int(16)),
                     IntTy::I32 => Expr::int_constant(val as i32, Type::signed_int(32)),
@@ -147,13 +144,7 @@ impl<'tcx> GotocCtx<'tcx> {
             TyKind::RigidTy(RigidTy::Uint(it)) => {
                 let val = alloc.read_uint().unwrap();
                 Some(match it {
-                    UintTy::Usize => {
-                        if self.symbol_table.machine_model().pointer_width == 32 {
-                            Expr::int_constant(val as u32, Type::size_t())
-                        } else {
-                            Expr::int_constant(val as u64, Type::size_t())
-                        }
-                    }
+                    UintTy::Usize => Expr::size_constant(val, &self.symbol_table),
                     UintTy::U8 => Expr::int_constant(val as u8, Type::unsigned_int(8)),
                     UintTy::U16 => Expr::int_constant(val as u16, Type::unsigned_int(16)),
                     UintTy::U32 => Expr::int_constant(val as u32, Type::unsigned_int(32)),
@@ -219,6 +210,8 @@ impl<'tcx> GotocCtx<'tcx> {
                         &self.symbol_table,
                     ))
                 } else {
+                    // Structures with more than one non-ZST element are handled with an extra
+                    // allocation.
                     None
                 }
             }
@@ -319,17 +312,7 @@ impl<'tcx> GotocCtx<'tcx> {
         } else {
             // If there's no provenance, just codegen the pointer address.
             trace!("codegen_const_ptr no_prov");
-            let expr = if self.symbol_table.machine_model().pointer_width == 32 {
-                Expr::int_constant(
-                    alloc.read_uint().unwrap() as u32,
-                    Type::unsigned_int(self.symbol_table.machine_model().pointer_width),
-                )
-            } else {
-                Expr::int_constant(
-                    alloc.read_uint().unwrap() as u64,
-                    Type::unsigned_int(self.symbol_table.machine_model().pointer_width),
-                )
-            };
+            let expr = Expr::size_constant(alloc.read_uint().unwrap(), &self.symbol_table);
             expr.cast_to(self.codegen_ty_stable(ty))
         }
     }

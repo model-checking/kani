@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-
+//! Check that we can properly handle tuple constants including the ones with some padding.
 #[kani::proof]
 fn point_slice() {
     let point: &[(u8, u32)] = &[(0, u32::MAX), (u8::MAX, 0)];
