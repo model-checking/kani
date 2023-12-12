@@ -18,6 +18,7 @@ use rustc_middle::ty::{
     UintTy, VariantDef, VtblEntry,
 };
 use rustc_middle::ty::{List, TypeFoldable};
+use rustc_smir::rustc_internal;
 use rustc_span::def_id::DefId;
 use rustc_target::abi::{
     Abi::Vector, FieldIdx, FieldsShape, Integer, LayoutS, Primitive, Size, TagEncoding,
@@ -680,7 +681,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     fn codegen_ty_raw_array(&mut self, elem_ty: Ty<'tcx>, len: Const<'tcx>) -> Type {
-        let size = self.codegen_const(len, None).int_constant_value().unwrap();
+        let size = self.codegen_const_internal(len, None).int_constant_value().unwrap();
         let elemt = self.codegen_ty(elem_ty);
         elemt.array_of(size)
     }
@@ -1323,12 +1324,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// For details, see <https://github.com/model-checking/kani/pull/1338>
     pub fn codegen_fndef_type(&mut self, instance: Instance<'tcx>) -> Type {
-        let func = self.symbol_name(instance);
-        self.ensure_struct(
-            format!("{func}::FnDefStruct"),
-            format!("{}::FnDefStruct", self.readable_instance_name(instance)),
-            |_, _| vec![],
-        )
+        self.codegen_fndef_type_stable(rustc_internal::stable(instance))
     }
 
     /// codegen for struct

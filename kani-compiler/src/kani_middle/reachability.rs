@@ -631,8 +631,8 @@ mod debug {
     impl Display for Node {
         fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
             match &self.0 {
-                MonoItem::Fn(instance) => write!(f, "{}", instance.mangled_name()),
-                MonoItem::Static(def) => write!(f, "{}", CrateItem::from(*def).name()),
+                MonoItem::Fn(instance) => write!(f, "{}", instance.name()),
+                MonoItem::Static(def) => write!(f, "{}", def.name()),
                 MonoItem::GlobalAsm(asm) => write!(f, "{asm:?}"),
             }
         }

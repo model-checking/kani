@@ -46,6 +46,7 @@ use rustc_session::Session;
 use rustc_smir::rustc_internal;
 use rustc_target::abi::Endian;
 use rustc_target::spec::PanicStrategy;
+use stable_mir::mir::mono::MonoItem as MonoItemStable;
 use std::any::Any;
 use std::collections::BTreeMap;
 use std::collections::HashSet;
@@ -111,8 +112,11 @@ impl GotocCodegenBackend {
                             );
                         }
                         MonoItem::Static(def_id) => {
+                            let MonoItemStable::Static(def) = rustc_internal::stable(item) else {
+                                unreachable!()
+                            };
                             gcx.call_with_panic_debug_info(
-                                |ctx| ctx.declare_static(def_id, *item),
+                                |ctx| ctx.declare_static(def),
                                 format!("declare_static: {def_id:?}"),
                                 def_id,
                             );
@@ -136,8 +140,11 @@ impl GotocCodegenBackend {
                             );
                         }
                         MonoItem::Static(def_id) => {
+                            let MonoItemStable::Static(def) = rustc_internal::stable(item) else {
+                                unreachable!()
+                            };
                             gcx.call_with_panic_debug_info(
-                                |ctx| ctx.codegen_static(def_id, *item),
+                                |ctx| ctx.codegen_static(def),
                                 format!("codegen_static: {def_id:?}"),
                                 def_id,
                             );
