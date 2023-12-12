@@ -1,1 +1,1 @@
-error[E0391]: cycle detected when optimizing MIR for `crate_a::assert_true`
+error[E0391]: cycle detected when optimizing MIR for `crate_b::assert_false`

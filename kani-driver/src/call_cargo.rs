@@ -319,8 +319,14 @@ fn packages_to_verify<'b>(
             .map(|pkg_name| metadata.packages.iter().find(|pkg| pkg.name == *pkg_name).unwrap())
             .collect()
     } else if !args.cargo.exclude.is_empty() {
+        // should be ensured by argument validation
+        assert!(args.cargo.workspace);
         validate_package_names(&args.cargo.exclude, &metadata.packages)?;
-        metadata.packages.iter().filter(|pkg| !args.cargo.exclude.contains(&pkg.name)).collect()
+        metadata
+            .workspace_packages()
+            .into_iter()
+            .filter(|pkg| !args.cargo.exclude.contains(&pkg.name))
+            .collect()
     } else {
         match (args.cargo.workspace, metadata.root_package()) {
             (true, _) | (_, None) => metadata.workspace_packages(),
@@ -346,8 +352,7 @@ fn map_kani_artifact(rustc_artifact: cargo_metadata::Artifact) -> Option<Artifac
     let result = rustc_artifact.filenames.iter().find_map(|path| {
         if path.extension() == Some("rmeta") {
             let file_stem = path.file_stem()?.strip_prefix("lib")?;
-            let parent =
-                path.parent().map(|p| p.as_std_path().to_path_buf()).unwrap_or(PathBuf::new());
+            let parent = path.parent().map(|p| p.as_std_path().to_path_buf()).unwrap_or_default();
             let mut meta_path = parent.join(file_stem);
             meta_path.set_extension(ArtifactType::Metadata);
             trace!(rmeta=?path, kani_meta=?meta_path.display(), "map_kani_artifact");

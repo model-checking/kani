@@ -10,11 +10,11 @@ use kani_metadata::{ArtifactType, HarnessAttributes, HarnessMetadata};
 use rustc_hir::def_id::DefId;
 use rustc_middle::ty::{Instance, InstanceDef, TyCtxt};
 
-use super::{attributes::extract_harness_attributes, SourceLocation};
+use super::{attributes::KaniAttributes, SourceLocation};
 
 /// Create the harness metadata for a proof harness for a given function.
 pub fn gen_proof_metadata(tcx: TyCtxt, def_id: DefId, base_name: &Path) -> HarnessMetadata {
-    let attributes = extract_harness_attributes(tcx, def_id);
+    let attributes = KaniAttributes::for_item(tcx, def_id).harness_attributes();
     let pretty_name = tcx.def_path_str(def_id);
     // Main function a special case in order to support `--function main`
     // TODO: Get rid of this: https://github.com/model-checking/kani/issues/2129

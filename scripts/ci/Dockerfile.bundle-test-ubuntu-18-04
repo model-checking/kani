@@ -2,19 +2,36 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
 # Note: this file is intended only for testing the kani release bundle
+# This docker assumes the following locations:
+# - ./kani_src/: Kani source code
+# - ./kani-*tar.gz/: The Kani release bundle. E.g. `kani-0.39.0-x86_64-unknown-linux-gnu.tar.gz`
+# - ./linux-kani-verifier.crate: The kani-verifier package
 
 FROM ubuntu:18.04
 ENV DEBIAN_FRONTEND=noninteractive \
     DEBCONF_NONINTERACTIVE_SEEN=true
+
 RUN apt-get update && \
-    apt-get install -y python3 python3-pip curl ctags && \
-    curl -sSf https://sh.rustup.rs | sh -s -- -y
+    apt-get install --no-install-recommends -y build-essential software-properties-common && \
+    add-apt-repository -y ppa:deadsnakes/ppa && \
+    apt install --no-install-recommends -y python3.7 python3.7-dev python3.7-distutils curl ctags
+
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.7 1
+
+RUN curl -s https://bootstrap.pypa.io/get-pip.py -o get-pip.py && \
+    python3 get-pip.py --force-reinstall && \
+    rm get-pip.py
+
+RUN curl -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
 
 WORKDIR /tmp/kani
-COPY ./tests ./tests
-COPY ./kani-latest-*.tar.gz ./
-# Very awkward glob (not regex!) to get `kani-verifier-*` and not `kani-verifier-*.crate`
-COPY ./target/package/kani-verifier-*[^e] ./kani-verifier
-RUN cargo install --path ./kani-verifier
-RUN cargo-kani setup --use-local-bundle ./kani-latest-*.tar.gz
+COPY ./kani_src/tests ./tests
+
+# This will extract things into kani-verifier-${VERSION} folder
+COPY ./linux-kani-verifier.crate ./kani-verifier.crate
+RUN tar zxvf ./kani-verifier.crate
+RUN cargo install --path ./kani-verifier-*
+
+COPY ./kani-*.tar.gz ./
+RUN cargo-kani setup --use-local-bundle ./kani-*.tar.gz

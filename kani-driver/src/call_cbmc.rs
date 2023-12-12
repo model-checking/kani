@@ -13,8 +13,12 @@ use crate::args::{OutputFormat, VerificationArgs};
 use crate::cbmc_output_parser::{
     extract_results, process_cbmc_output, CheckStatus, ParserItem, Property, VerificationOutput,
 };
-use crate::cbmc_property_renderer::{format_result, kani_cbmc_output_filter};
+use crate::cbmc_property_renderer::{format_coverage, format_result, kani_cbmc_output_filter};
 use crate::session::KaniSession;
+
+/// We will use Cadical by default since it performed better than MiniSAT in our analysis.
+/// Note: Kissat was marginally better, but it is an external solver which could be more unstable.
+static DEFAULT_SOLVER: CbmcSolver = CbmcSolver::Cadical;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VerificationStatus {
@@ -167,7 +171,6 @@ impl KaniSession {
             args.push("--div-by-zero-check".into());
             args.push("--float-overflow-check".into());
             args.push("--nan-check".into());
-            args.push("--undefined-shift-check".into());
             // With PR #647 we use Rust's `-C overflow-checks=on` instead of:
             // --unsigned-overflow-check
             // --signed-overflow-check
@@ -207,8 +210,7 @@ impl KaniSession {
         } else if let Some(solver) = harness_solver {
             solver
         } else {
-            // Nothing to do
-            return Ok(());
+            &DEFAULT_SOLVER
         };
 
         match solver {
@@ -303,21 +305,39 @@ impl VerificationResult {
         }
     }
 
-    pub fn render(&self, output_format: &OutputFormat, should_panic: bool) -> String {
+    pub fn render(
+        &self,
+        output_format: &OutputFormat,
+        should_panic: bool,
+        coverage_mode: bool,
+    ) -> String {
         match &self.results {
             Ok(results) => {
                 let status = self.status;
                 let failed_properties = self.failed_properties;
                 let show_checks = matches!(output_format, OutputFormat::Regular);
-                let mut result =
-                    format_result(results, status, should_panic, failed_properties, show_checks);
+
+                let mut result = if coverage_mode {
+                    format_coverage(results, status, should_panic, failed_properties, show_checks)
+                } else {
+                    format_result(results, status, should_panic, failed_properties, show_checks)
+                };
                 writeln!(result, "Verification Time: {}s", self.runtime.as_secs_f32()).unwrap();
                 result
             }
             Err(exit_status) => {
                 let verification_result = console::style("FAILED").red();
+                let explanation = if *exit_status == 137 {
+                    "CBMC appears to have run out of memory. You may want to rerun your proof in \
+                    an environment with additional memory or use stubbing to reduce the size of the \
+                    code the verifier reasons about.\n"
+                } else {
+                    ""
+                };
                 format!(
-                    "\nCBMC failed with status {exit_status}\nVERIFICATION:- {verification_result}\n",
+                    "\nCBMC failed with status {exit_status}\n\
+                    VERIFICATION:- {verification_result}\n\
+                    {explanation}",
                 )
             }
         }

@@ -16,7 +16,9 @@ use cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
 use cbmc::{InternString, InternedString};
 use lazy_static::lazy_static;
 use rustc_middle::ty::Instance;
+use rustc_smir::rustc_internal;
 use rustc_target::abi::call::Conv;
+use stable_mir::mir::mono::Instance as InstanceStable;
 use tracing::{debug, trace};
 
 lazy_static! {
@@ -44,8 +46,9 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// For other foreign items, we declare a shim and add to the list of foreign shims to be
     /// handled later.
-    pub fn codegen_foreign_fn(&mut self, instance: Instance<'tcx>) -> &Symbol {
+    pub fn codegen_foreign_fn(&mut self, instance: InstanceStable) -> &Symbol {
         debug!(?instance, "codegen_foreign_function");
+        let instance = rustc_internal::internal(instance);
         let fn_name = self.symbol_name(instance).intern();
         if self.symbol_table.contains(fn_name) {
             // Symbol has been added (either a built-in CBMC function or a Rust allocation function).
@@ -89,7 +92,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Checks whether C-FFI has been enabled or not.
     /// When enabled, we blindly encode the function type as is.
     fn is_cffi_enabled(&self) -> bool {
-        self.queries.unstable_features.contains(&"c-ffi".to_string())
+        self.queries.args().unstable_features.contains(&"c-ffi".to_string())
     }
 
     /// Generate code for a foreign function shim.
@@ -110,16 +113,15 @@ impl<'tcx> GotocCtx<'tcx> {
             .args
             .iter()
             .enumerate()
-            .filter_map(|(idx, arg)| {
-                (!arg.is_ignore()).then(|| {
-                    let arg_name = format!("{fn_name}::param_{idx}");
-                    let base_name = format!("param_{idx}");
-                    let arg_type = self.codegen_ty(arg.layout.ty);
-                    let sym = Symbol::variable(&arg_name, &base_name, arg_type.clone(), loc)
-                        .with_is_parameter(true);
-                    self.symbol_table.insert(sym);
-                    arg_type.as_parameter(Some(arg_name.into()), Some(base_name.into()))
-                })
+            .filter(|&(_, arg)| (!arg.is_ignore()))
+            .map(|(idx, arg)| {
+                let arg_name = format!("{fn_name}::param_{idx}");
+                let base_name = format!("param_{idx}");
+                let arg_type = self.codegen_ty(arg.layout.ty);
+                let sym = Symbol::variable(&arg_name, &base_name, arg_type.clone(), loc)
+                    .with_is_parameter(true);
+                self.symbol_table.insert(sym);
+                arg_type.as_parameter(Some(arg_name.into()), Some(base_name.into()))
             })
             .collect();
         let ret_type = self.codegen_ty(fn_abi.ret.layout.ty);

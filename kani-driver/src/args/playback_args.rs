@@ -3,7 +3,7 @@
 //! Implements the subcommand handling of the playback subcommand
 
 use crate::args::cargo::CargoTestArgs;
-use crate::args::common::UnstableFeatures;
+use crate::args::common::UnstableFeature;
 use crate::args::{CommonArgs, ValidateArgs};
 use clap::error::ErrorKind;
 use clap::{Error, Parser, ValueEnum};
@@ -74,7 +74,7 @@ impl ValidateArgs for KaniPlaybackArgs {
         if !self.input.is_file() {
             return Err(Error::raw(
                 ErrorKind::InvalidValue,
-                &format!(
+                format!(
                     "Invalid argument: Input invalid. `{}` is not a regular file.",
                     self.input.display()
                 ),
@@ -87,7 +87,7 @@ impl ValidateArgs for KaniPlaybackArgs {
 impl ValidateArgs for PlaybackArgs {
     fn validate(&self) -> Result<(), Error> {
         self.common_opts.validate()?;
-        if !self.common_opts.unstable_features.contains(&UnstableFeatures::ConcretePlayback) {
+        if !self.common_opts.unstable_features.contains(UnstableFeature::ConcretePlayback) {
             return Err(Error::raw(
                 ErrorKind::MissingRequiredArgument,
                 "The `playback` subcommand is unstable and requires `-Z concrete-playback` \

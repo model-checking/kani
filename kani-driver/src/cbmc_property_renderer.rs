@@ -8,7 +8,8 @@ use console::style;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use rustc_demangle::demangle;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
+use strum_macros::{AsRefStr, Display};
 
 type CbmcAltDescriptions = HashMap<&'static str, Vec<(&'static str, Option<&'static str>)>>;
 
@@ -148,6 +149,15 @@ static CBMC_ALT_DESCRIPTIONS: Lazy<CbmcAltDescriptions> = Lazy::new(|| {
     // map.insert("precondition_instance": vec![]);
     map
 });
+
+#[derive(PartialEq, Eq, AsRefStr, Clone, Copy, Display)]
+#[strum(serialize_all = "UPPERCASE")]
+// The status of coverage reported by Kani
+enum CoverageStatus {
+    Full,
+    Partial,
+    None,
+}
 
 const UNSUPPORTED_CONSTRUCT_DESC: &str = "is not currently supported by Kani";
 const UNWINDING_ASSERT_DESC: &str = "unwinding assertion loop";
@@ -421,6 +431,72 @@ pub fn format_result(
     result_str
 }
 
+/// Separate checks into coverage and non-coverage based on property class and format them separately for --coverage. We report both verification and processed coverage
+/// results
+pub fn format_coverage(
+    properties: &[Property],
+    status: VerificationStatus,
+    should_panic: bool,
+    failed_properties: FailedProperties,
+    show_checks: bool,
+) -> String {
+    let (coverage_checks, non_coverage_checks): (Vec<Property>, Vec<Property>) =
+        properties.iter().cloned().partition(|x| x.property_class() == "code_coverage");
+
+    let verification_output =
+        format_result(&non_coverage_checks, status, should_panic, failed_properties, show_checks);
+    let coverage_output = format_result_coverage(&coverage_checks);
+    let result = format!("{}\n{}", verification_output, coverage_output);
+
+    result
+}
+
+/// Generate coverage result from all coverage properties (i.e., checks with `code_coverage` property class).
+/// Loops through each of the checks with the `code_coverage` property class on a line and gives:
+///  - A status `FULL` if all checks pertaining to a line number are `COVERED`
+///  - A status `NONE` if all checks related to a line are `UNCOVERED`
+///  - Otherwise (i.e., if the line contains both) it reports `PARTIAL`.
+///
+/// Used when the user requests coverage information with `--coverage`.
+/// Output is tested through the `coverage-based` testing suite, not the regular
+/// `expected` suite.
+fn format_result_coverage(properties: &[Property]) -> String {
+    let mut formatted_output = String::new();
+    formatted_output.push_str("\nCoverage Results:\n");
+
+    let mut coverage_results: BTreeMap<String, BTreeMap<usize, CoverageStatus>> =
+        BTreeMap::default();
+    for prop in properties {
+        let src = prop.source_location.clone();
+        let file_entries = coverage_results.entry(src.file.unwrap()).or_default();
+        let check_status = if prop.status == CheckStatus::Covered {
+            CoverageStatus::Full
+        } else {
+            CoverageStatus::None
+        };
+
+        // Create Map<file, Map<line, status>>
+        file_entries
+            .entry(src.line.unwrap().parse().unwrap())
+            .and_modify(|line_status| {
+                if *line_status != check_status {
+                    *line_status = CoverageStatus::Partial
+                }
+            })
+            .or_insert(check_status);
+    }
+
+    // Create formatted string that is returned to the user as output
+    for (file, checks) in coverage_results.iter() {
+        for (line_number, coverage_status) in checks {
+            formatted_output.push_str(&format!("{}, {}, {}\n", file, line_number, coverage_status));
+        }
+        formatted_output.push('\n');
+    }
+
+    formatted_output
+}
+
 /// Attempts to build a message for a failed property with as much detailed
 /// information on the source location as possible.
 fn build_failure_message(description: String, trace: &Option<Vec<TraceItem>>) -> String {
@@ -456,10 +532,14 @@ fn build_failure_message(description: String, trace: &Option<Vec<TraceItem>>) ->
 /// to `--object-bits` being too low. The message is edited to show Kani
 /// options.
 fn postprocess_error_message(message: ParserItem) -> ParserItem {
-    if let ParserItem::Message { ref message_text, message_type: _ } = message && message_text.contains("use the `--object-bits n` option") {
+    if let ParserItem::Message { ref message_text, message_type: _ } = message
+        && message_text.contains("use the `--object-bits n` option")
+    {
         ParserItem::Message {
-            message_text: message_text.replace("--object-bits ", "--enable-unstable --cbmc-args --object-bits "),
-            message_type: String::from("ERROR") }
+            message_text: message_text
+                .replace("--object-bits ", "--enable-unstable --cbmc-args --object-bits "),
+            message_type: String::from("ERROR"),
+        }
     } else {
         message
     }
@@ -512,7 +592,8 @@ pub fn postprocess_result(properties: Vec<Property>, extra_ptr_checks: bool) -> 
 
     let updated_properties =
         update_properties_with_reach_status(properties_filtered, has_fundamental_failures);
-    update_results_of_cover_checks(updated_properties)
+    let results_after_code_coverage = update_results_of_code_covererage_checks(updated_properties);
+    update_results_of_cover_checks(results_after_code_coverage)
 }
 
 /// Determines if there is property with status `FAILURE` and the given description
@@ -542,7 +623,10 @@ fn modify_undefined_function_checks(mut properties: Vec<Property>) -> (Vec<Prope
         {
             // Missing functions come with mangled names.
             // `demangle` produces the demangled version if it's a mangled name.
-            let modified_description = format!("Function `{:#}` with missing definition is unreachable", demangle(function));
+            let modified_description = format!(
+                "Function `{:#}` with missing definition is unreachable",
+                demangle(function)
+            );
             prop.description = modified_description;
             if prop.status == CheckStatus::Failure {
                 has_unknown_location_checks = true;
@@ -608,6 +692,27 @@ fn update_properties_with_reach_status(
                 "** ERROR: Expecting the unreachable property \"{description}\" to have a status of \"SUCCESS\""
             );
             prop.status = CheckStatus::Unreachable
+        }
+    }
+    properties
+}
+
+/// Update the results of `code_coverage` (NOT `cover`) properties.
+/// - `SUCCESS` -> `UNCOVERED`
+/// - `FAILURE` -> `COVERED`
+/// Note that these statuses are intermediate statuses that aren't reported to
+/// users but rather internally consumed and reported finally as `PARTIAL`, `FULL`
+/// or `NONE` based on aggregated line coverage results.
+fn update_results_of_code_covererage_checks(mut properties: Vec<Property>) -> Vec<Property> {
+    for prop in properties.iter_mut() {
+        if prop.is_code_coverage_property() {
+            prop.status = match prop.status {
+                CheckStatus::Success => CheckStatus::Uncovered,
+                CheckStatus::Failure => CheckStatus::Covered,
+                _ => unreachable!(
+                    "status for coverage checks should be either `SUCCESS` or `FAILURE` prior to postprocessing"
+                ),
+            };
         }
     }
     properties

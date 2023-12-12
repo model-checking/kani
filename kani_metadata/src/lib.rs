@@ -1,6 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+extern crate clap;
+
 use std::{collections::HashSet, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -13,7 +15,10 @@ pub use vtable::*;
 pub mod artifact;
 mod cbmc_solver;
 mod harness;
+pub mod unstable;
 mod vtable;
+
+pub use unstable::{EnabledUnstableFeatures, UnstableFeature};
 
 /// The structure of `.kani-metadata.json` files, which are emitted for each crate
 #[derive(Debug, Clone, Serialize, Deserialize)]

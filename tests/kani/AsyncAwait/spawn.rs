@@ -11,9 +11,24 @@ use std::sync::{
     Arc,
 };
 
+#[kani::proof(schedule = kani::RoundRobin::default())]
+#[kani::unwind(4)]
+async fn round_robin_schedule() {
+    let x = Arc::new(AtomicI64::new(0)); // Surprisingly, Arc verified faster than Rc
+    let x2 = x.clone();
+    let x3 = x2.clone();
+    let handle = kani::spawn(async move {
+        x3.fetch_add(1, Ordering::Relaxed);
+    });
+    kani::yield_now().await;
+    x2.fetch_add(1, Ordering::Relaxed);
+    handle.await;
+    assert_eq!(x.load(Ordering::Relaxed), 2);
+}
+
 #[kani::proof]
 #[kani::unwind(4)]
-fn round_robin_schedule() {
+fn round_robin_schedule_manual() {
     let x = Arc::new(AtomicI64::new(0)); // Surprisingly, Arc verified faster than Rc
     let x2 = x.clone();
     kani::block_on_with_spawn(

@@ -88,5 +88,9 @@ ${MDBOOK} build -d $KANI_DIR/docs/book/rfc
 echo "Building rustdocs..."
 cd $KANI_DIR
 RUSTFLAGS="--cfg=kani" cargo doc -p kani --no-deps --target-dir docs/book/crates
+# We remove build files to avoid false positives in secret scanning alerts.
+# More details in: https://github.com/model-checking/kani/issues/2735
+echo "Removing build files from rustdocs..."
+rm -r docs/book/crates/debug
 
 echo "Finished documentation build successfully."

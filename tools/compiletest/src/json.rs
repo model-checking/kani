@@ -59,18 +59,19 @@ pub fn extract_rendered(output: &str) -> String {
                     } else {
                         Some(format!(
                             "Future incompatibility report: {}",
-                            report
-                                .future_incompat_report
-                                .into_iter()
-                                .map(|item| {
-                                    format!(
-                                        "Future breakage diagnostic:\n{}",
-                                        item.diagnostic
-                                            .rendered
-                                            .unwrap_or_else(|| "Not rendered".to_string())
-                                    )
-                                })
-                                .collect::<String>()
+                            report.future_incompat_report.into_iter().fold(
+                                String::new(),
+                                |mut output, item| {
+                                    use std::fmt::Write;
+                                    let _ = writeln!(output, "Future breakage diagnostic:");
+                                    let s = item
+                                        .diagnostic
+                                        .rendered
+                                        .unwrap_or_else(|| "Not rendered".to_string());
+                                    let _ = write!(output, "{s}");
+                                    output
+                                }
+                            )
                         ))
                     }
                 } else if serde_json::from_str::<ArtifactNotification>(line).is_ok() {

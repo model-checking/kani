@@ -3,22 +3,37 @@
 
 //! MIR Span related functions
 
-use crate::{codegen_cprover_gotoc::GotocCtx, kani_middle::SourceLocation};
+use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::Location;
-use rustc_middle::mir::{Local, VarDebugInfo, VarDebugInfoContents};
+use rustc_middle::mir::{Local, VarDebugInfoContents};
+use rustc_smir::rustc_internal;
 use rustc_span::Span;
+use stable_mir::mir::VarDebugInfo;
+use stable_mir::ty::Span as SpanStable;
 
 impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_span(&self, sp: &Span) -> Location {
-        let loc = SourceLocation::new(self.tcx, sp);
+        self.codegen_span_stable(rustc_internal::stable(sp))
+    }
+
+    pub fn codegen_span_stable(&self, sp: SpanStable) -> Location {
+        let loc = sp.get_lines();
         Location::new(
-            loc.filename,
+            sp.get_filename().to_string(),
             self.current_fn.as_ref().map(|x| x.readable_name().to_string()),
             loc.start_line,
             Some(loc.start_col),
             loc.end_line,
             Some(loc.end_col),
         )
+    }
+
+    pub fn codegen_span_option_stable(&self, sp: Option<SpanStable>) -> Location {
+        sp.map_or(Location::none(), |span| self.codegen_span_stable(span))
+    }
+
+    pub fn codegen_caller_span_stable(&self, sp: SpanStable) -> Location {
+        self.codegen_caller_span(&Some(rustc_internal::internal(sp)))
     }
 
     /// Get the location of the caller. This will attempt to reach the macro caller.
@@ -38,22 +53,12 @@ impl<'tcx> GotocCtx<'tcx> {
         sp.map_or(Location::none(), |x| self.codegen_span(&x))
     }
 
-    pub fn find_debug_info(&self, l: &Local) -> Option<&VarDebugInfo<'tcx>> {
-        self.current_fn().mir().var_debug_info.iter().find(|info| match info.value {
-            VarDebugInfoContents::Place(p) => p.local == *l && p.projection.len() == 0,
-            VarDebugInfoContents::Const(_) => false,
-            // This variant was added in
-            // https://github.com/rust-lang/rust/pull/102570 and is concerned
-            // with a scalar replacement of aggregates (SROA) MIR optimization
-            // that is only enabled with `--mir-opt-level=3` or higher.
-            // TODO: create a test and figure out if we should return debug info
-            // for this case:
-            // https://github.com/model-checking/kani/issues/1933
-            VarDebugInfoContents::Composite { .. } => {
-                // Fail in debug mode to determine if we ever hit this case
-                debug_assert!(false, "Unhandled VarDebugInfoContents::Composite");
-                false
-            }
-        })
+    pub fn find_debug_info(&self, l: &Local) -> Option<VarDebugInfo> {
+        rustc_internal::stable(self.current_fn().body_internal().var_debug_info.iter().find(
+            |info| match info.value {
+                VarDebugInfoContents::Place(p) => p.local == *l && p.projection.len() == 0,
+                VarDebugInfoContents::Const(_) => false,
+            },
+        ))
     }
 }

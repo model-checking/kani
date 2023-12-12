@@ -5,10 +5,17 @@
 #![feature(register_tool)]
 #![register_tool(kanitool)]
 // Used for rustc_diagnostic_item.
+// Note: We could use a kanitool attribute instead.
 #![feature(rustc_attrs)]
 // This is required for the optimized version of `any_array()`
 #![feature(generic_const_exprs)]
 #![allow(incomplete_features)]
+// Used to model simd.
+#![feature(repr_simd)]
+// Features used for tests only.
+#![cfg_attr(test, feature(platform_intrinsics, portable_simd))]
+// Required for rustc_diagnostic_item
+#![allow(internal_features)]
 
 pub mod arbitrary;
 #[cfg(feature = "concrete_playback")]
@@ -17,6 +24,8 @@ pub mod futures;
 pub mod slice;
 pub mod tuple;
 pub mod vec;
+
+mod models;
 
 pub use arbitrary::Arbitrary;
 #[cfg(feature = "concrete_playback")]
@@ -65,6 +74,33 @@ pub fn assume(cond: bool) {
     assert!(cond, "`kani::assume` should always hold");
 }
 
+/// `implies!(premise => conclusion)` means that if the `premise` is true, so
+/// must be the `conclusion`.
+///
+/// This simply expands to `!premise || conclusion` and is intended to be used
+/// in function contracts to make them more readable, as the concept of an
+/// implication is more natural to think about than its expansion.
+///
+/// For further convenience multiple comma separated premises are allowed, and
+/// are joined with `||` in the expansion. E.g. `implies!(a, b => c)` expands to
+/// `!a || !b || c` and says that `c` is true if both `a` and `b` are true (see
+/// also [Horn Clauses](https://en.wikipedia.org/wiki/Horn_clause)).
+#[macro_export]
+macro_rules! implies {
+    ($($premise:expr),+ => $conclusion:expr) => {
+        $(!$premise)||+ || ($conclusion)
+    };
+}
+
+/// A way to break the ownerhip rules. Only used by contracts where we can
+/// guarantee it is done safely.
+#[inline(never)]
+#[doc(hidden)]
+#[rustc_diagnostic_item = "KaniUntrackedDeref"]
+pub fn untracked_deref<T>(_: &T) -> T {
+    todo!()
+}
+
 /// Creates an assertion of the specified condition and message.
 ///
 /// # Example:
@@ -110,7 +146,7 @@ pub const fn assert(cond: bool, msg: &'static str) {
 ///
 #[inline(never)]
 #[rustc_diagnostic_item = "KaniCover"]
-pub fn cover(_cond: bool, _msg: &'static str) {}
+pub const fn cover(_cond: bool, _msg: &'static str) {}
 
 /// This creates an symbolic *valid* value of type `T`. You can assign the return value of this
 /// function to a variable that you want to make symbolic.
@@ -258,5 +294,7 @@ macro_rules! cover {
     };
 }
 
-/// Kani proc macros must be in a separate crate
+// Kani proc macros must be in a separate crate
 pub use kani_macros::*;
+
+pub mod contracts;

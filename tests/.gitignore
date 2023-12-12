@@ -1,2 +1,12 @@
-*.goto
+# Temporary files and folders
 *.json
+kani_concrete_playback
+rmet*/
+target/
+
+# Binary artifacts
+*.goto
+*out
+smoke
+check_tests
+function

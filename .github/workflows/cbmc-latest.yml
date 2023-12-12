@@ -19,10 +19,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-11, ubuntu-20.04, ubuntu-22.04]
+        os: [macos-12, ubuntu-20.04, ubuntu-22.04]
     steps:
       - name: Checkout Kani under "kani"
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           path: kani
 
@@ -37,7 +37,7 @@ jobs:
         run: cargo build-dev
 
       - name: Checkout CBMC under "cbmc"
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: diffblue/cbmc
           path: cbmc
@@ -58,7 +58,7 @@ jobs:
     runs-on: ubuntu-20.04
     steps:
       - name: Checkout Kani under "kani"
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           path: kani
 
@@ -73,7 +73,7 @@ jobs:
         run: cargo build-dev -- --release
 
       - name: Checkout CBMC under "cbmc"
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: diffblue/cbmc
           path: cbmc

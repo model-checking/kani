@@ -5,12 +5,12 @@
 
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::InternedString;
-use rustc_hir::def_id::DefId;
 use rustc_hir::def_id::LOCAL_CRATE;
 use rustc_middle::mir::mono::CodegenUnitNameBuilder;
 use rustc_middle::mir::Local;
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{Instance, TyCtxt};
+use stable_mir::mir::mono::Instance as InstanceStable;
 use tracing::debug;
 
 impl<'tcx> GotocCtx<'tcx> {
@@ -22,7 +22,7 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_var_base_name(&self, l: &Local) -> String {
         match self.find_debug_info(l) {
             None => format!("var_{}", l.index()),
-            Some(info) => format!("{}", info.name),
+            Some(info) => info.name,
         }
     }
 
@@ -54,9 +54,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// A human readable name in Rust for reference, should not be used as a key.
     pub fn readable_instance_name(&self, instance: Instance<'tcx>) -> String {
-        with_no_trimmed_paths!(
-            self.tcx.def_path_str_with_substs(instance.def_id(), instance.substs)
-        )
+        with_no_trimmed_paths!(self.tcx.def_path_str_with_args(instance.def_id(), instance.args))
     }
 
     /// The actual function name used in the symbol table
@@ -77,6 +75,15 @@ impl<'tcx> GotocCtx<'tcx> {
         if pretty == "main" { pretty } else { llvm_mangled }
     }
 
+    /// Return the mangled name to be used in the symbol table.
+    ///
+    /// We special case main function in order to support `--function main`.
+    // TODO: Get rid of this: https://github.com/model-checking/kani/issues/2129
+    pub fn symbol_name_stable(&self, instance: InstanceStable) -> String {
+        let pretty = instance.name();
+        if pretty == "main" { pretty } else { instance.mangled_name() }
+    }
+
     /// The name for a tuple field
     pub fn tuple_fld_name(n: usize) -> String {
         format!("{n}")
@@ -85,12 +92,8 @@ impl<'tcx> GotocCtx<'tcx> {
     /// The name for the struct field on a vtable for a given function. Because generic
     /// functions can share the same name, we need to use the index of the entry in the
     /// vtable. This is the same index that will be passed in virtual function calls as
-    /// InstanceDef::Virtual(def_id, idx). We could use solely the index as a key into
-    /// the vtable struct, but we add the method name for debugging readability.
-    ///     Example: 3_vol
-    pub fn vtable_field_name(&self, _def_id: DefId, idx: usize) -> InternedString {
-        // format!("{}_{}", idx, with_no_trimmed_paths!(|| self.tcx.item_name(def_id)))
-        // TODO: use def_id https://github.com/model-checking/kani/issues/364
+    /// InstanceDef::Virtual(def_id, idx).
+    pub fn vtable_field_name(&self, idx: usize) -> InternedString {
         idx.to_string().into()
     }
 

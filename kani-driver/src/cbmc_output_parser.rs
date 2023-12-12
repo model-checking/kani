@@ -95,10 +95,16 @@ pub struct PropertyId {
 }
 
 impl Property {
-    const COVER_PROPERTY_CLASS: &str = "cover";
+    const COVER_PROPERTY_CLASS: &'static str = "cover";
+    const COVERAGE_PROPERTY_CLASS: &'static str = "code_coverage";
 
     pub fn property_class(&self) -> String {
         self.property_id.class.clone()
+    }
+
+    // Returns true if this is a code_coverage check
+    pub fn is_code_coverage_property(&self) -> bool {
+        self.property_id.class == Self::COVERAGE_PROPERTY_CLASS
     }
 
     /// Returns true if this is a cover property
@@ -322,11 +328,13 @@ impl std::fmt::Display for TraceData {
 #[serde(rename_all = "UPPERCASE")]
 pub enum CheckStatus {
     Failure,
-    Satisfied, // for cover properties only
+    Covered,   // for `code_coverage` properties only
+    Satisfied, // for `cover` properties only
     Success,
     Undetermined,
     Unreachable,
-    Unsatisfiable, // for cover properties only
+    Uncovered,     // for `code_coverage` properties only
+    Unsatisfiable, // for `cover` properties only
 }
 
 impl std::fmt::Display for CheckStatus {
@@ -334,6 +342,8 @@ impl std::fmt::Display for CheckStatus {
         let check_str = match self {
             CheckStatus::Satisfied => style("SATISFIED").green(),
             CheckStatus::Success => style("SUCCESS").green(),
+            CheckStatus::Covered => style("COVERED").green(),
+            CheckStatus::Uncovered => style("UNCOVERED").red(),
             CheckStatus::Failure => style("FAILURE").red(),
             CheckStatus::Unreachable => style("UNREACHABLE").yellow(),
             CheckStatus::Undetermined => style("UNDETERMINED").yellow(),

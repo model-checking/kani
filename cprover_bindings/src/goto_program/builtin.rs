@@ -61,6 +61,7 @@ pub enum BuiltinFn {
     Sinf,
     Sqrt,
     Sqrtf,
+    Sysconf,
     Trunc,
     Truncf,
     Unlink,
@@ -124,6 +125,7 @@ impl ToString for BuiltinFn {
             Sinf => "sinf",
             Sqrt => "sqrt",
             Sqrtf => "sqrtf",
+            Sysconf => "sysconf",
             Trunc => "trunc",
             Truncf => "truncf",
             Unlink => "unlink",
@@ -188,6 +190,7 @@ impl BuiltinFn {
             Sinf => vec![Type::float()],
             Sqrt => vec![Type::double()],
             Sqrtf => vec![Type::float()],
+            Sysconf => vec![Type::c_int()],
             Trunc => vec![Type::double()],
             Truncf => vec![Type::float()],
             Unlink => vec![Type::c_char().to_pointer()],
@@ -251,6 +254,7 @@ impl BuiltinFn {
             Sinf => Type::float(),
             Sqrt => Type::double(),
             Sqrtf => Type::float(),
+            Sysconf => Type::c_long_int(),
             Trunc => Type::double(),
             Truncf => Type::float(),
             Unlink => Type::c_int(),
@@ -314,6 +318,7 @@ impl BuiltinFn {
             Sinf,
             Sqrt,
             Sqrtf,
+            Sysconf,
             Trunc,
             Truncf,
             Unlink,
@@ -324,7 +329,7 @@ impl BuiltinFn {
 /// Converters: build symbols and expressions from Builtins
 impl BuiltinFn {
     pub fn as_symbol(&self) -> Symbol {
-        Symbol::builtin_function(&self.to_string(), self.param_types(), self.return_type())
+        Symbol::builtin_function(self.to_string(), self.param_types(), self.return_type())
     }
 
     pub fn as_expr(&self) -> Expr {

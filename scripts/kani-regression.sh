@@ -18,26 +18,38 @@ KANI_DIR=$SCRIPT_DIR/..
 # TODO: We should add a more robust mechanism to detect python unexpected behavior.
 export KANI_FAIL_ON_UNEXPECTED_DESCRIPTION="true"
 
-# Required dependencies
-check-cbmc-version.py --major 5 --minor 86
-check-cbmc-viewer-version.py --major 3 --minor 8
+# Gather dependencies version from top `kani-dependencies` file.
+source "${KANI_DIR}/kani-dependencies"
+# Sanity check dependencies values.
+[[ "${CBMC_MAJOR}.${CBMC_MINOR}" == "${CBMC_VERSION%.*}" ]] || \
+    (echo "Conflicting CBMC versions"; exit 1)
+[[ "${CBMC_VIEWER_MAJOR}.${CBMC_VIEWER_MINOR}" == "${CBMC_VIEWER_VERSION}" ]] || \
+    (echo "Conflicting CBMC viewer versions"; exit 1)
+# Check if installed versions are correct.
+check-cbmc-version.py --major ${CBMC_MAJOR} --minor ${CBMC_MINOR}
+check-cbmc-viewer-version.py --major ${CBMC_VIEWER_MAJOR} --minor ${CBMC_VIEWER_MINOR}
 check_kissat_version.sh
 
 # Formatting check
 ${SCRIPT_DIR}/kani-fmt.sh --check
 
-# Build all packages in the workspace
-cargo build-dev
+# Build all packages in the workspace and ensure no warning is emitted.
+RUSTFLAGS="-D warnings" cargo build-dev
 
 # Unit tests
 cargo test -p cprover_bindings
 cargo test -p kani-compiler
 cargo test -p kani-driver
 cargo test -p kani_metadata
+cargo test -p kani --lib # skip doc tests.
+# Test the actual macros, skipping doc tests and enabling extra traits for "syn"
+# so we can debug print AST
+RUSTFLAGS=--cfg=kani_sysroot cargo test -p kani_macros --features syn/extra-traits --lib
 
 # Declare testing suite information (suite and mode)
 TESTS=(
     "script-based-pre exec"
+    "coverage coverage-based"
     "kani kani"
     "expected expected"
     "ui expected"
@@ -87,10 +99,6 @@ time "$SCRIPT_DIR"/codegen-firecracker.sh
 FEATURES_MANIFEST_PATH="$KANI_DIR/tests/cargo-kani/cargo-features-flag/Cargo.toml"
 cargo kani --manifest-path "$FEATURES_MANIFEST_PATH" --harness trivial_success
 cargo clean --manifest-path "$FEATURES_MANIFEST_PATH"
-
-# Check that documentation compiles.
-echo "Starting doc tests:"
-cargo doc --workspace --no-deps --exclude std
 
 echo
 echo "All Kani regression tests completed successfully."

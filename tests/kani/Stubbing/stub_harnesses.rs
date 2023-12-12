@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-// kani-flags: --harness check --enable-unstable --enable-stubbing
+// kani-flags: --harness check -Z stubbing
 //
 //! This tests whether we provide a user friendly error if more than one harness has stubs
 

@@ -88,7 +88,7 @@ impl Book {
         let summary_dir = summary_path.parent().unwrap().to_path_buf();
         let summary = fs::read_to_string(summary_path.clone()).unwrap();
         assert!(
-            summary.starts_with(&summary_start.as_str()),
+            summary.starts_with(summary_start.as_str()),
             "Error: The start of {} summary file changed.",
             self.name
         );
@@ -409,7 +409,7 @@ fn extract(
     config_paths: &mut HashSet<PathBuf>,
     default_edition: Edition,
 ) {
-    let code = fs::read_to_string(&par_from).unwrap();
+    let code = fs::read_to_string(par_from).unwrap();
     let mut examples = Examples(Vec::new());
     find_testable_code(&code, &mut examples, ErrorCodes::No, false, None);
     for mut example in examples.0 {
@@ -514,7 +514,7 @@ fn generate_text_bookrunner(bookrunner: bookrunner::Tree, path: &Path) {
         bookrunner.data.num_fail,
         bookrunner
     );
-    fs::write(&path, bookrunner_str).expect("Error: Unable to write bookrunner results");
+    fs::write(path, bookrunner_str).expect("Error: Unable to write bookrunner results");
 }
 
 /// Runs examples using Litani build.

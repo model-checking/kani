@@ -12,16 +12,17 @@ use rustc_middle::mir::{HasLocalDecls, Local, Operand, Place, Rvalue};
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::print::FmtPrinter;
-use rustc_middle::ty::subst::InternalSubsts;
+use rustc_middle::ty::GenericArgsRef;
 use rustc_middle::ty::{
-    self, AdtDef, Const, FloatTy, GeneratorSubsts, Instance, IntTy, PolyFnSig, Ty, TyCtxt, TyKind,
+    self, AdtDef, Const, CoroutineArgs, FloatTy, Instance, IntTy, PolyFnSig, Ty, TyCtxt, TyKind,
     UintTy, VariantDef, VtblEntry,
 };
 use rustc_middle::ty::{List, TypeFoldable};
+use rustc_smir::rustc_internal;
 use rustc_span::def_id::DefId;
 use rustc_target::abi::{
-    Abi::Vector, FieldsShape, Integer, LayoutS, Primitive, Size, TagEncoding, TyAndLayout,
-    VariantIdx, Variants,
+    Abi::Vector, FieldIdx, FieldsShape, Integer, LayoutS, Primitive, Size, TagEncoding,
+    TyAndLayout, VariantIdx, Variants,
 };
 use rustc_target::spec::abi::Abi;
 use std::iter;
@@ -157,6 +158,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         cbmc::goto_program::CIntType::Bool => "bool",
                         cbmc::goto_program::CIntType::Char => "char",
                         cbmc::goto_program::CIntType::Int => "int",
+                        cbmc::goto_program::CIntType::LongInt => "long int",
                         cbmc::goto_program::CIntType::SizeT => "size_t",
                         cbmc::goto_program::CIntType::SSizeT => "ssize_t",
                     };
@@ -262,7 +264,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let fn_sig = sig.skip_binder();
         if let Some((tupe, prev_args)) = fn_sig.inputs().split_last() {
             let args = match *tupe.kind() {
-                ty::Tuple(substs) => substs,
+                ty::Tuple(args) => args,
                 _ => unreachable!("the final argument of a closure must be a tuple"),
             };
 
@@ -287,14 +289,10 @@ impl<'tcx> GotocCtx<'tcx> {
         sig
     }
 
-    fn closure_sig(
-        &self,
-        def_id: DefId,
-        substs: ty::subst::SubstsRef<'tcx>,
-    ) -> ty::PolyFnSig<'tcx> {
-        let sig = self.monomorphize(substs.as_closure().sig());
+    fn closure_sig(&self, def_id: DefId, args: ty::GenericArgsRef<'tcx>) -> ty::PolyFnSig<'tcx> {
+        let sig = self.monomorphize(args.as_closure().sig());
 
-        // In addition to `def_id` and `substs`, we need to provide the kind of region `env_region`
+        // In addition to `def_id` and `args`, we need to provide the kind of region `env_region`
         // in `closure_env_ty`, which we can build from the bound variables as follows
         let bound_vars = self.tcx.mk_bound_variable_kinds_from_iter(
             sig.bound_vars().iter().chain(iter::once(ty::BoundVariableKind::Region(ty::BrEnv))),
@@ -303,8 +301,8 @@ impl<'tcx> GotocCtx<'tcx> {
             var: ty::BoundVar::from_usize(bound_vars.len() - 1),
             kind: ty::BoundRegionKind::BrEnv,
         };
-        let env_region = ty::Region::new_late_bound(self.tcx, ty::INNERMOST, br);
-        let env_ty = self.tcx.closure_env_ty(def_id, substs, env_region).unwrap();
+        let env_region = ty::Region::new_bound(self.tcx, ty::INNERMOST, br);
+        let env_ty = self.tcx.closure_env_ty(def_id, args, env_region).unwrap();
 
         let sig = sig.skip_binder();
 
@@ -329,41 +327,41 @@ impl<'tcx> GotocCtx<'tcx> {
     // Adapted from `fn_sig_for_fn_abi` in
     // https://github.com/rust-lang/rust/blob/739d68a76e35b22341d9930bb6338bf202ba05ba/compiler/rustc_ty_utils/src/abi.rs#L88
     // Code duplication tracked here: https://github.com/model-checking/kani/issues/1365
-    fn generator_sig(
+    fn coroutine_sig(
         &self,
         did: &DefId,
         ty: Ty<'tcx>,
-        substs: ty::subst::SubstsRef<'tcx>,
+        args: ty::GenericArgsRef<'tcx>,
     ) -> ty::PolyFnSig<'tcx> {
-        let sig = substs.as_generator().poly_sig();
+        let sig = args.as_coroutine().sig();
 
-        let bound_vars = self.tcx.mk_bound_variable_kinds_from_iter(
-            sig.bound_vars().iter().chain(iter::once(ty::BoundVariableKind::Region(ty::BrEnv))),
-        );
+        let bound_vars = self.tcx.mk_bound_variable_kinds_from_iter(iter::once(
+            ty::BoundVariableKind::Region(ty::BrEnv),
+        ));
         let br = ty::BoundRegion {
             var: ty::BoundVar::from_usize(bound_vars.len() - 1),
             kind: ty::BoundRegionKind::BrEnv,
         };
-        let env_region = ty::ReLateBound(ty::INNERMOST, br);
-        let env_ty = self.tcx.mk_mut_ref(ty::Region::new_from_kind(self.tcx, env_region), ty);
+        let env_region = ty::ReBound(ty::INNERMOST, br);
+        let env_ty = Ty::new_mut_ref(self.tcx, ty::Region::new_from_kind(self.tcx, env_region), ty);
 
         let pin_did = self.tcx.require_lang_item(LangItem::Pin, None);
         let pin_adt_ref = self.tcx.adt_def(pin_did);
-        let pin_substs = self.tcx.mk_substs(&[env_ty.into()]);
-        let env_ty = self.tcx.mk_adt(pin_adt_ref, pin_substs);
+        let pin_args = self.tcx.mk_args(&[env_ty.into()]);
+        let env_ty = Ty::new_adt(self.tcx, pin_adt_ref, pin_args);
 
-        let sig = sig.skip_binder();
-        // The `FnSig` and the `ret_ty` here is for a generators main
-        // `Generator::resume(...) -> GeneratorState` function in case we
-        // have an ordinary generator, or the `Future::poll(...) -> Poll`
-        // function in case this is a special generator backing an async construct.
+        // The `FnSig` and the `ret_ty` here is for a coroutines main
+        // `coroutine::resume(...) -> CoroutineState` function in case we
+        // have an ordinary coroutine, or the `Future::poll(...) -> Poll`
+        // function in case this is a special coroutine backing an async construct.
         let tcx = self.tcx;
-        let (resume_ty, ret_ty) = if tcx.generator_is_async(*did) {
+        let (resume_ty, ret_ty) = if tcx.coroutine_is_async(*did) {
             // The signature should be `Future::poll(_, &mut Context<'_>) -> Poll<Output>`
             let poll_did = tcx.require_lang_item(LangItem::Poll, None);
             let poll_adt_ref = tcx.adt_def(poll_did);
-            let poll_substs = tcx.mk_substs(&[sig.return_ty.into()]);
-            let ret_ty = tcx.mk_adt(poll_adt_ref, poll_substs);
+            let poll_args = tcx.mk_args(&[sig.return_ty.into()]);
+            // TODO figure out where this one went
+            let ret_ty = Ty::new_adt(tcx, poll_adt_ref, poll_args);
 
             // We have to replace the `ResumeTy` that is used for type and borrow checking
             // with `&mut Context<'_>` which is used in codegen.
@@ -376,15 +374,15 @@ impl<'tcx> GotocCtx<'tcx> {
                     panic!("expected `ResumeTy`, found `{:?}`", sig.resume_ty);
                 };
             }
-            let context_mut_ref = tcx.mk_task_context();
+            let context_mut_ref = Ty::new_task_context(tcx);
 
             (context_mut_ref, ret_ty)
         } else {
-            // The signature should be `Generator::resume(_, Resume) -> GeneratorState<Yield, Return>`
-            let state_did = tcx.require_lang_item(LangItem::GeneratorState, None);
+            // The signature should be `Coroutine::resume(_, Resume) -> CoroutineState<Yield, Return>`
+            let state_did = tcx.require_lang_item(LangItem::CoroutineState, None);
             let state_adt_ref = tcx.adt_def(state_did);
-            let state_substs = tcx.mk_substs(&[sig.yield_ty.into(), sig.return_ty.into()]);
-            let ret_ty = tcx.mk_adt(state_adt_ref, state_substs);
+            let state_args = tcx.mk_args(&[sig.yield_ty.into(), sig.return_ty.into()]);
+            let ret_ty = Ty::new_adt(tcx, state_adt_ref, state_args);
 
             (sig.resume_ty, ret_ty)
         };
@@ -413,7 +411,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
                 sig
             }
-            ty::Generator(did, substs, _) => self.generator_sig(did, fntyp, substs),
+            ty::Coroutine(did, args, _) => self.coroutine_sig(did, fntyp, args),
             _ => unreachable!("Can't get function signature of type: {:?}", fntyp),
         })
     }
@@ -426,7 +424,7 @@ impl<'tcx> GotocCtx<'tcx> {
     {
         // Instance is Some(..) only when current codegen unit is a function.
         if let Some(current_fn) = &self.current_fn {
-            current_fn.instance().subst_mir_and_normalize_erasing_regions(
+            current_fn.instance().instantiate_mir_and_normalize_erasing_regions(
                 self.tcx,
                 ty::ParamEnv::reveal_all(),
                 ty::EarlyBinder::bind(value),
@@ -439,19 +437,19 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     pub fn local_ty(&self, l: Local) -> Ty<'tcx> {
-        self.monomorphize(self.current_fn().mir().local_decls()[l].ty)
+        self.monomorphize(self.current_fn().body_internal().local_decls()[l].ty)
     }
 
     pub fn rvalue_ty(&self, rv: &Rvalue<'tcx>) -> Ty<'tcx> {
-        self.monomorphize(rv.ty(self.current_fn().mir().local_decls(), self.tcx))
+        self.monomorphize(rv.ty(self.current_fn().body_internal().local_decls(), self.tcx))
     }
 
     pub fn operand_ty(&self, o: &Operand<'tcx>) -> Ty<'tcx> {
-        self.monomorphize(o.ty(self.current_fn().mir().local_decls(), self.tcx))
+        self.monomorphize(o.ty(self.current_fn().body_internal().local_decls(), self.tcx))
     }
 
     pub fn place_ty(&self, p: &Place<'tcx>) -> Ty<'tcx> {
-        self.monomorphize(p.ty(self.current_fn().mir().local_decls(), self.tcx).ty)
+        self.monomorphize(p.ty(self.current_fn().body_internal().local_decls(), self.tcx).ty)
     }
 
     /// Is the MIR type a zero-sized type.
@@ -484,7 +482,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let fn_ptr = fn_ty.to_pointer();
 
         // vtable field name, i.e., 3_vol (idx_method)
-        let vtable_field_name = self.vtable_field_name(instance.def_id(), idx);
+        let vtable_field_name = self.vtable_field_name(idx);
 
         DatatypeComponent::field(vtable_field_name, fn_ptr)
     }
@@ -634,16 +632,17 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     pub fn ty_pretty_name(&self, t: Ty<'tcx>) -> InternedString {
+        use crate::rustc_middle::ty::print::Print;
         use rustc_hir::def::Namespace;
-        use rustc_middle::ty::print::Printer;
-        let printer = FmtPrinter::new(self.tcx, Namespace::TypeNS);
+        let mut printer = FmtPrinter::new(self.tcx, Namespace::TypeNS);
 
         // Monomorphizing the type ensures we get a cannonical form for dynamic trait
         // objects with auto traits, such as:
         //   StructTag("tag-std::boxed::Box<(dyn std::error::Error + std::marker::Send + std::marker::Sync)>") }
         //   StructTag("tag-std::boxed::Box<dyn std::error::Error + std::marker::Send + std::marker::Sync>") }
         let t = self.monomorphize(t);
-        with_no_trimmed_paths!(printer.print_type(t).unwrap().into_buffer()).intern()
+        t.print(&mut printer).unwrap();
+        with_no_trimmed_paths!(printer.into_buffer()).intern()
     }
 
     pub fn ty_mangled_name(&self, t: Ty<'tcx>) -> InternedString {
@@ -659,7 +658,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // linked C libraries
         // https://github.com/model-checking/kani/issues/450
         match t.kind() {
-            TyKind::Adt(def, substs) if substs.is_empty() && def.repr().c() => {
+            TyKind::Adt(def, args) if args.is_empty() && def.repr().c() => {
                 // For non-generic #[repr(C)] types, use the literal path instead of mangling it.
                 self.tcx.def_path_str(def.did()).intern()
             }
@@ -682,7 +681,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     fn codegen_ty_raw_array(&mut self, elem_ty: Ty<'tcx>, len: Const<'tcx>) -> Type {
-        let size = self.codegen_const(len, None).int_constant_value().unwrap();
+        let size = self.codegen_const_internal(len, None).int_constant_value().unwrap();
         let elemt = self.codegen_ty(elem_ty);
         elemt.array_of(size)
     }
@@ -783,16 +782,16 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Slice(e) => self.codegen_ty(*e).flexible_array_of(),
             ty::Str => Type::unsigned_int(8).flexible_array_of(),
             ty::Ref(_, t, _) | ty::RawPtr(ty::TypeAndMut { ty: t, .. }) => self.codegen_ty_ref(*t),
-            ty::FnDef(def_id, substs) => {
+            ty::FnDef(def_id, args) => {
                 let instance =
-                    Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), *def_id, substs)
+                    Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), *def_id, args)
                         .unwrap()
                         .unwrap();
                 self.codegen_fndef_type(instance)
             }
             ty::FnPtr(sig) => self.codegen_function_sig(*sig).to_pointer(),
             ty::Closure(_, subst) => self.codegen_ty_closure(ty, subst),
-            ty::Generator(..) => self.codegen_ty_generator(ty),
+            ty::Coroutine(..) => self.codegen_ty_coroutine(ty),
             ty::Never => self.ensure_struct(NEVER_TYPE_EMPTY_STRUCT_NAME, "!", |_, _| vec![]),
             ty::Tuple(ts) => {
                 if ts.is_empty() {
@@ -815,11 +814,7 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Bound(_, _) | ty::Param(_) => unreachable!("monomorphization bug"),
 
             // type checking remnants which shouldn't be reachable
-            ty::GeneratorWitness(_)
-            | ty::GeneratorWitnessMIR(_, _)
-            | ty::Infer(_)
-            | ty::Placeholder(_)
-            | ty::Error(_) => {
+            ty::CoroutineWitness(_, _) | ty::Infer(_) | ty::Placeholder(_) | ty::Error(_) => {
                 unreachable!("remnants of type checking")
             }
         }
@@ -866,7 +861,7 @@ impl<'tcx> GotocCtx<'tcx> {
             // We need to pad to the next offset
             let padding_size = next_offset - current_offset;
             let name = format!("$pad{idx}");
-            Some(DatatypeComponent::padding(&name, padding_size.bits()))
+            Some(DatatypeComponent::padding(name, padding_size.bits()))
         } else {
             None
         }
@@ -876,7 +871,7 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_alignment_padding(
         &self,
         size: Size,
-        layout: &LayoutS,
+        layout: &LayoutS<FieldIdx, VariantIdx>,
         idx: usize,
     ) -> Option<DatatypeComponent> {
         let align = Size::from_bits(layout.align.abi.bits());
@@ -901,7 +896,7 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_struct_fields(
         &mut self,
         flds: Vec<(String, Ty<'tcx>)>,
-        layout: &LayoutS,
+        layout: &LayoutS<FieldIdx, VariantIdx>,
         initial_offset: Size,
     ) -> Vec<DatatypeComponent> {
         match &layout.fields {
@@ -981,15 +976,15 @@ impl<'tcx> GotocCtx<'tcx> {
     /// A closure is a struct of all its environments. That is, a closure is
     /// just a tuple with a unique type identifier, so that Fn related traits
     /// can find its impl.
-    fn codegen_ty_closure(&mut self, t: Ty<'tcx>, substs: ty::subst::SubstsRef<'tcx>) -> Type {
+    fn codegen_ty_closure(&mut self, t: Ty<'tcx>, args: ty::GenericArgsRef<'tcx>) -> Type {
         self.ensure_struct(self.ty_mangled_name(t), self.ty_pretty_name(t), |ctx, _| {
-            ctx.codegen_ty_tuple_like(t, substs.as_closure().upvar_tys().collect())
+            ctx.codegen_ty_tuple_like(t, args.as_closure().upvar_tys().to_vec())
         })
     }
 
-    /// Translate a generator type similarly to an enum with a variant for each suspend point.
+    /// Translate a coroutine type similarly to an enum with a variant for each suspend point.
     ///
-    /// Consider the following generator:
+    /// Consider the following coroutine:
     /// ```
     /// || {
     ///     let a = true;
@@ -1001,13 +996,13 @@ impl<'tcx> GotocCtx<'tcx> {
     /// ```
     ///
     /// Rustc compiles this to something similar to the following enum (but there are differences, see below!),
-    /// as described at the top of <https://github.com/rust-lang/rust/blob/master/compiler/rustc_mir_transform/src/generator.rs>:
+    /// as described at the top of <https://github.com/rust-lang/rust/blob/master/compiler/rustc_mir_transform/src/coroutine.rs>:
     ///
     /// ```ignore
-    /// enum GeneratorEnum {
-    ///     Unresumed,                        // initial state of the generator
-    ///     Returned,                         // generator has returned
-    ///     Panicked,                         // generator has panicked
+    /// enum CoroutineEnum {
+    ///     Unresumed,                        // initial state of the coroutine
+    ///     Returned,                         // coroutine has returned
+    ///     Panicked,                         // coroutine has panicked
     ///     Suspend0 { b: &bool, a: bool },   // state after suspending (`yield`ing) for the first time
     ///     Suspend1,                         // state after suspending (`yield`ing) for the second time
     /// }
@@ -1020,12 +1015,12 @@ impl<'tcx> GotocCtx<'tcx> {
     /// This means that we CANNOT use the enum translation, which would be roughly as follows:
     ///
     /// ```ignore
-    /// struct GeneratorEnum {
+    /// struct CoroutineEnum {
     ///     int case; // discriminant
-    ///     union GeneratorEnum-union cases; // variant
+    ///     union CoroutineEnum-union cases; // variant
     /// }
     ///
-    /// union GeneratorEnum-union {
+    /// union CoroutineEnum-union {
     ///     struct Unresumed variant0;
     ///     struct Returned variant1;
     ///     // ...
@@ -1035,10 +1030,10 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Instead, we use the following translation:
     ///
     /// ```ignore
-    /// union GeneratorEnum {
+    /// union CoroutineEnum {
     ///     struct DirectFields direct_fields;
-    ///     struct Unresumed generator_variant_Unresumed;
-    ///     struct Returned generator_variant_Returned;
+    ///     struct Unresumed coroutine_variant_Unresumed;
+    ///     struct Returned coroutine_variant_Returned;
     ///     // ...
     /// }
     ///
@@ -1055,17 +1050,17 @@ impl<'tcx> GotocCtx<'tcx> {
     /// // ...
     ///
     /// struct Suspend0 {
-    ///     bool *generator_field_0; // variable b in the generator code above
+    ///     bool *coroutine_field_0; // variable b in the coroutine code above
     ///     // padding (for char case in DirectFields)
-    ///     bool generator_field_1; // variable a in the generator code above
+    ///     bool coroutine_field_1; // variable a in the coroutine code above
     /// }
     /// ```
     ///
-    /// Of course, if the generator has any other top-level/direct fields, they'd be included in the `DirectFields` struct as well.
-    fn codegen_ty_generator(&mut self, ty: Ty<'tcx>) -> Type {
-        let generator_name = self.ty_mangled_name(ty);
+    /// Of course, if the coroutine has any other top-level/direct fields, they'd be included in the `DirectFields` struct as well.
+    fn codegen_ty_coroutine(&mut self, ty: Ty<'tcx>) -> Type {
+        let coroutine_name = self.ty_mangled_name(ty);
         let pretty_name = self.ty_pretty_name(ty);
-        debug!(?pretty_name, "codeged_ty_generator");
+        debug!(?pretty_name, "codeged_ty_coroutine");
         self.ensure_union(self.ty_mangled_name(ty), pretty_name, |ctx, _| {
             let type_and_layout = ctx.layout_of(ty);
             let (discriminant_field, variants) = match &type_and_layout.variants {
@@ -1075,13 +1070,13 @@ impl<'tcx> GotocCtx<'tcx> {
                     variants,
                     ..
                 } => (tag_field, variants),
-                _ => unreachable!("Generators have more than one variant and use direct encoding"),
+                _ => unreachable!("Coroutines have more than one variant and use direct encoding"),
             };
             // generate a struct for the direct fields of the layout (fields that don't occur in the variants)
             let direct_fields = DatatypeComponent::Field {
                 name: "direct_fields".into(),
-                typ: ctx.codegen_generator_variant_struct(
-                    generator_name,
+                typ: ctx.codegen_coroutine_variant_struct(
+                    coroutine_name,
                     pretty_name,
                     type_and_layout,
                     "DirectFields".into(),
@@ -1090,11 +1085,11 @@ impl<'tcx> GotocCtx<'tcx> {
             };
             let mut fields = vec![direct_fields];
             for var_idx in variants.indices() {
-                let variant_name = GeneratorSubsts::variant_name(var_idx).into();
+                let variant_name = CoroutineArgs::variant_name(var_idx).into();
                 fields.push(DatatypeComponent::Field {
-                    name: ctx.generator_variant_name(var_idx),
-                    typ: ctx.codegen_generator_variant_struct(
-                        generator_name,
+                    name: ctx.coroutine_variant_name(var_idx),
+                    typ: ctx.codegen_coroutine_variant_struct(
+                        coroutine_name,
                         pretty_name,
                         type_and_layout.for_variant(ctx, var_idx),
                         variant_name,
@@ -1106,22 +1101,22 @@ impl<'tcx> GotocCtx<'tcx> {
         })
     }
 
-    /// Generates a struct for a variant of the generator.
+    /// Generates a struct for a variant of the coroutine.
     ///
-    /// The field `discriminant_field` should be `Some(idx)` when generating the variant for the direct (top-[evel) fields of the generator.
+    /// The field `discriminant_field` should be `Some(idx)` when generating the variant for the direct (top-[evel) fields of the coroutine.
     /// Then the field with the index `idx` will be treated as the discriminant and will be given a special name to work with the rest of the code.
-    /// The field `discriminant_field` should be `None` when generating an actual variant of the generator because those don't contain the discriminant as a field.
-    fn codegen_generator_variant_struct(
+    /// The field `discriminant_field` should be `None` when generating an actual variant of the coroutine because those don't contain the discriminant as a field.
+    fn codegen_coroutine_variant_struct(
         &mut self,
-        generator_name: InternedString,
-        pretty_generator_name: InternedString,
+        coroutine_name: InternedString,
+        pretty_coroutine_name: InternedString,
         type_and_layout: TyAndLayout<'tcx, Ty<'tcx>>,
         variant_name: InternedString,
         discriminant_field: Option<usize>,
     ) -> Type {
-        let struct_name = format!("{generator_name}::{variant_name}");
-        let pretty_struct_name = format!("{pretty_generator_name}::{variant_name}");
-        debug!(?pretty_struct_name, "codeged_generator_variant_struct");
+        let struct_name = format!("{coroutine_name}::{variant_name}");
+        let pretty_struct_name = format!("{pretty_coroutine_name}::{variant_name}");
+        debug!(?pretty_struct_name, "codeged_coroutine_variant_struct");
         self.ensure_struct(struct_name, pretty_struct_name, |ctx, _| {
             let mut offset = Size::ZERO;
             let mut fields = vec![];
@@ -1131,7 +1126,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let field_name = if Some(idx) == discriminant_field {
                     "case".into()
                 } else {
-                    ctx.generator_field_name(idx)
+                    ctx.coroutine_field_name(idx)
                 };
                 let field_ty = type_and_layout.field(ctx, idx).ty;
                 let field_offset = type_and_layout.fields.offset(idx);
@@ -1154,12 +1149,12 @@ impl<'tcx> GotocCtx<'tcx> {
         })
     }
 
-    pub fn generator_variant_name(&self, var_idx: VariantIdx) -> InternedString {
-        format!("generator_variant_{}", GeneratorSubsts::variant_name(var_idx)).into()
+    pub fn coroutine_variant_name(&self, var_idx: VariantIdx) -> InternedString {
+        format!("coroutine_variant_{}", CoroutineArgs::variant_name(var_idx)).into()
     }
 
-    pub fn generator_field_name(&self, field_idx: usize) -> InternedString {
-        format!("generator_field_{field_idx}").into()
+    pub fn coroutine_field_name(&self, field_idx: usize) -> InternedString {
+        format!("coroutine_field_{field_idx}").into()
     }
 
     /// Codegen "fat pointers" to the given `pointee_type`. These are pointers with metadata.
@@ -1236,7 +1231,7 @@ impl<'tcx> GotocCtx<'tcx> {
             | ty::Closure(..)
             | ty::Float(_)
             | ty::Foreign(_)
-            | ty::Generator(..)
+            | ty::Coroutine(..)
             | ty::Int(_)
             | ty::RawPtr(_)
             | ty::Ref(..)
@@ -1256,8 +1251,7 @@ impl<'tcx> GotocCtx<'tcx> {
             // For soundness, hold off on generating them till we have test-cases.
             ty::Bound(_, _) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Error(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
-            ty::GeneratorWitness(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
-            ty::GeneratorWitnessMIR(_, _) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
+            ty::CoroutineWitness(_, _) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Infer(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Param(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Placeholder(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
@@ -1330,12 +1324,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// For details, see <https://github.com/model-checking/kani/pull/1338>
     pub fn codegen_fndef_type(&mut self, instance: Instance<'tcx>) -> Type {
-        let func = self.symbol_name(instance);
-        self.ensure_struct(
-            format!("{func}::FnDefStruct"),
-            format!("{}::FnDefStruct", self.readable_instance_name(instance)),
-            |_, _| vec![],
-        )
+        self.codegen_fndef_type_stable(rustc_internal::stable(instance))
     }
 
     /// codegen for struct
@@ -1345,7 +1334,7 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         ty: Ty<'tcx>,
         def: &'tcx AdtDef,
-        subst: &'tcx InternalSubsts<'tcx>,
+        subst: &'tcx GenericArgsRef<'tcx>,
     ) -> Type {
         self.ensure_struct(self.ty_mangled_name(ty), self.ty_pretty_name(ty), |ctx, _| {
             let variant = &def.variants().raw[0];
@@ -1358,8 +1347,8 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_variant_struct_fields(
         &mut self,
         variant: &VariantDef,
-        subst: &'tcx InternalSubsts<'tcx>,
-        layout: &LayoutS,
+        subst: &'tcx GenericArgsRef<'tcx>,
+        layout: &LayoutS<FieldIdx, VariantIdx>,
         initial_offset: Size,
     ) -> Vec<DatatypeComponent> {
         let flds: Vec<_> =
@@ -1372,7 +1361,7 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         ty: Ty<'tcx>,
         def: &'tcx AdtDef,
-        subst: &'tcx InternalSubsts<'tcx>,
+        subst: &'tcx GenericArgsRef<'tcx>,
     ) -> Type {
         self.ensure_union(self.ty_mangled_name(ty), self.ty_pretty_name(ty), |ctx, _| {
             def.variants().raw[0]
@@ -1380,7 +1369,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 .iter()
                 .map(|f| {
                     DatatypeComponent::field(
-                        &f.name.to_string(),
+                        f.name.to_string(),
                         ctx.codegen_ty(f.ty(ctx.tcx, subst)),
                     )
                 })
@@ -1424,7 +1413,7 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         ty: Ty<'tcx>,
         adtdef: &'tcx AdtDef,
-        subst: &'tcx InternalSubsts<'tcx>,
+        subst: &'tcx GenericArgsRef<'tcx>,
     ) -> Type {
         let pretty_name = self.ty_pretty_name(ty);
         // variants appearing in source code (in source code order)
@@ -1448,9 +1437,9 @@ impl<'tcx> GotocCtx<'tcx> {
                 })
             }
             Variants::Multiple { tag_encoding, variants, tag_field, .. } => {
-                // Contrary to generators, currently enums have only one field (the discriminant), the rest are in the variants:
+                // Contrary to coroutines, currently enums have only one field (the discriminant), the rest are in the variants:
                 assert!(layout.fields.count() <= 1);
-                // Contrary to generators, the discriminant is the first (and only) field for enums:
+                // Contrary to coroutines, the discriminant is the first (and only) field for enums:
                 assert_eq!(*tag_field, 0);
                 match tag_encoding {
                     TagEncoding::Direct => {
@@ -1527,8 +1516,8 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         ty: Ty<'tcx>,
         adtdef: &'tcx AdtDef,
-        subst: &'tcx InternalSubsts<'tcx>,
-        variants: &IndexVec<VariantIdx, LayoutS>,
+        subst: &'tcx GenericArgsRef<'tcx>,
+        variants: &IndexVec<VariantIdx, LayoutS<FieldIdx, VariantIdx>>,
     ) -> Type {
         let non_zst_count = variants.iter().filter(|layout| layout.size.bytes() > 0).count();
         let mangled_name = self.ty_mangled_name(ty);
@@ -1547,7 +1536,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     pub(crate) fn variant_min_offset(
         &self,
-        variants: &IndexVec<VariantIdx, LayoutS>,
+        variants: &IndexVec<VariantIdx, LayoutS<FieldIdx, VariantIdx>>,
     ) -> Option<Size> {
         variants
             .iter()
@@ -1608,9 +1597,10 @@ impl<'tcx> GotocCtx<'tcx> {
 
             Primitive::F32 => self.tcx.types.f32,
             Primitive::F64 => self.tcx.types.f64,
-            Primitive::Pointer(_) => {
-                self.tcx.mk_ptr(ty::TypeAndMut { ty: self.tcx.types.u8, mutbl: Mutability::Not })
-            }
+            Primitive::Pointer(_) => Ty::new_ptr(
+                self.tcx,
+                ty::TypeAndMut { ty: self.tcx.types.u8, mutbl: Mutability::Not },
+            ),
         }
     }
 
@@ -1630,8 +1620,8 @@ impl<'tcx> GotocCtx<'tcx> {
         name: InternedString,
         pretty_name: InternedString,
         def: &'tcx AdtDef,
-        subst: &'tcx InternalSubsts<'tcx>,
-        layouts: &IndexVec<VariantIdx, LayoutS>,
+        subst: &'tcx GenericArgsRef<'tcx>,
+        layouts: &IndexVec<VariantIdx, LayoutS<FieldIdx, VariantIdx>>,
         initial_offset: Size,
     ) -> Vec<DatatypeComponent> {
         def.variants()
@@ -1642,7 +1632,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     None
                 } else {
                     Some(DatatypeComponent::field(
-                        &case.name.to_string(),
+                        case.name.to_string(),
                         self.codegen_enum_case_struct(
                             name,
                             pretty_name,
@@ -1662,8 +1652,8 @@ impl<'tcx> GotocCtx<'tcx> {
         name: InternedString,
         pretty_name: InternedString,
         case: &VariantDef,
-        subst: &'tcx InternalSubsts<'tcx>,
-        variant: &LayoutS,
+        subst: &'tcx GenericArgsRef<'tcx>,
+        variant: &LayoutS<FieldIdx, VariantIdx>,
         initial_offset: Size,
     ) -> Type {
         let case_name = format!("{name}::{}", case.name);
@@ -1716,7 +1706,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     // components as parameters with a special naming convention
                     // so that we can "retuple" them in the function prelude.
                     // See: compiler/rustc_codegen_llvm/src/gotoc/mod.rs:codegen_function_prelude
-                    if let Some(spread) = self.current_fn().mir().spread_arg {
+                    if let Some(spread) = self.current_fn().body_internal().spread_arg {
                         if lc.index() >= spread.index() {
                             let (name, _) = self.codegen_spread_arg_name(&lc);
                             ident = name;
@@ -1771,7 +1761,7 @@ impl<'tcx> GotocCtx<'tcx> {
             // Codegen the type replacing the non-zst field.
             let new_name = self.ty_mangled_name(*curr).to_string() + "::WithDataPtr";
             let new_pretty_name = format!("{}::WithDataPtr", self.ty_pretty_name(*curr));
-            if let ty::Adt(adt_def, adt_substs) = curr.kind() {
+            if let ty::Adt(adt_def, adt_args) = curr.kind() {
                 let fields = &adt_def.variants().get(VariantIdx::from_u32(0)).unwrap().fields;
                 self.ensure_struct(new_name, new_pretty_name, |ctx, s_name| {
                     let fields_shape = ctx.layout_of(*curr).layout.fields();
@@ -1780,7 +1770,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         .map(|idx| {
                             let idx = idx.into();
                             let name = fields[idx].name.to_string().intern();
-                            let field_ty = fields[idx].ty(ctx.tcx, adt_substs);
+                            let field_ty = fields[idx].ty(ctx.tcx, adt_args);
                             let typ = if !ctx.is_zst(field_ty) {
                                 last_type.clone()
                             } else {
@@ -1811,11 +1801,11 @@ impl<'tcx> GotocCtx<'tcx> {
         }
 
         let mut typ = struct_type;
-        while let ty::Adt(adt_def, adt_substs) = typ.kind() {
+        while let ty::Adt(adt_def, adt_args) = typ.kind() {
             assert_eq!(adt_def.variants().len(), 1, "Expected a single-variant ADT. Found {typ:?}");
             let fields = &adt_def.variants().get(VariantIdx::from_u32(0)).unwrap().fields;
             let last_field = fields.last_index().expect("Trait should be the last element.");
-            typ = fields[last_field].ty(self.tcx, adt_substs);
+            typ = fields[last_field].ty(self.tcx, adt_args);
         }
         if typ.is_trait() { Some(typ) } else { None }
     }
@@ -1858,7 +1848,7 @@ impl<'tcx> GotocCtx<'tcx> {
             type Item = (String, Ty<'tcx>);
 
             fn next(&mut self) -> Option<Self::Item> {
-                if let ty::Adt(adt_def, adt_substs) = self.curr.kind() {
+                if let ty::Adt(adt_def, adt_args) = self.curr.kind() {
                     assert_eq!(
                         adt_def.variants().len(),
                         1,
@@ -1869,8 +1859,8 @@ impl<'tcx> GotocCtx<'tcx> {
                     let fields = &adt_def.variants().get(VariantIdx::from_u32(0)).unwrap().fields;
                     let mut non_zsts = fields
                         .iter()
-                        .filter(|field| !ctx.is_zst(field.ty(ctx.tcx, adt_substs)))
-                        .map(|non_zst| (non_zst.name.to_string(), non_zst.ty(ctx.tcx, adt_substs)));
+                        .filter(|field| !ctx.is_zst(field.ty(ctx.tcx, adt_args)))
+                        .map(|non_zst| (non_zst.name.to_string(), non_zst.ty(ctx.tcx, adt_args)));
                     let (name, next) = non_zsts.next().expect("Expected one non-zst field.");
                     self.curr = next;
                     assert!(non_zsts.next().is_none(), "Expected only one non-zst field.");

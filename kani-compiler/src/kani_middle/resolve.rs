@@ -14,7 +14,7 @@ use std::fmt;
 use std::iter::Peekable;
 
 use rustc_hir::def::{DefKind, Res};
-use rustc_hir::def_id::{DefId, LocalDefId, CRATE_DEF_INDEX, LOCAL_CRATE};
+use rustc_hir::def_id::{DefId, LocalDefId, LocalModDefId, CRATE_DEF_INDEX, LOCAL_CRATE};
 use rustc_hir::{ItemKind, UseKind};
 use rustc_middle::ty::TyCtxt;
 use tracing::debug;
@@ -90,6 +90,12 @@ pub enum ResolveError<'tcx> {
     UnexpectedType { tcx: TyCtxt<'tcx>, item: DefId, expected: &'static str },
 }
 
+impl<'tcx> fmt::Debug for ResolveError<'tcx> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        std::fmt::Display::fmt(self, f)
+    }
+}
+
 impl<'tcx> fmt::Display for ResolveError<'tcx> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -153,8 +159,10 @@ fn resolve_prefix<'tcx>(
 ) -> Result<Path, ResolveError<'tcx>> {
     debug!(?name, ?current_module, "resolve_prefix");
 
-    // Split the string into segments separated by `::`.
-    let mut segments = name.split("::").map(str::to_string).peekable();
+    // Split the string into segments separated by `::`. Trim the whitespace
+    // since path strings generated from macros sometimes add spaces around
+    // `::`.
+    let mut segments = name.split("::").map(|s| s.trim().to_string()).peekable();
     assert!(segments.peek().is_some(), "expected identifier, found `{name}`");
 
     // Resolve qualifiers `crate`, initial `::`, and `self`. The qualifier
@@ -182,7 +190,7 @@ fn resolve_prefix<'tcx>(
         CRATE => {
             segments.next();
             // Find the module at the root of the crate.
-            let current_module_hir_id = tcx.hir().local_def_id_to_hir_id(current_module);
+            let current_module_hir_id = tcx.local_def_id_to_hir_id(current_module);
             let crate_root = match tcx.hir().parent_iter(current_module_hir_id).last() {
                 None => current_module,
                 Some((hir_id, _)) => hir_id.owner.def_id,
@@ -221,7 +229,7 @@ fn resolve_super<'tcx, I>(
 where
     I: Iterator<Item = String>,
 {
-    let current_module_hir_id = tcx.hir().local_def_id_to_hir_id(current_module);
+    let current_module_hir_id = tcx.local_def_id_to_hir_id(current_module);
     let mut parents = tcx.hir().parent_iter(current_module_hir_id);
     let mut base_module = current_module;
     while segments.next_if(|segment| segment == SUPER).is_some() {
@@ -278,7 +286,7 @@ enum RelativeResolution {
 }
 
 /// Resolves a path relative to a local module.
-fn resolve_relative(tcx: TyCtxt, current_module: LocalDefId, name: &str) -> RelativeResolution {
+fn resolve_relative(tcx: TyCtxt, current_module: LocalModDefId, name: &str) -> RelativeResolution {
     debug!(?name, ?current_module, "resolve_relative");
 
     let mut glob_imports = vec![];
@@ -318,7 +326,7 @@ fn resolve_in_module<'tcx>(
             ResolveError::MissingItem { tcx, base: current_module, unresolved: name.to_string() }
         }),
         Some(local_id) => {
-            let result = resolve_relative(tcx, local_id, name);
+            let result = resolve_relative(tcx, LocalModDefId::new_unchecked(local_id), name);
             match result {
                 RelativeResolution::Found(def_id) => Ok(def_id),
                 RelativeResolution::Globs(globs) => {
@@ -372,7 +380,7 @@ fn resolve_in_glob_uses<'tcx>(
 fn resolve_in_glob_use(tcx: TyCtxt, res: &Res, name: &str) -> RelativeResolution {
     if let Res::Def(DefKind::Mod, def_id) = res {
         if let Some(local_id) = def_id.as_local() {
-            resolve_relative(tcx, local_id, name)
+            resolve_relative(tcx, LocalModDefId::new_unchecked(local_id), name)
         } else {
             resolve_in_foreign_module(tcx, *def_id, name)
                 .map_or(RelativeResolution::Globs(vec![]), RelativeResolution::Found)

@@ -4,9 +4,148 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
+## [0.42.0]
+
+### What's Changed
+
+* Build CBMC from source and install as package on non-x86_64 by @bennofs in https://github.com/model-checking/kani/pull/2877 and https://github.com/model-checking/kani/pull/2878
+* Emit suggestions and an explanation when CBMC runs out of memory by @JustusAdam in https://github.com/model-checking/kani/pull/2885
+* Rust toolchain upgraded to `nightly-2023-11-28` by @celinval
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.41.0...kani-0.42.0
+
+## [0.41.0]
+
+### Breaking Changes
+
+* Set minimum python to 3.7 in docker container and release action by @remi-delmas-3000 in https://github.com/model-checking/kani/pull/2879
+* Delete `any_slice` which has been deprecated since Kani 0.38.0. by @zhassan-aws in https://github.com/model-checking/kani/pull/2860
+
+### What's Changed
+
+* Make `cover` const by @jswrenn in https://github.com/model-checking/kani/pull/2867
+* Change `expect()` from taking formatted strings to use `unwrap_or_else()` by @matthiaskrgr in https://github.com/model-checking/kani/pull/2865
+* Fix setup for `aarch64-unknown-linux-gnu` platform by @adpaco-aws in https://github.com/model-checking/kani/pull/2864
+* Do not override `std` library during playback by @celinval in https://github.com/model-checking/kani/pull/2852
+* Rust toolchain upgraded to `nightly-2023-11-11` by @zhassan-aws
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.40.0...kani-0.41.0
+
+## [0.40.0]
+
+### What's Changed
+
+* Ease setup in Amazon Linux 2 by @adpaco-aws in https://github.com/model-checking/kani/pull/2833
+* Propagate backend options into goto-synthesizer by @qinheping in https://github.com/model-checking/kani/pull/2643
+* Update CBMC version to 5.95.1 by @adpaco-aws in https://github.com/model-checking/kani/pull/2844
+* Rust toolchain upgraded to `nightly-2023-10-31` by @jaisnan @adpaco-aws
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.39.0...kani-0.40.0
+
+## [0.39.0]
+
+### What's Changed
+
+* Limit --exclude to workspace packages by @tautschnig in https://github.com/model-checking/kani/pull/2808
+* Fix panic warning and add arbitrary Duration by @celinval in https://github.com/model-checking/kani/pull/2820
+* Update CBMC version to 5.94 by @celinval in https://github.com/model-checking/kani/pull/2821
+* Rust toolchain upgraded to `nightly-2023-10-17` by @celinval @tautschnig
+
+**Full Changelog**:
+https://github.com/model-checking/kani/compare/kani-0.38.0...kani-0.39.0
+
+## [0.38.0]
+
+### Major Changes
+
+* Deprecate `any_slice` by @zhassan-aws in https://github.com/model-checking/kani/pull/2789
+
+### What's Changed
+
+* Provide better error message for invalid stubs by @JustusAdam in https://github.com/model-checking/kani/pull/2787
+* Simple Stubbing with Contracts by @JustusAdam in https://github.com/model-checking/kani/pull/2746
+* Avoid mismatch when generating structs that represent scalar data but also include ZSTs by @adpaco-aws in https://github.com/model-checking/kani/pull/2794
+* Prevent kani crash during setup for first time by @jaisnan in https://github.com/model-checking/kani/pull/2799
+* Create concrete playback temp files in source directory by @tautschnig in https://github.com/model-checking/kani/pull/2804
+* Bump CBMC version by @zhassan-aws in https://github.com/model-checking/kani/pull/2796
+* Update Rust toolchain to 2023-09-23 by @tautschnig in https://github.com/model-checking/kani/pull/2806
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.37.0...kani-0.38.0
+
+## [0.37.0]
+
+### Major Changes
+
+* Delete obsolete stubs for `Vec` and related options by @zhassan-aws in https://github.com/model-checking/kani/pull/2770
+* Add support for the ARM64 Linux platform by @adpaco-aws in https://github.com/model-checking/kani/pull/2757
+
+### What's Changed
+
+* Function Contracts: Support for defining and checking `requires` and `ensures` clauses by @JustusAdam in https://github.com/model-checking/kani/pull/2655
+* Force `any_vec` capacity to match length by @celinval in https://github.com/model-checking/kani/pull/2765
+* Fix expected value for `pref_align_of` under aarch64/macos by @remi-delmas-3000 in https://github.com/model-checking/kani/pull/2782
+* Bump CBMC version to 5.92.0 by @zhassan-aws in https://github.com/model-checking/kani/pull/2771
+* Upgrade to Kissat 3.1.1 by @zhassan-aws in https://github.com/model-checking/kani/pull/2756
+* Rust toolchain upgraded to `nightly-2023-09-19` by @remi-delmas-3000 @tautschnig
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.36.0...kani-0.37.0
+
+## [0.36.0]
+
+### What's Changed
+
+* Enable `-Z stubbing` and error out instead of ignoring stub by @celinval in https://github.com/model-checking/kani/pull/2678
+* Enable concrete playback for failure of UB checks by @zhassan-aws in https://github.com/model-checking/kani/pull/2727
+* Bump CBMC version to 5.91.0 by @adpaco-aws in https://github.com/model-checking/kani/pull/2733
+* Rust toolchain upgraded to `nightly-2023-09-06` by @celinval @jaisnan @adpaco-aws
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.35.0...kani-0.36.0
+
+## [0.35.0]
+
+### What's Changed
+
+* Add support to `simd_bitmask` by @celinval in https://github.com/model-checking/kani/pull/2677
+* Add integer overflow checking for `simd_div` and `simd_rem` by @reisnera in https://github.com/model-checking/kani/pull/2645
+* Bump CBMC version by @zhassan-aws in https://github.com/model-checking/kani/pull/2702
+* Upgrade Rust toolchain to 2023-08-19 by @zhassan-aws in https://github.com/model-checking/kani/pull/2696
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.34.0...kani-0.35.0
+
+## [0.34.0]
+
+### Breaking Changes
+* Change default solver to CaDiCaL by @celinval in https://github.com/model-checking/kani/pull/2557
+By default, Kani will now run CBMC with CaDiCaL, since this solver has outperformed Minisat in most of our benchmarks.
+User's should still be able to select Minisat (or a different solver) either by using `#[solver]` harness attribute,
+or by passing `--solver=<SOLVER>` command line option.
+
+### What's Changed
+
+* Allow specifying the scheduling strategy in #[kani_proof] for async functions by @fzaiser in https://github.com/model-checking/kani/pull/1661
+* Support for stubbing out foreign functions by @feliperodri in https://github.com/model-checking/kani/pull/2658
+* Coverage reporting without a need for cbmc-viewer by @adpaco-aws in https://github.com/model-checking/kani/pull/2609
+* Add support to array-based SIMD by @celinval in https://github.com/model-checking/kani/pull/2633
+* Add unchecked/SIMD bitshift checks and disable CBMC flag by @reisnera in https://github.com/model-checking/kani/pull/2630
+* Fix codegen of constant byte slices to address spurious verification failures by @zhassan in https://github.com/model-checking/kani/pull/2663
+* Bump CBMC to v5.89.0 by @remi-delmas-3000 in https://github.com/model-checking/kani/pull/2662
+* Update Rust toolchain to nightly 2023-08-04 by @remi-delmas-3000 in https://github.com/model-checking/kani/pull/2661
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.33.0...kani-0.34.0
+
+## [0.33.0]
+
+### What's Changed
+* Add support for sysconf by @feliperodri in https://github.com/model-checking/kani/pull/2557
+* Print Kani version by @adpaco-aws in https://github.com/model-checking/kani/pull/2619
+* Upgrade Rust toolchain to nightly-2023-07-01 by @qinheping in https://github.com/model-checking/kani/pull/2616
+* Bump CBMC version to 5.88.1 by @zhassan-aws in https://github.com/model-checking/kani/pull/2623
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.32.0...kani-0.33.0
+
 ## [0.32.0]
 
-## What's Changed
+### What's Changed
 
 * Add kani::spawn and an executor to the Kani library by @fzaiser in https://github.com/model-checking/kani/pull/1659
 * Add "kani" configuration key to enable conditional compilation in build scripts by @celinval in https://github.com/model-checking/kani/pull/2297
@@ -20,7 +159,7 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 
 ## [0.31.0]
 
-## What's Changed
+### What's Changed
 * Add `--exact` flag by @jaisnan in https://github.com/model-checking/kani/pull/2527
 * Build the verification libraries using Kani compiler by @celinval in https://github.com/model-checking/kani/pull/2534
 * Verify all Kani attributes in all crate items upfront by @celinval in https://github.com/model-checking/kani/pull/2536
@@ -31,7 +170,7 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 
 ## [0.30.0]
 
-## What's Changed
+### What's Changed
 * Remove --harness requirement from stubbing by @celinval in https://github.com/model-checking/kani/pull/2495
 * Add target selection for cargo kani by @celinval in https://github.com/model-checking/kani/pull/2507
 * Generate Multiple playback harnesses when multiple crashes exist in a single harness. by @YoshikiTakashima in https://github.com/model-checking/kani/pull/2496
