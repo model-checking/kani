@@ -2,10 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use crate::codegen_cprover_gotoc::codegen::place::ProjectedPlace;
-use crate::codegen_cprover_gotoc::codegen::ty_stable::{
-    is_adt, is_array, is_char, is_coroutine, is_integral, is_numeric, is_signed, is_simd,
-    pointee_type_stable, StableConverter,
-};
+use crate::codegen_cprover_gotoc::codegen::ty_stable::{pointee_type_stable, StableConverter};
 use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::codegen_cprover_gotoc::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
@@ -119,7 +116,7 @@ impl<'tcx> GotocCtx<'tcx> {
             BinOp::Rem => ce1.rem(ce2),
             BinOp::ShlUnchecked => ce1.shl(ce2),
             BinOp::ShrUnchecked => {
-                if is_signed(&self.operand_ty_stable(e1).kind()) {
+                if self.operand_ty_stable(e1).kind().is_signed() {
                     ce1.ashr(ce2)
                 } else {
                     ce1.lshr(ce2)
@@ -138,7 +135,7 @@ impl<'tcx> GotocCtx<'tcx> {
             BinOp::Mul => ce1.mul(ce2),
             BinOp::Shl => ce1.shl(ce2),
             BinOp::Shr => {
-                if is_signed(&self.operand_ty_stable(e1).kind()) {
+                if self.operand_ty_stable(e1).kind().is_signed() {
                     ce1.ashr(ce2)
                 } else {
                     ce1.lshr(ce2)
@@ -327,7 +324,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 Expr::struct_expr_from_values(
                     self.codegen_ty_stable(res_ty),
                     vec![
-                        if is_signed(&t1.kind()) {
+                        if t1.kind().is_signed() {
                             ce1.ashr(ce2.clone())
                         } else {
                             ce1.lshr(ce2.clone())
@@ -366,7 +363,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             BinOp::Div | BinOp::Rem => {
                 let result = self.codegen_unchecked_scalar_binop(op, e1, e2);
-                if is_integral(&self.operand_ty_stable(e1).kind()) {
+                if self.operand_ty_stable(e1).kind().is_integral() {
                     let is_rem = matches!(op, BinOp::Rem);
                     let check = self.check_div_overflow(e1, e2, is_rem, loc);
                     Expr::statement_expression(
@@ -446,7 +443,7 @@ impl<'tcx> GotocCtx<'tcx> {
             msg,
             loc,
         );
-        if is_signed(&self.operand_ty_stable(dividend).kind()) {
+        if self.operand_ty_stable(dividend).kind().is_signed() {
             let dividend_expr = self.codegen_operand_stable(dividend);
             let overflow_msg = if is_remainder {
                 "attempt to calculate the remainder with overflow"
@@ -625,7 +622,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     &self.symbol_table,
                 )
             }
-            AggregateKind::Adt(_, _, _, _, _) if is_simd(&res_ty.kind()) => {
+            AggregateKind::Adt(_, _, _, _, _) if res_ty.kind().is_simd() => {
                 let typ = self.codegen_ty_stable(res_ty);
                 let layout = self.layout_of_stable(res_ty);
                 trace!(shape=?layout.fields, "codegen_rvalue_aggregate");
@@ -789,7 +786,7 @@ impl<'tcx> GotocCtx<'tcx> {
             ),
             "discriminant field (`case`) only exists for multiple variants and direct encoding"
         );
-        let expr = if is_coroutine(&ty.kind()) {
+        let expr = if ty.kind().is_coroutine() {
             // Coroutines are translated somewhat differently from enums (see [`GotoCtx::codegen_ty_coroutine`]).
             // As a consequence, the discriminant is accessed as `.direct_fields.case` instead of just `.case`.
             place.member("direct_fields", &self.symbol_table)
@@ -930,19 +927,19 @@ impl<'tcx> GotocCtx<'tcx> {
         let dst_ty_kind = dst_ty.kind();
 
         // number casting
-        if is_numeric(&src_ty_kind) && is_numeric(&dst_ty_kind) {
+        if src_ty_kind.is_numeric() && dst_ty_kind.is_numeric() {
             return self.codegen_operand_stable(src).cast_to(self.codegen_ty_stable(dst_ty));
         }
 
         // Behind the scenes, char is just a 32bit integer
-        if (is_integral(&src_ty_kind) && is_char(&dst_ty_kind))
-            || (is_char(&src_ty_kind) && is_integral(&dst_ty_kind))
+        if (src_ty_kind.is_integral() && dst_ty_kind.is_char())
+            || (src_ty_kind.is_char() && dst_ty_kind.is_integral())
         {
             return self.codegen_operand_stable(src).cast_to(self.codegen_ty_stable(dst_ty));
         }
 
         // Cast an enum to its discriminant
-        if src_ty_kind.is_enum() && is_integral(&dst_ty_kind) {
+        if src_ty_kind.is_enum() && dst_ty_kind.is_integral() {
             let operand = self.codegen_operand_stable(src);
             return self.codegen_get_discriminant(operand, src_ty, dst_ty);
         }
@@ -1143,8 +1140,8 @@ impl<'tcx> GotocCtx<'tcx> {
         info: CoerceUnsizedInfo,
         member_coercion: Expr,
     ) -> Expr {
-        assert!(is_adt(&info.src_ty.kind()), "Expected struct. Found {:?}", info.src_ty);
-        assert!(is_adt(&info.dst_ty.kind()), "Expected struct. Found {:?}", info.dst_ty);
+        assert!(info.src_ty.kind().is_adt(), "Expected struct. Found {:?}", info.src_ty);
+        assert!(info.dst_ty.kind().is_adt(), "Expected struct. Found {:?}", info.dst_ty);
         let dst_goto_type = self.codegen_ty_stable(info.dst_ty);
         let src_field_exprs = src_expr.struct_field_exprs(&self.symbol_table);
         let dst_field_exprs = src_field_exprs
@@ -1394,7 +1391,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 assert_eq!(src_elt_type, dst_elt_type);
                 let dst_goto_len = self.codegen_const(&src_elt_count, None);
                 let src_pointee_ty = pointee_type_stable(coerce_info.src_ty).unwrap();
-                let dst_data_expr = if is_array(&src_pointee_ty.kind()) {
+                let dst_data_expr = if src_pointee_ty.kind().is_array() {
                     src_goto_expr.cast_to(self.codegen_ty_stable(src_elt_type).to_pointer())
                 } else {
                     // A struct that contains the type being coerced to a slice.

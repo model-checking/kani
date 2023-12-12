@@ -20,8 +20,6 @@ use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{Local, Operand, Place, Rvalue};
 use stable_mir::ty::{Const, RigidTy, Ty, TyKind};
 
-pub use self::ty_utils::*;
-
 impl<'tcx> GotocCtx<'tcx> {
     pub fn place_ty_stable(&self, place: &Place) -> Ty {
         place.ty(self.current_fn().body().locals()).unwrap()
@@ -179,51 +177,5 @@ impl<'a, 'tcx> MutVisitor<'tcx> for StableConverter<'a, 'tcx> {
         let ty = constant.ty();
         constant.const_ = mir::Const::Val(val, ty);
         self.super_constant(constant, location);
-    }
-}
-
-/// Utility methods for types that we expect to be incorporated into StableMIR.
-pub mod ty_utils {
-    use rustc_smir::rustc_internal;
-    use stable_mir::ty::{RigidTy, TyKind};
-
-    pub fn is_signed(kind: &TyKind) -> bool {
-        matches!(kind, TyKind::RigidTy(RigidTy::Int(..)))
-    }
-
-    pub fn is_integral(kind: &TyKind) -> bool {
-        matches!(kind, TyKind::RigidTy(RigidTy::Int(..) | RigidTy::Uint(..)))
-    }
-
-    pub fn is_array(kind: &TyKind) -> bool {
-        matches!(kind, TyKind::RigidTy(RigidTy::Array(..)))
-    }
-
-    pub fn is_adt(kind: &TyKind) -> bool {
-        matches!(kind, TyKind::RigidTy(RigidTy::Adt(..)))
-    }
-
-    pub fn is_char(kind: &TyKind) -> bool {
-        matches!(kind, TyKind::RigidTy(RigidTy::Char))
-    }
-
-    pub fn is_float(kind: &TyKind) -> bool {
-        matches!(kind, TyKind::RigidTy(RigidTy::Float(..)))
-    }
-
-    pub fn is_numeric(kind: &TyKind) -> bool {
-        is_integral(kind) || is_float(kind)
-    }
-
-    pub fn is_coroutine(kind: &TyKind) -> bool {
-        matches!(kind, TyKind::RigidTy(RigidTy::Coroutine(..)))
-    }
-
-    pub fn is_simd(kind: &TyKind) -> bool {
-        matches!(kind, TyKind::RigidTy(RigidTy::Adt(def, ..)) if rustc_internal::internal(def).repr().simd() )
-    }
-
-    pub fn is_box(kind: &TyKind) -> bool {
-        matches!(kind, TyKind::RigidTy(RigidTy::Adt(def, _)) if def.is_box())
     }
 }

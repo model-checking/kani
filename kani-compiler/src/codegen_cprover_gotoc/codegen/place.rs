@@ -6,9 +6,7 @@
 //! in [GotocCtx::codegen_place] below.
 
 use super::typ::TypeExt;
-use crate::codegen_cprover_gotoc::codegen::ty_stable::{
-    is_box, is_coroutine, pointee_type, StableConverter,
-};
+use crate::codegen_cprover_gotoc::codegen::ty_stable::{pointee_type, StableConverter};
 use crate::codegen_cprover_gotoc::codegen::typ::std_pointee_type;
 use crate::codegen_cprover_gotoc::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::codegen_cprover_gotoc::GotocCtx;
@@ -411,7 +409,7 @@ impl<'tcx> GotocCtx<'tcx> {
         match proj {
             ProjectionElem::Deref => {
                 let base_type = before.mir_typ();
-                let inner_goto_expr = if is_box(&base_type.kind()) {
+                let inner_goto_expr = if base_type.kind().is_box() {
                     self.deref_box(before.goto_expr)
                 } else {
                     before.goto_expr
@@ -601,7 +599,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     Variants::Single { .. } => before.goto_expr,
                     Variants::Multiple { tag_encoding, .. } => match tag_encoding {
                         TagEncoding::Direct => {
-                            let cases = if is_coroutine(&ty_kind) {
+                            let cases = if ty_kind.is_coroutine() {
                                 before.goto_expr
                             } else {
                                 before.goto_expr.member("cases", &self.symbol_table)
