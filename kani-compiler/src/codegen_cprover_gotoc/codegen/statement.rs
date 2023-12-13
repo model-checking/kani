@@ -3,6 +3,7 @@
 use super::typ::TypeExt;
 use super::typ::FN_RETURN_VOID_VAR_NAME;
 use super::PropertyClass;
+use crate::codegen_cprover_gotoc::codegen::ty_stable::StableConverter;
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::{Expr, Location, Stmt, Type};
@@ -18,7 +19,7 @@ use rustc_smir::rustc_internal;
 use rustc_span::Span;
 use rustc_target::abi::VariantIdx;
 use rustc_target::abi::{FieldsShape, Primitive, TagEncoding, Variants};
-use stable_mir::mir::Place as PlaceStable;
+use stable_mir::mir::{Operand as OperandStable, Place as PlaceStable};
 use tracing::{debug, debug_span, trace};
 
 impl<'tcx> GotocCtx<'tcx> {
@@ -68,15 +69,13 @@ impl<'tcx> GotocCtx<'tcx> {
             StatementKind::Intrinsic(box NonDivergingIntrinsic::CopyNonOverlapping(
                 mir::CopyNonOverlapping { ref src, ref dst, ref count },
             )) => {
+                let operands =
+                    [src, dst, count].map(|op| StableConverter::convert_operand(self, op.clone()));
                 // Pack the operands and their types, then call `codegen_copy`
-                let fargs = vec![
-                    self.codegen_operand(src),
-                    self.codegen_operand(dst),
-                    self.codegen_operand(count),
-                ];
-                let farg_types =
-                    &[self.operand_ty(src), self.operand_ty(dst), self.operand_ty(count)];
-                self.codegen_copy("copy_nonoverlapping", true, fargs, farg_types, None, location)
+                let fargs =
+                    operands.iter().map(|op| self.codegen_operand_stable(op)).collect::<Vec<_>>();
+                let farg_types = operands.map(|op| self.operand_ty_stable(&op));
+                self.codegen_copy("copy_nonoverlapping", true, fargs, &farg_types, None, location)
             }
             StatementKind::Intrinsic(box NonDivergingIntrinsic::Assume(ref op)) => {
                 let cond = self.codegen_operand(op).cast_to(Type::bool());
@@ -474,20 +473,20 @@ impl<'tcx> GotocCtx<'tcx> {
     /// This is used because we ignore ZST arguments, except for intrinsics.
     pub(crate) fn codegen_funcall_args(
         &mut self,
-        args: &[Operand<'tcx>],
+        args: &[OperandStable],
         skip_zst: bool,
     ) -> Vec<Expr> {
         let fargs = args
             .iter()
-            .filter_map(|o| {
-                let op_ty = self.operand_ty(o);
-                if op_ty.is_bool() {
-                    Some(self.codegen_operand(o).cast_to(Type::c_bool()))
-                } else if !self.is_zst(op_ty) || !skip_zst {
-                    Some(self.codegen_operand(o))
+            .filter_map(|op| {
+                let op_ty = self.operand_ty_stable(op);
+                if op_ty.kind().is_bool() {
+                    Some(self.codegen_operand_stable(op).cast_to(Type::c_bool()))
+                } else if !self.is_zst_stable(op_ty) || !skip_zst {
+                    Some(self.codegen_operand_stable(op))
                 } else {
                     // We ignore ZST types.
-                    debug!(arg=?o, "codegen_funcall_args ignore");
+                    debug!(arg=?op, "codegen_funcall_args ignore");
                     None
                 }
             })
@@ -517,13 +516,26 @@ impl<'tcx> GotocCtx<'tcx> {
         span: Span,
     ) -> Stmt {
         debug!(?func, ?args, ?destination, ?span, "codegen_funcall");
-        if self.is_intrinsic(func) {
-            return self.codegen_funcall_of_intrinsic(func, args, destination, target, span);
+        let func_stable = StableConverter::convert_operand(self, func.clone());
+        let args_stable = args
+            .iter()
+            .map(|arg| StableConverter::convert_operand(self, arg.clone()))
+            .collect::<Vec<_>>();
+        let destination_stable = StableConverter::convert_place(self, *destination);
+
+        if self.is_intrinsic(&func_stable) {
+            return self.codegen_funcall_of_intrinsic(
+                &func_stable,
+                &args_stable,
+                &destination_stable,
+                target.map(|bb| bb.index()),
+                rustc_internal::stable(span),
+            );
         }
 
         let loc = self.codegen_span(&span);
         let funct = self.operand_ty(func);
-        let mut fargs = self.codegen_funcall_args(args, true);
+        let mut fargs = self.codegen_funcall_args(&args_stable, true);
         match &funct.kind() {
             ty::FnDef(defid, subst) => {
                 let instance =
@@ -700,13 +712,13 @@ impl<'tcx> GotocCtx<'tcx> {
     /// A MIR [Place] is an L-value (i.e. the LHS of an assignment).
     ///
     /// In Kani, we slightly optimize the special case for Unit and don't assign anything.
-    pub(crate) fn codegen_expr_to_place_stable(&mut self, p: &PlaceStable, e: Expr) -> Stmt {
-        if e.typ().is_unit() {
-            e.as_stmt(Location::none())
+    pub(crate) fn codegen_expr_to_place_stable(&mut self, place: &PlaceStable, expr: Expr) -> Stmt {
+        if self.place_ty_stable(place).kind().is_unit() {
+            expr.as_stmt(Location::none())
         } else {
-            unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place_stable(p))
+            unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place_stable(place))
                 .goto_expr
-                .assign(e, Location::none())
+                .assign(expr, Location::none())
         }
     }
 

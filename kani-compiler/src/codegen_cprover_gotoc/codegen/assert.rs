@@ -150,7 +150,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Generate a cover statement for code coverage reports.
     pub fn codegen_coverage(&self, span: Span) -> Stmt {
-        let loc = self.codegen_caller_span(&Some(span));
+        let loc = self.codegen_caller_span(&span);
         // Should use Stmt::cover, but currently this doesn't work with CBMC
         // unless it is run with '--cover cover' (see
         // https://github.com/diffblue/cbmc/issues/6613). So for now use
@@ -214,9 +214,9 @@ impl<'tcx> GotocCtx<'tcx> {
         &self,
         property_class: PropertyClass,
         msg: &str,
-        span: Option<Span>,
+        span: SpanStable,
     ) -> Stmt {
-        let loc = self.codegen_caller_span(&span);
+        let loc = self.codegen_caller_span_stable(span);
         self.codegen_assert_assume_false(property_class, msg, loc)
     }
 
@@ -228,9 +228,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let msg = self.extract_const_message(&fargs[0]).unwrap_or(String::from(
             "This is a placeholder message; Kani doesn't support message formatted at runtime",
         ));
-
-        let loc = self.codegen_caller_span_stable(span);
-        self.codegen_assert_assume_false(PropertyClass::Assertion, &msg, loc)
+        self.codegen_fatal_error(PropertyClass::Assertion, &msg, span)
     }
 
     /// Kani does not currently support all MIR constructs.

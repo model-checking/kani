@@ -393,7 +393,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // Check that computing `offset` in bytes would not overflow
                 let (offset_bytes, bytes_overflow_check) = self.count_in_bytes(
                     ce2.clone().cast_to(Type::ssize_t()),
-                    rustc_internal::internal(ty),
+                    ty,
                     Type::ssize_t(),
                     "offset",
                     loc,
