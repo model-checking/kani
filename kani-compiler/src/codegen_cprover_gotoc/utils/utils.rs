@@ -1,12 +1,9 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use super::super::codegen::TypeExt;
-use crate::codegen_cprover_gotoc::codegen::typ::{is_pointer, pointee_type};
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{Expr, ExprValue, Location, SymbolTable, Type};
 use cbmc::{btree_string_map, InternedString};
-use rustc_middle::ty::layout::LayoutOf;
-use rustc_middle::ty::Ty;
 use tracing::debug;
 
 // Should move into rvalue
@@ -20,21 +17,6 @@ pub fn dynamic_fat_ptr(typ: Type, data: Expr, vtable: Expr, symbol_table: &Symbo
 }
 
 impl<'tcx> GotocCtx<'tcx> {
-    /// Generates an expression `(ptr as usize) % align_of(T) == 0`
-    /// to determine if a pointer `ptr` with pointee type `T` is aligned.
-    pub fn is_ptr_aligned(&mut self, typ: Ty<'tcx>, ptr: Expr) -> Expr {
-        // Ensure `typ` is a pointer, then extract the pointee type
-        assert!(is_pointer(typ));
-        let pointee_type = pointee_type(typ).unwrap();
-        // Obtain the alignment for the pointee type `T`
-        let layout = self.layout_of(pointee_type);
-        let align = Expr::int_constant(layout.align.abi.bytes(), Type::size_t());
-        // Cast the pointer to `usize` and return the alignment expression
-        let cast_ptr = ptr.cast_to(Type::size_t());
-        let zero = Type::size_t().zero();
-        cast_ptr.rem(align).eq(zero)
-    }
-
     pub fn unsupported_msg(item: &str, url: Option<&str>) -> String {
         let mut s = format!("{item} is not currently supported by Kani");
         if let Some(url) = url {

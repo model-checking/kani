@@ -1898,12 +1898,6 @@ fn common_vtable_fields(drop_in_place: Type) -> Vec<DatatypeComponent> {
     fields
 }
 
-/// The mir type is a mir pointer type (Ref or RawPtr).
-/// This will return false for all smart pointers. See is_std_pointer for a more complete check.
-pub fn is_pointer(mir_type: Ty) -> bool {
-    return pointee_type(mir_type).is_some();
-}
-
 /// If given type is a Ref / Raw ref, return the pointee type.
 pub fn pointee_type(mir_type: Ty) -> Option<Ty> {
     match mir_type.kind() {

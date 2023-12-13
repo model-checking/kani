@@ -33,20 +33,16 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     pub fn codegen_caller_span_stable(&self, sp: SpanStable) -> Location {
-        self.codegen_caller_span(&Some(rustc_internal::internal(sp)))
+        self.codegen_caller_span(&rustc_internal::internal(sp))
     }
 
     /// Get the location of the caller. This will attempt to reach the macro caller.
     /// This function uses rustc_span methods designed to returns span for the macro which
     /// originally caused the expansion to happen.
     /// Note: The API stops backtracing at include! boundary.
-    pub fn codegen_caller_span(&self, sp: &Option<Span>) -> Location {
-        if let Some(span) = sp {
-            let topmost = span.ctxt().outer_expn().expansion_cause().unwrap_or(*span);
-            self.codegen_span(&topmost)
-        } else {
-            Location::none()
-        }
+    pub fn codegen_caller_span(&self, span: &Span) -> Location {
+        let topmost = span.ctxt().outer_expn().expansion_cause().unwrap_or(*span);
+        self.codegen_span(&topmost)
     }
 
     pub fn codegen_span_option(&self, sp: Option<Span>) -> Location {

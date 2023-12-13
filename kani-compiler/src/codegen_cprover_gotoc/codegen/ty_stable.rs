@@ -33,11 +33,11 @@ impl<'tcx> GotocCtx<'tcx> {
         self.codegen_ty_ref(rustc_internal::internal(ty))
     }
 
-    pub fn local_ty_stable(&mut self, local: Local) -> Ty {
+    pub fn local_ty_stable(&self, local: Local) -> Ty {
         self.current_fn().body().local_decl(local).unwrap().ty
     }
 
-    pub fn operand_ty_stable(&mut self, operand: &Operand) -> Ty {
+    pub fn operand_ty_stable(&self, operand: &Operand) -> Ty {
         operand.ty(self.current_fn().body().locals()).unwrap()
     }
 
@@ -89,6 +89,11 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn rvalue_ty_stable(&self, rvalue: &Rvalue) -> Ty {
         rvalue.ty(self.current_fn().body().locals()).unwrap()
     }
+
+    pub fn simd_size_and_type(&self, ty: Ty) -> (u64, Ty) {
+        let (sz, ty) = rustc_internal::internal(ty).simd_size_and_type(self.tcx);
+        (sz, rustc_internal::stable(ty))
+    }
 }
 /// If given type is a Ref / Raw ref, return the pointee type.
 pub fn pointee_type(mir_type: Ty) -> Option<Ty> {
@@ -97,6 +102,14 @@ pub fn pointee_type(mir_type: Ty) -> Option<Ty> {
         TyKind::RigidTy(RigidTy::RawPtr(ty, ..)) => Some(ty),
         _ => None,
     }
+}
+
+/// Convert a type into a user readable type representation.
+///
+/// This should be replaced by StableMIR `pretty_ty()` after
+/// <https://github.com/rust-lang/rust/pull/118364> is merged.
+pub fn pretty_ty(ty: Ty) -> String {
+    rustc_internal::internal(ty).to_string()
 }
 
 /// Convert internal rustc's structs into StableMIR ones.
