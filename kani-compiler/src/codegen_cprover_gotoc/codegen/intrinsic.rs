@@ -4,13 +4,13 @@
 use super::typ;
 use super::{bb_label, PropertyClass};
 use crate::codegen_cprover_gotoc::codegen::ty_stable::{pointee_type_stable, pretty_ty};
-use crate::codegen_cprover_gotoc::GotocCtx;
+use crate::codegen_cprover_gotoc::{utils, GotocCtx};
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::{
     ArithmeticOverflowResult, BinaryOperator, BuiltinFn, Expr, Location, Stmt, Type,
 };
 use rustc_middle::ty::layout::ValidityRequirement;
-use rustc_middle::ty::{ParamEnv, TyCtxt};
+use rustc_middle::ty::ParamEnv;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::{Instance, InstanceKind};
 use stable_mir::mir::{BasicBlockIdx, Operand, Place};
@@ -235,9 +235,10 @@ impl<'tcx> GotocCtx<'tcx> {
         macro_rules! codegen_size_align {
             ($which: ident) => {{
                 let args = instance_args(&instance);
-                let tp_ty = args.0[0].expect_ty();
+                // The type `T` that we'll compute the size or alignment.
+                let target_ty = args.0[0].expect_ty();
                 let arg = fargs.remove(0);
-                let size_align = self.size_and_align_of_dst(*tp_ty, arg);
+                let size_align = self.size_and_align_of_dst(*target_ty, arg);
                 self.codegen_expr_to_place_stable(place, size_align.$which)
             }};
         }
@@ -639,7 +640,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Calling this function will abort the compilation though that is not
     /// obvious by the type.
     fn intrinsics_typecheck_fail(&self, span: Span, name: &str, expected: &str, actual: Ty) -> ! {
-        span_err(
+        utils::span_err(
             self.tcx,
             span,
             format!(
@@ -765,10 +766,10 @@ impl<'tcx> GotocCtx<'tcx> {
         intrinsic: &str,
         span: Span,
     ) -> Stmt {
-        // Get the instantiated T from the assert definition.
+        // Get the type `T` from the `assert_fn<T>` definition.
         let args = instance_args(&instance);
-        let ty = args.0[0].expect_ty();
-        let layout = self.layout_of_stable(*ty);
+        let target_ty = args.0[0].expect_ty();
+        let layout = self.layout_of_stable(*target_ty);
         // Note: We follow the pattern seen in `codegen_panic_intrinsic` from `rustc_codegen_ssa`
         // https://github.com/rust-lang/rust/blob/master/compiler/rustc_codegen_ssa/src/mir/block.rs
 
@@ -777,12 +778,12 @@ impl<'tcx> GotocCtx<'tcx> {
         if layout.abi.is_uninhabited() {
             return self.codegen_fatal_error(
                 PropertyClass::SafetyCheck,
-                &format!("attempted to instantiate uninhabited type `{}`", pretty_ty(*ty)),
+                &format!("attempted to instantiate uninhabited type `{}`", pretty_ty(*target_ty)),
                 span,
             );
         }
 
-        let param_env_and_type = ParamEnv::reveal_all().and(rustc_internal::internal(ty));
+        let param_env_and_type = ParamEnv::reveal_all().and(rustc_internal::internal(target_ty));
 
         // Then we check if the type allows "raw" initialization for the cases
         // where memory is zero-initialized or entirely uninitialized
@@ -796,7 +797,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 PropertyClass::SafetyCheck,
                 &format!(
                     "attempted to zero-initialize type `{}`, which is invalid",
-                    pretty_ty(*ty)
+                    pretty_ty(*target_ty)
                 ),
                 span,
             );
@@ -815,7 +816,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 PropertyClass::SafetyCheck,
                 &format!(
                     "attempted to leave type `{}` uninitialized, which is invalid",
-                    pretty_ty(*ty)
+                    pretty_ty(*target_ty)
                 ),
                 span,
             );
@@ -1271,7 +1272,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     if matches!(ty.kind(), TyKind::RigidTy(RigidTy::Uint(UintTy::U32))) =>
                 {
                     len.eval_target_usize().unwrap_or_else(|err| {
-                        span_err(
+                        utils::span_err(
                             self.tcx,
                             span,
                             format!("could not evaluate shuffle index array length: {err}"),
@@ -1285,14 +1286,14 @@ impl<'tcx> GotocCtx<'tcx> {
                         "simd_shuffle index must be an array of `u32`, got `{}`",
                         pretty_ty(farg_types[2])
                     );
-                    span_err(self.tcx, span, err_msg);
+                    utils::span_err(self.tcx, span, err_msg);
                     // Return a dummy value
                     u64::MIN
                 }
             }
         } else {
             stripped.parse().unwrap_or_else(|_| {
-                span_err(
+                utils::span_err(
                     self.tcx,
                     span,
                     "bad `simd_shuffle` instruction only caught in codegen?".to_string(),
@@ -1428,7 +1429,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 pretty_ty(rust_arg_types[0]),
                 pretty_ty(rust_ret_type)
             );
-            span_err(self.tcx, span, err_msg);
+            utils::span_err(self.tcx, span, err_msg);
         }
         self.tcx.sess.abort_if_errors();
 
@@ -1468,7 +1469,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 pretty_ty(rust_arg_types[0]),
                 pretty_ty(rust_arg_types[2]),
             );
-            span_err(self.tcx, span, err_msg);
+            utils::span_err(self.tcx, span, err_msg);
         }
         self.tcx.sess.abort_if_errors();
 
@@ -1536,7 +1537,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 pretty_ty(rust_ret_type),
                 ret_typ.len().unwrap()
             );
-            span_err(self.tcx, span, err_msg);
+            utils::span_err(self.tcx, span, err_msg);
         }
 
         if !ret_typ.base_type().unwrap().is_integer() {
@@ -1546,7 +1547,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 pretty_ty(rust_ret_type),
                 pretty_ty(rust_base_type),
             );
-            span_err(self.tcx, span, err_msg);
+            utils::span_err(self.tcx, span, err_msg);
         }
         self.tcx.sess.abort_if_errors();
 
@@ -1740,7 +1741,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 "expected return type of length {n}, found `{}` with length {ret_type_len}",
                 pretty_ty(rust_ret_type),
             );
-            span_err(self.tcx, span, err_msg);
+            utils::span_err(self.tcx, span, err_msg);
         }
         if vec_subtype != ret_type_subtype {
             let err_msg = format!(
@@ -1751,7 +1752,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 pretty_ty(rust_ret_type),
                 pretty_ty(ret_type_subtype),
             );
-            span_err(self.tcx, span, err_msg);
+            utils::span_err(self.tcx, span, err_msg);
         }
 
         // An unsigned type here causes an invariant violation in CBMC.
@@ -1917,10 +1918,6 @@ impl<'tcx> GotocCtx<'tcx> {
         let zero = Type::size_t().zero();
         cast_ptr.rem(align).eq(zero)
     }
-}
-
-fn span_err(tcx: TyCtxt, span: Span, msg: String) {
-    tcx.sess.span_err(rustc_internal::internal(span), msg);
 }
 
 fn instance_args(instance: &Instance) -> GenericArgs {

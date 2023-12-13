@@ -4,6 +4,9 @@ use super::super::codegen::TypeExt;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{Expr, ExprValue, Location, SymbolTable, Type};
 use cbmc::{btree_string_map, InternedString};
+use rustc_middle::ty::TyCtxt;
+use rustc_smir::rustc_internal;
+use stable_mir::ty::Span;
 use tracing::debug;
 
 // Should move into rvalue
@@ -188,4 +191,8 @@ impl<'tcx> GotocCtx<'tcx> {
         assert_eq!(component.name().to_string().as_str(), "pointer");
         assert!(component.typ().is_pointer() || component.typ().is_rust_fat_ptr(&self.symbol_table))
     }
+}
+
+pub fn span_err(tcx: TyCtxt, span: Span, msg: String) {
+    tcx.sess.span_err(rustc_internal::internal(span), msg);
 }

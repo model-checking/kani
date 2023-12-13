@@ -228,9 +228,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let msg = self.extract_const_message(&fargs[0]).unwrap_or(String::from(
             "This is a placeholder message; Kani doesn't support message formatted at runtime",
         ));
-
-        let loc = self.codegen_caller_span_stable(span);
-        self.codegen_assert_assume_false(PropertyClass::Assertion, &msg, loc)
+        self.codegen_fatal_error(PropertyClass::Assertion, &msg, span)
     }
 
     /// Kani does not currently support all MIR constructs.
