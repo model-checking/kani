@@ -867,6 +867,8 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Extract the niche value from `v`. This value should be of type `niche_ty` and located
     /// at byte offset `offset`
+    ///
+    /// The `offset` in bytes of the niche value.
     pub fn codegen_get_niche(&self, v: Expr, offset: Size, niche_ty: Type) -> Expr {
         if offset == 0 {
             v.reinterpret_cast(niche_ty)
@@ -1477,6 +1479,6 @@ fn get_strict_operator(op: &BinOp) -> BinOp {
     match op {
         BinOp::Le => BinOp::Lt,
         BinOp::Ge => BinOp::Gt,
-        _ => op.clone(),
+        _ => *op,
     }
 }
