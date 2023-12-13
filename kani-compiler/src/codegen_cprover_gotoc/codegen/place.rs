@@ -6,13 +6,13 @@
 //! in [GotocCtx::codegen_place] below.
 
 use super::typ::TypeExt;
-use crate::codegen_cprover_gotoc::codegen::ty_stable::{pointee_type, StableConverter};
+use crate::codegen_cprover_gotoc::codegen::ty_stable::pointee_type;
 use crate::codegen_cprover_gotoc::codegen::typ::std_pointee_type;
 use crate::codegen_cprover_gotoc::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::unwrap_or_return_codegen_unimplemented;
 use cbmc::goto_program::{Expr, Location, Type};
-use rustc_middle::mir::{Local as LocalInternal, Place as PlaceInternal};
+use rustc_middle::mir::Local as LocalInternal;
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_smir::rustc_internal;
 use rustc_target::abi::{TagEncoding, Variants};
@@ -637,10 +637,6 @@ impl<'tcx> GotocCtx<'tcx> {
     ///   build the fat pointer from there.
     /// - For `*(Wrapper<T>)` where `T: Unsized`, the projection's `goto_expr` returns an object,
     ///   and we need to take it's address and build the fat pointer.
-    pub fn codegen_place_ref(&mut self, place: &PlaceInternal<'tcx>) -> Expr {
-        self.codegen_place_ref_stable(&StableConverter::convert_place(self, *place))
-    }
-
     pub fn codegen_place_ref_stable(&mut self, place: &Place) -> Expr {
         let place_ty = self.place_ty_stable(place);
         let projection =
@@ -696,13 +692,6 @@ impl<'tcx> GotocCtx<'tcx> {
             )),
             _ => result,
         }
-    }
-
-    pub fn codegen_place(
-        &mut self,
-        place: &PlaceInternal<'tcx>,
-    ) -> Result<ProjectedPlace, UnimplementedData> {
-        self.codegen_place_stable(&StableConverter::convert_place(self, *place))
     }
 
     /// Given a projection, generate an lvalue that represents the given variant index.

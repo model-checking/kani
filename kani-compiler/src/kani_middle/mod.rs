@@ -231,6 +231,7 @@ impl SourceLocation {
 }
 
 /// Get the FnAbi of a given instance with no extra variadic arguments.
+/// TODO: Get rid of this. Use instance.fn_sig() instead.
 pub fn fn_abi<'tcx>(tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> &'tcx FnAbi<'tcx, Ty<'tcx>> {
     let helper = CompilerHelpers { tcx };
     helper.fn_abi_of_instance(instance, ty::List::empty())

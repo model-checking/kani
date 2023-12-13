@@ -8,7 +8,9 @@ use cbmc::goto_program::{Expr, Stmt, Symbol};
 use cbmc::InternString;
 use rustc_middle::mir::traversal::reverse_postorder;
 use rustc_middle::mir::{Body, HasLocalDecls, Local};
-use rustc_middle::ty::{self, Instance};
+use rustc_middle::ty;
+use stable_mir::mir::mono::Instance;
+use stable_mir::CrateDef;
 use std::collections::BTreeMap;
 use std::iter::FromIterator;
 use tracing::{debug, debug_span};
@@ -65,28 +67,31 @@ impl<'tcx> GotocCtx<'tcx> {
         });
     }
 
-    pub fn codegen_function(&mut self, instance: Instance<'tcx>) {
+    pub fn codegen_function(&mut self, instance: Instance) {
         self.set_current_fn(instance);
-        let name = self.current_fn().name();
+        let name = self.symbol_name_stable(instance);
         let old_sym = self.symbol_table.lookup(&name).unwrap();
 
-        let _trace_span =
-            debug_span!("CodegenFunction", name = self.current_fn().readable_name()).entered();
+        let _trace_span = debug_span!("CodegenFunction", name = instance.name()).entered();
         if old_sym.is_function_definition() {
             debug!("Double codegen of {:?}", old_sym);
         } else {
             assert!(old_sym.is_function());
-            let mir = self.current_fn().body_internal();
-            self.print_instance(instance, mir);
+            // TODO: Remove this clone.
+            let body = self.current_fn().body().clone();
+            self.print_instance(instance, &body);
             self.codegen_function_prelude();
             self.codegen_declare_variables();
 
-            reverse_postorder(mir).for_each(|(bb, bbd)| self.codegen_block(bb, bbd));
+            // Get the order from internal body for now.
+            let internal_body = self.current_fn().body_internal();
+            reverse_postorder(internal_body)
+                .for_each(|(bb, _)| self.codegen_block(bb.index(), &body.blocks[bb.index()]));
 
-            let loc = self.codegen_span(&mir.span);
+            let loc = self.codegen_span_stable(instance.def.span());
             let stmts = self.current_fn_mut().extract_block();
-            let body = Stmt::block(stmts, loc);
-            self.symbol_table.update_fn_declaration_with_definition(&name, body);
+            let goto_body = Stmt::block(stmts, loc);
+            self.symbol_table.update_fn_declaration_with_definition(&name, goto_body);
         }
         self.reset_current_fn();
     }
@@ -222,19 +227,17 @@ impl<'tcx> GotocCtx<'tcx> {
         );
     }
 
-    pub fn declare_function(&mut self, instance: Instance<'tcx>) {
-        debug!("declaring {}; {:?}", instance, instance);
+    pub fn declare_function(&mut self, instance: Instance) {
+        debug!("declaring {}; {:?}", instance.name(), instance);
         self.set_current_fn(instance);
-        debug!(krate = self.current_fn().krate().as_str());
-        debug!(is_std = self.current_fn().is_std());
-        self.ensure(&self.current_fn().name(), |ctx, fname| {
-            let mir = ctx.current_fn().body_internal();
+        debug!(krate=?instance.def.krate(), is_std=self.current_fn().is_std(), "declare_function");
+        self.ensure(&self.symbol_name_stable(instance), |ctx, fname| {
             Symbol::function(
                 fname,
                 ctx.fn_typ(),
                 None,
-                ctx.current_fn().readable_name(),
-                ctx.codegen_span(&mir.span),
+                instance.name(),
+                ctx.codegen_span_stable(instance.def.span()),
             )
         });
         self.reset_current_fn();

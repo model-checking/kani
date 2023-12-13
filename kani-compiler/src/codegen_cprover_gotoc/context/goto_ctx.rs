@@ -29,12 +29,12 @@ use rustc_middle::ty::layout::{
     FnAbiError, FnAbiOfHelpers, FnAbiRequest, HasParamEnv, HasTyCtxt, LayoutError, LayoutOfHelpers,
     TyAndLayout,
 };
-use rustc_middle::ty::{self, Instance, Ty, TyCtxt};
-use rustc_smir::rustc_internal;
+use rustc_middle::ty::{self, Ty, TyCtxt};
 use rustc_span::source_map::respan;
 use rustc_span::Span;
 use rustc_target::abi::call::FnAbi;
 use rustc_target::abi::{HasDataLayout, TargetDataLayout};
+use stable_mir::mir::mono::Instance;
 use stable_mir::ty::Allocation;
 
 pub struct GotocCtx<'tcx> {
@@ -298,8 +298,8 @@ impl<'tcx> GotocCtx<'tcx> {
 
 /// Mutators
 impl<'tcx> GotocCtx<'tcx> {
-    pub fn set_current_fn(&mut self, instance: Instance<'tcx>) {
-        self.current_fn = Some(CurrentFnCtx::new(rustc_internal::stable(instance), self));
+    pub fn set_current_fn(&mut self, instance: Instance) {
+        self.current_fn = Some(CurrentFnCtx::new(instance, self));
     }
 
     pub fn reset_current_fn(&mut self) {

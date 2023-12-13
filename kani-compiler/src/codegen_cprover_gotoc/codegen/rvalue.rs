@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use crate::codegen_cprover_gotoc::codegen::place::ProjectedPlace;
-use crate::codegen_cprover_gotoc::codegen::ty_stable::{pointee_type_stable, StableConverter};
+use crate::codegen_cprover_gotoc::codegen::ty_stable::pointee_type_stable;
 use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::codegen_cprover_gotoc::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
@@ -17,7 +17,6 @@ use cbmc::goto_program::{
 use cbmc::MachineModel;
 use cbmc::{btree_string_map, InternString, InternedString};
 use num::bigint::BigInt;
-use rustc_middle::mir::Rvalue as RvalueInternal;
 use rustc_middle::ty::{TyCtxt, VtblEntry};
 use rustc_smir::rustc_internal;
 use rustc_target::abi::{FieldsShape, TagEncoding, Variants};
@@ -583,12 +582,8 @@ impl<'tcx> GotocCtx<'tcx> {
             stmts.push(assign_case);
         }
         // 3- Set discriminant.
-        let set_discriminant = self.codegen_set_discriminant(
-            rustc_internal::internal(res_ty),
-            temp_var.clone(),
-            rustc_internal::internal(variant_index),
-            loc,
-        );
+        let set_discriminant =
+            self.codegen_set_discriminant(res_ty, temp_var.clone(), variant_index, loc);
         stmts.push(set_discriminant);
         // 4- Return temporary variable.
         stmts.push(temp_var.as_stmt(loc));
@@ -666,10 +661,6 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             AggregateKind::Coroutine(_, _, _) => self.codegen_rvalue_coroutine(&operands, res_ty),
         }
-    }
-
-    pub fn codegen_rvalue(&mut self, rv: &RvalueInternal<'tcx>, loc: Location) -> Expr {
-        self.codegen_rvalue_stable(&StableConverter::convert_rvalue(self, rv.clone()), loc)
     }
 
     pub fn codegen_rvalue_stable(&mut self, rv: &Rvalue, loc: Location) -> Expr {
@@ -831,8 +822,8 @@ impl<'tcx> GotocCtx<'tcx> {
                     //
                     // Note: niche_variants can only represent values that fit in a u32.
                     let result_type = self.codegen_ty_stable(res_ty);
-                    let discr_mir_ty = self.codegen_enum_discr_typ(rustc_internal::internal(ty));
-                    let discr_type = self.codegen_ty(discr_mir_ty);
+                    let discr_mir_ty = self.codegen_enum_discr_typ_stable(ty);
+                    let discr_type = self.codegen_ty_stable(discr_mir_ty);
                     let niche_val = self.codegen_get_niche(e, offset.bytes() as usize, discr_type);
                     let relative_discr =
                         wrapping_sub(&niche_val, u64::try_from(*niche_start).unwrap());

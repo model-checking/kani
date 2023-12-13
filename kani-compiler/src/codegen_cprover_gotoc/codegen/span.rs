@@ -45,10 +45,6 @@ impl<'tcx> GotocCtx<'tcx> {
         self.codegen_span(&topmost)
     }
 
-    pub fn codegen_span_option(&self, sp: Option<Span>) -> Location {
-        sp.map_or(Location::none(), |x| self.codegen_span(&x))
-    }
-
     pub fn find_debug_info(&self, l: &Local) -> Option<VarDebugInfo> {
         rustc_internal::stable(self.current_fn().body_internal().var_debug_info.iter().find(
             |info| match info.value {

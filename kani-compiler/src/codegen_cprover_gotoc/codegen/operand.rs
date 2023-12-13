@@ -1,12 +1,10 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-use crate::codegen_cprover_gotoc::codegen::ty_stable::StableConverter;
 use crate::codegen_cprover_gotoc::utils::slice_fat_ptr;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::unwrap_or_return_codegen_unimplemented;
 use cbmc::goto_program::{DatatypeComponent, Expr, ExprValue, Location, Stmt, Symbol, Type};
-use rustc_middle::mir::Operand as OperandInternal;
-use rustc_middle::ty::{Const as ConstInternal, Instance as InstanceInternal};
+use rustc_middle::ty::Const as ConstInternal;
 use rustc_smir::rustc_internal;
 use rustc_span::Span as SpanInternal;
 use stable_mir::mir::alloc::{AllocId, GlobalAlloc};
@@ -34,10 +32,6 @@ impl<'tcx> GotocCtx<'tcx> {
     /// A MIR operand is either a constant (literal or `const` declaration) or a place
     /// (being moved or copied for this operation).
     /// An "operand" in MIR is the argument to an "Rvalue" (and is also used by some statements.)
-    pub fn codegen_operand(&mut self, operand: &OperandInternal<'tcx>) -> Expr {
-        self.codegen_operand_stable(&StableConverter::convert_operand(self, operand.clone()))
-    }
-
     pub fn codegen_operand_stable(&mut self, operand: &Operand) -> Expr {
         trace!(?operand, "codegen_operand");
         match operand {
@@ -67,7 +61,7 @@ impl<'tcx> GotocCtx<'tcx> {
         constant: ConstInternal<'tcx>,
         span: Option<SpanInternal>,
     ) -> Expr {
-        let stable_const = StableConverter::convert_constant(self, constant);
+        let stable_const = rustc_internal::stable(constant);
         let stable_span = rustc_internal::stable(span);
         self.codegen_const(&stable_const, stable_span)
     }
@@ -592,16 +586,6 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Note: In general with this `Expr` you should immediately either `.address_of()` or `.call(...)`.
     ///
     /// This should not be used where Rust expects a "function item" (See `codegen_fn_item`)
-    pub fn codegen_func_expr_internal(
-        &mut self,
-        instance: InstanceInternal<'tcx>,
-        span: Option<&SpanInternal>,
-    ) -> Expr {
-        let (func_symbol, func_typ) = self.codegen_func_symbol(rustc_internal::stable(instance));
-        Expr::symbol_expression(func_symbol.name, func_typ)
-            .with_location(self.codegen_span_option(span.cloned()))
-    }
-
     pub fn codegen_func_expr(&mut self, instance: Instance, span: Option<Span>) -> Expr {
         let (func_symbol, func_typ) = self.codegen_func_symbol(instance);
         Expr::symbol_expression(func_symbol.name, func_typ)

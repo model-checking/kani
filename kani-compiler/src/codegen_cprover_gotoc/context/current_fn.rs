@@ -3,7 +3,7 @@
 
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::Stmt;
-use rustc_middle::mir::{BasicBlock, Body as InternalBody};
+use rustc_middle::mir::Body as InternalBody;
 use rustc_middle::ty::{Instance as InternalInstance, PolyFnSig};
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
@@ -80,11 +80,6 @@ impl<'tcx> CurrentFnCtx<'tcx> {
         rustc_internal::internal(self.instance)
     }
 
-    /// The crate that function came from
-    pub fn krate(&self) -> String {
-        self.krate.to_string()
-    }
-
     /// The internal MIR for the function we are currently compiling using internal APIs.
     pub fn body_internal(&self) -> &'tcx InternalBody<'tcx> {
         self.mir
@@ -116,9 +111,5 @@ impl CurrentFnCtx<'_> {
     /// Is the current function from the `std` crate?
     pub fn is_std(&self) -> bool {
         self.krate == "std" || self.krate == "core"
-    }
-
-    pub fn find_label(&self, bb: &BasicBlock) -> String {
-        format!("{bb:?}")
     }
 }

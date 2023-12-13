@@ -8,7 +8,7 @@ use cbmc::{InternString, InternedString};
 use rustc_ast::ast::Mutability;
 use rustc_hir::{LangItem, Unsafety};
 use rustc_index::IndexVec;
-use rustc_middle::mir::{HasLocalDecls, Local, Operand, Place, Rvalue};
+use rustc_middle::mir::Local;
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::print::FmtPrinter;
@@ -436,22 +436,6 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    pub fn local_ty(&self, l: Local) -> Ty<'tcx> {
-        self.monomorphize(self.current_fn().body_internal().local_decls()[l].ty)
-    }
-
-    pub fn rvalue_ty(&self, rv: &Rvalue<'tcx>) -> Ty<'tcx> {
-        self.monomorphize(rv.ty(self.current_fn().body_internal().local_decls(), self.tcx))
-    }
-
-    pub fn operand_ty(&self, o: &Operand<'tcx>) -> Ty<'tcx> {
-        self.monomorphize(o.ty(self.current_fn().body_internal().local_decls(), self.tcx))
-    }
-
-    pub fn place_ty(&self, p: &Place<'tcx>) -> Ty<'tcx> {
-        self.monomorphize(p.ty(self.current_fn().body_internal().local_decls(), self.tcx).ty)
-    }
-
     /// Is the MIR type a zero-sized type.
     pub fn is_zst(&self, t: Ty<'tcx>) -> bool {
         self.layout_of(t).is_zst()
@@ -735,6 +719,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// also c.f. <https://www.ralfj.de/blog/2020/04/04/layout-debugging.html>
     ///      c.f. <https://rust-lang.github.io/unsafe-code-guidelines/introduction.html>
     pub fn codegen_ty(&mut self, ty: Ty<'tcx>) -> Type {
+        // TODO: Remove all monomorphize calls
         let normalized = self.tcx.normalize_erasing_regions(ty::ParamEnv::reveal_all(), ty);
         let goto_typ = self.codegen_ty_inner(normalized);
         if let Some(tag) = goto_typ.tag() {
