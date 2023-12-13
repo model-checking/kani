@@ -426,7 +426,11 @@ impl<'tcx> GotocCtx<'tcx> {
             "cttz_nonzero" => codegen_count_intrinsic!(cttz, false),
             "discriminant_value" => {
                 let ty = instance.args.type_at(0);
-                let e = self.codegen_get_discriminant(fargs.remove(0).dereference(), ty, ret_ty);
+                let e = self.codegen_get_discriminant(
+                    fargs.remove(0).dereference(),
+                    rustc_internal::stable(ty),
+                    rustc_internal::stable(ret_ty),
+                );
                 self.codegen_expr_to_place(p, e)
             }
             "exact_div" => self.codegen_exact_div(fargs, p, loc),

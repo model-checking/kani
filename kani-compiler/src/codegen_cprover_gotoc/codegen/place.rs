@@ -7,18 +7,13 @@
 
 use super::typ::TypeExt;
 use crate::codegen_cprover_gotoc::codegen::ty_stable::{pointee_type, StableConverter};
-use crate::codegen_cprover_gotoc::codegen::typ::{
-    pointee_type as pointee_type_internal, std_pointee_type,
-};
+use crate::codegen_cprover_gotoc::codegen::typ::std_pointee_type;
 use crate::codegen_cprover_gotoc::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::unwrap_or_return_codegen_unimplemented;
 use cbmc::goto_program::{Expr, Location, Type};
+use rustc_middle::mir::{Local as LocalInternal, Place as PlaceInternal};
 use rustc_middle::ty::layout::LayoutOf;
-use rustc_middle::{
-    mir::{Local as LocalInternal, Place as PlaceInternal},
-    ty::Ty as TyInternal,
-};
 use rustc_smir::rustc_internal;
 use rustc_target::abi::{TagEncoding, Variants};
 use stable_mir::mir::{FieldIdx, Local, Mutability, Place, ProjectionElem};
@@ -152,13 +147,12 @@ impl ProjectedPlace {
         }
     }
 
-    pub fn try_new_internal<'tcx>(
+    pub fn try_from_ty(
         goto_expr: Expr,
-        ty: TyInternal<'tcx>,
-        ctx: &mut GotocCtx<'tcx>,
+        ty: Ty,
+        ctx: &mut GotocCtx,
     ) -> Result<Self, UnimplementedData> {
-        let ty = ctx.monomorphize(ty);
-        Self::try_new(goto_expr, TypeOrVariant::Type(rustc_internal::stable(ty)), None, None, ctx)
+        Self::try_new(goto_expr, TypeOrVariant::Type(ty), None, None, ctx)
     }
 
     pub fn try_new(
@@ -415,7 +409,7 @@ impl<'tcx> GotocCtx<'tcx> {
         match proj {
             ProjectionElem::Deref => {
                 let base_type = before.mir_typ();
-                let inner_goto_expr = if is_box(base_type) {
+                let inner_goto_expr = if base_type.kind().is_box() {
                     self.deref_box(before.goto_expr)
                 } else {
                     before.goto_expr
@@ -605,7 +599,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     Variants::Single { .. } => before.goto_expr,
                     Variants::Multiple { tag_encoding, .. } => match tag_encoding {
                         TagEncoding::Direct => {
-                            let cases = if is_coroutine(ty_kind) {
+                            let cases = if ty_kind.is_coroutine() {
                                 before.goto_expr
                             } else {
                                 before.goto_expr.member("cases", &self.symbol_table)
@@ -644,12 +638,17 @@ impl<'tcx> GotocCtx<'tcx> {
     /// - For `*(Wrapper<T>)` where `T: Unsized`, the projection's `goto_expr` returns an object,
     ///   and we need to take it's address and build the fat pointer.
     pub fn codegen_place_ref(&mut self, place: &PlaceInternal<'tcx>) -> Expr {
-        let place_ty = self.place_ty(place);
-        let projection = unwrap_or_return_codegen_unimplemented!(self, self.codegen_place(place));
-        if self.use_thin_pointer(place_ty) {
+        self.codegen_place_ref_stable(&StableConverter::convert_place(self, *place))
+    }
+
+    pub fn codegen_place_ref_stable(&mut self, place: &Place) -> Expr {
+        let place_ty = self.place_ty_stable(place);
+        let projection =
+            unwrap_or_return_codegen_unimplemented!(self, self.codegen_place_stable(place));
+        if self.use_thin_pointer_stable(place_ty) {
             // Just return the address of the place dereferenced.
             projection.goto_expr.address_of()
-        } else if place_ty == pointee_type_internal(self.local_ty(place.local)).unwrap() {
+        } else if place_ty == pointee_type(self.local_ty_stable(place.local)).unwrap() {
             // Just return the fat pointer if this is a simple &(*local).
             projection.fat_ptr_goto_expr.unwrap()
         } else {
@@ -657,8 +656,8 @@ impl<'tcx> GotocCtx<'tcx> {
             // original fat pointer.
             let data = projection_data_ptr(&projection);
             let fat_ptr = projection.fat_ptr_goto_expr.unwrap();
-            let place_type = self.codegen_ty_ref(place_ty);
-            if self.use_vtable_fat_pointer(place_ty) {
+            let place_type = self.codegen_ty_ref_stable(place_ty);
+            if self.use_vtable_fat_pointer_stable(place_ty) {
                 let vtable = fat_ptr.member("vtable", &self.symbol_table);
                 dynamic_fat_ptr(place_type, data, vtable, &self.symbol_table)
             } else {
@@ -779,14 +778,6 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_idx_array(&mut self, arr: Expr, idx: Expr) -> Expr {
         arr.index_array(idx)
     }
-}
-
-fn is_box(ty: Ty) -> bool {
-    matches!(ty.kind(), TyKind::RigidTy(RigidTy::Adt(def, _)) if def.is_box())
-}
-
-fn is_coroutine(ty_kind: TyKind) -> bool {
-    matches!(ty_kind, TyKind::RigidTy(RigidTy::Coroutine(..)))
 }
 
 /// Extract the data pointer from a projection.

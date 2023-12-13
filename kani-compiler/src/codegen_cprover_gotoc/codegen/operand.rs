@@ -8,7 +8,6 @@ use cbmc::goto_program::{DatatypeComponent, Expr, ExprValue, Location, Stmt, Sym
 use rustc_middle::mir::Operand as OperandInternal;
 use rustc_middle::ty::{Const as ConstInternal, Instance as InstanceInternal};
 use rustc_smir::rustc_internal;
-use rustc_span::def_id::DefId;
 use rustc_span::Span as SpanInternal;
 use stable_mir::mir::alloc::{AllocId, GlobalAlloc};
 use stable_mir::mir::mono::{Instance, StaticDef};
@@ -17,7 +16,7 @@ use stable_mir::ty::{
     Allocation, Const, ConstantKind, FloatTy, FnDef, GenericArgs, IntTy, RigidTy, Size, Span, Ty,
     TyKind, UintTy,
 };
-use stable_mir::CrateDef;
+use stable_mir::{CrateDef, CrateItem};
 use tracing::{debug, trace};
 
 #[derive(Clone, Debug)]
@@ -80,7 +79,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ///   generate code for it as simple literals or constants if possible. Otherwise, we create
     ///   a memory allocation for them and access them indirectly.
     /// - ZeroSized: These are ZST constants and they just need to match the right type.
-    fn codegen_const(&mut self, constant: &Const, span: Option<Span>) -> Expr {
+    pub fn codegen_const(&mut self, constant: &Const, span: Option<Span>) -> Expr {
         trace!(?constant, "codegen_constant");
         match constant.kind() {
             ConstantKind::Allocated(alloc) => self.codegen_allocation(alloc, constant.ty(), span),
@@ -379,8 +378,8 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Generate a goto expression for a pointer to a thread-local variable.
     ///
     /// These are not initialized here, see `codegen_static`.
-    pub fn codegen_thread_local_pointer(&mut self, def_id: DefId) -> Expr {
-        let instance = rustc_internal::stable(InstanceInternal::mono(self.tcx, def_id));
+    pub fn codegen_thread_local_pointer(&mut self, def: CrateItem) -> Expr {
+        let instance = Instance::try_from(def).unwrap();
         self.codegen_instance_pointer(instance, true)
     }
 
