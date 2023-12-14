@@ -201,11 +201,11 @@ impl<'tcx> GotocCtx<'tcx> {
     /// for which it needs to be enforced.
     ///
     /// 1. Gets the `#[kanitool::inner_check = "..."]` target, then resolves exactly one instance
-    ///    of it. Panics there are more or less than one instance.
+    ///    of it. Panics if there are more or less than one instance.
     /// 2. Expects that a `#[kanitool::modifies(...)]` is placed on the `inner_check` function,
     ///    turns it into a CBMC contract and attaches it to the symbol for the previously resolved
     ///    instance.
-    /// 3. Returns the mangled of the symbol it attached the contract to.
+    /// 3. Returns the mangled name of the symbol it attached the contract to.
     /// 4. Resolves the `#[kanitool::checked_with = "..."]` target from `function_under_contract`
     ///    which has `static mut REENTRY : bool` declared inside.
     /// 5. Returns the full path to this constant that `--nondet-static-exclude` expects which is
