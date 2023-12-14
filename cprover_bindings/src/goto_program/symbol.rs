@@ -386,7 +386,7 @@ impl Symbol {
         self
     }
 
-    /// Set `is_property` to true.
+    /// Set `is_property`.
     pub fn with_is_property(mut self, v: bool) -> Self {
         self.is_property = v;
         self

@@ -256,6 +256,7 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn attach_contract(&mut self, instance: Instance<'tcx>, contract: Vec<Local>) {
         // This should be safe, since the contract is pretty much evaluated as
         // though it was the first (or last) assertion in the function.
+        assert!(self.current_fn.is_none());
         self.set_current_fn(instance);
         let goto_contract = self.as_goto_contract(contract);
         let name = self.current_fn().name();
