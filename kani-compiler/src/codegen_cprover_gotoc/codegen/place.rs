@@ -12,7 +12,6 @@ use crate::codegen_cprover_gotoc::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::unwrap_or_return_codegen_unimplemented;
 use cbmc::goto_program::{Expr, Location, Type};
-use rustc_middle::mir::Local as LocalInternal;
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_smir::rustc_internal;
 use rustc_target::abi::{TagEncoding, Variants};
@@ -390,7 +389,7 @@ impl<'tcx> GotocCtx<'tcx> {
         }
 
         // Otherwise, simply look up the local by the var name.
-        let vname = self.codegen_var_name(&LocalInternal::from(l));
+        let vname = self.codegen_var_name(&l);
         Expr::symbol_expression(vname, self.codegen_ty_stable(local_ty))
     }
 

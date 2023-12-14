@@ -566,7 +566,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// sometimes subtly differs from the type that codegen_function_sig returns.
     /// This is tracked in <https://github.com/model-checking/kani/issues/1350>.
     fn codegen_func_symbol(&mut self, instance: Instance) -> (&Symbol, Type) {
-        let funct = self.codegen_function_sig(self.fn_sig_of_instance_stable(instance));
+        let funct = self.codegen_function_sig_stable(self.fn_sig_of_instance_stable(instance));
         let sym = if instance.is_foreign_item() {
             // Get the symbol that represents a foreign instance.
             self.codegen_foreign_fn(instance)

@@ -137,7 +137,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// This will behave like `codegen_unimplemented_stmt` but print a message that includes
     /// the name of the function not supported and the calling convention.
-    pub fn codegen_ffi_unsupported(&mut self, instance: Instance<'tcx>, loc: Location) -> Stmt {
+    fn codegen_ffi_unsupported(&mut self, instance: Instance<'tcx>, loc: Location) -> Stmt {
         let fn_name = &self.symbol_name(instance);
         debug!(?fn_name, ?loc, "codegen_ffi_unsupported");
 

@@ -8,7 +8,6 @@ use cbmc::{InternString, InternedString};
 use rustc_ast::ast::Mutability;
 use rustc_hir::{LangItem, Unsafety};
 use rustc_index::IndexVec;
-use rustc_middle::mir::Local;
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::print::FmtPrinter;
@@ -25,6 +24,7 @@ use rustc_target::abi::{
     TyAndLayout, VariantIdx, Variants,
 };
 use rustc_target::spec::abi::Abi;
+use stable_mir::mir::Body;
 use std::iter;
 use tracing::{debug, trace, warn};
 
@@ -1288,17 +1288,7 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_function_sig(&mut self, sig: PolyFnSig<'tcx>) -> Type {
         let sig = self.monomorphize(sig);
         let sig = self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig);
-        let params = sig
-            .inputs()
-            .iter()
-            .filter_map(|t| if self.is_zst(*t) { None } else { Some(self.codegen_ty(*t)) })
-            .collect();
-
-        if sig.c_variadic {
-            Type::variadic_code_with_unnamed_parameters(params, self.codegen_ty(sig.output()))
-        } else {
-            Type::code_with_unnamed_parameters(params, self.codegen_ty(sig.output()))
-        }
+        self.codegen_function_sig_stable(rustc_internal::stable(sig))
     }
 
     /// Creates a zero-sized struct for a FnDef.
@@ -1666,39 +1656,39 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// the function type of the current instance
-    pub fn fn_typ(&mut self) -> Type {
-        let sig = self.current_fn().sig();
-        let sig = self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig);
-        // we don't call [codegen_function_sig] because we want to get a bit more metainformation.
-        let is_vtable_shim =
-            matches!(self.current_fn().instance().def, ty::InstanceDef::VTableShim(..));
+    pub fn fn_typ(&mut self, body: &Body) -> Type {
+        let sig = self.current_fn().sig().clone();
+        let internal_instance = self.current_fn().instance();
+        let is_vtable_shim = matches!(internal_instance.def, ty::InstanceDef::VTableShim(..));
         let mut params: Vec<Parameter> = sig
             .inputs()
             .iter()
             .enumerate()
-            .filter_map(|(i, t)| {
+            .filter_map(|(i, ty)| {
+                debug!(?i, ?ty, "fn_typ");
                 let is_vtable_shim_self = i == 0 && is_vtable_shim;
-                if self.is_zst(*t) && !is_vtable_shim_self {
+                if self.is_zst_stable(*ty) && !is_vtable_shim_self {
                     // We ignore zero-sized parameters.
                     // See https://github.com/model-checking/kani/issues/274 for more details.
                     None
                 } else {
-                    let lc = Local::from_usize(i + 1);
+                    // An arg is the local with index offset by one (return value is always local 0)
+                    let lc = i + 1;
                     let mut ident = self.codegen_var_name(&lc);
 
                     // `spread_arg` indicates that the last argument is tupled
-                    // at the LLVM/codegen level, so we need to declare the indivual
+                    // at the LLVM/codegen level, so we need to declare the individual
                     // components as parameters with a special naming convention
                     // so that we can "retuple" them in the function prelude.
                     // See: compiler/rustc_codegen_llvm/src/gotoc/mod.rs:codegen_function_prelude
-                    if let Some(spread) = self.current_fn().body_internal().spread_arg {
-                        if lc.index() >= spread.index() {
+                    if let Some(spread) = body.spread_arg() {
+                        if lc >= spread {
                             let (name, _) = self.codegen_spread_arg_name(&lc);
                             ident = name;
                         }
                     }
                     Some(
-                        self.codegen_ty(*t)
+                        self.codegen_ty_stable(*ty)
                             .as_parameter(Some(ident.clone().into()), Some(ident.into())),
                     )
                 }
@@ -1719,9 +1709,9 @@ impl<'tcx> GotocCtx<'tcx> {
 
         debug!(?params, signature=?sig, "function_type");
         if sig.c_variadic {
-            Type::variadic_code(params, self.codegen_ty(sig.output()))
+            Type::variadic_code(params, self.codegen_ty_stable(sig.output()))
         } else {
-            Type::code(params, self.codegen_ty(sig.output()))
+            Type::code(params, self.codegen_ty_stable(sig.output()))
         }
     }
 

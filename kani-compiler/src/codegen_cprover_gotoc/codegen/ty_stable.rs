@@ -13,11 +13,11 @@ use rustc_middle::ty::{self};
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{Local, Operand, Place, Rvalue};
-use stable_mir::ty::{RigidTy, Ty, TyKind};
+use stable_mir::ty::{FnSig, RigidTy, Ty, TyKind};
 
 impl<'tcx> GotocCtx<'tcx> {
     pub fn place_ty_stable(&self, place: &Place) -> Ty {
-        place.ty(self.current_fn().body().locals()).unwrap()
+        place.ty(self.current_fn().locals()).unwrap()
     }
 
     pub fn codegen_ty_stable(&mut self, ty: Ty) -> Type {
@@ -29,11 +29,11 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     pub fn local_ty_stable(&self, local: Local) -> Ty {
-        self.current_fn().body().local_decl(local).unwrap().ty
+        self.current_fn().locals()[local].ty
     }
 
     pub fn operand_ty_stable(&self, operand: &Operand) -> Ty {
-        operand.ty(self.current_fn().body().locals()).unwrap()
+        operand.ty(self.current_fn().locals()).unwrap()
     }
 
     pub fn is_zst_stable(&self, ty: Ty) -> bool {
@@ -53,8 +53,11 @@ impl<'tcx> GotocCtx<'tcx> {
         )
     }
 
-    pub fn fn_sig_of_instance_stable(&self, instance: Instance) -> ty::PolyFnSig<'tcx> {
-        self.fn_sig_of_instance(rustc_internal::internal(instance))
+    pub fn fn_sig_of_instance_stable(&self, instance: Instance) -> FnSig {
+        let fn_sig = self.fn_sig_of_instance(rustc_internal::internal(instance));
+        let fn_sig =
+            self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), fn_sig);
+        rustc_internal::stable(fn_sig)
     }
 
     pub fn use_fat_pointer_stable(&self, pointer_ty: Ty) -> bool {
@@ -82,7 +85,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     pub fn rvalue_ty_stable(&self, rvalue: &Rvalue) -> Ty {
-        rvalue.ty(self.current_fn().body().locals()).unwrap()
+        rvalue.ty(self.current_fn().locals()).unwrap()
     }
 
     pub fn simd_size_and_type(&self, ty: Ty) -> (u64, Ty) {
@@ -92,6 +95,25 @@ impl<'tcx> GotocCtx<'tcx> {
 
     pub fn codegen_enum_discr_typ_stable(&self, ty: Ty) -> Ty {
         rustc_internal::stable(self.codegen_enum_discr_typ(rustc_internal::internal(ty)))
+    }
+
+    pub fn codegen_function_sig_stable(&mut self, sig: FnSig) -> Type {
+        let params = sig
+            .inputs()
+            .iter()
+            .filter_map(|ty| {
+                if self.is_zst_stable(*ty) { None } else { Some(self.codegen_ty_stable(*ty)) }
+            })
+            .collect();
+
+        if sig.c_variadic {
+            Type::variadic_code_with_unnamed_parameters(
+                params,
+                self.codegen_ty_stable(sig.output()),
+            )
+        } else {
+            Type::code_with_unnamed_parameters(params, self.codegen_ty_stable(sig.output()))
+        }
     }
 }
 /// If given type is a Ref / Raw ref, return the pointee type.

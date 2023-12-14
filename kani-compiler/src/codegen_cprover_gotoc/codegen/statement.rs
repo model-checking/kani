@@ -135,8 +135,8 @@ impl<'tcx> GotocCtx<'tcx> {
                 "https://github.com/model-checking/kani/issues/692",
             ),
             TerminatorKind::Return => {
-                let rty = self.current_fn().sig().skip_binder().output();
-                if rty.is_unit() {
+                let rty = self.current_fn().sig().output();
+                if rty.kind().is_unit() {
                     self.codegen_ret_unit()
                 } else {
                     let p = Place::from(RETURN_LOCAL);
@@ -177,7 +177,8 @@ impl<'tcx> GotocCtx<'tcx> {
                 } else if let AssertMessage::MisalignedPointerDereference { .. } = msg {
                     // Misaligned pointer dereference check messages is also a runtime messages.
                     // Generate a generic one here.
-                    "misaligned pointer dereference: address must be a multiple of its type's alignment"
+                    "misaligned pointer dereference: address must be a multiple of its type's \
+                    alignment"
                 } else {
                     // For all other assert kind we can get the static message.
                     msg.description().unwrap()

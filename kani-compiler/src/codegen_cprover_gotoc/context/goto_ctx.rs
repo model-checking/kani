@@ -35,6 +35,7 @@ use rustc_span::Span;
 use rustc_target::abi::call::FnAbi;
 use rustc_target::abi::{HasDataLayout, TargetDataLayout};
 use stable_mir::mir::mono::Instance;
+use stable_mir::mir::Body;
 use stable_mir::ty::Allocation;
 
 pub struct GotocCtx<'tcx> {
@@ -298,8 +299,8 @@ impl<'tcx> GotocCtx<'tcx> {
 
 /// Mutators
 impl<'tcx> GotocCtx<'tcx> {
-    pub fn set_current_fn(&mut self, instance: Instance) {
-        self.current_fn = Some(CurrentFnCtx::new(instance, self));
+    pub fn set_current_fn(&mut self, instance: Instance, body: &Body) {
+        self.current_fn = Some(CurrentFnCtx::new(instance, self, body));
     }
 
     pub fn reset_current_fn(&mut self) {
