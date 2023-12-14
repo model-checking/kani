@@ -127,7 +127,7 @@
 //! `result`.
 //!
 //! In addition Kani provides the [`modifies`](macro@modifies) attribute. This
-//! works a bit different int aht it does not contain conditions but a comma
+//! works a bit different in that it does not contain conditions but a comma
 //! separated sequence of expressions that evaluate to pointers. This attribute
 //! constrains to which memory locations the function is allowed to write. Each
 //! expression can contain arbitrary Rust syntax, though it may not perform side
@@ -203,7 +203,7 @@
 //! The [`modifies`](macro@modifies) attribute is used to describe which
 //! locations in memory a function may assign to. The attribute contains a comma
 //! separated series of expressions that reference the function arguments.
-//! Syntactically any expression id permissible, though it may not perform side
+//! Syntactically any expression is permissible, though it may not perform side
 //! effects (I/O, mutation) or panic. As an example consider this super simple
 //! function:
 //!
