@@ -2,6 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zfunction-contracts
 
+// Tests that providing the "modifies" clause havocks the pointer such
+// that the increment can no longer be observed (in the absence of an
+// "ensures" clause)
+
 #[kani::requires(**ptr < 100)]
 #[kani::modifies(ptr.as_ref())]
 fn modify(ptr: &mut Box<u32>) {

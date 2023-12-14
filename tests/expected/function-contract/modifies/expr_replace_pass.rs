@@ -4,7 +4,7 @@
 
 #[kani::requires(**ptr < 100)]
 #[kani::modifies(ptr.as_ref())]
-#[kani::ensures(*ptr.as_ref() == prior + 1)]
+#[kani::ensures(**ptr == prior + 1)]
 fn modify(ptr: &mut Box<u32>, prior: u32) {
     *ptr.as_mut() += 1;
 }

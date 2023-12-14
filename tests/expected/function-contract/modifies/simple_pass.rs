@@ -10,7 +10,6 @@ fn modify(ptr: &mut u32) {
 
 #[kani::proof_for_contract(modify)]
 fn main() {
-    let _ = Box::new(());
     let mut i = kani::any();
     modify(&mut i);
 }

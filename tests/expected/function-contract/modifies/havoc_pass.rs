@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zfunction-contracts
 
-// These two are reordered in comparison to `havoc_pass` and we expect the test case to pass still
 #[kani::modifies(dst)]
 #[kani::ensures(*dst == src)]
 fn copy(src: u32, dst: &mut u32) {

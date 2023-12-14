@@ -58,7 +58,16 @@ enum KaniAttributeKind {
     /// Attribute on a function that was auto-generated from expanding a
     /// function contract.
     IsContractGenerated,
+    /// Identifies a set of pointer arguments that should be added to the write
+    /// set when checking a function contract. Placed on the inner check function.
+    ///
+    /// Emitted by the expansion of a `modifies` function contract clause.
     Modifies,
+    /// A function used as the inner code of a contract check.
+    ///
+    /// Contains the original body of the contracted function. The signature is
+    /// expanded with additional pointer arguments that are not used in the function
+    /// but referenced by the `modifies` annotation.
     InnerCheck,
 }
 

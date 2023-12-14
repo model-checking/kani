@@ -260,33 +260,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let goto_contract = self.as_goto_contract(contract);
         let name = self.current_fn().name();
 
-        // CBMC has two ways of attaching the contract and it seems the
-        // difference is whether dfcc is used or not. With dfcc it's stored in
-        // `contract::<fn name>`, otherwise directly on the type of the
-        // function.
-        //
-        // Actually the issue sees to haver been something else and ataching to
-        // the symbol directly seems ot also work if dfcc is used.
-        let create_separate_contract_sym = false;
-
-        let contract_target_name = if create_separate_contract_sym {
-            let contract_sym_name = format!("contract::{}", name);
-            self.ensure(&contract_sym_name, |ctx, fname| {
-                Symbol::function(
-                    fname,
-                    ctx.fn_typ(),
-                    None,
-                    format!("contract::{}", ctx.current_fn().readable_name()),
-                    ctx.codegen_span(&ctx.current_fn().mir().span),
-                )
-                .with_is_property(true)
-            });
-            contract_sym_name
-        } else {
-            name
-        };
-
-        self.symbol_table.attach_contract(contract_target_name, goto_contract);
+        self.symbol_table.attach_contract(name, goto_contract);
         self.reset_current_fn()
     }
 
