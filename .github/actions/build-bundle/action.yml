@@ -65,7 +65,7 @@ runs:
         echo "PKG=${{ inputs.os }}-kani-verifier.crate" >> $GITHUB_ENV
 
     - name: Upload bundle
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: ${{ env.BUNDLE }}
         path: ${{ env.BUNDLE }}
@@ -74,7 +74,7 @@ runs:
         retention-days: 3
 
     - name: Upload kani-verifier pkg
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: ${{ env.PKG }}
         path: ${{ env.PKG }}
