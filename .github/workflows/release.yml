@@ -115,12 +115,12 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Download bundle
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: ${{ matrix.prev_job.bundle }}
 
       - name: Download kani-verifier crate
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: ${{ matrix.prev_job.package }}
 
@@ -165,12 +165,12 @@ jobs:
           path: ${{ env.KANI_SRC }}
 
       - name: Download bundle
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: ${{ env.BUNDLE }}
 
       - name: Download kani-verifier crate
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: ${{ env.PKG }}
 
@@ -224,12 +224,12 @@ jobs:
           echo "version=${{ env.TAG_VERSION }}" >> $GITHUB_OUTPUT
 
       - name: Download MacOS bundle
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: ${{ needs.build_bundle_macos.outputs.bundle }}
 
       - name: Download Linux bundle
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: ${{ needs.build_bundle_linux.outputs.bundle }}
 
