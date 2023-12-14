@@ -9,8 +9,8 @@ fn modify(v: &mut Vec<u32>, src: u32) {
     v[0] = src
 }
 
-//#[kani::unwind(10)]
-//#[kani::proof_for_contract(modify)]
+#[kani::unwind(10)]
+#[kani::proof_for_contract(modify)]
 fn main() {
     let v_len = kani::any_where(|i| *i < 4);
     let mut v: Vec<u32> = vec![kani::any()];
