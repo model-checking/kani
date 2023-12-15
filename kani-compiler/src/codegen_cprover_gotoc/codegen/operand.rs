@@ -299,6 +299,20 @@ impl<'tcx> GotocCtx<'tcx> {
                         &self.symbol_table,
                     )
                 }
+                // TODO: Improve this check after we upgrade nightly to 2023-12-18.
+                TyKind::RigidTy(RigidTy::Adt(def, _)) if def.name().ends_with("::CStr") => {
+                    // TODO: Handle CString
+                    // <https://github.com/model-checking/kani/issues/2549>
+                    let loc = self.codegen_span_option_stable(span);
+                    let typ = self.codegen_ty_stable(ty);
+                    let operation_name = "C string literal";
+                    self.codegen_unimplemented_expr(
+                        &operation_name,
+                        typ,
+                        loc,
+                        "https://github.com/model-checking/kani/issues/2549",
+                    )
+                }
                 _ => unreachable!("{inner_ty:?}"),
             }
         } else if !alloc.provenance.ptrs.is_empty() {
