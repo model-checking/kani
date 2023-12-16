@@ -24,6 +24,10 @@
 //! axiom <expr2>;
 //! ...
 //!
+//! // Datatypes:
+//! datatype <datatype-name> = <constructor1, constructor2, ...>;
+//! ...
+//!
 //! // Functions:
 //! function <function1-name>(<arg1>: <type1>, ...) returns (return-var-name: <return-type>)
 //! {
@@ -118,6 +122,12 @@ impl BoogieProgram {
                 todo!()
             }
         }
+        if !self.datatypes.is_empty() {
+            writeln!(writer, "// Datatypes:")?;
+            for d in &self.datatypes {
+                d.write_to(&mut writer)?;
+            }
+        }
         if !self.functions.is_empty() {
             writeln!(writer, "// Functions:")?;
             for f in &self.functions {
@@ -129,6 +139,50 @@ impl BoogieProgram {
             for p in &self.procedures {
                 p.write_to(&mut writer)?;
             }
+        }
+        Ok(())
+    }
+}
+
+impl DataType {
+    fn write_to<T: Write>(&self, writer: &mut Writer<T>) -> std::io::Result<()> {
+        write!(writer, "datatype {}", self.name)?;
+        if !self.type_parameters.is_empty() {
+            write!(writer, "<")?;
+            for (i, tp) in self.type_parameters.iter().enumerate() {
+                if i > 0 {
+                    write!(writer, ", ")?;
+                }
+                write!(writer, "{tp}")?;
+            }
+            write!(writer, ">")?;
+        }
+        write!(writer, " {{")?;
+        for (i, cons) in self.constructors.iter().enumerate() {
+            if i > 0 {
+                writeln!(writer, ",")?;
+            }
+            cons.write_to(writer)?;
+        }
+        writeln!(writer, " }}")?;
+        writer.newline()?;
+        Ok(())
+    }
+}
+
+impl DataTypeConstructor {
+    fn write_to<T: Write>(&self, writer: &mut Writer<T>) -> std::io::Result<()> {
+        write!(writer, " {}", self.name)?;
+        if !self.parameters.is_empty() {
+            write!(writer, "(")?;
+            for (i, tp) in self.parameters.iter().enumerate() {
+                if i > 0 {
+                    write!(writer, ", ")?;
+                }
+                write!(writer, "{}: ", tp.name)?;
+                tp.typ.write_to(writer)?;
+            }
+            write!(writer, ")")?;
         }
         Ok(())
     }
@@ -392,6 +446,13 @@ impl Type {
                 value.write_to(writer)?;
             }
             Type::Parameter { name } => write!(writer, "{name}")?,
+            Type::UserDefined { name, type_arguments } => {
+                write!(writer, "{name}")?;
+                for arg in type_arguments {
+                    write!(writer, " ")?;
+                    arg.write_to(writer)?;
+                }
+            }
         }
         Ok(())
     }
@@ -460,6 +521,17 @@ mod tests {
             const_declarations: Vec::new(),
             var_declarations: Vec::new(),
             axioms: Vec::new(),
+            datatypes: vec![DataType::new(
+                "Pair".into(),
+                vec!["U".into(), "V".into()],
+                vec![DataTypeConstructor::new(
+                    "Pair".into(),
+                    vec![
+                        Parameter::new("fst".into(), Type::parameter("U".into())),
+                        Parameter::new("snd".into(), Type::parameter("V".into())),
+                    ],
+                )],
+            )],
             functions: vec![
                 Function::new(
                     "isZero".into(),
@@ -502,6 +574,13 @@ mod tests {
                     statements: vec![
                         Stmt::Decl { name: "x".to_string(), typ: Type::Int },
                         Stmt::Decl { name: "y".to_string(), typ: Type::Int },
+                        Stmt::Decl {
+                            name: "p".to_string(),
+                            typ: Type::user_defined(
+                                "Pair".to_string(),
+                                vec![Type::Bool, Type::Int],
+                            ),
+                        },
                         Stmt::Assignment {
                             target: "x".to_string(),
                             value: Expr::Literal(Literal::Int(1.into())),
@@ -550,6 +629,9 @@ mod tests {
 
         let expected = String::from(
             "\
+// Datatypes:
+datatype Pair<U, V> { Pair(fst: U, snd: V) }
+
 // Functions:
 function {:inline} isZero(x: int) returns (bool) {
   (x == 0)
@@ -563,6 +645,7 @@ procedure main() returns (z: bool)
 {
   var x: int;
   var y: int;
+  var p: Pair bool int;
   x := 1;
   y := 2;
   assert (x == 1);
