@@ -31,6 +31,11 @@ pub enum Type {
 
     /// Generic type parameter, e.g. `T`
     Parameter { name: String },
+
+    /// A user-defined type, e.g. using `type` or `datatype`
+    /// The arguments to generic type parameters are stored in the
+    /// `type_arguments` field.
+    UserDefined { name: String, type_arguments: Vec<Type> },
 }
 
 impl Type {
@@ -44,6 +49,10 @@ impl Type {
 
     pub fn map(key: Type, value: Type) -> Self {
         Self::Map { key: Box::new(key), value: Box::new(value) }
+    }
+
+    pub fn user_defined(name: String, type_arguments: Vec<Type>) -> Self {
+        Self::UserDefined { name, type_arguments }
     }
 }
 
@@ -203,6 +212,37 @@ pub enum Stmt {
     While { condition: Expr, body: Box<Stmt> },
 }
 
+/// A Boogie datatype. A datatype is defined by one or more constructors.
+/// See https://github.com/boogie-org/boogie/pull/685 for more details.
+pub struct DataType {
+    name: String,
+    type_parameters: Vec<String>,
+    constructors: Vec<DataTypeConstructor>,
+}
+
+impl DataType {
+    pub fn new(
+        name: String,
+        type_parameters: Vec<String>,
+        constructors: Vec<DataTypeConstructor>,
+    ) -> Self {
+        Self { name, type_parameters, constructors }
+    }
+}
+
+/// A constructor for a datatype. A constructor has a name and zero or more
+/// parameters.
+pub struct DataTypeConstructor {
+    name: String,
+    parameters: Vec<Parameter>,
+}
+
+impl DataTypeConstructor {
+    pub fn new(name: String, parameters: Vec<Parameter>) -> Self {
+        Self { name, parameters }
+    }
+}
+
 /// Contract specification
 pub struct Contract {
     /// Pre-conditions
@@ -269,6 +309,7 @@ pub struct BoogieProgram {
     const_declarations: Vec<ConstDeclaration>,
     var_declarations: Vec<VarDeclaration>,
     axioms: Vec<Axiom>,
+    datatypes: Vec<DataType>,
     functions: Vec<Function>,
     procedures: Vec<Procedure>,
 }
@@ -280,6 +321,7 @@ impl BoogieProgram {
             const_declarations: Vec::new(),
             var_declarations: Vec::new(),
             axioms: Vec::new(),
+            datatypes: Vec::new(),
             functions: Vec::new(),
             procedures: Vec::new(),
         }
@@ -291,5 +333,9 @@ impl BoogieProgram {
 
     pub fn add_function(&mut self, function: Function) {
         self.functions.push(function);
+    }
+
+    pub fn add_datatype(&mut self, datatype: DataType) {
+        self.datatypes.push(datatype);
     }
 }
