@@ -1331,7 +1331,7 @@ impl<'tcx> GotocCtx<'tcx> {
             TyKind::RigidTy(RigidTy::Slice(_)) | TyKind::RigidTy(RigidTy::Str) => {
                 let unit_t = match ty.kind() {
                     TyKind::RigidTy(RigidTy::Slice(et)) => et,
-                    TyKind::RigidTy(RigidTy::Str) => rustc_internal::stable(self.tcx.types.u8),
+                    TyKind::RigidTy(RigidTy::Str) => Ty::unsigned_ty(UintTy::U8),
                     _ => unreachable!(),
                 };
                 let unit = self.layout_of_stable(unit_t);

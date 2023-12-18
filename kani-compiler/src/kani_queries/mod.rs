@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! Define the communication between KaniCompiler and the codegen implementation.
 
-use rustc_hir::definitions::DefPathHash;
+use cbmc::{InternString, InternedString};
 use std::{
     collections::HashMap,
     path::PathBuf,
@@ -16,7 +16,7 @@ use crate::args::Arguments;
 pub struct QueryDb {
     args: Option<Arguments>,
     /// Information about all target harnesses.
-    pub harnesses_info: HashMap<DefPathHash, PathBuf>,
+    pub harnesses_info: HashMap<InternedString, PathBuf>,
 }
 
 impl QueryDb {
@@ -25,13 +25,13 @@ impl QueryDb {
     }
 
     /// Get the definition hash for all harnesses that are being compiled in this compilation stage.
-    pub fn target_harnesses(&self) -> Vec<DefPathHash> {
+    pub fn target_harnesses(&self) -> Vec<InternedString> {
         self.harnesses_info.keys().cloned().collect()
     }
 
     /// Get the model path for a given harness.
-    pub fn harness_model_path(&self, harness: &DefPathHash) -> Option<&PathBuf> {
-        self.harnesses_info.get(harness)
+    pub fn harness_model_path(&self, harness: &String) -> Option<&PathBuf> {
+        self.harnesses_info.get(&harness.intern())
     }
 
     pub fn set_args(&mut self, args: Arguments) {

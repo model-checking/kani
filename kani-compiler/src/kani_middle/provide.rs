@@ -13,6 +13,7 @@ use rustc_hir::def_id::{DefId, LocalDefId};
 use rustc_interface;
 use rustc_middle::util::Providers;
 use rustc_middle::{mir::Body, query::queries, ty::TyCtxt};
+use stable_mir::mir::mono::MonoItem;
 
 /// Sets up rustc's query mechanism to apply Kani's custom queries to code from
 /// a crate.
@@ -77,10 +78,8 @@ fn collect_and_partition_mono_items(
     key: (),
 ) -> queries::collect_and_partition_mono_items::ProvidedValue {
     rustc_smir::rustc_internal::run(tcx, || {
-        let entry_fn = tcx.entry_fn(()).map(|(id, _)| id);
-        let local_reachable = filter_crate_items(tcx, |_, def_id| {
-            tcx.is_reachable_non_generic(def_id) || entry_fn == Some(def_id)
-        });
+        let local_reachable =
+            filter_crate_items(tcx, |_, _| true).into_iter().map(MonoItem::Fn).collect::<Vec<_>>();
         // We do not actually need the value returned here.
         collect_reachable_items(tcx, &local_reachable);
     })

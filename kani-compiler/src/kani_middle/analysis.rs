@@ -7,9 +7,6 @@
 //! This module will perform all the analyses requested. Callers are responsible for selecting
 //! when the cost of these analyses are worth it.
 
-use rustc_middle::mir::mono::MonoItem as InternalMonoItem;
-use rustc_middle::ty::TyCtxt;
-use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::MonoItem;
 use stable_mir::mir::{
     visit::Location, MirVisitor, Rvalue, Statement, StatementKind, Terminator, TerminatorKind,
@@ -23,8 +20,7 @@ use std::fmt::Display;
 ///  - Number of items per type (Function / Constant / Shims)
 ///  - Number of instructions per type.
 ///  - Total number of MIR instructions.
-pub fn print_stats<'tcx>(_tcx: TyCtxt<'tcx>, items: &[InternalMonoItem<'tcx>]) {
-    let items: Vec<MonoItem> = items.iter().map(rustc_internal::stable).collect();
+pub fn print_stats(items: &[MonoItem]) {
     let item_types = items.iter().collect::<Counter>();
     let visitor = items
         .iter()

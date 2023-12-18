@@ -25,6 +25,7 @@ use crate::kani_middle::reachability::filter_crate_items;
 use crate::kani_middle::stubbing::{self, harness_stub_map};
 use crate::kani_queries::QueryDb;
 use crate::session::init_session;
+use cbmc::{InternString, InternedString};
 use clap::Parser;
 use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata};
 use rustc_codegen_ssa::traits::CodegenBackend;
@@ -68,7 +69,7 @@ fn backend(queries: Arc<Mutex<QueryDb>>) -> Box<CodegenBackend> {
 }
 
 /// A stable (across compilation sessions) identifier for the harness function.
-type HarnessId = DefPathHash;
+type HarnessId = InternedString;
 
 /// A set of stubs.
 type Stubs = BTreeMap<DefPathHash, DefPathHash>;
@@ -280,14 +281,13 @@ impl KaniCompiler {
         if self.queries.lock().unwrap().args().reachability_analysis == ReachabilityType::Harnesses
         {
             let base_filename = tcx.output_filenames(()).output_path(OutputType::Object);
-            let harnesses = filter_crate_items(tcx, |_, def_id| is_proof_harness(tcx, def_id));
+            let harnesses = filter_crate_items(tcx, |_, instance| is_proof_harness(tcx, instance));
             let all_harnesses = harnesses
                 .into_iter()
                 .map(|harness| {
-                    let def_id = harness.def_id();
-                    let def_path = tcx.def_path_hash(def_id);
-                    let metadata = gen_proof_metadata(tcx, def_id, &base_filename);
-                    let stub_map = harness_stub_map(tcx, def_id, &metadata);
+                    let def_path = harness.name().intern();
+                    let metadata = gen_proof_metadata(tcx, harness, &base_filename);
+                    let stub_map = harness_stub_map(tcx, harness, &metadata);
                     (def_path, HarnessInfo { metadata, stub_map })
                 })
                 .collect::<HashMap<_, _>>();

@@ -10,7 +10,6 @@ use tracing::{debug, trace};
 
 pub use self::transform::*;
 use kani_metadata::HarnessMetadata;
-use rustc_hir::def_id::DefId;
 use rustc_hir::definitions::DefPathHash;
 use rustc_middle::mir::Const;
 use rustc_middle::ty::{self, EarlyBinder, ParamEnv, TyCtxt, TypeFoldable};
@@ -25,13 +24,14 @@ use self::annotations::update_stub_mapping;
 /// Collects the stubs from the harnesses in a crate.
 pub fn harness_stub_map(
     tcx: TyCtxt,
-    harness: DefId,
+    harness: Instance,
     metadata: &HarnessMetadata,
 ) -> BTreeMap<DefPathHash, DefPathHash> {
+    let def_id = rustc_internal::internal(harness.def.def_id());
     let attrs = &metadata.attributes;
     let mut stub_pairs = BTreeMap::default();
     for stubs in &attrs.stubs {
-        update_stub_mapping(tcx, harness.expect_local(), stubs, &mut stub_pairs);
+        update_stub_mapping(tcx, def_id.expect_local(), stubs, &mut stub_pairs);
     }
     stub_pairs
 }
