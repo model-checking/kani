@@ -130,7 +130,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 "https://github.com/model-checking/kani/issues/692",
             ),
             TerminatorKind::Abort => self.codegen_mimic_unimplemented(
-                "TerminatorKind::UnwindTerminate",
+                "TerminatorKind::Abort",
                 loc,
                 "https://github.com/model-checking/kani/issues/692",
             ),
