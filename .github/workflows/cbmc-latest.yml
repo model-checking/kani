@@ -81,8 +81,8 @@ jobs:
       - name: Build CBMC
         working-directory: ./cbmc
         run: |
-          cmake -S . -Bbuild -DWITH_JBMC=OFF
-          cmake --build build -- -j 4
+          make -C src minisat2-download cadical-download
+          make -C src -j4 MINISAT2=../../minisat-2.2.1 CADICAL=../../cadical
           # Prepend the bin directory to $PATH
           echo "${GITHUB_WORKSPACE}/cbmc/build/bin" >> $GITHUB_PATH
 
