@@ -18,6 +18,7 @@
 #![allow(internal_features)]
 
 pub mod arbitrary;
+pub mod array;
 #[cfg(feature = "concrete_playback")]
 mod concrete_playback;
 pub mod futures;

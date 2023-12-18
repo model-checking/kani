@@ -8,6 +8,7 @@ mod writer;
 
 use num_bigint::BigInt;
 use std::ops::Not;
+use std::string::ToString;
 
 struct TypeDeclaration {}
 struct ConstDeclaration {}
@@ -69,6 +70,7 @@ impl Parameter {
 }
 
 /// Literal types
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Literal {
     /// Boolean values: `true`/`false`
     Bool(bool),
@@ -87,6 +89,7 @@ impl Literal {
 }
 
 /// Unary operators
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum UnaryOp {
     /// Logical negation
     Not,
@@ -95,6 +98,7 @@ pub enum UnaryOp {
     Neg,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BinaryOp {
     /// Logical AND
     And,
@@ -137,6 +141,7 @@ pub enum BinaryOp {
 }
 
 /// Expr types
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Expr {
     /// Literal (constant)
     Literal(Literal),
@@ -152,6 +157,12 @@ pub enum Expr {
 
     /// Function call
     FunctionCall { symbol: String, arguments: Vec<Expr> },
+
+    /// Field operator for datatypes
+    Field { base: Box<Expr>, field: String },
+
+    /// Select operation for maps
+    Select { base: Box<Expr>, key: Box<Expr> },
 }
 
 impl Expr {
@@ -161,6 +172,12 @@ impl Expr {
 
     pub fn function_call(symbol: String, arguments: Vec<Expr>) -> Self {
         Expr::FunctionCall { symbol, arguments }
+    }
+}
+
+impl ToString for Expr {
+    fn to_string(&self) -> String {
+        writer::write_expr(self)
     }
 }
 
@@ -184,7 +201,7 @@ pub enum Stmt {
     Assume { condition: Expr },
 
     /// Statement block: `{ statements }`
-    Block { statements: Vec<Stmt> },
+    Block { label: Option<String>, statements: Vec<Stmt> },
 
     /// Break statement: `break;`
     /// A `break` in boogie can take a label, but this is probably not needed
@@ -196,20 +213,33 @@ pub enum Stmt {
     /// Declaration statement: `var name: type;`
     Decl { name: String, typ: Type },
 
+    /// Havoc statement: `havoc x;`
+    Havoc { name: String },
+
     /// If statement: `if (condition) { body } else { else_body }`
     If { condition: Expr, body: Box<Stmt>, else_body: Option<Box<Stmt>> },
 
     /// Goto statement: `goto label;`
     Goto { label: String },
 
-    /// Label statement: `label:`
-    Label { label: String },
-
     /// Return statement: `return;`
     Return,
 
+    /// Skip statement
+    Skip,
+
     /// While statement: `while (condition) { body }`
     While { condition: Expr, body: Box<Stmt> },
+}
+
+impl Stmt {
+    pub fn block(statements: Vec<Stmt>) -> Self {
+        Self::Block { label: None, statements }
+    }
+
+    pub fn labelled_block(label: String, statements: Vec<Stmt>) -> Self {
+        Self::Block { label: Some(label), statements }
+    }
 }
 
 /// A Boogie datatype. A datatype is defined by one or more constructors.
