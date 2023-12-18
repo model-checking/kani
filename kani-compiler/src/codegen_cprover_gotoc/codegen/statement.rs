@@ -139,16 +139,16 @@ impl<'tcx> GotocCtx<'tcx> {
                 if rty.kind().is_unit() {
                     self.codegen_ret_unit()
                 } else {
-                    let p = Place::from(RETURN_LOCAL);
-                    let v = unwrap_or_return_codegen_unimplemented_stmt!(
+                    let place = Place::from(RETURN_LOCAL);
+                    let place_expr = unwrap_or_return_codegen_unimplemented_stmt!(
                         self,
-                        self.codegen_place_stable(&p)
+                        self.codegen_place_stable(&place)
                     )
                     .goto_expr;
-                    if self.place_ty_stable(&p).kind().is_bool() {
-                        v.cast_to(Type::c_bool()).ret(loc)
+                    if self.place_ty_stable(&place).kind().is_bool() {
+                        place_expr.cast_to(Type::c_bool()).ret(loc)
                     } else {
-                        v.ret(loc)
+                        place_expr.ret(loc)
                     }
                 }
             }
@@ -368,8 +368,8 @@ impl<'tcx> GotocCtx<'tcx> {
                     }
                 }
             }
-            _ => unreachable!(
-                "TerminatorKind::Drop but not InstanceKind::DropGlue should be impossible"
+            kind => unreachable!(
+                "Expected a `InstanceKind::Shim` for `TerminatorKind::Drop`, but found {kind:?}"
             ),
         };
         let goto_target = Stmt::goto(bb_label(*target), loc);
