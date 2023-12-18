@@ -138,7 +138,7 @@ impl<'tcx> GotocCtx<'tcx> {
         debug!(?fargs, "codegen_intrinsic");
         debug!(?place, "codegen_intrinsic");
         debug!(?span, "codegen_intrinsic");
-        let sig = instance.fn_sig();
+        let sig = instance.ty().kind().fn_sig().unwrap().skip_binder();
         let ret_ty = sig.output();
         let farg_types = sig.inputs();
         let cbmc_ret_ty = self.codegen_ty_stable(ret_ty);
@@ -414,7 +414,8 @@ impl<'tcx> GotocCtx<'tcx> {
             "cttz" => codegen_count_intrinsic!(cttz, true),
             "cttz_nonzero" => codegen_count_intrinsic!(cttz, false),
             "discriminant_value" => {
-                let ty = pointee_type_stable(instance.fn_sig().inputs()[0]).unwrap();
+                let sig = instance.ty().kind().fn_sig().unwrap().skip_binder();
+                let ty = pointee_type_stable(sig.inputs()[0]).unwrap();
                 let e = self.codegen_get_discriminant(fargs.remove(0).dereference(), ty, ret_ty);
                 self.codegen_expr_to_place_stable(place, e)
             }

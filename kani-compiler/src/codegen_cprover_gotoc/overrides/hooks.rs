@@ -29,7 +29,7 @@ pub trait GotocHook {
         gcx: &mut GotocCtx,
         instance: Instance,
         fargs: Vec<Expr>,
-        assign_to: Place,
+        assign_to: &Place,
         target: Option<BasicBlockIdx>,
         span: Span,
     ) -> Stmt;
@@ -65,7 +65,7 @@ impl GotocHook for Cover {
         gcx: &mut GotocCtx,
         _instance: Instance,
         mut fargs: Vec<Expr>,
-        _assign_to: Place,
+        _assign_to: &Place,
         target: Option<BasicBlockIdx>,
         span: Span,
     ) -> Stmt {
@@ -100,7 +100,7 @@ impl GotocHook for Assume {
         gcx: &mut GotocCtx,
         _instance: Instance,
         mut fargs: Vec<Expr>,
-        _assign_to: Place,
+        _assign_to: &Place,
         target: Option<BasicBlockIdx>,
         span: Span,
     ) -> Stmt {
@@ -124,7 +124,7 @@ impl GotocHook for Assert {
         gcx: &mut GotocCtx,
         _instance: Instance,
         mut fargs: Vec<Expr>,
-        _assign_to: Place,
+        _assign_to: &Place,
         target: Option<BasicBlockIdx>,
         span: Span,
     ) -> Stmt {
@@ -165,20 +165,20 @@ impl GotocHook for Nondet {
         gcx: &mut GotocCtx,
         _instance: Instance,
         fargs: Vec<Expr>,
-        assign_to: Place,
+        assign_to: &Place,
         target: Option<BasicBlockIdx>,
         span: Span,
     ) -> Stmt {
         assert!(fargs.is_empty());
         let loc = gcx.codegen_span_stable(span);
         let target = target.unwrap();
-        let pt = gcx.place_ty_stable(&assign_to);
+        let pt = gcx.place_ty_stable(assign_to);
         if pt.kind().is_unit() {
             Stmt::goto(bb_label(target), loc)
         } else {
             let pe = unwrap_or_return_codegen_unimplemented_stmt!(
                 gcx,
-                gcx.codegen_place_stable(&assign_to)
+                gcx.codegen_place_stable(assign_to)
             )
             .goto_expr;
             Stmt::block(
@@ -209,7 +209,7 @@ impl GotocHook for Panic {
         gcx: &mut GotocCtx,
         _instance: Instance,
         fargs: Vec<Expr>,
-        _assign_to: Place,
+        _assign_to: &Place,
         _target: Option<BasicBlockIdx>,
         span: Span,
     ) -> Stmt {
@@ -231,7 +231,7 @@ impl GotocHook for RustAlloc {
         gcx: &mut GotocCtx,
         instance: Instance,
         mut fargs: Vec<Expr>,
-        assign_to: Place,
+        assign_to: &Place,
         target: Option<BasicBlockIdx>,
         span: Span,
     ) -> Stmt {
@@ -243,7 +243,7 @@ impl GotocHook for RustAlloc {
             vec![
                 unwrap_or_return_codegen_unimplemented_stmt!(
                     gcx,
-                    gcx.codegen_place_stable(&assign_to)
+                    gcx.codegen_place_stable(assign_to)
                 )
                 .goto_expr
                 .assign(
@@ -282,7 +282,7 @@ impl GotocHook for MemCmp {
         gcx: &mut GotocCtx,
         instance: Instance,
         mut fargs: Vec<Expr>,
-        assign_to: Place,
+        assign_to: &Place,
         target: Option<BasicBlockIdx>,
         span: Span,
     ) -> Stmt {
@@ -304,7 +304,7 @@ impl GotocHook for MemCmp {
         let is_second_ok = second_var.clone().is_nonnull();
         let should_skip_pointer_checks = is_count_zero.and(is_first_ok).and(is_second_ok);
         let place_expr =
-            unwrap_or_return_codegen_unimplemented_stmt!(gcx, gcx.codegen_place_stable(&assign_to))
+            unwrap_or_return_codegen_unimplemented_stmt!(gcx, gcx.codegen_place_stable(assign_to))
                 .goto_expr;
         let rhs = should_skip_pointer_checks.ternary(
             Expr::int_constant(0, place_expr.typ().clone()), // zero bytes are always equal (as long as pointers are nonnull and aligned)
@@ -338,7 +338,7 @@ impl GotocHook for UntrackedDeref {
         gcx: &mut GotocCtx,
         _instance: Instance,
         mut fargs: Vec<Expr>,
-        assign_to: Place,
+        assign_to: &Place,
         _target: Option<BasicBlockIdx>,
         span: Span,
     ) -> Stmt {
@@ -354,7 +354,7 @@ impl GotocHook for UntrackedDeref {
             vec![Stmt::assign(
                 unwrap_or_return_codegen_unimplemented_stmt!(
                     gcx,
-                    gcx.codegen_place_stable(&assign_to)
+                    gcx.codegen_place_stable(assign_to)
                 )
                 .goto_expr,
                 fargs.pop().unwrap().dereference(),

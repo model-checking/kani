@@ -47,6 +47,7 @@ use rustc_smir::rustc_internal;
 use rustc_target::abi::Endian;
 use rustc_target::spec::PanicStrategy;
 use stable_mir::mir::mono::MonoItem as MonoItemStable;
+use stable_mir::CrateDef;
 use std::any::Any;
 use std::collections::BTreeMap;
 use std::collections::HashSet;
@@ -102,23 +103,21 @@ impl GotocCodegenBackend {
                 for item in &items {
                     match *item {
                         MonoItem::Fn(instance) => {
+                            let instance = rustc_internal::stable(instance);
                             gcx.call_with_panic_debug_info(
                                 |ctx| ctx.declare_function(instance),
-                                format!(
-                                    "declare_function: {}",
-                                    gcx.readable_instance_name(instance)
-                                ),
-                                instance.def_id(),
+                                format!("declare_function: {}", instance.name()),
+                                instance.def,
                             );
                         }
-                        MonoItem::Static(def_id) => {
+                        MonoItem::Static(_) => {
                             let MonoItemStable::Static(def) = rustc_internal::stable(item) else {
                                 unreachable!()
                             };
                             gcx.call_with_panic_debug_info(
                                 |ctx| ctx.declare_static(def),
-                                format!("declare_static: {def_id:?}"),
-                                def_id,
+                                format!("declare_static: {}", def.name()),
+                                def,
                             );
                         }
                         MonoItem::GlobalAsm(_) => {} // Ignore this. We have already warned about it.
@@ -129,24 +128,25 @@ impl GotocCodegenBackend {
                 for item in &items {
                     match *item {
                         MonoItem::Fn(instance) => {
+                            let instance = rustc_internal::stable(instance);
                             gcx.call_with_panic_debug_info(
                                 |ctx| ctx.codegen_function(instance),
                                 format!(
                                     "codegen_function: {}\n{}",
-                                    gcx.readable_instance_name(instance),
-                                    gcx.symbol_name(instance)
+                                    instance.name(),
+                                    gcx.symbol_name_stable(instance)
                                 ),
-                                instance.def_id(),
+                                instance.def,
                             );
                         }
-                        MonoItem::Static(def_id) => {
+                        MonoItem::Static(_) => {
                             let MonoItemStable::Static(def) = rustc_internal::stable(item) else {
                                 unreachable!()
                             };
                             gcx.call_with_panic_debug_info(
                                 |ctx| ctx.codegen_static(def),
-                                format!("codegen_static: {def_id:?}"),
-                                def_id,
+                                format!("codegen_static: {}", def.name()),
+                                def,
                             );
                         }
                         MonoItem::GlobalAsm(_) => {} // We have already warned above

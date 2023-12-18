@@ -7,10 +7,10 @@ use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::InternedString;
 use rustc_hir::def_id::LOCAL_CRATE;
 use rustc_middle::mir::mono::CodegenUnitNameBuilder;
-use rustc_middle::mir::Local;
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{Instance, TyCtxt};
 use stable_mir::mir::mono::Instance as InstanceStable;
+use stable_mir::mir::Local;
 use tracing::debug;
 
 impl<'tcx> GotocCtx<'tcx> {
@@ -20,22 +20,22 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     pub fn codegen_var_base_name(&self, l: &Local) -> String {
-        match self.find_debug_info(l) {
-            None => format!("var_{}", l.index()),
-            Some(info) => info.name,
+        match self.current_fn().local_name(*l) {
+            None => format!("var_{l}"),
+            Some(name) => name.to_string(),
         }
     }
 
     pub fn codegen_var_name(&self, l: &Local) -> String {
         let fname = self.current_fn().name();
-        match self.find_debug_info(l) {
-            Some(info) => format!("{fname}::1::var{l:?}::{}", info.name),
-            None => format!("{fname}::1::var{l:?}"),
+        match self.current_fn().local_name(*l) {
+            Some(name) => format!("{fname}::1::var_{l}::{name}"),
+            None => format!("{fname}::1::var_{l}"),
         }
     }
 
     pub fn is_user_variable(&self, var: &Local) -> bool {
-        self.find_debug_info(var).is_some()
+        self.current_fn().local_name(*var).is_some()
     }
 
     // Special naming conventions for parameters that are spread from a tuple
