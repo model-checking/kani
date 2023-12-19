@@ -138,6 +138,9 @@ pub enum BinaryOp {
 
     /// Modulo
     Mod,
+
+    /// Bit-Vector Concat
+    Concat,
 }
 
 /// Expr types
@@ -155,6 +158,9 @@ pub enum Expr {
     /// Binary operation
     BinaryOp { op: BinaryOp, left: Box<Expr>, right: Box<Expr> },
 
+    /// Bit-vector extract operation, e.g. `x[7:2]` (half-open interval)
+    Extract { base: Box<Expr>, high: usize, low: usize },
+
     /// Function call
     FunctionCall { symbol: String, arguments: Vec<Expr> },
 
@@ -170,8 +176,24 @@ impl Expr {
         Expr::Literal(l)
     }
 
+    pub fn concat(e1: Box<Expr>, e2: Box<Expr>) -> Self {
+        Expr::BinaryOp { op: BinaryOp::Concat, left: e1, right: e2 }
+    }
+
+    pub fn extract(base: Box<Expr>, high: usize, low: usize) -> Self {
+        Expr::Extract { base, high, low }
+    }
+
     pub fn function_call(symbol: String, arguments: Vec<Expr>) -> Self {
         Expr::FunctionCall { symbol, arguments }
+    }
+
+    pub fn sign_extend(_e: Box<Expr>, _width: usize) -> Self {
+        todo!()
+    }
+
+    pub fn zero_extend(e: Box<Expr>, width: usize) -> Self {
+        Expr::concat(Box::new(Expr::literal(Literal::bv(width, 0.into()))), e)
     }
 }
 
