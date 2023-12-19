@@ -1,0 +1,69 @@
+// Datatypes:
+datatype $Array<T> { $Array(data: [bv64]T, len: bv64) }
+
+// Functions:
+function {:bvbuiltin "bvult"} $BvUnsignedLessThan<T>(lhs: T, rhs: T) returns (bool);
+
+function {:bvbuiltin "bvslt"} $BvSignedLessThan<T>(lhs: T, rhs: T) returns (bool);
+
+function {:bvbuiltin "bvugt"} $BvUnsignedGreaterThan<T>(lhs: T, rhs: T) returns (bool);
+
+function {:bvbuiltin "bvsgt"} $BvSignedGreaterThan<T>(lhs: T, rhs: T) returns (bool);
+
+function {:bvbuiltin "bvadd"} $BvAdd<T>(lhs: T, rhs: T) returns (T);
+
+function {:bvbuiltin "bvor"} $BvOr<T>(lhs: T, rhs: T) returns (T);
+
+function {:bvbuiltin "bvand"} $BvAnd<T>(lhs: T, rhs: T) returns (T);
+
+function {:bvbuiltin "bvshl"} $BvShl<T>(lhs: T, rhs: T) returns (T);
+
+function {:bvbuiltin "bvlshr"} $BvShr<T>(lhs: T, rhs: T) returns (T);
+
+// Procedures:
+procedure
+{
+  var src: $Array bv16;
+  var buf: $Array bv8;
+  var src_len: bv64;
+  var buf_len: bv64;
+  var i: bv64;
+  var x: bv16;
+  var byte0: bv8;
+  var byte1: bv8;
+  var j: bv64;
+  var dst: $Array bv16;
+  bb
+  havoc src; 
+  goto bb
+  havoc buf; 
+  src_len := src->len;
+  buf_len := buf->len;
+  := $BvShr(buf_len, 1bv64);
+  := !($BvUnsignedLessThan(
+  assume
+  i := 0bv64;
+  := $BvUnsignedLessThan(
+  if (\
+    goto bb\
+  } else {
+    goto bb\
+  }
+  havoc dst; 
+  return;
+  := src->data[
+  := dst->data[
+  assert
+  := $BvAdd(i, 1bv64);
+  := $BvShl(
+  := buf->data[
+  := (0bv8 ++
+  := $BvOr(
+  := $BvAnd(x, 255bv16);
+  )[8:0];
+  := $BvShr(x, 8bv16);
+  byte1 :=
+  j := $BvShl(
+  buf->data[(j)] := byte0;
+  := $BvAdd(j, 1bv64);
+}
