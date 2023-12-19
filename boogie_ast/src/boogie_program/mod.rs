@@ -188,7 +188,8 @@ impl Expr {
         Expr::FunctionCall { symbol, arguments }
     }
 
-    pub fn sign_extend(_e: Box<Expr>, _width: usize) -> Self {
+    pub fn sign_extend(e: Box<Expr>, _width: usize) -> Self {
+        let _e = e;
         todo!()
     }
 

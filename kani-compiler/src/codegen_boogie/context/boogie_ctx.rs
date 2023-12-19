@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use itertools::Itertools;
+use std::cmp::Ordering;
 use std::io::Write;
 
 use crate::kani_queries::QueryDb;
@@ -329,16 +330,14 @@ impl<'a, 'tcx> FunctionCtx<'a, 'tcx> {
                     let to = self.codegen_type(*ty);
                     let Type::Bv(from_width) = from else { panic!("Expecting bv type in cast") };
                     let Type::Bv(to_width) = to else { panic!("Expecting bv type in cast") };
-                    let op = if from_width > to_width {
-                        Expr::extract(Box::new(o), to_width, 0)
-                    } else if from_width < to_width {
-                        match from_type.kind() {
+                    let op = match from_width.cmp(&to_width) {
+                        Ordering::Greater => Expr::extract(Box::new(o), to_width, 0),
+                        Ordering::Less => match from_type.kind() {
                             ty::Int(_) => Expr::sign_extend(Box::new(o), to_width - from_width),
                             ty::Uint(_) => Expr::zero_extend(Box::new(o), to_width - from_width),
                             _ => todo!(),
-                        }
-                    } else {
-                        o
+                        },
+                        Ordering::Equal => o,
                     };
                     (None, op)
                 } else {
