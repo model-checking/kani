@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use itertools::Itertools;
+use std::cmp::Ordering;
 use std::io::Write;
 
 use crate::kani_queries::QueryDb;
@@ -13,7 +14,7 @@ use rustc_data_structures::fx::FxHashMap;
 use rustc_middle::mir::interpret::Scalar;
 use rustc_middle::mir::traversal::reverse_postorder;
 use rustc_middle::mir::{
-    BasicBlock, BasicBlockData, BinOp, Body, Const as mirConst, ConstOperand, ConstValue,
+    BasicBlock, BasicBlockData, BinOp, Body, CastKind, Const as mirConst, ConstOperand, ConstValue,
     HasLocalDecls, Local, Operand, Place, ProjectionElem, Rvalue, Statement, StatementKind,
     SwitchTargets, Terminator, TerminatorKind, UnOp, VarDebugInfoContents,
 };
@@ -320,6 +321,28 @@ impl<'a, 'tcx> FunctionCtx<'a, 'tcx> {
             Rvalue::CheckedBinaryOp(binop, box (ref e1, ref e2)) => {
                 // TODO: handle overflow check
                 self.codegen_binary_op(binop, e1, e2)
+            }
+            Rvalue::Cast(kind, operand, ty) => {
+                if *kind == CastKind::IntToInt {
+                    let from_type = self.operand_ty(operand);
+                    let o = self.codegen_operand(operand);
+                    let from = self.codegen_type(from_type);
+                    let to = self.codegen_type(*ty);
+                    let Type::Bv(from_width) = from else { panic!("Expecting bv type in cast") };
+                    let Type::Bv(to_width) = to else { panic!("Expecting bv type in cast") };
+                    let op = match from_width.cmp(&to_width) {
+                        Ordering::Greater => Expr::extract(Box::new(o), to_width, 0),
+                        Ordering::Less => match from_type.kind() {
+                            ty::Int(_) => Expr::sign_extend(Box::new(o), to_width - from_width),
+                            ty::Uint(_) => Expr::zero_extend(Box::new(o), to_width - from_width),
+                            _ => todo!(),
+                        },
+                        Ordering::Equal => o,
+                    };
+                    (None, op)
+                } else {
+                    todo!()
+                }
             }
             _ => todo!(),
         }
