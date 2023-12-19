@@ -1,25 +1,27 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+use itertools::Itertools;
 use std::io::Write;
 
 use crate::kani_queries::QueryDb;
 use boogie_ast::boogie_program::{
-    BinaryOp, BoogieProgram, Expr, Literal, Procedure, Stmt, Type, UnaryOp,
+    BinaryOp, BoogieProgram, DataType, DataTypeConstructor, Expr, Literal, Parameter, Procedure,
+    Stmt, Type, UnaryOp,
 };
 use rustc_data_structures::fx::FxHashMap;
 use rustc_middle::mir::interpret::Scalar;
 use rustc_middle::mir::traversal::reverse_postorder;
 use rustc_middle::mir::{
     BasicBlock, BasicBlockData, BinOp, Body, Const as mirConst, ConstOperand, ConstValue,
-    HasLocalDecls, Local, Operand, Place, Rvalue, Statement, StatementKind, Terminator,
-    TerminatorKind, UnOp, VarDebugInfoContents,
+    HasLocalDecls, Local, Operand, Place, ProjectionElem, Rvalue, Statement, StatementKind,
+    SwitchTargets, Terminator, TerminatorKind, UnOp, VarDebugInfoContents,
 };
 use rustc_middle::span_bug;
 use rustc_middle::ty::layout::{
     HasParamEnv, HasTyCtxt, LayoutError, LayoutOf, LayoutOfHelpers, TyAndLayout,
 };
-use rustc_middle::ty::{self, Instance, IntTy, Ty, TyCtxt, UintTy};
+use rustc_middle::ty::{self, Instance, IntTy, List, Ty, TyCtxt, UintTy};
 use rustc_span::Span;
 use rustc_target::abi::{HasDataLayout, TargetDataLayout};
 use std::collections::hash_map::Entry;
@@ -28,6 +30,8 @@ use tracing::{debug, debug_span, trace};
 
 use super::kani_intrinsic::get_kani_intrinsic;
 use super::smt_builtins::{smt_builtin_binop, SmtBvBuiltin};
+
+const UNBOUNDED_ARRAY: &str = "$Array";
 
 /// A context that provides the main methods for translating MIR constructs to
 /// Boogie and stores what has been codegen so far
@@ -60,6 +64,22 @@ impl<'tcx> BoogieCtx<'tcx> {
                 bv_builtin.is_predicate(),
             ));
         }
+
+        // Add unbounded array
+        let name = String::from(UNBOUNDED_ARRAY);
+        let constructor = DataTypeConstructor::new(
+            name.clone(),
+            vec![
+                Parameter::new(
+                    String::from("data"),
+                    Type::map(Type::Bv(64), Type::parameter(String::from("T"))),
+                ),
+                Parameter::new(String::from("len"), Type::Bv(64)),
+            ],
+        );
+        let unbounded_array_data_type =
+            DataType::new(name.clone(), vec![String::from("T")], vec![constructor]);
+        program.add_datatype(unbounded_array_data_type);
     }
 
     /// Codegen a function into a Boogie procedure.
@@ -70,7 +90,7 @@ impl<'tcx> BoogieCtx<'tcx> {
             debug!("skipping kani intrinsic `{instance}`");
             return None;
         }
-        let fcx = FunctionCtx::new(self, instance);
+        let mut fcx = FunctionCtx::new(self, instance);
         let mut decl = fcx.codegen_declare_variables();
         let body = fcx.codegen_body();
         decl.push(body);
@@ -79,7 +99,7 @@ impl<'tcx> BoogieCtx<'tcx> {
             vec![],
             vec![],
             None,
-            Stmt::Block { statements: decl },
+            Stmt::block(decl),
         ))
     }
 
@@ -100,6 +120,14 @@ pub(crate) struct FunctionCtx<'a, 'tcx> {
     mir: &'a Body<'tcx>,
     /// Maps from local to the name of the corresponding Boogie variable.
     local_names: FxHashMap<Local, String>,
+    /// A map to keep track of the source of each borrow. This is an ugly hack
+    /// that only works in very special cases, more specifically where an
+    /// explicit variable is borrowed, e.g.
+    /// ```
+    /// let b = &mut x;
+    /// ````
+    /// In this case, the map will contain an entry that maps `b` to `x`
+    pub(crate) ref_to_expr: FxHashMap<Place<'tcx>, Expr>,
 }
 
 impl<'a, 'tcx> FunctionCtx<'a, 'tcx> {
@@ -135,7 +163,7 @@ impl<'a, 'tcx> FunctionCtx<'a, 'tcx> {
             };
             local_names.insert(local, name);
         }
-        Self { bcx, instance, mir, local_names }
+        Self { bcx, instance, mir, local_names, ref_to_expr: FxHashMap::default() }
     }
 
     fn codegen_declare_variables(&self) -> Vec<Stmt> {
@@ -154,6 +182,12 @@ impl<'a, 'tcx> FunctionCtx<'a, 'tcx> {
                 }
                 debug!(?lc, ?typ, "codegen_declare_variables");
                 let name = self.local_name(lc).clone();
+                // skip the declaration of mutable references (e.g. `let mut _9: &mut i32;`)
+                if let ty::Ref(_, _, m) = typ.kind() {
+                    if m.is_mut() {
+                        return None;
+                    }
+                }
                 let boogie_type = self.codegen_type(typ);
                 Some(Stmt::Decl { name, typ: boogie_type })
             })
@@ -167,17 +201,52 @@ impl<'a, 'tcx> FunctionCtx<'a, 'tcx> {
             ty::Bool => Type::Bool,
             ty::Int(ity) => Type::Bv(ity.bit_width().unwrap_or(64).try_into().unwrap()),
             ty::Uint(uty) => Type::Bv(uty.bit_width().unwrap_or(64).try_into().unwrap()),
+            ty::Tuple(types) => {
+                // TODO: Only handles first element of tuple for now (e.g.
+                // ignores overflow field of an addition and only takes the
+                // result field)
+                self.codegen_type(types.iter().next().unwrap())
+            }
+            ty::Adt(def, args) => {
+                let name = format!("{def:?}");
+                if name == "kani::array::Array" {
+                    let fields = def.all_fields();
+                    //let mut field_types: Vec<Type> = fields.filter_map(|f| {
+                    //    let typ = f.ty(self.tcx(), args);
+                    //    self.layout_of(typ).is_zst().then(|| self.codegen_type(typ))
+                    //}).collect();
+                    //assert_eq!(field_types.len(), 1);
+                    //let typ = field_types.pop().unwrap();
+                    let phantom_data_field = fields
+                        .filter(|f| self.layout_of(f.ty(self.tcx(), args)).is_zst())
+                        .exactly_one()
+                        .unwrap_or_else(|_| panic!());
+                    let phantom_data_type = phantom_data_field.ty(self.tcx(), args);
+                    assert!(phantom_data_type.is_phantom_data());
+                    let field_type = args.types().exactly_one().unwrap_or_else(|_| panic!());
+                    let typ = self.codegen_type(field_type);
+                    Type::user_defined(String::from(UNBOUNDED_ARRAY), vec![typ])
+                } else {
+                    todo!()
+                }
+            }
+            ty::Ref(_r, ty, m) => {
+                if m.is_not() {
+                    return self.codegen_type(*ty);
+                }
+                todo!()
+            }
             _ => todo!(),
         }
     }
 
-    fn codegen_body(&self) -> Stmt {
+    fn codegen_body(&mut self) -> Stmt {
         let statements: Vec<Stmt> =
             reverse_postorder(self.mir).map(|(bb, bbd)| self.codegen_block(bb, bbd)).collect();
-        Stmt::Block { statements }
+        Stmt::block(statements)
     }
 
-    fn codegen_block(&self, bb: BasicBlock, bbd: &BasicBlockData<'tcx>) -> Stmt {
+    fn codegen_block(&mut self, bb: BasicBlock, bbd: &BasicBlockData<'tcx>) -> Stmt {
         debug!(?bb, ?bbd, "codegen_block");
         // the first statement should be labelled. if there is no statements, then the
         // terminator should be labelled.
@@ -196,19 +265,34 @@ impl<'a, 'tcx> FunctionCtx<'a, 'tcx> {
                 statements
             }
         };
-        Stmt::Block { statements }
+        Stmt::labelled_block(format!("{bb:?}"), statements)
     }
 
-    fn codegen_statement(&self, stmt: &Statement<'tcx>) -> Stmt {
+    fn codegen_statement(&mut self, stmt: &Statement<'tcx>) -> Stmt {
         match &stmt.kind {
             StatementKind::Assign(box (place, rvalue)) => {
                 debug!(?place, ?rvalue, "codegen_statement");
-                let rv = self.codegen_rvalue(rvalue);
                 let place_name = self.local_name(place.local).clone();
-                // assignment statement
-                let asgn = Stmt::Assignment { target: place_name, value: rv.1 };
-                // add it to other statements generated while creating the rvalue (if any)
-                add_statement(rv.0, asgn)
+                if let Rvalue::Ref(_, _, rhs) = rvalue {
+                    let expr = self.codegen_place(rhs);
+                    self.ref_to_expr.insert(*place, expr);
+                    Stmt::Skip
+                } else if is_deref(place) {
+                    // lookup the place itself
+                    debug!(?self.ref_to_expr, ?place, ?place.local, "codegen_statement_assign_deref");
+                    let empty_projection = List::empty();
+                    let place = Place { local: place.local, projection: empty_projection };
+                    let expr = self.ref_to_expr.get(&place).unwrap();
+                    let rv = self.codegen_rvalue(rvalue);
+                    let asgn = Stmt::Assignment { target: expr.to_string(), value: rv.1 };
+                    add_statement(rv.0, asgn)
+                } else {
+                    let rv = self.codegen_rvalue(rvalue);
+                    // assignment statement
+                    let asgn = Stmt::Assignment { target: place_name, value: rv.1 };
+                    // add it to other statements generated while creating the rvalue (if any)
+                    add_statement(rv.0, asgn)
+                }
             }
             StatementKind::FakeRead(..)
             | StatementKind::SetDiscriminant { .. }
@@ -233,6 +317,10 @@ impl<'a, 'tcx> FunctionCtx<'a, 'tcx> {
             Rvalue::Use(operand) => (None, self.codegen_operand(operand)),
             Rvalue::UnaryOp(op, operand) => self.codegen_unary_op(op, operand),
             Rvalue::BinaryOp(binop, box (lhs, rhs)) => self.codegen_binary_op(binop, lhs, rhs),
+            Rvalue::CheckedBinaryOp(binop, box (ref e1, ref e2)) => {
+                // TODO: handle overflow check
+                self.codegen_binary_op(binop, e1, e2)
+            }
             _ => todo!(),
         }
     }
@@ -318,20 +406,23 @@ impl<'a, 'tcx> FunctionCtx<'a, 'tcx> {
         (None, expr)
     }
 
-    fn codegen_terminator(&self, term: &Terminator<'tcx>) -> Stmt {
+    fn codegen_terminator(&mut self, term: &Terminator<'tcx>) -> Stmt {
         let _trace_span = debug_span!("CodegenTerminator", statement = ?term.kind).entered();
         debug!("handling terminator {:?}", term);
         match &term.kind {
             TerminatorKind::Call { func, args, destination, target, .. } => {
                 self.codegen_funcall(func, args, destination, target, term.source_info.span)
             }
+            TerminatorKind::Goto { target } => Stmt::Goto { label: format!("{target:?}") },
             TerminatorKind::Return => Stmt::Return,
+            TerminatorKind::SwitchInt { discr, targets } => self.codegen_switch_int(discr, targets),
+            TerminatorKind::Assert { .. } => Stmt::Skip, // TODO: ignore injection assertions for now
             _ => todo!(),
         }
     }
 
     fn codegen_funcall(
-        &self,
+        &mut self,
         func: &Operand<'tcx>,
         args: &[Operand<'tcx>],
         destination: &Place<'tcx>,
@@ -367,6 +458,32 @@ impl<'a, 'tcx> FunctionCtx<'a, 'tcx> {
         }
     }
 
+    fn codegen_switch_int(&self, discr: &Operand<'tcx>, targets: &SwitchTargets) -> Stmt {
+        debug!(discr=?discr, targets=?targets, "codegen_switch_int");
+        let op = self.codegen_operand(discr);
+        if targets.all_targets().len() == 2 {
+            let then = targets.iter().next().unwrap();
+            let right = match self.operand_ty(discr).kind() {
+                ty::Bool => Literal::Bool(then.0 != 0),
+                ty::Uint(_) => Literal::bv(128, then.0.into()),
+                _ => unreachable!(),
+            };
+            // model as an if
+            return Stmt::If {
+                condition: Expr::BinaryOp {
+                    op: BinaryOp::Eq,
+                    left: Box::new(op),
+                    right: Box::new(Expr::Literal(right)),
+                },
+                body: Box::new(Stmt::Goto { label: format!("{:?}", then.1) }),
+                else_body: Some(Box::new(Stmt::Goto {
+                    label: format!("{:?}", targets.otherwise()),
+                })),
+            };
+        }
+        todo!()
+    }
+
     fn codegen_funcall_args(&self, args: &[Operand<'tcx>]) -> Vec<Expr> {
         debug!(?args, "codegen_funcall_args");
         args.iter()
@@ -395,10 +512,14 @@ impl<'a, 'tcx> FunctionCtx<'a, 'tcx> {
         }
     }
 
-    fn codegen_place(&self, place: &Place<'tcx>) -> Expr {
+    pub(crate) fn codegen_place(&self, place: &Place<'tcx>) -> Expr {
         debug!(place=?place, "codegen_place");
         debug!(place.local=?place.local, "codegen_place");
         debug!(place.projection=?place.projection, "codegen_place");
+        if let Some(expr) = self.ref_to_expr.get(place) {
+            return expr.clone();
+        }
+        //let local_ty = self.mir.local_decls()[place.local].ty;
         self.codegen_local(place.local)
     }
 
@@ -494,12 +615,20 @@ impl<'a, 'tcx> HasDataLayout for FunctionCtx<'a, 'tcx> {
 fn add_statement(s1: Option<Stmt>, s2: Stmt) -> Stmt {
     match s1 {
         Some(s1) => match s1 {
-            Stmt::Block { mut statements } => {
+            Stmt::Block { label, mut statements } => {
                 statements.push(s2);
-                Stmt::Block { statements }
+                Stmt::Block { label, statements }
             }
-            _ => Stmt::Block { statements: vec![s1, s2] },
+            _ => Stmt::block(vec![s1, s2]),
         },
         None => s2,
     }
+}
+
+fn is_deref(p: &Place<'_>) -> bool {
+    let proj = p.projection;
+    if proj.len() == 1 && proj.iter().next().unwrap() == ProjectionElem::Deref {
+        return true;
+    }
+    false
 }

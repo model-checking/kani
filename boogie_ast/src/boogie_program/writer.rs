@@ -310,6 +310,16 @@ impl Expr {
                 }
                 write!(writer, ")")?;
             }
+            Expr::Field { base, field } => {
+                base.write_to(writer)?;
+                write!(writer, "->{field}")?;
+            }
+            Expr::Select { base, key } => {
+                base.write_to(writer)?;
+                write!(writer, "[(")?;
+                key.write_to(writer)?;
+                write!(writer, ")]")?;
+            }
         }
         Ok(())
     }
@@ -336,7 +346,12 @@ impl Stmt {
                 condition.write_to(writer)?;
                 writeln!(writer, ";")?;
             }
-            Stmt::Block { statements } => {
+            Stmt::Block { label, statements } => {
+                if let Some(label) = label {
+                    writer.indent()?;
+                    write!(writer, "{label}:")?;
+                    writeln!(writer)?;
+                }
                 for s in statements {
                     s.write_to(writer)?;
                 }
@@ -362,6 +377,10 @@ impl Stmt {
                 typ.write_to(writer)?;
                 writeln!(writer, ";")?;
             }
+            Stmt::Havoc { name } => {
+                writer.indent()?;
+                writeln!(writer, "havoc {}; ", name)?;
+            }
             Stmt::If { condition, body, else_body } => {
                 writer.indent()?;
                 write!(writer, "if (")?;
@@ -386,14 +405,11 @@ impl Stmt {
                 writer.indent()?;
                 writeln!(writer, "goto {label};")?;
             }
-            Stmt::Label { label } => {
-                writer.indent()?;
-                writeln!(writer, "{label}:")?;
-            }
             Stmt::Return => {
                 writer.indent()?;
                 writeln!(writer, "return;")?;
             }
+            Stmt::Skip => {}
             Stmt::While { condition, body } => {
                 writer.indent()?;
                 write!(writer, "while (")?;
@@ -510,6 +526,13 @@ impl BinaryOp {
     }
 }
 
+pub fn write_expr(e: &Expr) -> String {
+    let mut buf = Vec::new();
+    let mut writer = writer::Writer::new(&mut buf);
+    e.write_to(&mut writer).unwrap();
+    String::from_utf8(buf).unwrap()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -571,6 +594,7 @@ mod tests {
                     modifies: Vec::new(),
                 }),
                 body: Stmt::Block {
+                    label: Some("label1".into()),
                     statements: vec![
                         Stmt::Decl { name: "x".to_string(), typ: Type::Int },
                         Stmt::Decl { name: "y".to_string(), typ: Type::Int },
@@ -643,6 +667,7 @@ function {:bvbuiltin \"bvand\"} $BvAnd<T>(lhs: T, rhs: T) returns (T);
 procedure main() returns (z: bool)
   ensures (z == true);
 {
+  label1:
   var x: int;
   var y: int;
   var p: Pair bool int;
