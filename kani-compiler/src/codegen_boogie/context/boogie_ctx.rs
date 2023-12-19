@@ -31,7 +31,7 @@ use tracing::{debug, debug_span, trace};
 use super::kani_intrinsic::get_kani_intrinsic;
 use super::smt_builtins::{smt_builtin_binop, SmtBvBuiltin};
 
-const UNBOUNDED_ARRAY: &'static str = "$Array";
+const UNBOUNDED_ARRAY: &str = "$Array";
 
 /// A context that provides the main methods for translating MIR constructs to
 /// Boogie and stores what has been codegen so far
@@ -520,34 +520,7 @@ impl<'a, 'tcx> FunctionCtx<'a, 'tcx> {
             return expr.clone();
         }
         //let local_ty = self.mir.local_decls()[place.local].ty;
-        let local = self.codegen_local(place.local);
-        local
-        //place.projection.iter().fold(local, |place, proj| {
-        //    match proj {
-        //        ProjectionElem::Index(i) => {
-        //            let index = self.codegen_local(i);
-        //            Expr::Index { base: Box::new(place), index: Box::new(index) }
-        //        }
-        //        ProjectionElem::Field(f, _t) => {
-        //            debug!(ty=?local_ty, "codegen_place_fold");
-        //            match local_ty.kind() {
-        //                ty::Adt(def, _args) => {
-        //                    let field_name = def.non_enum_variant().fields[f].name.to_string();
-        //                    Expr::Field { base: Box::new(place), field: field_name }
-        //                }
-        //                ty::Tuple(_types) => {
-        //                    // TODO: handle tuples
-        //                    place
-        //                }
-        //                _ => todo!(),
-        //            }
-        //        }
-        //        _ => {
-        //            // TODO: handle
-        //            place
-        //        }
-        //    }
-        //})
+        self.codegen_local(place.local)
     }
 
     fn codegen_local(&self, local: Local) -> Expr {

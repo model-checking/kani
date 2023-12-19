@@ -18,6 +18,7 @@ use tracing::debug;
 
 // TODO: move this enum up to `kani_middle`
 #[derive(Debug, Clone, PartialEq, Eq, EnumString, EnumVariantNames)]
+#[allow(clippy::enum_variant_names)]
 pub enum KaniIntrinsic {
     /// Kani assert statement (`kani::assert`)
     KaniAssert,
