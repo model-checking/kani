@@ -446,14 +446,14 @@ mod tests {
     use rustc_hir::definitions::DefPathHash;
     use std::collections::HashMap;
 
-    fn mock_next_harness() -> HarnessId {
+    fn mock_next_harness_id() -> HarnessId {
         static mut COUNTER: u64 = 0;
         unsafe { COUNTER += 1 };
         let id = unsafe { COUNTER };
         format!("mod::harness-{id}").intern()
     }
 
-    fn mock_next_stub() -> DefPathHash {
+    fn mock_next_stub_id() -> DefPathHash {
         static mut COUNTER: u64 = 0;
         unsafe { COUNTER += 1 };
         let id = unsafe { COUNTER };
@@ -480,15 +480,15 @@ mod tests {
     #[test]
     fn test_group_by_stubs_works() {
         // Set up the inputs
-        let harness_1 = mock_next_harness();
-        let harness_2 = mock_next_harness();
-        let harness_3 = mock_next_harness();
+        let harness_1 = mock_next_harness_id();
+        let harness_2 = mock_next_harness_id();
+        let harness_3 = mock_next_harness_id();
         let harnesses = vec![harness_1, harness_2, harness_3];
 
-        let stub_1 = (mock_next_stub(), mock_next_stub());
-        let stub_2 = (mock_next_stub(), mock_next_stub());
-        let stub_3 = (mock_next_stub(), mock_next_stub());
-        let stub_4 = (stub_3.0, mock_next_stub());
+        let stub_1 = (mock_next_stub_id(), mock_next_stub_id());
+        let stub_2 = (mock_next_stub_id(), mock_next_stub_id());
+        let stub_3 = (mock_next_stub_id(), mock_next_stub_id());
+        let stub_4 = (stub_3.0, mock_next_stub_id());
 
         let set_1 = Stubs::from([stub_1, stub_2, stub_3]);
         let set_2 = Stubs::from([stub_1, stub_2, stub_4]);
@@ -523,7 +523,7 @@ mod tests {
 
         let mut info = mock_info_with_stubs(Stubs::default());
         info.metadata.attributes.proof = true;
-        let id = mock_next_harness();
+        let id = mock_next_harness_id();
         let all_harnesses = HashMap::from([(id, info.clone())]);
 
         // Call generate metadata.
@@ -560,7 +560,7 @@ mod tests {
         let infos = harnesses.map(|harness| {
             let mut metadata = mock_metadata(harness.to_string(), krate.clone());
             metadata.attributes.proof = true;
-            (mock_next_harness(), HarnessInfo { stub_map: Stubs::default(), metadata })
+            (mock_next_harness_id(), HarnessInfo { stub_map: Stubs::default(), metadata })
         });
         let all_harnesses = HashMap::from(infos.clone());
 
