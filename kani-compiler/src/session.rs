@@ -9,7 +9,7 @@ use rustc_errors::{
     ColorConfig, Diagnostic, TerminalUrl,
 };
 use rustc_session::config::ErrorOutputType;
-use rustc_session::EarlyErrorHandler;
+use rustc_session::EarlyDiagCtxt;
 use std::io::IsTerminal;
 use std::panic;
 use std::sync::LazyLock;
@@ -71,7 +71,7 @@ pub fn init_session(args: &Arguments, json_hook: bool) {
     // Initialize the rustc logger using value from RUSTC_LOG. We keep the log control separate
     // because we cannot control the RUSTC log format unless if we match the exact tracing
     // version used by RUSTC.
-    let handler = EarlyErrorHandler::new(ErrorOutputType::default());
+    let handler = EarlyDiagCtxt::new(ErrorOutputType::default());
     rustc_driver::init_rustc_env_logger(&handler);
 
     // Install Kani panic hook.
