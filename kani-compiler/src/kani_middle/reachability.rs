@@ -73,8 +73,6 @@ where
     crate_items
         .iter()
         .filter_map(|item| {
-            tracing::warn!(?item, name = item.name(), "crate_item");
-            tracing::warn!(body=?item.body().blocks.len(), "crate_item");
             // Only collect monomorphic items.
             // TODO: Remove the def_kind check once https://github.com/rust-lang/rust/pull/119135 has been released.
             let def_id = rustc_internal::internal(item.def_id());

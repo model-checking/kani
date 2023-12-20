@@ -44,7 +44,7 @@ use rustc_session::Session;
 use rustc_smir::rustc_internal;
 use rustc_target::abi::Endian;
 use rustc_target::spec::PanicStrategy;
-use stable_mir::mir::mono::MonoItem;
+use stable_mir::mir::mono::{Instance, MonoItem};
 use stable_mir::CrateDef;
 use std::any::Any;
 use std::collections::BTreeMap;
@@ -281,10 +281,15 @@ impl CodegenBackend for GotocCodegenBackend {
                 }
                 ReachabilityType::None => {}
                 ReachabilityType::PubFns => {
-                    let local_reachable = filter_crate_items(tcx, |_, _| true)
-                        .into_iter()
-                        .map(MonoItem::Fn)
-                        .collect::<Vec<_>>();
+                    let main_instance =
+                        stable_mir::entry_fn().map(|main_fn| Instance::try_from(main_fn).unwrap());
+                    let local_reachable = filter_crate_items(tcx, |_, instance| {
+                        let def_id = rustc_internal::internal(instance.def.def_id());
+                        Some(instance) == main_instance || tcx.is_reachable_non_generic(def_id)
+                    })
+                    .into_iter()
+                    .map(MonoItem::Fn)
+                    .collect::<Vec<_>>();
                     let model_path = base_filename.with_extension(ArtifactType::SymTabGoto);
                     let (gcx, items) = self.codegen_items(
                         tcx,
