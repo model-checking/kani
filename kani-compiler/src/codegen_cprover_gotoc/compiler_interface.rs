@@ -230,10 +230,11 @@ impl CodegenBackend for GotocCodegenBackend {
                     let mut items: HashSet<_> = HashSet::with_capacity(harnesses.len());
                     items.extend(harnesses);
                     let harnesses = filter_crate_items(tcx, |_, instance| {
-                        items.contains(&instance.name().intern())
+                        items.contains(&instance.mangled_name().intern())
                     });
                     for harness in harnesses {
-                        let model_path = queries.harness_model_path(&harness.name()).unwrap();
+                        let model_path =
+                            queries.harness_model_path(&harness.mangled_name()).unwrap();
                         let (gcx, mono_items) = self.codegen_items(
                             tcx,
                             &[MonoItem::Fn(harness)],

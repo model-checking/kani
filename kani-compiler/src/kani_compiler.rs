@@ -285,7 +285,7 @@ impl KaniCompiler {
             let all_harnesses = harnesses
                 .into_iter()
                 .map(|harness| {
-                    let def_path = harness.name().intern();
+                    let def_path = harness.mangled_name().intern();
                     let metadata = gen_proof_metadata(tcx, harness, &base_filename);
                     let stub_map = harness_stub_map(tcx, harness, &metadata);
                     (def_path, HarnessInfo { metadata, stub_map })
