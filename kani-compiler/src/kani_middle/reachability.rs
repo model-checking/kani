@@ -21,8 +21,6 @@ use tracing::{debug, debug_span, trace};
 use rustc_data_structures::fingerprint::Fingerprint;
 use rustc_data_structures::fx::FxHashSet;
 use rustc_data_structures::stable_hasher::{HashStable, StableHasher};
-use rustc_hir::def_id::DefId;
-use rustc_middle::mir::mono::MonoItem as InternalMonoItem;
 use rustc_middle::ty::{TyCtxt, VtblEntry};
 use rustc_smir::rustc_internal;
 use stable_mir::mir::alloc::{AllocId, GlobalAlloc};
@@ -33,23 +31,20 @@ use stable_mir::mir::{
     TerminatorKind,
 };
 use stable_mir::ty::{Allocation, ClosureKind, ConstantKind, RigidTy, Ty, TyKind};
-use stable_mir::CrateDef;
 use stable_mir::{self, CrateItem};
+use stable_mir::{CrateDef, ItemKind};
 
 use crate::kani_middle::coercion;
 use crate::kani_middle::coercion::CoercionBase;
 use crate::kani_middle::stubbing::{get_stub, validate_instance};
 
 /// Collect all reachable items starting from the given starting points.
-pub fn collect_reachable_items<'tcx>(
-    tcx: TyCtxt<'tcx>,
-    starting_points: &[InternalMonoItem<'tcx>],
-) -> Vec<InternalMonoItem<'tcx>> {
+pub fn collect_reachable_items(tcx: TyCtxt, starting_points: &[MonoItem]) -> Vec<MonoItem> {
     // For each harness, collect items using the same collector.
     // I.e.: This will return any item that is reachable from one or more of the starting points.
     let mut collector = MonoItemsCollector::new(tcx);
     for item in starting_points {
-        collector.collect(rustc_internal::stable(item));
+        collector.collect(item.clone());
     }
 
     #[cfg(debug_assertions)]
@@ -62,17 +57,16 @@ pub fn collect_reachable_items<'tcx>(
     // Sort the result so code generation follows deterministic order.
     // This helps us to debug the code, but it also provides the user a good experience since the
     // order of the errors and warnings is stable.
-    let mut sorted_items: Vec<_> =
-        collector.collected.iter().map(rustc_internal::internal).collect();
+    let mut sorted_items: Vec<_> = collector.collected.into_iter().collect();
     sorted_items.sort_by_cached_key(|item| to_fingerprint(tcx, item));
     sorted_items
 }
 
 /// Collect all (top-level) items in the crate that matches the given predicate.
-/// An item can only be a root if they are: non-generic Fn / Static / GlobalASM
-pub fn filter_crate_items<F>(tcx: TyCtxt, predicate: F) -> Vec<InternalMonoItem>
+/// An item can only be a root if they are a non-generic function.
+pub fn filter_crate_items<F>(tcx: TyCtxt, predicate: F) -> Vec<Instance>
 where
-    F: Fn(TyCtxt, DefId) -> bool,
+    F: Fn(TyCtxt, Instance) -> bool,
 {
     let crate_items = stable_mir::all_local_items();
     // Filter regular items.
@@ -80,11 +74,16 @@ where
         .iter()
         .filter_map(|item| {
             // Only collect monomorphic items.
-            Instance::try_from(*item).ok().and_then(|instance| {
-                let def_id = rustc_internal::internal(item);
-                predicate(tcx, def_id)
-                    .then_some(InternalMonoItem::Fn(rustc_internal::internal(&instance)))
+            // TODO: Remove the def_kind check once https://github.com/rust-lang/rust/pull/119135 has been released.
+            let def_id = rustc_internal::internal(item.def_id());
+            (matches!(tcx.def_kind(def_id), rustc_hir::def::DefKind::Ctor(..))
+                || matches!(item.kind(), ItemKind::Fn))
+            .then(|| {
+                Instance::try_from(*item)
+                    .ok()
+                    .and_then(|instance| predicate(tcx, instance).then_some(instance))
             })
+            .flatten()
         })
         .collect::<Vec<_>>()
 }
@@ -93,9 +92,9 @@ where
 ///
 /// Probably only specifically useful with a predicate to find `TestDescAndFn` const declarations from
 /// tests and extract the closures from them.
-pub fn filter_const_crate_items<F>(tcx: TyCtxt, mut predicate: F) -> Vec<InternalMonoItem>
+pub fn filter_const_crate_items<F>(tcx: TyCtxt, mut predicate: F) -> Vec<MonoItem>
 where
-    F: FnMut(TyCtxt, DefId) -> bool,
+    F: FnMut(TyCtxt, Instance) -> bool,
 {
     let crate_items = stable_mir::all_local_items();
     let mut roots = Vec::new();
@@ -103,8 +102,7 @@ where
     for item in crate_items {
         // Only collect monomorphic items.
         if let Ok(instance) = Instance::try_from(item) {
-            let def_id = rustc_internal::internal(&item);
-            if predicate(tcx, def_id) {
+            if predicate(tcx, instance) {
                 let body = instance.body().unwrap();
                 let mut collector = MonoItemsFnCollector {
                     tcx,
@@ -113,7 +111,7 @@ where
                     instance: &instance,
                 };
                 collector.visit_body(&body);
-                roots.extend(collector.collected.iter().map(rustc_internal::internal));
+                roots.extend(collector.collected.into_iter());
             }
         }
     }
@@ -475,10 +473,10 @@ fn extract_unsize_coercion(tcx: TyCtxt, orig_ty: Ty, dst_trait: Ty) -> (Ty, Ty) 
 
 /// Convert a `MonoItem` into a stable `Fingerprint` which can be used as a stable hash across
 /// compilation sessions. This allow us to provide a stable deterministic order to codegen.
-fn to_fingerprint(tcx: TyCtxt, item: &InternalMonoItem) -> Fingerprint {
+fn to_fingerprint(tcx: TyCtxt, item: &MonoItem) -> Fingerprint {
     tcx.with_stable_hashing_context(|mut hcx| {
         let mut hasher = StableHasher::new();
-        item.hash_stable(&mut hcx, &mut hasher);
+        rustc_internal::internal(item).hash_stable(&mut hcx, &mut hasher);
         hasher.finish()
     })
 }

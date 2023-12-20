@@ -7,11 +7,9 @@ use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::InternedString;
 use rustc_hir::def_id::LOCAL_CRATE;
 use rustc_middle::mir::mono::CodegenUnitNameBuilder;
-use rustc_middle::ty::print::with_no_trimmed_paths;
-use rustc_middle::ty::{Instance, TyCtxt};
-use stable_mir::mir::mono::Instance as InstanceStable;
+use rustc_middle::ty::TyCtxt;
+use stable_mir::mir::mono::Instance;
 use stable_mir::mir::Local;
-use tracing::debug;
 
 impl<'tcx> GotocCtx<'tcx> {
     /// The full crate name including versioning info
@@ -52,34 +50,11 @@ impl<'tcx> GotocCtx<'tcx> {
         format!("{var_name}_init")
     }
 
-    /// A human readable name in Rust for reference, should not be used as a key.
-    pub fn readable_instance_name(&self, instance: Instance<'tcx>) -> String {
-        with_no_trimmed_paths!(self.tcx.def_path_str_with_args(instance.def_id(), instance.args))
-    }
-
-    /// The actual function name used in the symbol table
-    pub fn symbol_name(&self, instance: Instance<'tcx>) -> String {
-        let llvm_mangled = self.tcx.symbol_name(instance).name.to_string();
-        debug!(
-            "finding function name for instance: {}, debug: {:?}, name: {}, symbol: {}",
-            instance,
-            instance,
-            self.readable_instance_name(instance),
-            llvm_mangled,
-        );
-
-        let pretty = self.readable_instance_name(instance);
-
-        // Make main function a special case in order to support `--function main`
-        // TODO: Get rid of this: https://github.com/model-checking/kani/issues/2129
-        if pretty == "main" { pretty } else { llvm_mangled }
-    }
-
     /// Return the mangled name to be used in the symbol table.
     ///
     /// We special case main function in order to support `--function main`.
     // TODO: Get rid of this: https://github.com/model-checking/kani/issues/2129
-    pub fn symbol_name_stable(&self, instance: InstanceStable) -> String {
+    pub fn symbol_name_stable(&self, instance: Instance) -> String {
         let pretty = instance.name();
         if pretty == "main" { pretty } else { instance.mangled_name() }
     }

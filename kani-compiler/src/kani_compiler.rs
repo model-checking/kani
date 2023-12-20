@@ -25,6 +25,7 @@ use crate::kani_middle::reachability::filter_crate_items;
 use crate::kani_middle::stubbing::{self, harness_stub_map};
 use crate::kani_queries::QueryDb;
 use crate::session::init_session;
+use cbmc::{InternString, InternedString};
 use clap::Parser;
 use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata};
 use rustc_codegen_ssa::traits::CodegenBackend;
@@ -68,7 +69,7 @@ fn backend(queries: Arc<Mutex<QueryDb>>) -> Box<CodegenBackend> {
 }
 
 /// A stable (across compilation sessions) identifier for the harness function.
-type HarnessId = DefPathHash;
+type HarnessId = InternedString;
 
 /// A set of stubs.
 type Stubs = BTreeMap<DefPathHash, DefPathHash>;
@@ -280,14 +281,13 @@ impl KaniCompiler {
         if self.queries.lock().unwrap().args().reachability_analysis == ReachabilityType::Harnesses
         {
             let base_filename = tcx.output_filenames(()).output_path(OutputType::Object);
-            let harnesses = filter_crate_items(tcx, |_, def_id| is_proof_harness(tcx, def_id));
+            let harnesses = filter_crate_items(tcx, |_, instance| is_proof_harness(tcx, instance));
             let all_harnesses = harnesses
                 .into_iter()
                 .map(|harness| {
-                    let def_id = harness.def_id();
-                    let def_path = tcx.def_path_hash(def_id);
-                    let metadata = gen_proof_metadata(tcx, def_id, &base_filename);
-                    let stub_map = harness_stub_map(tcx, def_id, &metadata);
+                    let def_path = harness.mangled_name().intern();
+                    let metadata = gen_proof_metadata(tcx, harness, &base_filename);
+                    let stub_map = harness_stub_map(tcx, harness, &metadata);
                     (def_path, HarnessInfo { metadata, stub_map })
                 })
                 .collect::<HashMap<_, _>>();
@@ -446,7 +446,14 @@ mod tests {
     use rustc_hir::definitions::DefPathHash;
     use std::collections::HashMap;
 
-    fn mock_next_id() -> HarnessId {
+    fn mock_next_harness_id() -> HarnessId {
+        static mut COUNTER: u64 = 0;
+        unsafe { COUNTER += 1 };
+        let id = unsafe { COUNTER };
+        format!("mod::harness-{id}").intern()
+    }
+
+    fn mock_next_stub_id() -> DefPathHash {
         static mut COUNTER: u64 = 0;
         unsafe { COUNTER += 1 };
         let id = unsafe { COUNTER };
@@ -473,15 +480,15 @@ mod tests {
     #[test]
     fn test_group_by_stubs_works() {
         // Set up the inputs
-        let harness_1 = mock_next_id();
-        let harness_2 = mock_next_id();
-        let harness_3 = mock_next_id();
+        let harness_1 = mock_next_harness_id();
+        let harness_2 = mock_next_harness_id();
+        let harness_3 = mock_next_harness_id();
         let harnesses = vec![harness_1, harness_2, harness_3];
 
-        let stub_1 = (mock_next_id(), mock_next_id());
-        let stub_2 = (mock_next_id(), mock_next_id());
-        let stub_3 = (mock_next_id(), mock_next_id());
-        let stub_4 = (stub_3.0, mock_next_id());
+        let stub_1 = (mock_next_stub_id(), mock_next_stub_id());
+        let stub_2 = (mock_next_stub_id(), mock_next_stub_id());
+        let stub_3 = (mock_next_stub_id(), mock_next_stub_id());
+        let stub_4 = (stub_3.0, mock_next_stub_id());
 
         let set_1 = Stubs::from([stub_1, stub_2, stub_3]);
         let set_2 = Stubs::from([stub_1, stub_2, stub_4]);
@@ -516,7 +523,7 @@ mod tests {
 
         let mut info = mock_info_with_stubs(Stubs::default());
         info.metadata.attributes.proof = true;
-        let id = mock_next_id();
+        let id = mock_next_harness_id();
         let all_harnesses = HashMap::from([(id, info.clone())]);
 
         // Call generate metadata.
@@ -553,7 +560,7 @@ mod tests {
         let infos = harnesses.map(|harness| {
             let mut metadata = mock_metadata(harness.to_string(), krate.clone());
             metadata.attributes.proof = true;
-            (mock_next_id(), HarnessInfo { stub_map: Stubs::default(), metadata })
+            (mock_next_harness_id(), HarnessInfo { stub_map: Stubs::default(), metadata })
         });
         let all_harnesses = HashMap::from(infos.clone());
 
