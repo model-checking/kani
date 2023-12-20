@@ -48,14 +48,14 @@ impl<'tcx> GotocCtx<'tcx> {
     /// handled later.
     pub fn codegen_foreign_fn(&mut self, instance: Instance) -> &Symbol {
         debug!(?instance, "codegen_foreign_function");
-        let internal_instance = rustc_internal::internal(instance);
+        let instance_internal = rustc_internal::internal(instance);
         let fn_name = self.symbol_name_stable(instance).intern();
         if self.symbol_table.contains(fn_name) {
             // Symbol has been added (either a built-in CBMC function or a Rust allocation function).
             self.symbol_table.lookup(fn_name).unwrap()
         } else if RUST_ALLOC_FNS.contains(&fn_name)
             || (self.is_cffi_enabled()
-                && kani_middle::fn_abi(self.tcx, internal_instance).conv == Conv::C)
+                && kani_middle::fn_abi(self.tcx, instance_internal).conv == Conv::C)
         {
             // Add a Rust alloc lib function as is declared by core.
             // When C-FFI feature is enabled, we just trust the rust declaration.
