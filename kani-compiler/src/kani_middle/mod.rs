@@ -14,7 +14,7 @@ use rustc_middle::ty::layout::{
     FnAbiError, FnAbiOf, FnAbiOfHelpers, FnAbiRequest, HasParamEnv, HasTyCtxt, LayoutError,
     LayoutOfHelpers, TyAndLayout,
 };
-use rustc_middle::ty::{self, Instance as InstanceInternal, Ty, TyCtxt};
+use rustc_middle::ty::{self, Instance as InstanceInternal, Ty as TyInternal, TyCtxt};
 use rustc_session::config::OutputType;
 use rustc_smir::rustc_internal;
 use rustc_span::source_map::respan;
@@ -22,7 +22,9 @@ use rustc_span::Span;
 use rustc_target::abi::call::FnAbi;
 use rustc_target::abi::{HasDataLayout, TargetDataLayout};
 use stable_mir::mir::mono::{Instance, InstanceKind, MonoItem};
-use stable_mir::ty::{BoundVariableKind, Span as SpanStable};
+use stable_mir::mir::pretty::pretty_ty;
+use stable_mir::ty::{BoundVariableKind, RigidTy, Span as SpanStable, Ty, TyKind};
+use stable_mir::visitor::{Visitable, Visitor as TypeVisitor};
 use stable_mir::{CrateDef, DefId};
 use std::fs::File;
 use std::io::BufWriter;
@@ -104,10 +106,9 @@ pub fn check_reachable_items(tcx: TyCtxt, queries: &QueryDb, items: &[MonoItem])
 /// This is a temporary safety measure because contracts cannot yet reason
 /// about the heap.
 fn check_is_contract_safe(tcx: TyCtxt, instance: Instance) {
-    use ty::TypeVisitor;
     struct NoMutPtr<'tcx> {
         tcx: TyCtxt<'tcx>,
-        is_prohibited: fn(ty::Ty<'tcx>) -> bool,
+        is_prohibited: fn(Ty) -> bool,
         /// Where (top level) did the type we're analyzing come from. Used for
         /// composing error messages.
         r#where: &'static str,
@@ -116,14 +117,15 @@ fn check_is_contract_safe(tcx: TyCtxt, instance: Instance) {
         what: &'static str,
     }
 
-    impl<'tcx> TypeVisitor<TyCtxt<'tcx>> for NoMutPtr<'tcx> {
-        fn visit_ty(&mut self, t: ty::Ty<'tcx>) -> std::ops::ControlFlow<Self::BreakTy> {
-            use ty::TypeSuperVisitable;
-            if (self.is_prohibited)(t) {
+    impl<'tcx> TypeVisitor for NoMutPtr<'tcx> {
+        type Break = ();
+        fn visit_ty(&mut self, ty: &Ty) -> std::ops::ControlFlow<Self::Break> {
+            if (self.is_prohibited)(*ty) {
                 // TODO make this more user friendly
                 self.tcx.sess.err(format!(
-                    "{} contains a {}pointer ({t:?}). This is prohibited for functions with contracts, \
-                    as they cannot yet reason about the pointer behavior.", self.r#where, self.what));
+                    "{} contains a {}pointer ({}). This is prohibited for functions with contracts, \
+                    as they cannot yet reason about the pointer behavior.", self.r#where, self.what,
+                    pretty_ty(ty.kind())));
             }
 
             // Rust's type visitor only recurses into type arguments, (e.g.
@@ -134,28 +136,28 @@ fn check_is_contract_safe(tcx: TyCtxt, instance: Instance) {
             // Since the field types also must contain in some form all the type
             // arguments the visitor will see them as it inspects the fields and
             // we don't need to call back to `super`.
-            if let ty::TyKind::Adt(adt_def, generics) = t.kind() {
+            if let TyKind::RigidTy(RigidTy::Adt(adt_def, generics)) = ty.kind() {
                 for variant in adt_def.variants() {
-                    for field in &variant.fields {
-                        let ctrl = self.visit_ty(field.ty(self.tcx, generics));
-                        if ctrl.is_break() {
-                            // Technically we can just ignore this because we
-                            // know this case will never happen, but just to be
-                            // safe.
-                            return ctrl;
-                        }
+                    for field in &variant.fields() {
+                        self.visit_ty(&field.ty_with_args(&generics))?;
                     }
                 }
                 std::ops::ControlFlow::Continue(())
             } else {
                 // For every other type.
-                t.super_visit_with(self)
+                ty.super_visit(self)
             }
         }
     }
 
-    fn is_raw_mutable_ptr(t: ty::Ty) -> bool {
-        matches!(t.kind(), ty::TyKind::RawPtr(tmut) if tmut.mutbl == rustc_ast::Mutability::Mut)
+    fn is_raw_mutable_ptr(ty: Ty) -> bool {
+        let kind = ty.kind();
+        kind.is_raw_ptr() && kind.is_mutable_ptr()
+    }
+
+    fn is_raw_ptr(ty: Ty) -> bool {
+        let kind = ty.kind();
+        kind.is_raw_ptr()
     }
 
     // TODO: Replace this with fn_abi.
@@ -173,15 +175,15 @@ fn check_is_contract_safe(tcx: TyCtxt, instance: Instance) {
 
     let fn_typ = bound_fn_sig.skip_binder();
 
-    for (typ, (is_prohibited, r#where, what)) in fn_typ
+    for (input_ty, (is_prohibited, r#where, what)) in fn_typ
         .inputs()
         .iter()
         .copied()
         .zip(std::iter::repeat((is_raw_mutable_ptr as fn(_) -> _, "This argument", "mutable ")))
-        .chain([(fn_typ.output(), (ty::Ty::is_unsafe_ptr as fn(_) -> _, "The return", ""))])
+        .chain([(fn_typ.output(), (is_raw_ptr as fn(_) -> _, "The return", ""))])
     {
         let mut v = NoMutPtr { tcx, is_prohibited, r#where, what };
-        v.visit_ty(rustc_internal::internal(typ));
+        v.visit_ty(&input_ty);
     }
 }
 
@@ -226,7 +228,7 @@ pub struct SourceLocation {
 }
 
 impl SourceLocation {
-    pub fn new(span: &SpanStable) -> Self {
+    pub fn new(span: SpanStable) -> Self {
         let loc = span.get_lines();
         let filename = span.get_filename().to_string();
         let start_line = loc.start_line;
@@ -243,7 +245,7 @@ impl SourceLocation {
 pub fn fn_abi<'tcx>(
     tcx: TyCtxt<'tcx>,
     instance: InstanceInternal<'tcx>,
-) -> &'tcx FnAbi<'tcx, Ty<'tcx>> {
+) -> &'tcx FnAbi<'tcx, TyInternal<'tcx>> {
     let helper = CompilerHelpers { tcx };
     helper.fn_abi_of_instance(instance, ty::List::empty())
 }
@@ -274,14 +276,14 @@ impl<'tcx> LayoutOfHelpers<'tcx> for CompilerHelpers<'tcx> {
     type LayoutOfResult = TyAndLayout<'tcx>;
 
     #[inline]
-    fn handle_layout_err(&self, err: LayoutError<'tcx>, span: Span, ty: Ty<'tcx>) -> ! {
+    fn handle_layout_err(&self, err: LayoutError<'tcx>, span: Span, ty: TyInternal<'tcx>) -> ! {
         span_bug!(span, "failed to get layout for `{}`: {}", ty, err)
     }
 }
 
 /// Implement error handling for extracting function ABI information.
 impl<'tcx> FnAbiOfHelpers<'tcx> for CompilerHelpers<'tcx> {
-    type FnAbiOfResult = &'tcx FnAbi<'tcx, Ty<'tcx>>;
+    type FnAbiOfResult = &'tcx FnAbi<'tcx, TyInternal<'tcx>>;
 
     #[inline]
     fn handle_fn_abi_err(

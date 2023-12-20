@@ -31,8 +31,8 @@ use stable_mir::mir::{
     TerminatorKind,
 };
 use stable_mir::ty::{Allocation, ClosureKind, ConstantKind, RigidTy, Ty, TyKind};
-use stable_mir::CrateDef;
 use stable_mir::{self, CrateItem};
+use stable_mir::{CrateDef, ItemKind};
 
 use crate::kani_middle::coercion;
 use crate::kani_middle::coercion::CoercionBase;
@@ -73,10 +73,19 @@ where
     crate_items
         .iter()
         .filter_map(|item| {
+            tracing::warn!(?item, name = item.name(), "crate_item");
+            tracing::warn!(body=?item.body().blocks.len(), "crate_item");
             // Only collect monomorphic items.
-            Instance::try_from(*item)
-                .ok()
-                .and_then(|instance| predicate(tcx, instance).then_some(instance))
+            // TODO: Remove the def_kind check once https://github.com/rust-lang/rust/pull/119135 has been released.
+            let def_id = rustc_internal::internal(item.def_id());
+            (matches!(tcx.def_kind(def_id), rustc_hir::def::DefKind::Ctor(..))
+                || matches!(item.kind(), ItemKind::Fn))
+            .then(|| {
+                Instance::try_from(*item)
+                    .ok()
+                    .and_then(|instance| predicate(tcx, instance).then_some(instance))
+            })
+            .flatten()
         })
         .collect::<Vec<_>>()
 }

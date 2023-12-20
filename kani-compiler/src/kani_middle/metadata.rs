@@ -23,7 +23,9 @@ pub fn gen_proof_metadata(tcx: TyCtxt, instance: Instance, base_name: &Path) -> 
     let mangled_name =
         if pretty_name == "main" { pretty_name.clone() } else { instance.mangled_name() };
 
-    let loc = SourceLocation::new(&instance.def.span());
+    // We get the body span to include the entire function definition.
+    // This is required for concrete playback to properly position the generated test.
+    let loc = SourceLocation::new(instance.body().unwrap().span);
     let file_stem = format!("{}_{mangled_name}", base_name.file_stem().unwrap().to_str().unwrap());
     let model_file = base_name.with_file_name(file_stem).with_extension(ArtifactType::SymTabGoto);
 
@@ -50,7 +52,7 @@ pub fn gen_test_metadata(
 ) -> HarnessMetadata {
     let pretty_name = test_harness_name(tcx, &test_desc);
     let mangled_name = test_fn.mangled_name();
-    let loc = SourceLocation::new(&test_desc.span());
+    let loc = SourceLocation::new(test_desc.span());
     let file_stem = format!("{}_{mangled_name}", base_name.file_stem().unwrap().to_str().unwrap());
     let model_file = base_name.with_file_name(file_stem).with_extension(ArtifactType::SymTabGoto);
 
