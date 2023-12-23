@@ -80,6 +80,8 @@ impl SymbolTable {
         self.symbol_table.get_mut(&name).unwrap().update_fn_declaration_with_definition(body);
     }
 
+    /// Attach a contract to the symbol identified by `name`. If a prior
+    /// contract exists it is extended with additional clauses.
     pub fn attach_contract<T: Into<InternedString>>(
         &mut self,
         name: T,

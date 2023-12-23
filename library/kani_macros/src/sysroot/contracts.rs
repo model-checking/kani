@@ -1319,11 +1319,12 @@ fn hash_of_token_stream<H: std::hash::Hasher>(hasher: &mut H, stream: proc_macro
 /// Hash this `TokenStream` and return an integer that is at most digits
 /// long when hex formatted.
 fn short_hash_of_token_stream(stream: &proc_macro::TokenStream) -> u64 {
+    const SIX_HEX_DIGITS_MASK: u64 = 0x1_000_000;
     use std::hash::Hasher;
     let mut hasher = std::collections::hash_map::DefaultHasher::default();
     hash_of_token_stream(&mut hasher, proc_macro2::TokenStream::from(stream.clone()));
     let long_hash = hasher.finish();
-    long_hash % 0x1_000_000 // six hex digits
+    long_hash % SIX_HEX_DIGITS_MASK
 }
 
 /// Makes consistent names for a generated function which was created for
