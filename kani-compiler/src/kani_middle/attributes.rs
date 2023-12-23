@@ -588,7 +588,7 @@ macro_rules! comma_tok {
     };
 }
 
-/// Parse the a token stream inside an attribute (like `kanitool::modifies`) as a comma separated
+/// Parse the token stream inside an attribute (like `kanitool::modifies`) as a comma separated
 /// sequence of function parameter names on `local_def_id` (must refer to a function). Then
 /// translates the names into [`Local`]s.
 fn parse_modify_values<'a>(
