@@ -45,3 +45,13 @@ fn main() {
         assert!(c == i64x4(2, 4, 6, 8));
     }
 }
+
+#[kani::proof]
+fn check_shuffle() {
+    {
+        let y = i64x2(0, 1);
+        let z = i64x2(1, 2);
+        const I: [u32; 4] = [1, 2, 0, 3];
+        let _x: i64x4 = unsafe { simd_shuffle(y, z, I) };
+    }
+}

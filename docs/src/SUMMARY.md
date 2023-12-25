@@ -26,6 +26,7 @@
   - [Coding conventions](./conventions.md)
   - [Working with CBMC](./cbmc-hacks.md)
   - [Working with `rustc`](./rustc-hacks.md)
+  - [Migrating to StableMIR](./stable-mir.md)
   - [Command cheat sheets](./cheat-sheets.md)
   - [cargo kani assess](./dev-assess.md)
   - [Testing](./testing.md)

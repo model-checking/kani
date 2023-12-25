@@ -4,6 +4,13 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
+## [0.43.0]
+
+###  What's Changed
+* Rust toolchain upgraded to `nightly-2023-12-14` by @tautschnig and @adpaco-aws
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.42.0...kani-0.43.0
+
 ## [0.42.0]
 
 ### What's Changed

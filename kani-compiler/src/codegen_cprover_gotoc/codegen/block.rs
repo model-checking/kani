@@ -2,8 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use crate::codegen_cprover_gotoc::GotocCtx;
-use rustc_middle::mir::{BasicBlock, BasicBlockData};
+use stable_mir::mir::{BasicBlock, BasicBlockIdx};
 use tracing::debug;
+
+pub fn bb_label(bb: BasicBlockIdx) -> String {
+    format!("bb{bb}")
+}
 
 impl<'tcx> GotocCtx<'tcx> {
     /// Generates Goto-C for a basic block.
@@ -12,21 +16,20 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// This function does not return a value, but mutates state with
     /// `self.current_fn_mut().push_onto_block(...)`
-    pub fn codegen_block(&mut self, bb: BasicBlock, bbd: &BasicBlockData<'tcx>) {
-        debug!(?bb, "Codegen basicblock");
-        self.current_fn_mut().set_current_bb(bb);
-        let label: String = self.current_fn().find_label(&bb);
+    pub fn codegen_block(&mut self, bb: BasicBlockIdx, bbd: &BasicBlock) {
+        debug!(?bb, "codegen_block");
+        let label = bb_label(bb);
         let check_coverage = self.queries.args().check_coverage;
         // the first statement should be labelled. if there is no statements, then the
         // terminator should be labelled.
         match bbd.statements.len() {
             0 => {
-                let term = bbd.terminator();
+                let term = &bbd.terminator;
                 let tcode = self.codegen_terminator(term);
                 // When checking coverage, the `coverage` check should be
                 // labelled instead.
                 if check_coverage {
-                    let span = term.source_info.span;
+                    let span = term.span;
                     let cover = self.codegen_coverage(span);
                     self.current_fn_mut().push_onto_block(cover.with_label(label));
                     self.current_fn_mut().push_onto_block(tcode);
@@ -40,7 +43,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // When checking coverage, the `coverage` check should be
                 // labelled instead.
                 if check_coverage {
-                    let span = stmt.source_info.span;
+                    let span = stmt.span;
                     let cover = self.codegen_coverage(span);
                     self.current_fn_mut().push_onto_block(cover.with_label(label));
                     self.current_fn_mut().push_onto_block(scode);
@@ -50,16 +53,16 @@ impl<'tcx> GotocCtx<'tcx> {
 
                 for s in &bbd.statements[1..] {
                     if check_coverage {
-                        let span = s.source_info.span;
+                        let span = s.span;
                         let cover = self.codegen_coverage(span);
                         self.current_fn_mut().push_onto_block(cover);
                     }
                     let stmt = self.codegen_statement(s);
                     self.current_fn_mut().push_onto_block(stmt);
                 }
-                let term = bbd.terminator();
+                let term = &bbd.terminator;
                 if check_coverage {
-                    let span = term.source_info.span;
+                    let span = term.span;
                     let cover = self.codegen_coverage(span);
                     self.current_fn_mut().push_onto_block(cover);
                 }
@@ -67,6 +70,5 @@ impl<'tcx> GotocCtx<'tcx> {
                 self.current_fn_mut().push_onto_block(tcode);
             }
         }
-        self.current_fn_mut().reset_current_bb();
     }
 }

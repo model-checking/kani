@@ -15,8 +15,10 @@ use crate::kani_middle;
 use cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
 use cbmc::{InternString, InternedString};
 use lazy_static::lazy_static;
-use rustc_middle::ty::Instance;
+use rustc_smir::rustc_internal;
 use rustc_target::abi::call::Conv;
+use stable_mir::mir::mono::Instance;
+use stable_mir::CrateDef;
 use tracing::{debug, trace};
 
 lazy_static! {
@@ -44,14 +46,16 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// For other foreign items, we declare a shim and add to the list of foreign shims to be
     /// handled later.
-    pub fn codegen_foreign_fn(&mut self, instance: Instance<'tcx>) -> &Symbol {
+    pub fn codegen_foreign_fn(&mut self, instance: Instance) -> &Symbol {
         debug!(?instance, "codegen_foreign_function");
-        let fn_name = self.symbol_name(instance).intern();
+        let instance_internal = rustc_internal::internal(instance);
+        let fn_name = self.symbol_name_stable(instance).intern();
         if self.symbol_table.contains(fn_name) {
             // Symbol has been added (either a built-in CBMC function or a Rust allocation function).
             self.symbol_table.lookup(fn_name).unwrap()
         } else if RUST_ALLOC_FNS.contains(&fn_name)
-            || (self.is_cffi_enabled() && kani_middle::fn_abi(self.tcx, instance).conv == Conv::C)
+            || (self.is_cffi_enabled()
+                && kani_middle::fn_abi(self.tcx, instance_internal).conv == Conv::C)
         {
             // Add a Rust alloc lib function as is declared by core.
             // When C-FFI feature is enabled, we just trust the rust declaration.
@@ -60,14 +64,8 @@ impl<'tcx> GotocCtx<'tcx> {
             // https://github.com/model-checking/kani/issues/2426
             self.ensure(fn_name, |gcx, _| {
                 let typ = gcx.codegen_ffi_type(instance);
-                Symbol::function(
-                    fn_name,
-                    typ,
-                    None,
-                    gcx.readable_instance_name(instance),
-                    Location::none(),
-                )
-                .with_is_extern(true)
+                Symbol::function(fn_name, typ, None, instance.name(), Location::none())
+                    .with_is_extern(true)
             })
         } else {
             let shim_name = format!("{fn_name}_ffi_shim");
@@ -79,7 +77,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     &shim_name,
                     typ,
                     Some(gcx.codegen_ffi_shim(shim_name.as_str().into(), instance)),
-                    gcx.readable_instance_name(instance),
+                    instance.name(),
                     Location::none(),
                 )
             })
@@ -93,19 +91,19 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Generate code for a foreign function shim.
-    fn codegen_ffi_shim(&mut self, shim_name: InternedString, instance: Instance<'tcx>) -> Stmt {
+    fn codegen_ffi_shim(&mut self, shim_name: InternedString, instance: Instance) -> Stmt {
         debug!(?shim_name, ?instance, sym=?self.symbol_table.lookup(shim_name), "generate_foreign_shim");
 
-        let loc = self.codegen_span(&self.tcx.def_span(instance.def_id()));
+        let loc = self.codegen_span_stable(instance.def.span());
         let unsupported_check = self.codegen_ffi_unsupported(instance, loc);
         Stmt::block(vec![unsupported_check], loc)
     }
 
     /// Generate type for the given foreign instance.
-    fn codegen_ffi_type(&mut self, instance: Instance<'tcx>) -> Type {
-        let fn_name = self.symbol_name(instance);
-        let fn_abi = kani_middle::fn_abi(self.tcx, instance);
-        let loc = self.codegen_span(&self.tcx.def_span(instance.def_id()));
+    fn codegen_ffi_type(&mut self, instance: Instance) -> Type {
+        let fn_name = self.symbol_name_stable(instance);
+        let fn_abi = kani_middle::fn_abi(self.tcx, rustc_internal::internal(instance));
+        let loc = self.codegen_span_stable(instance.def.span());
         let params = fn_abi
             .args
             .iter()
@@ -134,15 +132,15 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// This will behave like `codegen_unimplemented_stmt` but print a message that includes
     /// the name of the function not supported and the calling convention.
-    pub fn codegen_ffi_unsupported(&mut self, instance: Instance<'tcx>, loc: Location) -> Stmt {
-        let fn_name = &self.symbol_name(instance);
+    fn codegen_ffi_unsupported(&mut self, instance: Instance, loc: Location) -> Stmt {
+        let fn_name = &self.symbol_name_stable(instance);
         debug!(?fn_name, ?loc, "codegen_ffi_unsupported");
 
         // Save this occurrence so we can emit a warning in the compilation report.
         let entry = self.unsupported_constructs.entry("foreign function".into()).or_default();
         entry.push(loc);
 
-        let call_conv = kani_middle::fn_abi(self.tcx, instance).conv;
+        let call_conv = kani_middle::fn_abi(self.tcx, rustc_internal::internal(instance)).conv;
         let msg = format!("call to foreign \"{call_conv:?}\" function `{fn_name}`");
         let url = if call_conv == Conv::C {
             "https://github.com/model-checking/kani/issues/2423"

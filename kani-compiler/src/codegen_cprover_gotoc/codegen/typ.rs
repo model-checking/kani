@@ -8,7 +8,6 @@ use cbmc::{InternString, InternedString};
 use rustc_ast::ast::Mutability;
 use rustc_hir::{LangItem, Unsafety};
 use rustc_index::IndexVec;
-use rustc_middle::mir::{HasLocalDecls, Local, Operand, Place, Rvalue};
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::print::FmtPrinter;
@@ -18,12 +17,14 @@ use rustc_middle::ty::{
     UintTy, VariantDef, VtblEntry,
 };
 use rustc_middle::ty::{List, TypeFoldable};
+use rustc_smir::rustc_internal;
 use rustc_span::def_id::DefId;
 use rustc_target::abi::{
     Abi::Vector, FieldIdx, FieldsShape, Integer, LayoutS, Primitive, Size, TagEncoding,
     TyAndLayout, VariantIdx, Variants,
 };
 use rustc_target::spec::abi::Abi;
+use stable_mir::mir::Body;
 use std::iter;
 use tracing::{debug, trace, warn};
 
@@ -332,11 +333,11 @@ impl<'tcx> GotocCtx<'tcx> {
         ty: Ty<'tcx>,
         args: ty::GenericArgsRef<'tcx>,
     ) -> ty::PolyFnSig<'tcx> {
-        let sig = args.as_coroutine().poly_sig();
+        let sig = args.as_coroutine().sig();
 
-        let bound_vars = self.tcx.mk_bound_variable_kinds_from_iter(
-            sig.bound_vars().iter().chain(iter::once(ty::BoundVariableKind::Region(ty::BrEnv))),
-        );
+        let bound_vars = self.tcx.mk_bound_variable_kinds_from_iter(iter::once(
+            ty::BoundVariableKind::Region(ty::BrEnv),
+        ));
         let br = ty::BoundRegion {
             var: ty::BoundVar::from_usize(bound_vars.len() - 1),
             kind: ty::BoundRegionKind::BrEnv,
@@ -349,7 +350,6 @@ impl<'tcx> GotocCtx<'tcx> {
         let pin_args = self.tcx.mk_args(&[env_ty.into()]);
         let env_ty = Ty::new_adt(self.tcx, pin_adt_ref, pin_args);
 
-        let sig = sig.skip_binder();
         // The `FnSig` and the `ret_ty` here is for a coroutines main
         // `coroutine::resume(...) -> CoroutineState` function in case we
         // have an ordinary coroutine, or the `Future::poll(...) -> Poll`
@@ -436,22 +436,6 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    pub fn local_ty(&self, l: Local) -> Ty<'tcx> {
-        self.monomorphize(self.current_fn().mir().local_decls()[l].ty)
-    }
-
-    pub fn rvalue_ty(&self, rv: &Rvalue<'tcx>) -> Ty<'tcx> {
-        self.monomorphize(rv.ty(self.current_fn().mir().local_decls(), self.tcx))
-    }
-
-    pub fn operand_ty(&self, o: &Operand<'tcx>) -> Ty<'tcx> {
-        self.monomorphize(o.ty(self.current_fn().mir().local_decls(), self.tcx))
-    }
-
-    pub fn place_ty(&self, p: &Place<'tcx>) -> Ty<'tcx> {
-        self.monomorphize(p.ty(self.current_fn().mir().local_decls(), self.tcx).ty)
-    }
-
     /// Is the MIR type a zero-sized type.
     pub fn is_zst(&self, t: Ty<'tcx>) -> bool {
         self.layout_of(t).is_zst()
@@ -482,7 +466,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let fn_ptr = fn_ty.to_pointer();
 
         // vtable field name, i.e., 3_vol (idx_method)
-        let vtable_field_name = self.vtable_field_name(instance.def_id(), idx);
+        let vtable_field_name = self.vtable_field_name(idx);
 
         DatatypeComponent::field(vtable_field_name, fn_ptr)
     }
@@ -681,7 +665,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     fn codegen_ty_raw_array(&mut self, elem_ty: Ty<'tcx>, len: Const<'tcx>) -> Type {
-        let size = self.codegen_const(len, None).int_constant_value().unwrap();
+        let size = self.codegen_const_internal(len, None).int_constant_value().unwrap();
         let elemt = self.codegen_ty(elem_ty);
         elemt.array_of(size)
     }
@@ -735,6 +719,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// also c.f. <https://www.ralfj.de/blog/2020/04/04/layout-debugging.html>
     ///      c.f. <https://rust-lang.github.io/unsafe-code-guidelines/introduction.html>
     pub fn codegen_ty(&mut self, ty: Ty<'tcx>) -> Type {
+        // TODO: Remove all monomorphize calls
         let normalized = self.tcx.normalize_erasing_regions(ty::ParamEnv::reveal_all(), ty);
         let goto_typ = self.codegen_ty_inner(normalized);
         if let Some(tag) = goto_typ.tag() {
@@ -1303,17 +1288,7 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_function_sig(&mut self, sig: PolyFnSig<'tcx>) -> Type {
         let sig = self.monomorphize(sig);
         let sig = self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig);
-        let params = sig
-            .inputs()
-            .iter()
-            .filter_map(|t| if self.is_zst(*t) { None } else { Some(self.codegen_ty(*t)) })
-            .collect();
-
-        if sig.c_variadic {
-            Type::variadic_code_with_unnamed_parameters(params, self.codegen_ty(sig.output()))
-        } else {
-            Type::code_with_unnamed_parameters(params, self.codegen_ty(sig.output()))
-        }
+        self.codegen_function_sig_stable(rustc_internal::stable(sig))
     }
 
     /// Creates a zero-sized struct for a FnDef.
@@ -1324,12 +1299,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// For details, see <https://github.com/model-checking/kani/pull/1338>
     pub fn codegen_fndef_type(&mut self, instance: Instance<'tcx>) -> Type {
-        let func = self.symbol_name(instance);
-        self.ensure_struct(
-            format!("{func}::FnDefStruct"),
-            format!("{}::FnDefStruct", self.readable_instance_name(instance)),
-            |_, _| vec![],
-        )
+        self.codegen_fndef_type_stable(rustc_internal::stable(instance))
     }
 
     /// codegen for struct
@@ -1686,39 +1656,39 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// the function type of the current instance
-    pub fn fn_typ(&mut self) -> Type {
-        let sig = self.current_fn().sig();
-        let sig = self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig);
-        // we don't call [codegen_function_sig] because we want to get a bit more metainformation.
-        let is_vtable_shim =
-            matches!(self.current_fn().instance().def, ty::InstanceDef::VTableShim(..));
+    pub fn fn_typ(&mut self, body: &Body) -> Type {
+        let sig = self.current_fn().sig().clone();
+        let internal_instance = self.current_fn().instance();
+        let is_vtable_shim = matches!(internal_instance.def, ty::InstanceDef::VTableShim(..));
         let mut params: Vec<Parameter> = sig
             .inputs()
             .iter()
             .enumerate()
-            .filter_map(|(i, t)| {
+            .filter_map(|(i, ty)| {
+                debug!(?i, ?ty, "fn_typ");
                 let is_vtable_shim_self = i == 0 && is_vtable_shim;
-                if self.is_zst(*t) && !is_vtable_shim_self {
+                if self.is_zst_stable(*ty) && !is_vtable_shim_self {
                     // We ignore zero-sized parameters.
                     // See https://github.com/model-checking/kani/issues/274 for more details.
                     None
                 } else {
-                    let lc = Local::from_usize(i + 1);
+                    // An arg is the local with index offset by one (return value is always local 0)
+                    let lc = i + 1;
                     let mut ident = self.codegen_var_name(&lc);
 
                     // `spread_arg` indicates that the last argument is tupled
-                    // at the LLVM/codegen level, so we need to declare the indivual
+                    // at the LLVM/codegen level, so we need to declare the individual
                     // components as parameters with a special naming convention
                     // so that we can "retuple" them in the function prelude.
                     // See: compiler/rustc_codegen_llvm/src/gotoc/mod.rs:codegen_function_prelude
-                    if let Some(spread) = self.current_fn().mir().spread_arg {
-                        if lc.index() >= spread.index() {
+                    if let Some(spread) = body.spread_arg() {
+                        if lc >= spread {
                             let (name, _) = self.codegen_spread_arg_name(&lc);
                             ident = name;
                         }
                     }
                     Some(
-                        self.codegen_ty(*t)
+                        self.codegen_ty_stable(*ty)
                             .as_parameter(Some(ident.clone().into()), Some(ident.into())),
                     )
                 }
@@ -1739,9 +1709,9 @@ impl<'tcx> GotocCtx<'tcx> {
 
         debug!(?params, signature=?sig, "function_type");
         if sig.c_variadic {
-            Type::variadic_code(params, self.codegen_ty(sig.output()))
+            Type::variadic_code(params, self.codegen_ty_stable(sig.output()))
         } else {
-            Type::code(params, self.codegen_ty(sig.output()))
+            Type::code(params, self.codegen_ty_stable(sig.output()))
         }
     }
 
@@ -1901,12 +1871,6 @@ fn common_vtable_fields(drop_in_place: Type) -> Vec<DatatypeComponent> {
         .collect();
     assert_eq!(fields.len(), 3, "We expect only three common fields for every vtable.");
     fields
-}
-
-/// The mir type is a mir pointer type (Ref or RawPtr).
-/// This will return false for all smart pointers. See is_std_pointer for a more complete check.
-pub fn is_pointer(mir_type: Ty) -> bool {
-    return pointee_type(mir_type).is_some();
 }
 
 /// If given type is a Ref / Raw ref, return the pointee type.

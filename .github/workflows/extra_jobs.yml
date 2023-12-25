@@ -33,11 +33,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout Kani
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Label PR
       id: labeler
-      uses: actions/labeler@v4
+      uses: actions/labeler@v5
       with:
         dot: true
 

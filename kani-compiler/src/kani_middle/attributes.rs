@@ -23,7 +23,10 @@ use rustc_middle::{
     ty::{Instance, TyCtxt, TyKind},
 };
 use rustc_session::Session;
+use rustc_smir::rustc_internal;
 use rustc_span::{Span, Symbol};
+use stable_mir::mir::mono::Instance as InstanceStable;
+use stable_mir::CrateDef;
 use std::str::FromStr;
 use strum_macros::{AsRefStr, EnumString};
 
@@ -134,6 +137,10 @@ impl<'tcx> std::fmt::Debug for KaniAttributes<'tcx> {
 impl<'tcx> KaniAttributes<'tcx> {
     /// Perform preliminary parsing and checking for the attributes on this
     /// function
+    pub fn for_instance(tcx: TyCtxt<'tcx>, instance: InstanceStable) -> Self {
+        KaniAttributes::for_item(tcx, rustc_internal::internal(instance.def.def_id()))
+    }
+
     pub fn for_item(tcx: TyCtxt<'tcx>, def_id: DefId) -> Self {
         let all_attributes = tcx.get_attrs_unchecked(def_id);
         let map = all_attributes.iter().fold(
@@ -657,20 +664,23 @@ pub fn is_function_contract_generated(tcx: TyCtxt, def_id: DefId) -> bool {
 
 /// Same as [`KaniAttributes::is_harness`] but more efficient because less
 /// attribute parsing is performed.
-pub fn is_proof_harness(tcx: TyCtxt, def_id: DefId) -> bool {
+pub fn is_proof_harness(tcx: TyCtxt, instance: InstanceStable) -> bool {
+    let def_id = rustc_internal::internal(instance.def.def_id());
     has_kani_attribute(tcx, def_id, |a| {
         matches!(a, KaniAttributeKind::Proof | KaniAttributeKind::ProofForContract)
     })
 }
 
 /// Does this `def_id` have `#[rustc_test_marker]`?
-pub fn is_test_harness_description(tcx: TyCtxt, def_id: DefId) -> bool {
+pub fn is_test_harness_description(tcx: TyCtxt, item: impl CrateDef) -> bool {
+    let def_id = rustc_internal::internal(item.def_id());
     let attrs = tcx.get_attrs_unchecked(def_id);
     attr::contains_name(attrs, rustc_span::symbol::sym::rustc_test_marker)
 }
 
 /// Extract the test harness name from the `#[rustc_test_maker]`
-pub fn test_harness_name(tcx: TyCtxt, def_id: DefId) -> String {
+pub fn test_harness_name(tcx: TyCtxt, def: &impl CrateDef) -> String {
+    let def_id = rustc_internal::internal(def.def_id());
     let attrs = tcx.get_attrs_unchecked(def_id);
     let marker = attr::find_by_name(attrs, rustc_span::symbol::sym::rustc_test_marker).unwrap();
     parse_str_value(&marker).unwrap()

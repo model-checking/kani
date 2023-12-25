@@ -8,32 +8,32 @@ use std::path::Path;
 
 use crate::kani_middle::attributes::test_harness_name;
 use kani_metadata::{ArtifactType, HarnessAttributes, HarnessMetadata};
-use rustc_hir::def_id::DefId;
-use rustc_middle::ty::{Instance, InstanceDef, TyCtxt};
+use rustc_middle::ty::TyCtxt;
+use stable_mir::mir::mono::Instance;
+use stable_mir::CrateDef;
 
 use super::{attributes::KaniAttributes, SourceLocation};
 
 /// Create the harness metadata for a proof harness for a given function.
-pub fn gen_proof_metadata(tcx: TyCtxt, def_id: DefId, base_name: &Path) -> HarnessMetadata {
-    let attributes = KaniAttributes::for_item(tcx, def_id).harness_attributes();
-    let pretty_name = tcx.def_path_str(def_id);
+pub fn gen_proof_metadata(tcx: TyCtxt, instance: Instance, base_name: &Path) -> HarnessMetadata {
+    let def = instance.def;
+    let attributes = KaniAttributes::for_instance(tcx, instance).harness_attributes();
+    let pretty_name = instance.name();
     // Main function a special case in order to support `--function main`
     // TODO: Get rid of this: https://github.com/model-checking/kani/issues/2129
-    let mangled_name = if pretty_name == "main" {
-        pretty_name.clone()
-    } else {
-        tcx.symbol_name(Instance::mono(tcx, def_id)).to_string()
-    };
+    let mangled_name =
+        if pretty_name == "main" { pretty_name.clone() } else { instance.mangled_name() };
 
-    let body = tcx.instance_mir(InstanceDef::Item(def_id));
-    let loc = SourceLocation::new(tcx, &body.span);
+    // We get the body span to include the entire function definition.
+    // This is required for concrete playback to properly position the generated test.
+    let loc = SourceLocation::new(instance.body().unwrap().span);
     let file_stem = format!("{}_{mangled_name}", base_name.file_stem().unwrap().to_str().unwrap());
     let model_file = base_name.with_file_name(file_stem).with_extension(ArtifactType::SymTabGoto);
 
     HarnessMetadata {
         pretty_name,
         mangled_name,
-        crate_name: tcx.crate_name(def_id.krate).to_string(),
+        crate_name: def.krate().name,
         original_file: loc.filename,
         original_start_line: loc.start_line,
         original_end_line: loc.end_line,
@@ -46,23 +46,22 @@ pub fn gen_proof_metadata(tcx: TyCtxt, def_id: DefId, base_name: &Path) -> Harne
 
 /// Create the harness metadata for a test description.
 #[allow(dead_code)]
-pub fn gen_test_metadata<'tcx>(
-    tcx: TyCtxt<'tcx>,
-    test_desc: DefId,
-    test_fn: Instance<'tcx>,
+pub fn gen_test_metadata(
+    tcx: TyCtxt,
+    test_desc: impl CrateDef,
+    test_fn: Instance,
     base_name: &Path,
 ) -> HarnessMetadata {
-    let pretty_name = test_harness_name(tcx, test_desc);
-    let mangled_name = tcx.symbol_name(test_fn).to_string();
-    let body = tcx.instance_mir(InstanceDef::Item(test_desc));
-    let loc = SourceLocation::new(tcx, &body.span);
+    let pretty_name = test_harness_name(tcx, &test_desc);
+    let mangled_name = test_fn.mangled_name();
+    let loc = SourceLocation::new(test_desc.span());
     let file_stem = format!("{}_{mangled_name}", base_name.file_stem().unwrap().to_str().unwrap());
     let model_file = base_name.with_file_name(file_stem).with_extension(ArtifactType::SymTabGoto);
 
     HarnessMetadata {
         pretty_name,
         mangled_name,
-        crate_name: tcx.crate_name(test_desc.krate).to_string(),
+        crate_name: test_desc.krate().name,
         original_file: loc.filename,
         original_start_line: loc.start_line,
         original_end_line: loc.end_line,

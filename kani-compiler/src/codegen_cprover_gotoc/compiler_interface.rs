@@ -16,7 +16,7 @@ use crate::kani_middle::{check_reachable_items, dump_mir_items};
 use crate::kani_queries::QueryDb;
 use cbmc::goto_program::Location;
 use cbmc::irep::goto_binary_serde::write_goto_binary_file;
-use cbmc::RoundingMode;
+use cbmc::{InternString, RoundingMode};
 use cbmc::{InternedString, MachineModel};
 use kani_metadata::artifact::convert_type;
 use kani_metadata::UnsupportedFeature;
@@ -31,21 +31,23 @@ use rustc_codegen_ssa::{CodegenResults, CrateInfo};
 use rustc_data_structures::fx::{FxHashMap, FxIndexMap};
 use rustc_data_structures::temp_dir::MaybeTempDir;
 use rustc_errors::{ErrorGuaranteed, DEFAULT_LOCALE_RESOURCE};
-use rustc_hir::def_id::{DefId, LOCAL_CRATE};
+use rustc_hir::def_id::LOCAL_CRATE;
 use rustc_hir::definitions::DefPathHash;
+use rustc_metadata::creader::MetadataLoaderDyn;
 use rustc_metadata::fs::{emit_wrapper_file, METADATA_FILENAME};
 use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
 use rustc_middle::mir::mono::MonoItem;
-use rustc_middle::ty::{Instance, InstanceDef, TyCtxt};
+use rustc_middle::ty::TyCtxt;
 use rustc_middle::util::Providers;
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
-use rustc_session::cstore::MetadataLoaderDyn;
 use rustc_session::output::out_filename;
 use rustc_session::Session;
 use rustc_smir::rustc_internal;
 use rustc_target::abi::Endian;
 use rustc_target::spec::PanicStrategy;
+use stable_mir::mir::mono::{Instance, MonoItem};
+use stable_mir::CrateDef;
 use std::any::Any;
 use std::collections::BTreeMap;
 use std::collections::HashSet;
@@ -87,11 +89,11 @@ impl GotocCodegenBackend {
     fn codegen_items<'tcx>(
         &self,
         tcx: TyCtxt<'tcx>,
-        starting_items: &[MonoItem<'tcx>],
+        starting_items: &[MonoItem],
         symtab_goto: &Path,
         machine_model: &MachineModel,
         check_contract: Option<DefId>,
-    ) -> (GotocCtx<'tcx>, Vec<MonoItem<'tcx>>, Option<AssignsContract>) {
+    ) -> (GotocCtx<'tcx>, Vec<MonoItem>, Option<AssignsContract>) {
         let items = with_timer(
             || collect_reachable_items(tcx, starting_items),
             "codegen reachability analysis",
@@ -111,18 +113,15 @@ impl GotocCodegenBackend {
                         MonoItem::Fn(instance) => {
                             gcx.call_with_panic_debug_info(
                                 |ctx| ctx.declare_function(instance),
-                                format!(
-                                    "declare_function: {}",
-                                    gcx.readable_instance_name(instance)
-                                ),
-                                instance.def_id(),
+                                format!("declare_function: {}", instance.name()),
+                                instance.def,
                             );
                         }
-                        MonoItem::Static(def_id) => {
+                        MonoItem::Static(def) => {
                             gcx.call_with_panic_debug_info(
-                                |ctx| ctx.declare_static(def_id, *item),
-                                format!("declare_static: {def_id:?}"),
-                                def_id,
+                                |ctx| ctx.declare_static(def),
+                                format!("declare_static: {}", def.name()),
+                                def,
                             );
                         }
                         MonoItem::GlobalAsm(_) => {} // Ignore this. We have already warned about it.
@@ -137,17 +136,17 @@ impl GotocCodegenBackend {
                                 |ctx| ctx.codegen_function(instance),
                                 format!(
                                     "codegen_function: {}\n{}",
-                                    gcx.readable_instance_name(instance),
-                                    gcx.symbol_name(instance)
+                                    instance.name(),
+                                    gcx.symbol_name_stable(instance)
                                 ),
-                                instance.def_id(),
+                                instance.def,
                             );
                         }
-                        MonoItem::Static(def_id) => {
+                        MonoItem::Static(def) => {
                             gcx.call_with_panic_debug_info(
-                                |ctx| ctx.codegen_static(def_id, *item),
-                                format!("codegen_static: {def_id:?}"),
-                                def_id,
+                                |ctx| ctx.codegen_static(def),
+                                format!("codegen_static: {}", def.name()),
+                                def,
                             );
                         }
                         MonoItem::GlobalAsm(_) => {} // We have already warned above
@@ -310,14 +309,14 @@ impl CodegenBackend for GotocCodegenBackend {
                 ReachabilityType::Harnesses => {
                     // Cross-crate collecting of all items that are reachable from the crate harnesses.
                     let harnesses = queries.target_harnesses();
-                    let mut items: HashSet<DefPathHash> = HashSet::with_capacity(harnesses.len());
+                    let mut items: HashSet<_> = HashSet::with_capacity(harnesses.len());
                     items.extend(harnesses);
-                    let harnesses = filter_crate_items(tcx, |_, def_id| {
-                        items.contains(&tcx.def_path_hash(def_id))
+                    let harnesses = filter_crate_items(tcx, |_, instance| {
+                        items.contains(&instance.mangled_name().intern())
                     });
                     for harness in harnesses {
                         let model_path = queries
-                            .harness_model_path(&tcx.def_path_hash(harness.def_id()))
+                            .harness_model_path(&harness.mangled_name())
                             .unwrap();
                         let Ok(contract_metadata) =
                             contract_metadata_for_harness(tcx, harness.def_id())
@@ -326,7 +325,7 @@ impl CodegenBackend for GotocCodegenBackend {
                         };
                         let (gcx, items, contract_info) = self.codegen_items(
                             tcx,
-                            &[harness],
+                            &[MonoItem::Fn(harness)],
                             model_path,
                             &results.machine_model,
                             contract_metadata,
@@ -344,9 +343,9 @@ impl CodegenBackend for GotocCodegenBackend {
                     // test closure that we want to execute
                     // TODO: Refactor this code so we can guarantee that the pair (test_fn, test_desc) actually match.
                     let mut descriptions = vec![];
-                    let harnesses = filter_const_crate_items(tcx, |_, def_id| {
-                        if is_test_harness_description(tcx, def_id) {
-                            descriptions.push(def_id);
+                    let harnesses = filter_const_crate_items(tcx, |_, item| {
+                        if is_test_harness_description(tcx, item.def) {
+                            descriptions.push(item.def);
                             true
                         } else {
                             false
@@ -384,11 +383,15 @@ impl CodegenBackend for GotocCodegenBackend {
                 }
                 ReachabilityType::None => {}
                 ReachabilityType::PubFns => {
-                    let entry_fn = tcx.entry_fn(()).map(|(id, _)| id);
-                    let local_reachable = filter_crate_items(tcx, |_, def_id| {
-                        (tcx.is_reachable_non_generic(def_id) && tcx.def_kind(def_id).is_fn_like())
-                            || entry_fn == Some(def_id)
-                    });
+                    let main_instance =
+                        stable_mir::entry_fn().map(|main_fn| Instance::try_from(main_fn).unwrap());
+                    let local_reachable = filter_crate_items(tcx, |_, instance| {
+                        let def_id = rustc_internal::internal(instance.def.def_id());
+                        Some(instance) == main_instance || tcx.is_reachable_non_generic(def_id)
+                    })
+                    .into_iter()
+                    .map(MonoItem::Fn)
+                    .collect::<Vec<_>>();
                     let model_path = base_filename.with_extension(ArtifactType::SymTabGoto);
                     let (gcx, items, contract_info) = self.codegen_items(
                         tcx,
@@ -624,17 +627,17 @@ where
     }
 }
 
-struct GotoCodegenResults<'tcx> {
+struct GotoCodegenResults {
     reachability: ReachabilityType,
     harnesses: Vec<HarnessMetadata>,
     unsupported_constructs: UnsupportedConstructs,
     concurrent_constructs: UnsupportedConstructs,
-    items: Vec<MonoItem<'tcx>>,
+    items: Vec<MonoItem>,
     crate_name: InternedString,
     machine_model: MachineModel,
 }
 
-impl<'tcx> GotoCodegenResults<'tcx> {
+impl GotoCodegenResults {
     pub fn new(tcx: TyCtxt, reachability: ReachabilityType) -> Self {
         GotoCodegenResults {
             reachability,
@@ -682,12 +685,7 @@ impl<'tcx> GotoCodegenResults<'tcx> {
         }
     }
 
-    fn extend(
-        &mut self,
-        gcx: GotocCtx,
-        items: Vec<MonoItem<'tcx>>,
-        metadata: Option<HarnessMetadata>,
-    ) {
+    fn extend(&mut self, gcx: GotocCtx, items: Vec<MonoItem>, metadata: Option<HarnessMetadata>) {
         let mut items = items;
         self.harnesses.extend(metadata);
         self.concurrent_constructs.extend(gcx.concurrent_constructs);
@@ -696,7 +694,7 @@ impl<'tcx> GotoCodegenResults<'tcx> {
     }
 
     /// Prints a report at the end of the compilation.
-    fn print_report(&self, tcx: TyCtxt<'tcx>) {
+    fn print_report(&self, tcx: TyCtxt) {
         // Print all unsupported constructs.
         if !self.unsupported_constructs.is_empty() {
             // Sort alphabetically.
@@ -728,7 +726,7 @@ impl<'tcx> GotoCodegenResults<'tcx> {
 
         // Print some compilation stats.
         if tracing::enabled!(tracing::Level::INFO) {
-            analysis::print_stats(tcx, &self.items);
+            analysis::print_stats(&self.items);
         }
     }
 }
