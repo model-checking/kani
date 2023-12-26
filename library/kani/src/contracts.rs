@@ -118,7 +118,7 @@
 //!
 //! ## Specification Attributes Overview
 //!
-//! The basic two two specification attributes available for describing
+//! The basic two specification attributes available for describing
 //! function behavior are [`requires`][macro@requires] for preconditions and
 //! [`ensures`][macro@ensures] for postconditions. Both admit arbitrary Rust
 //! expressions as their bodies which may also reference the function arguments
