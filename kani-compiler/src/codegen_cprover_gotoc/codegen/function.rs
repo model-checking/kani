@@ -221,7 +221,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 Lambda::as_contract_for(
                     &goto_annotated_fn_typ,
                     None,
-                    self.codegen_place(&local.into()).unwrap().goto_expr.dereference(),
+                    self.codegen_place_stable(&local.into()).unwrap().goto_expr.dereference(),
                 )
             })
             .collect();
@@ -233,11 +233,12 @@ impl<'tcx> GotocCtx<'tcx> {
     /// `instance` must have previously been declared.
     ///
     /// This merges with any previously attached contracts.
-    pub fn attach_contract(&mut self, instance: Instance<'tcx>, contract: Vec<Local>) {
+    pub fn attach_contract(&mut self, instance: Instance, contract: Vec<Local>) {
         // This should be safe, since the contract is pretty much evaluated as
         // though it was the first (or last) assertion in the function.
         assert!(self.current_fn.is_none());
-        self.set_current_fn(instance);
+        let body = instance.body().unwrap();
+        self.set_current_fn(instance, &body);
         let goto_contract = self.as_goto_contract(contract);
         let name = self.current_fn().name();
 

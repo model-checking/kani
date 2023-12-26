@@ -31,13 +31,11 @@ use rustc_codegen_ssa::{CodegenResults, CrateInfo};
 use rustc_data_structures::fx::{FxHashMap, FxIndexMap};
 use rustc_data_structures::temp_dir::MaybeTempDir;
 use rustc_errors::{ErrorGuaranteed, DEFAULT_LOCALE_RESOURCE};
-use rustc_hir::def_id::LOCAL_CRATE;
-use rustc_hir::definitions::DefPathHash;
+use rustc_hir::def_id::{DefId, LOCAL_CRATE};
 use rustc_metadata::creader::MetadataLoaderDyn;
 use rustc_metadata::fs::{emit_wrapper_file, METADATA_FILENAME};
 use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
-use rustc_middle::mir::mono::MonoItem;
 use rustc_middle::ty::TyCtxt;
 use rustc_middle::util::Providers;
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
@@ -65,7 +63,7 @@ use tracing::{debug, error, info};
 
 pub type UnsupportedConstructs = FxHashMap<InternedString, Vec<Location>>;
 
-pub type ContractInfoChannel = std::sync::mpsc::Sender<(DefPathHash, AssignsContract)>;
+pub type ContractInfoChannel = std::sync::mpsc::Sender<(InternedString, AssignsContract)>;
 
 #[derive(Clone)]
 pub struct GotocCodegenBackend {
@@ -213,15 +211,17 @@ impl<'tcx> GotocCtx<'tcx> {
     fn handle_check_contract(
         &mut self,
         function_under_contract: DefId,
-        items: &[MonoItem<'tcx>],
+        items: &[MonoItem],
     ) -> AssignsContract {
         let tcx = self.tcx;
         let function_under_contract_attrs = KaniAttributes::for_item(tcx, function_under_contract);
         let wrapped_fn = function_under_contract_attrs.inner_check().unwrap().unwrap();
 
-        let mut instance_under_contract = items.iter().copied().filter_map(|i| match i {
-            MonoItem::Fn(instance @ Instance { def: InstanceDef::Item(did), .. }) => {
-                (wrapped_fn == did).then_some(instance)
+        let mut instance_under_contract = items.iter().filter_map(|i| match i {
+            MonoItem::Fn(instance @ Instance { def, .. })
+                if wrapped_fn == rustc_internal::internal(def.def_id()) =>
+            {
+                Some(instance.clone())
             }
             _ => None,
         });
@@ -237,7 +237,7 @@ impl<'tcx> GotocCtx<'tcx> {
         });
         self.attach_contract(instance_of_check, assigns_contract);
 
-        let wrapper_name = tcx.symbol_name(instance_of_check).to_string();
+        let wrapper_name = self.symbol_name_stable(instance_of_check);
 
         let recursion_wrapper_id =
             function_under_contract_attrs.checked_with_id().unwrap().unwrap();
@@ -315,12 +315,12 @@ impl CodegenBackend for GotocCodegenBackend {
                         items.contains(&instance.mangled_name().intern())
                     });
                     for harness in harnesses {
-                        let model_path = queries
-                            .harness_model_path(&harness.mangled_name())
-                            .unwrap();
-                        let Ok(contract_metadata) =
-                            contract_metadata_for_harness(tcx, harness.def_id())
-                        else {
+                        let model_path =
+                            queries.harness_model_path(&harness.mangled_name()).unwrap();
+                        let Ok(contract_metadata) = contract_metadata_for_harness(
+                            tcx,
+                            rustc_internal::internal(harness.def.def_id()),
+                        ) else {
                             continue;
                         };
                         let (gcx, items, contract_info) = self.codegen_items(
@@ -333,7 +333,7 @@ impl CodegenBackend for GotocCodegenBackend {
                         results.extend(gcx, items, None);
                         if let Some(assigns_contract) = contract_info {
                             self.contract_channel
-                                .send((tcx.def_path_hash(harness.def_id()), assigns_contract))
+                                .send((harness.name().intern(), assigns_contract))
                                 .unwrap();
                         }
                     }

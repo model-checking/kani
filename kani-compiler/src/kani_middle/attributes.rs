@@ -18,14 +18,12 @@ use rustc_hir::{
     def::DefKind,
     def_id::{DefId, LocalDefId},
 };
-use rustc_middle::{
-    mir::Local,
-    ty::{Instance, TyCtxt, TyKind},
-};
+use rustc_middle::ty::{Instance, TyCtxt, TyKind};
 use rustc_session::Session;
 use rustc_smir::rustc_internal;
 use rustc_span::{Span, Symbol};
 use stable_mir::mir::mono::Instance as InstanceStable;
+use stable_mir::mir::Local;
 use stable_mir::CrateDef;
 use std::str::FromStr;
 use strum_macros::{AsRefStr, EnumString};
@@ -619,7 +617,8 @@ fn parse_modify_values<'a>(
                             .zip(mir.args_iter())
                             .find(|(name, _decl)| name.name == *id)
                             .unwrap()
-                            .1,
+                            .1
+                            .as_usize(),
                     )
                 } else {
                     wrong_token_err();

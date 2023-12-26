@@ -278,7 +278,7 @@ impl KaniCompiler {
     fn run_compilation_session(
         &mut self,
         args: &[String],
-    ) -> Result<Vec<(DefPathHash, AssignsContract)>, ErrorGuaranteed> {
+    ) -> Result<Vec<(InternedString, AssignsContract)>, ErrorGuaranteed> {
         debug!(?args, "run_compilation_session");
         let queries = self.queries.clone();
         let mut compiler = RunCompiler::new(args, self);
