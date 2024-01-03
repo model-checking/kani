@@ -472,7 +472,9 @@ fn outcome_from_global_conditions(
         .filter(|cond| cond.enabled())
         .collect::<Vec<&GlobalCondition>>()
         .is_empty();
+
     if !enabled_global_conditions {
+        // If no global conditions are enabled, the outcome only depends on failed properties
         let failed_properties = determine_failed_properties(properties);
         if failed_properties == FailedProperties::None {
             VerificationStatus::Success
