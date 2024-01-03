@@ -463,15 +463,14 @@ pub fn format_result(
 pub fn format_coverage(
     properties: &[Property],
     status: VerificationStatus,
-    should_panic: bool,
-    failed_properties: FailedProperties,
+    global_conditions: &Vec<GlobalCondition>,
     show_checks: bool,
 ) -> String {
     let (coverage_checks, non_coverage_checks): (Vec<Property>, Vec<Property>) =
         properties.iter().cloned().partition(|x| x.property_class() == "code_coverage");
 
     let verification_output =
-        format_result(&non_coverage_checks, status, should_panic, failed_properties, show_checks);
+        format_result(&non_coverage_checks, status, global_conditions, show_checks);
     let coverage_output = format_result_coverage(&coverage_checks);
     let result = format!("{}\n{}", verification_output, coverage_output);
 

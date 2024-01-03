@@ -400,7 +400,7 @@ impl VerificationResult {
                 let global_conditions = &self.global_conditions;
                 let show_checks = matches!(output_format, OutputFormat::Regular);
                 let mut result = if coverage_mode {
-                    format_coverage(results, status, failed_properties, show_checks)
+                    format_coverage(results, status, global_conditions, show_checks)
                 } else {
                     format_result(results, status, global_conditions, show_checks)
                 };
