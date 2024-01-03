@@ -7,96 +7,85 @@ use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{Expr, Stmt, Symbol};
 use cbmc::InternString;
 use rustc_middle::mir::traversal::reverse_postorder;
-use rustc_middle::mir::{Body, HasLocalDecls, Local};
-use rustc_middle::ty::{self, Instance};
+use stable_mir::mir::mono::Instance;
+use stable_mir::mir::{Body, Local};
+use stable_mir::ty::{RigidTy, TyKind};
+use stable_mir::CrateDef;
 use std::collections::BTreeMap;
 use std::iter::FromIterator;
 use tracing::{debug, debug_span};
 
 /// Codegen MIR functions into gotoc
 impl<'tcx> GotocCtx<'tcx> {
-    /// Get the number of parameters that the current function expects.
-    fn get_params_size(&self) -> usize {
-        let sig = self.current_fn().sig();
-        let sig = self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig);
-        // we don't call [codegen_function_sig] because we want to get a bit more metainformation.
-        sig.inputs().len()
-    }
-
     /// Declare variables according to their index.
     /// - Index 0 represents the return value.
     /// - Indices [1, N] represent the function parameters where N is the number of parameters.
     /// - Indices that are greater than N represent local variables.
-    fn codegen_declare_variables(&mut self) {
-        let mir = self.current_fn().mir();
-        let ldecls = mir.local_decls();
-        let num_args = self.get_params_size();
-        ldecls.indices().enumerate().for_each(|(idx, lc)| {
-            if Some(lc) == mir.spread_arg {
+    fn codegen_declare_variables(&mut self, body: &Body) {
+        let ldecls = body.local_decls();
+        let num_args = body.arg_locals().len();
+        for (lc, ldata) in ldecls {
+            if Some(lc) == body.spread_arg() {
                 // We have already added this local in the function prelude, so
                 // skip adding it again here.
-                return;
+                continue;
             }
             let base_name = self.codegen_var_base_name(&lc);
             let name = self.codegen_var_name(&lc);
-            let ldata = &ldecls[lc];
-            let var_ty = self.monomorphize(ldata.ty);
-            let var_type = self.codegen_ty(var_ty);
-            let loc = self.codegen_span(&ldata.source_info.span);
+            let var_type = self.codegen_ty_stable(ldata.ty);
+            let loc = self.codegen_span_stable(ldata.span);
             // Indices [1, N] represent the function parameters where N is the number of parameters.
             // Except that ZST fields are not included as parameters.
-            let sym = Symbol::variable(
-                name,
-                base_name,
-                var_type,
-                self.codegen_span(&ldata.source_info.span),
-            )
-            .with_is_hidden(!self.is_user_variable(&lc))
-            .with_is_parameter((idx > 0 && idx <= num_args) && !self.is_zst(var_ty));
+            let sym =
+                Symbol::variable(name, base_name, var_type, self.codegen_span_stable(ldata.span))
+                    .with_is_hidden(!self.is_user_variable(&lc))
+                    .with_is_parameter((lc > 0 && lc <= num_args) && !self.is_zst_stable(ldata.ty));
             let sym_e = sym.to_expr();
             self.symbol_table.insert(sym);
 
             // Index 0 represents the return value, which does not need to be
             // declared in the first block
-            if lc.index() < 1 || lc.index() > mir.arg_count {
+            if lc < 1 || lc > body.arg_locals().len() {
                 let init = self.codegen_default_initializer(&sym_e);
                 self.current_fn_mut().push_onto_block(Stmt::decl(sym_e, init, loc));
             }
-        });
+        }
     }
 
-    pub fn codegen_function(&mut self, instance: Instance<'tcx>) {
-        self.set_current_fn(instance);
-        let name = self.current_fn().name();
+    pub fn codegen_function(&mut self, instance: Instance) {
+        let name = self.symbol_name_stable(instance);
         let old_sym = self.symbol_table.lookup(&name).unwrap();
 
-        let _trace_span =
-            debug_span!("CodegenFunction", name = self.current_fn().readable_name()).entered();
+        let _trace_span = debug_span!("CodegenFunction", name = instance.name()).entered();
         if old_sym.is_function_definition() {
             debug!("Double codegen of {:?}", old_sym);
         } else {
             assert!(old_sym.is_function());
-            let mir = self.current_fn().mir();
-            self.print_instance(instance, mir);
-            self.codegen_function_prelude();
-            self.codegen_declare_variables();
+            let body = instance.body().unwrap();
+            self.set_current_fn(instance, &body);
+            self.print_instance(instance, &body);
+            self.codegen_function_prelude(&body);
+            self.codegen_declare_variables(&body);
 
-            reverse_postorder(mir).for_each(|(bb, bbd)| self.codegen_block(bb, bbd));
+            // Get the order from internal body for now.
+            let internal_body = self.current_fn().body_internal();
+            reverse_postorder(internal_body)
+                .for_each(|(bb, _)| self.codegen_block(bb.index(), &body.blocks[bb.index()]));
 
-            let loc = self.codegen_span(&mir.span);
+            let loc = self.codegen_span_stable(instance.def.span());
             let stmts = self.current_fn_mut().extract_block();
-            let body = Stmt::block(stmts, loc);
-            self.symbol_table.update_fn_declaration_with_definition(&name, body);
+            let goto_body = Stmt::block(stmts, loc);
+            self.symbol_table.update_fn_declaration_with_definition(&name, goto_body);
+            self.reset_current_fn();
         }
-        self.reset_current_fn();
     }
 
     /// Codegen changes required due to the function ABI.
     /// We currently untuple arguments for RustCall ABI where the `spread_arg` is set.
-    fn codegen_function_prelude(&mut self) {
-        let mir = self.current_fn().mir();
-        if let Some(spread_arg) = mir.spread_arg {
-            self.codegen_spread_arg(mir, spread_arg);
+    fn codegen_function_prelude(&mut self, body: &Body) {
+        debug!(spread_arg=?body.spread_arg(), "codegen_function_prelude");
+        if let Some(spread_arg) = body.spread_arg() {
+            self.codegen_spread_arg(body, spread_arg);
         }
     }
 
@@ -117,34 +106,27 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// See:
     /// <https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp/topic/Determine.20untupled.20closure.20args.20from.20Instance.3F>
-    fn codegen_spread_arg(&mut self, mir: &Body<'tcx>, spread_arg: Local) {
-        tracing::debug!(current=?self.current_fn, "codegen_spread_arg");
-        let spread_data = &mir.local_decls()[spread_arg];
-        let tup_ty = self.monomorphize(spread_data.ty);
-        if self.is_zst(tup_ty) {
+    fn codegen_spread_arg(&mut self, body: &Body, spread_arg: Local) {
+        debug!(current=?self.current_fn().name(), "codegen_spread_arg");
+        let spread_data = &body.locals()[spread_arg];
+        let tup_ty = spread_data.ty;
+        if self.is_zst_stable(tup_ty) {
             // No need to spread a ZST since it will be ignored.
             return;
         }
 
-        let loc = self.codegen_span(&spread_data.source_info.span);
+        let loc = self.codegen_span_stable(spread_data.span);
 
         // Get the function signature from MIR, _before_ we untuple
-        let fntyp = self.current_fn().instance().ty(self.tcx, ty::ParamEnv::reveal_all());
-        let sig = match fntyp.kind() {
-            ty::FnPtr(..) | ty::FnDef(..) => fntyp.fn_sig(self.tcx).skip_binder(),
-            // Closures themselves will have their arguments already untupled,
-            // see Zulip link above.
-            ty::Closure(..) => unreachable!(
-                "Unexpected `spread arg` set for closure, got: {:?}, {:?}",
-                fntyp,
-                self.current_fn().readable_name()
-            ),
-            _ => unreachable!(
-                "Expected function type for `spread arg` prelude, got: {:?}, {:?}",
-                fntyp,
-                self.current_fn().readable_name()
-            ),
-        };
+        let instance = self.current_fn().instance_stable();
+        // Closures themselves will have their arguments already untupled,
+        // see Zulip link above.
+        assert!(
+            !instance.ty().kind().is_closure(),
+            "Unexpected spread arg `{}` set for closure `{}`",
+            spread_arg,
+            instance.name()
+        );
 
         // When we codegen the function signature elsewhere, we will codegen the untupled version.
         // We then marshall the arguments into a local variable holding the expected tuple.
@@ -166,7 +148,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // };
         // ```
         // Note how the compiler has reordered the fields to improve packing.
-        let tup_type = self.codegen_ty(tup_ty);
+        let tup_type = self.codegen_ty_stable(tup_ty);
 
         // We need to marshall the arguments into the tuple
         // The arguments themselves have been tacked onto the explicit function paramaters by
@@ -185,21 +167,19 @@ impl<'tcx> GotocCtx<'tcx> {
         // }
         // ```
 
-        let tupe = sig.inputs().last().unwrap();
-        let args = match tupe.kind() {
-            ty::Tuple(substs) => *substs,
-            _ => unreachable!("a function's spread argument must be a tuple"),
+        let TyKind::RigidTy(RigidTy::Tuple(args)) = tup_ty.kind() else {
+            unreachable!("a function's spread argument must be a tuple")
         };
-        let starting_idx = sig.inputs().len();
+        let starting_idx = spread_arg;
         let marshalled_tuple_fields =
             BTreeMap::from_iter(args.iter().enumerate().map(|(arg_i, arg_t)| {
                 // The components come at the end, so offset by the untupled length.
                 // This follows the naming convention defined in `typ.rs`.
-                let lc = Local::from_usize(arg_i + starting_idx);
+                let lc = arg_i + starting_idx;
                 let (name, base_name) = self.codegen_spread_arg_name(&lc);
-                let sym = Symbol::variable(name, base_name, self.codegen_ty(arg_t), loc)
+                let sym = Symbol::variable(name, base_name, self.codegen_ty_stable(*arg_t), loc)
                     .with_is_hidden(false)
-                    .with_is_parameter(!self.is_zst(arg_t));
+                    .with_is_parameter(!self.is_zst_stable(*arg_t));
                 // The spread arguments are additional function paramaters that are patched in
                 // They are to the function signature added in the `fn_typ` function.
                 // But they were never added to the symbol table, which we currently do here.
@@ -222,19 +202,18 @@ impl<'tcx> GotocCtx<'tcx> {
         );
     }
 
-    pub fn declare_function(&mut self, instance: Instance<'tcx>) {
-        debug!("declaring {}; {:?}", instance, instance);
-        self.set_current_fn(instance);
-        debug!(krate = self.current_fn().krate().as_str());
-        debug!(is_std = self.current_fn().is_std());
-        self.ensure(&self.current_fn().name(), |ctx, fname| {
-            let mir = ctx.current_fn().mir();
+    pub fn declare_function(&mut self, instance: Instance) {
+        debug!("declaring {}; {:?}", instance.name(), instance);
+        let body = instance.body().unwrap();
+        self.set_current_fn(instance, &body);
+        debug!(krate=?instance.def.krate(), is_std=self.current_fn().is_std(), "declare_function");
+        self.ensure(&self.symbol_name_stable(instance), |ctx, fname| {
             Symbol::function(
                 fname,
-                ctx.fn_typ(),
+                ctx.fn_typ(&body),
                 None,
-                ctx.current_fn().readable_name(),
-                ctx.codegen_span(&mir.span),
+                instance.name(),
+                ctx.codegen_span_stable(instance.def.span()),
             )
         });
         self.reset_current_fn();

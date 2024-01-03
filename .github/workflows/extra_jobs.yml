@@ -1,0 +1,49 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+#
+# Workflow that execute jobs based on the files that were changed or some label configuration.
+#
+# The first job in this workflow will auto label the PR, while the following jobs will conditionally
+# run according to the auto-label result.
+#
+# This workflow runs on `pull_request_target` because the labeler needs extra write permission.
+# Thus, we keep this job minimal, and the only actions used are from the same verified publisher.
+#
+# Other jobs should not require extra permissions, so be careful when adding new jobs to not propagate write
+# permissions.
+#
+# Note that this also means that the workflow version run is the one currently in `main`,
+# not the one from the PR. This is only relevant if a PR is changing this workflow.
+#
+# See <https://github.com/actions/labeler/issues/121> for more details.
+
+name: Kani Extra
+on: pull_request_target
+
+jobs:
+  # Keep this job minimal since it requires extra permission
+  auto-label:
+    name: Auto Label
+    permissions:
+      contents: read
+      pull-requests: write
+    outputs:
+      all-labels: ${{ steps.labeler.outputs.all-labels }}
+      new-labels: ${{ steps.labeler.outputs.new-labels }}
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Kani
+      uses: actions/checkout@v4
+
+    - name: Label PR
+      id: labeler
+      uses: actions/labeler@v5
+      with:
+        dot: true
+
+  verification-bench:
+    name: Verification Benchmarks
+    needs: auto-label
+    permissions: {}
+    if: contains(needs.auto-label.outputs.all-labels, 'Z-BenchCI')
+    uses: ./.github/workflows/bench.yml

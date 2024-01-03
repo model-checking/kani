@@ -12,7 +12,13 @@ use lazy_static::lazy_static;
 use regex::Regex;
 use rustc_data_structures::fingerprint::Fingerprint;
 use rustc_hir::{def_id::DefId, definitions::DefPathHash};
-use rustc_middle::{mir::Body, ty::TyCtxt};
+use rustc_index::IndexVec;
+use rustc_middle::mir::{
+    visit::MutVisitor, Body, Const, ConstValue, Local, LocalDecl, Location, Operand,
+};
+use rustc_middle::ty::{self, TyCtxt};
+
+use tracing::debug;
 
 /// Returns the `DefId` of the stub for the function/method identified by the
 /// parameter `def_id`, and `None` if the function/method is not stubbed.
@@ -23,18 +29,63 @@ pub fn get_stub(tcx: TyCtxt, def_id: DefId) -> Option<DefId> {
 
 /// Returns the new body of a function/method if it has been stubbed out;
 /// otherwise, returns the old body.
-pub fn transform<'tcx>(
-    tcx: TyCtxt<'tcx>,
-    def_id: DefId,
-    old_body: &'tcx Body<'tcx>,
-) -> &'tcx Body<'tcx> {
+pub fn transform<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId, old_body: &'tcx Body<'tcx>) -> Body<'tcx> {
     if let Some(replacement) = get_stub(tcx, def_id) {
+        debug!(
+            original = tcx.def_path_debug_str(def_id),
+            replaced = tcx.def_path_debug_str(replacement),
+            "transform"
+        );
         let new_body = tcx.optimized_mir(replacement).clone();
         if check_compatibility(tcx, def_id, old_body, replacement, &new_body) {
-            return tcx.arena.alloc(new_body);
+            return new_body;
         }
     }
-    old_body
+    old_body.clone()
+}
+
+/// Traverse `body` searching for calls to foreing functions and, whevever there is
+/// a stub available, replace the call to the foreign function with a call
+/// to its correspondent stub. This happens as a separate step because there is no
+/// body available to foreign functions at this stage.
+pub fn transform_foreign_functions<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
+    if let Some(stub_map) = get_stub_mapping(tcx) {
+        let mut visitor =
+            ForeignFunctionTransformer { tcx, local_decls: body.clone().local_decls, stub_map };
+        visitor.visit_body(body);
+    }
+}
+
+struct ForeignFunctionTransformer<'tcx> {
+    /// The compiler context.
+    tcx: TyCtxt<'tcx>,
+    /// Local declarations of the callee function. Kani searches here for foreign functions.
+    local_decls: IndexVec<Local, LocalDecl<'tcx>>,
+    /// Map of functions/methods to their correspondent stubs.
+    stub_map: HashMap<DefId, DefId>,
+}
+
+impl<'tcx> MutVisitor<'tcx> for ForeignFunctionTransformer<'tcx> {
+    fn tcx(&self) -> TyCtxt<'tcx> {
+        self.tcx
+    }
+
+    fn visit_operand(&mut self, operand: &mut Operand<'tcx>, _location: Location) {
+        let func_ty = operand.ty(&self.local_decls, self.tcx);
+        if let ty::FnDef(reachable_function, arguments) = *func_ty.kind() {
+            if self.tcx.is_foreign_item(reachable_function) {
+                if let Some(stub) = self.stub_map.get(&reachable_function) {
+                    let Operand::Constant(function_definition) = operand else {
+                        return;
+                    };
+                    function_definition.const_ = Const::from_value(
+                        ConstValue::ZeroSized,
+                        self.tcx.type_of(stub).instantiate(self.tcx, arguments),
+                    );
+                }
+            }
+        }
+    }
 }
 
 /// Checks whether the stub is compatible with the original function/method: do

@@ -1,0 +1,85 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+name: Attempt CBMC update
+
+on:
+  schedule:
+    - cron: "30 4 * * Mon" # Run this every Monday at 04:30 UTC
+  workflow_dispatch:     # Allow manual dispatching for a custom branch / tag.
+
+permissions:
+  checks: write
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  create-cargo-update-pr:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout Kani
+        uses: actions/checkout@v4
+
+      - name: Setup Kani Dependencies
+        uses: ./.github/actions/setup
+        with:
+          os: ubuntu-22.04
+
+      - name: Compare CBMC versions and determine next step
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          grep ^CBMC_VERSION kani-dependencies >> $GITHUB_ENV
+          CBMC_LATEST=$(gh -R diffblue/cbmc release list | grep Latest | awk '{print $1}' | cut -f2 -d-)
+          echo "CBMC_LATEST=$CBMC_LATEST" >> $GITHUB_ENV
+          # check whether the version has changed at all
+          if [ x$CBMC_LATEST = x$CBMC_VERSION ] ; then
+            echo "next_step=none" >> $GITHUB_ENV
+          # check whether we already have an existing issue for a failing
+          # upgrade
+          elif gh issue list -S \
+              "CBMC upgrade to $CBMC_LATEST failed" \
+              --json number,title | grep title ; then
+            echo "next_step=none" >> $GITHUB_ENV
+          # check whether we already have a branch (and thus: a PR) for a
+          # successful upgrade
+          elif ! git ls-remote --exit-code origin cbmc-$CBMC_LATEST ; then
+            CBMC_LATEST_MAJOR=$(echo $CBMC_LATEST | cut -f1 -d.)
+            CBMC_LATEST_MINOR=$(echo $CBMC_LATEST | cut -f2 -d.)
+            sed -i "s/^CBMC_MAJOR=.*/CBMC_MAJOR=\"$CBMC_MAJOR\"/" kani-dependencies
+            sed -i "s/^CBMC_MINOR=.*/CBMC_MINOR=\"$CBMC_MINOR\"/" kani-dependencies
+            sed -i "s/^CBMC_VERSION=.*/CBMC_VERSION=\"$CBMC_LATEST\"/" kani-dependencies
+            git diff
+            if ! ./scripts/kani-regression.sh ; then
+              echo "next_step=create_issue" >> $GITHUB_ENV
+            else
+              echo "next_step=create_pr" >> $GITHUB_ENV
+            fi
+          # we already have a PR, nothing to be done
+          else
+            echo "next_step=none" >> $GITHUB_ENV
+          fi
+
+      - name: Create Pull Request
+        if: ${{ env.next_step == 'create_pr' }}
+        uses: peter-evans/create-pull-request@v5
+        with:
+          commit-message: Upgrade CBMC from ${{ env.CBMC_VERSION }} to ${{ env.CBMC_LATEST }}
+          branch: cbmc-${{ env.CBMC_LATEST }}
+          delete-branch: true
+          title: 'Automatic upgrade of CBMC from ${{ env.CBMC_VERSION }} to ${{ env.CBMC_LATEST }}'
+          body: >
+            Upgrade CBMC to its latest release.
+
+      - name: Create Issue
+        if: ${{ env.next_step == 'create_issue' }}
+        uses: dacbd/create-issue-action@main
+        with:
+          token: ${{ github.token }}
+          title: 'CBMC upgrade to ${{ env.CBMC_LATEST }} failed'
+          body: >
+            Updating CBMC from ${{ evn.CBMC_VERSION }} to ${{ env.CBMC_LATEST }} failed.
+
+            The failed automated run
+            [can be found here.](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})

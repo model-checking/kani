@@ -5,6 +5,7 @@ use crate::args::common::Verbosity;
 use crate::args::VerificationArgs;
 use crate::util::render_command;
 use anyhow::{bail, Context, Result};
+use std::io::IsTerminal;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
@@ -13,7 +14,6 @@ use std::time::Instant;
 use strum_macros::Display;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Registry};
-use tracing_tree::HierarchicalLayer;
 
 /// Environment variable used to control this session log tracing.
 /// This is the same variable used to control `kani-compiler` logs. Note that you can still control
@@ -35,8 +35,6 @@ pub struct KaniSession {
     pub kani_compiler: PathBuf,
     /// The location we found 'kani_lib.c'
     pub kani_lib_c: PathBuf,
-    /// The location we found the Kani C stub .c files
-    pub kani_c_stubs: PathBuf,
 
     /// The temporary files we littered that need to be cleaned up at the end of execution
     pub temporaries: Mutex<Vec<PathBuf>>,
@@ -62,7 +60,6 @@ impl KaniSession {
             codegen_tests: false,
             kani_compiler: install.kani_compiler()?,
             kani_lib_c: install.kani_lib_c()?,
-            kani_c_stubs: install.kani_c_stubs()?,
             temporaries: Mutex::new(vec![]),
         })
     }
@@ -219,7 +216,7 @@ pub fn run_redirect(
             stdout.display()
         );
     }
-    let output_file = std::fs::File::create(&stdout)?;
+    let output_file = std::fs::File::create(stdout)?;
     cmd.stdout(output_file);
 
     let program = cmd.get_program().to_string_lossy().to_string();
@@ -291,6 +288,14 @@ pub fn base_folder() -> Result<PathBuf> {
         .to_path_buf())
 }
 
+/// Return the shorthand for the toolchain used by this Kani version.
+///
+/// This shorthand can be used to select the exact toolchain version that matches the one used to
+/// build the current Kani version.
+pub fn toolchain_shorthand() -> String {
+    format!("+{}", env!("RUSTUP_TOOLCHAIN"))
+}
+
 impl InstallType {
     pub fn new() -> Result<Self> {
         // Case 1: We've checked out the development repo and we're built under `target/kani`
@@ -331,10 +336,6 @@ impl InstallType {
         self.base_path_with("library/kani/kani_lib.c")
     }
 
-    pub fn kani_c_stubs(&self) -> Result<PathBuf> {
-        self.base_path_with("library/kani/stubs/C")
-    }
-
     /// A common case is that our repo and release bundle have the same `subpath`
     fn base_path_with(&self, subpath: &str) -> Result<PathBuf> {
         let path = match self {
@@ -368,16 +369,13 @@ fn init_logger(args: &VerificationArgs) {
     };
 
     // Use a hierarchical view for now.
-    let use_colors = atty::is(atty::Stream::Stdout);
+    let use_colors = std::io::stdout().is_terminal();
     let subscriber = Registry::default().with(filter);
     let subscriber = subscriber.with(
-        HierarchicalLayer::default()
+        tracing_subscriber::fmt::layer()
             .with_writer(std::io::stderr)
-            .with_indent_lines(true)
             .with_ansi(use_colors)
-            .with_targets(true)
-            .with_verbose_exit(true)
-            .with_indent_amount(4),
+            .with_target(true),
     );
     tracing::subscriber::set_global_default(subscriber).unwrap();
 }

@@ -7,7 +7,6 @@
 use crate::args::ConcretePlaybackMode;
 use crate::call_cbmc::VerificationResult;
 use crate::session::KaniSession;
-use crate::util::tempfile::TempFile;
 use anyhow::{Context, Result};
 use concrete_vals_extractor::{extract_harness_values, ConcreteVal};
 use kani_metadata::HarnessMetadata;
@@ -18,6 +17,7 @@ use std::hash::{Hash, Hasher};
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::process::Command;
+use tempfile::NamedTempFile;
 
 impl KaniSession {
     /// The main driver for generating concrete playback unit tests and adding them to source code.
@@ -158,25 +158,28 @@ impl KaniSession {
 
         // Create temp file
         if !unit_tests.is_empty() {
-            let mut temp_file = TempFile::try_new("concrete_playback.tmp")?;
+            let source_basedir = Path::new(source_path).parent().unwrap_or(Path::new("."));
+            let mut temp_file = NamedTempFile::with_prefix_in("concrete_playback", source_basedir)?;
             let mut curr_line_num = 0;
 
             // Use a buffered reader/writer to generate the unit test line by line
-            for line in source_reader.lines().flatten() {
+            for line in source_reader.lines().map_while(Result::ok) {
                 curr_line_num += 1;
-                if let Some(temp_writer) = temp_file.writer.as_mut() {
-                    writeln!(temp_writer, "{line}")?;
-                    if curr_line_num == proof_harness_end_line {
-                        for unit_test in unit_tests.iter() {
-                            for unit_test_line in unit_test.code.iter() {
-                                curr_line_num += 1;
-                                writeln!(temp_writer, "{unit_test_line}")?;
-                            }
+                writeln!(temp_file, "{line}")?;
+                if curr_line_num == proof_harness_end_line {
+                    for unit_test in unit_tests.iter() {
+                        for unit_test_line in unit_test.code.iter() {
+                            curr_line_num += 1;
+                            writeln!(temp_file, "{unit_test_line}")?;
                         }
                     }
                 }
             }
-            temp_file.rename(source_path).expect("Could not rename file");
+
+            // Renames are usually automic, so we won't corrupt the user's source file during a
+            // crash; but first flush all updates to disk, which persist wouldn't take care of.
+            temp_file.as_file().sync_all()?;
+            temp_file.persist(source_path).expect("Could not rename file");
         }
 
         Ok(!unit_tests.is_empty())
@@ -325,7 +328,7 @@ mod concrete_vals_extractor {
         result_items
             .iter()
             .filter(|prop| {
-                (prop.property_class() == "assertion" && prop.status == CheckStatus::Failure)
+                (prop.property_class() != "unwind" && prop.status == CheckStatus::Failure)
                     || (prop.property_class() == "cover" && prop.status == CheckStatus::Satisfied)
             })
             .map(|property| {
@@ -380,10 +383,22 @@ mod concrete_vals_extractor {
                         next_num.push(next_byte);
                     }
 
-                    return Some(ConcreteVal {
-                        byte_arr: next_num,
-                        interp_val: interp_concrete_val.to_string(),
-                    });
+                    // In ARM64 Linux, CBMC will produce a character instead of a number for
+                    // interpreted values because the char type is unsigned in that platform.
+                    // For example, for the value `101` it will produce `'e'` instead of `101`.
+                    // To correct this, we check if the value starts and ends with `'`, and
+                    // convert the character into its ASCII value in that case.
+                    let interp_val = {
+                        let interp_val_str = interp_concrete_val.to_string();
+                        if interp_val_str.starts_with('\'') && interp_val_str.ends_with('\'') {
+                            let interp_num = interp_val_str.chars().nth(1).unwrap() as u8;
+                            interp_num.to_string()
+                        } else {
+                            interp_val_str
+                        }
+                    };
+
+                    return Some(ConcreteVal { byte_arr: next_num, interp_val });
                 }
             }
         }

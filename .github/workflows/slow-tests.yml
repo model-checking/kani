@@ -18,10 +18,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-11, ubuntu-20.04, ubuntu-22.04]
+        os: [macos-12, ubuntu-20.04, ubuntu-22.04]
     steps:
       - name: Checkout Kani
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup

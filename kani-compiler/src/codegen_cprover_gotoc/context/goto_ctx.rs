@@ -24,16 +24,19 @@ use cbmc::utils::aggr_tag;
 use cbmc::{InternedString, MachineModel};
 use kani_metadata::HarnessMetadata;
 use rustc_data_structures::fx::FxHashMap;
-use rustc_middle::mir::interpret::Allocation;
 use rustc_middle::span_bug;
 use rustc_middle::ty::layout::{
     FnAbiError, FnAbiOfHelpers, FnAbiRequest, HasParamEnv, HasTyCtxt, LayoutError, LayoutOfHelpers,
     TyAndLayout,
 };
-use rustc_middle::ty::{self, Instance, Ty, TyCtxt};
-use rustc_span::source_map::{respan, Span};
+use rustc_middle::ty::{self, Ty, TyCtxt};
+use rustc_span::source_map::respan;
+use rustc_span::Span;
 use rustc_target::abi::call::FnAbi;
 use rustc_target::abi::{HasDataLayout, TargetDataLayout};
+use stable_mir::mir::mono::Instance;
+use stable_mir::mir::Body;
+use stable_mir::ty::Allocation;
 
 pub struct GotocCtx<'tcx> {
     /// the typing context
@@ -43,13 +46,13 @@ pub struct GotocCtx<'tcx> {
     pub queries: QueryDb,
     /// the generated symbol table for gotoc
     pub symbol_table: SymbolTable,
-    pub hooks: GotocHooks<'tcx>,
+    pub hooks: GotocHooks,
     /// the full crate name, including versioning info
     pub full_crate_name: String,
     /// a global counter for generating unique names for global variables
     pub global_var_count: u64,
     /// map a global allocation to a name in the symbol table
-    pub alloc_map: FxHashMap<&'tcx Allocation, String>,
+    pub alloc_map: FxHashMap<Allocation, String>,
     /// map (trait, method) pairs to possible implementations
     pub vtable_ctx: VtableCtx,
     pub current_fn: Option<CurrentFnCtx<'tcx>>,
@@ -78,7 +81,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> GotocCtx<'tcx> {
         let fhks = fn_hooks();
         let symbol_table = SymbolTable::new(machine_model.clone());
-        let emit_vtable_restrictions = queries.emit_vtable_restrictions;
+        let emit_vtable_restrictions = queries.args().emit_vtable_restrictions;
         GotocCtx {
             tcx,
             queries,
@@ -135,11 +138,6 @@ impl<'tcx> GotocCtx<'tcx> {
     // Generate a Symbol Expression representing a function variable from the MIR
     pub fn gen_function_local_variable(&mut self, c: u64, fname: &str, t: Type) -> Symbol {
         self.gen_stack_variable(c, fname, "var", t, Location::none(), false)
-    }
-
-    // Generate a Symbol Expression representing a function parameter from the MIR
-    pub fn gen_function_parameter(&mut self, c: u64, fname: &str, t: Type) -> Symbol {
-        self.gen_stack_variable(c, fname, "var", t, Location::none(), true)
     }
 
     /// Given a counter `c` a function name `fname, and a prefix `prefix`, generates a new function local variable
@@ -301,17 +299,8 @@ impl<'tcx> GotocCtx<'tcx> {
 
 /// Mutators
 impl<'tcx> GotocCtx<'tcx> {
-    pub fn set_current_fn(&mut self, instance: Instance<'tcx>) {
-        self.current_fn = Some(CurrentFnCtx::new(
-            instance,
-            self,
-            self.tcx
-                .instance_mir(instance.def)
-                .basic_blocks
-                .indices()
-                .map(|bb| format!("{bb:?}"))
-                .collect(),
-        ));
+    pub fn set_current_fn(&mut self, instance: Instance, body: &Body) {
+        self.current_fn = Some(CurrentFnCtx::new(instance, self, body));
     }
 
     pub fn reset_current_fn(&mut self) {
@@ -377,13 +366,13 @@ impl<'tcx> FnAbiOfHelpers<'tcx> for GotocCtx<'tcx> {
                 FnAbiRequest::OfFnPtr { sig, extra_args } => {
                     span_bug!(
                         span,
-                        "Error: {err}\n while running `fn_abi_of_fn_ptr. ({sig}, {extra_args:?})`",
+                        "Error: {err:?}\n while running `fn_abi_of_fn_ptr. ({sig}, {extra_args:?})`",
                     );
                 }
                 FnAbiRequest::OfInstance { instance, extra_args } => {
                     span_bug!(
                         span,
-                        "Error: {err}\n while running `fn_abi_of_instance. ({instance}, {extra_args:?})`",
+                        "Error: {err:?}\n while running `fn_abi_of_instance. ({instance}, {extra_args:?})`",
                     );
                 }
             }

@@ -92,17 +92,15 @@ impl KaniSession {
             flags.push("--write-json-symtab".into());
         }
 
-        if self.args.enable_stubbing {
+        if self.args.is_stubbing_enabled() {
             flags.push("--enable-stubbing".into());
         }
 
-        flags.extend(
-            self.args
-                .common_args
-                .unstable_features
-                .iter()
-                .map(|feature| format!("--unstable={feature}")),
-        );
+        if self.args.coverage {
+            flags.push("--coverage-checks".into());
+        }
+
+        flags.extend(self.args.common_args.unstable_features.as_arguments().map(str::to_string));
 
         // This argument will select the Kani flavour of the compiler. It will be removed before
         // rustc driver is invoked.
@@ -127,14 +125,6 @@ impl KaniSession {
             ]
             .map(OsString::from),
         );
-        if self.args.use_abs {
-            flags.push("-Z".into());
-            flags.push("force-unstable-if-unmarked=yes".into()); // ??
-            flags.push("--cfg=use_abs".into());
-            flags.push("--cfg".into());
-            let abs_type = format!("abs_type={}", self.args.abs_type.to_string().to_lowercase());
-            flags.push(abs_type.into());
-        }
 
         if let Some(seed_opt) = self.args.randomize_layout {
             flags.push("-Z".into());

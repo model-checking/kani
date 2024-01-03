@@ -21,6 +21,7 @@ use std::io::{self};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::{Duration, SystemTime};
+use test::test::TestTimeOptions;
 use test::ColorConfig;
 use tracing::*;
 use walkdir::WalkDir;
@@ -90,6 +91,14 @@ pub fn parse_config(args: Vec<String>) -> Config {
         .optflag("", "dry-run", "don't actually run the tests")
         .optflag("", "fix-expected",
         "override all expected files that did not match the output. Tests will NOT fail when there is a mismatch")
+        .optflag("", "report-time",
+                 "report the time of each test. Configuration is done via env variables, like \
+                 rust unit tests.")
+        .optmulti("", "kani-flag",
+                  "pass extra flags to Kani. Note that this may cause spurious failures if the \
+                  passed flag conflicts with the test configuration. Only works for `kani`, \
+                  `cargo-kani`, and `expected` modes."
+                  , "ARG")
     ;
 
     let (argv0, args_) = args.split_first().unwrap();
@@ -164,6 +173,10 @@ pub fn parse_config(args: Vec<String>) -> Config {
         dry_run: matches.opt_present("dry-run"),
         fix_expected: matches.opt_present("fix-expected"),
         timeout,
+        time_opts: matches
+            .opt_present("report-time")
+            .then_some(TestTimeOptions::new_from_env(false)),
+        extra_args: matches.opt_strs("kani-flag"),
     }
 }
 
@@ -292,7 +305,7 @@ pub fn test_opts(config: &Config) -> test::TestOpts {
         skip: vec![],
         list: false,
         options: test::Options::new(),
-        time_options: None,
+        time_options: config.time_opts,
         fail_fast: config.fail_fast,
         force_run_in_process: false,
     }
@@ -454,7 +467,7 @@ fn collect_rs_tests_from_dir(
     // tests themselves, they race for the privilege of
     // creating the directories and sometimes fail randomly.
     let build_dir = output_relative_path(config, relative_dir_path);
-    fs::create_dir_all(&build_dir).unwrap();
+    fs::create_dir_all(build_dir).unwrap();
 
     // Add each `.rs` file as a test, and recurse further on any
     // subdirectories we find, except for `aux` directories.
@@ -558,7 +571,7 @@ fn make_test_name(config: &Config, testpaths: &TestPaths) -> test::TestName {
     //    ui/foo/bar/baz.rs
     let path = PathBuf::from(config.src_base.file_name().unwrap())
         .join(&testpaths.relative_dir)
-        .join(&testpaths.file.file_name().unwrap());
+        .join(testpaths.file.file_name().unwrap());
 
     test::DynTestName(format!("[{}] {}", config.mode, path.display()))
 }

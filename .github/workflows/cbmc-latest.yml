@@ -19,10 +19,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-11, ubuntu-20.04, ubuntu-22.04]
+        os: [macos-12, ubuntu-20.04, ubuntu-22.04]
     steps:
       - name: Checkout Kani under "kani"
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           path: kani
 
@@ -37,7 +37,7 @@ jobs:
         run: cargo build-dev
 
       - name: Checkout CBMC under "cbmc"
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: diffblue/cbmc
           path: cbmc
@@ -45,8 +45,8 @@ jobs:
       - name: Build CBMC
         working-directory: ./cbmc
         run: |
-          make -C src minisat2-download cadical-download
-          make -C src -j4 MINISAT2=../../minisat-2.2.1 CADICAL=../../cadical
+          cmake -S . -Bbuild -DWITH_JBMC=OFF -Dsat_impl="minisat2;cadical"
+          cmake --build build -- -j 4
           # Prepend the bin directory to $PATH
           echo "${GITHUB_WORKSPACE}/cbmc/build/bin" >> $GITHUB_PATH
 
@@ -58,7 +58,7 @@ jobs:
     runs-on: ubuntu-20.04
     steps:
       - name: Checkout Kani under "kani"
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           path: kani
 
@@ -73,7 +73,7 @@ jobs:
         run: cargo build-dev -- --release
 
       - name: Checkout CBMC under "cbmc"
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: diffblue/cbmc
           path: cbmc

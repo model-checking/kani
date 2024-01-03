@@ -5,7 +5,7 @@
 use rustc_ast as ast;
 use rustc_data_structures::sync::Lrc;
 use rustc_driver::DEFAULT_LOCALE_RESOURCES;
-use rustc_errors::{ColorConfig, TerminalUrl};
+use rustc_errors::ColorConfig;
 use rustc_span::edition::Edition;
 use rustc_span::source_map::SourceMap;
 use rustc_span::symbol::sym;
@@ -66,7 +66,7 @@ pub fn make_test(
     let result = rustc_driver::catch_fatal_errors(|| {
         rustc_span::create_session_if_not_set_then(edition, |_| {
             use rustc_errors::emitter::{Emitter, EmitterWriter};
-            use rustc_errors::Handler;
+            use rustc_errors::DiagCtxt;
             use rustc_parse::maybe_new_parser_from_source_str;
             use rustc_parse::parser::ForceCollect;
             use rustc_session::parse::ParseSess;
@@ -81,37 +81,15 @@ pub fn make_test(
 
             let fallback_bundle =
                 rustc_errors::fallback_fluent_bundle(DEFAULT_LOCALE_RESOURCES.to_vec(), false);
-            supports_color = EmitterWriter::stderr(
-                ColorConfig::Auto,
-                None,
-                None,
-                fallback_bundle.clone(),
-                false,
-                false,
-                Some(80),
-                false,
-                false,
-                TerminalUrl::No,
-            )
-            .supports_color();
+            supports_color = EmitterWriter::stderr(ColorConfig::Auto, fallback_bundle.clone())
+                .diagnostic_width(Some(80))
+                .supports_color();
 
-            let emitter = EmitterWriter::new(
-                Box::new(io::sink()),
-                None,
-                None,
-                fallback_bundle,
-                false,
-                false,
-                false,
-                None,
-                false,
-                false,
-                TerminalUrl::No,
-            );
+            let emitter = EmitterWriter::new(Box::new(io::sink()), fallback_bundle);
 
             // FIXME(misdreavus): pass `-Z treat-err-as-bug` to the doctest parser
-            let handler = Handler::with_emitter(false, None, Box::new(emitter));
-            let sess = ParseSess::with_span_handler(handler, sm);
+            let handler = DiagCtxt::with_emitter(Box::new(emitter));
+            let sess = ParseSess::with_dcx(handler, sm);
 
             let mut found_main = false;
             let mut found_extern_crate = crate_name.is_none();
@@ -174,7 +152,7 @@ pub fn make_test(
             // handler. Any errors in the tests will be reported when the test file is compiled,
             // Note that we still need to cancel the errors above otherwise `DiagnosticBuilder`
             // will panic on drop.
-            sess.span_diagnostic.reset_err_count();
+            sess.dcx.reset_err_count();
 
             (found_main, found_extern_crate, found_macro)
         })

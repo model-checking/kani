@@ -19,7 +19,7 @@ fn main() -> Result<()> {
     let args = parser::ArgParser::parse();
 
     match args.subcommand {
-        parser::Commands::BuildDev(build_parser) => build_lib().and(build_bin(&build_parser.args)),
+        parser::Commands::BuildDev(build_parser) => build_lib(&build_bin(&build_parser.args)?),
         parser::Commands::Bundle(bundle_parser) => {
             let version_string = bundle_parser.version;
             let kani_string = format!("kani-{version_string}");
@@ -67,9 +67,8 @@ fn prebundle(dir: &Path) -> Result<()> {
     }
 
     // Before we begin, ensure Kani is built successfully in release mode.
-    build_bin(&["--release"])
-        // And that libraries have been built too.
-        .and(build_lib())
+    // And that libraries have been built too.
+    build_lib(&build_bin(&["--release"])?)
 }
 
 /// Copy Kani files into `dir`
@@ -84,7 +83,7 @@ fn bundle_kani(dir: &Path) -> Result<()> {
 
     // 2. Kani scripts
     let scripts = dir.join("scripts");
-    std::fs::create_dir(&scripts)?;
+    std::fs::create_dir(scripts)?;
 
     // 3. Kani libraries
     let library = dir.join("library");
@@ -149,7 +148,7 @@ fn bundle_kissat(dir: &Path) -> Result<()> {
 /// This should include all files as `dir/<path>` in the tarball.
 /// e.g. `kani-1.0/bin/kani-compiler` not just `bin/kani-compiler`.
 fn create_release_bundle(dir: &Path, bundle: &str) -> Result<()> {
-    Command::new("tar").args(&["zcf", bundle]).arg(dir).run()
+    Command::new("tar").args(["zcf", bundle]).arg(dir).run()
 }
 
 /// Helper trait to fallibly run commands

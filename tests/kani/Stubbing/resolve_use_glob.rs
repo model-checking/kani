@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-// kani-flags: --harness my_mod::harness --enable-unstable --enable-stubbing
+// kani-flags: --harness my_mod::harness -Z stubbing
 //
 //! This tests whether we take into account local use-glob statements (`use
 //! XXX::*;`) when resolving paths in `kani::stub` attributes.

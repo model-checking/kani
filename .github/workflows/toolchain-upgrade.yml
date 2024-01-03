@@ -8,22 +8,39 @@ on:
     - cron: "30 2 * * *" # Run this every day at 02:30 UTC
   workflow_dispatch:     # Allow manual dispatching for a custom branch / tag.
 
+permissions:
+  checks: write
+  contents: write
+  issues: write
+  pull-requests: write
+
 jobs:
   create-toolchain-pr:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout Kani
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+
+      - name: Setup Kani Dependencies
+        uses: ./.github/actions/setup
+        with:
+          os: ubuntu-22.04
 
       - name: Update toolchain config
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           current_toolchain_date=$(grep ^channel rust-toolchain.toml | sed 's/.*nightly-\(.*\)"/\1/')
           echo "current_toolchain_date=$current_toolchain_date" >> $GITHUB_ENV
           current_toolchain_epoch=$(date --date $current_toolchain_date +%s)
           next_toolchain_date=$(date --date "@$(($current_toolchain_epoch + 86400))" +%Y-%m-%d)
           echo "next_toolchain_date=$next_toolchain_date" >> $GITHUB_ENV
-          if ! git ls-remote --exit-code origin toolchain-$next_toolchain_date ; then
-            echo "branch_exists=false" >> $GITHUB_ENV
+          if gh issue list -S \
+              "Toolchain upgrade to nightly-$next_toolchain_date failed" \
+              --json number,title | grep title ; then
+            echo "next_step=none" >> $GITHUB_ENV
+          elif ! git ls-remote --exit-code origin toolchain-$next_toolchain_date ; then
+            echo "next_step=create_pr" >> $GITHUB_ENV
             sed -i "/^channel/ s/$current_toolchain_date/$next_toolchain_date/" rust-toolchain.toml
             git diff
             git clone --filter=tree:0 https://github.com/rust-lang/rust rust.git
@@ -39,11 +56,18 @@ jobs:
             echo "$EOF" >> $GITHUB_ENV
             cd ..
             rm -rf rust.git
+            if ! cargo build-dev ; then
+              echo "next_step=create_issue" >> $GITHUB_ENV
+            else
+              if ! ./scripts/kani-regression.sh ; then
+                echo "next_step=create_issue" >> $GITHUB_ENV
+              fi
+            fi
           else
-            echo "branch_exists=true" >> $GITHUB_ENV
+            echo "next_step=none" >> $GITHUB_ENV
           fi
       - name: Create Pull Request
-        if: ${{ env.branch_exists == 'false' }}
+        if: ${{ env.next_step == 'create_pr' }}
         uses: peter-evans/create-pull-request@v5
         with:
           commit-message: Upgrade Rust toolchain to nightly-${{ env.next_toolchain_date }}
@@ -56,6 +80,26 @@ jobs:
 
             This is an automatically generated pull request. If any of the CI checks fail,
             manual intervention is required. In such a case, review the changes at
+            https://github.com/rust-lang/rust from
+            https://github.com/rust-lang/rust/commit/${{ env.current_toolchain_hash }} up to
+            https://github.com/rust-lang/rust/commit/${{ env.next_toolchain_hash }}. The log
+            for this commit range is:
+
+            ${{ env.git_log }}
+      - name: Create Issue
+        if: ${{ env.next_step == 'create_issue' }}
+        uses: dacbd/create-issue-action@main
+        with:
+          token: ${{ github.token }}
+          title: 'Toolchain upgrade to nightly-${{ env.next_toolchain_date }} failed'
+          body: >
+            Updating Rust toolchain from nightly-${{ env.current_toolchain_date }} to
+            nightly-${{ env.next_toolchain_date }} requires source changes.
+
+            The failed automated run
+            [can be found here.](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+            Please review the changes at
             https://github.com/rust-lang/rust from
             https://github.com/rust-lang/rust/commit/${{ env.current_toolchain_hash }} up to
             https://github.com/rust-lang/rust/commit/${{ env.next_toolchain_hash }}. The log

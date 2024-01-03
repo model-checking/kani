@@ -5,7 +5,7 @@ use crate::args::VerificationArgs;
 use crate::call_single_file::to_rustc_arg;
 use crate::project::Artifact;
 use crate::session::KaniSession;
-use crate::util;
+use crate::{session, util};
 use anyhow::{bail, Context, Result};
 use cargo_metadata::diagnostic::{Diagnostic, DiagnosticLevel};
 use cargo_metadata::{Message, Metadata, MetadataCommand, Package, Target};
@@ -14,6 +14,7 @@ use std::ffi::{OsStr, OsString};
 use std::fmt::{self, Display};
 use std::fs::{self, File};
 use std::io::BufReader;
+use std::io::IsTerminal;
 use std::path::PathBuf;
 use std::process::Command;
 use tracing::{debug, trace};
@@ -78,8 +79,7 @@ impl KaniSession {
             cargo_args.push(format!("--features={}", features.join(",")).into());
         }
 
-        cargo_args.push("--target".into());
-        cargo_args.push(build_target.into());
+        cargo_args.append(&mut cargo_config_args());
 
         cargo_args.push("--target-dir".into());
         cargo_args.push(target_dir.into());
@@ -110,7 +110,8 @@ impl KaniSession {
         for package in packages {
             for verification_target in package_targets(&self.args, package) {
                 let mut cmd = Command::new("cargo");
-                cmd.args(&cargo_args)
+                cmd.arg(session::toolchain_shorthand())
+                    .args(&cargo_args)
                     .args(vec!["-p", &package.name])
                     .args(&verification_target.to_args())
                     .args(&pkg_args)
@@ -180,7 +181,7 @@ impl KaniSession {
     /// Run cargo and collect any error found.
     /// We also collect the metadata file generated during compilation if any.
     fn run_cargo(&self, cargo_cmd: Command, target: &Target) -> Result<Option<Artifact>> {
-        let support_color = atty::is(atty::Stream::Stdout);
+        let support_color = std::io::stdout().is_terminal();
         let mut artifact = None;
         if let Some(mut cargo_process) = self.run_piped(cargo_cmd)? {
             let reader = BufReader::new(cargo_process.stdout.take().unwrap());
@@ -251,6 +252,19 @@ impl KaniSession {
     }
 }
 
+pub fn cargo_config_args() -> Vec<OsString> {
+    [
+        "--target",
+        env!("TARGET"),
+        // Propagate `--cfg=kani` to build scripts.
+        "-Zhost-config",
+        "-Ztarget-applies-to-host",
+        "--config=host.rustflags=[\"--cfg=kani\"]",
+    ]
+    .map(OsString::from)
+    .to_vec()
+}
+
 /// Print the compiler message following the coloring schema.
 fn print_msg(diagnostic: &Diagnostic, use_rendered: bool) -> Result<()> {
     if use_rendered {
@@ -305,8 +319,14 @@ fn packages_to_verify<'b>(
             .map(|pkg_name| metadata.packages.iter().find(|pkg| pkg.name == *pkg_name).unwrap())
             .collect()
     } else if !args.cargo.exclude.is_empty() {
+        // should be ensured by argument validation
+        assert!(args.cargo.workspace);
         validate_package_names(&args.cargo.exclude, &metadata.packages)?;
-        metadata.packages.iter().filter(|pkg| !args.cargo.exclude.contains(&pkg.name)).collect()
+        metadata
+            .workspace_packages()
+            .into_iter()
+            .filter(|pkg| !args.cargo.exclude.contains(&pkg.name))
+            .collect()
     } else {
         match (args.cargo.workspace, metadata.root_package()) {
             (true, _) | (_, None) => metadata.workspace_packages(),
@@ -332,8 +352,7 @@ fn map_kani_artifact(rustc_artifact: cargo_metadata::Artifact) -> Option<Artifac
     let result = rustc_artifact.filenames.iter().find_map(|path| {
         if path.extension() == Some("rmeta") {
             let file_stem = path.file_stem()?.strip_prefix("lib")?;
-            let parent =
-                path.parent().map(|p| p.as_std_path().to_path_buf()).unwrap_or(PathBuf::new());
+            let parent = path.parent().map(|p| p.as_std_path().to_path_buf()).unwrap_or_default();
             let mut meta_path = parent.join(file_stem);
             meta_path.set_extension(ArtifactType::Metadata);
             trace!(rmeta=?path, kani_meta=?meta_path.display(), "map_kani_artifact");

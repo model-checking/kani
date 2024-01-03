@@ -5,6 +5,7 @@
 
 use crate::args::common::Verbosity;
 use crate::args::playback_args::{CargoPlaybackArgs, KaniPlaybackArgs, MessageFormat};
+use crate::call_cargo::cargo_config_args;
 use crate::call_single_file::base_rustc_flags;
 use crate::session::{lib_playback_folder, InstallType};
 use crate::{session, util};
@@ -83,7 +84,7 @@ fn build_test(install: &InstallType, args: &KaniPlaybackArgs) -> Result<PathBuf>
         rustc_args.push("--error-format=json".into());
     }
 
-    let mut cmd = Command::new(&install.kani_compiler()?);
+    let mut cmd = Command::new(install.kani_compiler()?);
     cmd.args(rustc_args);
 
     session::run_terminal(&args.playback.common_opts, cmd)?;
@@ -113,8 +114,7 @@ fn cargo_test(install: &InstallType, args: CargoPlaybackArgs) -> Result<()> {
     }
 
     cargo_args.append(&mut args.cargo.to_cargo_args());
-    cargo_args.push("--target".into());
-    cargo_args.push(env!("TARGET").into());
+    cargo_args.append(&mut cargo_config_args());
 
     // These have to be the last arguments to cargo test.
     if !args.playback.test_args.is_empty() {
@@ -124,7 +124,8 @@ fn cargo_test(install: &InstallType, args: CargoPlaybackArgs) -> Result<()> {
 
     // Arguments that will only be passed to the target package.
     let mut cmd = Command::new("cargo");
-    cmd.args(&cargo_args)
+    cmd.arg(session::toolchain_shorthand())
+        .args(&cargo_args)
         .env("RUSTC", &install.kani_compiler()?)
         // Use CARGO_ENCODED_RUSTFLAGS instead of RUSTFLAGS is preferred. See
         // https://doc.rust-lang.org/cargo/reference/environment-variables.html

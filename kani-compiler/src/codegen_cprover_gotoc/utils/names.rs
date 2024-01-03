@@ -5,13 +5,11 @@
 
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::InternedString;
-use rustc_hir::def_id::DefId;
 use rustc_hir::def_id::LOCAL_CRATE;
 use rustc_middle::mir::mono::CodegenUnitNameBuilder;
-use rustc_middle::mir::Local;
-use rustc_middle::ty::print::with_no_trimmed_paths;
-use rustc_middle::ty::{Instance, TyCtxt};
-use tracing::debug;
+use rustc_middle::ty::TyCtxt;
+use stable_mir::mir::mono::Instance;
+use stable_mir::mir::Local;
 
 impl<'tcx> GotocCtx<'tcx> {
     /// The full crate name including versioning info
@@ -20,22 +18,22 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     pub fn codegen_var_base_name(&self, l: &Local) -> String {
-        match self.find_debug_info(l) {
-            None => format!("var_{}", l.index()),
-            Some(info) => format!("{}", info.name),
+        match self.current_fn().local_name(*l) {
+            None => format!("var_{l}"),
+            Some(name) => name.to_string(),
         }
     }
 
     pub fn codegen_var_name(&self, l: &Local) -> String {
         let fname = self.current_fn().name();
-        match self.find_debug_info(l) {
-            Some(info) => format!("{fname}::1::var{l:?}::{}", info.name),
-            None => format!("{fname}::1::var{l:?}"),
+        match self.current_fn().local_name(*l) {
+            Some(name) => format!("{fname}::1::var_{l}::{name}"),
+            None => format!("{fname}::1::var_{l}"),
         }
     }
 
     pub fn is_user_variable(&self, var: &Local) -> bool {
-        self.find_debug_info(var).is_some()
+        self.current_fn().local_name(*var).is_some()
     }
 
     // Special naming conventions for parameters that are spread from a tuple
@@ -52,29 +50,13 @@ impl<'tcx> GotocCtx<'tcx> {
         format!("{var_name}_init")
     }
 
-    /// A human readable name in Rust for reference, should not be used as a key.
-    pub fn readable_instance_name(&self, instance: Instance<'tcx>) -> String {
-        with_no_trimmed_paths!(
-            self.tcx.def_path_str_with_substs(instance.def_id(), instance.substs)
-        )
-    }
-
-    /// The actual function name used in the symbol table
-    pub fn symbol_name(&self, instance: Instance<'tcx>) -> String {
-        let llvm_mangled = self.tcx.symbol_name(instance).name.to_string();
-        debug!(
-            "finding function name for instance: {}, debug: {:?}, name: {}, symbol: {}",
-            instance,
-            instance,
-            self.readable_instance_name(instance),
-            llvm_mangled,
-        );
-
-        let pretty = self.readable_instance_name(instance);
-
-        // Make main function a special case in order to support `--function main`
-        // TODO: Get rid of this: https://github.com/model-checking/kani/issues/2129
-        if pretty == "main" { pretty } else { llvm_mangled }
+    /// Return the mangled name to be used in the symbol table.
+    ///
+    /// We special case main function in order to support `--function main`.
+    // TODO: Get rid of this: https://github.com/model-checking/kani/issues/2129
+    pub fn symbol_name_stable(&self, instance: Instance) -> String {
+        let pretty = instance.name();
+        if pretty == "main" { pretty } else { instance.mangled_name() }
     }
 
     /// The name for a tuple field
@@ -85,12 +67,8 @@ impl<'tcx> GotocCtx<'tcx> {
     /// The name for the struct field on a vtable for a given function. Because generic
     /// functions can share the same name, we need to use the index of the entry in the
     /// vtable. This is the same index that will be passed in virtual function calls as
-    /// InstanceDef::Virtual(def_id, idx). We could use solely the index as a key into
-    /// the vtable struct, but we add the method name for debugging readability.
-    ///     Example: 3_vol
-    pub fn vtable_field_name(&self, _def_id: DefId, idx: usize) -> InternedString {
-        // format!("{}_{}", idx, with_no_trimmed_paths!(|| self.tcx.item_name(def_id)))
-        // TODO: use def_id https://github.com/model-checking/kani/issues/364
+    /// InstanceDef::Virtual(def_id, idx).
+    pub fn vtable_field_name(&self, idx: usize) -> InternedString {
         idx.to_string().into()
     }
 

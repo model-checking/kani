@@ -1,12 +1,12 @@
-undefined-shift\
+arithmetic_overflow\
 Status: FAILURE\
-Description: "shift distance too large"
+Description: "attempt to shift by excessive shift distance"
 
 GLOBAL CONDITIONS:\
 - should_panic: FAILURE
 
 Failed Checks: panicked on the `1` arm!
 Failed Checks: panicked on the `0` arm!
-Failed Checks: shift distance too large
+Failed Checks: attempt to shift by excessive shift distance
 
 VERIFICATION:- FAILED (one or more global conditions failed)

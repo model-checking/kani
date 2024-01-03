@@ -14,6 +14,7 @@ use crate::args::StandaloneSubcommand;
 use crate::concrete_playback::playback::{playback_cargo, playback_standalone};
 use crate::project::Project;
 use crate::session::KaniSession;
+use crate::version::print_kani_version;
 use clap::Parser;
 use tracing::debug;
 
@@ -35,12 +36,15 @@ mod metadata;
 mod project;
 mod session;
 mod util;
+mod version;
 
 /// The main function for the `kani-driver`.
 /// The driver can be invoked via `cargo kani` and `kani` commands, which determines what kind of
 /// project should be verified.
 fn main() -> ExitCode {
-    let result = match determine_invocation_type(Vec::from_iter(std::env::args_os())) {
+    let invocation_type = determine_invocation_type(Vec::from_iter(std::env::args_os()));
+
+    let result = match invocation_type {
         InvocationType::CargoKani(args) => cargokani_main(args),
         InvocationType::Standalone => standalone_main(),
     };
@@ -59,9 +63,14 @@ fn main() -> ExitCode {
 /// The main function for the `cargo kani` command.
 fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     let input_args = join_args(input_args)?;
-    let args = args::CargoKaniArgs::parse_from(input_args);
+    let args = args::CargoKaniArgs::parse_from(&input_args);
     check_is_valid(&args);
+
     let session = session::KaniSession::new(args.verify_opts)?;
+
+    if !session.args.common_args.quiet {
+        print_kani_version(InvocationType::CargoKani(input_args));
+    }
 
     match args.command {
         Some(CargoKaniSubcommand::Assess(args)) => {
@@ -91,6 +100,11 @@ fn standalone_main() -> Result<()> {
     }
 
     let session = session::KaniSession::new(args.verify_opts)?;
+
+    if !session.args.common_args.quiet {
+        print_kani_version(InvocationType::Standalone);
+    }
+
     let project = project::standalone_project(&args.input.unwrap(), &session)?;
     if session.args.only_codegen { Ok(()) } else { verify_project(project, session) }
 }
@@ -116,7 +130,7 @@ enum InvocationType {
 
 /// Peeks at command line arguments to determine if we're being invoked as 'kani' or 'cargo-kani'
 fn determine_invocation_type(mut args: Vec<OsString>) -> InvocationType {
-    let exe = util::executable_basename(&args.get(0));
+    let exe = util::executable_basename(&args.first());
 
     // Case 1: if 'kani' is our first real argument, then we're being invoked as cargo-kani
     // 'cargo kani ...' will cause cargo to run 'cargo-kani kani ...' preserving argv1

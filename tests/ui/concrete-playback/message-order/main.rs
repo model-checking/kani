@@ -5,5 +5,5 @@
 
 #[kani::proof]
 fn dummy() {
-    kani::cover!(kani::any::<u32>() != 10);
+    kani::cover!(kani::any::<u32>() == 10);
 }

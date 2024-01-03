@@ -5,10 +5,9 @@
 
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::Location;
-use rustc_middle::mir::Body;
-use rustc_middle::ty::print::with_no_trimmed_paths;
-use rustc_middle::ty::Instance;
-use rustc_span::def_id::DefId;
+use stable_mir::mir::mono::Instance;
+use stable_mir::mir::Body;
+use stable_mir::CrateDef;
 use std::cell::RefCell;
 use std::panic;
 use std::sync::LazyLock;
@@ -56,37 +55,32 @@ static DEFAULT_HOOK: LazyLock<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send + 
 impl<'tcx> GotocCtx<'tcx> {
     // Calls the closure while updating the tracked global variable marking the
     // codegen item for panic debugging.
-    pub fn call_with_panic_debug_info<F: FnOnce(&mut GotocCtx<'tcx>)>(
+    pub fn call_with_panic_debug_info<D: CrateDef, F: FnOnce(&mut GotocCtx<'tcx>)>(
         &mut self,
         call: F,
         panic_debug: String,
-        def_id: DefId,
+        def: D,
     ) {
         CURRENT_CODEGEN_ITEM.with(|odb_cell| {
-            odb_cell
-                .replace((Some(panic_debug), Some(self.codegen_span(&self.tcx.def_span(def_id)))));
+            odb_cell.replace((Some(panic_debug), Some(self.codegen_span_stable(def.span()))));
             call(self);
             odb_cell.replace((None, None));
         });
     }
 
-    pub fn print_instance(&self, instance: Instance<'_>, mir: &'tcx Body<'tcx>) {
+    pub fn print_instance(&self, instance: Instance, body: &Body) {
         if cfg!(debug_assertions) {
-            debug!(
-                "handling {}, {}",
-                instance,
-                with_no_trimmed_paths!(self.tcx.def_path_str(instance.def_id()))
-            );
+            debug!("handling {}", instance.name(),);
             debug!("variables: ");
-            for l in mir.args_iter().chain(mir.vars_and_temps_iter()) {
-                debug!("let {:?}: {:?}", l, self.local_ty(l));
+            for (idx, decl) in body.locals().iter().enumerate() {
+                debug!("let _{idx}: {:?}", decl.ty);
             }
-            for (bb, bbd) in mir.basic_blocks.iter_enumerated() {
+            for (bb, bbd) in body.blocks.iter().enumerate() {
                 debug!("block {:?}", bb);
                 for stmt in &bbd.statements {
                     debug!("{:?}", stmt);
                 }
-                debug!("{:?}", bbd.terminator().kind);
+                debug!("{:?}", bbd.terminator.kind);
             }
         }
     }

@@ -26,6 +26,7 @@
   - [Coding conventions](./conventions.md)
   - [Working with CBMC](./cbmc-hacks.md)
   - [Working with `rustc`](./rustc-hacks.md)
+  - [Migrating to StableMIR](./stable-mir.md)
   - [Command cheat sheets](./cheat-sheets.md)
   - [cargo kani assess](./dev-assess.md)
   - [Testing](./testing.md)
@@ -35,7 +36,6 @@
   - [Performance comparisons](./performance-comparisons.md)
     - [`benchcomp` command line](./benchcomp-cli.md)
     - [`benchcomp` configuration file](./benchcomp-conf.md)
-    - [Custom visualizations](./benchcomp-viz.md)
     - [Custom parsers](./benchcomp-parse.md)
 
 - [Limitations](./limitations.md)

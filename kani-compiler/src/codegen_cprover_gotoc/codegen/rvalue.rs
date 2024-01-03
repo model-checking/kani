@@ -1,37 +1,39 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use super::typ::pointee_type;
-use crate::codegen_cprover_gotoc::codegen::place::{ProjectedPlace, TypeOrVariant};
+use crate::codegen_cprover_gotoc::codegen::place::ProjectedPlace;
+use crate::codegen_cprover_gotoc::codegen::ty_stable::pointee_type_stable;
 use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::codegen_cprover_gotoc::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use crate::kani_middle::coercion::{
-    extract_unsize_casting, CoerceUnsizedInfo, CoerceUnsizedIterator, CoercionBase,
+    extract_unsize_casting_stable, CoerceUnsizedInfo, CoerceUnsizedIterator, CoercionBaseStable,
 };
 use crate::unwrap_or_return_codegen_unimplemented;
 use cbmc::goto_program::{
-    arithmetic_overflow_result_type, BinaryOperator, Expr, Location, Stmt, Symbol, Type,
+    arithmetic_overflow_result_type, BinaryOperator, Expr, Location, Stmt, Type,
     ARITH_OVERFLOW_OVERFLOWED_FIELD, ARITH_OVERFLOW_RESULT_FIELD,
 };
 use cbmc::MachineModel;
 use cbmc::{btree_string_map, InternString, InternedString};
 use num::bigint::BigInt;
-use rustc_abi::FieldIdx;
-use rustc_index::IndexVec;
-use rustc_middle::mir::{AggregateKind, BinOp, CastKind, NullOp, Operand, Place, Rvalue, UnOp};
-use rustc_middle::ty::adjustment::PointerCast;
-use rustc_middle::ty::layout::LayoutOf;
-use rustc_middle::ty::{self, Instance, IntTy, Ty, TyCtxt, UintTy, VtblEntry};
-use rustc_target::abi::{FieldsShape, Size, TagEncoding, VariantIdx, Variants};
+use rustc_middle::ty::{TyCtxt, VtblEntry};
+use rustc_smir::rustc_internal;
+use rustc_target::abi::{FieldsShape, TagEncoding, Variants};
+use stable_mir::mir::mono::Instance;
+use stable_mir::mir::{
+    AggregateKind, BinOp, CastKind, NullOp, Operand, Place, PointerCoercion, Rvalue, UnOp,
+};
+use stable_mir::ty::{ClosureKind, Const, IntTy, RigidTy, Size, Ty, TyKind, UintTy, VariantIdx};
 use std::collections::BTreeMap;
 use tracing::{debug, trace, warn};
 
 impl<'tcx> GotocCtx<'tcx> {
-    fn codegen_comparison(&mut self, op: &BinOp, e1: &Operand<'tcx>, e2: &Operand<'tcx>) -> Expr {
-        let left_op = self.codegen_operand(e1);
-        let right_op = self.codegen_operand(e2);
-        let is_float = self.operand_ty(e1).is_floating_point();
+    fn codegen_comparison(&mut self, op: &BinOp, e1: &Operand, e2: &Operand) -> Expr {
+        let left_op = self.codegen_operand_stable(e1);
+        let right_op = self.codegen_operand_stable(e2);
+        let is_float =
+            matches!(self.operand_ty_stable(e1).kind(), TyKind::RigidTy(RigidTy::Float(..)));
         comparison_expr(op, left_op, right_op, is_float)
     }
 
@@ -45,17 +47,17 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_comparison_fat_ptr(
         &mut self,
         op: &BinOp,
-        left_op: &Operand<'tcx>,
-        right_op: &Operand<'tcx>,
+        left_op: &Operand,
+        right_op: &Operand,
         loc: Location,
     ) -> Expr {
         debug!(?op, ?left_op, ?right_op, "codegen_comparison_fat_ptr");
-        let left_typ = self.operand_ty(left_op);
-        let right_typ = self.operand_ty(left_op);
+        let left_typ = self.operand_ty_stable(left_op);
+        let right_typ = self.operand_ty_stable(left_op);
         assert_eq!(left_typ, right_typ, "Cannot compare pointers of different types");
-        assert!(self.is_fat_pointer(left_typ));
+        assert!(self.is_fat_pointer_stable(left_typ));
 
-        if self.is_vtable_fat_pointer(left_typ) {
+        if self.is_vtable_fat_pointer_stable(left_typ) {
             // Codegen an assertion failure since vtable comparison is not stable.
             let ret_type = Type::Bool;
             let body = vec![
@@ -70,9 +72,9 @@ impl<'tcx> GotocCtx<'tcx> {
             Expr::statement_expression(body, ret_type).with_location(loc)
         } else {
             // Compare data pointer.
-            let left_ptr = self.codegen_operand(left_op);
+            let left_ptr = self.codegen_operand_stable(left_op);
             let left_data = left_ptr.clone().member("data", &self.symbol_table);
-            let right_ptr = self.codegen_operand(right_op);
+            let right_ptr = self.codegen_operand_stable(right_op);
             let right_data = right_ptr.clone().member("data", &self.symbol_table);
             let data_cmp = comparison_expr(op, left_data.clone(), right_data.clone(), false);
 
@@ -102,34 +104,37 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    fn codegen_unchecked_scalar_binop(
-        &mut self,
-        op: &BinOp,
-        e1: &Operand<'tcx>,
-        e2: &Operand<'tcx>,
-    ) -> Expr {
-        let ce1 = self.codegen_operand(e1);
-        let ce2 = self.codegen_operand(e2);
+    fn codegen_unchecked_scalar_binop(&mut self, op: &BinOp, e1: &Operand, e2: &Operand) -> Expr {
+        let ce1 = self.codegen_operand_stable(e1);
+        let ce2 = self.codegen_operand_stable(e2);
         match op {
             BinOp::BitAnd => ce1.bitand(ce2),
             BinOp::BitOr => ce1.bitor(ce2),
             BinOp::BitXor => ce1.bitxor(ce2),
             BinOp::Div => ce1.div(ce2),
             BinOp::Rem => ce1.rem(ce2),
+            BinOp::ShlUnchecked => ce1.shl(ce2),
+            BinOp::ShrUnchecked => {
+                if self.operand_ty_stable(e1).kind().is_signed() {
+                    ce1.ashr(ce2)
+                } else {
+                    ce1.lshr(ce2)
+                }
+            }
             _ => unreachable!("Unexpected {:?}", op),
         }
     }
 
-    fn codegen_scalar_binop(&mut self, op: &BinOp, e1: &Operand<'tcx>, e2: &Operand<'tcx>) -> Expr {
-        let ce1 = self.codegen_operand(e1);
-        let ce2 = self.codegen_operand(e2);
+    fn codegen_scalar_binop(&mut self, op: &BinOp, e1: &Operand, e2: &Operand) -> Expr {
+        let ce1 = self.codegen_operand_stable(e1);
+        let ce2 = self.codegen_operand_stable(e2);
         match op {
             BinOp::Add => ce1.plus(ce2),
             BinOp::Sub => ce1.sub(ce2),
             BinOp::Mul => ce1.mul(ce2),
             BinOp::Shl => ce1.shl(ce2),
             BinOp::Shr => {
-                if self.operand_ty(e1).is_signed() {
+                if self.operand_ty_stable(e1).kind().is_signed() {
                     ce1.ashr(ce2)
                 } else {
                     ce1.lshr(ce2)
@@ -140,27 +145,70 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Codegens expressions of the type `let a  = [4u8; 6];`
-    fn codegen_rvalue_repeat(
-        &mut self,
-        op: &Operand<'tcx>,
-        sz: ty::Const<'tcx>,
-        loc: Location,
-    ) -> Expr {
-        let op_expr = self.codegen_operand(op);
-        let width = sz.try_eval_target_usize(self.tcx, ty::ParamEnv::reveal_all()).unwrap();
+    fn codegen_rvalue_repeat(&mut self, op: &Operand, sz: &Const, loc: Location) -> Expr {
+        let op_expr = self.codegen_operand_stable(op);
+        let width = sz.eval_target_usize().unwrap();
         op_expr.array_constant(width).with_location(loc)
     }
 
-    fn codegen_rvalue_len(&mut self, p: &Place<'tcx>) -> Expr {
-        let pt = self.place_ty(p);
+    fn codegen_rvalue_len(&mut self, p: &Place) -> Expr {
+        let pt = self.place_ty_stable(p);
         match pt.kind() {
-            ty::Array(_, sz) => self.codegen_const(*sz, None),
-            ty::Slice(_) => unwrap_or_return_codegen_unimplemented!(self, self.codegen_place(p))
-                .fat_ptr_goto_expr
-                .unwrap()
-                .member("len", &self.symbol_table),
+            TyKind::RigidTy(RigidTy::Array(_, sz)) => self.codegen_const(&sz, None),
+            TyKind::RigidTy(RigidTy::Slice(_)) => {
+                unwrap_or_return_codegen_unimplemented!(self, self.codegen_place_stable(p))
+                    .fat_ptr_goto_expr
+                    .unwrap()
+                    .member("len", &self.symbol_table)
+            }
             _ => unreachable!("Len(_) called on type that has no length: {:?}", pt),
         }
+    }
+
+    /// Generate code for a binary operation with an overflow check.
+    fn codegen_binop_with_overflow_check(
+        &mut self,
+        op: &BinOp,
+        left_op: &Operand,
+        right_op: &Operand,
+        loc: Location,
+    ) -> Expr {
+        debug!(?op, "codegen_binop_with_overflow_check");
+        let left = self.codegen_operand_stable(left_op);
+        let right = self.codegen_operand_stable(right_op);
+        let ret_type = left.typ().clone();
+        let (bin_op, op_name) = match op {
+            BinOp::AddUnchecked => (BinaryOperator::OverflowResultPlus, "unchecked_add"),
+            BinOp::SubUnchecked => (BinaryOperator::OverflowResultMinus, "unchecked_sub"),
+            BinOp::MulUnchecked => (BinaryOperator::OverflowResultMult, "unchecked_mul"),
+            _ => unreachable!("Expected Add/Sub/Mul but got {op:?}"),
+        };
+        // Create CBMC result type and add to the symbol table.
+        let res_type = arithmetic_overflow_result_type(left.typ().clone());
+        let tag = res_type.tag().unwrap();
+        let struct_tag =
+            self.ensure_struct(tag, tag, |_, _| res_type.components().unwrap().clone());
+        let res = left.overflow_op(bin_op, right);
+        // store the result in a temporary variable
+        let (var, decl) = self.decl_temp_variable(struct_tag, Some(res), loc);
+        // cast into result type
+        let check = self.codegen_assert(
+            var.clone()
+                .member(ARITH_OVERFLOW_OVERFLOWED_FIELD, &self.symbol_table)
+                .cast_to(Type::c_bool())
+                .not(),
+            PropertyClass::ArithmeticOverflow,
+            format!("attempt to compute `{op_name}` which would overflow").as_str(),
+            loc,
+        );
+        Expr::statement_expression(
+            vec![
+                decl,
+                check,
+                var.member(ARITH_OVERFLOW_RESULT_FIELD, &self.symbol_table).as_stmt(loc),
+            ],
+            ret_type,
+        )
     }
 
     /// Generate code for a binary operation with an overflow and returns a tuple (res, overflow).
@@ -197,16 +245,16 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_rvalue_checked_binary_op(
         &mut self,
         op: &BinOp,
-        e1: &Operand<'tcx>,
-        e2: &Operand<'tcx>,
-        res_ty: Ty<'tcx>,
+        e1: &Operand,
+        e2: &Operand,
+        res_ty: Ty,
     ) -> Expr {
-        let ce1 = self.codegen_operand(e1);
-        let ce2 = self.codegen_operand(e2);
+        let ce1 = self.codegen_operand_stable(e1);
+        let ce2 = self.codegen_operand_stable(e2);
 
-        fn shift_max(t: Ty<'_>, mm: &MachineModel) -> Expr {
+        fn shift_max(t: Ty, mm: &MachineModel) -> Expr {
             match t.kind() {
-                ty::Int(k) => match k {
+                TyKind::RigidTy(RigidTy::Int(k)) => match k {
                     IntTy::I8 => Expr::int_constant(7, Type::signed_int(8)),
                     IntTy::I16 => Expr::int_constant(15, Type::signed_int(16)),
                     IntTy::I32 => Expr::int_constant(31, Type::signed_int(32)),
@@ -214,7 +262,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     IntTy::I128 => Expr::int_constant(127, Type::signed_int(128)),
                     IntTy::Isize => Expr::int_constant(mm.pointer_width - 1, Type::ssize_t()),
                 },
-                ty::Uint(k) => match k {
+                TyKind::RigidTy(RigidTy::Uint(k)) => match k {
                     UintTy::U8 => Expr::int_constant(7, Type::unsigned_int(8)),
                     UintTy::U16 => Expr::int_constant(15, Type::unsigned_int(16)),
                     UintTy::U32 => Expr::int_constant(31, Type::unsigned_int(32)),
@@ -228,7 +276,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         match op {
             BinOp::Add => {
-                let res_type = self.codegen_ty(res_ty);
+                let res_type = self.codegen_ty_stable(res_ty);
                 self.codegen_binop_with_overflow(
                     BinaryOperator::OverflowResultPlus,
                     ce1,
@@ -238,7 +286,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 )
             }
             BinOp::Sub => {
-                let res_type = self.codegen_ty(res_ty);
+                let res_type = self.codegen_ty_stable(res_ty);
                 self.codegen_binop_with_overflow(
                     BinaryOperator::OverflowResultMinus,
                     ce1,
@@ -248,7 +296,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 )
             }
             BinOp::Mul => {
-                let res_type = self.codegen_ty(res_ty);
+                let res_type = self.codegen_ty_stable(res_ty);
                 self.codegen_binop_with_overflow(
                     BinaryOperator::OverflowResultMult,
                     ce1,
@@ -258,25 +306,29 @@ impl<'tcx> GotocCtx<'tcx> {
                 )
             }
             BinOp::Shl => {
-                let t1 = self.operand_ty(e1);
+                let t1 = self.operand_ty_stable(e1);
                 let max = shift_max(t1, self.symbol_table.machine_model());
                 Expr::struct_expr_from_values(
-                    self.codegen_ty(res_ty),
+                    self.codegen_ty_stable(res_ty),
                     vec![
                         ce1.shl(ce2.clone()),
-                        ce2.cast_to(self.codegen_ty(t1)).gt(max).cast_to(Type::c_bool()),
+                        ce2.cast_to(self.codegen_ty_stable(t1)).gt(max).cast_to(Type::c_bool()),
                     ],
                     &self.symbol_table,
                 )
             }
             BinOp::Shr => {
-                let t1 = self.operand_ty(e1);
+                let t1 = self.operand_ty_stable(e1);
                 let max = shift_max(t1, self.symbol_table.machine_model());
                 Expr::struct_expr_from_values(
-                    self.codegen_ty(res_ty),
+                    self.codegen_ty_stable(res_ty),
                     vec![
-                        if t1.is_signed() { ce1.ashr(ce2.clone()) } else { ce1.lshr(ce2.clone()) },
-                        ce2.cast_to(self.codegen_ty(t1)).gt(max).cast_to(Type::c_bool()),
+                        if t1.kind().is_signed() {
+                            ce1.ashr(ce2.clone())
+                        } else {
+                            ce1.lshr(ce2.clone())
+                        },
+                        ce2.cast_to(self.codegen_ty_stable(t1)).gt(max).cast_to(Type::c_bool()),
                     ],
                     &self.symbol_table,
                 )
@@ -287,21 +339,46 @@ impl<'tcx> GotocCtx<'tcx> {
 
     fn codegen_rvalue_binary_op(
         &mut self,
-        ty: Ty<'tcx>,
+        ty: Ty,
         op: &BinOp,
-        e1: &Operand<'tcx>,
-        e2: &Operand<'tcx>,
+        e1: &Operand,
+        e2: &Operand,
         loc: Location,
     ) -> Expr {
         match op {
             BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Shl | BinOp::Shr => {
                 self.codegen_scalar_binop(op, e1, e2)
             }
-            BinOp::Div | BinOp::Rem | BinOp::BitXor | BinOp::BitAnd | BinOp::BitOr => {
+            BinOp::ShlUnchecked | BinOp::ShrUnchecked => {
+                let result = self.codegen_unchecked_scalar_binop(op, e1, e2);
+                let check = self.check_unchecked_shift_distance(e1, e2, loc);
+                Expr::statement_expression(
+                    vec![check, result.clone().as_stmt(loc)],
+                    result.typ().clone(),
+                )
+            }
+            BinOp::AddUnchecked | BinOp::MulUnchecked | BinOp::SubUnchecked => {
+                self.codegen_binop_with_overflow_check(op, e1, e2, loc)
+            }
+            BinOp::Div | BinOp::Rem => {
+                let result = self.codegen_unchecked_scalar_binop(op, e1, e2);
+                if self.operand_ty_stable(e1).kind().is_integral() {
+                    let is_rem = matches!(op, BinOp::Rem);
+                    let check = self.check_div_overflow(e1, e2, is_rem, loc);
+                    Expr::statement_expression(
+                        vec![check, result.clone().as_stmt(loc)],
+                        result.typ().clone(),
+                    )
+                } else {
+                    result
+                }
+            }
+            BinOp::BitXor | BinOp::BitAnd | BinOp::BitOr => {
                 self.codegen_unchecked_scalar_binop(op, e1, e2)
             }
             BinOp::Eq | BinOp::Lt | BinOp::Le | BinOp::Ne | BinOp::Ge | BinOp::Gt => {
-                if self.is_fat_pointer(self.operand_ty(e1)) {
+                let op_ty = self.operand_ty_stable(e1);
+                if self.is_fat_pointer_stable(op_ty) {
                     self.codegen_comparison_fat_ptr(op, e1, e2, loc)
                 } else {
                     self.codegen_comparison(op, e1, e2)
@@ -309,8 +386,8 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             // https://doc.rust-lang.org/std/primitive.pointer.html#method.offset
             BinOp::Offset => {
-                let ce1 = self.codegen_operand(e1);
-                let ce2 = self.codegen_operand(e2);
+                let ce1 = self.codegen_operand_stable(e1);
+                let ce2 = self.codegen_operand_stable(e2);
 
                 // Check that computing `offset` in bytes would not overflow
                 let (offset_bytes, bytes_overflow_check) = self.count_in_bytes(
@@ -341,20 +418,96 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    /// Create an initializer for a generator struct.
-    fn codegen_rvalue_generator(
+    /// Check that a division does not overflow.
+    /// For integer types, division by zero is UB, as is MIN / -1 for signed.
+    /// Note that the compiler already inserts these checks for regular division.
+    /// However, since <https://github.com/rust-lang/rust/pull/112168>, unchecked divisions are
+    /// lowered to `BinOp::Div`. Prefer adding duplicated checks for now.
+    fn check_div_overflow(
         &mut self,
-        operands: &IndexVec<FieldIdx, Operand<'tcx>>,
-        ty: Ty<'tcx>,
-    ) -> Expr {
-        let layout = self.layout_of(ty);
+        dividend: &Operand,
+        divisor: &Operand,
+        is_remainder: bool,
+        loc: Location,
+    ) -> Stmt {
+        let divisor_expr = self.codegen_operand_stable(divisor);
+        let msg = if is_remainder {
+            "attempt to calculate the remainder with a divisor of zero"
+        } else {
+            "attempt to divide by zero"
+        };
+        let div_by_zero_check = self.codegen_assert_assume(
+            divisor_expr.clone().is_zero().not(),
+            PropertyClass::ArithmeticOverflow,
+            msg,
+            loc,
+        );
+        if self.operand_ty_stable(dividend).kind().is_signed() {
+            let dividend_expr = self.codegen_operand_stable(dividend);
+            let overflow_msg = if is_remainder {
+                "attempt to calculate the remainder with overflow"
+            } else {
+                "attempt to divide with overflow"
+            };
+            let overflow_expr = dividend_expr
+                .clone()
+                .eq(dividend_expr.typ().min_int_expr(self.symbol_table.machine_model()))
+                .and(divisor_expr.clone().eq(Expr::int_constant(-1, divisor_expr.typ().clone())));
+            let overflow_check = self.codegen_assert_assume(
+                overflow_expr.not(),
+                PropertyClass::ArithmeticOverflow,
+                overflow_msg,
+                loc,
+            );
+            Stmt::block(vec![overflow_check, div_by_zero_check], loc)
+        } else {
+            div_by_zero_check
+        }
+    }
+
+    /// Check for valid unchecked shift distance.
+    /// Shifts on an integer of type T are UB if shift distance < 0 or >= T::BITS.
+    fn check_unchecked_shift_distance(
+        &mut self,
+        value: &Operand,
+        distance: &Operand,
+        loc: Location,
+    ) -> Stmt {
+        let value_expr = self.codegen_operand_stable(value);
+        let distance_expr = self.codegen_operand_stable(distance);
+        let value_width = value_expr.typ().sizeof_in_bits(&self.symbol_table);
+        let value_width_expr = Expr::int_constant(value_width, distance_expr.typ().clone());
+
+        let excessive_distance_check = self.codegen_assert_assume(
+            distance_expr.clone().lt(value_width_expr),
+            PropertyClass::ArithmeticOverflow,
+            "attempt to shift by excessive shift distance",
+            loc,
+        );
+
+        if distance_expr.typ().is_signed(self.symbol_table.machine_model()) {
+            let negative_distance_check = self.codegen_assert_assume(
+                distance_expr.is_non_negative(),
+                PropertyClass::ArithmeticOverflow,
+                "attempt to shift by negative distance",
+                loc,
+            );
+            Stmt::block(vec![negative_distance_check, excessive_distance_check], loc)
+        } else {
+            excessive_distance_check
+        }
+    }
+
+    /// Create an initializer for a coroutine struct.
+    fn codegen_rvalue_coroutine(&mut self, operands: &[Operand], ty: Ty) -> Expr {
+        let layout = self.layout_of_stable(ty);
         let discriminant_field = match &layout.variants {
             Variants::Multiple { tag_encoding: TagEncoding::Direct, tag_field, .. } => tag_field,
             _ => unreachable!(
-                "Expected generators to have multiple variants and direct encoding, but found: {layout:?}"
+                "Expected coroutines to have multiple variants and direct encoding, but found: {layout:?}"
             ),
         };
-        let overall_t = self.codegen_ty(ty);
+        let overall_t = self.codegen_ty_stable(ty);
         let direct_fields = overall_t.lookup_field("direct_fields", &self.symbol_table).unwrap();
         let direct_fields_expr = Expr::struct_expr_from_values(
             direct_fields.typ(),
@@ -366,7 +519,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     if idx == *discriminant_field {
                         Expr::int_constant(0, self.codegen_ty(field_ty))
                     } else {
-                        self.codegen_operand(&operands[idx.into()])
+                        self.codegen_operand_stable(&operands[idx])
                     }
                 })
                 .collect(),
@@ -383,32 +536,26 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_rvalue_enum_aggregate(
         &mut self,
         variant_index: VariantIdx,
-        operands: &IndexVec<FieldIdx, Operand<'tcx>>,
-        res_ty: Ty<'tcx>,
+        operands: &[Operand],
+        res_ty: Ty,
         loc: Location,
     ) -> Expr {
         let mut stmts = vec![];
-        let typ = self.codegen_ty(res_ty);
+        let typ = self.codegen_ty_stable(res_ty);
         // 1- Create a temporary value of the enum type.
         tracing::debug!(?typ, ?res_ty, "aggregate_enum");
         let (temp_var, decl) = self.decl_temp_variable(typ.clone(), None, loc);
         stmts.push(decl);
         if !operands.is_empty() {
             // 2- Initialize the members of the temporary variant.
-            let initial_projection = ProjectedPlace::try_new(
-                temp_var.clone(),
-                TypeOrVariant::Type(res_ty),
-                None,
-                None,
-                self,
-            )
-            .unwrap();
+            let initial_projection =
+                ProjectedPlace::try_from_ty(temp_var.clone(), res_ty, self).unwrap();
             let variant_proj = self.codegen_variant_lvalue(initial_projection, variant_index);
             let variant_expr = variant_proj.goto_expr.clone();
-            let layout = self.layout_of(res_ty);
+            let layout = self.layout_of_stable(res_ty);
             let fields = match &layout.variants {
                 Variants::Single { index } => {
-                    if *index != variant_index {
+                    if *index != rustc_internal::internal(variant_index) {
                         // This may occur if all variants except for the one pointed by
                         // index can never be constructed. Generic code might still try
                         // to initialize the non-existing invariant.
@@ -417,7 +564,9 @@ impl<'tcx> GotocCtx<'tcx> {
                     }
                     &layout.fields
                 }
-                Variants::Multiple { variants, .. } => &variants[variant_index].fields,
+                Variants::Multiple { variants, .. } => {
+                    &variants[rustc_internal::internal(variant_index)].fields
+                }
             };
 
             trace!(?variant_expr, ?fields, ?operands, "codegen_aggregate enum");
@@ -425,7 +574,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 variant_expr.typ().clone(),
                 fields
                     .index_by_increasing_offset()
-                    .map(|idx| self.codegen_operand(&operands[idx.into()]))
+                    .map(|idx| self.codegen_operand_stable(&operands[idx]))
                     .collect(),
                 &self.symbol_table,
             );
@@ -443,80 +592,84 @@ impl<'tcx> GotocCtx<'tcx> {
 
     fn codegen_rvalue_aggregate(
         &mut self,
-        aggregate: &AggregateKind<'tcx>,
-        operands: &IndexVec<FieldIdx, Operand<'tcx>>,
-        res_ty: Ty<'tcx>,
+        aggregate: &AggregateKind,
+        operands: &[Operand],
+        res_ty: Ty,
         loc: Location,
     ) -> Expr {
         match *aggregate {
             AggregateKind::Array(_et) => {
-                let typ = self.codegen_ty(res_ty);
-                Expr::array_expr(typ, operands.iter().map(|o| self.codegen_operand(o)).collect())
+                let typ = self.codegen_ty_stable(res_ty);
+                Expr::array_expr(
+                    typ,
+                    operands.iter().map(|o| self.codegen_operand_stable(o)).collect(),
+                )
             }
             AggregateKind::Adt(_, _, _, _, Some(active_field_index)) => {
-                assert!(res_ty.is_union());
+                assert!(res_ty.kind().is_union());
                 assert_eq!(operands.len(), 1);
-                let typ = self.codegen_ty(res_ty);
+                let typ = self.codegen_ty_stable(res_ty);
                 let components = typ.lookup_components(&self.symbol_table).unwrap();
                 Expr::union_expr(
                     typ,
-                    components[active_field_index.as_usize()].name(),
-                    self.codegen_operand(&operands[0usize.into()]),
+                    components[active_field_index].name(),
+                    self.codegen_operand_stable(&operands[0usize]),
                     &self.symbol_table,
                 )
             }
-            AggregateKind::Adt(_, _, _, _, _) if res_ty.is_simd() => {
-                let typ = self.codegen_ty(res_ty);
-                let layout = self.layout_of(res_ty);
-                let vector_element_type = typ.base_type().unwrap().clone();
-                Expr::vector_expr(
-                    typ,
-                    layout
-                        .fields
-                        .index_by_increasing_offset()
-                        .map(|idx| {
-                            let cgo = self.codegen_operand(&operands[idx.into()]);
-                            // The input operand might actually be a one-element array, as seen
-                            // when running assess on firecracker.
-                            if *cgo.typ() == vector_element_type {
-                                cgo
-                            } else {
-                                cgo.transmute_to(vector_element_type.clone(), &self.symbol_table)
-                            }
-                        })
-                        .collect(),
-                )
+            AggregateKind::Adt(_, _, _, _, _) if res_ty.kind().is_simd() => {
+                let typ = self.codegen_ty_stable(res_ty);
+                let layout = self.layout_of_stable(res_ty);
+                trace!(shape=?layout.fields, "codegen_rvalue_aggregate");
+                assert!(!operands.is_empty(), "SIMD vector cannot be empty");
+                if operands.len() == 1 {
+                    let data = self.codegen_operand_stable(&operands[0]);
+                    if data.typ().is_array() {
+                        // Array-based SIMD representation.
+                        data.transmute_to(typ, &self.symbol_table)
+                    } else {
+                        // Multi field-based representation with one field.
+                        Expr::vector_expr(typ, vec![data])
+                    }
+                } else {
+                    // Multi field SIMD representation.
+                    Expr::vector_expr(
+                        typ,
+                        layout
+                            .fields
+                            .index_by_increasing_offset()
+                            .map(|idx| self.codegen_operand_stable(&operands[idx]))
+                            .collect(),
+                    )
+                }
             }
-            AggregateKind::Adt(_, variant_index, ..) if res_ty.is_enum() => {
+            AggregateKind::Adt(_, variant_index, ..) if res_ty.kind().is_enum() => {
                 self.codegen_rvalue_enum_aggregate(variant_index, operands, res_ty, loc)
             }
             AggregateKind::Adt(..) | AggregateKind::Closure(..) | AggregateKind::Tuple => {
-                let typ = self.codegen_ty(res_ty);
-                let layout = self.layout_of(res_ty);
+                let typ = self.codegen_ty_stable(res_ty);
+                let layout = self.layout_of_stable(res_ty);
                 Expr::struct_expr_from_values(
                     typ,
                     layout
                         .fields
                         .index_by_increasing_offset()
-                        .map(|idx| self.codegen_operand(&operands[idx.into()]))
+                        .map(|idx| self.codegen_operand_stable(&operands[idx]))
                         .collect(),
                     &self.symbol_table,
                 )
             }
-            AggregateKind::Generator(_, _, _) => self.codegen_rvalue_generator(&operands, res_ty),
+            AggregateKind::Coroutine(_, _, _) => self.codegen_rvalue_coroutine(&operands, res_ty),
         }
     }
 
-    pub fn codegen_rvalue(&mut self, rv: &Rvalue<'tcx>, loc: Location) -> Expr {
-        let res_ty = self.rvalue_ty(rv);
-        debug!(?rv, "codegen_rvalue");
+    pub fn codegen_rvalue_stable(&mut self, rv: &Rvalue, loc: Location) -> Expr {
+        let res_ty = self.rvalue_ty_stable(rv);
+        debug!(?rv, ?res_ty, "codegen_rvalue");
         match rv {
-            Rvalue::Use(p) => self.codegen_operand(p),
-            Rvalue::Repeat(op, sz) => {
-                let sz = self.monomorphize(*sz);
-                self.codegen_rvalue_repeat(op, sz, loc)
-            }
-            Rvalue::Ref(_, _, p) | Rvalue::AddressOf(_, p) => self.codegen_place_ref(p),
+            Rvalue::Use(p) => self.codegen_operand_stable(p),
+            Rvalue::Repeat(op, sz) => self.codegen_rvalue_repeat(op, sz, loc),
+            Rvalue::Ref(_, _, p) | Rvalue::AddressOf(_, p) => self.codegen_place_ref_stable(&p),
             Rvalue::Len(p) => self.codegen_rvalue_len(p),
             // Rust has begun distinguishing "ptr -> num" and "num -> ptr" (providence-relevant casts) but we do not yet:
             // Should we? Tracking ticket: https://github.com/model-checking/kani/issues/1274
@@ -531,12 +684,9 @@ impl<'tcx> GotocCtx<'tcx> {
                 | CastKind::PointerFromExposedAddress,
                 e,
                 t,
-            ) => {
-                let t = self.monomorphize(*t);
-                self.codegen_misc_cast(e, t)
-            }
+            ) => self.codegen_misc_cast(e, *t),
             Rvalue::Cast(CastKind::DynStar, _, _) => {
-                let ty = self.codegen_ty(res_ty);
+                let ty = self.codegen_ty_stable(res_ty);
                 self.codegen_unimplemented_expr(
                     "CastKind::DynStar",
                     ty,
@@ -544,29 +694,32 @@ impl<'tcx> GotocCtx<'tcx> {
                     "https://github.com/model-checking/kani/issues/1784",
                 )
             }
-            Rvalue::Cast(CastKind::Pointer(k), e, t) => {
-                let t = self.monomorphize(*t);
-                self.codegen_pointer_cast(k, e, t, loc)
+            Rvalue::Cast(CastKind::PointerCoercion(k), e, t) => {
+                self.codegen_pointer_cast(k, e, *t, loc)
             }
             Rvalue::Cast(CastKind::Transmute, operand, ty) => {
-                let goto_typ = self.codegen_ty(self.monomorphize(*ty));
-                self.codegen_operand(operand).transmute_to(goto_typ, &self.symbol_table)
+                let goto_typ = self.codegen_ty_stable(*ty);
+                self.codegen_operand_stable(operand).transmute_to(goto_typ, &self.symbol_table)
             }
-            Rvalue::BinaryOp(op, box (ref e1, ref e2)) => {
-                self.codegen_rvalue_binary_op(res_ty, op, e1, e2, loc)
-            }
-            Rvalue::CheckedBinaryOp(op, box (ref e1, ref e2)) => {
+            Rvalue::BinaryOp(op, e1, e2) => self.codegen_rvalue_binary_op(res_ty, op, e1, e2, loc),
+            Rvalue::CheckedBinaryOp(op, e1, e2) => {
                 self.codegen_rvalue_checked_binary_op(op, e1, e2, res_ty)
             }
             Rvalue::NullaryOp(k, t) => {
-                let t = self.monomorphize(*t);
-                let layout = self.layout_of(t);
+                let layout = self.layout_of_stable(*t);
                 match k {
                     NullOp::SizeOf => Expr::int_constant(layout.size.bytes_usize(), Type::size_t())
-                        .with_size_of_annotation(self.codegen_ty(t)),
+                        .with_size_of_annotation(self.codegen_ty_stable(*t)),
                     NullOp::AlignOf => Expr::int_constant(layout.align.abi.bytes(), Type::size_t()),
                     NullOp::OffsetOf(fields) => Expr::int_constant(
-                        layout.offset_of_subfield(self, fields.iter().map(|f| f.index())).bytes(),
+                        layout
+                            .offset_of_subfield(
+                                self,
+                                fields.iter().map(|(var_idx, field_idx)| {
+                                    (rustc_internal::internal(var_idx), (*field_idx).into())
+                                }),
+                            )
+                            .bytes(),
                         Type::size_t(),
                     ),
                 }
@@ -574,28 +727,28 @@ impl<'tcx> GotocCtx<'tcx> {
             Rvalue::ShallowInitBox(ref operand, content_ty) => {
                 // The behaviour of ShallowInitBox is simply transmuting *mut u8 to Box<T>.
                 // See https://github.com/rust-lang/compiler-team/issues/460 for more details.
-                let operand = self.codegen_operand(operand);
-                let t = self.monomorphize(*content_ty);
-                let box_ty = self.tcx.mk_box(t);
-                let box_ty = self.codegen_ty(box_ty);
-                let cbmc_t = self.codegen_ty(t);
+                let operand = self.codegen_operand_stable(operand);
+                let box_ty = Ty::new_box(*content_ty);
+                let box_ty = self.codegen_ty_stable(box_ty);
+                let cbmc_t = self.codegen_ty_stable(*content_ty);
                 let box_contents = operand.cast_to(cbmc_t.to_pointer());
                 self.box_value(box_contents, box_ty)
             }
             Rvalue::UnaryOp(op, e) => match op {
                 UnOp::Not => {
-                    if self.operand_ty(e).is_bool() {
-                        self.codegen_operand(e).not()
+                    if self.operand_ty_stable(e).kind().is_bool() {
+                        self.codegen_operand_stable(e).not()
                     } else {
-                        self.codegen_operand(e).bitnot()
+                        self.codegen_operand_stable(e).bitnot()
                     }
                 }
-                UnOp::Neg => self.codegen_operand(e).neg(),
+                UnOp::Neg => self.codegen_operand_stable(e).neg(),
             },
             Rvalue::Discriminant(p) => {
                 let place =
-                    unwrap_or_return_codegen_unimplemented!(self, self.codegen_place(p)).goto_expr;
-                let pt = self.place_ty(p);
+                    unwrap_or_return_codegen_unimplemented!(self, self.codegen_place_stable(p))
+                        .goto_expr;
+                let pt = self.place_ty_stable(p);
                 self.codegen_get_discriminant(place, pt, res_ty)
             }
             Rvalue::Aggregate(ref k, operands) => {
@@ -604,18 +757,19 @@ impl<'tcx> GotocCtx<'tcx> {
             Rvalue::ThreadLocalRef(def_id) => {
                 // Since Kani is single-threaded, we treat a thread local like a static variable:
                 self.store_concurrent_construct("thread local (replaced by static variable)", loc);
-                self.codegen_static_pointer(*def_id, true)
+                self.codegen_thread_local_pointer(*def_id)
             }
             // A CopyForDeref is equivalent to a read from a place at the codegen level.
             // https://github.com/rust-lang/rust/blob/1673f1450eeaf4a5452e086db0fe2ae274a0144f/compiler/rustc_middle/src/mir/syntax.rs#L1055
             Rvalue::CopyForDeref(place) => {
-                unwrap_or_return_codegen_unimplemented!(self, self.codegen_place(place)).goto_expr
+                unwrap_or_return_codegen_unimplemented!(self, self.codegen_place_stable(place))
+                    .goto_expr
             }
         }
     }
 
-    pub fn codegen_discriminant_field(&self, place: Expr, ty: Ty<'tcx>) -> Expr {
-        let layout = self.layout_of(ty);
+    pub fn codegen_discriminant_field(&self, place: Expr, ty: Ty) -> Expr {
+        let layout = self.layout_of_stable(ty);
         assert!(
             matches!(
                 &layout.variants,
@@ -623,8 +777,8 @@ impl<'tcx> GotocCtx<'tcx> {
             ),
             "discriminant field (`case`) only exists for multiple variants and direct encoding"
         );
-        let expr = if ty.is_generator() {
-            // Generators are translated somewhat differently from enums (see [`GotoCtx::codegen_ty_generator`]).
+        let expr = if ty.kind().is_coroutine() {
+            // Coroutines are translated somewhat differently from enums (see [`GotoCtx::codegen_ty_coroutine`]).
             // As a consequence, the discriminant is accessed as `.direct_fields.case` instead of just `.case`.
             place.member("direct_fields", &self.symbol_table)
         } else {
@@ -635,19 +789,19 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// e: ty
     /// get the discriminant of e, of type res_ty
-    pub fn codegen_get_discriminant(&mut self, e: Expr, ty: Ty<'tcx>, res_ty: Ty<'tcx>) -> Expr {
-        let layout = self.layout_of(ty);
+    pub fn codegen_get_discriminant(&mut self, e: Expr, ty: Ty, res_ty: Ty) -> Expr {
+        let layout = self.layout_of_stable(ty);
         match &layout.variants {
             Variants::Single { index } => {
                 let discr_val = layout
                     .ty
                     .discriminant_for_variant(self.tcx, *index)
                     .map_or(index.as_u32() as u128, |discr| discr.val);
-                Expr::int_constant(discr_val, self.codegen_ty(res_ty))
+                Expr::int_constant(discr_val, self.codegen_ty_stable(res_ty))
             }
             Variants::Multiple { tag_encoding, .. } => match tag_encoding {
                 TagEncoding::Direct => {
-                    self.codegen_discriminant_field(e, ty).cast_to(self.codegen_ty(res_ty))
+                    self.codegen_discriminant_field(e, ty).cast_to(self.codegen_ty_stable(res_ty))
                 }
                 TagEncoding::Niche { untagged_variant, niche_variants, niche_start } => {
                     // This code follows the logic in the ssa codegen backend:
@@ -667,10 +821,10 @@ impl<'tcx> GotocCtx<'tcx> {
                     // https://github.com/rust-lang/rust/blob/fee75fbe11b1fad5d93c723234178b2a329a3c03/compiler/rustc_codegen_ssa/src/mir/place.rs#L247
                     //
                     // Note: niche_variants can only represent values that fit in a u32.
-                    let result_type = self.codegen_ty(res_ty);
-                    let discr_mir_ty = self.codegen_enum_discr_typ(ty);
-                    let discr_type = self.codegen_ty(discr_mir_ty);
-                    let niche_val = self.codegen_get_niche(e, offset, discr_type);
+                    let result_type = self.codegen_ty_stable(res_ty);
+                    let discr_mir_ty = self.codegen_enum_discr_typ_stable(ty);
+                    let discr_type = self.codegen_ty_stable(discr_mir_ty);
+                    let niche_val = self.codegen_get_niche(e, offset.bytes() as usize, discr_type);
                     let relative_discr =
                         wrapping_sub(&niche_val, u64::try_from(*niche_start).unwrap());
                     let relative_max =
@@ -704,23 +858,25 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Extract the niche value from `v`. This value should be of type `niche_ty` and located
     /// at byte offset `offset`
+    ///
+    /// The `offset` in bytes of the niche value.
     pub fn codegen_get_niche(&self, v: Expr, offset: Size, niche_ty: Type) -> Expr {
-        if offset == Size::ZERO {
+        if offset == 0 {
             v.reinterpret_cast(niche_ty)
         } else {
             v // t: T
                 .address_of() // &t: T*
                 .cast_to(Type::unsigned_int(8).to_pointer()) // (u8 *)&t: u8 *
-                .plus(Expr::int_constant(offset.bytes(), Type::size_t())) // ((u8 *)&t) + offset: u8 *
+                .plus(Expr::int_constant(offset, Type::size_t())) // ((u8 *)&t) + offset: u8 *
                 .cast_to(niche_ty.to_pointer()) // (N *)(((u8 *)&t) + offset): N *
                 .dereference() // *(N *)(((u8 *)&t) + offset): N
         }
     }
 
-    fn codegen_fat_ptr_to_fat_ptr_cast(&mut self, src: &Operand<'tcx>, dst_t: Ty<'tcx>) -> Expr {
+    fn codegen_fat_ptr_to_fat_ptr_cast(&mut self, src: &Operand, dst_t: Ty) -> Expr {
         debug!("codegen_fat_ptr_to_fat_ptr_cast |{:?}| |{:?}|", src, dst_t);
-        let src_goto_expr = self.codegen_operand(src);
-        let dst_goto_typ = self.codegen_ty(dst_t);
+        let src_goto_expr = self.codegen_operand_stable(src);
+        let dst_goto_typ = self.codegen_ty_stable(dst_t);
         let dst_data_type = dst_goto_typ.lookup_field_type("data", &self.symbol_table).unwrap();
         let dst_data_field = (
             "data",
@@ -743,10 +899,10 @@ impl<'tcx> GotocCtx<'tcx> {
         )
     }
 
-    fn codegen_fat_ptr_to_thin_ptr_cast(&mut self, src: &Operand<'tcx>, dst_t: Ty<'tcx>) -> Expr {
+    fn codegen_fat_ptr_to_thin_ptr_cast(&mut self, src: &Operand, dst_t: Ty) -> Expr {
         debug!("codegen_fat_ptr_to_thin_ptr_cast |{:?}| |{:?}|", src, dst_t);
-        let src_goto_expr = self.codegen_operand(src);
-        let dst_goto_typ = self.codegen_ty(dst_t);
+        let src_goto_expr = self.codegen_operand_stable(src);
+        let dst_goto_typ = self.codegen_ty_stable(dst_t);
         // In a vtable fat pointer, the data member is a void pointer,
         // so ensure the pointer has the correct type before dereferencing it.
         src_goto_expr.member("data", &self.symbol_table).cast_to(dst_goto_typ)
@@ -754,123 +910,127 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// This handles all kinds of casts, except a limited subset that are instead
     /// handled by [`Self::codegen_pointer_cast`].
-    fn codegen_misc_cast(&mut self, src: &Operand<'tcx>, dst_t: Ty<'tcx>) -> Expr {
-        let src_t = self.operand_ty(src);
+    fn codegen_misc_cast(&mut self, src: &Operand, dst_ty: Ty) -> Expr {
+        let src_ty = self.operand_ty_stable(src);
         debug!(
             "codegen_misc_cast: casting operand {:?} from type {:?} to type {:?}",
-            src, src_t, dst_t
+            src, src_ty, dst_ty
         );
+        let src_ty_kind = src_ty.kind();
+        let dst_ty_kind = dst_ty.kind();
 
         // number casting
-        if src_t.is_numeric() && dst_t.is_numeric() {
-            return self.codegen_operand(src).cast_to(self.codegen_ty(dst_t));
+        if src_ty_kind.is_numeric() && dst_ty_kind.is_numeric() {
+            return self.codegen_operand_stable(src).cast_to(self.codegen_ty_stable(dst_ty));
         }
 
         // Behind the scenes, char is just a 32bit integer
-        if (src_t.is_integral() && dst_t.is_char()) || (src_t.is_char() && dst_t.is_integral()) {
-            return self.codegen_operand(src).cast_to(self.codegen_ty(dst_t));
+        if (src_ty_kind.is_integral() && dst_ty_kind.is_char())
+            || (src_ty_kind.is_char() && dst_ty_kind.is_integral())
+        {
+            return self.codegen_operand_stable(src).cast_to(self.codegen_ty_stable(dst_ty));
         }
 
         // Cast an enum to its discriminant
-        if src_t.is_enum() && dst_t.is_integral() {
-            let operand = self.codegen_operand(src);
-            return self.codegen_get_discriminant(operand, src_t, dst_t);
+        if src_ty_kind.is_enum() && dst_ty_kind.is_integral() {
+            let operand = self.codegen_operand_stable(src);
+            return self.codegen_get_discriminant(operand, src_ty, dst_ty);
         }
 
         // Cast between fat pointers
-        if self.is_fat_pointer(src_t) && self.is_fat_pointer(dst_t) {
-            return self.codegen_fat_ptr_to_fat_ptr_cast(src, dst_t);
+        if self.is_fat_pointer_stable(src_ty) && self.is_fat_pointer_stable(dst_ty) {
+            return self.codegen_fat_ptr_to_fat_ptr_cast(src, dst_ty);
         }
 
-        if self.is_fat_pointer(src_t) && !self.is_fat_pointer(dst_t) {
-            return self.codegen_fat_ptr_to_thin_ptr_cast(src, dst_t);
+        if self.is_fat_pointer_stable(src_ty) && !self.is_fat_pointer_stable(dst_ty) {
+            return self.codegen_fat_ptr_to_thin_ptr_cast(src, dst_ty);
         }
 
         // pointer casting. from a pointer / reference to another pointer / reference
         // notice that if fat pointer is involved, it cannot be the destination, which is t.
-        match dst_t.kind() {
-            ty::Ref(_, mut dst_subt, _) | ty::RawPtr(ty::TypeAndMut { ty: mut dst_subt, .. }) => {
+        match dst_ty_kind {
+            TyKind::RigidTy(RigidTy::Ref(_, dst_subt, _))
+            | TyKind::RigidTy(RigidTy::RawPtr(dst_subt, ..)) => {
                 // this is a noop in the case dst_subt is a Projection or Opaque type
-                dst_subt = self.tcx.normalize_erasing_regions(ty::ParamEnv::reveal_all(), dst_subt);
                 match dst_subt.kind() {
-                    ty::Slice(_) | ty::Str | ty::Dynamic(_, _, _) => {
+                    TyKind::RigidTy(RigidTy::Slice(_))
+                    | TyKind::RigidTy(RigidTy::Str)
+                    | TyKind::RigidTy(RigidTy::Dynamic(_, _, _)) => {
                         //TODO: this does the wrong thing on Strings/fixme_boxed_str.rs
                         // if we cast to slice or string, then we know the source is also a slice or string,
                         // so there shouldn't be anything to do
                         //DSN The one time I've seen this for dynamic, it was just casting from const* to mut*
                         // TODO: see if it is accurate
-                        self.codegen_operand(src)
+                        self.codegen_operand_stable(src)
                     }
-                    _ => match src_t.kind() {
-                        ty::Ref(_, mut src_subt, _)
-                        | ty::RawPtr(ty::TypeAndMut { ty: mut src_subt, .. }) => {
+                    _ => match src_ty_kind {
+                        TyKind::RigidTy(RigidTy::Ref(_, src_subt, _))
+                        | TyKind::RigidTy(RigidTy::RawPtr(src_subt, ..)) => {
                             // this is a noop in the case dst_subt is a Projection or Opaque type
-                            src_subt = self
-                                .tcx
-                                .normalize_erasing_regions(ty::ParamEnv::reveal_all(), src_subt);
                             match src_subt.kind() {
-                                ty::Slice(_) | ty::Str | ty::Dynamic(..) => self
-                                    .codegen_operand(src)
+                                TyKind::RigidTy(RigidTy::Slice(_))
+                                | TyKind::RigidTy(RigidTy::Str)
+                                | TyKind::RigidTy(RigidTy::Dynamic(..)) => self
+                                    .codegen_operand_stable(src)
                                     .member("data", &self.symbol_table)
-                                    .cast_to(self.codegen_ty(dst_t)),
-                                _ => self.codegen_operand(src).cast_to(self.codegen_ty(dst_t)),
+                                    .cast_to(self.codegen_ty_stable(dst_ty)),
+                                _ => self
+                                    .codegen_operand_stable(src)
+                                    .cast_to(self.codegen_ty_stable(dst_ty)),
                             }
                         }
-                        ty::Int(_) | ty::Uint(_) | ty::FnPtr(..) => {
-                            self.codegen_operand(src).cast_to(self.codegen_ty(dst_t))
+                        TyKind::RigidTy(RigidTy::Int(_))
+                        | TyKind::RigidTy(RigidTy::Uint(_))
+                        | TyKind::RigidTy(RigidTy::FnPtr(..)) => {
+                            self.codegen_operand_stable(src).cast_to(self.codegen_ty_stable(dst_ty))
                         }
                         _ => unreachable!(),
                     },
                 }
             }
-            ty::Int(_) | ty::Uint(_) => self.codegen_operand(src).cast_to(self.codegen_ty(dst_t)),
-            _ => unreachable!(),
+            TyKind::RigidTy(RigidTy::Int(_)) | TyKind::RigidTy(RigidTy::Uint(_)) => {
+                self.codegen_operand_stable(src).cast_to(self.codegen_ty_stable(dst_ty))
+            }
+            _ => unreachable!("Unexpected cast destination type: `{dst_ty:?}`"),
         }
     }
 
     /// "Pointer casts" are particular kinds of pointer-to-pointer casts.
-    /// See the [`PointerCast`] type for specifics.
+    /// See the [`PointerCoercion`] type for specifics.
     /// Note that this does not include all casts involving pointers,
     /// many of which are instead handled by [`Self::codegen_misc_cast`] instead.
     fn codegen_pointer_cast(
         &mut self,
-        k: &PointerCast,
-        operand: &Operand<'tcx>,
-        t: Ty<'tcx>,
+        coercion: &PointerCoercion,
+        operand: &Operand,
+        t: Ty,
         loc: Location,
     ) -> Expr {
-        debug!(cast=?k, op=?operand, ?loc, "codegen_pointer_cast");
-        match k {
-            PointerCast::ReifyFnPointer => match self.operand_ty(operand).kind() {
-                ty::FnDef(def_id, substs) => {
-                    let instance =
-                        Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), *def_id, substs)
-                            .unwrap()
-                            .unwrap();
-                    // We need to handle this case in a special way because `codegen_operand` compiles FnDefs to dummy structs.
+        debug!(cast=?coercion, op=?operand, ?loc, "codegen_pointer_cast");
+        match coercion {
+            PointerCoercion::ReifyFnPointer => match self.operand_ty_stable(operand).kind() {
+                TyKind::RigidTy(RigidTy::FnDef(def, args)) => {
+                    let instance = Instance::resolve(def, &args).unwrap();
+                    // We need to handle this case in a special way because `codegen_operand_stable` compiles FnDefs to dummy structs.
                     // (cf. the function documentation)
                     self.codegen_func_expr(instance, None).address_of()
                 }
                 _ => unreachable!(),
             },
-            PointerCast::UnsafeFnPointer => self.codegen_operand(operand),
-            PointerCast::ClosureFnPointer(_) => {
-                if let ty::Closure(def_id, substs) = self.operand_ty(operand).kind() {
-                    let instance = Instance::resolve_closure(
-                        self.tcx,
-                        *def_id,
-                        substs,
-                        ty::ClosureKind::FnOnce,
-                    )
-                    .expect("failed to normalize and resolve closure during codegen")
-                    .polymorphize(self.tcx);
+            PointerCoercion::UnsafeFnPointer => self.codegen_operand_stable(operand),
+            PointerCoercion::ClosureFnPointer(_) => {
+                if let TyKind::RigidTy(RigidTy::Closure(def, args)) =
+                    self.operand_ty_stable(operand).kind()
+                {
+                    let instance = Instance::resolve_closure(def, &args, ClosureKind::FnOnce)
+                        .expect("failed to normalize and resolve closure during codegen");
                     self.codegen_func_expr(instance, None).address_of()
                 } else {
                     unreachable!("{:?} cannot be cast to a fn ptr", operand)
                 }
             }
-            PointerCast::MutToConstPointer => self.codegen_operand(operand),
-            PointerCast::ArrayToPointer => {
+            PointerCoercion::MutToConstPointer => self.codegen_operand_stable(operand),
+            PointerCoercion::ArrayToPointer => {
                 // TODO: I am not sure whether it is correct or not.
                 //
                 // some reasoning is as follows.
@@ -878,11 +1038,11 @@ impl<'tcx> GotocCtx<'tcx> {
                 // if we had to, then [o] necessarily has type [T; n] where *T is a fat pointer, meaning
                 // T is either [T] or str. but neither type is sized, which shouldn't participate in
                 // codegen.
-                match self.operand_ty(operand).kind() {
-                    ty::RawPtr(ty::TypeAndMut { ty, .. }) => {
+                match self.operand_ty_stable(operand).kind() {
+                    TyKind::RigidTy(RigidTy::RawPtr(ty, ..)) => {
                         // ty must be an array
-                        if let ty::Array(_, _) = ty.kind() {
-                            let oe = self.codegen_operand(operand);
+                        if let TyKind::RigidTy(RigidTy::Array(_, _)) = ty.kind() {
+                            let oe = self.codegen_operand_stable(operand);
                             oe.dereference() // : struct [T; n]
                                 .array_to_ptr() // : T*
                         } else {
@@ -892,9 +1052,9 @@ impl<'tcx> GotocCtx<'tcx> {
                     _ => unreachable!(),
                 }
             }
-            PointerCast::Unsize => {
-                let src_goto_expr = self.codegen_operand(operand);
-                let src_mir_type = self.operand_ty(operand);
+            PointerCoercion::Unsize => {
+                let src_goto_expr = self.codegen_operand_stable(operand);
+                let src_mir_type = self.operand_ty_stable(operand);
                 let dst_mir_type = t;
                 self.codegen_unsized_cast(src_goto_expr, src_mir_type, dst_mir_type)
             }
@@ -912,8 +1072,8 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_unsized_cast(
         &mut self,
         src_goto_expr: Expr,
-        src_mir_type: Ty<'tcx>,
-        dst_mir_type: Ty<'tcx>,
+        src_mir_type: Ty,
+        dst_mir_type: Ty,
     ) -> Expr {
         // The MIR may include casting that isn't necessary. Detect this early on and return the
         // expression for the RHS.
@@ -941,13 +1101,13 @@ impl<'tcx> GotocCtx<'tcx> {
     fn collect_unsized_cast_path(
         &self,
         src_goto_expr: Expr,
-        src_mir_type: Ty<'tcx>,
-        dst_mir_type: Ty<'tcx>,
-    ) -> Vec<(CoerceUnsizedInfo<'tcx>, Expr)> {
+        src_mir_type: Ty,
+        dst_mir_type: Ty,
+    ) -> Vec<(CoerceUnsizedInfo, Expr)> {
         let mut field_type = src_goto_expr;
         CoerceUnsizedIterator::new(self.tcx, src_mir_type, dst_mir_type)
             .map(|info| {
-                let expr = if let Some(field_symbol) = info.field {
+                let expr = if let Some(field_symbol) = &info.field {
                     // Generate the expression for the current structure and save the type for
                     // the divergent field.
                     let field_name = field_symbol.as_str().intern();
@@ -970,17 +1130,17 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_struct_unsized_coercion(
         &mut self,
         src_expr: Expr,
-        info: CoerceUnsizedInfo<'tcx>,
+        info: CoerceUnsizedInfo,
         member_coercion: Expr,
     ) -> Expr {
-        assert!(info.src_ty.is_adt(), "Expected struct. Found {:?}", info.src_ty);
-        assert!(info.dst_ty.is_adt(), "Expected struct. Found {:?}", info.dst_ty);
-        let dst_goto_type = self.codegen_ty(info.dst_ty);
+        assert!(info.src_ty.kind().is_adt(), "Expected struct. Found {:?}", info.src_ty);
+        assert!(info.dst_ty.kind().is_adt(), "Expected struct. Found {:?}", info.dst_ty);
+        let dst_goto_type = self.codegen_ty_stable(info.dst_ty);
         let src_field_exprs = src_expr.struct_field_exprs(&self.symbol_table);
         let dst_field_exprs = src_field_exprs
             .into_iter()
             .map(|(key, val)| {
-                let new_val = if info.field.unwrap().as_str().intern() == key {
+                let new_val = if info.field.as_ref().unwrap().as_str().intern() == key {
                     // The type being coerced. Use the provided expression.
                     member_coercion.clone()
                 } else {
@@ -1005,27 +1165,22 @@ impl<'tcx> GotocCtx<'tcx> {
         dst_expr
     }
 
-    fn codegen_vtable_method_field(
-        &mut self,
-        instance: Instance<'tcx>,
-        t: Ty<'tcx>,
-        idx: usize,
-    ) -> Expr {
-        debug!(?instance, typ=?t, %idx, "codegen_vtable_method_field");
-        let vtable_field_name = self.vtable_field_name(instance.def_id(), idx);
-        let vtable_type = Type::struct_tag(self.vtable_name(t));
+    fn codegen_vtable_method_field(&mut self, instance: Instance, ty: Ty, idx: usize) -> Expr {
+        debug!(?instance, typ=?ty, %idx, "codegen_vtable_method_field");
+        let vtable_field_name = self.vtable_field_name(idx);
+        let vtable_type = Type::struct_tag(self.vtable_name_stable(ty));
         let field_type =
             vtable_type.lookup_field_type(vtable_field_name, &self.symbol_table).unwrap();
         debug!(?vtable_field_name, ?vtable_type, "codegen_vtable_method_field");
 
         // Lookup in the symbol table using the full symbol table name/key
-        let fn_name = self.symbol_name(instance);
+        let fn_name = self.symbol_name_stable(instance);
 
         if let Some(fn_symbol) = self.symbol_table.lookup(&fn_name) {
             if self.vtable_ctx.emit_vtable_restrictions {
                 // Add to the possible method names for this trait type
                 self.vtable_ctx.add_possible_method(
-                    self.normalized_trait_name(t).into(),
+                    self.normalized_trait_name(rustc_internal::internal(ty)).into(),
                     idx,
                     fn_name.into(),
                 );
@@ -1041,7 +1196,7 @@ impl<'tcx> GotocCtx<'tcx> {
         } else {
             warn!(
                 "Unable to find vtable symbol for virtual function {}, attempted lookup for symbol name: {}",
-                self.readable_instance_name(instance),
+                instance.name(),
                 fn_name,
             );
             field_type.null()
@@ -1049,9 +1204,10 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Generate a function pointer to drop_in_place for entry into the vtable
-    fn codegen_vtable_drop_in_place(&mut self, ty: Ty<'tcx>, trait_ty: ty::Ty<'tcx>) -> Expr {
-        let drop_instance = Instance::resolve_drop_in_place(self.tcx, ty).polymorphize(self.tcx);
-        let drop_sym_name: InternedString = self.symbol_name(drop_instance).into();
+    fn codegen_vtable_drop_in_place(&mut self, ty: Ty, trait_ty: Ty) -> Expr {
+        let trait_ty = rustc_internal::internal(trait_ty);
+        let drop_instance = Instance::resolve_drop_in_place(ty);
+        let drop_sym_name: InternedString = drop_instance.mangled_name().into();
 
         // The drop instance has the concrete object type, for consistency with
         // type codegen we need the trait type for the function parameter.
@@ -1075,47 +1231,20 @@ impl<'tcx> GotocCtx<'tcx> {
                 .address_of()
                 .cast_to(trait_fn_ty)
         } else {
-            // We skip an entire submodule of the standard library, so drop is missing
-            // for it. Build and insert a function that just calls an unimplemented block
-            // to maintain soundness.
-            let drop_sym_name = format!("drop_unimplemented_{}", self.symbol_name(drop_instance));
-            let pretty_name =
-                format!("drop_unimplemented<{}>", self.readable_instance_name(drop_instance));
-            let drop_sym = self.ensure(&drop_sym_name, |ctx, name| {
-                // Function body
-                let unimplemented = ctx.codegen_unimplemented_stmt(
-                    format!("drop_in_place for {drop_instance}").as_str(),
-                    Location::none(),
-                    "https://github.com/model-checking/kani/issues/281",
-                );
-
-                // Declare symbol for the single, self parameter
-                let param_typ = ctx.codegen_ty(trait_ty).to_pointer();
-                let param_sym = ctx.gen_function_parameter(0, &drop_sym_name, param_typ);
-
-                // Build and insert the function itself
-                Symbol::function(
-                    name,
-                    Type::code(vec![param_sym.to_function_parameter()], Type::empty()),
-                    Some(Stmt::block(vec![unimplemented], Location::none())),
-                    pretty_name,
-                    Location::none(),
-                )
-            });
-            drop_sym.to_expr().address_of().cast_to(trait_fn_ty)
+            unreachable!("Missing drop implementation for {}", drop_instance.name())
         }
     }
 
     /// The size and alignment for the vtable is of the underlying type.
-    /// When we get the size and align of a ty::Ref, the TyCtxt::layout_of
+    /// When we get the size and align of a ty::Ref, the TyCtxt::layout_of_stable
     /// returns the correct size to match rustc vtable values. Checked via
     /// Kani-compile-time and CBMC assertions in check_vtable_size.
-    fn codegen_vtable_size_and_align(&mut self, operand_type: Ty<'tcx>) -> (Expr, Expr) {
+    fn codegen_vtable_size_and_align(&mut self, operand_type: Ty) -> (Expr, Expr) {
         debug!("vtable_size_and_align {:?}", operand_type.kind());
-        let vtable_layout = self.layout_of(operand_type);
+        let vtable_layout = self.layout_of_stable(operand_type);
         assert!(!vtable_layout.is_unsized(), "Can't create a vtable for an unsized type");
         let vt_size = Expr::int_constant(vtable_layout.size.bytes(), Type::size_t())
-            .with_size_of_annotation(self.codegen_ty(operand_type));
+            .with_size_of_annotation(self.codegen_ty_stable(operand_type));
         let vt_align = Expr::int_constant(vtable_layout.align.abi.bytes(), Type::size_t());
 
         (vt_size, vt_align)
@@ -1124,10 +1253,10 @@ impl<'tcx> GotocCtx<'tcx> {
     // Check the size are inserting in to the vtable against two sources of
     // truth: (1) the compile-time rustc sizeof functions, and (2) the CBMC
     //  __CPROVER_OBJECT_SIZE function.
-    fn check_vtable_size(&mut self, operand_type: Ty<'tcx>, vt_size: Expr) -> Stmt {
+    fn check_vtable_size(&mut self, operand_type: Ty, vt_size: Expr) -> Stmt {
         // Check against the size we get from the layout from the what we
         // get constructing a value of that type
-        let ty: Type = self.codegen_ty(operand_type);
+        let ty: Type = self.codegen_ty_stable(operand_type);
         let codegen_size = ty.sizeof(&self.symbol_table);
         assert_eq!(vt_size.int_constant_value().unwrap(), BigInt::from(codegen_size));
 
@@ -1140,7 +1269,7 @@ impl<'tcx> GotocCtx<'tcx> {
             // In practice, we have seen this with the Never type, which has size 0:
             // https://play.rust-lang.org/?version=nightly&mode=debug&edition=2018&gist=0f6eef4f6abeb279031444735e73d2e1
             assert!(
-                matches!(operand_type.kind(), ty::Never),
+                matches!(operand_type.kind(), TyKind::RigidTy(RigidTy::Never)),
                 "Expected Never, got: {operand_type:?}"
             );
             Type::size_t().zero()
@@ -1154,27 +1283,22 @@ impl<'tcx> GotocCtx<'tcx> {
         Stmt::block(vec![decl, size_assert], Location::none())
     }
 
-    fn codegen_vtable(&mut self, src_mir_type: Ty<'tcx>, dst_mir_type: Ty<'tcx>) -> Expr {
+    fn codegen_vtable(&mut self, src_mir_type: Ty, dst_mir_type: Ty) -> Expr {
         let trait_type = match dst_mir_type.kind() {
             // DST is pointer type
-            ty::Ref(_, pointee_type, ..) => *pointee_type,
+            TyKind::RigidTy(RigidTy::Ref(_, pointee_type, ..)) => pointee_type,
             // DST is box type
-            ty::Adt(adt_def, adt_subst) if adt_def.is_box() => {
-                adt_subst.first().unwrap().expect_ty()
+            TyKind::RigidTy(RigidTy::Adt(adt_def, adt_subst)) if adt_def.is_box() => {
+                *adt_subst.0.first().unwrap().expect_ty()
             }
             // DST is dynamic type
-            ty::Dynamic(..) => dst_mir_type,
-            _ => unimplemented!("Cannot codegen_vtable for type {:?}", dst_mir_type.kind()),
-        };
-        assert!(trait_type.is_trait(), "VTable trait type {trait_type} must be a trait type");
-        let binders = match trait_type.kind() {
-            ty::Dynamic(binders, ..) => binders,
-            _ => unimplemented!("Cannot codegen_vtable for type {:?}", dst_mir_type.kind()),
+            TyKind::RigidTy(RigidTy::Dynamic(..)) => dst_mir_type,
+            _ => unreachable!("Cannot codegen_vtable for type {:?}", dst_mir_type.kind()),
         };
 
-        let src_name = self.ty_mangled_name(src_mir_type);
+        let src_name = self.ty_mangled_name(rustc_internal::internal(src_mir_type));
         // The name needs to be the same as inserted in typ.rs
-        let vtable_name = self.vtable_name(trait_type).intern();
+        let vtable_name = self.vtable_name_stable(trait_type).intern();
         let vtable_impl_name = format!("{vtable_name}_impl_for_{src_name}");
 
         self.ensure_global_var(
@@ -1184,11 +1308,9 @@ impl<'tcx> GotocCtx<'tcx> {
             Location::none(),
             |ctx, var| {
                 // Build the vtable, using Rust's vtable_entries to determine field order
-                let vtable_entries = if let Some(principal) = binders.principal() {
-                    let trait_ref_binder = principal.with_self_ty(ctx.tcx, src_mir_type);
-                    let trait_ref_binder = ctx.tcx.erase_regions(trait_ref_binder);
-
-                    ctx.tcx.vtable_entries(trait_ref_binder)
+                let vtable_entries = if let Some(principal) = trait_type.kind().trait_principal() {
+                    let trait_ref_binder = principal.with_self_ty(src_mir_type);
+                    ctx.tcx.vtable_entries(rustc_internal::internal(trait_ref_binder))
                 } else {
                     TyCtxt::COMMON_VTABLE_ENTRIES
                 };
@@ -1209,9 +1331,11 @@ impl<'tcx> GotocCtx<'tcx> {
                         // TODO: trait upcasting
                         // https://github.com/model-checking/kani/issues/358
                         VtblEntry::TraitVPtr(_trait_ref) => None,
-                        VtblEntry::Method(instance) => {
-                            Some(ctx.codegen_vtable_method_field(*instance, trait_type, idx))
-                        }
+                        VtblEntry::Method(instance) => Some(ctx.codegen_vtable_method_field(
+                            rustc_internal::stable(instance),
+                            trait_type,
+                            idx,
+                        )),
                     })
                     .collect();
 
@@ -1234,31 +1358,34 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_cast_to_fat_pointer(
         &mut self,
         src_goto_expr: Expr,
-        coerce_info: CoerceUnsizedInfo<'tcx>,
+        coerce_info: CoerceUnsizedInfo,
     ) -> Expr {
         assert_ne!(coerce_info.src_ty.kind(), coerce_info.dst_ty.kind());
 
         // The fat pointer type.
-        let fat_ptr_type = self.codegen_ty(coerce_info.dst_ty);
+        let fat_ptr_type = self.codegen_ty_stable(coerce_info.dst_ty);
 
         // Extract the type conversion that will require metadata to be saved.
-        let CoercionBase { src_ty: metadata_src_type, dst_ty: metadata_dst_type } =
-            extract_unsize_casting(self.tcx, coerce_info.src_ty, coerce_info.dst_ty);
+        let CoercionBaseStable { src_ty: metadata_src_type, dst_ty: metadata_dst_type } =
+            extract_unsize_casting_stable(self.tcx, coerce_info.src_ty, coerce_info.dst_ty);
 
         // Extract information about the data pointer.
-        let dst_pointee_ty = pointee_type(coerce_info.dst_ty).unwrap();
-        let dst_data_type = self.codegen_ty(dst_pointee_ty).to_pointer();
+        let dst_pointee_ty = pointee_type_stable(coerce_info.dst_ty).unwrap();
+        let dst_data_type = self.codegen_ty_stable(dst_pointee_ty).to_pointer();
 
         debug!(?coerce_info, ?metadata_src_type, ?metadata_dst_type, "codegen_thin_to_fat");
         // Generate the metadata and the fat pointer according to the target of this coercion.
         match (metadata_src_type.kind(), metadata_dst_type.kind()) {
-            (ty::Array(src_elt_type, src_elt_count), ty::Slice(dst_elt_type)) => {
+            (
+                TyKind::RigidTy(RigidTy::Array(src_elt_type, src_elt_count)),
+                TyKind::RigidTy(RigidTy::Slice(dst_elt_type)),
+            ) => {
                 // Cast to a slice fat pointer.
                 assert_eq!(src_elt_type, dst_elt_type);
-                let dst_goto_len = self.codegen_const(*src_elt_count, None);
-                let src_pointee_ty = pointee_type(coerce_info.src_ty).unwrap();
-                let dst_data_expr = if src_pointee_ty.is_array() {
-                    src_goto_expr.cast_to(self.codegen_ty(*src_elt_type).to_pointer())
+                let dst_goto_len = self.codegen_const(&src_elt_count, None);
+                let src_pointee_ty = pointee_type_stable(coerce_info.src_ty).unwrap();
+                let dst_data_expr = if src_pointee_ty.kind().is_array() {
+                    src_goto_expr.cast_to(self.codegen_ty_stable(src_elt_type).to_pointer())
                 } else {
                     // A struct that contains the type being coerced to a slice.
                     // E.g.: Convert Src<[u8; 2]> to Src<[u8]> where struct Src<T> { member: T }
@@ -1266,21 +1393,21 @@ impl<'tcx> GotocCtx<'tcx> {
                 };
                 slice_fat_ptr(fat_ptr_type, dst_data_expr, dst_goto_len, &self.symbol_table)
             }
-            (ty::Dynamic(..), ty::Dynamic(..)) => {
+            (TyKind::RigidTy(RigidTy::Dynamic(..)), TyKind::RigidTy(RigidTy::Dynamic(..))) => {
                 // Cast between fat pointers. Cast the data and the source
                 let src_data = src_goto_expr.to_owned().member("data", &self.symbol_table);
                 let dst_data = src_data.cast_to(dst_data_type);
 
                 // Retrieve the vtable and cast the vtable type.
                 let src_vtable = src_goto_expr.member("vtable", &self.symbol_table);
-                let vtable_name = self.vtable_name(metadata_dst_type);
+                let vtable_name = self.vtable_name_stable(metadata_dst_type);
                 let vtable_ty = Type::struct_tag(vtable_name).to_pointer();
                 let dst_vtable = src_vtable.cast_to(vtable_ty);
 
                 // Construct a fat pointer with the same (casted) fields and new type
                 dynamic_fat_ptr(fat_ptr_type, dst_data, dst_vtable, &self.symbol_table)
             }
-            (_, ty::Dynamic(..)) => {
+            (_, TyKind::RigidTy(RigidTy::Dynamic(..))) => {
                 // Generate the data and vtable pointer that will be stored in the fat pointer.
                 let dst_data_expr = src_goto_expr.cast_to(dst_data_type);
                 let vtable = self.codegen_vtable(metadata_src_type, metadata_dst_type);

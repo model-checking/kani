@@ -11,16 +11,16 @@ source "${KANI_DIR}/kani-dependencies"
 
 if [ -z "${KISSAT_VERSION:-}" ]; then
   echo "$0: ERROR: KISSAT_VERSION is not set"
-  return 1
+  exit 1
 fi
 cmd="kissat --version"
 if kissat_version=$($cmd); then
   # Perform a lexicographic comparison of the version
   if [[ $kissat_version < $KISSAT_VERSION ]]; then
     echo "ERROR: Kissat version is $kissat_version. Expected at least $KISSAT_VERSION."
-    return 1
+    exit 1
   fi
 else
   echo "ERROR: Couldn't run command '$cmd'"
-  return 1
+  exit 1
 fi

@@ -172,6 +172,7 @@ pub struct VerificationArgs {
     pub function: Option<String>,
     /// If specified, only run harnesses that match this filter. This option can be provided
     /// multiple times, which will run all tests matching any of the filters.
+    /// If used with --exact, the harness filter will only match the exact fully qualified name of a harness.
     #[arg(
         long = "harness",
         conflicts_with = "function",
@@ -179,6 +180,10 @@ pub struct VerificationArgs {
         value_name = "HARNESS_FILTER"
     )]
     pub harnesses: Vec<String>,
+
+    /// When specified, the harness filter will only match the exact fully qualified name of a harness
+    #[arg(long, requires("harnesses"))]
+    pub exact: bool,
 
     /// Link external C files referenced by Rust code.
     /// This is an experimental feature and requires `-Z c-ffi` to be used
@@ -206,6 +211,7 @@ pub struct VerificationArgs {
     #[arg(long, requires("harnesses"))]
     pub unwind: Option<u32>,
     /// Specify the CBMC solver to use. Overrides the harness `solver` attribute.
+    /// If no solver is specified (with --solver or harness attribute), Kani will use CaDiCaL.
     #[arg(long, value_parser = CbmcSolverValueParser::new(CbmcSolver::VARIANTS))]
     pub solver: Option<CbmcSolver>,
     /// Pass through directly to CBMC; must be the last flag.
@@ -222,18 +228,6 @@ pub struct VerificationArgs {
     /// Number of parallel jobs, defaults to 1
     #[arg(short, long, hide = true, requires("enable_unstable"))]
     pub jobs: Option<Option<usize>>,
-
-    // Hide option till https://github.com/model-checking/kani/issues/697 is
-    // fixed.
-    /// Use abstractions for the standard library.
-    /// This is an experimental feature and requires `--enable-unstable` to be used
-    #[arg(long, hide = true, requires("enable_unstable"))]
-    pub use_abs: bool,
-    // Hide option till https://github.com/model-checking/kani/issues/697 is
-    // fixed.
-    /// Choose abstraction for modules of standard library if available
-    #[arg(long, default_value = "std", ignore_case = true, hide = true, value_enum)]
-    pub abs_type: AbstractionType,
 
     /// Enable extra pointer checks such as invalid pointers in relation operations and pointer
     /// arithmetic overflow.
@@ -296,7 +290,11 @@ pub struct VerificationArgs {
         requires("enable_unstable"),
         conflicts_with("concrete_playback")
     )]
-    pub enable_stubbing: bool,
+    enable_stubbing: bool,
+
+    /// Enable Kani coverage output alongside verification result
+    #[arg(long, hide_short_help = true)]
+    pub coverage: bool,
 
     /// Arguments to pass down to Cargo
     #[command(flatten)]
@@ -338,6 +336,18 @@ impl VerificationArgs {
             Some(Some(x)) => Some(x), // -j=x
         }
     }
+
+    /// Are experimental function contracts enabled?
+    pub fn is_function_contracts_enabled(&self) -> bool {
+        self.common_args.unstable_features.contains(UnstableFeature::FunctionContracts)
+    }
+
+    /// Is experimental stubbing enabled?
+    pub fn is_stubbing_enabled(&self) -> bool {
+        self.enable_stubbing
+            || self.common_args.unstable_features.contains(UnstableFeature::Stubbing)
+            || self.is_function_contracts_enabled()
+    }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
@@ -353,32 +363,6 @@ pub enum OutputFormat {
     Regular,
     Terse,
     Old,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, ValueEnum)]
-pub enum AbstractionType {
-    Std,
-    Kani,
-    // Clap defaults to `c-ffi`
-    CFfi,
-    // Clap defaults to `no-back`
-    NoBack,
-}
-impl std::fmt::Display for AbstractionType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Std => f.write_str("std"),
-            Self::Kani => f.write_str("kani"),
-            Self::CFfi => f.write_str("c-ffi"),
-            Self::NoBack => f.write_str("no-back"),
-        }
-    }
-}
-#[cfg(test)]
-impl AbstractionType {
-    pub fn variants() -> Vec<&'static str> {
-        vec!["std", "kani", "c-ffi", "no-back"]
-    }
 }
 
 #[derive(Debug, clap::Args)]
@@ -441,12 +425,12 @@ impl CheckArgs {
 ///
 /// We currently define a bunch of cargo specific arguments as part of the overall arguments,
 /// however, they are invalid in the Kani standalone usage. Explicitly check them for now.
-/// TODO: Remove this as part of https://github.com/model-checking/kani/issues/1831
+/// TODO: Remove this as part of <https://github.com/model-checking/kani/issues/1831>
 fn check_no_cargo_opt(is_set: bool, name: &str) -> Result<(), Error> {
     if is_set {
         Err(Error::raw(
             ErrorKind::UnknownArgument,
-            &format!("argument `{}` cannot be used with standalone Kani.", name),
+            format!("argument `{}` cannot be used with standalone Kani.", name),
         ))
     } else {
         Ok(())
@@ -472,7 +456,7 @@ impl ValidateArgs for StandaloneArgs {
             if !input.is_file() {
                 return Err(Error::raw(
                     ErrorKind::InvalidValue,
-                    &format!(
+                    format!(
                         "Invalid argument: Input invalid. `{}` is not a regular file.",
                         input.display()
                     ),
@@ -602,7 +586,7 @@ impl ValidateArgs for VerificationArgs {
             if out_dir.exists() && !out_dir.is_dir() {
                 return Err(Error::raw(
                     ErrorKind::InvalidValue,
-                    &format!(
+                    format!(
                         "Invalid argument: `--target-dir` argument `{}` is not a directory",
                         out_dir.display()
                     ),
@@ -610,8 +594,12 @@ impl ValidateArgs for VerificationArgs {
             }
         }
 
+        if self.enable_stubbing {
+            print_deprecated(&self.common_args, "--enable-stubbing", "-Z stubbing");
+        }
+
         if self.concrete_playback.is_some()
-            && !self.common_args.unstable_features.contains(&UnstableFeatures::ConcretePlayback)
+            && !self.common_args.unstable_features.contains(UnstableFeature::ConcretePlayback)
         {
             if self.common_args.enable_unstable {
                 print_deprecated(&self.common_args, "--enable-unstable", "-Z concrete-playback");
@@ -625,7 +613,7 @@ impl ValidateArgs for VerificationArgs {
         }
 
         if !self.c_lib.is_empty()
-            && !self.common_args.unstable_features.contains(&UnstableFeatures::CFfi)
+            && !self.common_args.unstable_features.contains(UnstableFeature::CFfi)
         {
             if self.common_args.enable_unstable {
                 print_deprecated(&self.common_args, "`--enable-unstable`", "-Z c-ffi");
@@ -636,6 +624,16 @@ impl ValidateArgs for VerificationArgs {
                 unstable C-FFI support.",
                 ));
             }
+        }
+
+        if self.coverage
+            && !self.common_args.unstable_features.contains(UnstableFeature::LineCoverage)
+        {
+            return Err(Error::raw(
+                ErrorKind::MissingRequiredArgument,
+                "The `--coverage` argument is unstable and requires `-Z \
+            line-coverage` to be used.",
+            ));
         }
 
         Ok(())
@@ -786,18 +784,6 @@ mod tests {
     }
 
     #[test]
-    fn check_abs_type() {
-        // Since we manually implemented this, consistency check it
-        for t in AbstractionType::variants() {
-            assert_eq!(t, format!("{}", AbstractionType::from_str(t, false).unwrap()));
-        }
-        check_opt!("--abs-type std", false, abs_type, AbstractionType::Std);
-        check_opt!("--abs-type kani", false, abs_type, AbstractionType::Kani);
-        check_opt!("--abs-type c-ffi", false, abs_type, AbstractionType::CFfi);
-        check_opt!("--abs-type no-back", false, abs_type, AbstractionType::NoBack);
-    }
-
-    #[test]
     fn check_dry_run_fails() {
         // We don't support --dry-run anymore but we print a friendly reminder for now.
         let args = vec!["kani", "file.rs", "--dry-run"];
@@ -830,11 +816,6 @@ mod tests {
     fn parse_unstable_enabled(args: &str) -> Result<StandaloneArgs, Error> {
         let args = format!("kani --enable-unstable file.rs {args}");
         StandaloneArgs::try_parse_from(args.split(' '))
-    }
-
-    #[test]
-    fn check_abs_unstable() {
-        check_unstable_flag!("--use-abs", use_abs);
     }
 
     #[test]

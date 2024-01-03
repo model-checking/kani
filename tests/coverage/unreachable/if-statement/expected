@@ -1,0 +1,10 @@
+coverage/unreachable/if-statement/main.rs, 5, FULL
+coverage/unreachable/if-statement/main.rs, 7, PARTIAL
+coverage/unreachable/if-statement/main.rs, 8, NONE
+coverage/unreachable/if-statement/main.rs, 9, NONE
+coverage/unreachable/if-statement/main.rs, 11, NONE
+coverage/unreachable/if-statement/main.rs, 13, FULL
+coverage/unreachable/if-statement/main.rs, 17, FULL
+coverage/unreachable/if-statement/main.rs, 18, FULL
+coverage/unreachable/if-statement/main.rs, 19, FULL
+coverage/unreachable/if-statement/main.rs, 20, FULL

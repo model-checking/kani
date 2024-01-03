@@ -6,7 +6,6 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::args::AbstractionType;
 use crate::session::KaniSession;
 
 impl KaniSession {
@@ -16,15 +15,6 @@ impl KaniSession {
         let mut args: Vec<OsString> = Vec::new();
         args.extend(inputs.iter().map(|x| x.clone().into_os_string()));
         args.extend(self.args.c_lib.iter().map(|x| x.clone().into_os_string()));
-
-        // Special case hack for handling the "c-ffi" abs-type
-        if self.args.use_abs && self.args.abs_type == AbstractionType::CFfi {
-            let vec = self.kani_c_stubs.join("vec/vec.c");
-            let hashset = self.kani_c_stubs.join("hashset/hashset.c");
-
-            args.push(vec.into_os_string());
-            args.push(hashset.into_os_string());
-        }
 
         // TODO think about this: kani_lib_c is just an empty c file. Maybe we could just
         // create such an empty file ourselves instead of having to look up this path.

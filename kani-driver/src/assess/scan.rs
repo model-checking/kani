@@ -179,7 +179,7 @@ fn invoke_assess(
     // Additionally, this should be `--manifest-path` but `cargo kani` doesn't support that yet.
     cmd.arg("-p").arg(package);
     cmd.arg("--enable-unstable"); // This has to be after `-p` due to an argument parsing bug in kani-driver
-    cmd.args(&["assess", "--emit-metadata"])
+    cmd.args(["assess", "--emit-metadata"])
         .arg(outfile)
         .current_dir(dir)
         .stdout(log.try_clone()?)
@@ -201,10 +201,16 @@ fn scan_cargo_projects(path: PathBuf, accumulator: &mut Vec<PathBuf>) {
         return;
     }
     // Errors are silently skipped entirely here
-    let Ok(entries) = std::fs::read_dir(path) else { return; };
+    let Ok(entries) = std::fs::read_dir(path) else {
+        return;
+    };
     for entry in entries {
-        let Ok(entry) = entry else { continue; };
-        let Ok(typ) = entry.file_type() else { continue; };
+        let Ok(entry) = entry else {
+            continue;
+        };
+        let Ok(typ) = entry.file_type() else {
+            continue;
+        };
         // symlinks are not `is_dir()`
         if typ.is_dir() {
             scan_cargo_projects(entry.path(), accumulator)

@@ -627,6 +627,34 @@ impl Expr {
         expr!(IntConstant(i), typ)
     }
 
+    pub fn ssize_constant(i: i128, symbol_table: &SymbolTable) -> Self {
+        match symbol_table.machine_model().pointer_width {
+            32 => {
+                let val = BigInt::from(i as i32);
+                expr!(IntConstant(val), Type::ssize_t())
+            }
+            64 => {
+                let val = BigInt::from(i as i64);
+                expr!(IntConstant(val), Type::ssize_t())
+            }
+            i => unreachable!("Expected 32 or 64 bits pointer width, but got `{i}`"),
+        }
+    }
+
+    pub fn size_constant(i: u128, symbol_table: &SymbolTable) -> Self {
+        match symbol_table.machine_model().pointer_width {
+            32 => {
+                let val = BigInt::from(i as u32);
+                expr!(IntConstant(val), Type::size_t())
+            }
+            64 => {
+                let val = BigInt::from(i as u64);
+                expr!(IntConstant(val), Type::size_t())
+            }
+            i => unreachable!("Expected 32 or 64 bits pointer width, but got `{i}`"),
+        }
+    }
+
     pub fn typecheck_call(function: &Expr, arguments: &[Expr]) -> bool {
         // For variadic functions, all named arguments must match the type of their formal param.
         // Extra arguments (e.g the ... args) can have any type.
@@ -1410,7 +1438,7 @@ impl Expr {
         ArithmeticOverflowResult { result, overflowed }
     }
 
-    /// Uses CBMC's [binop]-with-overflow operation that performs a single arithmetic
+    /// Uses CBMC's \[binop\]-with-overflow operation that performs a single arithmetic
     /// operation
     /// `struct (T, bool) overflow(binop, self, e)` where `T` is the type of `self`
     /// Pseudocode:

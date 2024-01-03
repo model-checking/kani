@@ -53,6 +53,22 @@ pub fn appears_setup() -> bool {
     kani_dir().expect("couldn't find kani directory").exists()
 }
 
+// Ensure that the tar file does not exist, essentially using its presence
+// to detect setup completion as if it were a lock file.
+pub fn appears_incomplete() -> Option<PathBuf> {
+    let kani_dir = kani_dir().expect("couldn't find kani directory");
+    let kani_dir_parent = kani_dir.parent().unwrap();
+
+    for entry in std::fs::read_dir(kani_dir_parent).ok()?.flatten() {
+        if let Some(file_name) = entry.file_name().to_str() {
+            if file_name.ends_with(".tar.gz") {
+                return Some(kani_dir_parent.join(file_name));
+            }
+        }
+    }
+    None
+}
+
 /// Sets up Kani by unpacking/installing to `~/.kani/kani-VERSION`
 pub fn setup(use_local_bundle: Option<OsString>) -> Result<()> {
     let kani_dir = kani_dir()?;
@@ -67,7 +83,7 @@ pub fn setup(use_local_bundle: Option<OsString>) -> Result<()> {
 
     setup_rust_toolchain(&kani_dir)?;
 
-    setup_python_deps(&kani_dir, &os)?;
+    setup_python_deps(&kani_dir)?;
 
     os_hacks::setup_os_hacks(&kani_dir, &os)?;
 
@@ -91,15 +107,18 @@ fn setup_kani_bundle(kani_dir: &Path, use_local_bundle: Option<OsString>) -> Res
             .arg("--strip-components=1")
             .arg("-zxf")
             .arg(&path)
-            .current_dir(&kani_dir)
-            .run()?;
+            .current_dir(kani_dir)
+            .run()
+            .context(
+                "Failed to extract tar file, try removing Kani setup located in .kani in your home directory and restarting",
+            )?;
     } else {
         let filename = download_filename();
         println!("[2/5] Downloading Kani release bundle: {}", &filename);
         fail_if_unsupported_target()?;
         let bundle = base_dir.join(filename);
         Command::new("curl")
-            .args(&["-sSLf", "-o"])
+            .args(["-sSLf", "-o"])
             .arg(&bundle)
             .arg(download_url())
             .run()
@@ -124,7 +143,7 @@ fn setup_rust_toolchain(kani_dir: &Path) -> Result<String> {
     // Currently this means we require the bundle to have been unpacked first!
     let toolchain_version = get_rust_toolchain_version(kani_dir)?;
     println!("[3/5] Installing rust toolchain version: {}", &toolchain_version);
-    Command::new("rustup").args(&["toolchain", "install", &toolchain_version]).run()?;
+    Command::new("rustup").args(["toolchain", "install", &toolchain_version]).run()?;
 
     let toolchain = home::rustup_home()?.join("toolchains").join(&toolchain_version);
 
@@ -133,20 +152,15 @@ fn setup_rust_toolchain(kani_dir: &Path) -> Result<String> {
 }
 
 /// Install into the pyroot the python dependencies we need
-fn setup_python_deps(kani_dir: &Path, os: &os_info::Info) -> Result<()> {
+fn setup_python_deps(kani_dir: &Path) -> Result<()> {
     println!("[4/5] Installing Kani python dependencies...");
     let pyroot = kani_dir.join("pyroot");
 
     // TODO: this is a repetition of versions from kani/kani-dependencies
     let pkg_versions = &["cbmc-viewer==3.8"];
 
-    if os_hacks::should_apply_ubuntu_18_04_python_hack(os)? {
-        os_hacks::setup_python_deps_on_ubuntu_18_04(&pyroot, pkg_versions)?;
-        return Ok(());
-    }
-
     Command::new("python3")
-        .args(&["-m", "pip", "install", "--target"])
+        .args(["-m", "pip", "install", "--target"])
         .arg(&pyroot)
         .args(pkg_versions)
         .run()?;
@@ -175,7 +189,10 @@ fn download_url() -> String {
 fn fail_if_unsupported_target() -> Result<()> {
     // This is basically going to be reduced to a compile-time constant
     match TARGET {
-        "x86_64-unknown-linux-gnu" | "x86_64-apple-darwin" | "aarch64-apple-darwin" => Ok(()),
+        "x86_64-unknown-linux-gnu"
+        | "x86_64-apple-darwin"
+        | "aarch64-unknown-linux-gnu"
+        | "aarch64-apple-darwin" => Ok(()),
         _ => bail!("Kani does not support this platform (Rust target {})", TARGET),
     }
 }

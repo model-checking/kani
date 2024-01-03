@@ -47,6 +47,7 @@ pub enum BuiltinFn {
     Memset,
     Nearbyint,
     Nearbyintf,
+    Posixmemalign,
     Pow,
     Powf,
     Powi,
@@ -60,6 +61,7 @@ pub enum BuiltinFn {
     Sinf,
     Sqrt,
     Sqrtf,
+    Sysconf,
     Trunc,
     Truncf,
     Unlink,
@@ -109,6 +111,7 @@ impl ToString for BuiltinFn {
             Memset => "memset",
             Nearbyint => "nearbyint",
             Nearbyintf => "nearbyintf",
+            Posixmemalign => "posix_memalign",
             Pow => "pow",
             Powf => "powf",
             Powi => "__builtin_powi",
@@ -122,6 +125,7 @@ impl ToString for BuiltinFn {
             Sinf => "sinf",
             Sqrt => "sqrt",
             Sqrtf => "sqrtf",
+            Sysconf => "sysconf",
             Trunc => "trunc",
             Truncf => "truncf",
             Unlink => "unlink",
@@ -173,6 +177,7 @@ impl BuiltinFn {
             Memset => vec![Type::void_pointer(), Type::c_int(), Type::size_t()],
             Nearbyint => vec![Type::double()],
             Nearbyintf => vec![Type::float()],
+            Posixmemalign => vec![Type::void_pointer(), Type::size_t(), Type::size_t()],
             Powf => vec![Type::float(), Type::float()],
             Powi => vec![Type::double(), Type::c_int()],
             Powif => vec![Type::float(), Type::c_int()],
@@ -185,6 +190,7 @@ impl BuiltinFn {
             Sinf => vec![Type::float()],
             Sqrt => vec![Type::double()],
             Sqrtf => vec![Type::float()],
+            Sysconf => vec![Type::c_int()],
             Trunc => vec![Type::double()],
             Truncf => vec![Type::float()],
             Unlink => vec![Type::c_char().to_pointer()],
@@ -234,6 +240,7 @@ impl BuiltinFn {
             Memset => Type::void_pointer(),
             Nearbyint => Type::double(),
             Nearbyintf => Type::float(),
+            Posixmemalign => Type::c_int(),
             Pow => Type::double(),
             Powf => Type::float(),
             Powi => Type::double(),
@@ -247,6 +254,7 @@ impl BuiltinFn {
             Sinf => Type::float(),
             Sqrt => Type::double(),
             Sqrtf => Type::float(),
+            Sysconf => Type::c_long_int(),
             Trunc => Type::double(),
             Truncf => Type::float(),
             Unlink => Type::c_int(),
@@ -296,6 +304,7 @@ impl BuiltinFn {
             Memset,
             Nearbyint,
             Nearbyintf,
+            Posixmemalign,
             Pow,
             Powf,
             Powi,
@@ -309,6 +318,7 @@ impl BuiltinFn {
             Sinf,
             Sqrt,
             Sqrtf,
+            Sysconf,
             Trunc,
             Truncf,
             Unlink,
@@ -319,7 +329,7 @@ impl BuiltinFn {
 /// Converters: build symbols and expressions from Builtins
 impl BuiltinFn {
     pub fn as_symbol(&self) -> Symbol {
-        Symbol::builtin_function(&self.to_string(), self.param_types(), self.return_type())
+        Symbol::builtin_function(self.to_string(), self.param_types(), self.return_type())
     }
 
     pub fn as_expr(&self) -> Expr {
