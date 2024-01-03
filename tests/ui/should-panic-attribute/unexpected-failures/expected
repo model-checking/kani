@@ -3,7 +3,7 @@ Status: FAILURE\
 Description: "attempt to shift by excessive shift distance"
 
 GLOBAL CONDITIONS:\
-- should_panic: FAILURE
+ - should_panic: FAILURE (encountered failures other than panics, which were unexpected)
 
 Failed Checks: panicked on the `1` arm!
 Failed Checks: panicked on the `0` arm!

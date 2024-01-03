@@ -2,5 +2,5 @@ check.assertion\
 SUCCESS\
 assertion failed: 1 + 1 == 2
 GLOBAL CONDITIONS:\
-- should_panic: FAILURE
+ - should_panic: FAILURE (encountered no panics, but at least one was expected)
 VERIFICATION:- FAILED (one or more global conditions failed)

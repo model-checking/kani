@@ -2,5 +2,5 @@
 Failed Checks: panicked on the `if` branch!
 Failed Checks: panicked on the `else` branch!
 GLOBAL CONDITIONS:\
-- should_panic: SUCCESS
+ - should_panic: SUCCESS (encountered one or more panics as expected)
 VERIFICATION:- SUCCESSFUL
