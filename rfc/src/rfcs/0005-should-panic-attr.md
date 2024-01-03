@@ -2,8 +2,10 @@
 - **Feature Request Issue:** <https://github.com/model-checking/kani/issues/600>
 - **RFC PR:** <https://github.com/model-checking/kani/pull/2272>
 - **Status:** Unstable
-- **Version:** 0
-- **Proof-of-concept:** <https://github.com/model-checking/kani/pull/2315>
+- **Version:** 1
+- **Proof-of-concept:**
+ * Version 0: <https://github.com/model-checking/kani/pull/2315>
+ * Version 1: <https://github.com/model-checking/kani/pull/2532>
 
 -------------------
 
@@ -95,20 +97,23 @@ Note that it's important that we provide the user with this feedback:
  2. **(Outcome)**: What's the actual result that Kani produced after the analysis?
 This will avoid a potential scenario where the user doesn't know for sure if the attribute has had an effect when verifying the harness.
 
+Therefore, the representation must make clear both the expectation and the outcome.
 Below, we show how we'll represent this result.
 
-#### Recommended Representation: Changes to overall result
 
-The representation must make clear both the expectation and the outcome.
-Moreover, the overall result must change according to the verification results (i.e., the failures that were found).
+#### Recommended Representation: As a Global Condition
 
-Using the `#[kani::should_panic]` attribute will return one of the following results:
- 1. `VERIFICATION:- FAILED (encountered no panics, but at least one was expected)` if there were no failures.
- 2. `VERIFICATION:- FAILED (encountered failures other than panics, which were unexpected)` if there were failures but not all them had `prop.property_class() == "assertion"`.
- 3. `VERIFICATION:- SUCCESSFUL (encountered one or more panics as expected)` otherwise.
+The `#[kani::should_panic]` attribute essentially behaves as a property that depends on other properties.
+This makes it well-suited for integration within the framework of [Global Conditions](https://model-checking.github.io/kani/rfc/rfcs/0007-global-conditions.html).
 
-Note that the criteria to achieve a `SUCCESSFUL` result depends on all failures having the property class `"assertion"`.
-If they don't, then the failed properties may contain UB, so we return a `FAILED` result instead.
+Using the `#[kani::should_panic]` attribute will enable the global condition with name `should_panic`.
+Following the format for global conditions, the outcome will be one of the following:
+ 1. `` - `should_panic`: FAILURE (encountered no panics, but at least one was expected)`` if there were no failures.
+ 2. `` - `should_panic`: FAILURE (encountered failures other than panics, which were unexpected)`` if there were failures but not all them had `prop.property_class() == "assertion"`.
+ 3. `` - `should_panic`: SUCCESS (encountered one or more panics as expected)`` otherwise.
+
+Note that the criteria to achieve a `SUCCESS` status depends on all failed properties having the property class `"assertion"`.
+If they don't, then the failed properties may contain UB, so we return a `FAILURE` status instead.
 
 ### Multiple Harnesses
 
