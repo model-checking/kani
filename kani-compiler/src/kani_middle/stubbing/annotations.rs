@@ -25,7 +25,7 @@ fn stub_def_ids(tcx: TyCtxt, harness: LocalDefId, stub: &Stub) -> Option<(DefId,
                 Some(def_id)
             }
             Err(err) => {
-                tcx.sess
+                tcx.dcx()
                     .span_err(tcx.def_span(harness), format!("failed to resolve `{name}`: {err}"));
                 None
             }
@@ -50,7 +50,7 @@ pub fn update_stub_mapping(
         let other_opt = stub_pairs.insert(orig_hash, stub_hash);
         if let Some(other) = other_opt {
             if other != stub_hash {
-                tcx.sess.span_err(
+                tcx.dcx().span_err(
                     tcx.def_span(harness),
                     format!(
                         "duplicate stub mapping: {} mapped to {} and {}",

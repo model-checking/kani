@@ -53,7 +53,7 @@ pub fn collect_reachable_items(tcx: TyCtxt, starting_points: &[MonoItem]) -> Vec
         .dump_dot(tcx)
         .unwrap_or_else(|e| tracing::error!("Failed to dump call graph: {e}"));
 
-    tcx.sess.abort_if_errors();
+    tcx.dcx().abort_if_errors();
     // Sort the result so code generation follows deterministic order.
     // This helps us to debug the code, but it also provides the user a good experience since the
     // order of the errors and warnings is stable.
@@ -412,7 +412,7 @@ impl<'a, 'tcx> MirVisitor for MonoItemsFnCollector<'a, 'tcx> {
                                 let receiver_ty = args.0[0].expect_ty();
                                 let sep = callee.rfind("::").unwrap();
                                 let trait_ = &callee[..sep];
-                                self.tcx.sess.span_err(
+                                self.tcx.dcx().span_err(
                                     rustc_internal::internal(terminator.span),
                                     format!(
                                         "`{}` doesn't implement \
