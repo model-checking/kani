@@ -411,7 +411,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
                 sig
             }
-            ty::Coroutine(did, args, _) => self.coroutine_sig(did, fntyp, args),
+            ty::Coroutine(did, args) => self.coroutine_sig(did, fntyp, args),
             _ => unreachable!("Can't get function signature of type: {:?}", fntyp),
         })
     }

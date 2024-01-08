@@ -65,7 +65,7 @@ pub fn make_test(
     // crate already is included.
     let result = rustc_driver::catch_fatal_errors(|| {
         rustc_span::create_session_if_not_set_then(edition, |_| {
-            use rustc_errors::emitter::{Emitter, EmitterWriter};
+            use rustc_errors::emitter::{Emitter, HumanEmitter};
             use rustc_errors::DiagCtxt;
             use rustc_parse::maybe_new_parser_from_source_str;
             use rustc_parse::parser::ForceCollect;
@@ -81,11 +81,11 @@ pub fn make_test(
 
             let fallback_bundle =
                 rustc_errors::fallback_fluent_bundle(DEFAULT_LOCALE_RESOURCES.to_vec(), false);
-            supports_color = EmitterWriter::stderr(ColorConfig::Auto, fallback_bundle.clone())
+            supports_color = HumanEmitter::stderr(ColorConfig::Auto, fallback_bundle.clone())
                 .diagnostic_width(Some(80))
                 .supports_color();
 
-            let emitter = EmitterWriter::new(Box::new(io::sink()), fallback_bundle);
+            let emitter = HumanEmitter::new(Box::new(io::sink()), fallback_bundle);
 
             // FIXME(misdreavus): pass `-Z treat-err-as-bug` to the doctest parser
             let handler = DiagCtxt::with_emitter(Box::new(emitter));

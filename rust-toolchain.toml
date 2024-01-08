@@ -2,5 +2,5 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
 [toolchain]
-channel = "nightly-2023-12-20"
+channel = "nightly-2024-01-08"
 components = ["llvm-tools-preview", "rustc-dev", "rust-src", "rustfmt"]

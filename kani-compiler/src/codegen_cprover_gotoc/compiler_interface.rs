@@ -417,10 +417,10 @@ fn check_target(session: &Session) {
             it is {}",
             &session.target.llvm_target
         );
-        session.err(err_msg);
+        session.dcx().err(err_msg);
     }
 
-    session.abort_if_errors();
+    session.dcx().abort_if_errors();
 }
 
 fn check_options(session: &Session) {
@@ -433,27 +433,27 @@ fn check_options(session: &Session) {
             let err_msg = format!(
                 "Kani requires the target architecture option `min_global_align` to be 1, but it is {align}."
             );
-            session.err(err_msg);
+            session.dcx().err(err_msg);
         }
         _ => (),
     }
 
     if session.target.options.endian != Endian::Little {
-        session.err("Kani requires the target architecture option `endian` to be `little`.");
+        session.dcx().err("Kani requires the target architecture option `endian` to be `little`.");
     }
 
     if !session.overflow_checks() {
-        session.err("Kani requires overflow checks in order to provide a sound analysis.");
+        session.dcx().err("Kani requires overflow checks in order to provide a sound analysis.");
     }
 
     if session.panic_strategy() != PanicStrategy::Abort {
-        session.err(
+        session.dcx().err(
             "Kani can only handle abort panic strategy (-C panic=abort). See for more details \
         https://github.com/model-checking/kani/issues/692",
         );
     }
 
-    session.abort_if_errors();
+    session.dcx().abort_if_errors();
 }
 
 /// Return a struct that contains information about the codegen results as expected by `rustc`.
@@ -503,8 +503,8 @@ fn symbol_table_to_gotoc(tcx: &TyCtxt, base_path: &Path) -> PathBuf {
             "Failed to generate goto model:\n\tsymtab2gb failed on file {}.",
             input_filename.display()
         );
-        tcx.sess.err(err_msg);
-        tcx.sess.abort_if_errors();
+        tcx.dcx().err(err_msg);
+        tcx.dcx().abort_if_errors();
     };
     output_filename
 }
@@ -607,7 +607,7 @@ impl GotoCodegenResults {
             msg += "\nVerification will fail if one or more of these constructs is reachable.";
             msg += "\nSee https://model-checking.github.io/kani/rust-feature-support.html for more \
             details.";
-            tcx.sess.warn(msg);
+            tcx.dcx().warn(msg);
         }
 
         if !self.concurrent_constructs.is_empty() {
@@ -618,7 +618,7 @@ impl GotoCodegenResults {
             for (construct, locations) in self.concurrent_constructs.iter() {
                 writeln!(&mut msg, "    - {construct} ({})", locations.len()).unwrap();
             }
-            tcx.sess.warn(msg);
+            tcx.dcx().warn(msg);
         }
 
         // Print some compilation stats.
