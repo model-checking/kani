@@ -8,7 +8,7 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 
 ### What's Changed
 
-* Rust toolchain upgraded to 2024-01-08 rust toolchain by @adpaco-aws, @celinval, @zhassan-aws
+* Rust toolchain upgraded to `nightly-2024-01-08` by @adpaco-aws @celinval @zhassan-aws
 
 **Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.43.0...kani-0.44.0
 
