@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: --enable-unstable --fail-uncoverable
 
-//! Checks that all cover statements are satisfied and `--fail-uncoverable`
-//! doesn't cause failures.
+//! Checks that all cover statements are satisfied and enabling
+//! `--fail-uncoverable` doesn't cause unexpected failures.
 
 #[kani::proof]
 fn harness1() {
