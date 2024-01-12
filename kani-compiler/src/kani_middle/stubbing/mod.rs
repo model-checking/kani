@@ -109,7 +109,7 @@ impl<'tcx> MirVisitor for StubConstChecker<'tcx> {
                         tcx.def_path_str(trait_),
                         self.source.name()
                     );
-                    tcx.sess.span_err(rustc_internal::internal(location.span()), msg);
+                    tcx.dcx().span_err(rustc_internal::internal(location.span()), msg);
                     self.is_valid = false;
                 }
             }

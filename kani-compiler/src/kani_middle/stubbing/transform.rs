@@ -101,7 +101,7 @@ fn check_compatibility<'a, 'tcx>(
 ) -> bool {
     // Check whether the arities match.
     if old_body.arg_count != stub_body.arg_count {
-        tcx.sess.span_err(
+        tcx.dcx().span_err(
             tcx.def_span(stub_def_id),
             format!(
                 "arity mismatch: original function/method `{}` takes {} argument(s), stub `{}` takes {}",
@@ -117,7 +117,7 @@ fn check_compatibility<'a, 'tcx>(
     let old_num_generics = tcx.generics_of(old_def_id).count();
     let stub_num_generics = tcx.generics_of(stub_def_id).count();
     if old_num_generics != stub_num_generics {
-        tcx.sess.span_err(
+        tcx.dcx().span_err(
             tcx.def_span(stub_def_id),
             format!(
                 "mismatch in the number of generic parameters: original function/method `{}` takes {} generic parameters(s), stub `{}` takes {}",
@@ -146,7 +146,7 @@ fn check_compatibility<'a, 'tcx>(
             } else {
                 format!("type of parameter {} differs", i - 1)
             };
-            tcx.sess.span_err(
+            tcx.dcx().span_err(
                 new_arg.source_info.span,
                 format!(
                     "{prefix}: stub `{}` has type `{}` where original function/method `{}` has type `{}`",

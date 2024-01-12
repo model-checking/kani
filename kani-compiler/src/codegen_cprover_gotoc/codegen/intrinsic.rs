@@ -649,7 +649,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 pretty_ty(actual)
             ),
         );
-        self.tcx.sess.abort_if_errors();
+        self.tcx.dcx().abort_if_errors();
         unreachable!("Rustc should have aborted already")
     }
 
@@ -1303,7 +1303,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 u64::MIN
             })
         };
-        self.tcx.sess.abort_if_errors();
+        self.tcx.dcx().abort_if_errors();
         n
     }
 
@@ -1432,7 +1432,7 @@ impl<'tcx> GotocCtx<'tcx> {
             );
             utils::span_err(self.tcx, span, err_msg);
         }
-        self.tcx.sess.abort_if_errors();
+        self.tcx.dcx().abort_if_errors();
 
         self.codegen_expr_to_place_stable(p, vec.index_array(index))
     }
@@ -1472,7 +1472,7 @@ impl<'tcx> GotocCtx<'tcx> {
             );
             utils::span_err(self.tcx, span, err_msg);
         }
-        self.tcx.sess.abort_if_errors();
+        self.tcx.dcx().abort_if_errors();
 
         // Type checker should have ensured it's a vector type
         let elem_ty = cbmc_ret_ty.base_type().unwrap().clone();
@@ -1550,7 +1550,7 @@ impl<'tcx> GotocCtx<'tcx> {
             );
             utils::span_err(self.tcx, span, err_msg);
         }
-        self.tcx.sess.abort_if_errors();
+        self.tcx.dcx().abort_if_errors();
 
         // Create the vector comparison expression
         let e = f(arg1, arg2, ret_typ);
@@ -1773,7 +1773,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 cond.ternary(t, e)
             })
             .collect();
-        self.tcx.sess.abort_if_errors();
+        self.tcx.dcx().abort_if_errors();
         let cbmc_ret_ty = self.codegen_ty_stable(rust_ret_type);
         self.codegen_expr_to_place_stable(p, Expr::vector_expr(cbmc_ret_ty, elems))
     }
