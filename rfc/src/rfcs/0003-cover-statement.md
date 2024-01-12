@@ -2,7 +2,7 @@
 - **Feature Request Issue:** <https://github.com/model-checking/kani/issues/696>
 - **RFC PR:** <https://github.com/model-checking/kani/pull/1906>
 - **Status:** Unstable
-- **Version:** 0
+- **Version:** 1
 
 -------------------
 
@@ -85,7 +85,16 @@ fn foo() {
 }
 ```
 
-We can consider adding an option that would cause verification to fail if a cover property was unsatisfiable or unreachable, e.g. `--fail-uncoverable`.
+The `--fail-uncoverable` option will allow users to fail the verification if a cover property is unsatisfiable or unreachable.
+This option will be integrated within the framework of [Global Conditions](https://model-checking.github.io/kani/rfc/rfcs/0007-global-conditions.html), which is used to define properties that depend on other properties.
+
+Using the `--fail-uncoverable` option will enable the global condition with name `fail_uncoverable`.
+Following the format for global conditions, the outcome will be one of the following:
+ 1. `` - fail_uncoverable: FAILURE (expected all cover statements to be satisfied, but at least one was not)``
+ 2. `` - fail_uncoverable: SUCCESS (all cover statements were satisfied as expected)``
+
+Note that the criteria to achieve a `SUCCESS` status depends on all properties of the `"cover"` class having a `SATISFIED` status.
+Otherwise, we return a `FAILURE` status.
 
 ### Inclusion in the Verification Summary
 
