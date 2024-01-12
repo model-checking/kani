@@ -90,7 +90,7 @@ This option will be integrated within the framework of [Global Conditions](https
 
 Using the `--fail-uncoverable` option will enable the global condition with name `fail_uncoverable`.
 Following the format for global conditions, the outcome will be one of the following:
- 1. `` - fail_uncoverable: FAILURE (encountered one or more cover statements which were not satisfied)``
+ 1. `` - fail_uncoverable: FAILURE (expected all cover statements to be satisfied, but at least one was not)``
  2. `` - fail_uncoverable: SUCCESS (all cover statements were satisfied as expected)``
 
 Note that the criteria to achieve a `SUCCESS` status depends on all properties of the `"cover"` class having a `SATISFIED` status.
