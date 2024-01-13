@@ -10,6 +10,7 @@ publish = false
 
 [dependencies]
 kani_macros = { path = "../kani_macros" }
+libc = ">=0.2.39"
 
 [features]
 concrete_playback = []

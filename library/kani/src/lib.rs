@@ -16,6 +16,8 @@
 #![cfg_attr(test, feature(platform_intrinsics, portable_simd))]
 // Required for rustc_diagnostic_item
 #![allow(internal_features)]
+// Required so we can use unstable library feature 'allocator_api'
+#![feature(allocator_api)]
 
 pub mod arbitrary;
 #[cfg(feature = "concrete_playback")]
@@ -26,6 +28,7 @@ pub mod tuple;
 pub mod vec;
 
 mod models;
+mod stubs;
 
 pub use arbitrary::Arbitrary;
 #[cfg(feature = "concrete_playback")]
