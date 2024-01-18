@@ -348,12 +348,12 @@ impl<'tcx> KaniAttributes<'tcx> {
                 "Use of unstable feature `{}`: {}",
                 unstable_attr.feature, unstable_attr.reason
             ))
-            .span_note(
+            .with_span_note(
                 self.tcx.def_span(self.item),
                 format!("the function `{fn_name}` is unstable:"),
             )
-            .note(format!("see issue {} for more information", unstable_attr.issue))
-            .help(format!("use `-Z {}` to enable using this function.", unstable_attr.feature))
+            .with_note(format!("see issue {} for more information", unstable_attr.issue))
+            .with_help(format!("use `-Z {}` to enable using this function.", unstable_attr.feature))
             .emit()
     }
 
@@ -422,7 +422,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                     self.item_name(),
                 ),
             )
-            .span_note(self.tcx.def_span(id), "Try adding a contract to this function.")
+            .with_span_note(self.tcx.def_span(id), "Try adding a contract to this function.")
             .emit();
             return;
         };
@@ -448,7 +448,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                             self.item_name(),
                         ),
                     )
-                    .span_note(
+                    .with_span_note(
                         self.tcx.def_span(def_id),
                         format!(
                             "Try adding a contract to this function or use the unsound `{}` attribute instead.", 
@@ -624,7 +624,7 @@ impl<'a> UnstableAttrParseError<'a> {
                 self.attr.span,
                 format!("failed to parse `#[kani::unstable]`: {}", self.reason),
             )
-            .note(format!(
+            .with_note(format!(
                 "expected format: #[kani::unstable({}, {}, {})]",
                 r#"feature="<IDENTIFIER>""#, r#"issue="<ISSUE>""#, r#"reason="<DESCRIPTION>""#
             ))
@@ -665,7 +665,7 @@ fn expect_no_args(tcx: TyCtxt, kind: KaniAttributeKind, attr: &Attribute) {
     if !attr.is_word() {
         tcx.dcx()
             .struct_span_err(attr.span, format!("unexpected argument for `{}`", kind.as_ref()))
-            .help("remove the extra argument")
+            .with_help("remove the extra argument")
             .emit();
     }
 }
