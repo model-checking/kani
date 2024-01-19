@@ -736,7 +736,7 @@ mod tests {
             "kani input.rs --harness harness_1 harness_2".split(" "),
         );
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        assert_eq!(result.unwrap_err().kind(), ErrorKind::ArgumentConflict);
     }
 
     #[test]
