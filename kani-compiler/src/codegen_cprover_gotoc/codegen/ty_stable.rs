@@ -21,11 +21,11 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     pub fn codegen_ty_stable(&mut self, ty: Ty) -> Type {
-        self.codegen_ty(rustc_internal::internal(ty))
+        self.codegen_ty(rustc_internal::internal(self.tcx, ty))
     }
 
     pub fn codegen_ty_ref_stable(&mut self, ty: Ty) -> Type {
-        self.codegen_ty_ref(rustc_internal::internal(ty))
+        self.codegen_ty_ref(rustc_internal::internal(self.tcx, ty))
     }
 
     pub fn local_ty_stable(&self, local: Local) -> Ty {
@@ -37,11 +37,11 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     pub fn is_zst_stable(&self, ty: Ty) -> bool {
-        self.is_zst(rustc_internal::internal(ty))
+        self.is_zst(rustc_internal::internal(self.tcx, ty))
     }
 
     pub fn layout_of_stable(&self, ty: Ty) -> TyAndLayout<'tcx> {
-        self.layout_of(rustc_internal::internal(ty))
+        self.layout_of(rustc_internal::internal(self.tcx, ty))
     }
 
     pub fn codegen_fndef_type_stable(&mut self, instance: Instance) -> Type {
@@ -54,34 +54,34 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     pub fn fn_sig_of_instance_stable(&self, instance: Instance) -> FnSig {
-        let fn_sig = self.fn_sig_of_instance(rustc_internal::internal(instance));
+        let fn_sig = self.fn_sig_of_instance(rustc_internal::internal(self.tcx, instance));
         let fn_sig =
             self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), fn_sig);
         rustc_internal::stable(fn_sig)
     }
 
     pub fn use_fat_pointer_stable(&self, pointer_ty: Ty) -> bool {
-        self.use_fat_pointer(rustc_internal::internal(pointer_ty))
+        self.use_fat_pointer(rustc_internal::internal(self.tcx, pointer_ty))
     }
 
     pub fn use_thin_pointer_stable(&self, pointer_ty: Ty) -> bool {
-        self.use_thin_pointer(rustc_internal::internal(pointer_ty))
+        self.use_thin_pointer(rustc_internal::internal(self.tcx, pointer_ty))
     }
 
     pub fn is_fat_pointer_stable(&self, pointer_ty: Ty) -> bool {
-        self.is_fat_pointer(rustc_internal::internal(pointer_ty))
+        self.is_fat_pointer(rustc_internal::internal(self.tcx, pointer_ty))
     }
 
     pub fn is_vtable_fat_pointer_stable(&self, pointer_ty: Ty) -> bool {
-        self.is_vtable_fat_pointer(rustc_internal::internal(pointer_ty))
+        self.is_vtable_fat_pointer(rustc_internal::internal(self.tcx, pointer_ty))
     }
 
     pub fn use_vtable_fat_pointer_stable(&self, pointer_ty: Ty) -> bool {
-        self.use_vtable_fat_pointer(rustc_internal::internal(pointer_ty))
+        self.use_vtable_fat_pointer(rustc_internal::internal(self.tcx, pointer_ty))
     }
 
     pub fn vtable_name_stable(&self, ty: Ty) -> String {
-        self.vtable_name(rustc_internal::internal(ty))
+        self.vtable_name(rustc_internal::internal(self.tcx, ty))
     }
 
     pub fn rvalue_ty_stable(&self, rvalue: &Rvalue) -> Ty {
@@ -89,12 +89,12 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     pub fn simd_size_and_type(&self, ty: Ty) -> (u64, Ty) {
-        let (sz, ty) = rustc_internal::internal(ty).simd_size_and_type(self.tcx);
+        let (sz, ty) = rustc_internal::internal(self.tcx, ty).simd_size_and_type(self.tcx);
         (sz, rustc_internal::stable(ty))
     }
 
     pub fn codegen_enum_discr_typ_stable(&self, ty: Ty) -> Ty {
-        rustc_internal::stable(self.codegen_enum_discr_typ(rustc_internal::internal(ty)))
+        rustc_internal::stable(self.codegen_enum_discr_typ(rustc_internal::internal(self.tcx, ty)))
     }
 
     pub fn codegen_function_sig_stable(&mut self, sig: FnSig) -> Type {
@@ -115,6 +115,14 @@ impl<'tcx> GotocCtx<'tcx> {
             Type::code_with_unnamed_parameters(params, self.codegen_ty_stable(sig.output()))
         }
     }
+
+    /// Convert a type into a user readable type representation.
+    ///
+    /// This should be replaced by StableMIR `pretty_ty()` after
+    /// <https://github.com/rust-lang/rust/pull/118364> is merged.
+    pub fn pretty_ty(&self, ty: Ty) -> String {
+        rustc_internal::internal(self.tcx, ty).to_string()
+    }
 }
 /// If given type is a Ref / Raw ref, return the pointee type.
 pub fn pointee_type(mir_type: Ty) -> Option<Ty> {
@@ -123,14 +131,6 @@ pub fn pointee_type(mir_type: Ty) -> Option<Ty> {
         TyKind::RigidTy(RigidTy::RawPtr(ty, ..)) => Some(ty),
         _ => None,
     }
-}
-
-/// Convert a type into a user readable type representation.
-///
-/// This should be replaced by StableMIR `pretty_ty()` after
-/// <https://github.com/rust-lang/rust/pull/118364> is merged.
-pub fn pretty_ty(ty: Ty) -> String {
-    rustc_internal::internal(ty).to_string()
 }
 
 pub fn pointee_type_stable(ty: Ty) -> Option<Ty> {

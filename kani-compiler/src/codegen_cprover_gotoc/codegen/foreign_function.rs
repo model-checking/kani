@@ -48,7 +48,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// handled later.
     pub fn codegen_foreign_fn(&mut self, instance: Instance) -> &Symbol {
         debug!(?instance, "codegen_foreign_function");
-        let instance_internal = rustc_internal::internal(instance);
+        let instance_internal = rustc_internal::internal(self.tcx, instance);
         let fn_name = self.symbol_name_stable(instance).intern();
         if self.symbol_table.contains(fn_name) {
             // Symbol has been added (either a built-in CBMC function or a Rust allocation function).
@@ -102,7 +102,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Generate type for the given foreign instance.
     fn codegen_ffi_type(&mut self, instance: Instance) -> Type {
         let fn_name = self.symbol_name_stable(instance);
-        let fn_abi = kani_middle::fn_abi(self.tcx, rustc_internal::internal(instance));
+        let fn_abi = kani_middle::fn_abi(self.tcx, rustc_internal::internal(self.tcx, instance));
         let loc = self.codegen_span_stable(instance.def.span());
         let params = fn_abi
             .args
@@ -140,7 +140,8 @@ impl<'tcx> GotocCtx<'tcx> {
         let entry = self.unsupported_constructs.entry("foreign function".into()).or_default();
         entry.push(loc);
 
-        let call_conv = kani_middle::fn_abi(self.tcx, rustc_internal::internal(instance)).conv;
+        let call_conv =
+            kani_middle::fn_abi(self.tcx, rustc_internal::internal(self.tcx, instance)).conv;
         let msg = format!("call to foreign \"{call_conv:?}\" function `{fn_name}`");
         let url = if call_conv == Conv::C {
             "https://github.com/model-checking/kani/issues/2423"

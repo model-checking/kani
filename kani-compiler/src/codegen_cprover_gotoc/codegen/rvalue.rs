@@ -555,7 +555,7 @@ impl<'tcx> GotocCtx<'tcx> {
             let layout = self.layout_of_stable(res_ty);
             let fields = match &layout.variants {
                 Variants::Single { index } => {
-                    if *index != rustc_internal::internal(variant_index) {
+                    if *index != rustc_internal::internal(self.tcx, variant_index) {
                         // This may occur if all variants except for the one pointed by
                         // index can never be constructed. Generic code might still try
                         // to initialize the non-existing invariant.
@@ -565,7 +565,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     &layout.fields
                 }
                 Variants::Multiple { variants, .. } => {
-                    &variants[rustc_internal::internal(variant_index)].fields
+                    &variants[rustc_internal::internal(self.tcx, variant_index)].fields
                 }
             };
 
@@ -716,7 +716,10 @@ impl<'tcx> GotocCtx<'tcx> {
                             .offset_of_subfield(
                                 self,
                                 fields.iter().map(|(var_idx, field_idx)| {
-                                    (rustc_internal::internal(var_idx), (*field_idx).into())
+                                    (
+                                        rustc_internal::internal(self.tcx, var_idx),
+                                        (*field_idx).into(),
+                                    )
                                 }),
                             )
                             .bytes(),
@@ -1180,7 +1183,7 @@ impl<'tcx> GotocCtx<'tcx> {
             if self.vtable_ctx.emit_vtable_restrictions {
                 // Add to the possible method names for this trait type
                 self.vtable_ctx.add_possible_method(
-                    self.normalized_trait_name(rustc_internal::internal(ty)).into(),
+                    self.normalized_trait_name(rustc_internal::internal(self.tcx, ty)).into(),
                     idx,
                     fn_name.into(),
                 );
@@ -1205,7 +1208,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Generate a function pointer to drop_in_place for entry into the vtable
     fn codegen_vtable_drop_in_place(&mut self, ty: Ty, trait_ty: Ty) -> Expr {
-        let trait_ty = rustc_internal::internal(trait_ty);
+        let trait_ty = rustc_internal::internal(self.tcx, trait_ty);
         let drop_instance = Instance::resolve_drop_in_place(ty);
         let drop_sym_name: InternedString = drop_instance.mangled_name().into();
 
@@ -1296,7 +1299,7 @@ impl<'tcx> GotocCtx<'tcx> {
             _ => unreachable!("Cannot codegen_vtable for type {:?}", dst_mir_type.kind()),
         };
 
-        let src_name = self.ty_mangled_name(rustc_internal::internal(src_mir_type));
+        let src_name = self.ty_mangled_name(rustc_internal::internal(self.tcx, src_mir_type));
         // The name needs to be the same as inserted in typ.rs
         let vtable_name = self.vtable_name_stable(trait_type).intern();
         let vtable_impl_name = format!("{vtable_name}_impl_for_{src_name}");
@@ -1310,7 +1313,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // Build the vtable, using Rust's vtable_entries to determine field order
                 let vtable_entries = if let Some(principal) = trait_type.kind().trait_principal() {
                     let trait_ref_binder = principal.with_self_ty(src_mir_type);
-                    ctx.tcx.vtable_entries(rustc_internal::internal(trait_ref_binder))
+                    ctx.tcx.vtable_entries(rustc_internal::internal(ctx.tcx, trait_ref_binder))
                 } else {
                     TyCtxt::COMMON_VTABLE_ENTRIES
                 };

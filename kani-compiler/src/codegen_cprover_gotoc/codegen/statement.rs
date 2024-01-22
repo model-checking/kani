@@ -219,8 +219,8 @@ impl<'tcx> GotocCtx<'tcx> {
         location: Location,
     ) -> Stmt {
         // this requires place points to an enum type.
-        let dest_ty_internal = rustc_internal::internal(dest_ty);
-        let variant_index_internal = rustc_internal::internal(variant_index);
+        let dest_ty_internal = rustc_internal::internal(self.tcx, dest_ty);
+        let variant_index_internal = rustc_internal::internal(self.tcx, variant_index);
         let layout = self.layout_of(dest_ty_internal);
         match &layout.variants {
             Variants::Single { .. } => Stmt::skip(location),
@@ -532,7 +532,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let instance = Instance::resolve(def, &subst).unwrap();
 
                 // TODO(celina): Move this check to be inside codegen_funcall_args.
-                if self.ty_needs_untupled_args(rustc_internal::internal(funct)) {
+                if self.ty_needs_untupled_args(rustc_internal::internal(self.tcx, funct)) {
                     self.codegen_untupled_args(instance, &mut fargs, args.last());
                 }
 
@@ -587,7 +587,7 @@ impl<'tcx> GotocCtx<'tcx> {
     fn extract_ptr(&self, arg_expr: Expr, arg_ty: Ty) -> Expr {
         // Generate an expression that indexes the pointer.
         let expr = self
-            .receiver_data_path(rustc_internal::internal(arg_ty))
+            .receiver_data_path(rustc_internal::internal(self.tcx, arg_ty))
             .fold(arg_expr, |curr_expr, (name, _)| curr_expr.member(name, &self.symbol_table));
 
         trace!(?arg_ty, gotoc_ty=?expr.typ(), gotoc_expr=?expr.value(), "extract_ptr");

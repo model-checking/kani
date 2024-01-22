@@ -66,8 +66,8 @@ pub fn extract_unsize_casting_stable(
 ) -> CoercionBaseStable {
     let CoercionBase { src_ty, dst_ty } = extract_unsize_casting(
         tcx,
-        rustc_internal::internal(src_ty),
-        rustc_internal::internal(dst_ty),
+        rustc_internal::internal(tcx, src_ty),
+        rustc_internal::internal(tcx, dst_ty),
     );
     CoercionBaseStable {
         src_ty: rustc_internal::stable(src_ty),
@@ -90,11 +90,11 @@ pub fn extract_unsize_casting<'tcx>(
     .last()
     .unwrap();
     // Extract the pointee type that is being coerced.
-    let src_pointee_ty = extract_pointee(coerce_info.src_ty).expect(&format!(
+    let src_pointee_ty = extract_pointee(tcx, coerce_info.src_ty).expect(&format!(
         "Expected source to be a pointer. Found {:?} instead",
         coerce_info.src_ty
     ));
-    let dst_pointee_ty = extract_pointee(coerce_info.dst_ty).expect(&format!(
+    let dst_pointee_ty = extract_pointee(tcx, coerce_info.dst_ty).expect(&format!(
         "Expected destination to be a pointer. Found {:?} instead",
         coerce_info.dst_ty
     ));
@@ -216,8 +216,8 @@ impl<'tcx> Iterator for CoerceUnsizedIterator<'tcx> {
 
                 let CustomCoerceUnsized::Struct(coerce_index) = custom_coerce_unsize_info(
                     self.tcx,
-                    rustc_internal::internal(src_ty),
-                    rustc_internal::internal(dst_ty),
+                    rustc_internal::internal(self.tcx, src_ty),
+                    rustc_internal::internal(self.tcx, dst_ty),
                 );
                 let coerce_index = coerce_index.as_usize();
                 assert!(coerce_index < src_fields.len());
@@ -229,7 +229,7 @@ impl<'tcx> Iterator for CoerceUnsizedIterator<'tcx> {
             _ => {
                 // Base case is always a pointer (Box, raw_pointer or reference).
                 assert!(
-                    extract_pointee(src_ty).is_some(),
+                    extract_pointee(self.tcx, src_ty).is_some(),
                     "Expected a pointer, but found {src_ty:?}"
                 );
                 None
@@ -262,6 +262,6 @@ fn custom_coerce_unsize_info<'tcx>(
 }
 
 /// Extract pointee type from builtin pointer types.
-fn extract_pointee<'tcx>(typ: TyStable) -> Option<Ty<'tcx>> {
-    rustc_internal::internal(typ).builtin_deref(true).map(|TypeAndMut { ty, .. }| ty)
+fn extract_pointee<'tcx>(tcx: TyCtxt<'tcx>, typ: TyStable) -> Option<Ty<'tcx>> {
+    rustc_internal::internal(tcx, typ).builtin_deref(true).map(|TypeAndMut { ty, .. }| ty)
 }

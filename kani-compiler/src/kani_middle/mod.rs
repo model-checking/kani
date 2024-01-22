@@ -84,7 +84,7 @@ pub fn check_reachable_items(tcx: TyCtxt, queries: &QueryDb, items: &[MonoItem])
         };
         if !def_ids.contains(&def_id) {
             // Check if any unstable attribute was reached.
-            KaniAttributes::for_item(tcx, rustc_internal::internal(def_id))
+            KaniAttributes::for_item(tcx, rustc_internal::internal(tcx, def_id))
                 .check_unstable_features(&queries.args().unstable_features);
             def_ids.insert(def_id);
         }
@@ -92,7 +92,10 @@ pub fn check_reachable_items(tcx: TyCtxt, queries: &QueryDb, items: &[MonoItem])
         // We don't short circuit here since this is a type check and can shake
         // out differently depending on generic parameters.
         if let MonoItem::Fn(instance) = item {
-            if attributes::is_function_contract_generated(tcx, rustc_internal::internal(def_id)) {
+            if attributes::is_function_contract_generated(
+                tcx,
+                rustc_internal::internal(tcx, def_id),
+            ) {
                 check_is_contract_safe(tcx, *instance);
             }
         }
@@ -167,7 +170,7 @@ fn check_is_contract_safe(tcx: TyCtxt, instance: Instance) {
     for var in &bound_fn_sig.bound_vars {
         if let BoundVariableKind::Ty(t) = var {
             tcx.dcx().span_err(
-                rustc_internal::internal(instance.def.span()),
+                rustc_internal::internal(tcx, instance.def.span()),
                 format!("Found a bound type variable {t:?} after monomorphization"),
             );
         }
@@ -211,7 +214,8 @@ pub fn dump_mir_items(tcx: TyCtxt, items: &[MonoItem], output: &Path) {
         // For each def_id, dump their MIR
         for (item, def_id) in items.iter().filter_map(visible_item) {
             writeln!(writer, "// Item: {item:?}").unwrap();
-            write_mir_pretty(tcx, Some(rustc_internal::internal(def_id)), &mut writer).unwrap();
+            write_mir_pretty(tcx, Some(rustc_internal::internal(tcx, def_id)), &mut writer)
+                .unwrap();
         }
     }
 }

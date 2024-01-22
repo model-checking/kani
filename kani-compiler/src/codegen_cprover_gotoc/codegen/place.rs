@@ -260,7 +260,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         Ok(parent_expr.member(Self::tuple_fld_name(field_idx), &self.symbol_table))
                     }
                     TyKind::RigidTy(RigidTy::Adt(def, _))
-                        if rustc_internal::internal(def).repr().simd() =>
+                        if rustc_internal::internal(self.tcx, def).repr().simd() =>
                     {
                         Ok(self.codegen_simd_field(
                             parent_expr,
@@ -415,7 +415,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 };
 
                 let inner_mir_typ_internal =
-                    std_pointee_type(rustc_internal::internal(base_type)).unwrap();
+                    std_pointee_type(rustc_internal::internal(self.tcx, base_type)).unwrap();
                 let inner_mir_typ = rustc_internal::stable(inner_mir_typ_internal);
                 let (fat_ptr_mir_typ, fat_ptr_goto_expr) = if self
                     .use_thin_pointer(inner_mir_typ_internal)
@@ -436,6 +436,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     );
                     assert!(
                         self.use_fat_pointer(rustc_internal::internal(
+                            self.tcx,
                             pointee_type(fat_ptr_mir_typ.unwrap()).unwrap()
                         )),
                         "Unexpected type: {:?} -- {:?}",
@@ -582,7 +583,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         (variant.name().into(), TypeOrVariant::Variant(variant))
                     }
                     TyKind::RigidTy(RigidTy::Coroutine(..)) => {
-                        let idx_internal = rustc_internal::internal(idx);
+                        let idx_internal = rustc_internal::internal(self.tcx, idx);
                         (
                             self.coroutine_variant_name(idx_internal),
                             TypeOrVariant::CoroutineVariant(*idx),
@@ -593,7 +594,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         &ty.kind()
                     ),
                 };
-                let layout = self.layout_of(rustc_internal::internal(ty));
+                let layout = self.layout_of(rustc_internal::internal(self.tcx, ty));
                 let expr = match &layout.variants {
                     Variants::Single { .. } => before.goto_expr,
                     Variants::Multiple { tag_encoding, .. } => match tag_encoding {

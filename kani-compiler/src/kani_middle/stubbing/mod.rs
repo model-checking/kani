@@ -27,7 +27,7 @@ pub fn harness_stub_map(
     harness: Instance,
     metadata: &HarnessMetadata,
 ) -> BTreeMap<DefPathHash, DefPathHash> {
-    let def_id = rustc_internal::internal(harness.def.def_id());
+    let def_id = rustc_internal::internal(tcx, harness.def.def_id());
     let attrs = &metadata.attributes;
     let mut stub_pairs = BTreeMap::default();
     for stubs in &attrs.stubs {
@@ -44,7 +44,7 @@ pub fn harness_stub_map(
 /// In stable MIR, trying to retrieve an `Instance::body()` will ICE if we cannot evaluate a
 /// constant as expected. For now, use internal APIs to anticipate this issue.
 pub fn validate_instance(tcx: TyCtxt, instance: Instance) -> bool {
-    let internal_instance = rustc_internal::internal(instance);
+    let internal_instance = rustc_internal::internal(tcx, instance);
     if get_stub(tcx, internal_instance.def_id()).is_some() {
         debug!(?instance, "validate_instance");
         let item = CrateItem::try_from(instance).unwrap();
@@ -87,7 +87,7 @@ impl<'tcx> StubConstChecker<'tcx> {
 impl<'tcx> MirVisitor for StubConstChecker<'tcx> {
     /// Collect constants that are represented as static variables.
     fn visit_constant(&mut self, constant: &Constant, location: Location) {
-        let const_ = self.monomorphize(rustc_internal::internal(&constant.literal));
+        let const_ = self.monomorphize(rustc_internal::internal(self.tcx, &constant.literal));
         debug!(?constant, ?location, ?const_, "visit_constant");
         match const_ {
             Const::Val(..) | Const::Ty(..) => {}
@@ -109,7 +109,7 @@ impl<'tcx> MirVisitor for StubConstChecker<'tcx> {
                         tcx.def_path_str(trait_),
                         self.source.name()
                     );
-                    tcx.dcx().span_err(rustc_internal::internal(location.span()), msg);
+                    tcx.dcx().span_err(rustc_internal::internal(self.tcx, location.span()), msg);
                     self.is_valid = false;
                 }
             }

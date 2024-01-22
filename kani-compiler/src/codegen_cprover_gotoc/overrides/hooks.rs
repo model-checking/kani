@@ -38,7 +38,7 @@ pub trait GotocHook {
 fn matches_function(tcx: TyCtxt, instance: Instance, attr_name: &str) -> bool {
     let attr_sym = rustc_span::symbol::Symbol::intern(attr_name);
     if let Some(attr_id) = tcx.all_diagnostic_items(()).name_to_id.get(&attr_sym) {
-        if rustc_internal::internal(instance.def.def_id()) == *attr_id {
+        if rustc_internal::internal(tcx, instance.def.def_id()) == *attr_id {
             debug!("matched: {:?} {:?}", attr_id, attr_sym);
             return true;
         }
@@ -196,7 +196,7 @@ struct Panic;
 
 impl GotocHook for Panic {
     fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
-        let def_id = rustc_internal::internal(instance.def.def_id());
+        let def_id = rustc_internal::internal(tcx, instance.def.def_id());
         Some(def_id) == tcx.lang_items().panic_fn()
             || tcx.has_attr(def_id, rustc_span::sym::rustc_const_panic_str)
             || Some(def_id) == tcx.lang_items().panic_fmt()
