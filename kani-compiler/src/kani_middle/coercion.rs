@@ -262,6 +262,6 @@ fn custom_coerce_unsize_info<'tcx>(
 }
 
 /// Extract pointee type from builtin pointer types.
-fn extract_pointee<'tcx>(tcx: TyCtxt<'tcx>, typ: TyStable) -> Option<Ty<'tcx>> {
+fn extract_pointee(tcx: TyCtxt<'_>, typ: TyStable) -> Option<Ty<'_>> {
     rustc_internal::internal(tcx, typ).builtin_deref(true).map(|TypeAndMut { ty, .. }| ty)
 }

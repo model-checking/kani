@@ -793,7 +793,7 @@ fn parse_integer(attr: &Attribute) -> Option<u128> {
     if attr_args.len() == 1 {
         let x = attr_args[0].lit()?;
         match x.kind {
-            LitKind::Int(y, ..) => Some(y),
+            LitKind::Int(y, ..) => Some(y.get()),
             _ => None,
         }
     }
