@@ -302,7 +302,11 @@ impl<'tcx> GotocCtx<'tcx> {
             kind: ty::BoundRegionKind::BrEnv,
         };
         let env_region = ty::Region::new_bound(self.tcx, ty::INNERMOST, br);
-        let env_ty = self.tcx.closure_env_ty(def_id, args, env_region).unwrap();
+        let env_ty = self.tcx.closure_env_ty(
+            Ty::new_closure(self.tcx, def_id, args),
+            args.as_closure().kind(),
+            env_region,
+        );
 
         let sig = sig.skip_binder();
 
