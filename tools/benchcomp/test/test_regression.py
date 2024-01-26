@@ -6,6 +6,7 @@
 # tests.
 
 import pathlib
+import re
 import subprocess
 import tempfile
 import textwrap
@@ -834,3 +835,70 @@ class RegressionTests(unittest.TestCase):
             run_bc()
             self.assertNotEqual(
                 run_bc.proc.returncode, 0, msg=run_bc.stderr)
+
+
+    def test_unknown_metric_in_benchmark(self):
+        """Ensure that benchcomp continues with warning if a benchmark result contained an unknown metric"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out_file = pathlib.Path(tmp) / str(uuid.uuid4())
+            run_bc = Benchcomp({
+                "variants": {
+                    "v1": {
+                        "config": {
+                            "command_line": "true",
+                            "directory": tmp,
+                        }
+                    },
+                    "v2": {
+                        "config": {
+                            "command_line": "true",
+                            "directory": tmp,
+                        }
+                    }
+                },
+                "run": {
+                    "suites": {
+                        "suite_1": {
+                            "parser": {
+                                "command": """
+                                    echo '{
+                                      metrics: {
+                                        foo: {},
+                                        bar: {},
+                                      },
+                                      benchmarks: {
+                                        bench_1: {
+                                          metrics: {
+                                            baz: 11
+                                          }
+                                        }
+                                      }
+                                    }'
+                                """
+                            },
+                            "variants": ["v2", "v1"]
+                        }
+                    }
+                },
+                "visualize": [{
+                    "type": "dump_markdown_results_table",
+                    "out_file": "-",
+                    "extra_columns": {},
+                }],
+            })
+
+            output_pat = re.compile(
+                "Benchmark 'bench_1' contained a metric 'baz' in the 'v1' "
+                "variant result that was not declared in the 'metrics' dict.")
+
+            run_bc()
+            self.assertRegex(run_bc.stderr, output_pat)
+
+            self.assertEqual(run_bc.proc.returncode, 0, msg=run_bc.stderr)
+
+            with open(run_bc.working_directory / "result.yaml") as handle:
+                result = yaml.safe_load(handle)
+
+            for item in ["benchmarks", "metrics"]:
+                self.assertIn(item, result)

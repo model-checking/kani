@@ -6,6 +6,7 @@ import dataclasses
 import json
 import logging
 import subprocess
+import sys
 import textwrap
 
 import jinja2
@@ -232,12 +233,19 @@ class dump_markdown_results_table:
         for bench, bench_result in results["benchmarks"].items():
             for variant, variant_result in bench_result["variants"].items():
                 for metric, value in variant_result["metrics"].items():
+                    if metric not in ret:
+                        ret[metric] = {}
+                        logging.warning(
+                            "Benchmark '%s' contained a metric '%s' in the "
+                            "'%s' variant result that was not declared in "
+                            "the 'metrics' dict. Add '%s: {}' to the metrics "
+                            "dict", bench, metric, variant, metric)
                     try:
                         ret[metric][bench][variant] = variant_result["metrics"][metric]
                     except KeyError:
                         ret[metric][bench] = {
                             variant: variant_result["metrics"][metric]
-                    }
+                        }
         return ret
 
 
