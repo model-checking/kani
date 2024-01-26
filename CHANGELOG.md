@@ -4,6 +4,13 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
+## [0.45.0]
+
+## What's Changed
+* Upgrade toolchain to nightly-2024-01-17 by @celinval in https://github.com/model-checking/kani/pull/2976
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.44.0...kani-0.45.0
+
 ## [0.44.0]
 
 ### What's Changed

@@ -30,13 +30,13 @@ fn main() {
         assert!(min_align_of_val(&0i16) == 2);
         assert!(min_align_of_val(&0i32) == 4);
         assert!(min_align_of_val(&0i64) == 8);
-        assert!(min_align_of_val(&0i128) == 8);
+        assert!(min_align_of_val(&0i128) == 16);
         assert!(min_align_of_val(&0isize) == 8);
         assert!(min_align_of_val(&0u8) == 1);
         assert!(min_align_of_val(&0u16) == 2);
         assert!(min_align_of_val(&0u32) == 4);
         assert!(min_align_of_val(&0u64) == 8);
-        assert!(min_align_of_val(&0u128) == 8);
+        assert!(min_align_of_val(&0u128) == 16);
         assert!(min_align_of_val(&0usize) == 8);
         assert!(min_align_of_val(&0f32) == 4);
         assert!(min_align_of_val(&0f64) == 8);

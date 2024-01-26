@@ -17,7 +17,7 @@ pub use std::*;
 // https://github.com/model-checking/kani/issues/1949
 #[cfg(not(feature = "concrete_playback"))]
 #[allow(unused_imports)]
-use core::assert as __kani__workaround_core_assert;
+pub use core::assert as __kani__workaround_core_assert;
 
 #[cfg(not(feature = "concrete_playback"))]
 // Override process calls with stubs.
