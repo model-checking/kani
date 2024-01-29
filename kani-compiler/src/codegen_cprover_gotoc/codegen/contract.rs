@@ -1,3 +1,5 @@
+// Copyright Kani Contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::attributes::KaniAttributes;
 use cbmc::goto_program::FunctionContract;

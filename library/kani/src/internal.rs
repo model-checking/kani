@@ -1,3 +1,6 @@
+// Copyright Kani Contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
 /// Helper trait for code generation for `modifies` contracts.
 ///
 /// We allow the user to provide us with a pointer-like object that we convert as needed.
