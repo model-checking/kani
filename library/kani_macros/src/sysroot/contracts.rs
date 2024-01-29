@@ -856,9 +856,9 @@ fn is_replace_return_havoc(stmt: &syn::Stmt) -> bool {
 /// For each argument create an expression that passes this argument along unmodified.
 ///
 /// Reconstructs structs that may have been deconstructed with patterns.
-fn exprs_for_args<'a, T>(
-    args: &'a syn::punctuated::Punctuated<FnArg, T>,
-) -> impl Iterator<Item = Expr> + Clone + 'a {
+fn exprs_for_args<T>(
+    args: &syn::punctuated::Punctuated<FnArg, T>,
+) -> impl Iterator<Item = Expr> + Clone + '_ {
     args.iter().map(|arg| match arg {
         FnArg::Receiver(_) => Expr::Verbatim(quote!(self)),
         FnArg::Typed(typed) => pat_to_expr(&typed.pat),
@@ -1351,7 +1351,7 @@ fn chunks_by<'a, T, C: Default + Extend<T>>(
     std::iter::from_fn(move || {
         let mut new = C::default();
         let mut empty = true;
-        while let Some(tok) = iter.next() {
+        for tok in iter.by_ref() {
             empty = false;
             if pred(&tok) {
                 break;
