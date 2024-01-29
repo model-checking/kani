@@ -16,7 +16,7 @@ use tracing::debug;
 // Use a thread-local global variable to track the current codegen item for debugging.
 // If Kani panics during codegen, we can grab this item to include the problematic
 // codegen item in the panic trace.
-thread_local!(static CURRENT_CODEGEN_ITEM: RefCell<(Option<String>, Option<Location>)> = RefCell::new((None, None)));
+thread_local!(static CURRENT_CODEGEN_ITEM: RefCell<(Option<String>, Option<Location>)> = const { RefCell::new((None, None)) });
 
 pub fn init() {
     // Install panic hook

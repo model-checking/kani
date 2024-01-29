@@ -7,6 +7,7 @@ use rustc_middle::mir::{Body, Const as mirConst, ConstValue, Operand, Terminator
 use rustc_middle::mir::{Local, LocalDecl};
 use rustc_middle::ty::{self, Ty, TyCtxt};
 use rustc_middle::ty::{Const, GenericArgsRef};
+use rustc_span::source_map::Spanned;
 use rustc_span::symbol::{sym, Symbol};
 use tracing::{debug, trace};
 
@@ -48,12 +49,12 @@ impl<'tcx> ModelIntrinsics<'tcx> {
     fn replace_simd_bitmask(
         &self,
         func: &mut Operand<'tcx>,
-        args: &[Operand<'tcx>],
+        args: &[Spanned<Operand<'tcx>>],
         gen_args: GenericArgsRef<'tcx>,
     ) {
         assert_eq!(args.len(), 1);
         let tcx = self.tcx;
-        let arg_ty = args[0].ty(&self.local_decls, tcx);
+        let arg_ty = args[0].node.ty(&self.local_decls, tcx);
         if arg_ty.is_simd() {
             // Get the stub definition.
             let stub_id = tcx.get_diagnostic_item(Symbol::intern("KaniModelSimdBitmask")).unwrap();

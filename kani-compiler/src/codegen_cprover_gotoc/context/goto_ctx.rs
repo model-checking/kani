@@ -360,7 +360,7 @@ impl<'tcx> FnAbiOfHelpers<'tcx> for GotocCtx<'tcx> {
         fn_abi_request: FnAbiRequest<'tcx>,
     ) -> ! {
         if let FnAbiError::Layout(LayoutError::SizeOverflow(_)) = err {
-            self.tcx.sess.emit_fatal(respan(span, err))
+            self.tcx.dcx().emit_fatal(respan(span, err))
         } else {
             match fn_abi_request {
                 FnAbiRequest::OfFnPtr { sig, extra_args } => {

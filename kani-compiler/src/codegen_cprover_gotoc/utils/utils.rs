@@ -194,5 +194,5 @@ impl<'tcx> GotocCtx<'tcx> {
 }
 
 pub fn span_err(tcx: TyCtxt, span: Span, msg: String) {
-    tcx.sess.span_err(rustc_internal::internal(span), msg);
+    tcx.dcx().span_err(rustc_internal::internal(span), msg);
 }

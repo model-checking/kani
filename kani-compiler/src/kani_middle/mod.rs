@@ -57,15 +57,15 @@ pub fn check_crate_items(tcx: TyCtxt, ignore_asm: bool) {
                     `--enable-unstable --ignore-global-asm` to suppress this error \
                     (**Verification results may be impacted**).",
                 );
-                tcx.sess.err(error_msg);
+                tcx.dcx().err(error_msg);
             } else {
-                tcx.sess.warn(format!(
+                tcx.dcx().warn(format!(
                     "Ignoring global ASM in crate {krate}. Verification results may be impacted.",
                 ));
             }
         }
     }
-    tcx.sess.abort_if_errors();
+    tcx.dcx().abort_if_errors();
 }
 
 /// Check that all given items are supported and there's no misconfiguration.
@@ -97,7 +97,7 @@ pub fn check_reachable_items(tcx: TyCtxt, queries: &QueryDb, items: &[MonoItem])
             }
         }
     }
-    tcx.sess.abort_if_errors();
+    tcx.dcx().abort_if_errors();
 }
 
 /// A basic check that ensures a function with a contract does not receive
@@ -122,7 +122,7 @@ fn check_is_contract_safe(tcx: TyCtxt, instance: Instance) {
         fn visit_ty(&mut self, ty: &Ty) -> std::ops::ControlFlow<Self::Break> {
             if (self.is_prohibited)(*ty) {
                 // TODO make this more user friendly
-                self.tcx.sess.err(format!(
+                self.tcx.dcx().err(format!(
                     "{} contains a {}pointer ({}). This is prohibited for functions with contracts, \
                     as they cannot yet reason about the pointer behavior.", self.r#where, self.what,
                     pretty_ty(ty.kind())));
@@ -166,7 +166,7 @@ fn check_is_contract_safe(tcx: TyCtxt, instance: Instance) {
 
     for var in &bound_fn_sig.bound_vars {
         if let BoundVariableKind::Ty(t) = var {
-            tcx.sess.span_err(
+            tcx.dcx().span_err(
                 rustc_internal::internal(instance.def.span()),
                 format!("Found a bound type variable {t:?} after monomorphization"),
             );
@@ -293,7 +293,7 @@ impl<'tcx> FnAbiOfHelpers<'tcx> for CompilerHelpers<'tcx> {
         fn_abi_request: FnAbiRequest<'tcx>,
     ) -> ! {
         if let FnAbiError::Layout(LayoutError::SizeOverflow(_)) = err {
-            self.tcx.sess.emit_fatal(respan(span, err))
+            self.tcx.dcx().emit_fatal(respan(span, err))
         } else {
             match fn_abi_request {
                 FnAbiRequest::OfFnPtr { sig, extra_args } => {
