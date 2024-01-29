@@ -18,5 +18,5 @@ fn main() {
     let val = kani::any_where(|i| *i < 100);
     let mut i = Box::new(val);
     modify(&mut i);
-    kani::assert(*i == val + 1, "Increment");
+    assert!(*i == val + 1, "Increment");
 }

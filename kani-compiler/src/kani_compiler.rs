@@ -17,7 +17,7 @@
 
 use crate::args::{Arguments, ReachabilityType};
 #[cfg(feature = "cprover")]
-use crate::codegen_cprover_gotoc::{ContractInfoChannel, GotocCodegenBackend};
+use crate::codegen_cprover_gotoc::GotocCodegenBackend;
 use crate::kani_middle::attributes::is_proof_harness;
 use crate::kani_middle::check_crate_items;
 use crate::kani_middle::metadata::gen_proof_metadata;
@@ -27,7 +27,7 @@ use crate::kani_queries::QueryDb;
 use crate::session::init_session;
 use cbmc::{InternString, InternedString};
 use clap::Parser;
-use kani_metadata::{ArtifactType, AssignsContract, HarnessMetadata, KaniMetadata};
+use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata};
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_driver::{Callbacks, Compilation, RunCompiler};
 use rustc_hir::def_id::LOCAL_CRATE;
@@ -58,11 +58,8 @@ pub fn run(args: Vec<String>) -> ExitCode {
 
 /// Configure the cprover backend that generate goto-programs.
 #[cfg(feature = "cprover")]
-fn backend(
-    queries: Arc<Mutex<QueryDb>>,
-    contract_channel: ContractInfoChannel,
-) -> Box<dyn CodegenBackend> {
-    Box::new(GotocCodegenBackend::new(queries, contract_channel))
+fn backend(queries: Arc<Mutex<QueryDb>>) -> Box<dyn CodegenBackend> {
+    Box::new(GotocCodegenBackend::new(queries))
 }
 
 /// Fallback backend. It will trigger an error if no backend has been enabled.
@@ -187,10 +184,23 @@ impl KaniCompiler {
     pub fn run(&mut self, orig_args: Vec<String>) -> Result<(), ErrorGuaranteed> {
         loop {
             debug!(next=?self.stage, "run");
-            match &self.stage {
-                CompilationStage::Init => {
-                    assert!(self.run_compilation_session(&orig_args)?.is_empty());
+            // Because this modifies `self.stage` we need to run this before
+            // borrowing `&self.stage` immutably
+            if let CompilationStage::Done { metadata: Some((metadata, _)), .. } = &mut self.stage {
+                let mut qdb = self.queries.lock().unwrap();
+                for harness in
+                    metadata.proof_harnesses.iter_mut().chain(metadata.test_harnesses.iter_mut())
+                {
+                    if let Some(modifies_contract) =
+                        qdb.get_modifies_contracts(&harness.mangled_name)
+                    {
+                        harness.contract = modifies_contract.into();
+                    }
                 }
+                qdb.assert_modifies_contracts_received();
+            }
+            match &self.stage {
+                CompilationStage::Init => self.run_compilation_session(&orig_args)?,
                 CompilationStage::CodegenNoStubs { .. } => {
                     unreachable!("This stage should always run in the same session as Init");
                 }
@@ -201,15 +211,7 @@ impl KaniCompiler {
                     let extra_arg = stubbing::mk_rustc_arg(&target_harness.stub_map);
                     let mut args = orig_args.clone();
                     args.push(extra_arg);
-                    let contract_spec = self.run_compilation_session(&args)?;
-                    let CompilationStage::CodegenWithStubs { all_harnesses, .. } = &mut self.stage
-                    else {
-                        unreachable!()
-                    };
-                    for (target, spec) in contract_spec {
-                        let target_harness = all_harnesses.get_mut(&target).unwrap();
-                        target_harness.metadata.contract = spec.into();
-                    }
+                    self.run_compilation_session(&args)?
                 }
                 CompilationStage::Done { metadata: Some((kani_metadata, crate_info)) } => {
                     // Only store metadata for harnesses for now.
@@ -275,17 +277,13 @@ impl KaniCompiler {
     }
 
     /// Run the Rust compiler with the given arguments and pass `&mut self` to handle callbacks.
-    fn run_compilation_session(
-        &mut self,
-        args: &[String],
-    ) -> Result<Vec<(InternedString, AssignsContract)>, ErrorGuaranteed> {
+    fn run_compilation_session(&mut self, args: &[String]) -> Result<(), ErrorGuaranteed> {
         debug!(?args, "run_compilation_session");
         let queries = self.queries.clone();
         let mut compiler = RunCompiler::new(args, self);
-        let (send, receive) = std::sync::mpsc::channel();
-        compiler.set_make_codegen_backend(Some(Box::new(move |_cfg| backend(queries, send))));
+        compiler.set_make_codegen_backend(Some(Box::new(move |_cfg| backend(queries))));
         compiler.run()?;
-        Ok(receive.iter().collect())
+        Ok(())
     }
 
     /// Gather and process all harnesses from this crate that shall be compiled.

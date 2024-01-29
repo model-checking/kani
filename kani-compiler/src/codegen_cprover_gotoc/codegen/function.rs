@@ -4,7 +4,7 @@
 //! This file contains functions related to codegenning MIR functions into gotoc
 
 use crate::codegen_cprover_gotoc::GotocCtx;
-use cbmc::goto_program::{Expr, FunctionContract, Stmt, Symbol};
+use cbmc::goto_program::{Expr, Stmt, Symbol};
 use cbmc::InternString;
 use rustc_middle::mir::traversal::reverse_postorder;
 use stable_mir::mir::mono::Instance;
@@ -200,50 +200,6 @@ impl<'tcx> GotocCtx<'tcx> {
             Some(marshalled_tuple_value),
             loc,
         );
-    }
-
-    /// Convert the Kani level contract into a CBMC level contract by creating a
-    /// CBMC lambda.
-    fn as_goto_contract(&mut self, assigns_contract: Vec<Local>) -> FunctionContract {
-        use cbmc::goto_program::Lambda;
-
-        let goto_annotated_fn_name = self.current_fn().name();
-        let goto_annotated_fn_typ = self
-            .symbol_table
-            .lookup(&goto_annotated_fn_name)
-            .unwrap_or_else(|| panic!("Function '{goto_annotated_fn_name}' is not declared"))
-            .typ
-            .clone();
-
-        let assigns = assigns_contract
-            .into_iter()
-            .map(|local| {
-                Lambda::as_contract_for(
-                    &goto_annotated_fn_typ,
-                    None,
-                    self.codegen_place_stable(&local.into()).unwrap().goto_expr.dereference(),
-                )
-            })
-            .collect();
-
-        FunctionContract::new(assigns)
-    }
-
-    /// Convert the contract to a CBMC contract, then attach it to `instance`.
-    /// `instance` must have previously been declared.
-    ///
-    /// This merges with any previously attached contracts.
-    pub fn attach_contract(&mut self, instance: Instance, contract: Vec<Local>) {
-        // This should be safe, since the contract is pretty much evaluated as
-        // though it was the first (or last) assertion in the function.
-        assert!(self.current_fn.is_none());
-        let body = instance.body().unwrap();
-        self.set_current_fn(instance, &body);
-        let goto_contract = self.as_goto_contract(contract);
-        let name = self.current_fn().name();
-
-        self.symbol_table.attach_contract(name, goto_contract);
-        self.reset_current_fn()
     }
 
     pub fn declare_function(&mut self, instance: Instance) {

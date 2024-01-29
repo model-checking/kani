@@ -504,15 +504,21 @@ impl ToIrep for SwitchCase {
 }
 
 impl ToIrep for Lambda {
+    /// At the moment this function assumes that this lambda is used for a
+    /// `modifies` contract. It should work for any other lambda body, but
+    /// the parameter names use "modifies" in their generated names.
     fn to_irep(&self, mm: &MachineModel) -> Irep {
         let (ops_ireps, types) = self
             .arguments
             .iter()
-            .map(|param| {
+            .enumerate()
+            .map(|(index, param)| {
                 let ty_rep = param.typ().to_irep(mm);
                 (
-                    Irep::symbol(param.identifier().unwrap_or("_".into()))
-                        .with_named_sub(IrepId::Type, ty_rep.clone()),
+                    Irep::symbol(
+                        param.identifier().unwrap_or_else(|| format!("_modifies_{index}").into()),
+                    )
+                    .with_named_sub(IrepId::Type, ty_rep.clone()),
                     ty_rep,
                 )
             })

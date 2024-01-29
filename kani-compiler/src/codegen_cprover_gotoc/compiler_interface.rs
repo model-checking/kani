@@ -31,7 +31,7 @@ use rustc_codegen_ssa::{CodegenResults, CrateInfo};
 use rustc_data_structures::fx::{FxHashMap, FxIndexMap};
 use rustc_data_structures::temp_dir::MaybeTempDir;
 use rustc_errors::{ErrorGuaranteed, DEFAULT_LOCALE_RESOURCE};
-use rustc_hir::def_id::{DefId, LOCAL_CRATE};
+use rustc_hir::def_id::{DefId as InternalDefId, LOCAL_CRATE};
 use rustc_metadata::creader::MetadataLoaderDyn;
 use rustc_metadata::fs::{emit_wrapper_file, METADATA_FILENAME};
 use rustc_metadata::EncodedMetadata;
@@ -45,7 +45,7 @@ use rustc_smir::rustc_internal;
 use rustc_target::abi::Endian;
 use rustc_target::spec::PanicStrategy;
 use stable_mir::mir::mono::{Instance, MonoItem};
-use stable_mir::CrateDef;
+use stable_mir::{CrateDef, DefId};
 use std::any::Any;
 use std::collections::BTreeMap;
 use std::collections::HashSet;
@@ -63,8 +63,6 @@ use tracing::{debug, error, info};
 
 pub type UnsupportedConstructs = FxHashMap<InternedString, Vec<Location>>;
 
-pub type ContractInfoChannel = std::sync::mpsc::Sender<(InternedString, AssignsContract)>;
-
 #[derive(Clone)]
 pub struct GotocCodegenBackend {
     /// The query is shared with `KaniCompiler` and it is initialized as part of `rustc`
@@ -72,13 +70,11 @@ pub struct GotocCodegenBackend {
     /// Since we don't have any guarantees on when the compiler creates the Backend object, neither
     /// in which thread it will be used, we prefer to explicitly synchronize any query access.
     queries: Arc<Mutex<QueryDb>>,
-
-    contract_channel: ContractInfoChannel,
 }
 
 impl GotocCodegenBackend {
-    pub fn new(queries: Arc<Mutex<QueryDb>>, contract_channel: ContractInfoChannel) -> Self {
-        GotocCodegenBackend { queries, contract_channel }
+    pub fn new(queries: Arc<Mutex<QueryDb>>) -> Self {
+        GotocCodegenBackend { queries }
     }
 
     /// Generate code that is reachable from the given starting points.
@@ -90,7 +86,7 @@ impl GotocCodegenBackend {
         starting_items: &[MonoItem],
         symtab_goto: &Path,
         machine_model: &MachineModel,
-        check_contract: Option<DefId>,
+        check_contract: Option<InternalDefId>,
     ) -> (GotocCtx<'tcx>, Vec<MonoItem>, Option<AssignsContract>) {
         let items = with_timer(
             || collect_reachable_items(tcx, starting_items),
@@ -192,78 +188,6 @@ impl GotocCodegenBackend {
     }
 }
 
-impl<'tcx> GotocCtx<'tcx> {
-    /// Given the `proof_for_contract` target `function_under_contract` and the reachable `items`,
-    /// find or create the `AssignsContract` that needs to be enforced and attach it to the symbol
-    /// for which it needs to be enforced.
-    ///
-    /// 1. Gets the `#[kanitool::inner_check = "..."]` target, then resolves exactly one instance
-    ///    of it. Panics if there are more or less than one instance.
-    /// 2. Expects that a `#[kanitool::modifies(...)]` is placed on the `inner_check` function,
-    ///    turns it into a CBMC contract and attaches it to the symbol for the previously resolved
-    ///    instance.
-    /// 3. Returns the mangled name of the symbol it attached the contract to.
-    /// 4. Resolves the `#[kanitool::checked_with = "..."]` target from `function_under_contract`
-    ///    which has `static mut REENTRY : bool` declared inside.
-    /// 5. Returns the full path to this constant that `--nondet-static-exclude` expects which is
-    ///    comprised of the file path that `checked_with` is located in, the name of the
-    ///    `checked_with` function and the name of the constant (`REENTRY`).
-    fn handle_check_contract(
-        &mut self,
-        function_under_contract: DefId,
-        items: &[MonoItem],
-    ) -> AssignsContract {
-        let tcx = self.tcx;
-        let function_under_contract_attrs = KaniAttributes::for_item(tcx, function_under_contract);
-        let wrapped_fn = function_under_contract_attrs.inner_check().unwrap().unwrap();
-
-        let mut instance_under_contract = items.iter().filter_map(|i| match i {
-            MonoItem::Fn(instance @ Instance { def, .. })
-                if wrapped_fn == rustc_internal::internal(def.def_id()) =>
-            {
-                Some(instance.clone())
-            }
-            _ => None,
-        });
-        let instance_of_check = instance_under_contract.next().unwrap();
-        assert!(
-            instance_under_contract.next().is_none(),
-            "Only one instance of a checked function may be in scope"
-        );
-        let attrs_of_wrapped_fn = KaniAttributes::for_item(tcx, wrapped_fn);
-        let assigns_contract = attrs_of_wrapped_fn.modifies_contract().unwrap_or_else(|| {
-            debug!(?instance_of_check, "had no assigns contract specified");
-            vec![]
-        });
-        self.attach_contract(instance_of_check, assigns_contract);
-
-        let wrapper_name = self.symbol_name_stable(instance_of_check);
-
-        let recursion_wrapper_id =
-            function_under_contract_attrs.checked_with_id().unwrap().unwrap();
-        let span_of_recursion_wrapper = tcx.def_span(recursion_wrapper_id);
-        let location_of_recursion_wrapper = self.codegen_span(&span_of_recursion_wrapper);
-
-        let full_name = format!(
-            "{}:{}::REENTRY",
-            location_of_recursion_wrapper
-                .filename()
-                .expect("recursion location wrapper should have a file name"),
-            tcx.item_name(recursion_wrapper_id),
-        );
-
-        AssignsContract { recursion_tracker: full_name, contracted_function_name: wrapper_name }
-    }
-}
-
-fn contract_metadata_for_harness(
-    tcx: TyCtxt,
-    def_id: DefId,
-) -> Result<Option<DefId>, ErrorGuaranteed> {
-    let attrs = KaniAttributes::for_item(tcx, def_id);
-    Ok(attrs.interpret_the_for_contract_attribute().transpose()?.map(|(_, id, _)| id))
-}
-
 impl CodegenBackend for GotocCodegenBackend {
     fn metadata_loader(&self) -> Box<MetadataLoaderDyn> {
         Box::new(rustc_codegen_ssa::back::metadata::DefaultMetadataLoader)
@@ -317,12 +241,8 @@ impl CodegenBackend for GotocCodegenBackend {
                     for harness in harnesses {
                         let model_path =
                             queries.harness_model_path(&harness.mangled_name()).unwrap();
-                        let Ok(contract_metadata) = contract_metadata_for_harness(
-                            tcx,
-                            rustc_internal::internal(harness.def.def_id()),
-                        ) else {
-                            continue;
-                        };
+                        let contract_metadata =
+                            contract_metadata_for_harness(tcx, harness.def.def_id()).unwrap();
                         let (gcx, items, contract_info) = self.codegen_items(
                             tcx,
                             &[MonoItem::Fn(harness)],
@@ -332,9 +252,10 @@ impl CodegenBackend for GotocCodegenBackend {
                         );
                         results.extend(gcx, items, None);
                         if let Some(assigns_contract) = contract_info {
-                            self.contract_channel
-                                .send((harness.name().intern(), assigns_contract))
-                                .unwrap();
+                            self.queries
+                                .lock()
+                                .unwrap()
+                                .add_modifies_contract(harness.name().intern(), assigns_contract);
                         }
                     }
                 }
@@ -495,6 +416,14 @@ impl CodegenBackend for GotocCodegenBackend {
         }
         Ok(())
     }
+}
+
+fn contract_metadata_for_harness(
+    tcx: TyCtxt,
+    def_id: DefId,
+) -> Result<Option<InternalDefId>, ErrorGuaranteed> {
+    let attrs = KaniAttributes::for_def_id(tcx, def_id);
+    Ok(attrs.interpret_the_for_contract_attribute().transpose()?.map(|(_, id, _)| id))
 }
 
 fn check_target(session: &Session) {

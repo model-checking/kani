@@ -7,6 +7,7 @@
 
 #[kani::requires(**ptr < 100)]
 #[kani::modifies(ptr.as_ref())]
+#[kani::ensures(**ptr < 101)]
 fn modify(ptr: &mut Box<u32>) {
     *ptr.as_mut() += 1;
 }

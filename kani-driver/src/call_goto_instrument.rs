@@ -173,7 +173,6 @@ impl KaniSession {
             vec!["--dfcc".into(), (&harness.mangled_name).into()];
 
         if let Some(assigns) = check {
-            println!("enforcing function contract for {assigns:?}");
             args.extend([
                 "--enforce-contract".into(),
                 assigns.contracted_function_name.as_str().into(),

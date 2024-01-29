@@ -88,7 +88,7 @@
 //! ```
 //!
 //! All named arguments of the annotated function are unsafely shallow-copied
-//! with the `kani::untracked_deref` function to circumvent the borrow checker
+//! with the `kani::internal::untracked_deref` function to circumvent the borrow checker
 //! for postconditions. The case where this is relevant is if you want to return
 //! a mutable borrow from the function which means any immutable borrow in the
 //! postcondition would be illegal. We must ensure that those copies are not
@@ -190,8 +190,8 @@
 //! #[allow(unused_variables)]
 //! #[kanitool::is_contract_generated(check)]
 //! fn div_check_965916(dividend: u32, divisor: u32) -> u32 {
-//!     let dividend_renamed = kani::untracked_deref(&dividend);
-//!     let divisor_renamed = kani::untracked_deref(&divisor);
+//!     let dividend_renamed = kani::internal::untracked_deref(&dividend);
+//!     let divisor_renamed = kani::internal::untracked_deref(&divisor);
 //!     let result = { kani::assume(divisor != 0); { dividend / divisor } };
 //!     kani::assert(result <= dividend_renamed, "result <= dividend");
 //!     std::mem::forget(dividend_renamed);
@@ -204,8 +204,8 @@
 //! #[kanitool::is_contract_generated(replace)]
 //! fn div_replace_965916(dividend: u32, divisor: u32) -> u32 {
 //!     kani::assert(divisor != 0, "divisor != 0");
-//!     let dividend_renamed = kani::untracked_deref(&dividend);
-//!     let divisor_renamed = kani::untracked_deref(&divisor);
+//!     let dividend_renamed = kani::internal::untracked_deref(&dividend);
+//!     let divisor_renamed = kani::internal::untracked_deref(&divisor);
 //!     let result = kani::any();
 //!     kani::assume(result <= dividend_renamed, "result <= dividend");
 //!     std::mem::forget(dividend_renamed);
@@ -530,7 +530,7 @@ impl<'a> ContractConditionsHandler<'a> {
                 };
 
                 quote!(
-                    #(let #wrapper_args = unsafe { kani::Pointer::decouple_lifetime(&#attr) };)*
+                    #(let #wrapper_args = unsafe { kani::internal::Pointer::decouple_lifetime(&#attr) };)*
                     #(#inner)*
                 )
             }
@@ -579,12 +579,12 @@ impl<'a> ContractConditionsHandler<'a> {
     /// ```ignore
     /// // multiple preconditions and argument copies like like
     /// kani::assert(.. precondition);
-    /// let arg_name = kani::untracked_deref(&arg_value);
+    /// let arg_name = kani::internal::untracked_deref(&arg_value);
     /// // single result havoc
     /// let result : ResultType = kani::any();
     ///
     /// // multiple argument havockings
-    /// *unsafe { kani::Pointer::assignable(argument) } = kani::any();
+    /// *unsafe { kani::internal::Pointer::assignable(argument) } = kani::any();
     /// // multiple postconditions
     /// kani::assume(postcond);
     /// // multiple argument copy (used in postconditions) cleanups
@@ -652,7 +652,7 @@ impl<'a> ContractConditionsHandler<'a> {
             ContractConditionsData::Modifies { attr } => {
                 quote!(
                     #(#before)*
-                    #(*unsafe { kani::Pointer::assignable(#attr) } = kani::any();)*
+                    #(*unsafe { kani::internal::Pointer::assignable(#attr) } = kani::any();)*
                     #(#after)*
                     result
                 )
@@ -1042,7 +1042,7 @@ fn make_unsafe_argument_copies(
     let also_arg_names = renaming_map.values();
     let arg_values = renaming_map.keys();
     (
-        quote!(#(let #arg_names = kani::untracked_deref(&#arg_values);)*),
+        quote!(#(let #arg_names = kani::internal::untracked_deref(&#arg_values);)*),
         quote!(#(std::mem::forget(#also_arg_names);)*),
     )
 }

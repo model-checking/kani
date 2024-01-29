@@ -3,6 +3,8 @@
 //! Define the communication between KaniCompiler and the codegen implementation.
 
 use cbmc::{InternString, InternedString};
+use kani_metadata::AssignsContract;
+use std::fmt::{Display, Formatter, Write};
 use std::{
     collections::HashMap,
     path::PathBuf,
@@ -17,6 +19,7 @@ pub struct QueryDb {
     args: Option<Arguments>,
     /// Information about all target harnesses.
     pub harnesses_info: HashMap<InternedString, PathBuf>,
+    modifies_contracts: HashMap<InternedString, AssignsContract>,
 }
 
 impl QueryDb {
@@ -40,5 +43,41 @@ impl QueryDb {
 
     pub fn args(&self) -> &Arguments {
         self.args.as_ref().expect("Arguments have not been initialized")
+    }
+
+    pub fn add_modifies_contract(&mut self, name: InternedString, contract: AssignsContract) {
+        assert!(
+            self.modifies_contracts.insert(name, contract).is_none(),
+            "Invariant broken, tried adding second modifies contracts to: {name}",
+        )
+    }
+
+    pub fn get_modifies_contracts(&mut self, key: &str) -> Option<AssignsContract> {
+        self.modifies_contracts.remove(&key.intern())
+    }
+
+    pub fn assert_modifies_contracts_received(&self) {
+        assert!(
+            self.modifies_contracts.is_empty(),
+            "Invariant broken: The modifies contracts for {} have not been retrieved",
+            PrintList(self.modifies_contracts.keys())
+        )
+    }
+}
+
+struct PrintList<I>(I);
+
+impl<E: Display, I: Iterator<Item = E> + Clone> Display for PrintList<I> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_char('[')?;
+        let mut is_first = true;
+        for e in self.0.clone() {
+            if is_first {
+                f.write_str(", ")?;
+                is_first = false;
+            }
+            e.fmt(f)?;
+        }
+        f.write_char(']')
     }
 }
