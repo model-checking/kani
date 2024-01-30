@@ -7,7 +7,7 @@ use crate::args::ReachabilityType;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::analysis;
 use crate::kani_middle::attributes::{is_test_harness_description, KaniAttributes};
-use crate::kani_middle::metadata::gen_test_metadata;
+use crate::kani_middle::metadata::{canonical_mangled_name, gen_test_metadata};
 use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{
     collect_reachable_items, filter_const_crate_items, filter_crate_items,
@@ -255,7 +255,7 @@ impl CodegenBackend for GotocCodegenBackend {
                             self.queries
                                 .lock()
                                 .unwrap()
-                                .add_modifies_contract(harness.name().intern(), assigns_contract);
+                                .add_modifies_contract(canonical_mangled_name(harness).intern(), assigns_contract);
                         }
                     }
                 }

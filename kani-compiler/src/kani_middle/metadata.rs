@@ -14,15 +14,19 @@ use stable_mir::CrateDef;
 
 use super::{attributes::KaniAttributes, SourceLocation};
 
+pub fn canonical_mangled_name(instance: Instance) -> String {
+    let pretty_name = instance.name();
+    // Main function a special case in order to support `--function main`
+    // TODO: Get rid of this: https://github.com/model-checking/kani/issues/2129
+    if pretty_name == "main" { pretty_name } else { instance.mangled_name() }
+}
+
 /// Create the harness metadata for a proof harness for a given function.
 pub fn gen_proof_metadata(tcx: TyCtxt, instance: Instance, base_name: &Path) -> HarnessMetadata {
     let def = instance.def;
     let attributes = KaniAttributes::for_instance(tcx, instance).harness_attributes();
     let pretty_name = instance.name();
-    // Main function a special case in order to support `--function main`
-    // TODO: Get rid of this: https://github.com/model-checking/kani/issues/2129
-    let mangled_name =
-        if pretty_name == "main" { pretty_name.clone() } else { instance.mangled_name() };
+    let mangled_name = canonical_mangled_name(instance);
 
     // We get the body span to include the entire function definition.
     // This is required for concrete playback to properly position the generated test.
