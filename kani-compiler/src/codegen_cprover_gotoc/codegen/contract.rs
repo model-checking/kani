@@ -41,7 +41,7 @@ impl<'tcx> GotocCtx<'tcx> {
             MonoItem::Fn(instance @ Instance { def, .. })
                 if wrapped_fn == rustc_internal::internal(def.def_id()) =>
             {
-                Some(instance.clone())
+                Some(instance)
             }
             _ => None,
         });
