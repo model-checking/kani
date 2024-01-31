@@ -20,6 +20,6 @@ set -x
 # Build from source, since there's only a macos-12 bottle which doesn't seem to work.
 # Install Python 3.12 first while ignoring errors: the system may provide this
 # version, which will hinder brew from installing symlinks
-brew install python@3.12
+brew install python@3.12 || true
 brew install -s aws/tap/cbmc-viewer
 echo "Installed: $(cbmc-viewer --version)"
