@@ -20,7 +20,7 @@ env:
 jobs:
   build_bundle_macos:
     name: BuildBundle-MacOs
-    runs-on: macos-12
+    runs-on: macos-13
     permissions:
       contents: write
     outputs:
@@ -35,13 +35,13 @@ jobs:
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
         with:
-          os: macos-12
+          os: macos-13
 
       - name: Build bundle
         id: bundle
         uses: ./.github/actions/build-bundle
         with:
-          os: macos-12
+          os: macos-13
           arch: x86_64-apple-darwin
 
   build_bundle_linux:
@@ -106,11 +106,11 @@ jobs:
     needs: [build_bundle_macos, build_bundle_linux]
     strategy:
       matrix:
-        os: [macos-12, ubuntu-20.04, ubuntu-22.04]
+        os: [macos-13, ubuntu-20.04, ubuntu-22.04]
         include:
           # Stores the output of the previous job conditional to the OS
           - prev_job: ${{ needs.build_bundle_linux.outputs }}
-          - os: macos-12
+          - os: macos-13
             prev_job: ${{ needs.build_bundle_macos.outputs }}
     runs-on: ${{ matrix.os }}
     steps:
