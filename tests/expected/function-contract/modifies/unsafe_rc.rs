@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zfunction-contracts
 
+/// Illustrates the problem from https://github.com/model-checking/kani/issues/2907
+
 use std::rc::Rc;
 use std::ops::Deref;
 
@@ -22,12 +24,11 @@ fn main() {
     modify(ptr.clone());
 }
 
-
-// #[kani::proof]
-// #[kani::stub_verified(modify)]
-// fn replace_modify() {
-//     let begin = kani::any_where(|i| *i < 100);
-//     let i = Rc::new(RefCell::new(begin));
-//     modify(i.clone());
-//     kani::assert(*i.borrow() == begin + 1, "end");
-// }
+#[kani::proof]
+#[kani::stub_verified(modify)]
+fn replace_modify() {
+    let begin = kani::any_where(|i| *i < 100);
+    let i = Rc::new(RefCell::new(begin));
+    modify(i.clone());
+    kani::assert(*i.borrow() == begin + 1, "end");
+}
