@@ -252,10 +252,10 @@ impl CodegenBackend for GotocCodegenBackend {
                         );
                         results.extend(gcx, items, None);
                         if let Some(assigns_contract) = contract_info {
-                            self.queries
-                                .lock()
-                                .unwrap()
-                                .add_modifies_contract(canonical_mangled_name(harness).intern(), assigns_contract);
+                            self.queries.lock().unwrap().add_modifies_contract(
+                                canonical_mangled_name(harness).intern(),
+                                assigns_contract,
+                            );
                         }
                     }
                 }
