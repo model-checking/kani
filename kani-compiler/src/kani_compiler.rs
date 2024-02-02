@@ -30,6 +30,7 @@ use clap::Parser;
 use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata};
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_driver::{Callbacks, Compilation, RunCompiler};
+use rustc_hash::FxHashMap;
 use rustc_hir::def_id::LOCAL_CRATE;
 use rustc_hir::definitions::DefPathHash;
 use rustc_interface::Config;
@@ -187,17 +188,26 @@ impl KaniCompiler {
             // Because this modifies `self.stage` we need to run this before
             // borrowing `&self.stage` immutably
             if let CompilationStage::Done { metadata: Some((metadata, _)), .. } = &mut self.stage {
-                let mut qdb = self.queries.lock().unwrap();
+                let mut contracts = self
+                    .queries
+                    .lock()
+                    .unwrap()
+                    .assigns_contracts()
+                    .map(|(k, v)| (*k, v.clone()))
+                    .collect::<FxHashMap<_, _>>();
                 for harness in
                     metadata.proof_harnesses.iter_mut().chain(metadata.test_harnesses.iter_mut())
                 {
                     if let Some(modifies_contract) =
-                        qdb.assigns_contract_for((&harness.mangled_name).intern())
+                        contracts.remove(&(&harness.mangled_name).intern())
                     {
                         harness.contract = modifies_contract.into();
                     }
                 }
-                qdb.assert_assigns_contracts_retrieved();
+                assert!(
+                    contracts.is_empty(),
+                    "Invariant broken: not all contracts have been handled."
+                )
             }
             match &self.stage {
                 CompilationStage::Init => self.run_compilation_session(&orig_args)?,

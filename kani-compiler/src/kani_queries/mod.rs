@@ -59,26 +59,10 @@ impl QueryDb {
         )
     }
 
-    /// Lookup if a CBMC-level `assigns` contract was registered for this
-    /// harness with [`Self::add_assigns_contract`].
-    ///
-    /// This removes the contract from the registry and is intended to be used in
-    /// conjunction with [`Self::assert_assigns_contracts_retrieved`] to uphold
-    /// the invariant that each contract has been handled and only handled once.
-    pub fn assigns_contract_for(
-        &mut self,
-        harness_name: InternedString,
-    ) -> Option<AssignsContract> {
-        self.modifies_contracts.remove(&harness_name)
-    }
-
-    /// Assert that the contract registry is empty. See [`Self::assigns_contract_for`]
-    pub fn assert_assigns_contracts_retrieved(&self) {
-        assert!(
-            self.modifies_contracts.is_empty(),
-            "Invariant broken: The modifies contracts for {} have not been retrieved",
-            PrintList(self.modifies_contracts.keys())
-        )
+    /// Lookup all CBMC-level `assigns` contract were registered with
+    /// [`Self::add_assigns_contract`].
+    pub fn assigns_contracts(&self) -> impl Iterator<Item = (&InternedString, &AssignsContract)> {
+        self.modifies_contracts.iter()
     }
 }
 
