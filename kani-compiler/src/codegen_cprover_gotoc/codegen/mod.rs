@@ -17,6 +17,7 @@ mod statement;
 mod static_var;
 
 // Visible for all codegen module.
+pub mod contract;
 mod ty_stable;
 pub(super) mod typ;
 

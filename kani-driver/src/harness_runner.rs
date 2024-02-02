@@ -57,6 +57,7 @@ impl<'sess, 'pr> HarnessRunner<'sess, 'pr> {
                     let report_dir = self.project.outdir.join(format!("report-{harness_filename}"));
                     let goto_file =
                         self.project.get_harness_artifact(&harness, ArtifactType::Goto).unwrap();
+
                     self.sess.instrument_model(goto_file, goto_file, &self.project, &harness)?;
 
                     if self.sess.args.synthesize_loop_contracts {
