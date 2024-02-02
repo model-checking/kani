@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use anyhow::Result;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
@@ -164,25 +164,18 @@ impl KaniSession {
 
     /// Make CBMC enforce a function contract.
     pub fn instrument_contracts(&self, harness: &HarnessMetadata, file: &Path) -> Result<()> {
-        let check = harness.contract.as_ref();
-        if check.is_none() {
-            return Ok(());
-        }
+        let Some(assigns) = harness.contract.as_ref() else { return Ok(()) };
 
-        let mut args: Vec<std::ffi::OsString> =
-            vec!["--dfcc".into(), (&harness.mangled_name).into()];
-
-        if let Some(assigns) = check {
-            args.extend([
-                "--enforce-contract".into(),
-                assigns.contracted_function_name.as_str().into(),
-                "--nondet-static-exclude".into(),
-                assigns.recursion_tracker.as_str().into(),
-            ]);
-        }
-
-        args.extend([file.into(), file.into()]);
-
+        let args: &[std::ffi::OsString] = &[
+            "--dfcc".into(),
+            (&harness.mangled_name).into(),
+            "--enforce-contract".into(),
+            assigns.contracted_function_name.as_str().into(),
+            "--nondet-static-exclude".into(),
+            assigns.recursion_tracker.as_str().into(),
+            file.into(),
+            file.into(),
+        ];
         self.call_goto_instrument(args)
     }
 
@@ -215,7 +208,10 @@ impl KaniSession {
     }
 
     /// Non-public helper function to actually do the run of goto-instrument
-    fn call_goto_instrument(&self, args: Vec<OsString>) -> Result<()> {
+    fn call_goto_instrument<S: AsRef<OsStr>>(
+        &self,
+        args: impl IntoIterator<Item = S>,
+    ) -> Result<()> {
         // TODO get goto-instrument path from self
         let mut cmd = Command::new("goto-instrument");
         cmd.args(args);

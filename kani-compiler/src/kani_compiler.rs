@@ -192,12 +192,12 @@ impl KaniCompiler {
                     metadata.proof_harnesses.iter_mut().chain(metadata.test_harnesses.iter_mut())
                 {
                     if let Some(modifies_contract) =
-                        qdb.get_modifies_contracts(&harness.mangled_name)
+                        qdb.assigns_contract_for((&harness.mangled_name).intern())
                     {
                         harness.contract = modifies_contract.into();
                     }
                 }
-                qdb.assert_modifies_contracts_received();
+                qdb.assert_assigns_contracts_retrieved();
             }
             match &self.stage {
                 CompilationStage::Init => self.run_compilation_session(&orig_args)?,
