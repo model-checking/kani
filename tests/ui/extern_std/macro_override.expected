@@ -1,0 +1,15 @@
+Checking harness foo...
+
+Status: SUCCESS\
+Description: ""debug_assert""\
+macro_override.rs:
+
+Status: SUCCESS\
+Description: "panic"\
+macro_override.rs:
+
+Status: SUCCESS\
+Description: "internal error: entered unreachable code: unreachable"\
+macro_override.rs:
+
+Complete - 1 successfully verified harnesses, 0 failures, 1 total.

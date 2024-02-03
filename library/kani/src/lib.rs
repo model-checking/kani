@@ -294,6 +294,13 @@ macro_rules! cover {
     };
 }
 
+// Used to bind `core::assert` to a different name to avoid possible name conflicts if a
+// crate uses `extern crate std as core`. See
+// https://github.com/model-checking/kani/issues/1949 and https://github.com/model-checking/kani/issues/2187
+#[doc(hidden)]
+#[cfg(not(feature = "concrete_playback"))]
+pub use core::assert as __kani__workaround_core_assert;
+
 // Kani proc macros must be in a separate crate
 pub use kani_macros::*;
 
