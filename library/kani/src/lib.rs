@@ -25,6 +25,9 @@ pub mod slice;
 pub mod tuple;
 pub mod vec;
 
+#[doc(hidden)]
+pub mod internal;
+
 mod models;
 
 pub use arbitrary::Arbitrary;
@@ -90,15 +93,6 @@ macro_rules! implies {
     ($($premise:expr),+ => $conclusion:expr) => {
         $(!$premise)||+ || ($conclusion)
     };
-}
-
-/// A way to break the ownerhip rules. Only used by contracts where we can
-/// guarantee it is done safely.
-#[inline(never)]
-#[doc(hidden)]
-#[rustc_diagnostic_item = "KaniUntrackedDeref"]
-pub fn untracked_deref<T>(_: &T) -> T {
-    todo!()
 }
 
 /// Creates an assertion of the specified condition and message.

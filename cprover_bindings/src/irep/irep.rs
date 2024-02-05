@@ -6,6 +6,7 @@ use super::super::goto_program::{Location, Type};
 use super::super::MachineModel;
 use super::{IrepId, ToIrep};
 use crate::cbmc_string::InternedString;
+use crate::linear_map;
 use linear_map::LinearMap;
 use num::BigInt;
 use std::fmt::Debug;
@@ -140,5 +141,13 @@ impl Irep {
 
     pub fn zero() -> Irep {
         Irep::just_id(IrepId::Id0)
+    }
+
+    pub fn tuple(sub: Vec<Irep>) -> Self {
+        Irep {
+            id: IrepId::Tuple,
+            sub,
+            named_sub: linear_map![(IrepId::Type, Irep::just_id(IrepId::Tuple))],
+        }
     }
 }

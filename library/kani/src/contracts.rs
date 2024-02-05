@@ -118,13 +118,21 @@
 //!
 //! ## Specification Attributes Overview
 //!
-//! There are currently two specification attributes available for describing
-//! function behavior: [`requires`][macro@requires] for preconditions and
+//! The basic two specification attributes available for describing
+//! function behavior are [`requires`][macro@requires] for preconditions and
 //! [`ensures`][macro@ensures] for postconditions. Both admit arbitrary Rust
 //! expressions as their bodies which may also reference the function arguments
 //! but must not mutate memory or perform I/O. The postcondition may
 //! additionally reference the return value of the function as the variable
 //! `result`.
+//!
+//! In addition Kani provides the [`modifies`](macro@modifies) attribute. This
+//! works a bit different in that it does not contain conditions but a comma
+//! separated sequence of expressions that evaluate to pointers. This attribute
+//! constrains to which memory locations the function is allowed to write. Each
+//! expression can contain arbitrary Rust syntax, though it may not perform side
+//! effects and it is also currently unsound if the expression can panic. For more
+//! information see the [write sets](#write-sets) section.
 //!
 //! During verified stubbing the return value of a function with a contract is
 //! replaced by a call to `kani::any`. As such the return value must implement
@@ -189,4 +197,32 @@
 //! If you feel strongly about this issue you can join the discussion on issue
 //! [#2823](https://github.com/model-checking/kani/issues/2823) to enable
 //! opt-out of inductive verification.
-pub use super::{ensures, proof_for_contract, requires, stub_verified};
+//!
+//! ## Write Sets
+//!
+//! The [`modifies`](macro@modifies) attribute is used to describe which
+//! locations in memory a function may assign to. The attribute contains a comma
+//! separated series of expressions that reference the function arguments.
+//! Syntactically any expression is permissible, though it may not perform side
+//! effects (I/O, mutation) or panic. As an example consider this super simple
+//! function:
+//!
+//! ```
+//! #[kani::modifies(ptr, my_box.as_ref())]
+//! fn a_function(ptr: &mut u32, my_box: &mut Box<u32>) {
+//!     *ptr = 80;
+//!     *my_box.as_mut() = 90;
+//! }
+//! ```
+//!
+//! Because the function performs an observable side-effect (setting both the
+//! value behind the pointer and the value pointed-to by the box) we need to
+//! provide a `modifies` attribute. Otherwise Kani will reject a contract on
+//! this function.
+//!
+//! An expression used in a `modifies` clause must return a pointer to the
+//! location that you would like to allow to be modified. This can be any basic
+//! Rust pointer type (`&T`, `&mut T`, `*const T` or `*mut T`). In addition `T`
+//! must implement [`Arbitrary`](super::Arbitrary). This is used to assign
+//! `kani::any()` to the location when the function is used in a `stub_verified`.
+pub use super::{ensures, modifies, proof_for_contract, requires, stub_verified};
