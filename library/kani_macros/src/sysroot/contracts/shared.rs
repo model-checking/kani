@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
 use quote::{quote, ToTokens};
 use syn::{
-    Attribute, PredicateType, ReturnType, Signature, TraitBound, TypeParamBound, WhereClause,
+    Attribute, Expr, PredicateType, ReturnType, Signature, TraitBound, TypeParamBound, WhereClause,
 };
 
 use super::{helpers::return_type_to_type, ContractConditionsHandler, ContractFunctionState};
@@ -196,4 +196,16 @@ pub fn try_as_result_assign(stmt: &syn::Stmt) -> Option<&syn::LocalInit> {
 /// It's a thin wrapper around [`try_as_result_assign_pat!`] to create a mutable match.
 pub fn try_as_result_assign_mut(stmt: &mut syn::Stmt) -> Option<&mut syn::LocalInit> {
     try_as_result_assign_pat!(stmt, as_mut)
+}
+
+/// Emits a sequence of `let id = expr;` from a vector of `[(id, expr), ...]`.
+///
+/// This doesn't do anything fancy, it's just to make sure the way that history
+/// expressions are treated in contract checks and replaces is uniform.
+pub fn create_history_expr_bindings(history_expressions: &[(Ident, Expr)]) -> TokenStream2 {
+    let history_variables = history_expressions.iter().map(|(v, _)| v);
+    let history_exprs = history_expressions.iter().map(|(_, v)| v);
+    quote!(
+        #(let #history_variables = #history_exprs;)*
+    )
 }

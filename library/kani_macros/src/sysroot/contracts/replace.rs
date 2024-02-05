@@ -6,6 +6,8 @@
 use proc_macro2::{Ident, TokenStream as TokenStream2};
 use quote::quote;
 
+use crate::sysroot::contracts::shared::create_history_expr_bindings;
+
 use super::{
     helpers::*,
     shared::{attach_require_kani_any, make_unsafe_argument_copies, try_as_result_assign},
@@ -77,9 +79,12 @@ impl<'a> ContractConditionsHandler<'a> {
                     result
                 )
             }
-            ContractConditionsData::Ensures { attr, argument_names } => {
+            ContractConditionsData::Ensures { attr, argument_names, history_expressions } => {
                 let (arg_copies, copy_clean) = make_unsafe_argument_copies(&argument_names);
+                let history_bindings = create_history_expr_bindings(history_expressions);
+
                 quote!(
+                    #history_bindings
                     #arg_copies
                     #(#before)*
                     #(#after)*

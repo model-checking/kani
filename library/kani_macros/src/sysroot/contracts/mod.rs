@@ -238,6 +238,7 @@ use syn::{parse_macro_input, Expr, ItemFn};
 
 mod bootstrap;
 mod check;
+#[macro_use]
 mod helpers;
 mod initialize;
 mod replace;
@@ -351,6 +352,8 @@ enum ContractConditionsData {
         argument_names: HashMap<Ident, Ident>,
         /// The contents of the attribute.
         attr: Expr,
+        /// History expressions used and the variable names they've been bound to.
+        history_expressions: Vec<(Ident, Expr)>,
     },
     Modifies {
         attr: Vec<Expr>,
