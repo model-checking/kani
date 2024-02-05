@@ -12,7 +12,7 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 cd $SCRIPT_DIR
 
 if [ $(uname -m) = "arm64" ]; then
-  if ! $(which xmdbook >/dev/null 2>&1); then
+  if ! $(which mdbook >/dev/null 2>&1); then
     >&2 echo "Pre-built mdbook binaries for Apple ARM are not available."
     >&2 echo 'Run `cargo install mdbook` and try again.'
     exit 1
@@ -62,7 +62,8 @@ fi
 echo "Building user documentation..."
 # Generate benchcomp documentation from source code
 mkdir -p gen_src
-"${SCRIPT_DIR}/gen_benchcomp_schemas.py" gen_src
+"${SCRIPT_DIR}/gen_visualization_schemas.py" gen_src
+"${SCRIPT_DIR}/gen_format_schemas.py" gen_src
 
 # Build the book into ./book/
 mkdir -p book

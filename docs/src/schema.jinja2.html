@@ -1,0 +1,62 @@
+{# Copyright Kani Contributors #}
+{# SPDX-License-Identifier: Apache-2.0 OR MIT #}
+
+{% if schema.type_name == "list" %}
+<ul class="schema">
+  {% for sub_property in schema.iterate_properties %}
+  <li>- {{ sub_property.property_name }}</li>
+  {% endfor %}
+</ul>
+{% endif %}
+
+{% if schema.type_name == "object" %}
+<ul class="schema">
+  {% for sub_property in schema.iterate_properties %}
+    {% if sub_property.property_name %}
+    <li>
+      {% if sub_property.property_name == "_str" %}
+      {% set name = "string" %}
+      {% set type = "schema_type" %}
+      {% else %}
+      {% set name = sub_property.property_name %}
+      {% set type = "schema_key" %}
+      {% endif %}
+      <span class="{{ type }}">
+      {% if name == sub_property.property_name %}&quot;{% endif -%}
+      {{ name }}
+      {%- if name == sub_property.property_name %}&quot;{% endif -%}
+      </span>:
+      {% if sub_property.type_name != "object" %}
+      {% if name == sub_property.type_name %}
+      <span class="schema_key">{{ name }}</span>
+      {% endif %}
+      <span class="schema_type">{{ sub_property.type_name }}</span>
+      {% else %}
+      {% if name == sub_property.type_name %}
+      <span class="schema_key">{{ name }}</span>:
+      {% endif %}
+      {% endif %}
+      <span class="schema_desc">{{ sub_property.description }}</span>
+    </li>
+    {% endif %}
+    {% with schema=sub_property %}
+      {% include "schema.jinja2.html" %}
+    {% endwith %}
+  {% endfor %}
+</ul>
+{% endif %}
+
+{% if schema.kw_any_of%}
+<span class="schema_comb">One of:</span>
+  {% for sub_property in schema.kw_any_of.array_items %}
+    {% if sub_property.property_name %}
+    <li>
+      <span class="schema_key">{{ sub_property.property_name }}</span>
+      <span class="schema_desc">{{ sub_property.description }}</span>
+    </li>
+    {% endif %}
+    {% with schema=sub_property %}
+      {% include "schema.jinja2.html" %}
+    {% endwith %}
+  {% endfor %}
+{% endif %}

@@ -43,4 +43,5 @@ class TestConfigFile(unittest.TestCase):
                   - variant_2
                 parser:
                   module: test
+          visualize: []
         """)))

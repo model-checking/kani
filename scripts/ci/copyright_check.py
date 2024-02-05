@@ -10,8 +10,8 @@ from itertools import chain
 
 COMMENT_OR_EMPTY_PATTERN = '^(//.*$|#.*$|\\s*$)'
 
-STANDARD_HEADER_PATTERN_1 = '(//|#) Copyright Kani Contributors'
-STANDARD_HEADER_PATTERN_2 = '(//|#) SPDX-License-Identifier: Apache-2.0 OR MIT'
+STANDARD_HEADER_PATTERN_1 = '(//|#|/\\*) Copyright Kani Contributors'
+STANDARD_HEADER_PATTERN_2 = '(//|#| \\*) SPDX-License-Identifier: Apache-2.0 OR MIT'
 
 MODIFIED_HEADER_PATTERN_1 = '(//|#) SPDX-License-Identifier: Apache-2.0 OR MIT'
 MODIFIED_HEADER_PATTERN_2 = COMMENT_OR_EMPTY_PATTERN
