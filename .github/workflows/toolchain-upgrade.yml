@@ -68,7 +68,7 @@ jobs:
           fi
       - name: Create Pull Request
         if: ${{ env.next_step == 'create_pr' }}
-        uses: peter-evans/create-pull-request@v5
+        uses: peter-evans/create-pull-request@v6
         with:
           commit-message: Upgrade Rust toolchain to nightly-${{ env.next_toolchain_date }}
           branch: toolchain-${{ env.next_toolchain_date }}

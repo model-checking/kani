@@ -6,8 +6,8 @@
 use crate::args::ReachabilityType;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::analysis;
-use crate::kani_middle::attributes::is_test_harness_description;
-use crate::kani_middle::metadata::gen_test_metadata;
+use crate::kani_middle::attributes::{is_test_harness_description, KaniAttributes};
+use crate::kani_middle::metadata::{canonical_mangled_name, gen_test_metadata};
 use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{
     collect_reachable_items, filter_const_crate_items, filter_crate_items,
@@ -19,9 +19,9 @@ use cbmc::irep::goto_binary_serde::write_goto_binary_file;
 use cbmc::{InternString, RoundingMode};
 use cbmc::{InternedString, MachineModel};
 use kani_metadata::artifact::convert_type;
-use kani_metadata::CompilerArtifactStub;
 use kani_metadata::UnsupportedFeature;
 use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata};
+use kani_metadata::{AssignsContract, CompilerArtifactStub};
 use rustc_codegen_ssa::back::archive::{
     get_native_object_symbols, ArArchiveBuilder, ArchiveBuilder,
 };
@@ -31,7 +31,7 @@ use rustc_codegen_ssa::{CodegenResults, CrateInfo};
 use rustc_data_structures::fx::{FxHashMap, FxIndexMap};
 use rustc_data_structures::temp_dir::MaybeTempDir;
 use rustc_errors::{ErrorGuaranteed, DEFAULT_LOCALE_RESOURCE};
-use rustc_hir::def_id::LOCAL_CRATE;
+use rustc_hir::def_id::{DefId as InternalDefId, LOCAL_CRATE};
 use rustc_metadata::creader::MetadataLoaderDyn;
 use rustc_metadata::fs::{emit_wrapper_file, METADATA_FILENAME};
 use rustc_metadata::EncodedMetadata;
@@ -45,7 +45,7 @@ use rustc_smir::rustc_internal;
 use rustc_target::abi::Endian;
 use rustc_target::spec::PanicStrategy;
 use stable_mir::mir::mono::{Instance, MonoItem};
-use stable_mir::CrateDef;
+use stable_mir::{CrateDef, DefId};
 use std::any::Any;
 use std::collections::BTreeMap;
 use std::collections::HashSet;
@@ -62,6 +62,7 @@ use tempfile::Builder as TempFileBuilder;
 use tracing::{debug, error, info};
 
 pub type UnsupportedConstructs = FxHashMap<InternedString, Vec<Location>>;
+
 #[derive(Clone)]
 pub struct GotocCodegenBackend {
     /// The query is shared with `KaniCompiler` and it is initialized as part of `rustc`
@@ -77,13 +78,16 @@ impl GotocCodegenBackend {
     }
 
     /// Generate code that is reachable from the given starting points.
+    ///
+    /// Invariant: iff `check_contract.is_some()` then `return.2.is_some()`
     fn codegen_items<'tcx>(
         &self,
         tcx: TyCtxt<'tcx>,
         starting_items: &[MonoItem],
         symtab_goto: &Path,
         machine_model: &MachineModel,
-    ) -> (GotocCtx<'tcx>, Vec<MonoItem>) {
+        check_contract: Option<InternalDefId>,
+    ) -> (GotocCtx<'tcx>, Vec<MonoItem>, Option<AssignsContract>) {
         let items = with_timer(
             || collect_reachable_items(tcx, starting_items),
             "codegen reachability analysis",
@@ -95,7 +99,7 @@ impl GotocCodegenBackend {
         let mut gcx = GotocCtx::new(tcx, (*self.queries.lock().unwrap()).clone(), machine_model);
         check_reachable_items(gcx.tcx, &gcx.queries, &items);
 
-        with_timer(
+        let contract_info = with_timer(
             || {
                 // we first declare all items
                 for item in &items {
@@ -142,6 +146,8 @@ impl GotocCodegenBackend {
                         MonoItem::GlobalAsm(_) => {} // We have already warned above
                     }
                 }
+
+                check_contract.map(|check_id| gcx.handle_check_contract(check_id, &items))
             },
             "codegen",
         );
@@ -178,7 +184,7 @@ impl GotocCodegenBackend {
             }
         }
 
-        (gcx, items)
+        (gcx, items, contract_info)
     }
 }
 
@@ -235,13 +241,22 @@ impl CodegenBackend for GotocCodegenBackend {
                     for harness in harnesses {
                         let model_path =
                             queries.harness_model_path(&harness.mangled_name()).unwrap();
-                        let (gcx, mono_items) = self.codegen_items(
+                        let contract_metadata =
+                            contract_metadata_for_harness(tcx, harness.def.def_id()).unwrap();
+                        let (gcx, items, contract_info) = self.codegen_items(
                             tcx,
                             &[MonoItem::Fn(harness)],
                             model_path,
                             &results.machine_model,
+                            contract_metadata,
                         );
-                        results.extend(gcx, mono_items, None);
+                        results.extend(gcx, items, None);
+                        if let Some(assigns_contract) = contract_info {
+                            self.queries.lock().unwrap().register_assigns_contract(
+                                canonical_mangled_name(harness).intern(),
+                                assigns_contract,
+                            );
+                        }
                     }
                 }
                 ReachabilityType::Tests => {
@@ -262,9 +277,16 @@ impl CodegenBackend for GotocCodegenBackend {
                     // We will be able to remove this once we optimize all calls to CBMC utilities.
                     // https://github.com/model-checking/kani/issues/1971
                     let model_path = base_filename.with_extension(ArtifactType::SymTabGoto);
-                    let (gcx, items) =
-                        self.codegen_items(tcx, &harnesses, &model_path, &results.machine_model);
+                    let (gcx, items, contract_info) = self.codegen_items(
+                        tcx,
+                        &harnesses,
+                        &model_path,
+                        &results.machine_model,
+                        Default::default(),
+                    );
                     results.extend(gcx, items, None);
+
+                    assert!(contract_info.is_none());
 
                     for (test_fn, test_desc) in harnesses.iter().zip(descriptions.iter()) {
                         let instance =
@@ -292,12 +314,14 @@ impl CodegenBackend for GotocCodegenBackend {
                     .map(MonoItem::Fn)
                     .collect::<Vec<_>>();
                     let model_path = base_filename.with_extension(ArtifactType::SymTabGoto);
-                    let (gcx, items) = self.codegen_items(
+                    let (gcx, items, contract_info) = self.codegen_items(
                         tcx,
                         &local_reachable,
                         &model_path,
                         &results.machine_model,
+                        Default::default(),
                     );
+                    assert!(contract_info.is_none());
                     results.extend(gcx, items, None);
                 }
             }
@@ -392,6 +416,14 @@ impl CodegenBackend for GotocCodegenBackend {
         }
         Ok(())
     }
+}
+
+fn contract_metadata_for_harness(
+    tcx: TyCtxt,
+    def_id: DefId,
+) -> Result<Option<InternalDefId>, ErrorGuaranteed> {
+    let attrs = KaniAttributes::for_def_id(tcx, def_id);
+    Ok(attrs.interpret_the_for_contract_attribute().transpose()?.map(|(_, id, _)| id))
 }
 
 fn check_target(session: &Session) {

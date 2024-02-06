@@ -25,6 +25,9 @@ pub mod slice;
 pub mod tuple;
 pub mod vec;
 
+#[doc(hidden)]
+pub mod internal;
+
 mod models;
 
 pub use arbitrary::Arbitrary;
@@ -90,15 +93,6 @@ macro_rules! implies {
     ($($premise:expr),+ => $conclusion:expr) => {
         $(!$premise)||+ || ($conclusion)
     };
-}
-
-/// A way to break the ownerhip rules. Only used by contracts where we can
-/// guarantee it is done safely.
-#[inline(never)]
-#[doc(hidden)]
-#[rustc_diagnostic_item = "KaniUntrackedDeref"]
-pub fn untracked_deref<T>(_: &T) -> T {
-    todo!()
 }
 
 /// Creates an assertion of the specified condition and message.
@@ -293,6 +287,13 @@ macro_rules! cover {
         kani::cover($cond, $msg);
     };
 }
+
+// Used to bind `core::assert` to a different name to avoid possible name conflicts if a
+// crate uses `extern crate std as core`. See
+// https://github.com/model-checking/kani/issues/1949 and https://github.com/model-checking/kani/issues/2187
+#[doc(hidden)]
+#[cfg(not(feature = "concrete_playback"))]
+pub use core::assert as __kani__workaround_core_assert;
 
 // Kani proc macros must be in a separate crate
 pub use kani_macros::*;

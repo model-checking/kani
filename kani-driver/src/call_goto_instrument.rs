@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use anyhow::Result;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
@@ -36,6 +36,8 @@ impl KaniSession {
         if self.args.run_sanity_checks {
             self.goto_sanity_check(output)?;
         }
+
+        self.instrument_contracts(harness, output)?;
 
         if self.args.checks.undefined_function_on() {
             self.add_library(output)?;
@@ -160,6 +162,23 @@ impl KaniSession {
         self.call_goto_instrument(args)
     }
 
+    /// Make CBMC enforce a function contract.
+    pub fn instrument_contracts(&self, harness: &HarnessMetadata, file: &Path) -> Result<()> {
+        let Some(assigns) = harness.contract.as_ref() else { return Ok(()) };
+
+        let args: &[std::ffi::OsString] = &[
+            "--dfcc".into(),
+            (&harness.mangled_name).into(),
+            "--enforce-contract".into(),
+            assigns.contracted_function_name.as_str().into(),
+            "--nondet-static-exclude".into(),
+            assigns.recursion_tracker.as_str().into(),
+            file.into(),
+            file.into(),
+        ];
+        self.call_goto_instrument(args)
+    }
+
     /// Generate a .demangled.c file from the .c file using the `prettyName`s from the symbol table
     ///
     /// Currently, only top-level function names and (most) type names are demangled.
@@ -189,7 +208,10 @@ impl KaniSession {
     }
 
     /// Non-public helper function to actually do the run of goto-instrument
-    fn call_goto_instrument(&self, args: Vec<OsString>) -> Result<()> {
+    fn call_goto_instrument<S: AsRef<OsStr>>(
+        &self,
+        args: impl IntoIterator<Item = S>,
+    ) -> Result<()> {
         // TODO get goto-instrument path from self
         let mut cmd = Command::new("goto-instrument");
         cmd.args(args);

@@ -12,13 +12,6 @@
 // re-export all std symbols
 pub use std::*;
 
-// Bind `core::assert` to a different name to avoid possible name conflicts if a
-// crate uses `extern crate std as core`. See
-// https://github.com/model-checking/kani/issues/1949
-#[cfg(not(feature = "concrete_playback"))]
-#[allow(unused_imports)]
-pub use core::assert as __kani__workaround_core_assert;
-
 #[cfg(not(feature = "concrete_playback"))]
 // Override process calls with stubs.
 pub mod process;
@@ -64,7 +57,7 @@ macro_rules! assert {
         // strategy, which is tracked in
         // https://github.com/model-checking/kani/issues/692
         if false {
-            __kani__workaround_core_assert!(true, $($arg)+);
+            kani::__kani__workaround_core_assert!(true, $($arg)+);
         }
     }};
 }
@@ -178,7 +171,7 @@ macro_rules! unreachable {
     // handle.
     ($fmt:expr, $($arg:tt)*) => {{
         if false {
-            __kani__workaround_core_assert!(true, $fmt, $($arg)+);
+            kani::__kani__workaround_core_assert!(true, $fmt, $($arg)+);
         }
         kani::panic(concat!("internal error: entered unreachable code: ",
         stringify!($fmt, $($arg)*)))}};
@@ -195,7 +188,7 @@ macro_rules! panic {
     // `panic!("Error message")`
     ($msg:literal $(,)?) => ({
         if false {
-            __kani__workaround_core_assert!(true, $msg);
+            kani::__kani__workaround_core_assert!(true, $msg);
         }
         kani::panic(concat!($msg))
     });
@@ -214,7 +207,7 @@ macro_rules! panic {
     // `panic!("Error: {}", code);`
     ($($arg:tt)+) => {{
         if false {
-            __kani__workaround_core_assert!(true, $($arg)+);
+            kani::__kani__workaround_core_assert!(true, $($arg)+);
         }
         kani::panic(stringify!($($arg)+));
     }};
