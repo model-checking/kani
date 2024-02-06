@@ -148,10 +148,10 @@ cttz_nonzero | Yes | |
 discriminant_value | Yes | |
 drop_in_place | No | |
 exact_div | Yes | |
-exp2f32 | No | |
-exp2f64 | No | |
-expf32 | No | |
-expf64 | No | |
+exp2f32 | Partial | Results are overapproximated |
+exp2f64 | Partial | Results are overapproximated |
+expf32 | Partial | Results are overapproximated |
+expf64 | Partial | Results are overapproximated |
 fabsf32 | Yes | |
 fabsf64 | Yes | |
 fadd_fast | Yes | |
@@ -170,8 +170,8 @@ log10f32 | No | |
 log10f64 | No | |
 log2f32 | No | |
 log2f64 | No | |
-logf32 | No | |
-logf64 | No | |
+logf32 | Partial | Results are overapproximated |
+logf64 | Partial | Results are overapproximated |
 maxnumf32 | Yes | |
 maxnumf64 | Yes | |
 min_align_of | Yes | |
@@ -185,10 +185,10 @@ nearbyintf64 | Yes | |
 needs_drop | Yes | |
 nontemporal_store | No | |
 offset | Partial | Doesn't check [all UB conditions](https://doc.rust-lang.org/std/primitive.pointer.html#safety-2) |
-powf32 | No | |
-powf64 | No | |
-powif32 | No | |
-powif64 | No | |
+powf32 | Partial | Results are overapproximated |
+powf64 | Partial | Results are overapproximated |
+powif32 | Partial | Results are overapproximated |
+powif64 | Partial | Results are overapproximated |
 pref_align_of | Yes | |
 prefetch_read_data | No | |
 prefetch_read_instruction | No | |
@@ -211,8 +211,8 @@ sinf32 | Partial | Results are overapproximated; [this test](https://github.com/
 sinf64 | Partial | Results are overapproximated; [this test](https://github.com/model-checking/kani/blob/main/tests/kani/Intrinsics/Math/Trigonometry/sinf64.rs) explains how |
 size_of | Yes | |
 size_of_val | Yes | |
-sqrtf32 | No | |
-sqrtf64 | No | |
+sqrtf32 | Partial | Results are overapproximated |
+sqrtf64 | Partial | Results are overapproximated |
 sub_with_overflow | Yes | |
 transmute | Partial | Doesn't check [all UB conditions](https://doc.rust-lang.org/nomicon/transmutes.html) |
 truncf32 | Yes | |

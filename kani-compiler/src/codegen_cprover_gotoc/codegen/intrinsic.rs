@@ -420,10 +420,10 @@ impl<'tcx> GotocCtx<'tcx> {
                 self.codegen_expr_to_place_stable(place, e)
             }
             "exact_div" => self.codegen_exact_div(fargs, place, loc),
-            "exp2f32" => unstable_codegen!(codegen_simple_intrinsic!(Exp2f)),
-            "exp2f64" => unstable_codegen!(codegen_simple_intrinsic!(Exp2)),
-            "expf32" => unstable_codegen!(codegen_simple_intrinsic!(Expf)),
-            "expf64" => unstable_codegen!(codegen_simple_intrinsic!(Exp)),
+            "exp2f32" => codegen_simple_intrinsic!(Exp2f),
+            "exp2f64" => codegen_simple_intrinsic!(Exp2),
+            "expf32" => codegen_simple_intrinsic!(Expf),
+            "expf64" => codegen_simple_intrinsic!(Exp),
             "fabsf32" => codegen_simple_intrinsic!(Fabsf),
             "fabsf64" => codegen_simple_intrinsic!(Fabs),
             "fadd_fast" => {
@@ -456,8 +456,8 @@ impl<'tcx> GotocCtx<'tcx> {
             "log10f64" => unstable_codegen!(codegen_simple_intrinsic!(Log10)),
             "log2f32" => unstable_codegen!(codegen_simple_intrinsic!(Log2f)),
             "log2f64" => unstable_codegen!(codegen_simple_intrinsic!(Log2)),
-            "logf32" => unstable_codegen!(codegen_simple_intrinsic!(Logf)),
-            "logf64" => unstable_codegen!(codegen_simple_intrinsic!(Log)),
+            "logf32" => codegen_simple_intrinsic!(Logf),
+            "logf64" => codegen_simple_intrinsic!(Log),
             "maxnumf32" => codegen_simple_intrinsic!(Fmaxf),
             "maxnumf64" => codegen_simple_intrinsic!(Fmax),
             "min_align_of" => codegen_intrinsic_const!(),
@@ -474,10 +474,10 @@ impl<'tcx> GotocCtx<'tcx> {
             "offset" => unreachable!(
                 "Expected `core::intrinsics::unreachable` to be handled by `BinOp::OffSet`"
             ),
-            "powf32" => unstable_codegen!(codegen_simple_intrinsic!(Powf)),
-            "powf64" => unstable_codegen!(codegen_simple_intrinsic!(Pow)),
-            "powif32" => unstable_codegen!(codegen_simple_intrinsic!(Powif)),
-            "powif64" => unstable_codegen!(codegen_simple_intrinsic!(Powi)),
+            "powf32" => codegen_simple_intrinsic!(Powf),
+            "powf64" => codegen_simple_intrinsic!(Pow),
+            "powif32" => codegen_simple_intrinsic!(Powif),
+            "powif64" => codegen_simple_intrinsic!(Powi),
             "pref_align_of" => codegen_intrinsic_const!(),
             "ptr_guaranteed_cmp" => self.codegen_ptr_guaranteed_cmp(fargs, place),
             "ptr_offset_from" => self.codegen_ptr_offset_from(fargs, place, loc),
@@ -555,8 +555,8 @@ impl<'tcx> GotocCtx<'tcx> {
             "simd_xor" => codegen_intrinsic_binop!(bitxor),
             "size_of" => unreachable!(),
             "size_of_val" => codegen_size_align!(size),
-            "sqrtf32" => unstable_codegen!(codegen_simple_intrinsic!(Sqrtf)),
-            "sqrtf64" => unstable_codegen!(codegen_simple_intrinsic!(Sqrt)),
+            "sqrtf32" => codegen_simple_intrinsic!(Sqrtf),
+            "sqrtf64" => codegen_simple_intrinsic!(Sqrt),
             "sub_with_overflow" => self.codegen_op_with_overflow(
                 BinaryOperator::OverflowResultMinus,
                 fargs,
