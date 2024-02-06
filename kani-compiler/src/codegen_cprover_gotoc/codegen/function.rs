@@ -210,7 +210,7 @@ impl<'tcx> GotocCtx<'tcx> {
         self.ensure(&self.symbol_name_stable(instance), |ctx, fname| {
             Symbol::function(
                 fname,
-                ctx.fn_typ(&body),
+                ctx.fn_typ(instance, &body),
                 None,
                 instance.name(),
                 ctx.codegen_span_stable(instance.def.span()),

@@ -574,13 +574,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Ensure that the given instance is in the symbol table, returning the symbol.
-    ///
-    /// FIXME: The function should not have to return the type of the function symbol as well
-    /// because the symbol should have the type. The problem is that the type in the symbol table
-    /// sometimes subtly differs from the type that codegen_function_sig returns.
-    /// This is tracked in <https://github.com/model-checking/kani/issues/1350>.
-    fn codegen_func_symbol(&mut self, instance: Instance) -> (&Symbol, Type) {
-        let funct = self.codegen_function_sig_stable(self.fn_sig_of_instance_stable(instance));
+    fn codegen_func_symbol(&mut self, instance: Instance) -> &Symbol {
         let sym = if instance.is_foreign_item() {
             // Get the symbol that represents a foreign instance.
             self.codegen_foreign_fn(instance)
@@ -592,7 +586,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 .lookup(&func)
                 .unwrap_or_else(|| panic!("Function `{func}` should've been declared before usage"))
         };
-        (sym, funct)
+        sym
     }
 
     /// Generate a goto expression that references the function identified by `instance`.
@@ -601,8 +595,8 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// This should not be used where Rust expects a "function item" (See `codegen_fn_item`)
     pub fn codegen_func_expr(&mut self, instance: Instance, span: Option<Span>) -> Expr {
-        let (func_symbol, func_typ) = self.codegen_func_symbol(instance);
-        Expr::symbol_expression(func_symbol.name, func_typ)
+        let func_symbol = self.codegen_func_symbol(instance);
+        Expr::symbol_expression(func_symbol.name, func_symbol.typ.clone())
             .with_location(self.codegen_span_option_stable(span))
     }
 
@@ -612,7 +606,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// This is the Rust "function item". See <https://doc.rust-lang.org/reference/types/function-item.html>
     /// This is not the function pointer, for that use `codegen_func_expr`.
     fn codegen_fn_item(&mut self, instance: Instance, span: Option<Span>) -> Expr {
-        let (func_symbol, _) = self.codegen_func_symbol(instance);
+        let func_symbol = self.codegen_func_symbol(instance);
         let mangled_name = func_symbol.name;
         let fn_item_struct_ty = self.codegen_fndef_type_stable(instance);
         // This zero-sized object that a function name refers to in Rust is globally unique, so we create such a global object.
