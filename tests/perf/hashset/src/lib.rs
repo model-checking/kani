@@ -6,6 +6,7 @@
 use std::collections::{hash_map::RandomState, HashSet};
 use std::mem::{size_of, size_of_val, transmute};
 
+#[allow(dead_code)]
 fn concrete_state() -> RandomState {
     let keys: [u64; 2] = [0, 0];
     assert_eq!(size_of_val(&keys), size_of::<RandomState>());
@@ -30,7 +31,7 @@ fn check_insert() {
 #[kani::solver(kissat)]
 fn check_contains() {
     let first = kani::any();
-    let mut set: HashSet<i8> = HashSet::from([first]);
+    let set: HashSet<i8> = HashSet::from([first]);
     assert!(set.contains(&first));
 }
 
@@ -38,7 +39,7 @@ fn check_contains() {
 #[kani::stub(RandomState::new, concrete_state)]
 #[kani::unwind(2)]
 fn check_contains_str() {
-    let mut set = HashSet::from(["s"]);
+    let set = HashSet::from(["s"]);
     assert!(set.contains(&"s"));
 }
 
