@@ -167,6 +167,27 @@ pub fn stub_verified(attr: TokenStream, item: TokenStream) -> TokenStream {
     attr_impl::stub_verified(attr, item)
 }
 
+/// Declaration of an explicit write-set for the annotated function.
+///
+/// This is part of the function contract API, for more general information see
+/// the [module-level documentation](../kani/contracts/index.html).
+///
+/// The contents of the attribute is a series of comma-separated expressions referencing the
+/// arguments of the function. Each expression is expected to return a pointer type, i.e. `*const T`,
+/// `*mut T`, `&T` or `&mut T`. The pointed-to type must implement
+/// [`Arbitrary`](../kani/arbitrary/trait.Arbitrary.html).
+///
+/// All Rust syntax is supported, even calling other functions, but the computations must be side
+/// effect free, e.g. it cannot perform I/O or use mutable memory.
+///
+/// Kani requires each function that uses a contract to have at least one designated
+/// [`proof_for_contract`][macro@proof_for_contract] harness for checking the
+/// contract.
+#[proc_macro_attribute]
+pub fn modifies(attr: TokenStream, item: TokenStream) -> TokenStream {
+    attr_impl::modifies(attr, item)
+}
+
 /// This module implements Kani attributes in a way that only Kani's compiler can understand.
 /// This code should only be activated when pre-building Kani's sysroot.
 #[cfg(kani_sysroot)]
@@ -175,7 +196,7 @@ mod sysroot {
 
     mod contracts;
 
-    pub use contracts::{ensures, proof_for_contract, requires, stub_verified};
+    pub use contracts::{ensures, modifies, proof_for_contract, requires, stub_verified};
 
     use super::*;
 
@@ -348,6 +369,7 @@ mod regular {
     no_op!(unwind);
     no_op!(requires);
     no_op!(ensures);
+    no_op!(modifies);
     no_op!(proof_for_contract);
     no_op!(stub_verified);
 }

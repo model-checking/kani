@@ -29,6 +29,7 @@ use cbmc::{InternString, InternedString};
 use clap::Parser;
 use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata};
 use rustc_codegen_ssa::traits::CodegenBackend;
+use rustc_data_structures::fx::FxHashMap;
 use rustc_driver::{Callbacks, Compilation, RunCompiler};
 use rustc_hir::def_id::LOCAL_CRATE;
 use rustc_hir::definitions::DefPathHash;
@@ -184,21 +185,43 @@ impl KaniCompiler {
     pub fn run(&mut self, orig_args: Vec<String>) -> Result<(), ErrorGuaranteed> {
         loop {
             debug!(next=?self.stage, "run");
-            match &self.stage {
-                CompilationStage::Init => {
-                    self.run_compilation_session(&orig_args)?;
+            // Because this modifies `self.stage` we need to run this before
+            // borrowing `&self.stage` immutably
+            if let CompilationStage::Done { metadata: Some((metadata, _)), .. } = &mut self.stage {
+                let mut contracts = self
+                    .queries
+                    .lock()
+                    .unwrap()
+                    .assigns_contracts()
+                    .map(|(k, v)| (*k, v.clone()))
+                    .collect::<FxHashMap<_, _>>();
+                for harness in
+                    metadata.proof_harnesses.iter_mut().chain(metadata.test_harnesses.iter_mut())
+                {
+                    if let Some(modifies_contract) =
+                        contracts.remove(&(&harness.mangled_name).intern())
+                    {
+                        harness.contract = modifies_contract.into();
+                    }
                 }
+                assert!(
+                    contracts.is_empty(),
+                    "Invariant broken: not all contracts have been handled."
+                )
+            }
+            match &self.stage {
+                CompilationStage::Init => self.run_compilation_session(&orig_args)?,
                 CompilationStage::CodegenNoStubs { .. } => {
                     unreachable!("This stage should always run in the same session as Init");
                 }
                 CompilationStage::CodegenWithStubs { target_harnesses, all_harnesses, .. } => {
                     assert!(!target_harnesses.is_empty(), "expected at least one target harness");
-                    let target_harness = &target_harnesses[0];
-                    let extra_arg =
-                        stubbing::mk_rustc_arg(&all_harnesses[&target_harness].stub_map);
+                    let target_harness_name = &target_harnesses[0];
+                    let target_harness = &all_harnesses[target_harness_name];
+                    let extra_arg = stubbing::mk_rustc_arg(&target_harness.stub_map);
                     let mut args = orig_args.clone();
                     args.push(extra_arg);
-                    self.run_compilation_session(&args)?;
+                    self.run_compilation_session(&args)?
                 }
                 CompilationStage::Done { metadata: Some((kani_metadata, crate_info)) } => {
                     // Only store metadata for harnesses for now.
@@ -251,7 +274,7 @@ impl KaniCompiler {
                 } else {
                     CompilationStage::Done {
                         metadata: Some((
-                            generate_metadata(&crate_info, all_harnesses),
+                            generate_metadata(&crate_info, &all_harnesses),
                             crate_info.clone(),
                         )),
                     }
@@ -269,7 +292,8 @@ impl KaniCompiler {
         let queries = self.queries.clone();
         let mut compiler = RunCompiler::new(args, self);
         compiler.set_make_codegen_backend(Some(Box::new(move |_cfg| backend(queries))));
-        compiler.run()
+        compiler.run()?;
+        Ok(())
     }
 
     /// Gather and process all harnesses from this crate that shall be compiled.
@@ -470,6 +494,7 @@ mod tests {
             original_end_line: 20,
             goto_file: None,
             attributes: HarnessAttributes::default(),
+            contract: Default::default(),
         }
     }
 

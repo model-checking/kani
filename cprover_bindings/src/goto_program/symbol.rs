@@ -13,6 +13,8 @@ pub struct Symbol {
     pub location: Location,
     pub typ: Type,
     pub value: SymbolValues,
+    /// Contracts to be enforced (only supported for functions)
+    pub contract: Option<Box<FunctionContract>>,
 
     /// Optional debugging information
 
@@ -42,6 +44,57 @@ pub struct Symbol {
     pub is_thread_local: bool,
     pub is_volatile: bool,
     pub is_weak: bool,
+}
+
+/// The equivalent of a "mathematical function" in CBMC. Semantically this is an
+/// anonymous function object, similar to a closure, but without closing over an
+/// environment.
+///
+/// This is only valid for use as a function contract. It may not perform side
+/// effects, a property that is enforced on the CBMC side.
+///
+/// The precise nomenclature is that in CBMC a contract value has *type*
+/// `mathematical_function` and values of that type are `lambda`s. Since this
+/// struct represents such values it is named `Lambda`.
+#[derive(Debug, Clone)]
+pub struct Lambda {
+    pub arguments: Vec<Parameter>,
+    pub body: Expr,
+}
+
+impl Lambda {
+    pub fn as_contract_for(
+        fn_ty: &Type,
+        return_var_name: Option<InternedString>,
+        body: Expr,
+    ) -> Self {
+        let arguments = match fn_ty {
+            Type::Code { parameters, return_type } => {
+                [Parameter::new(None, return_var_name, (**return_type).clone())]
+                    .into_iter()
+                    .chain(parameters.iter().cloned())
+                    .collect()
+            }
+            _ => panic!(
+                "Contract lambdas can only be generated for `Code` types, received {fn_ty:?}"
+            ),
+        };
+        Self { arguments, body }
+    }
+}
+
+/// The CBMC representation of a function contract. Represents
+/// https://diffblue.github.io/cbmc/contracts-user.html but currently only assigns clauses are
+/// supported.
+#[derive(Clone, Debug)]
+pub struct FunctionContract {
+    pub(crate) assigns: Vec<Lambda>,
+}
+
+impl FunctionContract {
+    pub fn new(assigns: Vec<Lambda>) -> Self {
+        Self { assigns }
+    }
 }
 
 /// Currently, only C is understood by CBMC.
@@ -84,6 +137,7 @@ impl Symbol {
             base_name,
             pretty_name,
 
+            contract: None,
             module: None,
             mode: SymbolModes::C,
             // global properties
@@ -104,6 +158,18 @@ impl Symbol {
             is_thread_local: false,
             is_volatile: false,
             is_weak: false,
+        }
+    }
+
+    /// Add this contract to the symbol (symbol must be a function) or fold the
+    /// conditions into an existing contract.
+    pub fn attach_contract(&mut self, contract: FunctionContract) {
+        assert!(self.typ.is_code());
+        match self.contract {
+            Some(ref mut prior) => {
+                prior.assigns.extend(contract.assigns);
+            }
+            None => self.contract = Some(Box::new(contract)),
         }
     }
 
@@ -317,6 +383,12 @@ impl Symbol {
 
     pub fn with_is_hidden(mut self, hidden: bool) -> Symbol {
         self.is_auxiliary = hidden;
+        self
+    }
+
+    /// Set `is_property`.
+    pub fn with_is_property(mut self, v: bool) -> Self {
+        self.is_property = v;
         self
     }
 }

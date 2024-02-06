@@ -1,0 +1,9 @@
+test_stubbing.assertion\
+- Status: SUCCESS\
+- Description: "a is 1"
+
+test_stubbing.assertion\
+- Status: SUCCESS\
+- Description: "b is 2"
+
+VERIFICATION:- SUCCESSFUL

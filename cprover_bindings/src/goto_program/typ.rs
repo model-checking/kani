@@ -228,6 +228,17 @@ impl Parameter {
     }
 }
 
+/// Constructor
+impl Parameter {
+    pub fn new<S: Into<InternedString>>(
+        base_name: Option<S>,
+        identifier: Option<S>,
+        typ: Type,
+    ) -> Self {
+        Self { base_name: base_name.map(Into::into), identifier: identifier.map(Into::into), typ }
+    }
+}
+
 impl CIntType {
     pub fn sizeof_in_bits(&self, st: &SymbolTable) -> u64 {
         match self {

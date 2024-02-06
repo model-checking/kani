@@ -5,6 +5,15 @@ use crate::CbmcSolver;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+/// A CBMC-level `assigns` contract that needs to be enforced on a function.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct AssignsContract {
+    /// The target of the contract
+    pub contracted_function_name: String,
+    /// A static global variable used to track recursion that must not be havocked.
+    pub recursion_tracker: String,
+}
+
 /// We emit this structure for each annotated proof harness (`#[kani::proof]`) we find.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct HarnessMetadata {
@@ -24,6 +33,8 @@ pub struct HarnessMetadata {
     pub goto_file: Option<PathBuf>,
     /// The `#[kani::<>]` attributes added to a harness.
     pub attributes: HarnessAttributes,
+    /// A CBMC-level assigns contract that should be enforced when running this harness.
+    pub contract: Option<AssignsContract>,
 }
 
 /// The attributes added by the user to control how a harness is executed.
