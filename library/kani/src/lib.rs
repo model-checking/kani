@@ -13,14 +13,18 @@
 // Used to model simd.
 #![feature(repr_simd)]
 // Features used for tests only.
-#![cfg_attr(test, feature(core_intrinsics, portable_simd))]
-// Required for rustc_diagnostic_item
+#![cfg_attr(test, feature(portable_simd))]
+// Required for `rustc_diagnostic_item` and `core_intrinsics`
 #![allow(internal_features)]
+// Required for implementing memory predicates.
+#![feature(core_intrinsics)]
+#![feature(ptr_metadata)]
 
 pub mod arbitrary;
 #[cfg(feature = "concrete_playback")]
 mod concrete_playback;
 pub mod futures;
+pub mod mem;
 pub mod slice;
 pub mod tuple;
 pub mod vec;
@@ -33,6 +37,7 @@ mod models;
 pub use arbitrary::Arbitrary;
 #[cfg(feature = "concrete_playback")]
 pub use concrete_playback::concrete_playback_run;
+
 #[cfg(not(feature = "concrete_playback"))]
 /// NOP `concrete_playback` for type checking during verification mode.
 pub fn concrete_playback_run<F: Fn()>(_: Vec<Vec<u8>>, _: F) {
@@ -80,18 +85,12 @@ pub fn assume(cond: bool) {
 /// `implies!(premise => conclusion)` means that if the `premise` is true, so
 /// must be the `conclusion`.
 ///
-/// This simply expands to `!premise || conclusion` and is intended to be used
-/// in function contracts to make them more readable, as the concept of an
-/// implication is more natural to think about than its expansion.
-///
-/// For further convenience multiple comma separated premises are allowed, and
-/// are joined with `||` in the expansion. E.g. `implies!(a, b => c)` expands to
-/// `!a || !b || c` and says that `c` is true if both `a` and `b` are true (see
-/// also [Horn Clauses](https://en.wikipedia.org/wiki/Horn_clause)).
+/// This simply expands to `!premise || conclusion` and is intended to make checks more readable,
+/// as the concept of an implication is more natural to think about than its expansion.
 #[macro_export]
 macro_rules! implies {
-    ($($premise:expr),+ => $conclusion:expr) => {
-        $(!$premise)||+ || ($conclusion)
+    ($premise:expr => $conclusion:expr) => {
+        !($premise) || ($conclusion)
     };
 }
 

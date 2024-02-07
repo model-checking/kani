@@ -126,6 +126,10 @@ pub enum ExprValue {
     Nondet,
     /// `NULL`
     PointerConstant(u64),
+    ReadOk {
+        ptr: Expr,
+        size: Expr,
+    },
     // `op++` etc
     SelfOp {
         op: SelfOperator,
@@ -715,6 +719,14 @@ impl Expr {
     /// `__nondet_typ()`
     pub fn nondet(typ: Type) -> Self {
         expr!(Nondet, typ)
+    }
+
+    /// `read_ok(ptr, size)`
+    pub fn read_ok(ptr: Expr, size: Expr) -> Self {
+        assert_eq!(*ptr.typ(), Type::void_pointer());
+        assert_eq!(*size.typ(), Type::size_t());
+
+        expr!(ReadOk { ptr, size }, Type::bool())
     }
 
     /// `e.g. NULL`
