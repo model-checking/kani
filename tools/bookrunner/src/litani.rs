@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! Utilities to interact with the `Litani` build accumulator.
 
-use pulldown_cmark::escape::StrWrite;
+use pulldown_cmark_escape::StrWrite;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::Path;
