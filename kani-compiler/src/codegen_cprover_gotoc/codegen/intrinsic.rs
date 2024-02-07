@@ -555,8 +555,8 @@ impl<'tcx> GotocCtx<'tcx> {
             "simd_xor" => codegen_intrinsic_binop!(bitxor),
             "size_of" => unreachable!(),
             "size_of_val" => codegen_size_align!(size),
-            "sqrtf32" => unstable_codegen!(codegen_simple_intrinsic!(Sqrtf)),
-            "sqrtf64" => unstable_codegen!(codegen_simple_intrinsic!(Sqrt)),
+            "sqrtf32" => codegen_simple_intrinsic!(Sqrtf),
+            "sqrtf64" => codegen_simple_intrinsic!(Sqrt),
             "sub_with_overflow" => self.codegen_op_with_overflow(
                 BinaryOperator::OverflowResultMinus,
                 fargs,
