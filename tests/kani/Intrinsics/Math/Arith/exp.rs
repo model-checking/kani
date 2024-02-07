@@ -11,7 +11,7 @@ fn verify_exp32() {
     let two_sq = std::f32::consts::E * std::f32::consts::E;
     let two_exp = two.exp();
 
-    assert!((two_sq - two_exp).abs() <= 1.0);
+    assert!((two_sq - two_exp).abs() <= 0.192);
 }
 
 #[kani::proof]
@@ -20,5 +20,5 @@ fn verify_exp64() {
     let two_sq = std::f64::consts::E * std::f64::consts::E;
     let two_exp = two.exp();
 
-    assert!((two_sq - two_exp).abs() <= 1.0);
+    assert!((two_sq - two_exp).abs() <= 0.192);
 }
