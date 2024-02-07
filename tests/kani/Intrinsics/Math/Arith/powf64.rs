@@ -1,5 +1,9 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// This test will trigger use of the `powf64` intrinsic, which in turn invoke functions modelled in
+// CBMC's math library. These models use approximations as documented in CBMC's source code:
+// https://github.com/diffblue/cbmc/blob/develop/src/ansi-c/library/math.c.
 
 pub fn f(a: u64) -> u64 {
     const C: f64 = 0.618;
