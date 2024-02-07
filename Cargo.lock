@@ -110,6 +110,7 @@ version = "0.1.0"
 dependencies = [
  "Inflector",
  "pulldown-cmark",
+ "pulldown-cmark-escape",
  "rustdoc",
  "serde",
  "serde_json",
@@ -773,6 +774,12 @@ dependencies = [
  "memchr",
  "unicase",
 ]
+
+[[package]]
+name = "pulldown-cmark-escape"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d5d8f9aa0e3cbcfaf8bf00300004ee3b72f74770f9cbac93f6928771f613276b"
 
 [[package]]
 name = "quote"

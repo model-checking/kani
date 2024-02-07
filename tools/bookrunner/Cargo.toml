@@ -11,6 +11,7 @@ publish = false
 [dependencies]
 Inflector = "0.11.4"
 pulldown-cmark = { version = "0.10", default-features = false }
+pulldown-cmark-escape = { version = "0.10", default-features = false }
 rustdoc = { path = "librustdoc" }
 walkdir = "2.3.2"
 serde = { version = "1.0", features = ["derive"] }
