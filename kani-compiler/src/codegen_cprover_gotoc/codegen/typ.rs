@@ -1101,7 +1101,7 @@ impl<'tcx> GotocCtx<'tcx> {
             .map(|(_, arg_abi)| {
                 let arg_ty_stable = arg_abi.ty;
                 let kind = arg_ty_stable.kind();
-                let arg_ty = rustc_internal::internal(arg_ty_stable);
+                let arg_ty = rustc_internal::internal(self.tcx, arg_ty_stable);
                 if is_first {
                     is_first = false;
                     debug!(self_type=?arg_ty, ?fn_abi, "codegen_dynamic_function_sig");
@@ -1686,7 +1686,7 @@ impl<'tcx> GotocCtx<'tcx> {
         instance: InstanceStable,
         fn_abi: &'a FnAbi,
     ) -> impl Iterator<Item = (usize, &'a ArgAbi)> {
-        let instance_internal = rustc_internal::internal(instance);
+        let instance_internal = rustc_internal::internal(self.tcx, instance);
         let requires_caller_location = instance_internal.def.requires_caller_location(self.tcx);
         let num_args = fn_abi.args.len();
         fn_abi.args.iter().enumerate().filter(move |(idx, arg_abi)| {

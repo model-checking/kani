@@ -3,7 +3,7 @@
 //! this module handles intrinsics
 use super::typ;
 use super::{bb_label, PropertyClass};
-use crate::codegen_cprover_gotoc::codegen::ty_stable::{pointee_type_stable, pretty_ty};
+use crate::codegen_cprover_gotoc::codegen::ty_stable::pointee_type_stable;
 use crate::codegen_cprover_gotoc::{utils, GotocCtx};
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::{
@@ -646,7 +646,7 @@ impl<'tcx> GotocCtx<'tcx> {
             span,
             format!(
                 "Type check failed for intrinsic `{name}`: Expected {expected}, found {}",
-                pretty_ty(actual)
+                self.pretty_ty(actual)
             ),
         );
         self.tcx.dcx().abort_if_errors();
@@ -779,12 +779,16 @@ impl<'tcx> GotocCtx<'tcx> {
         if layout.abi.is_uninhabited() {
             return self.codegen_fatal_error(
                 PropertyClass::SafetyCheck,
-                &format!("attempted to instantiate uninhabited type `{}`", pretty_ty(*target_ty)),
+                &format!(
+                    "attempted to instantiate uninhabited type `{}`",
+                    self.pretty_ty(*target_ty)
+                ),
                 span,
             );
         }
 
-        let param_env_and_type = ParamEnv::reveal_all().and(rustc_internal::internal(target_ty));
+        let param_env_and_type =
+            ParamEnv::reveal_all().and(rustc_internal::internal(self.tcx, target_ty));
 
         // Then we check if the type allows "raw" initialization for the cases
         // where memory is zero-initialized or entirely uninitialized
@@ -798,7 +802,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 PropertyClass::SafetyCheck,
                 &format!(
                     "attempted to zero-initialize type `{}`, which is invalid",
-                    pretty_ty(*target_ty)
+                    self.pretty_ty(*target_ty)
                 ),
                 span,
             );
@@ -817,7 +821,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 PropertyClass::SafetyCheck,
                 &format!(
                     "attempted to leave type `{}` uninitialized, which is invalid",
-                    pretty_ty(*target_ty)
+                    self.pretty_ty(*target_ty)
                 ),
                 span,
             );
@@ -1285,7 +1289,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 _ => {
                     let err_msg = format!(
                         "simd_shuffle index must be an array of `u32`, got `{}`",
-                        pretty_ty(farg_types[2])
+                        self.pretty_ty(farg_types[2])
                     );
                     utils::span_err(self.tcx, span, err_msg);
                     // Return a dummy value
@@ -1378,7 +1382,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
                 // Packed types ignore the alignment of their fields.
                 if let TyKind::RigidTy(RigidTy::Adt(def, _)) = ty.kind() {
-                    if rustc_internal::internal(def).repr().packed() {
+                    if rustc_internal::internal(self.tcx, def).repr().packed() {
                         unsized_align = sized_align.clone();
                     }
                 }
@@ -1426,9 +1430,9 @@ impl<'tcx> GotocCtx<'tcx> {
         if rust_ret_type != vector_base_type {
             let err_msg = format!(
                 "expected return type `{}` (element of input `{}`), found `{}`",
-                pretty_ty(vector_base_type),
-                pretty_ty(rust_arg_types[0]),
-                pretty_ty(rust_ret_type)
+                self.pretty_ty(vector_base_type),
+                self.pretty_ty(rust_arg_types[0]),
+                self.pretty_ty(rust_ret_type)
             );
             utils::span_err(self.tcx, span, err_msg);
         }
@@ -1466,9 +1470,9 @@ impl<'tcx> GotocCtx<'tcx> {
         if vector_base_type != rust_arg_types[2] {
             let err_msg = format!(
                 "expected inserted type `{}` (element of input `{}`), found `{}`",
-                pretty_ty(vector_base_type),
-                pretty_ty(rust_arg_types[0]),
-                pretty_ty(rust_arg_types[2]),
+                self.pretty_ty(vector_base_type),
+                self.pretty_ty(rust_arg_types[0]),
+                self.pretty_ty(rust_arg_types[2]),
             );
             utils::span_err(self.tcx, span, err_msg);
         }
@@ -1534,8 +1538,8 @@ impl<'tcx> GotocCtx<'tcx> {
                 "expected return type with length {} (same as input type `{}`), \
                 found `{}` with length {}",
                 arg1.typ().len().unwrap(),
-                pretty_ty(rust_arg_types[0]),
-                pretty_ty(rust_ret_type),
+                self.pretty_ty(rust_arg_types[0]),
+                self.pretty_ty(rust_ret_type),
                 ret_typ.len().unwrap()
             );
             utils::span_err(self.tcx, span, err_msg);
@@ -1545,8 +1549,8 @@ impl<'tcx> GotocCtx<'tcx> {
             let (_, rust_base_type) = self.simd_size_and_type(rust_ret_type);
             let err_msg = format!(
                 "expected return type with integer elements, found `{}` with non-integer `{}`",
-                pretty_ty(rust_ret_type),
-                pretty_ty(rust_base_type),
+                self.pretty_ty(rust_ret_type),
+                self.pretty_ty(rust_base_type),
             );
             utils::span_err(self.tcx, span, err_msg);
         }
@@ -1740,7 +1744,7 @@ impl<'tcx> GotocCtx<'tcx> {
         if ret_type_len != n {
             let err_msg = format!(
                 "expected return type of length {n}, found `{}` with length {ret_type_len}",
-                pretty_ty(rust_ret_type),
+                self.pretty_ty(rust_ret_type),
             );
             utils::span_err(self.tcx, span, err_msg);
         }
@@ -1748,10 +1752,10 @@ impl<'tcx> GotocCtx<'tcx> {
             let err_msg = format!(
                 "expected return element type `{}` (element of input `{}`), \
                  found `{}` with element type `{}`",
-                pretty_ty(vec_subtype),
-                pretty_ty(rust_arg_types[0]),
-                pretty_ty(rust_ret_type),
-                pretty_ty(ret_type_subtype),
+                self.pretty_ty(vec_subtype),
+                self.pretty_ty(rust_arg_types[0]),
+                self.pretty_ty(rust_ret_type),
+                self.pretty_ty(ret_type_subtype),
             );
             utils::span_err(self.tcx, span, err_msg);
         }

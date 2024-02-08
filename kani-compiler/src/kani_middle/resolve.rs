@@ -399,8 +399,11 @@ fn resolve_in_type<'tcx>(
     name: &str,
 ) -> Result<DefId, ResolveError<'tcx>> {
     debug!(?name, ?type_id, "resolve_in_type");
+    let missing_item_err =
+        || ResolveError::MissingItem { tcx, base: type_id, unresolved: name.to_string() };
     // Try the inherent `impl` blocks (i.e., non-trait `impl`s).
     tcx.inherent_impls(type_id)
+        .map_err(|_| missing_item_err())?
         .iter()
         .flat_map(|impl_id| tcx.associated_item_def_ids(impl_id))
         .cloned()
@@ -409,9 +412,5 @@ fn resolve_in_type<'tcx>(
             let last = item_path.split("::").last().unwrap();
             last == name
         })
-        .ok_or_else(|| ResolveError::MissingItem {
-            tcx,
-            base: type_id,
-            unresolved: name.to_string(),
-        })
+        .ok_or_else(missing_item_err)
 }

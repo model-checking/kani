@@ -141,7 +141,7 @@ impl<'tcx> KaniAttributes<'tcx> {
 
     /// Look up the attributes by a stable MIR DefID
     pub fn for_def_id(tcx: TyCtxt<'tcx>, def_id: StableDefId) -> Self {
-        KaniAttributes::for_item(tcx, rustc_internal::internal(def_id))
+        KaniAttributes::for_item(tcx, rustc_internal::internal(tcx, def_id))
     }
 
     pub fn for_item(tcx: TyCtxt<'tcx>, def_id: DefId) -> Self {
@@ -671,7 +671,7 @@ pub fn is_function_contract_generated(tcx: TyCtxt, def_id: DefId) -> bool {
 /// Same as [`KaniAttributes::is_harness`] but more efficient because less
 /// attribute parsing is performed.
 pub fn is_proof_harness(tcx: TyCtxt, instance: InstanceStable) -> bool {
-    let def_id = rustc_internal::internal(instance.def.def_id());
+    let def_id = rustc_internal::internal(tcx, instance.def.def_id());
     has_kani_attribute(tcx, def_id, |a| {
         matches!(a, KaniAttributeKind::Proof | KaniAttributeKind::ProofForContract)
     })
@@ -679,14 +679,14 @@ pub fn is_proof_harness(tcx: TyCtxt, instance: InstanceStable) -> bool {
 
 /// Does this `def_id` have `#[rustc_test_marker]`?
 pub fn is_test_harness_description(tcx: TyCtxt, item: impl CrateDef) -> bool {
-    let def_id = rustc_internal::internal(item.def_id());
+    let def_id = rustc_internal::internal(tcx, item.def_id());
     let attrs = tcx.get_attrs_unchecked(def_id);
     attr::contains_name(attrs, rustc_span::symbol::sym::rustc_test_marker)
 }
 
 /// Extract the test harness name from the `#[rustc_test_maker]`
 pub fn test_harness_name(tcx: TyCtxt, def: &impl CrateDef) -> String {
-    let def_id = rustc_internal::internal(def.def_id());
+    let def_id = rustc_internal::internal(tcx, def.def_id());
     let attrs = tcx.get_attrs_unchecked(def_id);
     let marker = attr::find_by_name(attrs, rustc_span::symbol::sym::rustc_test_marker).unwrap();
     parse_str_value(&marker).unwrap()
@@ -944,7 +944,7 @@ fn parse_integer(attr: &Attribute) -> Option<u128> {
     if attr_args.len() == 1 {
         let x = attr_args[0].lit()?;
         match x.kind {
-            LitKind::Int(y, ..) => Some(y),
+            LitKind::Int(y, ..) => Some(y.get()),
             _ => None,
         }
     }

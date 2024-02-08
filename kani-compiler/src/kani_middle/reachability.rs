@@ -75,7 +75,7 @@ where
         .filter_map(|item| {
             // Only collect monomorphic items.
             // TODO: Remove the def_kind check once https://github.com/rust-lang/rust/pull/119135 has been released.
-            let def_id = rustc_internal::internal(item.def_id());
+            let def_id = rustc_internal::internal(tcx, item.def_id());
             (matches!(tcx.def_kind(def_id), rustc_hir::def::DefKind::Ctor(..))
                 || matches!(item.kind(), ItemKind::Fn))
             .then(|| {
@@ -237,7 +237,8 @@ impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {
             let poly_trait_ref = principal.with_self_ty(concrete_ty);
 
             // Walk all methods of the trait, including those of its supertraits
-            let entries = self.tcx.vtable_entries(rustc_internal::internal(&poly_trait_ref));
+            let entries =
+                self.tcx.vtable_entries(rustc_internal::internal(self.tcx, &poly_trait_ref));
             let methods = entries.iter().filter_map(|entry| match entry {
                 VtblEntry::MetadataAlign
                 | VtblEntry::MetadataDropInPlace
@@ -395,9 +396,10 @@ impl<'a, 'tcx> MirVisitor for MonoItemsFnCollector<'a, 'tcx> {
                             let caller = CrateItem::try_from(*self.instance).unwrap().name();
                             let callee = fn_def.name();
                             // Check if the current function has been stubbed.
-                            if let Some(stub) =
-                                get_stub(self.tcx, rustc_internal::internal(self.instance).def_id())
-                            {
+                            if let Some(stub) = get_stub(
+                                self.tcx,
+                                rustc_internal::internal(self.tcx, self.instance).def_id(),
+                            ) {
                                 // During the MIR stubbing transformation, we do not
                                 // force type variables in the stub's signature to
                                 // implement the same traits as those in the
@@ -413,7 +415,7 @@ impl<'a, 'tcx> MirVisitor for MonoItemsFnCollector<'a, 'tcx> {
                                 let sep = callee.rfind("::").unwrap();
                                 let trait_ = &callee[..sep];
                                 self.tcx.dcx().span_err(
-                                    rustc_internal::internal(terminator.span),
+                                    rustc_internal::internal(self.tcx, terminator.span),
                                     format!(
                                         "`{}` doesn't implement \
                                         `{}`. The function `{}` \
@@ -465,8 +467,8 @@ impl<'a, 'tcx> MirVisitor for MonoItemsFnCollector<'a, 'tcx> {
 fn extract_unsize_coercion(tcx: TyCtxt, orig_ty: Ty, dst_trait: Ty) -> (Ty, Ty) {
     let CoercionBase { src_ty, dst_ty } = coercion::extract_unsize_casting(
         tcx,
-        rustc_internal::internal(orig_ty),
-        rustc_internal::internal(dst_trait),
+        rustc_internal::internal(tcx, orig_ty),
+        rustc_internal::internal(tcx, dst_trait),
     );
     (rustc_internal::stable(src_ty), rustc_internal::stable(dst_ty))
 }
@@ -476,7 +478,7 @@ fn extract_unsize_coercion(tcx: TyCtxt, orig_ty: Ty, dst_trait: Ty) -> (Ty, Ty) 
 fn to_fingerprint(tcx: TyCtxt, item: &MonoItem) -> Fingerprint {
     tcx.with_stable_hashing_context(|mut hcx| {
         let mut hasher = StableHasher::new();
-        rustc_internal::internal(item).hash_stable(&mut hcx, &mut hasher);
+        rustc_internal::internal(tcx, item).hash_stable(&mut hcx, &mut hasher);
         hasher.finish()
     })
 }

@@ -307,7 +307,7 @@ impl CodegenBackend for GotocCodegenBackend {
                     let main_instance =
                         stable_mir::entry_fn().map(|main_fn| Instance::try_from(main_fn).unwrap());
                     let local_reachable = filter_crate_items(tcx, |_, instance| {
-                        let def_id = rustc_internal::internal(instance.def.def_id());
+                        let def_id = rustc_internal::internal(tcx, instance.def.def_id());
                         Some(instance) == main_instance || tcx.is_reachable_non_generic(def_id)
                     })
                     .into_iter()

@@ -11,7 +11,7 @@ use syn::ItemFn;
 use super::{
     helpers::*,
     shared::{attach_require_kani_any, identifier_for_generated_function},
-    ContractConditionsData, ContractConditionsHandler,
+    ContractConditionsHandler,
 };
 
 impl<'a> ContractConditionsHandler<'a> {
