@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: --enable-stubbing --enable-unstable
+// kani-flags: -Z stubbing
 //! Try to verify HashSet basic behavior.
 
 use std::collections::{hash_map::RandomState, HashSet};
@@ -15,7 +15,7 @@ fn concrete_state() -> RandomState {
 
 #[kani::proof]
 #[kani::stub(RandomState::new, concrete_state)]
-#[kani::unwind(2)]
+#[kani::unwind(5)]
 #[kani::solver(kissat)]
 fn check_insert() {
     let mut set: HashSet<i32> = HashSet::default();
@@ -27,7 +27,7 @@ fn check_insert() {
 
 #[kani::proof]
 #[kani::stub(RandomState::new, concrete_state)]
-#[kani::unwind(2)]
+#[kani::unwind(5)]
 #[kani::solver(kissat)]
 fn check_contains() {
     let first = kani::any();
@@ -37,23 +37,11 @@ fn check_contains() {
 
 #[kani::proof]
 #[kani::stub(RandomState::new, concrete_state)]
-#[kani::unwind(2)]
+#[kani::unwind(5)]
+#[kani::solver(kissat)]
 fn check_contains_str() {
     let set = HashSet::from(["s"]);
     assert!(set.contains(&"s"));
-}
-
-#[kani::proof]
-#[kani::stub(RandomState::new, concrete_state)]
-#[kani::unwind(2)]
-#[kani::solver(kissat)]
-fn check_insert_two_concrete() {
-    let mut set: HashSet<i32> = HashSet::default();
-    let first = 10;
-    let second = 20;
-    set.insert(first);
-    set.insert(second);
-    assert_eq!(set.len(), 2);
 }
 
 // too slow so don't run in the regression for now
@@ -61,7 +49,7 @@ fn check_insert_two_concrete() {
 mod slow {
     #[kani::proof]
     #[kani::stub(RandomState::new, concrete_state)]
-    #[kani::unwind(3)]
+    #[kani::unwind(5)]
     fn check_insert_two_elements() {
         let mut set: HashSet<i8> = HashSet::default();
         let first = kani::any();
@@ -71,5 +59,18 @@ mod slow {
         set.insert(second);
 
         if first == second { assert_eq!(set.len(), 1) } else { assert_eq!(set.len(), 2) }
+    }
+
+    #[kani::proof]
+    #[kani::stub(RandomState::new, concrete_state)]
+    #[kani::unwind(5)]
+    #[kani::solver(kissat)]
+    fn check_insert_two_concrete() {
+        let mut set: HashSet<i32> = HashSet::default();
+        let first = 10;
+        let second = 20;
+        set.insert(first);
+        set.insert(second);
+        assert_eq!(set.len(), 2);
     }
 }
