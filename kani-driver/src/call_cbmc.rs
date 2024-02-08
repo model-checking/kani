@@ -14,6 +14,7 @@ use crate::cbmc_output_parser::{
     extract_results, process_cbmc_output, CheckStatus, Property, VerificationOutput,
 };
 use crate::cbmc_property_renderer::{format_coverage, format_result, kani_cbmc_output_filter};
+use crate::coverage::cov_results::{CoverageCheck, CoverageResults};
 use crate::session::KaniSession;
 
 /// We will use Cadical by default since it performed better than MiniSAT in our analysis.
@@ -54,6 +55,8 @@ pub struct VerificationResult {
     pub runtime: Duration,
     /// Whether concrete playback generated a test
     pub generated_concrete_test: bool,
+    /// The coverage results?
+    pub coverage_results: Option<CoverageResults>,
 }
 
 impl KaniSession {
@@ -262,6 +265,7 @@ impl VerificationResult {
                 results: Ok(results),
                 runtime,
                 generated_concrete_test: false,
+                coverage_results: None,
             }
         } else {
             // We never got results from CBMC - something went wrong (e.g. crash) so it's failure
@@ -271,6 +275,7 @@ impl VerificationResult {
                 results: Err(output.process_status),
                 runtime,
                 generated_concrete_test: false,
+                coverage_results: None,
             }
         }
     }
@@ -282,6 +287,7 @@ impl VerificationResult {
             results: Ok(vec![]),
             runtime: Duration::from_secs(0),
             generated_concrete_test: false,
+            coverage_results: None,
         }
     }
 
@@ -295,6 +301,7 @@ impl VerificationResult {
             results: Err(42),
             runtime: Duration::from_secs(0),
             generated_concrete_test: false,
+            coverage_results: None,
         }
     }
 

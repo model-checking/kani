@@ -123,6 +123,12 @@ impl KaniSession {
         let lib_path = lib_folder().unwrap();
         let mut flags: Vec<_> = base_rustc_flags(lib_path);
         // We only use panic abort strategy for verification since we cannot handle unwind logic.
+        if self.args.coverage {
+            flags.extend_from_slice(
+                // &["-C", "instrument-coverage", "-Z", "no-profiler-runtime", "--emit=mir"].map(OsString::from),
+                &["-C", "instrument-coverage", "-Z", "no-profiler-runtime", "-C", "opt-level=0"].map(OsString::from),
+            );
+        }
         flags.extend_from_slice(
             &[
                 "-C",

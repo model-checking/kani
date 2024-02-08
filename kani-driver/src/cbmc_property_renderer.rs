@@ -4,11 +4,16 @@
 use crate::args::OutputFormat;
 use crate::call_cbmc::{FailedProperties, VerificationStatus};
 use crate::cbmc_output_parser::{CheckStatus, ParserItem, Property, TraceItem};
+use crate::coverage::cov_results::{CoverageCheck, CoverageRegion, CoverageResults, CoverageTerm, fmt_coverage_results};
 use console::style;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use rustc_demangle::demangle;
 use std::collections::{BTreeMap, HashMap};
+use std::fs::File;
+use std::io::{BufRead, BufReader};
+use std::path::PathBuf;
+use std::sync::OnceLock;
 use strum_macros::{AsRefStr, Display};
 
 type CbmcAltDescriptions = HashMap<&'static str, Vec<(&'static str, Option<&'static str>)>>;
@@ -149,15 +154,6 @@ static CBMC_ALT_DESCRIPTIONS: Lazy<CbmcAltDescriptions> = Lazy::new(|| {
     // map.insert("precondition_instance": vec![]);
     map
 });
-
-#[derive(PartialEq, Eq, AsRefStr, Clone, Copy, Display)]
-#[strum(serialize_all = "UPPERCASE")]
-// The status of coverage reported by Kani
-enum CoverageStatus {
-    Full,
-    Partial,
-    None,
-}
 
 const UNSUPPORTED_CONSTRUCT_DESC: &str = "is not currently supported by Kani";
 const UNWINDING_ASSERT_DESC: &str = "unwinding assertion loop";
@@ -445,57 +441,79 @@ pub fn format_coverage(
 
     let verification_output =
         format_result(&non_coverage_checks, status, should_panic, failed_properties, show_checks);
-    let coverage_output = format_result_coverage(&coverage_checks);
-    let result = format!("{}\n{}", verification_output, coverage_output);
+    let new_coverage_output = format_result_new_coverage(&coverage_checks);
+    let result = format!("{}\n{}", verification_output, new_coverage_output);
 
     result
 }
 
-/// Generate coverage result from all coverage properties (i.e., checks with `code_coverage` property class).
-/// Loops through each of the checks with the `code_coverage` property class on a line and gives:
-///  - A status `FULL` if all checks pertaining to a line number are `COVERED`
-///  - A status `NONE` if all checks related to a line are `UNCOVERED`
-///  - Otherwise (i.e., if the line contains both) it reports `PARTIAL`.
-///
-/// Used when the user requests coverage information with `--coverage`.
-/// Output is tested through the `coverage-based` testing suite, not the regular
-/// `expected` suite.
-fn format_result_coverage(properties: &[Property]) -> String {
+fn format_result_new_coverage(properties: &[Property]) -> String {
     let mut formatted_output = String::new();
-    formatted_output.push_str("\nCoverage Results:\n");
+    formatted_output.push_str("\nCoverage Results (NEW):\n");
 
-    let mut coverage_results: BTreeMap<String, BTreeMap<usize, CoverageStatus>> =
-        BTreeMap::default();
+    let mut coverage_results: CoverageResults = BTreeMap::default();
+
+    let re = {
+        static RE: OnceLock<Regex> = OnceLock::new();
+        RE.get_or_init(|| {
+            Regex::new(
+                r#"^Coverage \{ kind: CounterIncrement\((?<counter_num>[0-9]+)\) \} (?<func_name>[_\d\w]+) - (?<span>.+)"#,
+            )
+            .unwrap()
+        })
+    };
+
+    let re2 = {
+        static RE: OnceLock<Regex> = OnceLock::new();
+        RE.get_or_init(|| {
+            Regex::new(
+                r#"^Coverage \{ kind: ExpressionUsed\((?<expr_num>[0-9]+)\) \} (?<func_name>[_\d\w]+) - (?<span>.+)"#,
+            )
+            .unwrap()
+        })
+    };
     for prop in properties {
-        let src = prop.source_location.clone();
-        let file_entries = coverage_results.entry(src.file.unwrap()).or_default();
-        let check_status = if prop.status == CheckStatus::Covered {
-            CoverageStatus::Full
-        } else {
-            CoverageStatus::None
-        };
+        if let Some(captures) = re.captures(&prop.description) {
+            let function = demangle(&captures["func_name"]).to_string();
+            let counter_num = &captures["counter_num"];
+            let status = prop.status;
+            let span = captures["span"].to_string();
 
-        // Create Map<file, Map<line, status>>
-        file_entries
-            .entry(src.line.unwrap().parse().unwrap())
-            .and_modify(|line_status| {
-                if *line_status != check_status {
-                    *line_status = CoverageStatus::Partial
-                }
-            })
-            .or_insert(check_status);
-    }
+            let term = CoverageTerm::Counter(counter_num.parse().unwrap());
+            let region = CoverageRegion::from_str(span);
+            
+            let cov_check = CoverageCheck::new(function, term, region, status);
+            let file = cov_check.region.file.clone();
 
-    // Create formatted string that is returned to the user as output
-    for (file, checks) in coverage_results.iter() {
-        for (line_number, coverage_status) in checks {
-            formatted_output.push_str(&format!("{}, {}, {}\n", file, line_number, coverage_status));
+            if coverage_results.contains_key(&file) {
+                coverage_results.entry(file).and_modify(|checks| checks.push(cov_check));
+            } else {
+                coverage_results.insert(file, vec![cov_check]);
+            }
         }
-        formatted_output.push('\n');
-    }
 
-    formatted_output
+        if let Some(captures) = re2.captures(&prop.description) {
+            let function = demangle(&captures["func_name"]).to_string();
+            let expr_num = &captures["expr_num"];
+            let status = prop.status;
+            let span = captures["span"].to_string();
+
+            let term = CoverageTerm::Expression(expr_num.parse().unwrap());
+            let region = CoverageRegion::from_str(span);
+
+            let cov_check = CoverageCheck::new(function, term, region, status);
+            let file = cov_check.region.file.clone();
+
+            if coverage_results.contains_key(&file) {
+                coverage_results.entry(file).and_modify(|checks| checks.push(cov_check));
+            } else {
+                coverage_results.insert(file, vec![cov_check]);
+            }
+        }
+    }
+    fmt_coverage_results(&coverage_results).expect("error: couldn't format coverage results")
 }
+
 
 /// Attempts to build a message for a failed property with as much detailed
 /// information on the source location as possible.
