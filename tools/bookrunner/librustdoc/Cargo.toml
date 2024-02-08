@@ -20,7 +20,7 @@ publish = false
 path = "lib.rs"
 
 [dependencies]
-pulldown-cmark = { version = "0.9", default-features = false }
+pulldown-cmark = { version = "0.10", default-features = false }
 
 [package.metadata.rust-analyzer]
 rustc_private = true

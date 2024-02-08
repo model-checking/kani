@@ -11,7 +11,7 @@ use crate::{
     util::{self, FailStep, TestProps},
 };
 use inflector::cases::{snakecase::to_snake_case, titlecase::to_title_case};
-use pulldown_cmark::{Event, Parser, Tag};
+use pulldown_cmark::{Event, Parser, Tag, TagEnd};
 use rustc_span::edition::Edition;
 use rustdoc::{
     doctest::{make_test, Tester},
@@ -99,21 +99,25 @@ impl Book {
         let mut hierarchy_path: PathBuf =
             ["tests", "bookrunner", "books", self.name.as_str()].iter().collect();
         let mut prev_event_is_text_or_code = false;
+        let mut current_link_url = String::from("");
         for event in parser {
             match event {
-                Event::End(Tag::Item) => {
+                Event::End(TagEnd::Item) => {
                     // Pop the current chapter/section from the hierarchy once
                     // we are done processing it and its subsections.
                     hierarchy_path.pop();
                     prev_event_is_text_or_code = false;
                 }
-                Event::End(Tag::Link(_, path, _)) => {
+                Event::Start(Tag::Link { dest_url, .. }) => {
+                    current_link_url = dest_url.into_string();
+                }
+                Event::End(TagEnd::Link) => {
                     // At the start of the link tag, the hierarchy does not yet
                     // contain the title of the current chapter/section. So, we wait
                     // for the end of the link tag before adding the path and
                     // hierarchy of the current chapter/section to the map.
                     let mut full_path = summary_dir.clone();
-                    full_path.extend(path.split('/'));
+                    full_path.extend(current_link_url.split('/'));
                     self.hierarchy.insert(full_path, hierarchy_path.clone());
                     prev_event_is_text_or_code = false;
                 }

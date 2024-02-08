@@ -508,13 +508,13 @@ impl Expr {
 
     /// `(typ) self`.
     pub fn cast_to(self, typ: Type) -> Self {
-        assert!(self.can_cast_to(&typ), "Can't cast\n\n{self:?} ({:?})\n\n{typ:?}", self.typ);
         if self.typ == typ {
             self
         } else if typ.is_bool() {
             let zero = self.typ.zero();
             self.neq(zero)
         } else {
+            assert!(self.can_cast_to(&typ), "Can't cast\n\n{self:?} ({:?})\n\n{typ:?}", self.typ);
             expr!(Typecast(self), typ)
         }
     }
@@ -688,7 +688,8 @@ impl Expr {
     pub fn call(self, arguments: Vec<Expr>) -> Self {
         assert!(
             Expr::typecheck_call(&self, &arguments),
-            "Function call does not type check:\nfunc: {self:?}\nargs: {arguments:?}"
+            "Function call does not type check:\nfunc params: {:?}\nargs: {arguments:?}",
+            self.typ().parameters().unwrap_or(&vec![])
         );
         let typ = self.typ().return_type().unwrap().clone();
         expr!(FunctionCall { function: self, arguments }, typ)

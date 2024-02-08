@@ -135,7 +135,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 "https://github.com/model-checking/kani/issues/692",
             ),
             TerminatorKind::Return => {
-                let rty = self.current_fn().sig().output();
+                let rty = self.current_fn().instance_stable().fn_abi().unwrap().ret.ty;
                 if rty.kind().is_unit() {
                     self.codegen_ret_unit()
                 } else {
@@ -145,7 +145,8 @@ impl<'tcx> GotocCtx<'tcx> {
                         self.codegen_place_stable(&place)
                     )
                     .goto_expr;
-                    if self.place_ty_stable(&place).kind().is_bool() {
+                    assert_eq!(rty, self.place_ty_stable(&place), "Unexpected return type");
+                    if rty.kind().is_bool() {
                         place_expr.cast_to(Type::c_bool()).ret(loc)
                     } else {
                         place_expr.ret(loc)
@@ -555,10 +556,17 @@ impl<'tcx> GotocCtx<'tcx> {
                         // We need to handle FnDef items in a special way because `codegen_operand` compiles them to dummy structs.
                         // (cf. the function documentation)
                         let func_exp = self.codegen_func_expr(instance, None);
-                        vec![
-                            self.codegen_expr_to_place_stable(destination, func_exp.call(fargs))
+                        if instance.is_foreign_item() {
+                            vec![self.codegen_foreign_call(func_exp, fargs, destination, loc)]
+                        } else {
+                            vec![
+                                self.codegen_expr_to_place_stable(
+                                    destination,
+                                    func_exp.call(fargs),
+                                )
                                 .with_location(loc),
-                        ]
+                            ]
+                        }
                     }
                 };
                 stmts.push(self.codegen_end_call(*target, loc));

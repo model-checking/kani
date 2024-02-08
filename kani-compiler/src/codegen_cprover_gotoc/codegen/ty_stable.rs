@@ -9,7 +9,6 @@
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::Type;
 use rustc_middle::ty::layout::{LayoutOf, TyAndLayout};
-use rustc_middle::ty::{self};
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{Local, Operand, Place, Rvalue};
@@ -51,13 +50,6 @@ impl<'tcx> GotocCtx<'tcx> {
             format!("{}::FnDefStruct", instance.name()),
             |_, _| vec![],
         )
-    }
-
-    pub fn fn_sig_of_instance_stable(&self, instance: Instance) -> FnSig {
-        let fn_sig = self.fn_sig_of_instance(rustc_internal::internal(self.tcx, instance));
-        let fn_sig =
-            self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), fn_sig);
-        rustc_internal::stable(fn_sig)
     }
 
     pub fn use_fat_pointer_stable(&self, pointer_ty: Ty) -> bool {

@@ -122,7 +122,7 @@ pub fn find_testable_code<T: doctest::Tester>(
                 tests.add_test(text, block_info, line);
                 prev_offset = offset.start;
             }
-            Event::Start(Tag::Heading(level, _, _)) => {
+            Event::Start(Tag::Heading { level, .. }) => {
                 register_header = Some(level as u32);
             }
             Event::Text(ref s) if register_header.is_some() => {

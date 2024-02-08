@@ -9,7 +9,6 @@ use rustc_middle::ty::Instance as InstanceInternal;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{Body, Local, LocalDecl};
-use stable_mir::ty::FnSig;
 use stable_mir::CrateDef;
 use std::collections::HashMap;
 
@@ -20,8 +19,6 @@ pub struct CurrentFnCtx<'tcx> {
     block: Vec<Stmt>,
     /// The codegen instance for the current function
     instance: Instance,
-    /// The current function signature.
-    fn_sig: FnSig,
     /// The crate this function is from
     krate: String,
     /// The MIR for the current instance. This is using the internal representation.
@@ -53,11 +50,9 @@ impl<'tcx> CurrentFnCtx<'tcx> {
             .iter()
             .filter_map(|info| info.local().map(|local| (local, (&info.name).into())))
             .collect::<HashMap<_, _>>();
-        let fn_sig = gcx.fn_sig_of_instance_stable(instance);
         Self {
             block: vec![],
             instance,
-            fn_sig,
             mir: gcx.tcx.instance_mir(instance_internal.def),
             instance_internal,
             krate: instance.def.krate().name,
@@ -112,11 +107,6 @@ impl<'tcx> CurrentFnCtx<'tcx> {
     /// The pretty name of the function we are currently compiling
     pub fn readable_name(&self) -> &str {
         &self.readable_name
-    }
-
-    /// The signature of the function we are currently compiling
-    pub fn sig(&self) -> &FnSig {
-        &self.fn_sig
     }
 
     pub fn locals(&self) -> &[LocalDecl] {
