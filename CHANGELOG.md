@@ -8,6 +8,11 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 
 ## What's Changed
 * `modifies` Clauses for Function Contracts by @JustusAdam in https://github.com/model-checking/kani/pull/2800
+* Fix ICEs due to mismatched arguments by @celinval in https://github.com/model-checking/kani/pull/2994. Resolves the following issues:
+  * https://github.com/model-checking/kani/issues/2260
+  * https://github.com/model-checking/kani/issues/2312
+  * https://github.com/model-checking/kani/issues/1365
+  * https://github.com/model-checking/kani/issues/1350
 * Enable powf*, exp*, log* intrinsics by @tautschnig in https://github.com/model-checking/kani/pull/2996
 * Upgrade Rust toolchain to nightly-2024-01-23 by @celinval in https://github.com/model-checking/kani/pull/2983
 * Upgrade Rust toolchain to nightly-2024-01-24 by @feliperodri in https://github.com/model-checking/kani/pull/3008
