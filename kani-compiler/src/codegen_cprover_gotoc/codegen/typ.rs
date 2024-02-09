@@ -100,6 +100,7 @@ impl TypeExt for Type {
         }
     }
 
+    #[allow(unused)]
     fn is_unit_pointer(&self) -> bool {
         match self {
             Type::Pointer { typ } => typ.is_unit(),
@@ -108,6 +109,7 @@ impl TypeExt for Type {
     }
 }
 
+#[allow(unused)]
 trait ExprExt {
     fn unit(symbol_table: &SymbolTable) -> Self;
 
@@ -640,7 +642,11 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Bound(_, _) | ty::Param(_) => unreachable!("monomorphization bug"),
 
             // type checking remnants which shouldn't be reachable
-            ty::CoroutineWitness(_, _) | ty::Infer(_) | ty::Placeholder(_) | ty::Error(_) => {
+            ty::CoroutineWitness(_, _)
+            | ty::CoroutineClosure(_, _)
+            | ty::Infer(_)
+            | ty::Placeholder(_)
+            | ty::Error(_) => {
                 unreachable!("remnants of type checking")
             }
         }
@@ -1078,6 +1084,7 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Bound(_, _) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Error(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::CoroutineWitness(_, _) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
+            ty::CoroutineClosure(_, _) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Infer(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Param(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Placeholder(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),

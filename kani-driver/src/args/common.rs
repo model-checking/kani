@@ -50,8 +50,6 @@ pub trait Verbosity {
     /// Whether we should be verbose.
     /// Note that `debug() == true` must imply `verbose() == true`.
     fn verbose(&self) -> bool;
-    /// Whether we should emit debug messages.
-    fn debug(&self) -> bool;
     /// Whether any verbosity was selected.
     fn is_set(&self) -> bool;
 }
@@ -63,10 +61,6 @@ impl Verbosity for CommonArgs {
 
     fn verbose(&self) -> bool {
         self.verbose || self.debug
-    }
-
-    fn debug(&self) -> bool {
-        self.debug
     }
 
     fn is_set(&self) -> bool {
