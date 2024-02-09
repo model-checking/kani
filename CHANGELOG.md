@@ -12,8 +12,7 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
   * https://github.com/model-checking/kani/issues/2260
   * https://github.com/model-checking/kani/issues/2312
 * Enable powf*, exp*, log* intrinsics by @tautschnig in https://github.com/model-checking/kani/pull/2996
-* Upgrade Rust toolchain to nightly-2024-01-23 by @celinval in https://github.com/model-checking/kani/pull/2983
-* Upgrade Rust toolchain to nightly-2024-01-24 by @feliperodri in https://github.com/model-checking/kani/pull/3008
+* Upgrade Rust toolchain to nightly-2024-01-24 by @celinval @feliperodri @qinheping
 
 **Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.45.0...kani-0.46.0
 
