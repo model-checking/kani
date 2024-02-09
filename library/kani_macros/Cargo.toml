@@ -3,7 +3,7 @@
 
 [package]
 name = "kani_macros"
-version = "0.45.0"
+version = "0.46.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 publish = false
