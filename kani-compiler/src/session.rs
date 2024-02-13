@@ -60,7 +60,7 @@ static JSON_PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send
                 TerminalUrl::No,
             );
             let diagnostic = Diagnostic::new(rustc_errors::Level::Bug, msg);
-            emitter.emit_diagnostic(&diagnostic);
+            emitter.emit_diagnostic(diagnostic);
             (*JSON_PANIC_HOOK)(info);
         }));
         hook

@@ -1,7 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use crate::codegen_cprover_gotoc::GotocCtx;
-use cbmc::btree_map;
 use cbmc::goto_program::{DatatypeComponent, Expr, Location, Parameter, Symbol, SymbolTable, Type};
 use cbmc::utils::aggr_tag;
 use cbmc::{InternString, InternedString};
@@ -51,8 +50,6 @@ pub trait TypeExt {
     fn is_rust_fat_ptr(&self, st: &SymbolTable) -> bool;
     fn is_rust_slice_fat_ptr(&self, st: &SymbolTable) -> bool;
     fn is_rust_trait_fat_ptr(&self, st: &SymbolTable) -> bool;
-    fn is_unit(&self) -> bool;
-    fn is_unit_pointer(&self) -> bool;
     fn unit() -> Self;
 }
 
@@ -91,42 +88,6 @@ impl TypeExt for Type {
         // We depend on GotocCtx::codegen_ty_unit() to put the type in the symbol table.
         // We don't have access to the symbol table here to do it ourselves.
         Type::struct_tag(UNIT_TYPE_EMPTY_STRUCT_NAME)
-    }
-
-    fn is_unit(&self) -> bool {
-        match self {
-            Type::StructTag(name) => *name == aggr_tag(UNIT_TYPE_EMPTY_STRUCT_NAME),
-            _ => false,
-        }
-    }
-
-    fn is_unit_pointer(&self) -> bool {
-        match self {
-            Type::Pointer { typ } => typ.is_unit(),
-            _ => false,
-        }
-    }
-}
-
-trait ExprExt {
-    fn unit(symbol_table: &SymbolTable) -> Self;
-
-    fn is_unit(&self) -> bool;
-
-    fn is_unit_pointer(&self) -> bool;
-}
-
-impl ExprExt for Expr {
-    fn unit(symbol_table: &SymbolTable) -> Self {
-        Expr::struct_expr(Type::unit(), btree_map![], symbol_table)
-    }
-
-    fn is_unit(&self) -> bool {
-        self.typ().is_unit()
-    }
-
-    fn is_unit_pointer(&self) -> bool {
-        self.typ().is_unit_pointer()
     }
 }
 
@@ -640,7 +601,11 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Bound(_, _) | ty::Param(_) => unreachable!("monomorphization bug"),
 
             // type checking remnants which shouldn't be reachable
-            ty::CoroutineWitness(_, _) | ty::Infer(_) | ty::Placeholder(_) | ty::Error(_) => {
+            ty::CoroutineWitness(_, _)
+            | ty::CoroutineClosure(_, _)
+            | ty::Infer(_)
+            | ty::Placeholder(_)
+            | ty::Error(_) => {
                 unreachable!("remnants of type checking")
             }
         }
@@ -1078,6 +1043,7 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Bound(_, _) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Error(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::CoroutineWitness(_, _) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
+            ty::CoroutineClosure(_, _) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Infer(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Param(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Placeholder(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
