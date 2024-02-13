@@ -1,7 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use crate::codegen_cprover_gotoc::GotocCtx;
-use cbmc::btree_map;
 use cbmc::goto_program::{DatatypeComponent, Expr, Location, Parameter, Symbol, SymbolTable, Type};
 use cbmc::utils::aggr_tag;
 use cbmc::{InternString, InternedString};
@@ -51,8 +50,6 @@ pub trait TypeExt {
     fn is_rust_fat_ptr(&self, st: &SymbolTable) -> bool;
     fn is_rust_slice_fat_ptr(&self, st: &SymbolTable) -> bool;
     fn is_rust_trait_fat_ptr(&self, st: &SymbolTable) -> bool;
-    fn is_unit(&self) -> bool;
-    fn is_unit_pointer(&self) -> bool;
     fn unit() -> Self;
 }
 
@@ -91,44 +88,6 @@ impl TypeExt for Type {
         // We depend on GotocCtx::codegen_ty_unit() to put the type in the symbol table.
         // We don't have access to the symbol table here to do it ourselves.
         Type::struct_tag(UNIT_TYPE_EMPTY_STRUCT_NAME)
-    }
-
-    fn is_unit(&self) -> bool {
-        match self {
-            Type::StructTag(name) => *name == aggr_tag(UNIT_TYPE_EMPTY_STRUCT_NAME),
-            _ => false,
-        }
-    }
-
-    #[allow(unused)]
-    fn is_unit_pointer(&self) -> bool {
-        match self {
-            Type::Pointer { typ } => typ.is_unit(),
-            _ => false,
-        }
-    }
-}
-
-#[allow(unused)]
-trait ExprExt {
-    fn unit(symbol_table: &SymbolTable) -> Self;
-
-    fn is_unit(&self) -> bool;
-
-    fn is_unit_pointer(&self) -> bool;
-}
-
-impl ExprExt for Expr {
-    fn unit(symbol_table: &SymbolTable) -> Self {
-        Expr::struct_expr(Type::unit(), btree_map![], symbol_table)
-    }
-
-    fn is_unit(&self) -> bool {
-        self.typ().is_unit()
-    }
-
-    fn is_unit_pointer(&self) -> bool {
-        self.typ().is_unit_pointer()
     }
 }
 
