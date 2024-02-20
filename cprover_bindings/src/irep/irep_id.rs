@@ -8,6 +8,8 @@ use crate::cbmc_string::InternedString;
 use crate::utils::NumUtils;
 use num::bigint::{BigInt, BigUint, Sign};
 
+use std::fmt::Display;
+
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
 pub enum IrepId {
     /// In addition to the standard enums defined below, CBMC also allows ids to be strings.
@@ -872,15 +874,19 @@ impl IrepId {
     }
 }
 
-impl ToString for IrepId {
-    fn to_string(&self) -> String {
+impl Display for IrepId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            IrepId::FreeformString(s) => return s.to_string(),
-            IrepId::FreeformInteger(i) => return i.to_string(),
-            IrepId::FreeformBitPattern(i) => {
-                return format!("{i:X}");
+            IrepId::FreeformString(s) => {
+                return write!(f, "{s}");
             }
-            _ => (),
+            IrepId::FreeformInteger(i) => {
+                return write!(f, "{i}");
+            }
+            IrepId::FreeformBitPattern(i) => {
+                return write!(f, "{i:X}");
+            }
+            _ => {}
         }
 
         let s = match self {
@@ -1708,7 +1714,7 @@ impl ToString for IrepId {
             IrepId::VectorGt => "vector->",
             IrepId::VectorLt => "vector-<",
         };
-        s.to_string()
+        write!(f, "{s}")
     }
 }
 

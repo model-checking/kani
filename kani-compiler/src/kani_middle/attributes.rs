@@ -268,7 +268,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                     .hir_id()
             };
 
-            let result = match hir_map.get_parent(hir_id) {
+            let result = match self.tcx.parent_hir_node(hir_id) {
                 Node::Item(Item { kind, .. }) => match kind {
                     ItemKind::Mod(m) => find_in_mod(m),
                     ItemKind::Impl(imp) => {
