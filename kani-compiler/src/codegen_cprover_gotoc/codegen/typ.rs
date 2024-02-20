@@ -1714,8 +1714,10 @@ impl<'tcx> GotocCtx<'tcx> {
     /// metadata associated with it.
     pub fn use_thin_pointer(&self, mir_type: Ty<'tcx>) -> bool {
         // ptr_metadata_ty is not defined on all types, the projection of an associated type
-        let (metadata, _check_is_sized) = mir_type.ptr_metadata_ty(self.tcx, normalize_type);
-        !self.is_unsized(mir_type) || metadata == self.tcx.types.unit
+        let metadata = mir_type.ptr_metadata_ty_or_tail(self.tcx, normalize_type);
+        !self.is_unsized(mir_type)
+            || metadata.is_err()
+            || (metadata.unwrap() == self.tcx.types.unit)
     }
 
     /// We use fat pointer if not thin pointer.
@@ -1726,14 +1728,14 @@ impl<'tcx> GotocCtx<'tcx> {
     /// A pointer to the mir type should be a slice fat pointer.
     /// We use a slice fat pointer if the metadata is the slice length (type usize).
     pub fn use_slice_fat_pointer(&self, mir_type: Ty<'tcx>) -> bool {
-        let (metadata, _check_is_sized) = mir_type.ptr_metadata_ty(self.tcx, normalize_type);
+        let metadata = mir_type.ptr_metadata_ty(self.tcx, normalize_type);
         metadata == self.tcx.types.usize
     }
     /// A pointer to the mir type should be a vtable fat pointer.
     /// We use a vtable fat pointer if this is a fat pointer to anything that is not a slice ptr.
     /// I.e.: The metadata is not length (type usize).
     pub fn use_vtable_fat_pointer(&self, mir_type: Ty<'tcx>) -> bool {
-        let (metadata, _check_is_sized) = mir_type.ptr_metadata_ty(self.tcx, normalize_type);
+        let metadata = mir_type.ptr_metadata_ty(self.tcx, normalize_type);
         metadata != self.tcx.types.unit && metadata != self.tcx.types.usize
     }
 

@@ -725,6 +725,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             .bytes(),
                         Type::size_t(),
                     ),
+                    NullOp::DebugAssertions => Expr::c_false(),
                 }
             }
             Rvalue::ShallowInitBox(ref operand, content_ty) => {
