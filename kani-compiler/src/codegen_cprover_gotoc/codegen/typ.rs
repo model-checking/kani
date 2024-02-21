@@ -21,7 +21,6 @@ use rustc_target::abi::{
     Abi::Vector, FieldIdx, FieldsShape, Integer, LayoutS, Primitive, Size, TagEncoding,
     TyAndLayout, VariantIdx, Variants,
 };
-use rustc_target::spec::abi::Abi;
 use stable_mir::abi::{ArgAbi, FnAbi, PassMode};
 use stable_mir::mir::mono::Instance as InstanceStable;
 use stable_mir::mir::Body;
@@ -729,39 +728,6 @@ impl<'tcx> GotocCtx<'tcx> {
             tys.iter().enumerate().map(|(i, t)| (GotocCtx::tuple_fld_name(i), *t)).collect();
         // tuple cannot have other initial offset
         self.codegen_struct_fields(flds, &layout.layout.0, Size::ZERO)
-    }
-
-    /// A closure / some shims in Rust MIR takes two arguments:
-    ///
-    ///    0. a struct representing the environment
-    ///    1. a tuple containing the parameters
-    ///
-    /// However, during codegen/lowering from MIR, the 2nd tuple of parameters
-    /// is flattened into subsequent parameters.
-    ///
-    /// Checking whether the type's kind is a closure is insufficient, because
-    /// a virtual method call through a vtable can have the trait's non-closure
-    /// type. For example:
-    ///
-    /// ```
-    ///         let p: &dyn Fn(i32) = &|x| assert!(x == 1);
-    ///         p(1);
-    /// ```
-    ///
-    /// Here, the call `p(1)` desugars to an MIR trait call `Fn::call(&p, (1,))`,
-    /// where the second argument is a tuple. The instance type kind for
-    /// `Fn::call` is not a closure, because dynamically, the pointer may be to
-    /// a function definition instead. We still need to untuple in this case,
-    /// so we follow the example elsewhere in Rust to use the ABI call type.
-    ///
-    /// See `make_call_args` in `rustc_mir_transform/src/inline.rs`
-    pub fn ty_needs_untupled_args(&self, ty: Ty<'tcx>) -> bool {
-        // Note that [Abi::RustCall] is not [Abi::Rust].
-        // Documentation is sparse, but it does seem to correspond to the need for untupling.
-        match ty.kind() {
-            ty::FnDef(..) | ty::FnPtr(..) => ty.fn_sig(self.tcx).abi() == Abi::RustCall,
-            _ => unreachable!("Can't treat type as a function: {:?}", ty),
-        }
     }
 
     /// A closure is a struct of all its environments. That is, a closure is
@@ -1647,13 +1613,12 @@ impl<'tcx> GotocCtx<'tcx> {
     /// 1. In some cases, an argument can be ignored (e.g.: ZST arguments in regular Rust calls).
     /// 2. We currently don't support `track_caller`, so we ignore the extra argument that is added to support that.
     ///    Tracked here: <https://github.com/model-checking/kani/issues/374>
-    fn codegen_args<'a>(
+    pub fn codegen_args<'a>(
         &self,
         instance: InstanceStable,
         fn_abi: &'a FnAbi,
     ) -> impl Iterator<Item = (usize, &'a ArgAbi)> {
-        let instance_internal = rustc_internal::internal(self.tcx, instance);
-        let requires_caller_location = instance_internal.def.requires_caller_location(self.tcx);
+        let requires_caller_location = self.requires_caller_location(instance);
         let num_args = fn_abi.args.len();
         fn_abi.args.iter().enumerate().filter(move |(idx, arg_abi)| {
             arg_abi.mode != PassMode::Ignore && !(requires_caller_location && idx + 1 == num_args)

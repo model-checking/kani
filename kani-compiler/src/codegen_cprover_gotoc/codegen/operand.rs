@@ -557,6 +557,17 @@ impl<'tcx> GotocCtx<'tcx> {
         alloc_vals
     }
 
+    /// Returns `Some(instance)` if the function is an intrinsic; `None` otherwise
+    pub fn get_instance(&self, func: &Operand) -> Option<Instance> {
+        let funct = self.operand_ty_stable(func);
+        match funct.kind() {
+            TyKind::RigidTy(RigidTy::FnDef(def, args)) => {
+                Some(Instance::resolve(def, &args).unwrap())
+            }
+            _ => None,
+        }
+    }
+
     /// Generate a goto expression for a MIR "function item" reference.
     ///
     /// A "function item" is a ZST that corresponds to a specific single function.

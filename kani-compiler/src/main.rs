@@ -13,6 +13,7 @@
 #![feature(lazy_cell)]
 #![feature(more_qualified_paths)]
 #![feature(iter_intersperse)]
+#![feature(let_chains)]
 extern crate rustc_abi;
 extern crate rustc_ast;
 extern crate rustc_ast_pretty;
