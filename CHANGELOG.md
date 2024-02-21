@@ -4,6 +4,13 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
+## [0.47.0]
+
+### What's Changed
+* Upgrade toolchain to 2024-02-14 by @zhassan-aws in https://github.com/model-checking/kani/pull/3036
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.46.0...kani-0.47.0
+
 ## [0.46.0]
 
 ## What's Changed
