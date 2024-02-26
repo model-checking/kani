@@ -353,10 +353,10 @@ impl CodegenBackend for GotocCodegenBackend {
         ongoing_codegen: Box<dyn Any>,
         _sess: &Session,
         _filenames: &OutputFilenames,
-    ) -> Result<(CodegenResults, FxIndexMap<WorkProductId, WorkProduct>), ErrorGuaranteed> {
+    ) -> (CodegenResults, FxIndexMap<WorkProductId, WorkProduct>) {
         match ongoing_codegen.downcast::<(CodegenResults, FxIndexMap<WorkProductId, WorkProduct>)>()
         {
-            Ok(val) => Ok(*val),
+            Ok(val) => *val,
             Err(val) => panic!("unexpected error: {:?}", (*val).type_id()),
         }
     }
