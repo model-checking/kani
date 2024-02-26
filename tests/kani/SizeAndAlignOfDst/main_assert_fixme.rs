@@ -1,15 +1,18 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+// The original harness takes too long so we introduced a simplified version to run in CI.
+// kani-flags: --harness simplified
 
 //! This is a regression test for size_and_align_of_dst computing the
 //! size and alignment of a dynamically-sized type like
 //! Arc<Mutex<dyn Subscriber>>.
+//! We added a simplified version of the original harness from:
 //! <https://github.com/model-checking/kani/issues/426>
+//! This currently fails on MacOS instances due to unsupported foreign function:
+//! `pthread_mutexattr_init`.
 
-/// This test fails on macos but not in other platforms.
-/// Thus only enable it for platforms where this shall succeed.
-#[cfg(not(target_os = "macos"))]
-mod not_macos {
+#[cfg(target_os = "macos")]
+mod macos {
     use std::sync::Arc;
     use std::sync::Mutex;
 
@@ -54,5 +57,15 @@ mod not_macos {
         let mut data = s.lock().unwrap();
         data.increment();
         assert!(data.get() == 1);
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+mod not_macos {
+    /// Since this is a fixme test, it must also fail in other platforms.
+    /// Remove this once we fix the issue above.
+    #[kani::proof]
+    fn fail() {
+        assert!(false);
     }
 }
