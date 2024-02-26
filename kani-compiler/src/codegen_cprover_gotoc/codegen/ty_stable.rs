@@ -115,6 +115,11 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn pretty_ty(&self, ty: Ty) -> String {
         rustc_internal::internal(self.tcx, ty).to_string()
     }
+
+    pub fn requires_caller_location(&self, instance: Instance) -> bool {
+        let instance_internal = rustc_internal::internal(self.tcx, instance);
+        instance_internal.def.requires_caller_location(self.tcx)
+    }
 }
 /// If given type is a Ref / Raw ref, return the pointee type.
 pub fn pointee_type(mir_type: Ty) -> Option<Ty> {

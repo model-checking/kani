@@ -12,7 +12,7 @@ use cbmc::goto_program::{
 use rustc_middle::ty::layout::ValidityRequirement;
 use rustc_middle::ty::ParamEnv;
 use rustc_smir::rustc_internal;
-use stable_mir::mir::mono::{Instance, InstanceKind};
+use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{BasicBlockIdx, Operand, Place};
 use stable_mir::ty::{GenericArgs, RigidTy, Span, Ty, TyKind, UintTy};
 use tracing::debug;
@@ -45,17 +45,15 @@ impl<'tcx> GotocCtx<'tcx> {
     /// there is no terminator.
     pub fn codegen_funcall_of_intrinsic(
         &mut self,
-        func: &Operand,
+        instance: Instance,
         args: &[Operand],
         destination: &Place,
         target: Option<BasicBlockIdx>,
         span: Span,
     ) -> Stmt {
-        let instance = self.get_intrinsic_instance(func).unwrap();
-
         if let Some(target) = target {
             let loc = self.codegen_span_stable(span);
-            let fargs = self.codegen_funcall_args(args, false);
+            let fargs = args.iter().map(|arg| self.codegen_operand_stable(arg)).collect::<Vec<_>>();
             Stmt::block(
                 vec![
                     self.codegen_intrinsic(instance, fargs, destination, span),
@@ -66,23 +64,6 @@ impl<'tcx> GotocCtx<'tcx> {
         } else {
             self.codegen_never_return_intrinsic(instance, span)
         }
-    }
-
-    /// Returns `Some(instance)` if the function is an intrinsic; `None` otherwise
-    fn get_intrinsic_instance(&self, func: &Operand) -> Option<Instance> {
-        let funct = self.operand_ty_stable(func);
-        match funct.kind() {
-            TyKind::RigidTy(RigidTy::FnDef(def, args)) => {
-                let instance = Instance::resolve(def, &args).unwrap();
-                if matches!(instance.kind, InstanceKind::Intrinsic) { Some(instance) } else { None }
-            }
-            _ => None,
-        }
-    }
-
-    /// Returns true if the `func` is a call to a compiler intrinsic; false otherwise.
-    pub fn is_intrinsic(&self, func: &Operand) -> bool {
-        self.get_intrinsic_instance(func).is_some()
     }
 
     /// Handles codegen for non returning intrinsics

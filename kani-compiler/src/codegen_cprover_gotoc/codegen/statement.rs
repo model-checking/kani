@@ -7,14 +7,16 @@ use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::{Expr, Location, Stmt, Type};
 use rustc_middle::ty::layout::LayoutOf;
+use rustc_middle::ty::{List, ParamEnv};
 use rustc_smir::rustc_internal;
 use rustc_target::abi::{FieldsShape, Primitive, TagEncoding, Variants};
+use stable_mir::abi::{ArgAbi, FnAbi, PassMode};
 use stable_mir::mir::mono::{Instance, InstanceKind};
 use stable_mir::mir::{
     AssertMessage, BasicBlockIdx, CopyNonOverlapping, NonDivergingIntrinsic, Operand, Place,
     Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind, RETURN_LOCAL,
 };
-use stable_mir::ty::{RigidTy, Span, Ty, TyKind, VariantIdx};
+use stable_mir::ty::{Abi, RigidTy, Span, Ty, TyKind, VariantIdx};
 use tracing::{debug, debug_span, trace};
 
 impl<'tcx> GotocCtx<'tcx> {
@@ -432,31 +434,21 @@ impl<'tcx> GotocCtx<'tcx> {
     /// as subsequent parameters.
     ///
     /// See [GotocCtx::ty_needs_untupled_args] for more details.
-    fn codegen_untupled_args(
-        &mut self,
-        instance: Instance,
-        fargs: &mut Vec<Expr>,
-        last_mir_arg: Option<&Operand>,
-    ) {
-        debug!("codegen_untuple_closure_args instance: {:?}, fargs {:?}", instance.name(), fargs);
-        if !fargs.is_empty() {
-            let tuple_ty = self.operand_ty_stable(last_mir_arg.unwrap());
-            if self.is_zst_stable(tuple_ty) {
-                // Don't pass anything if all tuple elements are ZST.
-                // ZST arguments are ignored.
-                return;
-            }
-            let tupe = fargs.remove(fargs.len() - 1);
-            if let TyKind::RigidTy(RigidTy::Tuple(tupled_args)) = tuple_ty.kind() {
-                for (idx, arg_ty) in tupled_args.iter().enumerate() {
-                    if !self.is_zst_stable(*arg_ty) {
-                        // Access the tupled parameters through the `member` operation
-                        let idx_expr = tupe.clone().member(&idx.to_string(), &self.symbol_table);
-                        fargs.push(idx_expr);
-                    }
-                }
-            }
-        }
+    fn codegen_untupled_args(&mut self, op: &Operand, args_abi: &[ArgAbi]) -> Vec<Expr> {
+        let tuple_ty = self.operand_ty_stable(op);
+        let tuple_expr = self.codegen_operand_stable(op);
+        let TyKind::RigidTy(RigidTy::Tuple(tupled_args)) = tuple_ty.kind() else { unreachable!() };
+        tupled_args
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, _)| {
+                let arg_abi = &args_abi[idx];
+                (arg_abi.mode != PassMode::Ignore).then(|| {
+                    // Access the tupled parameters through the `member` operation
+                    tuple_expr.clone().member(idx.to_string(), &self.symbol_table)
+                })
+            })
+            .collect()
     }
 
     /// Because function calls terminate basic blocks, to "end" a function call, we
@@ -472,25 +464,24 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Generate Goto-C for each argument to a function call.
     ///
     /// N.B. public only because instrinsics use this directly, too.
-    /// When `skip_zst` is set to `true`, the return value will not include any argument that is ZST.
-    /// This is used because we ignore ZST arguments, except for intrinsics.
-    pub(crate) fn codegen_funcall_args(&mut self, args: &[Operand], skip_zst: bool) -> Vec<Expr> {
-        let fargs = args
+    pub(crate) fn codegen_funcall_args(&mut self, fn_abi: &FnAbi, args: &[Operand]) -> Vec<Expr> {
+        let fargs: Vec<Expr> = args
             .iter()
-            .filter_map(|op| {
-                let op_ty = self.operand_ty_stable(op);
-                if op_ty.kind().is_bool() {
+            .enumerate()
+            .filter_map(|(i, op)| {
+                // Functions that require caller info will have an extra parameter.
+                let arg_abi = &fn_abi.args.get(i);
+                let ty = self.operand_ty_stable(op);
+                if ty.kind().is_bool() {
                     Some(self.codegen_operand_stable(op).cast_to(Type::c_bool()))
-                } else if !self.is_zst_stable(op_ty) || !skip_zst {
+                } else if arg_abi.map_or(true, |abi| abi.mode != PassMode::Ignore) {
                     Some(self.codegen_operand_stable(op))
                 } else {
-                    // We ignore ZST types.
-                    debug!(arg=?op, "codegen_funcall_args ignore");
                     None
                 }
             })
             .collect();
-        debug!(?fargs, "codegen_funcall_args");
+        debug!(?fargs, args_abi=?fn_abi.args, "codegen_funcall_args");
         fargs
     }
 
@@ -515,9 +506,12 @@ impl<'tcx> GotocCtx<'tcx> {
         span: Span,
     ) -> Stmt {
         debug!(?func, ?args, ?destination, ?span, "codegen_funcall");
-        if self.is_intrinsic(&func) {
+        let instance_opt = self.get_instance(func);
+        if let Some(instance) = instance_opt
+            && matches!(instance.kind, InstanceKind::Intrinsic)
+        {
             return self.codegen_funcall_of_intrinsic(
-                &func,
+                instance,
                 &args,
                 &destination,
                 target.map(|bb| bb),
@@ -526,16 +520,23 @@ impl<'tcx> GotocCtx<'tcx> {
         }
 
         let loc = self.codegen_span_stable(span);
-        let funct = self.operand_ty_stable(func);
-        let mut fargs = self.codegen_funcall_args(&args, true);
-        match funct.kind() {
-            TyKind::RigidTy(RigidTy::FnDef(def, subst)) => {
-                let instance = Instance::resolve(def, &subst).unwrap();
-
-                // TODO(celina): Move this check to be inside codegen_funcall_args.
-                if self.ty_needs_untupled_args(rustc_internal::internal(self.tcx, funct)) {
-                    self.codegen_untupled_args(instance, &mut fargs, args.last());
-                }
+        let fn_ty = self.operand_ty_stable(func);
+        match fn_ty.kind() {
+            fn_def @ TyKind::RigidTy(RigidTy::FnDef(..)) => {
+                let instance = instance_opt.unwrap();
+                let fn_abi = instance.fn_abi().unwrap();
+                let mut fargs = if args.is_empty()
+                    || fn_def.fn_sig().unwrap().value.abi != Abi::RustCall
+                {
+                    self.codegen_funcall_args(&fn_abi, &args)
+                } else {
+                    let (untupled, first_args) = args.split_last().unwrap();
+                    let mut fargs = self.codegen_funcall_args(&fn_abi, &first_args);
+                    fargs.append(
+                        &mut self.codegen_untupled_args(untupled, &fn_abi.args[first_args.len()..]),
+                    );
+                    fargs
+                };
 
                 if let Some(hk) = self.hooks.hook_applies(self.tcx, instance) {
                     return hk.handle(self, instance, fargs, destination, *target, span);
@@ -573,7 +574,16 @@ impl<'tcx> GotocCtx<'tcx> {
                 Stmt::block(stmts, loc)
             }
             // Function call through a pointer
-            TyKind::RigidTy(RigidTy::FnPtr(_)) => {
+            TyKind::RigidTy(RigidTy::FnPtr(fn_sig)) => {
+                let fn_sig_internal = rustc_internal::internal(self.tcx, fn_sig);
+                let fn_ptr_abi = rustc_internal::stable(
+                    self.tcx
+                        .fn_abi_of_fn_ptr(
+                            ParamEnv::reveal_all().and((fn_sig_internal, &List::empty())),
+                        )
+                        .unwrap(),
+                );
+                let fargs = self.codegen_funcall_args(&fn_ptr_abi, &args);
                 let func_expr = self.codegen_operand_stable(func).dereference();
                 // Actually generate the function call and return.
                 Stmt::block(
