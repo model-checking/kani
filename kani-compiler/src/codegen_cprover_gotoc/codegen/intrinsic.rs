@@ -272,7 +272,8 @@ impl<'tcx> GotocCtx<'tcx> {
         // include type arguments (e.g., `arith_offset::<u8>`). In that case, we
         // remove them to simplify the match below.
         let intrinsic_split = intrinsic.split_once("::");
-        let intrinsic = if let Some((base_name, _type_args)) = intrinsic_split { base_name } else { intrinsic };
+        let intrinsic =
+            if let Some((base_name, _type_args)) = intrinsic_split { base_name } else { intrinsic };
 
         if let Some(stripped) = intrinsic.strip_prefix("simd_shuffle") {
             assert!(fargs.len() == 3, "`simd_shuffle` had unexpected arguments {fargs:?}");
