@@ -112,7 +112,7 @@ impl<'tcx> GotocCtx<'tcx> {
         place: &Place,
         span: Span,
     ) -> Stmt {
-        let intrinsic_sym = instance.mangled_name();
+        let intrinsic_sym = instance.trimmed_name();
         let intrinsic = intrinsic_sym.as_str();
         let loc = self.codegen_span_stable(span);
         debug!(?instance, "codegen_intrinsic");
@@ -267,6 +267,12 @@ impl<'tcx> GotocCtx<'tcx> {
                 self.codegen_expr_to_place_stable(place, expr)
             }};
         }
+
+        // If the intrinsic is defined on generic types, its trimmed name will
+        // include type arguments (e.g., `arith_offset::<u8>`). In that case, we
+        // remove them to simplify the match below.
+        let intrinsic_split = intrinsic.split_once("::");
+        let intrinsic = if let Some((base_name, _type_args)) = intrinsic_split { base_name } else { intrinsic };
 
         if let Some(stripped) = intrinsic.strip_prefix("simd_shuffle") {
             assert!(fargs.len() == 3, "`simd_shuffle` had unexpected arguments {fargs:?}");
