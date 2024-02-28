@@ -7,7 +7,6 @@
 
 use rustc_span::edition::Edition;
 
-use std::default::Default;
 use std::str;
 use std::{borrow::Cow, marker::PhantomData};
 
