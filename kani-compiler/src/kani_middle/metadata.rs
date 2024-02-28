@@ -3,7 +3,6 @@
 //! This module handles Kani metadata generation. For example, generating HarnessMetadata for a
 //! given function.
 
-use std::default::Default;
 use std::path::Path;
 
 use crate::kani_middle::attributes::test_harness_name;

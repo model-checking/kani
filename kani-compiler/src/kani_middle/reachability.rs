@@ -31,7 +31,7 @@ use stable_mir::mir::{
     TerminatorKind,
 };
 use stable_mir::ty::{Allocation, ClosureKind, ConstantKind, RigidTy, Ty, TyKind};
-use stable_mir::{self, CrateItem};
+use stable_mir::CrateItem;
 use stable_mir::{CrateDef, ItemKind};
 
 use crate::kani_middle::coercion;

@@ -53,7 +53,6 @@ use std::ffi::OsString;
 use std::fmt::Write;
 use std::fs::File;
 use std::io::BufWriter;
-use std::iter::FromIterator;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex};

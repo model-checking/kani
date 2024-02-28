@@ -7,7 +7,6 @@ use super::super::MachineModel;
 use super::{Expr, SymbolTable};
 use crate::cbmc_string::InternedString;
 use std::collections::BTreeMap;
-use std::convert::TryInto;
 use std::fmt::Debug;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////

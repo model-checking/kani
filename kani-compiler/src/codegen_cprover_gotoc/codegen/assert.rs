@@ -22,7 +22,6 @@ use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{Expr, Location, Stmt, Type};
 use cbmc::InternedString;
 use stable_mir::ty::Span as SpanStable;
-use std::convert::AsRef;
 use strum_macros::{AsRefStr, EnumString};
 use tracing::debug;
 

@@ -10,7 +10,6 @@ use crate::kani_middle::reachability::{collect_reachable_items, filter_crate_ite
 use crate::kani_middle::stubbing;
 use crate::kani_queries::QueryDb;
 use rustc_hir::def_id::{DefId, LocalDefId};
-use rustc_interface;
 use rustc_middle::util::Providers;
 use rustc_middle::{mir::Body, query::queries, ty::TyCtxt};
 use stable_mir::mir::mono::MonoItem;
