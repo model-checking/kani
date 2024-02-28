@@ -37,22 +37,19 @@ impl<'tcx> GotocCtx<'tcx> {
         let function_under_contract_attrs = KaniAttributes::for_item(tcx, function_under_contract);
         let wrapped_fn = function_under_contract_attrs.inner_check().unwrap().unwrap();
 
-        let recursion_tracker = items
-            .iter()
-            .filter_map(|i| match i {
-                MonoItem::Static(recursion_tracker)
-                    if (*recursion_tracker).name().contains("REENTRY") =>
-                {
-                    Some(*recursion_tracker)
-                }
-                _ => None,
-            })
-            .next();
+        let recursion_tracker = items.iter().find_map(|i| match i {
+            MonoItem::Static(recursion_tracker)
+                if (*recursion_tracker).name().contains("REENTRY") =>
+            {
+                Some(*recursion_tracker)
+            }
+            _ => None,
+        });
         assert!(
             recursion_tracker.is_some(),
             "There should exist a recursion tracker called REENTRY"
         );
-        let instance_recursion_tracker = recursion_tracker.unwrap();
+        let recursion_tracker = recursion_tracker.unwrap();
 
         let mut instance_under_contract = items.iter().filter_map(|i| match i {
             MonoItem::Fn(instance @ Instance { def, .. })
@@ -86,7 +83,7 @@ impl<'tcx> GotocCtx<'tcx> {
             location_of_recursion_wrapper
                 .filename()
                 .expect("recursion location wrapper should have a file name"),
-            instance_recursion_tracker.name(),
+            recursion_tracker.name(),
         );
 
         AssignsContract { recursion_tracker: full_name, contracted_function_name: wrapper_name }
