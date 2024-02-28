@@ -240,9 +240,9 @@ impl<'tcx> GotocCtx<'tcx> {
         // var = tmp;
         // -------------------------
         //
-        // In fetch functions of atomic_ptr, the type of var2 can be pointer (invalid_mut).
+        // In fetch functions of atomic_ptr such as https://doc.rust-lang.org/std/sync/atomic/struct.AtomicPtr.html#method.fetch_byte_add,
+        // the type of var2 can be pointer (invalid_mut).
         // In such case, atomic binops are transformed as follows to avoid typecheck failure.
-        //
         // -------------------------
         // var = atomic_op(var1, var2)
         // -------------------------
@@ -262,20 +262,18 @@ impl<'tcx> GotocCtx<'tcx> {
                 let (tmp, decl_stmt) =
                     self.decl_temp_variable(var1.typ().clone(), Some(var1.to_owned()), loc);
                 let var2 = fargs.remove(0);
+                let op_expr: Expr;
                 if var2.typ().is_pointer() {
-                    let op_expr = (var1.clone().cast_to(Type::c_size_t()))
+                    op_expr = (var1.clone().cast_to(Type::c_size_t()))
                         .$op(var2.cast_to(Type::c_size_t()))
                         .with_location(loc)
                         .cast_to(var1.typ().clone());
-                    let assign_stmt = (var1.clone()).assign(op_expr, loc);
-                    let res_stmt = self.codegen_expr_to_place_stable(place, tmp.clone());
-                    Stmt::atomic_block(vec![decl_stmt, assign_stmt, res_stmt], loc)
                 } else {
-                    let op_expr = (var1.clone()).$op(var2).with_location(loc);
-                    let assign_stmt = (var1.clone()).assign(op_expr, loc);
-                    let res_stmt = self.codegen_expr_to_place_stable(place, tmp.clone());
-                    Stmt::atomic_block(vec![decl_stmt, assign_stmt, res_stmt], loc)
+                    op_expr = (var1.clone()).$op(var2).with_location(loc);
                 }
+                let assign_stmt = (var1.clone()).assign(op_expr, loc);
+                let res_stmt = self.codegen_expr_to_place_stable(place, tmp.clone());
+                Stmt::atomic_block(vec![decl_stmt, assign_stmt, res_stmt], loc)
             }};
         }
 

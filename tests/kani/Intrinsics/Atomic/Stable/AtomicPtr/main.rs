@@ -1,3 +1,8 @@
+// Copyright Kani Contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+//! Test atomic intrinsics through the stable interface of atomic_ptr.
+
 #![feature(strict_provenance_atomic_ptr, strict_provenance)]
 use std::sync::atomic::{AtomicPtr, Ordering};
 
