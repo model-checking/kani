@@ -23,7 +23,6 @@ use std::process::{Command, ExitStatus, Output, Stdio};
 use std::str;
 
 use serde::{Deserialize, Serialize};
-use serde_yaml;
 use tracing::*;
 use wait_timeout::ChildExt;
 
