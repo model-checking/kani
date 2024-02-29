@@ -262,15 +262,14 @@ impl<'tcx> GotocCtx<'tcx> {
                 let (tmp, decl_stmt) =
                     self.decl_temp_variable(var1.typ().clone(), Some(var1.to_owned()), loc);
                 let var2 = fargs.remove(0);
-                let op_expr: Expr;
-                if var2.typ().is_pointer() {
-                    op_expr = (var1.clone().cast_to(Type::c_size_t()))
+                let op_expr = if var2.typ().is_pointer() {
+                    (var1.clone().cast_to(Type::c_size_t()))
                         .$op(var2.cast_to(Type::c_size_t()))
                         .with_location(loc)
-                        .cast_to(var1.typ().clone());
+                        .cast_to(var1.typ().clone())
                 } else {
-                    op_expr = (var1.clone()).$op(var2).with_location(loc);
-                }
+                    (var1.clone()).$op(var2).with_location(loc)
+                };
                 let assign_stmt = (var1.clone()).assign(op_expr, loc);
                 let res_stmt = self.codegen_expr_to_place_stable(place, tmp.clone());
                 Stmt::atomic_block(vec![decl_stmt, assign_stmt, res_stmt], loc)
