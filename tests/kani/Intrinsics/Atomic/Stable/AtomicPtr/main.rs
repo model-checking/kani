@@ -3,7 +3,7 @@
 //
 // Test atomic intrinsics through the stable interface of atomic_ptr.
 // Specifically, it checks that Kani correctly handles atomic_ptr's fetch methods, in which the second argument is a pointer type.
-// These methods were not correctly handles as explained in https://github.com/model-checking/kani/issues/3042.
+// These methods were not correctly handled as explained in https://github.com/model-checking/kani/issues/3042.
 
 #![feature(strict_provenance_atomic_ptr, strict_provenance)]
 use std::sync::atomic::{AtomicPtr, Ordering};
