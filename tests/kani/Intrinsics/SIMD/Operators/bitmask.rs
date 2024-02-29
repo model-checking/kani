@@ -6,16 +6,11 @@
 //! This is done by initializing vectors with the contents of 2-member tuples
 //! with symbolic values. The result of using each of the intrinsics is compared
 //! against the result of using the associated bitwise operator on the tuples.
-#![feature(repr_simd, platform_intrinsics)]
+#![feature(repr_simd, core_intrinsics)]
 #![feature(generic_const_exprs)]
 #![feature(portable_simd)]
-#![feature(core_intrinsics)]
-
 use std::fmt::Debug;
-
-extern "platform-intrinsic" {
-    fn simd_bitmask<T, U>(x: T) -> U;
-}
+use std::intrinsics::simd::simd_bitmask;
 
 #[repr(simd)]
 #[derive(Clone, Debug)]

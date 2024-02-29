@@ -8,7 +8,8 @@
 //! This is done by initializing vectors with the contents of 2-member tuples
 //! with symbolic values. The result of using each of the intrinsics is compared
 //! against the result of using the associated bitwise operator on the tuples.
-#![feature(repr_simd, platform_intrinsics)]
+#![feature(repr_simd, core_intrinsics)]
+use std::intrinsics::simd::{simd_and, simd_or, simd_xor};
 
 #[repr(simd)]
 #[allow(non_camel_case_types)]
@@ -50,11 +51,6 @@ pub struct u32x2(u32, u32);
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct u64x2(u64, u64);
 
-extern "platform-intrinsic" {
-    fn simd_and<T>(x: T, y: T) -> T;
-    fn simd_or<T>(x: T, y: T) -> T;
-    fn simd_xor<T>(x: T, y: T) -> T;
-}
 macro_rules! compare_simd_op_with_normal_op {
     ($simd_op: ident, $normal_op: tt, $simd_type: ident) => {
         let tup_x: (_,_) = kani::any();
