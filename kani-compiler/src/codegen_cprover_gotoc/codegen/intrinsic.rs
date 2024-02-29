@@ -268,12 +268,22 @@ impl<'tcx> GotocCtx<'tcx> {
             }};
         }
 
-        // If the intrinsic is defined on generic types, its trimmed name will
-        // include type arguments (e.g., `arith_offset::<u8>`). In that case, we
-        // remove them to simplify the match below.
-        let intrinsic_split = intrinsic.split_once("::");
-        let intrinsic =
-            if let Some((base_name, _type_args)) = intrinsic_split { base_name } else { intrinsic };
+        /// Gets the basename of an intrinsic given its trimmed name.
+        ///
+        /// For example, given `arith_offset::<u8>` this returns `arith_offset`.
+        fn intrinsic_basename(name: &str) -> &str {
+            let scope_sep_count = name.matches("::").count();
+            // We expect at most one `::` separator from trimmed intrinsic names
+            assert!(
+                scope_sep_count < 2,
+                "expected at most one `::` in intrinsic name, but found {scope_sep_count} in `{name}`"
+            );
+            let name_split = name.split_once("::");
+            if let Some((base_name, _type_args)) = name_split { base_name } else { name }
+        }
+        // The trimmed name includes type arguments if the intrinsic was defined
+        // on generic types, but we only need the basename for the match below.
+        let intrinsic = intrinsic_basename(intrinsic);
 
         if let Some(stripped) = intrinsic.strip_prefix("simd_shuffle") {
             assert!(fargs.len() == 3, "`simd_shuffle` had unexpected arguments {fargs:?}");
