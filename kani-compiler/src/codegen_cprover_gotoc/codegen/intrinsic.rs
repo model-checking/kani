@@ -274,7 +274,7 @@ impl<'tcx> GotocCtx<'tcx> {
         fn intrinsic_basename(name: &str) -> &str {
             let scope_sep_count = name.matches("::").count();
             // We expect at most one `::` separator from trimmed intrinsic names
-            assert!(
+            debug_assert!(
                 scope_sep_count < 2,
                 "expected at most one `::` in intrinsic name, but found {scope_sep_count} in `{name}`"
             );
