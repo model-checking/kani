@@ -18,7 +18,7 @@ fn check_fetch_byte_add() {
 
 #[kani::proof]
 fn check_fetch_byte_sub() {
-    let atom = AtomicPtr::<i64>::new(core::ptr::invalid_mut(1));
+    let atom = AtomicPtr::<i64>::new(core::ptr::without_provenance_mut(1));
     assert_eq!(atom.fetch_byte_sub(1, Ordering::Relaxed).addr(), 1);
     assert_eq!(atom.load(Ordering::Relaxed).addr(), 0);
 }

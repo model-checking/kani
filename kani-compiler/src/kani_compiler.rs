@@ -465,10 +465,8 @@ fn metadata_output_path(tcx: TyCtxt) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kani_metadata::{HarnessAttributes, HarnessMetadata};
+    use kani_metadata::HarnessAttributes;
     use rustc_data_structures::fingerprint::Fingerprint;
-    use rustc_hir::definitions::DefPathHash;
-    use std::collections::HashMap;
 
     fn mock_next_harness_id() -> HarnessId {
         static mut COUNTER: u64 = 0;

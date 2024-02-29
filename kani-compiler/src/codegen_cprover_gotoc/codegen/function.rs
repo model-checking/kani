@@ -12,7 +12,6 @@ use stable_mir::mir::{Body, Local};
 use stable_mir::ty::{RigidTy, TyKind};
 use stable_mir::CrateDef;
 use std::collections::BTreeMap;
-use std::iter::FromIterator;
 use tracing::{debug, debug_span};
 
 /// Codegen MIR functions into gotoc
