@@ -1,3 +1,9 @@
+// Copyright Kani Contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+// kani-flags: -Zfunction-contracts
+
+//! Check Kani handling of generics and recursion with function contracts.
+
 #[kani::requires(x != 0)]
 fn foo<T: std::cmp::PartialEq<i32>>(x: T) {
     assert_ne!(x, 0);
