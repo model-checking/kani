@@ -9,3 +9,10 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+
+  - package-ecosystem: "gitsubmodule"
+    directory: "/"
+    allow:
+      - dependency-name: "tests/perf/s2n-quic"
+    schedule:
+      interval: "weekly"
