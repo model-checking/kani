@@ -4,16 +4,13 @@
 //! This test checks that we emit an error when the third argument for
 //! `simd_insert` (the value to be inserted) has a type different to the first
 //! argument's (i.e., the vector) base type.
-#![feature(repr_simd, platform_intrinsics)]
+#![feature(repr_simd, core_intrinsics)]
+use std::intrinsics::simd::simd_insert;
 
 #[repr(simd)]
 #[allow(non_camel_case_types)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct i64x2(i64, i64);
-
-extern "platform-intrinsic" {
-    fn simd_insert<T, U>(x: T, idx: u32, b: U) -> T;
-}
 
 #[kani::proof]
 fn main() {

@@ -3,16 +3,13 @@
 
 //! Checks that `simd_shuffle` triggers an out-of-bounds failure when any of the
 //! indexes supplied is greater than the combined size of the input vectors.
-#![feature(repr_simd, platform_intrinsics)]
+#![feature(repr_simd, core_intrinsics)]
+use std::intrinsics::simd::simd_shuffle;
 
 #[repr(simd)]
 #[allow(non_camel_case_types)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct i64x2(i64, i64);
-
-extern "platform-intrinsic" {
-    fn simd_shuffle<T, U, V>(x: T, y: T, idx: U) -> V;
-}
 
 #[kani::proof]
 fn main() {
