@@ -415,6 +415,11 @@ impl<'tcx> GotocCtx<'tcx> {
                 loc,
                 "https://github.com/model-checking/kani/issues/374",
             ),
+            "catch_unwind" => self.codegen_unimplemented_stmt(
+                intrinsic,
+                loc,
+                "https://github.com/model-checking/kani/issues/267",
+            ),
             "ceilf32" => codegen_simple_intrinsic!(Ceilf),
             "ceilf64" => codegen_simple_intrinsic!(Ceil),
             "compare_bytes" => self.codegen_compare_bytes(fargs, place, loc),
@@ -584,11 +589,6 @@ impl<'tcx> GotocCtx<'tcx> {
             "transmute" => self.codegen_intrinsic_transmute(fargs, ret_ty, place),
             "truncf32" => codegen_simple_intrinsic!(Truncf),
             "truncf64" => codegen_simple_intrinsic!(Trunc),
-            "try" => self.codegen_unimplemented_stmt(
-                intrinsic,
-                loc,
-                "https://github.com/model-checking/kani/issues/267",
-            ),
             "type_id" => codegen_intrinsic_const!(),
             "type_name" => codegen_intrinsic_const!(),
             "unaligned_volatile_load" => {
