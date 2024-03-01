@@ -67,6 +67,9 @@ impl<'tcx> GotocCtx<'tcx> {
             location_of_recursion_wrapper
                 .filename()
                 .expect("recursion location wrapper should have a file name"),
+            // We must use the pretty name of the tracker instead of the mangled name.
+            // This restrictions comes from `--nondet-static-exclude` in CBMC.
+            // Mode details at https://github.com/diffblue/cbmc/issues/8225.
             recursion_tracker_def.name(),
         );
 
