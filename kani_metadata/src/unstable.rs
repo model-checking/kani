@@ -84,6 +84,8 @@ pub enum UnstableFeature {
     FunctionContracts,
     /// Memory predicate APIs.
     MemPredicates,
+    /// Automatically check for that all values checks.
+    ValidValueChecks,
 }
 
 impl UnstableFeature {
