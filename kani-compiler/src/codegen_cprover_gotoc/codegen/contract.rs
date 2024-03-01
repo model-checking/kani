@@ -38,17 +38,18 @@ impl<'tcx> GotocCtx<'tcx> {
 
         let recursion_wrapper_id =
             function_under_contract_attrs.checked_with_id().unwrap().unwrap();
+        let expected_name = format!("{}::REENTRY", tcx.item_name(recursion_wrapper_id));
         let mut recursion_tracker = items.iter().filter_map(|i| match i {
             MonoItem::Static(recursion_tracker)
-                if (*recursion_tracker).name().contains(
-                    format!("{}::REENTRY", tcx.item_name(recursion_wrapper_id)).as_str(),
-                ) =>
+                if (*recursion_tracker).name().contains(expected_name.as_str()) =>
             {
                 Some(*recursion_tracker)
             }
             _ => None,
         });
-        let recursion_tracker_def = recursion_tracker.next().unwrap();
+        let recursion_tracker_def = recursion_tracker
+            .next()
+            .expect("There should be at least one recursion tracker (REENTRY) in scope");
         assert!(
             recursion_tracker.next().is_none(),
             "Only one recursion tracker (REENTRY) may be in scope"
