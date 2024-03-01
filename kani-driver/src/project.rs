@@ -270,8 +270,12 @@ pub fn cargo_project(session: &KaniSession, keep_going: bool) -> Result<Project>
 }
 
 /// Generate a project directly using `kani-compiler` on a single crate.
-pub fn standalone_project(input: &Path, session: &KaniSession) -> Result<Project> {
-    StandaloneProjectBuilder::try_new(input, session)?.build()
+pub fn standalone_project(
+    input: &Path,
+    crate_name: Option<String>,
+    session: &KaniSession,
+) -> Result<Project> {
+    StandaloneProjectBuilder::try_new(input, crate_name, session)?.build()
 }
 
 /// Builder for a standalone project.
@@ -291,7 +295,7 @@ struct StandaloneProjectBuilder<'a> {
 impl<'a> StandaloneProjectBuilder<'a> {
     /// Create a `StandaloneProjectBuilder` from the given input and session.
     /// This will perform a few validations before the build.
-    fn try_new(input: &Path, session: &'a KaniSession) -> Result<Self> {
+    fn try_new(input: &Path, krate_name: Option<String>, session: &'a KaniSession) -> Result<Self> {
         // Ensure the directory exist and it's in its canonical form.
         let outdir = if let Some(target_dir) = &session.args.target_dir {
             std::fs::create_dir_all(target_dir)?; // This is a no-op if directory exists.
@@ -299,7 +303,7 @@ impl<'a> StandaloneProjectBuilder<'a> {
         } else {
             input.canonicalize().unwrap().parent().unwrap().to_path_buf()
         };
-        let crate_name = crate_name(&input);
+        let crate_name = if let Some(name) = krate_name { name } else { crate_name(&input) };
         let metadata = standalone_artifact(&outdir, &crate_name, Metadata);
         Ok(StandaloneProjectBuilder {
             outdir,
