@@ -1,0 +1,159 @@
+thread 'main' panicked at src/tools/rustfmt/src/parse/session.rs:42:9:
+silent emitter attempted to translate a diagnostic
+stack backtrace:
+   0:     0x7fd525774eaf - std::backtrace_rs::backtrace::libunwind::trace::hccc68910ff13f958
+                               at /rustc/0ecbd0605770f45c9151715e66ba2b3cae367fcb/library/std/src/../../backtrace/src/backtrace/libunwind.rs:104:5
+   1:     0x7fd525774eaf - std::backtrace_rs::backtrace::trace_unsynchronized::h88722ccba6833fa5
+                               at /rustc/0ecbd0605770f45c9151715e66ba2b3cae367fcb/library/std/src/../../backtrace/src/backtrace/mod.rs:66:5
+   2:     0x7fd525774eaf - std::backtrace::Backtrace::create::h01d402c209ac5db2
+                               at /rustc/0ecbd0605770f45c9151715e66ba2b3cae367fcb/library/std/src/backtrace.rs:331:13
+   3:     0x7fd525774df0 - std::backtrace::Backtrace::force_capture::h69a70e3e5cea5385
+                               at /rustc/0ecbd0605770f45c9151715e66ba2b3cae367fcb/library/std/src/backtrace.rs:312:9
+   4:     0x7fd5286a1108 - std[d552d81111d10822]::panicking::update_hook::<alloc[c9232cf8044bd381]::boxed::Box<rustc_driver_impl[8fe79628258f8a06]::install_ice_hook::{closure#0}>>::{closure#0}
+   5:     0x7fd52578fc60 - <alloc::boxed::Box<F,A> as core::ops::function::Fn<Args>>::call::h148c64496bcc724c
+                               at /rustc/0ecbd0605770f45c9151715e66ba2b3cae367fcb/library/alloc/src/boxed.rs:2030:9
+   6:     0x7fd52578fc60 - std::panicking::rust_panic_with_hook::h18f7fbcd19143e05
+                               at /rustc/0ecbd0605770f45c9151715e66ba2b3cae367fcb/library/std/src/panicking.rs:783:13
+   7:     0x7fd52578f969 - std::panicking::begin_panic_handler::{{closure}}::h9b1e5e4a583f1a9f
+                               at /rustc/0ecbd0605770f45c9151715e66ba2b3cae367fcb/library/std/src/panicking.rs:649:13
+   8:     0x7fd52578cee6 - std::sys_common::backtrace::__rust_end_short_backtrace::h5a04e37630d644c0
+                               at /rustc/0ecbd0605770f45c9151715e66ba2b3cae367fcb/library/std/src/sys_common/backtrace.rs:171:18
+   9:     0x7fd52578f6d4 - rust_begin_unwind
+                               at /rustc/0ecbd0605770f45c9151715e66ba2b3cae367fcb/library/std/src/panicking.rs:645:5
+  10:     0x7fd5257d9ea5 - core::panicking::panic_fmt::h6be3da941e46ae73
+                               at /rustc/0ecbd0605770f45c9151715e66ba2b3cae367fcb/library/core/src/panicking.rs:72:14
+  11:     0x558ff5bee02f - <rustfmt_nightly[8d4f808e9469a8c9]::parse::session::SilentEmitter as rustc_errors[fcee4e46eb3cda72]::translation::Translate>::fallback_fluent_bundle
+  12:     0x558ff5b69901 - <rustfmt_nightly[8d4f808e9469a8c9]::parse::session::SilentOnIgnoredFilesEmitter as rustc_errors[fcee4e46eb3cda72]::translation::Translate>::translate_message
+  13:     0x7fd526d6e520 - <rustc_errors[fcee4e46eb3cda72]::DiagCtxt>::eagerly_translate::<indexmap[9ba59d78c0581370]::map::iter::Iter<alloc[c9232cf8044bd381]::borrow::Cow<str>, rustc_errors[fcee4e46eb3cda72]::diagnostic::DiagnosticArgValue>>
+  14:     0x7fd528d70e6c - <rustc_parse[afc5b6d65a3b334f]::errors::ComparisonOrShiftInterpretedAsGenericSugg as rustc_errors[fcee4e46eb3cda72]::diagnostic::AddToDiagnostic>::add_to_diagnostic_with::<rustc_span[40015a5eff005e8e]::ErrorGuaranteed, <rustc_errors[fcee4e46eb3cda72]::diagnostic::DiagnosticBuilder>::subdiagnostic<rustc_parse[afc5b6d65a3b334f]::errors::ComparisonOrShiftInterpretedAsGenericSugg>::{closure#0}>
+  15:     0x7fd528d70ce4 - <rustc_parse[afc5b6d65a3b334f]::errors::ShiftInterpretedAsGeneric as rustc_errors[fcee4e46eb3cda72]::diagnostic::IntoDiagnostic>::into_diagnostic
+  16:     0x7fd529bd14cd - <rustc_parse[afc5b6d65a3b334f]::parser::Parser>::parse_expr_assoc_with
+  17:     0x7fd52a2acede - <rustc_parse[afc5b6d65a3b334f]::parser::Parser>::parse_local
+  18:     0x7fd52a0c8fdd - <rustc_parse[afc5b6d65a3b334f]::parser::Parser>::parse_stmt_without_recovery
+  19:     0x7fd52a0c57b6 - <rustc_parse[afc5b6d65a3b334f]::parser::Parser>::parse_block_tail
+  20:     0x7fd529ff1ef0 - <rustc_parse[afc5b6d65a3b334f]::parser::Parser>::parse_fn
+  21:     0x7fd52a37f61b - <rustc_parse[afc5b6d65a3b334f]::parser::Parser>::parse_item_kind
+  22:     0x7fd529dab1be - <rustc_parse[afc5b6d65a3b334f]::parser::Parser>::parse_item_common
+  23:     0x7fd529da8c2a - <rustc_parse[afc5b6d65a3b334f]::parser::Parser>::parse_mod
+  24:     0x7fd52aae2af1 - <rustc_parse[afc5b6d65a3b334f]::parser::Parser>::parse_crate_mod
+  25:     0x558ff5bedbdf - <rustfmt_nightly[8d4f808e9469a8c9]::parse::parser::Parser>::parse_crate
+  26:     0x558ff5ba72a4 - <rustfmt_nightly[8d4f808e9469a8c9]::Session<alloc[c9232cf8044bd381]::vec::Vec<u8>>>::format_input_inner::{closure#0}
+  27:     0x558ff5c1a208 - rustfmt_nightly[8d4f808e9469a8c9]::format_snippet
+  28:     0x558ff5bce656 - <rustfmt_nightly[8d4f808e9469a8c9]::lists::ListItems<core[bd769e7ba7008c3]::slice::iter::Iter<rustfmt_nightly[8d4f808e9469a8c9]::macros::MacroBranch>, rustfmt_nightly[8d4f808e9469a8c9]::macros::rewrite_macro_def::{closure#1}, rustfmt_nightly[8d4f808e9469a8c9]::macros::rewrite_macro_def::{closure#2}, rustfmt_nightly[8d4f808e9469a8c9]::macros::rewrite_macro_def::{closure#3}> as core[bd769e7ba7008c3]::iter::traits::iterator::Iterator>::next::{closure#0}
+  29:     0x558ff5bd36fa - rustfmt_nightly[8d4f808e9469a8c9]::macros::rewrite_macro_def
+  30:     0x558ff5c0f4c5 - <rustfmt_nightly[8d4f808e9469a8c9]::visitor::FmtVisitor>::visit_item
+  31:     0x558ff5bf3ae6 - <rustfmt_nightly[8d4f808e9469a8c9]::visitor::FmtVisitor>::visit_items_with_reordering
+  32:     0x558ff5c136cb - <rustfmt_nightly[8d4f808e9469a8c9]::visitor::FmtVisitor>::format_separate_mod
+  33:     0x558ff5a8d7be - <rustfmt_nightly[8d4f808e9469a8c9]::Session<std[d552d81111d10822]::io::stdio::Stdout>>::format_input_inner::{closure#0}
+  34:     0x558ff5aa2e41 - rustfmt[61a5e1a68eb86e51]::format_and_emit_report::<std[d552d81111d10822]::io::stdio::Stdout>
+  35:     0x558ff5aa0db7 - rustfmt[61a5e1a68eb86e51]::execute
+  36:     0x558ff5a9c9ab - rustfmt[61a5e1a68eb86e51]::main
+  37:     0x558ff5a87083 - std[d552d81111d10822]::sys_common::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  38:     0x558ff5a89329 - std[d552d81111d10822]::rt::lang_start::<()>::{closure#0}
+  39:     0x7fd525771e93 - core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &F>::call_once::hd871a26e604b1b61
+                               at /rustc/0ecbd0605770f45c9151715e66ba2b3cae367fcb/library/core/src/ops/function.rs:284:13
+  40:     0x7fd525771e93 - std::panicking::try::do_call::h8c535df1c0082533
+                               at /rustc/0ecbd0605770f45c9151715e66ba2b3cae367fcb/library/std/src/panicking.rs:552:40
+  41:     0x7fd525771e93 - std::panicking::try::hb983a17d8c2d0d25
+                               at /rustc/0ecbd0605770f45c9151715e66ba2b3cae367fcb/library/std/src/panicking.rs:516:19
+  42:     0x7fd525771e93 - std::panic::catch_unwind::hc39ef01f5f7bff9a
+                               at /rustc/0ecbd0605770f45c9151715e66ba2b3cae367fcb/library/std/src/panic.rs:142:14
+  43:     0x7fd525771e93 - std::rt::lang_start_internal::{{closure}}::h5d0060bca314125e
+                               at /rustc/0ecbd0605770f45c9151715e66ba2b3cae367fcb/library/std/src/rt.rs:148:48
+  44:     0x7fd525771e93 - std::panicking::try::do_call::h9eec93bd1b7794e8
+                               at /rustc/0ecbd0605770f45c9151715e66ba2b3cae367fcb/library/std/src/panicking.rs:552:40
+  45:     0x7fd525771e93 - std::panicking::try::h4e014b77ab3dfd3d
+                               at /rustc/0ecbd0605770f45c9151715e66ba2b3cae367fcb/library/std/src/panicking.rs:516:19
+  46:     0x7fd525771e93 - std::panic::catch_unwind::ha2f220b987d764b1
+                               at /rustc/0ecbd0605770f45c9151715e66ba2b3cae367fcb/library/std/src/panic.rs:142:14
+  47:     0x7fd525771e93 - std::rt::lang_start_internal::h55152906ff6b99c9
+                               at /rustc/0ecbd0605770f45c9151715e66ba2b3cae367fcb/library/std/src/rt.rs:148:20
+  48:     0x558ff5aa4005 - main
+  49:     0x7fd525229d90 - <unknown>
+  50:     0x7fd525229e40 - __libc_start_main
+  51:     0x558ff5a766f9 - <unknown>
+  52:                0x0 - <unknown>
+
+
+rustc version: 1.78.0-nightly (0ecbd0605 2024-02-25)
+platform: x86_64-unknown-linux-gnuthread 'main' panicked at src/tools/rustfmt/src/parse/session.rs:42:9:
+silent emitter attempted to translate a diagnostic
+stack backtrace:
+   0:     0x7fd525774eaf - std::backtrace_rs::backtrace::libunwind::trace::hccc68910ff13f958
+                               at /rustc/0ecbd0605770f45c9151715e66ba2b3cae367fcb/library/std/src/../../backtrace/src/backtrace/libunwind.rs:104:5
+   1:     0x7fd525774eaf - std::backtrace_rs::backtrace::trace_unsynchronized::h88722ccba6833fa5
+                               at /rustc/0ecbd0605770f45c9151715e66ba2b3cae367fcb/library/std/src/../../backtrace/src/backtrace/mod.rs:66:5
+   2:     0x7fd525774eaf - std::backtrace::Backtrace::create::h01d402c209ac5db2
+                               at /rustc/0ecbd0605770f45c9151715e66ba2b3cae367fcb/library/std/src/backtrace.rs:331:13
+   3:     0x7fd525774df0 - std::backtrace::Backtrace::force_capture::h69a70e3e5cea5385
+                               at /rustc/0ecbd0605770f45c9151715e66ba2b3cae367fcb/library/std/src/backtrace.rs:312:9
+   4:     0x7fd5286a1108 - std[d552d81111d10822]::panicking::update_hook::<alloc[c9232cf8044bd381]::boxed::Box<rustc_driver_impl[8fe79628258f8a06]::install_ice_hook::{closure#0}>>::{closure#0}
+   5:     0x7fd52578fc60 - <alloc::boxed::Box<F,A> as core::ops::function::Fn<Args>>::call::h148c64496bcc724c
+                               at /rustc/0ecbd0605770f45c9151715e66ba2b3cae367fcb/library/alloc/src/boxed.rs:2030:9
+   6:     0x7fd52578fc60 - std::panicking::rust_panic_with_hook::h18f7fbcd19143e05
+                               at /rustc/0ecbd0605770f45c9151715e66ba2b3cae367fcb/library/std/src/panicking.rs:783:13
+   7:     0x7fd52578f969 - std::panicking::begin_panic_handler::{{closure}}::h9b1e5e4a583f1a9f
+                               at /rustc/0ecbd0605770f45c9151715e66ba2b3cae367fcb/library/std/src/panicking.rs:649:13
+   8:     0x7fd52578cee6 - std::sys_common::backtrace::__rust_end_short_backtrace::h5a04e37630d644c0
+                               at /rustc/0ecbd0605770f45c9151715e66ba2b3cae367fcb/library/std/src/sys_common/backtrace.rs:171:18
+   9:     0x7fd52578f6d4 - rust_begin_unwind
+                               at /rustc/0ecbd0605770f45c9151715e66ba2b3cae367fcb/library/std/src/panicking.rs:645:5
+  10:     0x7fd5257d9ea5 - core::panicking::panic_fmt::h6be3da941e46ae73
+                               at /rustc/0ecbd0605770f45c9151715e66ba2b3cae367fcb/library/core/src/panicking.rs:72:14
+  11:     0x558ff5bee02f - <rustfmt_nightly[8d4f808e9469a8c9]::parse::session::SilentEmitter as rustc_errors[fcee4e46eb3cda72]::translation::Translate>::fallback_fluent_bundle
+  12:     0x558ff5b69901 - <rustfmt_nightly[8d4f808e9469a8c9]::parse::session::SilentOnIgnoredFilesEmitter as rustc_errors[fcee4e46eb3cda72]::translation::Translate>::translate_message
+  13:     0x7fd526d6e520 - <rustc_errors[fcee4e46eb3cda72]::DiagCtxt>::eagerly_translate::<indexmap[9ba59d78c0581370]::map::iter::Iter<alloc[c9232cf8044bd381]::borrow::Cow<str>, rustc_errors[fcee4e46eb3cda72]::diagnostic::DiagnosticArgValue>>
+  14:     0x7fd528d70e6c - <rustc_parse[afc5b6d65a3b334f]::errors::ComparisonOrShiftInterpretedAsGenericSugg as rustc_errors[fcee4e46eb3cda72]::diagnostic::AddToDiagnostic>::add_to_diagnostic_with::<rustc_span[40015a5eff005e8e]::ErrorGuaranteed, <rustc_errors[fcee4e46eb3cda72]::diagnostic::DiagnosticBuilder>::subdiagnostic<rustc_parse[afc5b6d65a3b334f]::errors::ComparisonOrShiftInterpretedAsGenericSugg>::{closure#0}>
+  15:     0x7fd528d70ce4 - <rustc_parse[afc5b6d65a3b334f]::errors::ShiftInterpretedAsGeneric as rustc_errors[fcee4e46eb3cda72]::diagnostic::IntoDiagnostic>::into_diagnostic
+  16:     0x7fd529bd14cd - <rustc_parse[afc5b6d65a3b334f]::parser::Parser>::parse_expr_assoc_with
+  17:     0x7fd52a2acede - <rustc_parse[afc5b6d65a3b334f]::parser::Parser>::parse_local
+  18:     0x7fd52a0c8fdd - <rustc_parse[afc5b6d65a3b334f]::parser::Parser>::parse_stmt_without_recovery
+  19:     0x7fd52a0c57b6 - <rustc_parse[afc5b6d65a3b334f]::parser::Parser>::parse_block_tail
+  20:     0x7fd529ff1ef0 - <rustc_parse[afc5b6d65a3b334f]::parser::Parser>::parse_fn
+  21:     0x7fd52a37f61b - <rustc_parse[afc5b6d65a3b334f]::parser::Parser>::parse_item_kind
+  22:     0x7fd529dab1be - <rustc_parse[afc5b6d65a3b334f]::parser::Parser>::parse_item_common
+  23:     0x7fd52a0c8600 - <rustc_parse[afc5b6d65a3b334f]::parser::Parser>::parse_stmt_without_recovery
+  24:     0x7fd52a0c57b6 - <rustc_parse[afc5b6d65a3b334f]::parser::Parser>::parse_block_tail
+  25:     0x7fd529ff1ef0 - <rustc_parse[afc5b6d65a3b334f]::parser::Parser>::parse_fn
+  26:     0x7fd52a37f61b - <rustc_parse[afc5b6d65a3b334f]::parser::Parser>::parse_item_kind
+  27:     0x7fd529dab1be - <rustc_parse[afc5b6d65a3b334f]::parser::Parser>::parse_item_common
+  28:     0x7fd529da8c2a - <rustc_parse[afc5b6d65a3b334f]::parser::Parser>::parse_mod
+  29:     0x7fd52aae2af1 - <rustc_parse[afc5b6d65a3b334f]::parser::Parser>::parse_crate_mod
+  30:     0x558ff5bedbdf - <rustfmt_nightly[8d4f808e9469a8c9]::parse::parser::Parser>::parse_crate
+  31:     0x558ff5ba72a4 - <rustfmt_nightly[8d4f808e9469a8c9]::Session<alloc[c9232cf8044bd381]::vec::Vec<u8>>>::format_input_inner::{closure#0}
+  32:     0x558ff5c1a208 - rustfmt_nightly[8d4f808e9469a8c9]::format_snippet
+  33:     0x558ff5c1aeb2 - rustfmt_nightly[8d4f808e9469a8c9]::format_code_block
+  34:     0x558ff5bce6b2 - <rustfmt_nightly[8d4f808e9469a8c9]::lists::ListItems<core[bd769e7ba7008c3]::slice::iter::Iter<rustfmt_nightly[8d4f808e9469a8c9]::macros::MacroBranch>, rustfmt_nightly[8d4f808e9469a8c9]::macros::rewrite_macro_def::{closure#1}, rustfmt_nightly[8d4f808e9469a8c9]::macros::rewrite_macro_def::{closure#2}, rustfmt_nightly[8d4f808e9469a8c9]::macros::rewrite_macro_def::{closure#3}> as core[bd769e7ba7008c3]::iter::traits::iterator::Iterator>::next::{closure#0}
+  35:     0x558ff5bd36fa - rustfmt_nightly[8d4f808e9469a8c9]::macros::rewrite_macro_def
+  36:     0x558ff5c0f4c5 - <rustfmt_nightly[8d4f808e9469a8c9]::visitor::FmtVisitor>::visit_item
+  37:     0x558ff5bf3ae6 - <rustfmt_nightly[8d4f808e9469a8c9]::visitor::FmtVisitor>::visit_items_with_reordering
+  38:     0x558ff5c136cb - <rustfmt_nightly[8d4f808e9469a8c9]::visitor::FmtVisitor>::format_separate_mod
+  39:     0x558ff5a8d7be - <rustfmt_nightly[8d4f808e9469a8c9]::Session<std[d552d81111d10822]::io::stdio::Stdout>>::format_input_inner::{closure#0}
+  40:     0x558ff5aa2e41 - rustfmt[61a5e1a68eb86e51]::format_and_emit_report::<std[d552d81111d10822]::io::stdio::Stdout>
+  41:     0x558ff5aa0db7 - rustfmt[61a5e1a68eb86e51]::execute
+  42:     0x558ff5a9c9ab - rustfmt[61a5e1a68eb86e51]::main
+  43:     0x558ff5a87083 - std[d552d81111d10822]::sys_common::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  44:     0x558ff5a89329 - std[d552d81111d10822]::rt::lang_start::<()>::{closure#0}
+  45:     0x7fd525771e93 - core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &F>::call_once::hd871a26e604b1b61
+                               at /rustc/0ecbd0605770f45c9151715e66ba2b3cae367fcb/library/core/src/ops/function.rs:284:13
+  46:     0x7fd525771e93 - std::panicking::try::do_call::h8c535df1c0082533
+                               at /rustc/0ecbd0605770f45c9151715e66ba2b3cae367fcb/library/std/src/panicking.rs:552:40
+  47:     0x7fd525771e93 - std::panicking::try::hb983a17d8c2d0d25
+                               at /rustc/0ecbd0605770f45c9151715e66ba2b3cae367fcb/library/std/src/panicking.rs:516:19
+  48:     0x7fd525771e93 - std::panic::catch_unwind::hc39ef01f5f7bff9a
+                               at /rustc/0ecbd0605770f45c9151715e66ba2b3cae367fcb/library/std/src/panic.rs:142:14
+  49:     0x7fd525771e93 - std::rt::lang_start_internal::{{closure}}::h5d0060bca314125e
+                               at /rustc/0ecbd0605770f45c9151715e66ba2b3cae367fcb/library/std/src/rt.rs:148:48
+  50:     0x7fd525771e93 - std::panicking::try::do_call::h9eec93bd1b7794e8
+                               at /rustc/0ecbd0605770f45c9151715e66ba2b3cae367fcb/library/std/src/panicking.rs:552:40
+  51:     0x7fd525771e93 - std::panicking::try::h4e014b77ab3dfd3d
+                               at /rustc/0ecbd0605770f45c9151715e66ba2b3cae367fcb/library/std/src/panicking.rs:516:19
+  52:     0x7fd525771e93 - std::panic::catch_unwind::ha2f220b987d764b1
+                               at /rustc/0ecbd0605770f45c9151715e66ba2b3cae367fcb/library/std/src/panic.rs:142:14
+  53:     0x7fd525771e93 - std::rt::lang_start_internal::h55152906ff6b99c9
+                               at /rustc/0ecbd0605770f45c9151715e66ba2b3cae367fcb/library/std/src/rt.rs:148:20
+  54:     0x558ff5aa4005 - main
+  55:     0x7fd525229d90 - <unknown>
+  56:     0x7fd525229e40 - __libc_start_main
+  57:     0x558ff5a766f9 - <unknown>
+  58:                0x0 - <unknown>
