@@ -16,6 +16,7 @@ mod cmd;
 mod os_hacks;
 mod setup;
 
+use clap::{App, Arg, SubCommand};
 use std::ffi::OsString;
 use std::os::unix::prelude::CommandExt;
 use std::path::{Path, PathBuf};
@@ -28,16 +29,16 @@ use anyhow::{bail, Context, Result};
 /// `bin` should be either `kani` or `cargo-kani`
 pub fn proxy(bin: &str) -> Result<()> {
     match parse_args(env::args_os().collect()) {
-        ArgsResult::ExplicitSetup { use_local_bundle } => setup::setup(use_local_bundle),
+        ArgsResult::ExplicitSetup { use_local_bundle, use_local_toolchain } => setup::setup(use_local_bundle, use_local_toolchain),
         ArgsResult::Default => {
             fail_if_in_dev_environment()?;
             if !setup::appears_setup() {
-                setup::setup(None)?;
+                setup::setup(None, None)?;
             } else {
                 // This handles cases where the setup was left incomplete due to an interrupt
                 // For example - https://github.com/model-checking/kani/issues/1545
                 if let Some(path_to_bundle) = setup::appears_incomplete() {
-                    setup::setup(Some(path_to_bundle.clone().into_os_string()))?;
+                    setup::setup(Some(path_to_bundle.clone().into_os_string()), None)?;
                     // Suppress warning with unused assignment
                     // and remove the bundle if it still exists
                     let _ = fs::remove_file(path_to_bundle);
@@ -51,28 +52,52 @@ pub fn proxy(bin: &str) -> Result<()> {
 /// Minimalist argument parsing result type
 #[derive(PartialEq, Eq, Debug)]
 enum ArgsResult {
-    ExplicitSetup { use_local_bundle: Option<OsString> },
+    ExplicitSetup { use_local_bundle: Option<OsString>,  use_local_toolchain: Option<OsString>},
     Default,
 }
 
 /// Parse `args` and decide what to do.
 fn parse_args(args: Vec<OsString>) -> ArgsResult {
-    // In an effort to keep our dependencies minimal, we do the bare minimum argument parsing manually.
-    // `args_ez` makes it easy to do crude arg parsing with match.
-    let args_ez: Vec<Option<&str>> = args.iter().map(|x| x.to_str()).collect();
-    // "cargo kani setup" comes in as "cargo-kani kani setup"
-    // "cargo-kani setup" comes in as "cargo-kani setup"
-    match &args_ez[..] {
-        &[_, Some("setup"), Some("--use-local-bundle"), _] => {
-            ArgsResult::ExplicitSetup { use_local_bundle: Some(args[3].clone()) }
+    let matches = App::new("kani")
+        .subcommand(
+            SubCommand::with_name("setup")
+                .arg(Arg::with_name("use-local-bundle").long("use-local-bundle").takes_value(true))
+                .arg(
+                    Arg::with_name("use-local-toolchain")
+                        .long("use-local-toolchain")
+                        .takes_value(true),
+                ),
+        )
+        .subcommand(
+            SubCommand::with_name("kani")
+            .subcommand(
+                SubCommand::with_name("setup")
+                    .arg(Arg::with_name("use-local-bundle").long("use-local-bundle").takes_value(true))
+                    .arg(
+                        Arg::with_name("use-local-toolchain")
+                            .long("use-local-toolchain")
+                            .takes_value(true),
+                    ),
+                ),
+            )
+        .get_matches_from(args);
+
+    // Default is the behaviour for Kani when cargo-kani/ cargo kani runs on its own and sees that there is no setup done yet
+    // Explicit is when the user uses the sub-command cargo-kani setup explicitly
+    if let Some(matches) = matches.subcommand_matches("setup") {
+        let use_local_toolchain = matches.value_of_os("use-local-toolchain").map(OsString::from);
+        let use_local_bundle = matches.value_of_os("use-local-bundle").map(OsString::from);
+        ArgsResult::ExplicitSetup { use_local_bundle: use_local_bundle, use_local_toolchain: use_local_toolchain }
+    } else if let Some(matches) = matches.subcommand_matches("kani") {
+        if let Some(matches) = matches.subcommand_matches("setup") {
+            let use_local_toolchain = matches.value_of_os("use-local-toolchain").map(OsString::from);
+            let use_local_bundle = matches.value_of_os("use-local-bundle").map(OsString::from);
+            ArgsResult::ExplicitSetup { use_local_bundle: use_local_bundle, use_local_toolchain: use_local_toolchain }
+        } else {
+            ArgsResult::Default
         }
-        &[_, Some("kani"), Some("setup"), Some("--use-local-bundle"), _] => {
-            ArgsResult::ExplicitSetup { use_local_bundle: Some(args[4].clone()) }
-        }
-        &[_, Some("setup")] | &[_, Some("kani"), Some("setup")] => {
-            ArgsResult::ExplicitSetup { use_local_bundle: None }
-        }
-        _ => ArgsResult::Default,
+    } else {
+        ArgsResult::Default
     }
 }
 
@@ -223,16 +248,28 @@ mod tests {
             assert_eq!(e, trial(&[]));
         }
         {
-            let e = ArgsResult::ExplicitSetup { use_local_bundle: None };
+            let e = ArgsResult::ExplicitSetup { use_local_bundle: None, use_local_toolchain: None };
             assert_eq!(e, trial(&["cargo-kani", "kani", "setup"]));
             assert_eq!(e, trial(&["cargo", "kani", "setup"]));
             assert_eq!(e, trial(&["cargo-kani", "setup"]));
         }
         {
-            let e = ArgsResult::ExplicitSetup { use_local_bundle: Some(OsString::from("FILE")) };
+            let e = ArgsResult::ExplicitSetup { use_local_bundle: Some(OsString::from("FILE")), use_local_toolchain: None };
             assert_eq!(e, trial(&["cargo-kani", "kani", "setup", "--use-local-bundle", "FILE"]));
             assert_eq!(e, trial(&["cargo", "kani", "setup", "--use-local-bundle", "FILE"]));
             assert_eq!(e, trial(&["cargo-kani", "setup", "--use-local-bundle", "FILE"]));
+        }
+        {
+            let e = ArgsResult::ExplicitSetup { use_local_bundle: None, use_local_toolchain: Some(OsString::from("TOOLCHAIN")) };
+            assert_eq!(e, trial(&["cargo-kani", "kani", "setup", "--use-local-toolchain", "TOOLCHAIN"]));
+            assert_eq!(e, trial(&["cargo", "kani", "setup", "--use-local-toolchain", "TOOLCHAIN"]));
+            assert_eq!(e, trial(&["cargo-kani", "setup", "--use-local-toolchain", "TOOLCHAIN"]));
+        }
+        {
+            let e = ArgsResult::ExplicitSetup { use_local_bundle: Some(OsString::from("FILE")), use_local_toolchain: Some(OsString::from("TOOLCHAIN")) };
+            assert_eq!(e, trial(&["cargo-kani", "kani", "setup", "--use-local-bundle", "FILE", "--use-local-toolchain", "TOOLCHAIN"]));
+            assert_eq!(e, trial(&["cargo", "kani", "setup", "--use-local-bundle", "FILE", "--use-local-toolchain", "TOOLCHAIN"]));
+            assert_eq!(e, trial(&["cargo-kani", "setup", "--use-local-bundle", "FILE", "--use-local-toolchain", "TOOLCHAIN"]));
         }
     }
 }

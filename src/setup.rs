@@ -70,7 +70,7 @@ pub fn appears_incomplete() -> Option<PathBuf> {
 }
 
 /// Sets up Kani by unpacking/installing to `~/.kani/kani-VERSION`
-pub fn setup(use_local_bundle: Option<OsString>) -> Result<()> {
+pub fn setup(use_local_bundle: Option<OsString>, use_local_toolchain: Option<OsString>) -> Result<()> {
     let kani_dir = kani_dir()?;
     let os = os_info::get();
 
@@ -81,7 +81,7 @@ pub fn setup(use_local_bundle: Option<OsString>) -> Result<()> {
 
     setup_kani_bundle(&kani_dir, use_local_bundle)?;
 
-    setup_rust_toolchain(&kani_dir)?;
+    setup_rust_toolchain(&kani_dir, use_local_toolchain)?;
 
     setup_python_deps(&kani_dir)?;
 
@@ -139,14 +139,22 @@ pub(crate) fn get_rust_toolchain_version(kani_dir: &Path) -> Result<String> {
 }
 
 /// Install the Rust toolchain version we require
-fn setup_rust_toolchain(kani_dir: &Path) -> Result<String> {
+fn setup_rust_toolchain(kani_dir: &Path, use_local_toolchain: Option<OsString>) -> Result<String> {
     // Currently this means we require the bundle to have been unpacked first!
     let toolchain_version = get_rust_toolchain_version(kani_dir)?;
     println!("[3/5] Installing rust toolchain version: {}", &toolchain_version);
+
+    // Symlink to a local toolchain if the user explicitly requests
+    if let Some(local_toolchain_path) = use_local_toolchain {
+        let toolchain_path = Path::new(&local_toolchain_path);
+        // TODO: match the version against which kani was built
+        symlink_rust_toolchain(toolchain_path, kani_dir)?;
+        return Ok(toolchain_version);
+    }
+
+    // This is the default behaviour when no explicit path to a toolchain is mentioned
     Command::new("rustup").args(["toolchain", "install", &toolchain_version]).run()?;
-
     let toolchain = home::rustup_home()?.join("toolchains").join(&toolchain_version);
-
     symlink_rust_toolchain(&toolchain, kani_dir)?;
     Ok(toolchain_version)
 }
@@ -201,6 +209,7 @@ fn fail_if_unsupported_target() -> Result<()> {
 fn symlink_rust_toolchain(toolchain: &Path, kani_dir: &Path) -> Result<()> {
     let path = kani_dir.join("toolchain");
     // We want setup to be idempotent, so if the symlink already exists, delete instead of failing
+    // There's a chance that we might need to delete actual toolchain folders in the repo if they exist
     if path.exists() && path.is_symlink() {
         std::fs::remove_file(&path)?;
     }
