@@ -200,6 +200,10 @@ impl<'tcx> KaniAttributes<'tcx> {
             .collect()
     }
 
+    pub(crate) fn is_contract_generated(&self) -> bool {
+        self.map.contains_key(&KaniAttributeKind::IsContractGenerated)
+    }
+
     /// Parse and extract the `proof_for_contract(TARGET)` attribute. The
     /// returned symbol and DefId are respectively the name and id of `TARGET`,
     /// the span in the span for the attribute (contents).
