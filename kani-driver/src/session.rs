@@ -81,7 +81,6 @@ impl KaniSession {
             }
             InstallType::Release(kani_dir) => {
                 let cargo_path = kani_dir.join("toolchain").join("bin").join("cargo");
-                
                 Command::new(cargo_path)
             }
         };
