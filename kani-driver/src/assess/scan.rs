@@ -4,7 +4,6 @@
 use std::collections::HashSet;
 use std::path::Path;
 use std::path::PathBuf;
-use std::process::Command;
 use std::time::Instant;
 
 use anyhow::Result;
