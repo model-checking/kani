@@ -109,9 +109,8 @@ impl KaniSession {
         let mut failed_targets = vec![];
         for package in packages {
             for verification_target in package_targets(&self.args, package) {
-                let mut cmd = Command::new("cargo");
-                cmd.arg(session::toolchain_shorthand())
-                    .args(&cargo_args)
+                let mut cmd = self.setup_cargo_command()?;
+                cmd.args(&cargo_args)
                     .args(vec!["-p", &package.name])
                     .args(&verification_target.to_args())
                     .args(&pkg_args)

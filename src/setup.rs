@@ -70,7 +70,10 @@ pub fn appears_incomplete() -> Option<PathBuf> {
 }
 
 /// Sets up Kani by unpacking/installing to `~/.kani/kani-VERSION`
-pub fn setup(use_local_bundle: Option<OsString>, use_local_toolchain: Option<OsString>) -> Result<()> {
+pub fn setup(
+    use_local_bundle: Option<OsString>,
+    use_local_toolchain: Option<OsString>,
+) -> Result<()> {
     let kani_dir = kani_dir()?;
     let os = os_info::get();
 
@@ -209,7 +212,6 @@ fn fail_if_unsupported_target() -> Result<()> {
 fn symlink_rust_toolchain(toolchain: &Path, kani_dir: &Path) -> Result<()> {
     let path = kani_dir.join("toolchain");
     // We want setup to be idempotent, so if the symlink already exists, delete instead of failing
-    // There's a chance that we might need to delete actual toolchain folders in the repo if they exist
     if path.exists() && path.is_symlink() {
         std::fs::remove_file(&path)?;
     }

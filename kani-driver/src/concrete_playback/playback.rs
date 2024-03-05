@@ -96,6 +96,21 @@ fn build_test(install: &InstallType, args: &KaniPlaybackArgs) -> Result<PathBuf>
 /// TODO: This should likely be inside KaniSession, but KaniSession requires `VerificationArgs` today.
 /// For now, we just use InstallType directly.
 fn cargo_test(install: &InstallType, args: CargoPlaybackArgs) -> Result<()> {
+    // Recreating the match from `setup_cargo_command` here because this function takes InstallType
+    // This whole function needs refactoring to use KaniSession instead
+    let mut cmd = match install {
+        InstallType::DevRepo(_) => {
+            let mut cmd = Command::new("cargo");
+            cmd.arg(session::toolchain_shorthand());
+            cmd
+        }
+        InstallType::Release(kani_dir) => {
+            let cargo_path = kani_dir.join("toolchain").join("bin").join("cargo");
+            let cmd = Command::new(cargo_path);
+            cmd
+        }
+    };
+
     let rustc_args = base_rustc_flags(lib_playback_folder()?);
     let mut cargo_args: Vec<OsString> = vec!["test".into()];
 
@@ -123,9 +138,7 @@ fn cargo_test(install: &InstallType, args: CargoPlaybackArgs) -> Result<()> {
     }
 
     // Arguments that will only be passed to the target package.
-    let mut cmd = Command::new("cargo");
-    cmd.arg(session::toolchain_shorthand())
-        .args(&cargo_args)
+    cmd.args(&cargo_args)
         .env("RUSTC", &install.kani_compiler()?)
         // Use CARGO_ENCODED_RUSTFLAGS instead of RUSTFLAGS is preferred. See
         // https://doc.rust-lang.org/cargo/reference/environment-variables.html

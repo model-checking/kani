@@ -29,7 +29,9 @@ use anyhow::{bail, Context, Result};
 /// `bin` should be either `kani` or `cargo-kani`
 pub fn proxy(bin: &str) -> Result<()> {
     match parse_args(env::args_os().collect()) {
-        ArgsResult::ExplicitSetup { use_local_bundle, use_local_toolchain } => setup::setup(use_local_bundle, use_local_toolchain),
+        ArgsResult::ExplicitSetup { use_local_bundle, use_local_toolchain } => {
+            setup::setup(use_local_bundle, use_local_toolchain)
+        }
         ArgsResult::Default => {
             fail_if_in_dev_environment()?;
             if !setup::appears_setup() {
@@ -52,7 +54,7 @@ pub fn proxy(bin: &str) -> Result<()> {
 /// Minimalist argument parsing result type
 #[derive(PartialEq, Eq, Debug)]
 enum ArgsResult {
-    ExplicitSetup { use_local_bundle: Option<OsString>,  use_local_toolchain: Option<OsString>},
+    ExplicitSetup { use_local_bundle: Option<OsString>, use_local_toolchain: Option<OsString> },
     Default,
 }
 
@@ -69,17 +71,20 @@ fn parse_args(args: Vec<OsString>) -> ArgsResult {
                 ),
         )
         .subcommand(
-            SubCommand::with_name("kani")
-            .subcommand(
+            SubCommand::with_name("kani").subcommand(
                 SubCommand::with_name("setup")
-                    .arg(Arg::with_name("use-local-bundle").long("use-local-bundle").takes_value(true))
+                    .arg(
+                        Arg::with_name("use-local-bundle")
+                            .long("use-local-bundle")
+                            .takes_value(true),
+                    )
                     .arg(
                         Arg::with_name("use-local-toolchain")
                             .long("use-local-toolchain")
                             .takes_value(true),
                     ),
-                ),
-            )
+            ),
+        )
         .get_matches_from(args);
 
     // Default is the behaviour for Kani when cargo-kani/ cargo kani runs on its own and sees that there is no setup done yet
@@ -87,12 +92,19 @@ fn parse_args(args: Vec<OsString>) -> ArgsResult {
     if let Some(matches) = matches.subcommand_matches("setup") {
         let use_local_toolchain = matches.value_of_os("use-local-toolchain").map(OsString::from);
         let use_local_bundle = matches.value_of_os("use-local-bundle").map(OsString::from);
-        ArgsResult::ExplicitSetup { use_local_bundle: use_local_bundle, use_local_toolchain: use_local_toolchain }
+        ArgsResult::ExplicitSetup {
+            use_local_bundle: use_local_bundle,
+            use_local_toolchain: use_local_toolchain,
+        }
     } else if let Some(matches) = matches.subcommand_matches("kani") {
         if let Some(matches) = matches.subcommand_matches("setup") {
-            let use_local_toolchain = matches.value_of_os("use-local-toolchain").map(OsString::from);
+            let use_local_toolchain =
+                matches.value_of_os("use-local-toolchain").map(OsString::from);
             let use_local_bundle = matches.value_of_os("use-local-bundle").map(OsString::from);
-            ArgsResult::ExplicitSetup { use_local_bundle: use_local_bundle, use_local_toolchain: use_local_toolchain }
+            ArgsResult::ExplicitSetup {
+                use_local_bundle: use_local_bundle,
+                use_local_toolchain: use_local_toolchain,
+            }
         } else {
             ArgsResult::Default
         }
@@ -254,22 +266,66 @@ mod tests {
             assert_eq!(e, trial(&["cargo-kani", "setup"]));
         }
         {
-            let e = ArgsResult::ExplicitSetup { use_local_bundle: Some(OsString::from("FILE")), use_local_toolchain: None };
+            let e = ArgsResult::ExplicitSetup {
+                use_local_bundle: Some(OsString::from("FILE")),
+                use_local_toolchain: None,
+            };
             assert_eq!(e, trial(&["cargo-kani", "kani", "setup", "--use-local-bundle", "FILE"]));
             assert_eq!(e, trial(&["cargo", "kani", "setup", "--use-local-bundle", "FILE"]));
             assert_eq!(e, trial(&["cargo-kani", "setup", "--use-local-bundle", "FILE"]));
         }
         {
-            let e = ArgsResult::ExplicitSetup { use_local_bundle: None, use_local_toolchain: Some(OsString::from("TOOLCHAIN")) };
-            assert_eq!(e, trial(&["cargo-kani", "kani", "setup", "--use-local-toolchain", "TOOLCHAIN"]));
+            let e = ArgsResult::ExplicitSetup {
+                use_local_bundle: None,
+                use_local_toolchain: Some(OsString::from("TOOLCHAIN")),
+            };
+            assert_eq!(
+                e,
+                trial(&["cargo-kani", "kani", "setup", "--use-local-toolchain", "TOOLCHAIN"])
+            );
             assert_eq!(e, trial(&["cargo", "kani", "setup", "--use-local-toolchain", "TOOLCHAIN"]));
             assert_eq!(e, trial(&["cargo-kani", "setup", "--use-local-toolchain", "TOOLCHAIN"]));
         }
         {
-            let e = ArgsResult::ExplicitSetup { use_local_bundle: Some(OsString::from("FILE")), use_local_toolchain: Some(OsString::from("TOOLCHAIN")) };
-            assert_eq!(e, trial(&["cargo-kani", "kani", "setup", "--use-local-bundle", "FILE", "--use-local-toolchain", "TOOLCHAIN"]));
-            assert_eq!(e, trial(&["cargo", "kani", "setup", "--use-local-bundle", "FILE", "--use-local-toolchain", "TOOLCHAIN"]));
-            assert_eq!(e, trial(&["cargo-kani", "setup", "--use-local-bundle", "FILE", "--use-local-toolchain", "TOOLCHAIN"]));
+            let e = ArgsResult::ExplicitSetup {
+                use_local_bundle: Some(OsString::from("FILE")),
+                use_local_toolchain: Some(OsString::from("TOOLCHAIN")),
+            };
+            assert_eq!(
+                e,
+                trial(&[
+                    "cargo-kani",
+                    "kani",
+                    "setup",
+                    "--use-local-bundle",
+                    "FILE",
+                    "--use-local-toolchain",
+                    "TOOLCHAIN"
+                ])
+            );
+            assert_eq!(
+                e,
+                trial(&[
+                    "cargo",
+                    "kani",
+                    "setup",
+                    "--use-local-bundle",
+                    "FILE",
+                    "--use-local-toolchain",
+                    "TOOLCHAIN"
+                ])
+            );
+            assert_eq!(
+                e,
+                trial(&[
+                    "cargo-kani",
+                    "setup",
+                    "--use-local-bundle",
+                    "FILE",
+                    "--use-local-toolchain",
+                    "TOOLCHAIN"
+                ])
+            );
         }
     }
 }

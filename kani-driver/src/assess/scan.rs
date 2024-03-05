@@ -168,7 +168,8 @@ fn invoke_assess(
 ) -> Result<()> {
     let dir = manifest.parent().expect("file not in a directory?");
     let log = std::fs::File::create(logfile)?;
-    let mut cmd = Command::new("cargo");
+
+    let mut cmd = session.setup_cargo_command()?;
     cmd.arg("kani");
     // Use of options before 'assess' subcommand is a hack, these should be factored out.
     // TODO: --only-codegen should be outright an option to assess. (perhaps tests too?)
