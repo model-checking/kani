@@ -1,19 +1,14 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// Checks that the `simd_div` and `simd_rem` intrinsics check for integer overflows.
-
-#![feature(repr_simd, platform_intrinsics)]
+//! Checks that the `simd_div` and `simd_rem` intrinsics check for integer overflows.
+#![feature(repr_simd, core_intrinsics)]
+use std::intrinsics::simd::{simd_div, simd_rem};
 
 #[repr(simd)]
 #[allow(non_camel_case_types)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct i32x2(i32, i32);
-
-extern "platform-intrinsic" {
-    fn simd_div<T>(x: T, y: T) -> T;
-    fn simd_rem<T>(x: T, y: T) -> T;
-}
 
 unsafe fn do_simd_div(dividends: i32x2, divisors: i32x2) -> i32x2 {
     simd_div(dividends, divisors)

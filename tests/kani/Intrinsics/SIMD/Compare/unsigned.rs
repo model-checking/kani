@@ -2,25 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 //! Checks that intrinsics for SIMD vectors of unsigned integers are supported
-#![feature(repr_simd, platform_intrinsics)]
+#![feature(repr_simd, core_intrinsics)]
+use std::intrinsics::simd::*;
 
 #[repr(simd)]
 #[allow(non_camel_case_types)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct u64x2(u64, u64);
-
-// From <https://github.com/rust-lang/rfcs/blob/master/text/1199-simd-infrastructure.md#comparisons>:
-// > The type checker ensures that `T` and `U` have the same length, and that
-// > `U` is appropriately "boolean"-y.
-// This means that `U` is allowed to be `i64` or `u64`, but not `f64`.
-extern "platform-intrinsic" {
-    fn simd_eq<T, U>(x: T, y: T) -> U;
-    fn simd_ne<T, U>(x: T, y: T) -> U;
-    fn simd_lt<T, U>(x: T, y: T) -> U;
-    fn simd_le<T, U>(x: T, y: T) -> U;
-    fn simd_gt<T, U>(x: T, y: T) -> U;
-    fn simd_ge<T, U>(x: T, y: T) -> U;
-}
 
 macro_rules! assert_cmp {
     ($res_cmp: ident, $simd_cmp: ident, $x: expr, $y: expr, $($res: expr),+) => {
