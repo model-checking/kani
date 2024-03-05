@@ -93,8 +93,8 @@ fn parse_args(args: Vec<OsString>) -> ArgsResult {
         let use_local_toolchain = matches.value_of_os("use-local-toolchain").map(OsString::from);
         let use_local_bundle = matches.value_of_os("use-local-bundle").map(OsString::from);
         ArgsResult::ExplicitSetup {
-            use_local_bundle: use_local_bundle,
-            use_local_toolchain: use_local_toolchain,
+            use_local_bundle ,
+            use_local_toolchain,
         }
     } else if let Some(matches) = matches.subcommand_matches("kani") {
         if let Some(matches) = matches.subcommand_matches("setup") {
@@ -102,8 +102,8 @@ fn parse_args(args: Vec<OsString>) -> ArgsResult {
                 matches.value_of_os("use-local-toolchain").map(OsString::from);
             let use_local_bundle = matches.value_of_os("use-local-bundle").map(OsString::from);
             ArgsResult::ExplicitSetup {
-                use_local_bundle: use_local_bundle,
-                use_local_toolchain: use_local_toolchain,
+                use_local_bundle,
+                use_local_toolchain,
             }
         } else {
             ArgsResult::Default

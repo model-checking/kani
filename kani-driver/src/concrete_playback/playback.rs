@@ -106,8 +106,8 @@ fn cargo_test(install: &InstallType, args: CargoPlaybackArgs) -> Result<()> {
         }
         InstallType::Release(kani_dir) => {
             let cargo_path = kani_dir.join("toolchain").join("bin").join("cargo");
-            let cmd = Command::new(cargo_path);
-            cmd
+            
+            Command::new(cargo_path)
         }
     };
 
