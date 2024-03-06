@@ -92,8 +92,6 @@ fn build_test(install: &InstallType, args: &KaniPlaybackArgs) -> Result<PathBuf>
 }
 
 /// Invokes cargo test using Kani compiler and the provided arguments.
-/// TODO: Refactor to remove installtype
-/// Issue: https://github.com/model-checking/kani/issues/3060
 fn cargo_test(args: CargoPlaybackArgs) -> Result<()> {
     let install = InstallType::new()?;
     let mut cmd = setup_cargo_command()?;
