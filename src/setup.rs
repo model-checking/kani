@@ -151,6 +151,7 @@ fn setup_rust_toolchain(kani_dir: &Path, use_local_toolchain: Option<OsString>) 
     if let Some(local_toolchain_path) = use_local_toolchain {
         let toolchain_path = Path::new(&local_toolchain_path);
         // TODO: match the version against which kani was built
+        // Issue: https://github.com/model-checking/kani/issues/3060
         symlink_rust_toolchain(toolchain_path, kani_dir)?;
         return Ok(toolchain_version);
     }

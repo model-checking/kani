@@ -17,8 +17,7 @@ use std::process::Command;
 use tracing::debug;
 
 pub fn playback_cargo(args: CargoPlaybackArgs) -> Result<()> {
-    let install = InstallType::new()?;
-    cargo_test(&install, args)
+    cargo_test(args)
 }
 
 pub fn playback_standalone(args: KaniPlaybackArgs) -> Result<()> {
@@ -93,10 +92,10 @@ fn build_test(install: &InstallType, args: &KaniPlaybackArgs) -> Result<PathBuf>
 }
 
 /// Invokes cargo test using Kani compiler and the provided arguments.
-/// TODO: This should likely be inside KaniSession, but KaniSession requires `VerificationArgs` today.
-/// For now, we just use InstallType directly.
-fn cargo_test(install: &InstallType, args: CargoPlaybackArgs) -> Result<()> {
-
+/// TODO: Refactor to remove installtype
+/// Issue: https://github.com/model-checking/kani/issues/3060
+fn cargo_test(args: CargoPlaybackArgs) -> Result<()> {
+    let install = InstallType::new()?;
     let mut cmd = setup_cargo_command()?;
 
     let rustc_args = base_rustc_flags(lib_playback_folder()?);
