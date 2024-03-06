@@ -9,6 +9,7 @@ use std::time::Instant;
 use anyhow::Result;
 use cargo_metadata::Package;
 
+use crate::session::setup_cargo_command;
 use crate::session::KaniSession;
 
 use super::metadata::AssessMetadata;
@@ -168,7 +169,7 @@ fn invoke_assess(
     let dir = manifest.parent().expect("file not in a directory?");
     let log = std::fs::File::create(logfile)?;
 
-    let mut cmd = session.setup_cargo_command()?;
+    let mut cmd = setup_cargo_command()?;
     cmd.arg("kani");
     // Use of options before 'assess' subcommand is a hack, these should be factored out.
     // TODO: --only-codegen should be outright an option to assess. (perhaps tests too?)

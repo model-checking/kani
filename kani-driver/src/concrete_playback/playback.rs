@@ -7,7 +7,7 @@ use crate::args::common::Verbosity;
 use crate::args::playback_args::{CargoPlaybackArgs, KaniPlaybackArgs, MessageFormat};
 use crate::call_cargo::cargo_config_args;
 use crate::call_single_file::base_rustc_flags;
-use crate::session::{lib_playback_folder, InstallType};
+use crate::session::{lib_playback_folder, setup_cargo_command, InstallType};
 use crate::{session, util};
 use anyhow::Result;
 use std::ffi::OsString;
@@ -96,19 +96,8 @@ fn build_test(install: &InstallType, args: &KaniPlaybackArgs) -> Result<PathBuf>
 /// TODO: This should likely be inside KaniSession, but KaniSession requires `VerificationArgs` today.
 /// For now, we just use InstallType directly.
 fn cargo_test(install: &InstallType, args: CargoPlaybackArgs) -> Result<()> {
-    // Recreating the match from `setup_cargo_command` here because this function takes InstallType
-    // This whole function needs refactoring to use KaniSession instead
-    let mut cmd = match install {
-        InstallType::DevRepo(_) => {
-            let mut cmd = Command::new("cargo");
-            cmd.arg(session::toolchain_shorthand());
-            cmd
-        }
-        InstallType::Release(kani_dir) => {
-            let cargo_path = kani_dir.join("toolchain").join("bin").join("cargo");
-            Command::new(cargo_path)
-        }
-    };
+
+    let mut cmd = setup_cargo_command()?;
 
     let rustc_args = base_rustc_flags(lib_playback_folder()?);
     let mut cargo_args: Vec<OsString> = vec!["test".into()];
