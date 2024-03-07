@@ -13,11 +13,10 @@
 // Used to model simd.
 #![feature(repr_simd)]
 // Features used for tests only.
-#![cfg_attr(test, feature(portable_simd))]
+#![cfg_attr(test, feature(core_intrinsics, portable_simd))]
 // Required for `rustc_diagnostic_item` and `core_intrinsics`
 #![allow(internal_features)]
 // Required for implementing memory predicates.
-#![feature(core_intrinsics)]
 #![feature(ptr_metadata)]
 
 pub mod arbitrary;
@@ -216,13 +215,7 @@ pub(crate) unsafe fn any_raw_internal<T, const SIZE_T: usize>() -> T {
 #[inline(never)]
 #[allow(dead_code)]
 fn any_raw_inner<T>() -> T {
-    // while we could use `unreachable!()` or `panic!()` as the body of this
-    // function, both cause Kani to produce a warning on any program that uses
-    // kani::any() (see https://github.com/model-checking/kani/issues/2010).
-    // This function is handled via a hook anyway, so we just need to put a body
-    // that rustc does not complain about. An infinite loop works out nicely.
-    #[allow(clippy::empty_loop)]
-    loop {}
+    kani_intrinsic()
 }
 
 /// Function used to generate panic with a static message as this is the only one currently
@@ -238,6 +231,20 @@ pub const fn panic(message: &'static str) -> ! {
     panic!("{}", message)
 }
 
+/// An empty body that can be used to define Kani intrinsic functions.
+///
+/// A Kani intrinsic is a function that is interpreted by Kani compiler.
+/// While we could use `unreachable!()` or `panic!()` as the body of a kani intrinsic
+/// function, both cause Kani to produce a warning since we don't support caller location.
+/// (see https://github.com/model-checking/kani/issues/2010).
+///
+/// This function is dead, since its caller is always  handled via a hook anyway,
+/// so we just need to put a body that rustc does not complain about.
+/// An infinite loop works out nicely.
+fn kani_intrinsic<T>() -> T {
+    #[allow(clippy::empty_loop)]
+    loop {}
+}
 /// A macro to check if a condition is satisfiable at a specific location in the
 /// code.
 ///

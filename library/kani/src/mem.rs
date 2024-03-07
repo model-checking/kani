@@ -34,16 +34,17 @@
 //! The way Kani tracks provenance is not enough to check if the address was the result of a cast
 //! from a non-zero integer literal.
 
+use crate::kani_intrinsic;
 use crate::mem::private::Internal;
 use std::mem::{align_of, size_of};
 use std::ptr::{DynMetadata, NonNull, Pointee};
 
 /// Assert that the pointer is valid for access according to [crate::mem] conditions 1, 2 and 3.
 ///
+/// Note that a unaligned pointer is still considered valid.
+///
 /// TODO: Kani will automatically add those checks when a de-reference happens.
 /// https://github.com/model-checking/kani/issues/2975
-///
-/// TODO: Add tests for nullptr, dangling, slice, trait, ZST, and sized objects.
 ///
 /// This function will either panic or return `true`. This is to make it easier to use it in
 /// contracts.
@@ -60,25 +61,30 @@ where
     crate::assert(!ptr.is_null(), "Expected valid pointer, but found `null`");
 
     let (thin_ptr, metadata) = ptr.to_raw_parts();
-    metadata.can_read(thin_ptr, Internal)
+    can_read(&metadata, thin_ptr)
 }
 
-#[crate::unstable(
-    feature = "mem-predicates",
-    issue = 2690,
-    reason = "experimental memory predicate API"
-)]
-pub fn is_ptr_aligned<T>(ptr: *const T) -> bool
+fn can_read<M, T>(metadata: &M, data_ptr: *const ()) -> bool
 where
+    M: PtrProperties<T>,
     T: ?Sized,
-    <T as Pointee>::Metadata: PtrProperties<T>,
 {
-    let (thin_ptr, metadata) = ptr.to_raw_parts();
-    thin_ptr as usize % metadata.min_alignment(Internal) == 0
+    let marker = Internal;
+    let sz = metadata.pointee_size(marker);
+    if metadata.dangling(marker) as *const _ == data_ptr {
+        crate::assert(sz == 0, "Dangling pointer is only valid for zero-sized access")
+    } else {
+        crate::assert(
+            is_read_ok(data_ptr, sz),
+            "Expected valid pointer, but found dangling pointer",
+        );
+    }
+    true
 }
 
 mod private {
     /// Define like this to restrict usage of PtrProperties functions outside Kani.
+    #[derive(Copy, Clone)]
     pub struct Internal;
 }
 
@@ -89,15 +95,10 @@ pub trait PtrProperties<T: ?Sized> {
 
     fn min_alignment(&self, _: Internal) -> usize;
 
-    fn can_read(&self, thin_ptr: *const (), _: Internal) -> bool {
-        crate::assert(
-            is_read_ok(thin_ptr, self.pointee_size(Internal)),
-            "Expected valid pointer, but found dangling pointer",
-        );
-        true
-    }
+    fn dangling(&self, _: Internal) -> *const ();
 }
 
+/// Get the information for sized types (they don't have metadata).
 impl<T> PtrProperties<T> for () {
     fn pointee_size(&self, _: Internal) -> usize {
         size_of::<T>()
@@ -107,21 +108,14 @@ impl<T> PtrProperties<T> for () {
         align_of::<T>()
     }
 
-    fn can_read(&self, thin_ptr: *const (), _: Internal) -> bool {
-        let sz = size_of::<T>();
-        if NonNull::<T>::dangling().as_ptr() as *const _ as *const () == thin_ptr {
-            crate::assert(sz == 0, "Dangling pointer is only valid for zero-sized access")
-        } else {
-            crate::assert(
-                is_read_ok(thin_ptr, sz),
-                "Expected valid pointer, but found dangling pointer",
-            );
-        }
-        true
+    fn dangling(&self, _: Internal) -> *const () {
+        NonNull::<T>::dangling().as_ptr() as *const _
     }
 }
 
+/// Get the information from the str metadata.
 impl PtrProperties<str> for usize {
+    #[inline(always)]
     fn pointee_size(&self, _: Internal) -> usize {
         *self
     }
@@ -132,18 +126,28 @@ impl PtrProperties<str> for usize {
     fn min_alignment(&self, _: Internal) -> usize {
         align_of::<u8>()
     }
+
+    fn dangling(&self, _: Internal) -> *const () {
+        NonNull::<u8>::dangling().as_ptr() as _
+    }
 }
 
+/// Get the information from the slice metadata.
 impl<T> PtrProperties<[T]> for usize {
     fn pointee_size(&self, _: Internal) -> usize {
-        *self
+        *self * size_of::<T>()
     }
 
     fn min_alignment(&self, _: Internal) -> usize {
         align_of::<T>()
     }
+
+    fn dangling(&self, _: Internal) -> *const () {
+        NonNull::<T>::dangling().as_ptr() as _
+    }
 }
 
+/// Get the information from the vtable.
 impl<T> PtrProperties<T> for DynMetadata<T>
 where
     T: ?Sized,
@@ -155,6 +159,10 @@ where
     fn min_alignment(&self, _: Internal) -> usize {
         self.align_of()
     }
+
+    fn dangling(&self, _: Internal) -> *const () {
+        NonNull::<&T>::dangling().as_ptr() as _
+    }
 }
 
 /// Check if the pointer `_ptr` contains an allocated address of size equal or greater than `_size`.
@@ -165,17 +173,17 @@ where
 #[rustc_diagnostic_item = "KaniIsReadOk"]
 #[inline(never)]
 fn is_read_ok(_ptr: *const (), _size: usize) -> bool {
-    // This will be replaced by Kani codegen.
-    #[allow(clippy::empty_loop)]
-    loop {}
+    kani_intrinsic()
 }
 
 #[cfg(test)]
 mod tests {
-    use super::PtrProperties;
+    use super::{assert_valid_ptr, PtrProperties};
     use crate::mem::private::Internal;
+    use std::fmt::Debug;
     use std::intrinsics::size_of;
     use std::mem::{align_of, align_of_val, size_of_val};
+    use std::ptr;
     use std::ptr::{NonNull, Pointee};
 
     fn size_of_t<T>(ptr: *const T) -> usize
@@ -213,12 +221,62 @@ mod tests {
     fn test_alignment() {
         assert_eq!(align_of_t("hi"), align_of_val("hi"));
         assert_eq!(align_of_t(&0u8), align_of_val(&0u8));
-        assert_eq!(align_of_t(&0u8 as *const dyn std::fmt::Display), align_of_val(&0u8));
-        assert_eq!(align_of_t(&[0u8, 1u8] as &[u8]), align_of_val(&[0u8, 1u8]));
+        assert_eq!(align_of_t(&0u32 as *const dyn std::fmt::Display), align_of_val(&0u32));
+        assert_eq!(align_of_t(&[0isize, 1isize] as &[isize]), align_of_val(&[0isize, 1isize]));
         assert_eq!(align_of_t(&[] as &[u8]), align_of_val::<[u8; 0]>(&[]));
         assert_eq!(
             align_of_t(NonNull::<u32>::dangling().as_ptr() as *const dyn std::fmt::Display),
             align_of::<u32>()
         );
+    }
+
+    #[test]
+    pub fn test_empty_slice() {
+        let slice_ptr = Vec::<char>::new().as_slice() as *const [char];
+        assert_valid_ptr(slice_ptr);
+    }
+
+    #[test]
+    pub fn test_empty_str() {
+        let slice_ptr = String::new().as_str() as *const str;
+        assert_valid_ptr(slice_ptr);
+    }
+
+    #[test]
+    fn test_dangling_zst() {
+        test_dangling_of_t::<()>();
+        test_dangling_of_t::<[(); 10]>();
+    }
+
+    fn test_dangling_of_t<T>() {
+        let dangling: *const T = NonNull::<T>::dangling().as_ptr();
+        assert_valid_ptr(dangling);
+
+        let vec_ptr = Vec::<T>::new().as_ptr();
+        assert_valid_ptr(vec_ptr);
+    }
+
+    #[test]
+    #[should_panic(expected = "Dangling pointer is only valid for zero-sized access")]
+    fn test_dangling_char() {
+        test_dangling_of_t::<char>();
+    }
+
+    #[test]
+    #[should_panic(expected = "Dangling pointer is only valid for zero-sized access")]
+    fn test_dangling_slice() {
+        test_dangling_of_t::<&str>();
+    }
+
+    #[test]
+    #[should_panic(expected = "Expected valid pointer, but found `null`")]
+    fn test_null_fat_ptr() {
+        assert_valid_ptr(ptr::null::<char>() as *const dyn Debug);
+    }
+
+    #[test]
+    #[should_panic(expected = "Expected valid pointer, but found `null`")]
+    fn test_null_char() {
+        assert_valid_ptr(ptr::null::<char>());
     }
 }

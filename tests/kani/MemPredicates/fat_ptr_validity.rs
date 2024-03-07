@@ -6,7 +6,6 @@
 extern crate kani;
 
 use kani::mem::assert_valid_ptr;
-use std::fmt::Debug;
 
 mod valid_access {
     use super::*;
@@ -27,6 +26,15 @@ mod valid_access {
         assert_eq!(unsafe { &*slice }[0], 'a');
         assert_eq!(unsafe { &*slice }[2], 'c');
     }
+
+    #[kani::proof]
+    pub fn check_valid_zst() {
+        let slice_ptr = Vec::<char>::new().as_slice() as *const [char];
+        assert_valid_ptr(slice_ptr);
+
+        let str_ptr = String::new().as_str() as *const str;
+        assert_valid_ptr(str_ptr);
+    }
 }
 
 mod invalid_access {
@@ -34,13 +42,28 @@ mod invalid_access {
     #[kani::proof]
     #[kani::should_panic]
     pub fn check_invalid_dyn_ptr() {
-        let raw_ptr: *const dyn PartialEq<u8> = unsafe { new_dead_ptr::<u8>() };
+        let raw_ptr: *const dyn PartialEq<u8> = unsafe { new_dead_ptr::<u8>(0) };
         assert_valid_ptr(raw_ptr);
-        assert_eq!(*unsafe { &*raw_ptr }, 0u8);
     }
 
-    unsafe fn new_dead_ptr<T: Default>() -> *const T {
-        let var = T::default();
-        &var as *const _
+    #[kani::proof]
+    #[kani::should_panic]
+    pub fn check_invalid_slice_ptr() {
+        let raw_ptr: *const [char] = unsafe { new_dead_ptr::<[char; 2]>(['a', 'b']) };
+        assert_valid_ptr(raw_ptr);
+    }
+
+    #[kani::proof]
+    #[kani::should_panic]
+    pub fn check_invalid_slice_len() {
+        let array = [10usize; 10];
+        let invalid: *const [usize; 11] = &array as *const [usize; 10] as *const [usize; 11];
+        let ptr: *const [usize] = invalid as *const _;
+        assert_valid_ptr(ptr);
+    }
+
+    unsafe fn new_dead_ptr<T>(val: T) -> *const T {
+        let local = val;
+        &local as *const _
     }
 }
