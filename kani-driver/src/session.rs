@@ -379,3 +379,25 @@ fn init_logger(args: &VerificationArgs) {
     );
     tracing::subscriber::set_global_default(subscriber).unwrap();
 }
+
+// Setup the default version of cargo being run, based on the type/mode of installation for kani
+// If kani is being run in developer mode, then we use the one provided by rustup as we can assume that the developer will have rustup installed
+// For release versions of Kani, we use a version of cargo that's in the toolchain that's been symlinked during `cargo-kani` setup. This will allow
+// Kani to remove the runtime dependency on rustup later on.
+pub fn setup_cargo_command() -> Result<Command> {
+    let install_type = InstallType::new()?;
+
+    let cmd = match install_type {
+        InstallType::DevRepo(_) => {
+            let mut cmd = Command::new("cargo");
+            cmd.arg(self::toolchain_shorthand());
+            cmd
+        }
+        InstallType::Release(kani_dir) => {
+            let cargo_path = kani_dir.join("toolchain").join("bin").join("cargo");
+            Command::new(cargo_path)
+        }
+    };
+
+    Ok(cmd)
+}
