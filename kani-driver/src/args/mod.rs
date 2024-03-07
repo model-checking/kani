@@ -80,7 +80,7 @@ pub struct StandaloneArgs {
     #[command(subcommand)]
     pub command: Option<StandaloneSubcommand>,
 
-    #[arg(long, hide = true, requires("enable_unstable"))]
+    #[arg(long, hide = true)]
     pub crate_name: Option<String>,
 }
 
