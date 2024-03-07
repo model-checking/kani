@@ -381,7 +381,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Codegen for a local
-    fn codegen_local(&mut self, l: Local) -> Expr {
+    pub fn codegen_local(&mut self, l: Local) -> Expr {
         let local_ty = self.local_ty_stable(l);
         // Check if the local is a function definition (see comment above)
         if let Some(fn_def) = self.codegen_local_fndef(local_ty) {
