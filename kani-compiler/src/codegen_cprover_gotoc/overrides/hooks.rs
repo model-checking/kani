@@ -217,7 +217,7 @@ impl GotocHook for Panic {
     }
 }
 
-/// Encodes __CBMC_r_ok
+/// Encodes __CPROVER_r_ok
 struct IsReadOk;
 impl GotocHook for IsReadOk {
     fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {

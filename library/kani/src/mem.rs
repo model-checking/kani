@@ -16,12 +16,12 @@
 //!    accesses, even if some memory happens to exist at that address and gets deallocated.
 //!    This corresponds to writing your own allocator: allocating zero-sized objects is not very
 //!    hard. The canonical way to obtain a pointer that is valid for zero-sized accesses is
-//!    NonNull::dangling.
+//!    `NonNull::dangling`.
 //! 4. All accesses performed by functions in this module are non-atomic in the sense of atomic
 //!    operations used to synchronize between threads.
 //!    This means it is undefined behavior to perform two concurrent accesses to the same location
 //!    from different threads unless both accesses only read from memory.
-//!    Notice that this explicitly includes read_volatile and write_volatile:
+//!    Notice that this explicitly includes `read_volatile` and `write_volatile`:
 //!    Volatile accesses cannot be used for inter-thread synchronization.
 //! 5. The result of casting a reference to a pointer is valid for as long as the underlying
 //!    object is live and no reference (just raw pointers) is used to access the same memory.
@@ -41,9 +41,9 @@ use std::ptr::{DynMetadata, NonNull, Pointee};
 
 /// Assert that the pointer is valid for access according to [crate::mem] conditions 1, 2 and 3.
 ///
-/// Note that a unaligned pointer is still considered valid.
+/// Note that an unaligned pointer is still considered valid.
 ///
-/// TODO: Kani will automatically add those checks when a de-reference happens.
+/// TODO: Kani should automatically add those checks when a de-reference happens.
 /// https://github.com/model-checking/kani/issues/2975
 ///
 /// This function will either panic or return `true`. This is to make it easier to use it in
