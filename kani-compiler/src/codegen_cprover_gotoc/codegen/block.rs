@@ -74,6 +74,13 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 }
 
+/// Iterate over the basic blocks in reverse post-order.
+///
+/// The `reverse_postorder` function used before was internal to the compiler and reflected the
+/// internal body representation.
+///
+/// As we introduce transformations on the top of SMIR body, there will be not guarantee of a
+/// 1:1 relationship between basic blocks from internal body and monomorphic body from StableMIR.
 pub fn reverse_postorder(body: &Body) -> impl Iterator<Item = BasicBlockIdx> {
     postorder(body, 0, &mut HashSet::with_capacity(body.blocks.len())).into_iter().rev()
 }
