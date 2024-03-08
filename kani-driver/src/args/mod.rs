@@ -79,6 +79,9 @@ pub struct StandaloneArgs {
 
     #[command(subcommand)]
     pub command: Option<StandaloneSubcommand>,
+
+    #[arg(long, hide = true)]
+    pub crate_name: Option<String>,
 }
 
 /// Kani takes optional subcommands to request specialized behavior.

@@ -104,7 +104,7 @@ fn standalone_main() -> Result<()> {
         print_kani_version(InvocationType::Standalone);
     }
 
-    let project = project::standalone_project(&args.input.unwrap(), &session)?;
+    let project = project::standalone_project(&args.input.unwrap(), args.crate_name, &session)?;
     if session.args.only_codegen { Ok(()) } else { verify_project(project, session) }
 }
 
