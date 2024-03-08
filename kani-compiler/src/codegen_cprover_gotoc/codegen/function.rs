@@ -3,10 +3,10 @@
 
 //! This file contains functions related to codegenning MIR functions into gotoc
 
+use crate::codegen_cprover_gotoc::codegen::block::reverse_postorder;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{Expr, Stmt, Symbol};
 use cbmc::InternString;
-use rustc_middle::mir::traversal::reverse_postorder;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{Body, Local};
 use stable_mir::ty::{RigidTy, TyKind};
@@ -67,9 +67,7 @@ impl<'tcx> GotocCtx<'tcx> {
             self.codegen_declare_variables(&body);
 
             // Get the order from internal body for now.
-            let internal_body = self.current_fn().body_internal();
-            reverse_postorder(internal_body)
-                .for_each(|(bb, _)| self.codegen_block(bb.index(), &body.blocks[bb.index()]));
+            reverse_postorder(&body).for_each(|bb| self.codegen_block(bb, &body.blocks[bb]));
 
             let loc = self.codegen_span_stable(instance.def.span());
             let stmts = self.current_fn_mut().extract_block();
