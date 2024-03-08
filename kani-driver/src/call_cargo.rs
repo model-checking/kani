@@ -4,8 +4,8 @@
 use crate::args::VerificationArgs;
 use crate::call_single_file::to_rustc_arg;
 use crate::project::Artifact;
-use crate::session::KaniSession;
-use crate::{session, util};
+use crate::session::{setup_cargo_command, KaniSession};
+use crate::util;
 use anyhow::{bail, Context, Result};
 use cargo_metadata::diagnostic::{Diagnostic, DiagnosticLevel};
 use cargo_metadata::{Message, Metadata, MetadataCommand, Package, Target};
@@ -109,9 +109,8 @@ impl KaniSession {
         let mut failed_targets = vec![];
         for package in packages {
             for verification_target in package_targets(&self.args, package) {
-                let mut cmd = Command::new("cargo");
-                cmd.arg(session::toolchain_shorthand())
-                    .args(&cargo_args)
+                let mut cmd = setup_cargo_command()?;
+                cmd.args(&cargo_args)
                     .args(vec!["-p", &package.name])
                     .args(&verification_target.to_args())
                     .args(&pkg_args)

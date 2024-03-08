@@ -16,6 +16,7 @@ desktop.ini
 Session.vim
 .cproject
 .idea
+toolchains/
 *.iml
 .vscode
 .project
