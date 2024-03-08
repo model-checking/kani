@@ -4,7 +4,6 @@
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::Stmt;
 use cbmc::InternedString;
-use rustc_middle::mir::Body as BodyInternal;
 use rustc_middle::ty::Instance as InstanceInternal;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
@@ -21,8 +20,6 @@ pub struct CurrentFnCtx<'tcx> {
     instance: Instance,
     /// The crate this function is from
     krate: String,
-    /// The MIR for the current instance. This is using the internal representation.
-    mir: &'tcx BodyInternal<'tcx>,
     /// The current instance. This is using the internal representation.
     instance_internal: InstanceInternal<'tcx>,
     /// A list of local declarations used to retrieve MIR component types.
@@ -53,7 +50,6 @@ impl<'tcx> CurrentFnCtx<'tcx> {
         Self {
             block: vec![],
             instance,
-            mir: gcx.tcx.instance_mir(instance_internal.def),
             instance_internal,
             krate: instance.def.krate().name,
             locals,
@@ -92,11 +88,6 @@ impl<'tcx> CurrentFnCtx<'tcx> {
 
     pub fn instance_stable(&self) -> Instance {
         self.instance
-    }
-
-    /// The internal MIR for the function we are currently compiling using internal APIs.
-    pub fn body_internal(&self) -> &'tcx BodyInternal<'tcx> {
-        self.mir
     }
 
     /// The name of the function we are currently compiling
