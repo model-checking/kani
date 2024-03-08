@@ -13,7 +13,7 @@
 // Used to model simd.
 #![feature(repr_simd)]
 // Features used for tests only.
-#![cfg_attr(test, feature(platform_intrinsics, portable_simd))]
+#![cfg_attr(test, feature(core_intrinsics, portable_simd))]
 // Required for rustc_diagnostic_item
 #![allow(internal_features)]
 

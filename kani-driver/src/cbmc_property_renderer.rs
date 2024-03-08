@@ -837,7 +837,7 @@ fn annotate_properties_with_reach_results(
             let prop_match_id =
                 check_marker_pat.captures(description.as_str()).unwrap().get(0).unwrap().as_str();
             // Get the status associated to the ID we captured
-            let reach_status_opt = reach_map.get(&prop_match_id.to_string());
+            let reach_status_opt = reach_map.get(prop_match_id);
             // Update the reachability status of the property
             if let Some(reach_status) = reach_status_opt {
                 prop.reach = Some(*reach_status);
