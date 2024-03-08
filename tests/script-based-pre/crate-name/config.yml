@@ -1,3 +1,4 @@
 # Copyright Kani Contributors
 # SPDX-License-Identifier: Apache-2.0 OR MIT
-script: crate-name-default.sh
+script: crate-name.sh
+expected: crate-name.expected
