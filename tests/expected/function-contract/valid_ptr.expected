@@ -1,0 +1,11 @@
+Checking harness pre_condition::harness_invalid_ptr...
+Failed Checks: Dangling pointer is only valid for zero-sized access
+
+Checking harness pre_condition::harness_stack_ptr...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness pre_condition::harness_head_ptr...
+VERIFICATION:- SUCCESSFUL
+
+Verification failed for - pre_condition::harness_invalid_ptr
+Complete - 2 successfully verified harnesses, 1 failures, 3 total
