@@ -159,8 +159,8 @@ fdiv_fast | Partial | [#809](https://github.com/model-checking/kani/issues/809) 
 float_to_int_unchecked | No | |
 floorf32 | Yes | |
 floorf64 | Yes | |
-fmaf32 | No | |
-fmaf64 | No | |
+fmaf32 | Partial | Results are overapproximated |
+fmaf64 | Partial | Results are overapproximated |
 fmul_fast | Partial | [#809](https://github.com/model-checking/kani/issues/809) |
 forget | Yes | |
 frem_fast | No | |
