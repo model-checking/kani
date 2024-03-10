@@ -7,6 +7,8 @@ use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
 use quote::quote;
 use syn::{Expr, FnArg, ItemFn, Token};
 
+use crate::sysroot::contracts::shared::create_history_expr_bindings;
+
 use super::{
     helpers::*,
     shared::{make_unsafe_argument_copies, try_as_result_assign_mut},
@@ -31,8 +33,9 @@ impl<'a> ContractConditionsHandler<'a> {
                     #(#inner)*
                 )
             }
-            ContractConditionsData::Ensures { argument_names, attr } => {
+            ContractConditionsData::Ensures { argument_names, attr, history_expressions } => {
                 let (arg_copies, copy_clean) = make_unsafe_argument_copies(&argument_names);
+                let history_bindings = create_history_expr_bindings(history_expressions);
 
                 // The code that enforces the postconditions and cleans up the shallow
                 // argument copies (with `mem::forget`).
@@ -48,6 +51,7 @@ impl<'a> ContractConditionsHandler<'a> {
                 ));
 
                 quote!(
+                    #history_bindings
                     #arg_copies
                     #(#inner)*
                     #exec_postconditions

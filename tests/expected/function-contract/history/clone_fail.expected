@@ -1,0 +1,11 @@
+error[E0382]: borrow of moved value: `ptr`
+value borrowed here after move\
+move occurs because `ptr` has type `&mut NoCopy<u32>`, which does not implement the `Copy` trait
+
+error[E0382]: borrow of moved value: `ptr`
+#[kani::ensures(old(ptr).0 + 1 == ptr.0)]\
+value moved here
+#[kani::modifies(&mut ptr.0)]\
+value borrowed here after move\
+fn modify(ptr: &mut NoCopy<u32>) {\
+move occurs because `ptr` has type `&mut NoCopy<u32>`, which does not implement the `Copy` trait
