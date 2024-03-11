@@ -26,18 +26,6 @@ pub fn crate_name(path: &Path) -> String {
     stem.replace(['-', '.'], "_")
 }
 
-/// Attempt to guess the rlib name for rust source file.
-/// This is only used by 'kani', never 'cargo-kani', so we hopefully don't have too many corner
-/// cases to deal with.
-/// In rustc, you can find some code dealing this this naming in:
-///      compiler/rustc_codegen_ssa/src/back/link.rs
-pub fn guess_rlib_name(path: &Path) -> PathBuf {
-    let basedir = path.parent().unwrap_or(Path::new("."));
-    let rlib_name = format!("lib{}.rlib", crate_name(path));
-
-    basedir.join(rlib_name)
-}
-
 /// Given a path of some sort (usually from argv0), this attempts to extract the basename / stem
 /// of the executable. e.g. "/path/foo -> foo" "./foo.exe -> foo" "foo -> foo"
 pub fn executable_basename(argv0: &Option<&OsString>) -> Option<OsString> {
@@ -115,14 +103,6 @@ mod tests {
 
         let q = PathBuf::from("file.more.rs");
         assert_eq!(alter_extension(&q, "symtab.json"), PathBuf::from("file.more.symtab.json"));
-    }
-
-    #[test]
-    fn check_guess_rlib_name() {
-        assert_eq!(guess_rlib_name(Path::new("mycrate.rs")), PathBuf::from("libmycrate.rlib"));
-        assert_eq!(guess_rlib_name(Path::new("my-crate.rs")), PathBuf::from("libmy_crate.rlib"));
-        assert_eq!(guess_rlib_name(Path::new("./foo.rs")), PathBuf::from("./libfoo.rlib"));
-        assert_eq!(guess_rlib_name(Path::new("a/b/foo.rs")), PathBuf::from("a/b/libfoo.rlib"));
     }
 
     #[test]
