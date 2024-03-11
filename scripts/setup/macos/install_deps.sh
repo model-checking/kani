@@ -9,15 +9,13 @@ set -eux
 # https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners#supported-software
 #brew update
 
+# Install Python separately to workround recurring homebrew CI issue.
+# See https://github.com/actions/runner-images/issues/9471 for more details.
+brew install python@3 || true
+brew link --overwrite python@3
+
 # Install dependencies via `brew`
 brew install universal-ctags wget jq
-
-# Add Python package dependencies
-PYTHON_DEPS=(
-  autopep8
-)
-
-python3 -m pip install "${PYTHON_DEPS[@]}"
 
 # Get the directory containing this script
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
