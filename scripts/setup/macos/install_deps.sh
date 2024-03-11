@@ -17,13 +17,6 @@ brew link --overwrite python@3
 # Install dependencies via `brew`
 brew install universal-ctags wget jq
 
-# Add Python package dependencies
-PYTHON_DEPS=(
-  autopep8
-)
-
-python3 -m pip install "${PYTHON_DEPS[@]}"
-
 # Get the directory containing this script
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
