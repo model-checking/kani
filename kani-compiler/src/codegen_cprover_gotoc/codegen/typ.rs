@@ -542,6 +542,9 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Float(k) => match k {
                 FloatTy::F32 => Type::float(),
                 FloatTy::F64 => Type::double(),
+                // `F16` and `F128` are not yet handled.
+                // Tracked here: <https://github.com/model-checking/kani/issues/3069>
+                FloatTy::F16 | FloatTy::F128 => unimplemented!(),
             },
             ty::Adt(def, _) if def.repr().simd() => self.codegen_vector(ty),
             ty::Adt(def, subst) => {
@@ -1346,6 +1349,9 @@ impl<'tcx> GotocCtx<'tcx> {
 
             Primitive::F32 => self.tcx.types.f32,
             Primitive::F64 => self.tcx.types.f64,
+            // `F16` and `F128` are not yet handled.
+            // Tracked here: <https://github.com/model-checking/kani/issues/3069>
+            Primitive::F16 | Primitive::F128 => unimplemented!(),
             Primitive::Pointer(_) => Ty::new_ptr(
                 self.tcx,
                 ty::TypeAndMut { ty: self.tcx.types.u8, mutbl: Mutability::Not },

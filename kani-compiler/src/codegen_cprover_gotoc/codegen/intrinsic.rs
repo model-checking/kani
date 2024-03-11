@@ -474,6 +474,11 @@ impl<'tcx> GotocCtx<'tcx> {
                 let binop_stmt = codegen_intrinsic_binop!(sub);
                 self.add_finite_args_checks(intrinsic, fargs_clone, binop_stmt, span)
             }
+            "is_val_statically_known" => {
+                // Returning false is sound according do this intrinsic's documentation:
+                // https://doc.rust-lang.org/nightly/std/intrinsics/fn.is_val_statically_known.html
+                self.codegen_expr_to_place_stable(place, Expr::c_false())
+            }
             "likely" => self.codegen_expr_to_place_stable(place, fargs.remove(0)),
             "log10f32" => unstable_codegen!(codegen_simple_intrinsic!(Log10f)),
             "log10f64" => unstable_codegen!(codegen_simple_intrinsic!(Log10)),
@@ -506,6 +511,7 @@ impl<'tcx> GotocCtx<'tcx> {
             "ptr_offset_from" => self.codegen_ptr_offset_from(fargs, place, loc),
             "ptr_offset_from_unsigned" => self.codegen_ptr_offset_from_unsigned(fargs, place, loc),
             "raw_eq" => self.codegen_intrinsic_raw_eq(instance, fargs, place, loc),
+            "retag_box_to_raw" => self.codegen_retag_box_to_raw(fargs, place, loc),
             "rintf32" => codegen_simple_intrinsic!(Rintf),
             "rintf64" => codegen_simple_intrinsic!(Rint),
             "rotate_left" => codegen_intrinsic_binop!(rol),
@@ -1257,6 +1263,19 @@ impl<'tcx> GotocCtx<'tcx> {
             .eq(Type::c_int().zero())
             .cast_to(Type::c_bool());
         self.codegen_expr_to_place_stable(p, e)
+    }
+
+    // This is an operation that is primarily relevant for stacked borrow
+    // checks.  For Kani, we simply return the pointer.
+    fn codegen_retag_box_to_raw(
+        &mut self,
+        mut fargs: Vec<Expr>,
+        p: &Place,
+        _loc: Location,
+    ) -> Stmt {
+        assert_eq!(fargs.len(), 1, "raw_box_to_box expected one argument");
+        let arg = fargs.remove(0);
+        self.codegen_expr_to_place_stable(p, arg)
     }
 
     fn vtable_info(
