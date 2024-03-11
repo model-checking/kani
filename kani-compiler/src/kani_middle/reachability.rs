@@ -515,8 +515,8 @@ fn collect_alloc_items(alloc_id: AllocId) -> Vec<MonoItem> {
 }
 
 #[cfg(debug_assertions)]
+#[allow(dead_code)]
 mod debug {
-    #![allow(dead_code)]
 
     use std::fmt::{Display, Formatter};
     use std::{
