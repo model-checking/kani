@@ -11,7 +11,8 @@ set -eux
 
 # Install Python separately to workround recurring homebrew CI issue.
 # See https://github.com/actions/runner-images/issues/9471 for more details.
-brew install python@3 || brew link --overwrite python@3
+brew install python@3 || true
+brew link --overwrite python@3
 
 # Install dependencies via `brew`
 brew install universal-ctags wget jq
