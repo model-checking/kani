@@ -397,7 +397,7 @@ impl CodegenBackend for GotocCodegenBackend {
                 let path = MaybeTempDir::new(tmp_dir, sess.opts.cg.save_temps);
                 let (metadata, _metadata_position) = create_wrapper_file(
                     sess,
-                    b".rmeta".to_vec(),
+                    ".rmeta".to_string(),
                     codegen_results.metadata.raw_data(),
                 );
                 let metadata = emit_wrapper_file(sess, &metadata, &path, METADATA_FILENAME);
