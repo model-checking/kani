@@ -433,6 +433,7 @@ impl ToIrep for StmtBody {
             }
             StmtBody::Break => code_irep(IrepId::Break, vec![]),
             StmtBody::Continue => code_irep(IrepId::Continue, vec![]),
+            StmtBody::Dead(symbol) => code_irep(IrepId::Dead, vec![symbol.to_irep(mm)]),
             StmtBody::Decl { lhs, value } => {
                 if value.is_some() {
                     code_irep(
