@@ -33,6 +33,7 @@ visualize:
 
   - type: dump_markdown_results_table
     out_file: '-'
+    scatterplot: linear
     extra_columns:
 
       # For these two metrics, display the difference between old and new and

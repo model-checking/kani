@@ -436,6 +436,7 @@ class RegressionTests(unittest.TestCase):
                 "visualize": [{
                     "type": "dump_markdown_results_table",
                     "out_file": "-",
+                    "scatterplot": "linear",
                     "extra_columns": {
                         "runtime": [{
                             "column_name": "ratio",
@@ -460,6 +461,20 @@ class RegressionTests(unittest.TestCase):
             self.assertEqual(
                 run_bc.stdout, textwrap.dedent("""
                     ## runtime
+
+                    ```mermaid
+                    %%{init: { "quadrantChart": { "chartWidth": 400, "chartHeight": 400, "pointRadius": 2, "pointLabelFontSize": 3 }, "themeVariables": { "quadrant1Fill": "#FFFFFF", "quadrant2Fill": "#FFFFFF", "quadrant3Fill": "#FFFFFF", "quadrant4Fill": "#FFFFFF", "quadrant1TextFill": "#FFFFFF", "quadrant2TextFill": "#FFFFFF", "quadrant3TextFill": "#FFFFFF", "quadrant4TextFill": "#FFFFFF", "quadrantInternalBorderStrokeFill": "#FFFFFF" } }%%
+                    quadrantChart
+                        title runtime
+                        x-axis variant_1
+                        y-axis variant_2
+                        quadrant-1 1
+                        quadrant-2 2
+                        quadrant-3 3
+                        quadrant-4 4
+                        bench_1: [0.0, 1.0]
+                        bench_2: [1.0, 0.0]
+                    ```
 
                     | Benchmark |  variant_1 | variant_2 | ratio |
                     | --- | --- | --- | --- |

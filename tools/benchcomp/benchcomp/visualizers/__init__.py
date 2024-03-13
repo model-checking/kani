@@ -3,8 +3,10 @@
 
 
 import dataclasses
+import enum
 import json
 import logging
+import math
 import subprocess
 import sys
 import textwrap
@@ -125,11 +127,21 @@ class dump_yaml:
 
 
 
+class Plot(enum.Enum):
+    """Scatterplot configuration options
+    """
+    OFF = 1
+    LINEAR = 2
+    LOG = 3
+
+
+
 class dump_markdown_results_table:
     """Print Markdown-formatted tables displaying benchmark results
 
     For each metric, this visualization prints out a table of benchmarks,
-    showing the value of the metric for each variant.
+    showing the value of the metric for each variant, combined with an optional
+    scatterplot.
 
     The 'out_file' key is mandatory; specify '-' to print to stdout.
 
@@ -145,12 +157,16 @@ class dump_markdown_results_table:
     particular combinations of values for different variants, such as
     regressions or performance improvements.
 
+    'scatterplot' takes the values 'off' (default), 'linear' (linearly scaled
+    axes), or 'log' (logarithmically scaled axes).
+
     Sample configuration:
 
     ```
     visualize:
     - type: dump_markdown_results_table
       out_file: "-"
+      scatterplot: linear
       extra_columns:
         runtime:
         - column_name: ratio
@@ -187,9 +203,10 @@ class dump_markdown_results_table:
     """
 
 
-    def __init__(self, out_file, extra_columns=None):
+    def __init__(self, out_file, extra_columns=None, scatterplot=None):
         self.get_out_file = benchcomp.Outfile(out_file)
         self.extra_columns = self._eval_column_text(extra_columns or {})
+        self.scatterplot = self._parse_scatterplot_config(scatterplot)
 
 
     @staticmethod
@@ -207,11 +224,44 @@ class dump_markdown_results_table:
 
 
     @staticmethod
+    def _parse_scatterplot_config(scatterplot_config_string):
+        if (scatterplot_config_string is None or
+                scatterplot_config_string == "off"):
+            return Plot.OFF
+        elif scatterplot_config_string == "linear":
+            return Plot.LINEAR
+        elif scatterplot_config_string == "log":
+            return Plot.LOG
+        else:
+            logging.error(
+                "Invalid scatterplot configuration '%s'",
+                scatterplot_config_string)
+            sys.exit(1)
+
+
+    @staticmethod
     def _get_template():
         return textwrap.dedent("""\
             {% for metric, benchmarks in d["metrics"].items() %}
             ## {{ metric }}
 
+            {% if scatterplot and metric in d["scaled_metrics"] and d["scaled_variants"][metric]|length == 2 -%}
+            ```mermaid
+            %%{init: { "quadrantChart": { "chartWidth": 400, "chartHeight": 400, "pointRadius": 2, "pointLabelFontSize": 3 }, "themeVariables": { "quadrant1Fill": "#FFFFFF", "quadrant2Fill": "#FFFFFF", "quadrant3Fill": "#FFFFFF", "quadrant4Fill": "#FFFFFF", "quadrant1TextFill": "#FFFFFF", "quadrant2TextFill": "#FFFFFF", "quadrant3TextFill": "#FFFFFF", "quadrant4TextFill": "#FFFFFF", "quadrantInternalBorderStrokeFill": "#FFFFFF" } }%%
+            quadrantChart
+                title {{ metric }}
+                x-axis {{ d["scaled_variants"][metric][0] }}
+                y-axis {{ d["scaled_variants"][metric][1] }}
+                quadrant-1 1
+                quadrant-2 2
+                quadrant-3 3
+                quadrant-4 4
+                {%- for bench_name, bench_variants in d["scaled_metrics"][metric].items () %}
+                {{ bench_name }}: [{{ bench_variants[d["scaled_variants"][metric][0]] }}, {{ bench_variants[d["scaled_variants"][metric][1]] }}]
+                {%- endfor %}
+            ```
+
+            {% endif -%}
             | Benchmark | {% for variant in d["variants"][metric] %} {{ variant }} |{% endfor %}
             | --- |{% for variant in d["variants"][metric] %} --- |{% endfor -%}
             {% for bench_name, bench_variants in benchmarks.items () %}
@@ -228,7 +278,40 @@ class dump_markdown_results_table:
 
 
     @staticmethod
-    def _organize_results_into_metrics(results):
+    def _compute_scaled_metric(data_for_metric, log_scaling):
+        min_value = None
+        max_value = None
+        for bench, bench_result in data_for_metric.items():
+            for variant, variant_result in bench_result.items():
+                if isinstance(variant_result, (bool, str)):
+                    return None
+                if not isinstance(variant_result, (int, float)):
+                    return None
+                if min_value is None or variant_result < min_value:
+                    min_value = variant_result
+                if max_value is None or variant_result > max_value:
+                    max_value = variant_result
+        ret = {bench: {} for bench in data_for_metric.keys()}
+        if min_value is None or min_value == max_value:
+            for bench, bench_result in data_for_metric.items():
+                ret[bench] = {variant: 1.0 for variant in bench_result.keys()}
+        else:
+            if log_scaling:
+                min_value = math.log(min_value, 10)
+                max_value = math.log(max_value, 10)
+            value_range = max_value - min_value
+            for bench, bench_result in data_for_metric.items():
+                for variant, variant_result in bench_result.items():
+                    if log_scaling:
+                        abs_value = math.log(variant_result, 10)
+                    else:
+                        abs_value = variant_result
+                    ret[bench][variant] = (abs_value - min_value) / value_range
+        return ret
+
+
+    @staticmethod
+    def _organize_results_into_metrics(results, log_scaling):
         ret = {metric: {} for metric in results["metrics"]}
         for bench, bench_result in results["benchmarks"].items():
             for variant, variant_result in bench_result["variants"].items():
@@ -246,7 +329,13 @@ class dump_markdown_results_table:
                         ret[metric][bench] = {
                             variant: variant_result["metrics"][metric]
                         }
-        return ret
+        ret_scaled = {}
+        for metric, bench_result in ret.items():
+            scaled = dump_markdown_results_table._compute_scaled_metric(
+                    bench_result, log_scaling)
+            if scaled is not None:
+                ret_scaled[metric] = scaled
+        return (ret, ret_scaled)
 
 
     def _add_extra_columns(self, metrics):
@@ -272,12 +361,15 @@ class dump_markdown_results_table:
 
 
     def __call__(self, results):
-        metrics = self._organize_results_into_metrics(results)
+        (metrics, scaled) = self._organize_results_into_metrics(
+                results, self.scatterplot == Plot.LOG)
         self._add_extra_columns(metrics)
 
         data = {
             "metrics": metrics,
             "variants": self._get_variants(metrics),
+            "scaled_metrics": scaled,
+            "scaled_variants": self._get_variants(scaled),
         }
 
         env = jinja2.Environment(
@@ -285,6 +377,7 @@ class dump_markdown_results_table:
                 enabled_extensions=("html"),
                 default_for_string=True))
         template = env.from_string(self._get_template())
-        output = template.render(d=data)[:-1]
+        include_scatterplot = self.scatterplot != Plot.OFF
+        output = template.render(d=data, scatterplot=include_scatterplot)[:-1]
         with self.get_out_file() as handle:
             print(output, file=handle)
