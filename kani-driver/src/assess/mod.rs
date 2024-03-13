@@ -170,7 +170,7 @@ fn reconstruct_metadata_structure(
         }
         if !package_artifacts.is_empty() {
             let mut merged = crate::metadata::merge_kani_metadata(package_artifacts);
-            merged.crate_name = package.name.clone();
+            merged.crate_name.clone_from(&package.name);
             package_metas.push(merged);
         }
     }

@@ -611,9 +611,8 @@ fn parse_modify_values<'a>(
     let mut iter = t.trees();
     std::iter::from_fn(move || {
         let tree = iter.next()?;
-        let wrong_token_err = || {
-            tcx.sess.parse_sess.dcx.span_err(tree.span(), "Unexpected token. Expected identifier.")
-        };
+        let wrong_token_err =
+            || tcx.sess.psess.dcx.span_err(tree.span(), "Unexpected token. Expected identifier.");
         let result = match tree {
             TokenTree::Token(token, _) => {
                 if let TokenKind::Ident(id, _) = &token.kind {
@@ -640,7 +639,7 @@ fn parse_modify_values<'a>(
         match iter.next() {
             None | Some(comma_tok!()) => (),
             Some(not_comma) => {
-                tcx.sess.parse_sess.dcx.span_err(
+                tcx.sess.psess.dcx.span_err(
                     not_comma.span(),
                     "Unexpected token, expected end of attribute or comma",
                 );

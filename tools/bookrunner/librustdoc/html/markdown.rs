@@ -225,7 +225,7 @@ impl LangString {
         let mut data = LangString::default();
         let mut ignores = vec![];
 
-        data.original = string.to_owned();
+        string.clone_into(&mut data.original);
 
         for token in Self::tokens(string) {
             match token {

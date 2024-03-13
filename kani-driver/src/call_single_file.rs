@@ -122,6 +122,8 @@ impl KaniSession {
                 "symbol-mangling-version=v0",
                 "-Z",
                 "panic_abort_tests=yes",
+                "-Z",
+                "sanitizer=address",
             ]
             .map(OsString::from),
         );
