@@ -4,6 +4,21 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
+## [0.48.0]
+
+### Major Changes
+* We fixed a soundness bug that in some cases may cause Kani to not detect a use-after-free issue in https://github.com/model-checking/kani/pull/3063
+
+### What's Changed
+* Fix `codegen_atomic_binop` for `atomic_ptr` by @qinheping in https://github.com/model-checking/kani/pull/3047
+* Retrieve info for recursion tracker reliably by @feliperodri in https://github.com/model-checking/kani/pull/3045
+* Add `--use-local-toolchain` to Kani setup by @jaisnan in https://github.com/model-checking/kani/pull/3056
+* Replace internal reverse_postorder by a stable one by @celinval in https://github.com/model-checking/kani/pull/3064
+* Add option to override `--crate-name` from `kani` by @adpaco-aws in https://github.com/model-checking/kani/pull/3054
+* Rust toolchain upgraded to 2024-03-11 by @adpaco-ws @celinval @zyadh
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.47.0...kani-0.48.0
+
 ## [0.47.0]
 
 ### What's Changed
