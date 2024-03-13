@@ -293,6 +293,11 @@ impl ToIrep for ExprValue {
                     Irep::just_bitpattern_id(*i, mm.pointer_width, false)
                 )],
             },
+            ExprValue::ReadOk { ptr, size } => Irep {
+                id: IrepId::ROk,
+                sub: vec![ptr.to_irep(mm), size.to_irep(mm)],
+                named_sub: linear_map![],
+            },
             ExprValue::SelfOp { op, e } => side_effect_irep(op.to_irep_id(), vec![e.to_irep(mm)]),
             ExprValue::StatementExpression { statements: ops } => side_effect_irep(
                 IrepId::StatementExpression,
