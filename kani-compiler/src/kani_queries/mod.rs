@@ -4,7 +4,6 @@
 
 use cbmc::{InternString, InternedString};
 use kani_metadata::AssignsContract;
-use std::fmt::{Display, Formatter, Write};
 use std::{
     collections::HashMap,
     path::PathBuf,
@@ -63,22 +62,5 @@ impl QueryDb {
     /// [`Self::add_assigns_contract`].
     pub fn assigns_contracts(&self) -> impl Iterator<Item = (&InternedString, &AssignsContract)> {
         self.modifies_contracts.iter()
-    }
-}
-
-struct PrintList<I>(I);
-
-impl<E: Display, I: Iterator<Item = E> + Clone> Display for PrintList<I> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_char('[')?;
-        let mut is_first = true;
-        for e in self.0.clone() {
-            if is_first {
-                f.write_str(", ")?;
-                is_first = false;
-            }
-            e.fmt(f)?;
-        }
-        f.write_char(']')
     }
 }
