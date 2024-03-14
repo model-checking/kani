@@ -19,7 +19,6 @@ include = ["/src", "/build.rs", "/rust-toolchain.toml", "/LICENSE-*", "/README.m
 [dependencies]
 anyhow = "1"
 home = "0.5"
-clap = "2.33.3"
 os_info = { version = "3", default-features = false }
 
 [[bin]]
