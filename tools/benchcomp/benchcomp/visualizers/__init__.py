@@ -256,12 +256,15 @@ class dump_markdown_results_table:
                 quadrant-2 2
                 quadrant-3 3
                 quadrant-4 4
-                {%- for bench_name, bench_variants in d["scaled_metrics"][metric].items () %}
+                {%- for bench_name, bench_variants in d["scaled_metrics"][metric]["benchmarks"].items () %}
                 {% set v0 = bench_variants[d["scaled_variants"][metric][0]] -%}
                 {% set v1 = bench_variants[d["scaled_variants"][metric][1]] -%}
                 "{{ bench_name }}": [{{ v0|round(3) }}, {{ v1|round(3) }}]
                 {%- endfor %}
             ```
+            Scatterplot axis ranges are
+            {{ d["scaled_metrics"][metric]["min_value"] }} (bottom/left) to
+            {{ d["scaled_metrics"][metric]["max_value"] }} (top/right).
 
             {% endif -%}
             | Benchmark | {% for variant in d["variants"][metric] %} {{ variant }} |{% endfor %}
@@ -293,13 +296,17 @@ class dump_markdown_results_table:
                     min_value = variant_result
                 if max_value is None or variant_result > max_value:
                     max_value = variant_result
-        ret = {bench: {} for bench in data_for_metric.keys()}
+        ret = {
+                "benchmarks": {bench: {} for bench in data_for_metric.keys()},
+                "min_value": "log({})".format(min_value) if log_scaling else min_value,
+                "max_value": "log({})".format(max_value) if log_scaling else max_value,
+              }
         # 1.0 is not a permissible value for mermaid, so make sure all scaled
         # results stay below that by use 0.99 as hard-coded value or
         # artificially increasing the range by 10 per cent
         if min_value is None or min_value == max_value:
             for bench, bench_result in data_for_metric.items():
-                ret[bench] = {variant: 0.99 for variant in bench_result.keys()}
+                ret["benchmarks"][bench] = {variant: 0.99 for variant in bench_result.keys()}
         else:
             if log_scaling:
                 min_value = math.log(min_value, 10)
@@ -312,7 +319,7 @@ class dump_markdown_results_table:
                         abs_value = math.log(variant_result, 10)
                     else:
                         abs_value = variant_result
-                    ret[bench][variant] = (abs_value - min_value) / value_range
+                    ret["benchmarks"][bench][variant] = (abs_value - min_value) / value_range
         return ret
 
 
@@ -366,6 +373,16 @@ class dump_markdown_results_table:
         return ret
 
 
+    @staticmethod
+    def _get_scaled_variants(metrics):
+        ret = {}
+        for metric, entries in metrics.items():
+            for bench, variants in entries["benchmarks"].items():
+                ret[metric] = list(variants.keys())
+                break
+        return ret
+
+
     def __call__(self, results):
         (metrics, scaled) = self._organize_results_into_metrics(
                 results, self.scatterplot == Plot.LOG)
@@ -375,7 +392,7 @@ class dump_markdown_results_table:
             "metrics": metrics,
             "variants": self._get_variants(metrics),
             "scaled_metrics": scaled,
-            "scaled_variants": self._get_variants(scaled),
+            "scaled_variants": self._get_scaled_variants(scaled),
         }
 
         env = jinja2.Environment(
