@@ -463,7 +463,7 @@ class RegressionTests(unittest.TestCase):
                     ## runtime
 
                     ```mermaid
-                    %%{init: { "quadrantChart": { "chartWidth": 400, "chartHeight": 400, "pointRadius": 2, "pointLabelFontSize": 3 }, "themeVariables": { "quadrant1Fill": "#FFFFFF", "quadrant2Fill": "#FFFFFF", "quadrant3Fill": "#FFFFFF", "quadrant4Fill": "#FFFFFF", "quadrant1TextFill": "#FFFFFF", "quadrant2TextFill": "#FFFFFF", "quadrant3TextFill": "#FFFFFF", "quadrant4TextFill": "#FFFFFF", "quadrantInternalBorderStrokeFill": "#FFFFFF" } }%%
+                    %%{init: { "quadrantChart": { "pointRadius": 2, "pointLabelFontSize": 2 }, "themeVariables": { "quadrant1Fill": "#FFFFFF", "quadrant2Fill": "#FFFFFF", "quadrant3Fill": "#FFFFFF", "quadrant4Fill": "#FFFFFF", "quadrant1TextFill": "#FFFFFF", "quadrant2TextFill": "#FFFFFF", "quadrant3TextFill": "#FFFFFF", "quadrant4TextFill": "#FFFFFF", "quadrantInternalBorderStrokeFill": "#FFFFFF" } } }%%
                     quadrantChart
                         title runtime
                         x-axis variant_1
