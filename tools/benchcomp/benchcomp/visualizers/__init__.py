@@ -294,14 +294,18 @@ class dump_markdown_results_table:
                 if max_value is None or variant_result > max_value:
                     max_value = variant_result
         ret = {bench: {} for bench in data_for_metric.keys()}
+        # 1.0 is not a permissible value for mermaid, so make sure all scaled
+        # results stay below that by use 0.99 as hard-coded value or
+        # artificially increasing the range by 10 per cent
         if min_value is None or min_value == max_value:
             for bench, bench_result in data_for_metric.items():
-                ret[bench] = {variant: 1.0 for variant in bench_result.keys()}
+                ret[bench] = {variant: 0.99 for variant in bench_result.keys()}
         else:
             if log_scaling:
                 min_value = math.log(min_value, 10)
                 max_value = math.log(max_value, 10)
             value_range = max_value - min_value
+            value_range = value_range * 1.1
             for bench, bench_result in data_for_metric.items():
                 for variant, variant_result in bench_result.items():
                     if log_scaling:

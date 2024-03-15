@@ -472,8 +472,8 @@ class RegressionTests(unittest.TestCase):
                         quadrant-2 2
                         quadrant-3 3
                         quadrant-4 4
-                        "bench_1": [0.0, 1.0]
-                        "bench_2": [1.0, 0.0]
+                        "bench_1": [0.0, 0.909]
+                        "bench_2": [0.909, 0.0]
                     ```
 
                     | Benchmark |  variant_1 | variant_2 | ratio |
