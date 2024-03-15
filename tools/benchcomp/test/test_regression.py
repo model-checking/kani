@@ -458,7 +458,6 @@ class RegressionTests(unittest.TestCase):
             run_bc()
 
             self.assertEqual(run_bc.proc.returncode, 0, msg=run_bc.stderr)
-            self.maxDiff = None
             self.assertEqual(
                 run_bc.stdout, textwrap.dedent("""
                     ## runtime
