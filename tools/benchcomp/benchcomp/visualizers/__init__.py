@@ -257,7 +257,7 @@ class dump_markdown_results_table:
                 quadrant-3 3
                 quadrant-4 4
                 {%- for bench_name, bench_variants in d["scaled_metrics"][metric].items () %}
-                {{ bench_name }}: [{{ bench_variants[d["scaled_variants"][metric][0]] }}, {{ bench_variants[d["scaled_variants"][metric][1]] }}]
+                "{{ bench_name }}": [{{ bench_variants[d["scaled_variants"][metric][0]] }}, {{ bench_variants[d["scaled_variants"][metric][1]] }}]
                 {%- endfor %}
             ```
 
