@@ -128,7 +128,7 @@ impl KaniSession {
                 "-Z",
                 "panic_abort_tests=yes",
                 "-Z",
-                "sanitizer=address",
+                "mir-enable-passes=-RemoveStorageMarkers",
             ]
             .map(OsString::from),
         );
