@@ -282,8 +282,8 @@ class dump_markdown_results_table:
 
     @staticmethod
     def _compute_scaled_metric(data_for_metric, log_scaling):
-        min_value = None
-        max_value = None
+        min_value = math.inf
+        max_value = -math.inf
         for bench, bench_result in data_for_metric.items():
             for variant, variant_result in bench_result.items():
                 if isinstance(variant_result, (bool, str)):
