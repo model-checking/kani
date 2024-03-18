@@ -302,7 +302,7 @@ class dump_markdown_results_table:
         # 1.0 is not a permissible value for mermaid, so make sure all scaled
         # results stay below that by use 0.99 as hard-coded value or
         # artificially increasing the range by 10 per cent
-        if min_value is None or min_value == max_value:
+        if min_value == math.inf or min_value == max_value:
             for bench, bench_result in data_for_metric.items():
                 ret["benchmarks"][bench] = {variant: 0.99 for variant in bench_result.keys()}
         else:
