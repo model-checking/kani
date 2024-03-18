@@ -290,9 +290,9 @@ class dump_markdown_results_table:
                     return None
                 if not isinstance(variant_result, (int, float)):
                     return None
-                if min_value is None or variant_result < min_value:
+                if variant_result < min_value:
                     min_value = variant_result
-                if max_value is None or variant_result > max_value:
+                if variant_result > max_value:
                     max_value = variant_result
         ret = {
                 "benchmarks": {bench: {} for bench in data_for_metric.keys()},
