@@ -1,8 +1,8 @@
 - **Feature Name:** Cover statement (`cover-statement`)
 - **Feature Request Issue:** <https://github.com/model-checking/kani/issues/696>
 - **RFC PR:** <https://github.com/model-checking/kani/pull/1906>
-- **Status:** Unstable
-- **Version:** 1
+- **Status:** Stable
+- **Version:** 2
 
 -------------------
 
