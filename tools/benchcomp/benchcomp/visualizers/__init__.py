@@ -262,9 +262,7 @@ class dump_markdown_results_table:
                 "{{ bench_name }}": [{{ v0|round(3) }}, {{ v1|round(3) }}]
                 {%- endfor %}
             ```
-            Scatterplot axis ranges are
-            {{ d["scaled_metrics"][metric]["min_value"] }} (bottom/left) to
-            {{ d["scaled_metrics"][metric]["max_value"] }} (top/right).
+            Scatterplot axis ranges are {{ d["scaled_metrics"][metric]["min_value"] }} (bottom/left) to {{ d["scaled_metrics"][metric]["max_value"] }} (top/right).
 
             {% endif -%}
             | Benchmark | {% for variant in d["variants"][metric] %} {{ variant }} |{% endfor %}

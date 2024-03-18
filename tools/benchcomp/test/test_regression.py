@@ -458,7 +458,6 @@ class RegressionTests(unittest.TestCase):
             run_bc()
 
             self.assertEqual(run_bc.proc.returncode, 0, msg=run_bc.stderr)
-            self.maxDiff = None
             self.assertEqual(
                 run_bc.stdout, textwrap.dedent("""
                     ## runtime
@@ -476,10 +475,7 @@ class RegressionTests(unittest.TestCase):
                         "bench_1": [0.0, 0.909]
                         "bench_2": [0.909, 0.0]
                     ```
-                    Scatterplot axis ranges are
-                    5 (bottom/left) to
-                    10 (top/right).
-
+                    Scatterplot axis ranges are 5 (bottom/left) to 10 (top/right).
 
                     | Benchmark |  variant_1 | variant_2 | ratio |
                     | --- | --- | --- | --- |
