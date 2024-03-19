@@ -217,6 +217,41 @@ impl GotocHook for Panic {
     }
 }
 
+/// Encodes __CPROVER_r_ok
+struct IsReadOk;
+impl GotocHook for IsReadOk {
+    fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
+        matches_function(tcx, instance, "KaniIsReadOk")
+    }
+
+    fn handle(
+        &self,
+        gcx: &mut GotocCtx,
+        _instance: Instance,
+        mut fargs: Vec<Expr>,
+        assign_to: &Place,
+        target: Option<BasicBlockIdx>,
+        span: Span,
+    ) -> Stmt {
+        assert_eq!(fargs.len(), 2);
+        let size = fargs.pop().unwrap();
+        let ptr = fargs.pop().unwrap().cast_to(Type::void_pointer());
+        let target = target.unwrap();
+        let loc = gcx.codegen_caller_span_stable(span);
+        let ret_place =
+            unwrap_or_return_codegen_unimplemented_stmt!(gcx, gcx.codegen_place_stable(assign_to));
+        let ret_type = ret_place.goto_expr.typ().clone();
+
+        Stmt::block(
+            vec![
+                ret_place.goto_expr.assign(Expr::read_ok(ptr, size).cast_to(ret_type), loc),
+                Stmt::goto(bb_label(target), Location::none()),
+            ],
+            Location::none(),
+        )
+    }
+}
+
 struct RustAlloc;
 // Removing this hook causes regression failures.
 // https://github.com/model-checking/kani/issues/1170
@@ -373,6 +408,7 @@ pub fn fn_hooks() -> GotocHooks {
             Rc::new(Assert),
             Rc::new(Cover),
             Rc::new(Nondet),
+            Rc::new(IsReadOk),
             Rc::new(RustAlloc),
             Rc::new(MemCmp),
             Rc::new(UntrackedDeref),

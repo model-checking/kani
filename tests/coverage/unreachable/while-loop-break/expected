@@ -1,5 +1,5 @@
 coverage/unreachable/while-loop-break/main.rs, 8, FULL
-coverage/unreachable/while-loop-break/main.rs, 9, FULL
+coverage/unreachable/while-loop-break/main.rs, 9, PARTIAL
 coverage/unreachable/while-loop-break/main.rs, 10, FULL
 coverage/unreachable/while-loop-break/main.rs, 11, FULL
 coverage/unreachable/while-loop-break/main.rs, 13, FULL

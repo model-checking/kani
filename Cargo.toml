@@ -3,7 +3,7 @@
 
 [package]
 name = "kani-verifier"
-version = "0.47.0"
+version = "0.48.0"
 edition = "2021"
 description = "A bit-precise model checker for Rust."
 readme = "README.md"
@@ -19,7 +19,6 @@ include = ["/src", "/build.rs", "/rust-toolchain.toml", "/LICENSE-*", "/README.m
 [dependencies]
 anyhow = "1"
 home = "0.5"
-clap = "2.33.3"
 os_info = { version = "3", default-features = false }
 
 [[bin]]

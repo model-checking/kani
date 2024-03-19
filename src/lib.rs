@@ -16,7 +16,6 @@ mod cmd;
 mod os_hacks;
 mod setup;
 
-use clap::{App, Arg, SubCommand};
 use std::ffi::OsString;
 use std::os::unix::prelude::CommandExt;
 use std::path::{Path, PathBuf};
@@ -60,50 +59,54 @@ enum ArgsResult {
 
 /// Parse `args` and decide what to do.
 fn parse_args(args: Vec<OsString>) -> ArgsResult {
-    let matches = App::new("kani")
-        .subcommand(
-            SubCommand::with_name("setup")
-                .arg(Arg::with_name("use-local-bundle").long("use-local-bundle").takes_value(true))
-                .arg(
-                    Arg::with_name("use-local-toolchain")
-                        .long("use-local-toolchain")
-                        .takes_value(true),
-                ),
-        )
-        .subcommand(
-            SubCommand::with_name("kani").subcommand(
-                SubCommand::with_name("setup")
-                    .arg(
-                        Arg::with_name("use-local-bundle")
-                            .long("use-local-bundle")
-                            .takes_value(true),
-                    )
-                    .arg(
-                        Arg::with_name("use-local-toolchain")
-                            .long("use-local-toolchain")
-                            .takes_value(true),
-                    ),
-            ),
-        )
-        .get_matches_from(args);
-
-    // Default is the behaviour for Kani when cargo-kani/ cargo kani runs on its own and sees that there is no setup done yet
-    // Explicit is when the user uses the sub-command cargo-kani setup explicitly
-    if let Some(matches) = matches.subcommand_matches("setup") {
-        let use_local_toolchain = matches.value_of_os("use-local-toolchain").map(OsString::from);
-        let use_local_bundle = matches.value_of_os("use-local-bundle").map(OsString::from);
-        ArgsResult::ExplicitSetup { use_local_bundle, use_local_toolchain }
-    } else if let Some(matches) = matches.subcommand_matches("kani") {
-        if let Some(matches) = matches.subcommand_matches("setup") {
-            let use_local_toolchain =
-                matches.value_of_os("use-local-toolchain").map(OsString::from);
-            let use_local_bundle = matches.value_of_os("use-local-bundle").map(OsString::from);
-            ArgsResult::ExplicitSetup { use_local_bundle, use_local_toolchain }
-        } else {
-            ArgsResult::Default
+    // In an effort to keep our dependencies minimal, we do the bare minimum argument parsing manually.
+    // `args_ez` makes it easy to do crude arg parsing with match.
+    let args_ez: Vec<Option<&str>> = args.iter().map(|x| x.to_str()).collect();
+    // "cargo kani setup" comes in as "cargo-kani kani setup"
+    // "cargo-kani setup" comes in as "cargo-kani setup"
+    match &args_ez[..] {
+        &[_, Some("setup"), Some("--use-local-bundle"), _, Some("--use-local-toolchain"), _] => {
+            ArgsResult::ExplicitSetup {
+                use_local_bundle: Some(args[3].clone()),
+                use_local_toolchain: Some(args[5].clone()),
+            }
         }
-    } else {
-        ArgsResult::Default
+        &[
+            _,
+            Some("kani"),
+            Some("setup"),
+            Some("--use-local-bundle"),
+            _,
+            Some("--use-local-toolchain"),
+            _,
+        ] => ArgsResult::ExplicitSetup {
+            use_local_bundle: Some(args[4].clone()),
+            use_local_toolchain: Some(args[6].clone()),
+        },
+        &[_, Some("setup"), Some("--use-local-bundle"), _] => ArgsResult::ExplicitSetup {
+            use_local_bundle: Some(args[3].clone()),
+            use_local_toolchain: None,
+        },
+        &[_, Some("kani"), Some("setup"), Some("--use-local-bundle"), _] => {
+            ArgsResult::ExplicitSetup {
+                use_local_bundle: Some(args[4].clone()),
+                use_local_toolchain: None,
+            }
+        }
+        &[_, Some("setup"), Some("--use-local-toolchain"), _] => ArgsResult::ExplicitSetup {
+            use_local_bundle: None,
+            use_local_toolchain: Some(args[3].clone()),
+        },
+        &[_, Some("kani"), Some("setup"), Some("--use-local-toolchain"), _] => {
+            ArgsResult::ExplicitSetup {
+                use_local_bundle: None,
+                use_local_toolchain: Some(args[4].clone()),
+            }
+        }
+        &[_, Some("setup")] | &[_, Some("kani"), Some("setup")] => {
+            ArgsResult::ExplicitSetup { use_local_bundle: None, use_local_toolchain: None }
+        }
+        _ => ArgsResult::Default,
     }
 }
 

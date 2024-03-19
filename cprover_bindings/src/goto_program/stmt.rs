@@ -57,6 +57,8 @@ pub enum StmtBody {
     Break,
     /// `continue;`
     Continue,
+    /// End-of-life of a local variable
+    Dead(Expr),
     /// `lhs.typ lhs = value;` or `lhs.typ lhs;`
     Decl {
         lhs: Expr, // SymbolExpr
@@ -230,6 +232,11 @@ impl Stmt {
     pub fn cover(cond: Expr, loc: Location) -> Self {
         assert!(cond.typ().is_bool());
         BuiltinFn::CProverCover.call(vec![cond], loc).as_stmt(loc)
+    }
+
+    /// Local variable goes out of scope
+    pub fn dead(symbol: Expr, loc: Location) -> Self {
+        stmt!(Dead(symbol), loc)
     }
 
     /// `lhs.typ lhs = value;` or `lhs.typ lhs;`
