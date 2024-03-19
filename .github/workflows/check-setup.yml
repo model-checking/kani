@@ -65,14 +65,33 @@ jobs:
           cargo kani setup --use-local-toolchain ${{ github.workspace }}/custom_toolchain/
 
       - name: Ensure that the rustup toolchain is not present
-        run: ls -la ~/.rustup/toolchains/
-
-      - name: Run tests
         run: |
-          ls ./tests/cargo-ui/
+          ls -la ~/.rustup/toolchains/
+          if [ ! -f "~/.rustup/toolchains/" ]; then
+            echo "Default toolchain file does not exist. Proceeding with running tests."
+          else
+            echo "::error::Default toolchain exists despite not installing."
+            exit 1
+          fi
+
+      - name: Run cargo-kani tests
+        run: |
           for dir in function multiple-harnesses verbose; do
             >&2 echo "Running test $dir"
             pushd ./tests/cargo-ui/$dir
             cargo kani
+            popd
+          done
+
+      - name: Check --help and --version
+        run: |
+          cargo kani --help && cargo kani --version
+
+      - name: Run standalone kani test
+        run: |
+          for dir in Assert; do
+            >&2 echo "Running test on file $dir"
+            pushd ./tests/cargo-ui/$dir
+            kani bool_ref.rs
             popd
           done
