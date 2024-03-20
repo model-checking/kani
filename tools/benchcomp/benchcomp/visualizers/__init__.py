@@ -250,8 +250,8 @@ class dump_markdown_results_table:
             %%{init: { "quadrantChart": { "titlePadding": 15, "xAxisLabelPadding": 20, "yAxisLabelPadding": 20, "quadrantLabelFontSize": 0, "pointRadius": 2, "pointLabelFontSize": 2 }, "themeVariables": { "quadrant1Fill": "#FFFFFF", "quadrant2Fill": "#FFFFFF", "quadrant3Fill": "#FFFFFF", "quadrant4Fill": "#FFFFFF", "quadrant1TextFill": "#FFFFFF", "quadrant2TextFill": "#FFFFFF", "quadrant3TextFill": "#FFFFFF", "quadrant4TextFill": "#FFFFFF", "quadrantInternalBorderStrokeFill": "#FFFFFF" } } }%%
             quadrantChart
                 title {{ metric }}
-                x-axis {{ d["scaled_variants"][metric][0] }}
-                y-axis {{ d["scaled_variants"][metric][1] }}
+                x-axis "{{ d["scaled_variants"][metric][0] }}"
+                y-axis "{{ d["scaled_variants"][metric][1] }}"
                 quadrant-1 1
                 quadrant-2 2
                 quadrant-3 3
