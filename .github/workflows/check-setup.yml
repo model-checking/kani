@@ -97,6 +97,7 @@ jobs:
 
   test-use-local-toolchain:
     name: TestLocalToolchain
+    needs: [build_bundle_macos, build_bundle_linux]
     strategy:
       matrix:
         os: [macos-13, ubuntu-20.04, ubuntu-22.04]
@@ -106,10 +107,10 @@ jobs:
           prev_job: ${{ needs.build_bundle_macos.outputs }}
         - os: ubuntu-20.04
           rust_target: x86_64-unknown-linux-gnu
-          - prev_job: ${{ needs.build_bundle_linux.outputs }}
+          prev_job: ${{ needs.build_bundle_linux.outputs }}
         - os: ubuntu-22.04
           rust_target: x86_64-unknown-linux-gnu
-          - prev_job: ${{ needs.build_bundle_linux.outputs }}
+          prev_job: ${{ needs.build_bundle_linux.outputs }}
     runs-on: ${{ matrix.os }}
     steps:
       - name: Download bundle
