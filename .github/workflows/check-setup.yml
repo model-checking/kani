@@ -127,6 +127,11 @@ jobs:
       - name: Build Kani
         run: cargo install --locked --path ./kani
 
+      - name: Download bundle
+        uses: actions/download-artifact@v3
+        with:
+          name: ${{ matrix.prev_job.bundle }}
+
       - name: Check download
         run: |
           ls -lh .
