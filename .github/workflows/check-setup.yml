@@ -104,24 +104,26 @@ jobs:
         include:
         - os: macos-13
           rust_target: x86_64-apple-darwin
-          prev_job: ${{ needs.build_bundle_macos.outputs }}
         - os: ubuntu-20.04
           rust_target: x86_64-unknown-linux-gnu
-          prev_job: ${{ needs.build_bundle_linux.outputs }}
         - os: ubuntu-22.04
           rust_target: x86_64-unknown-linux-gnu
           prev_job: ${{ needs.build_bundle_linux.outputs }}
     runs-on: ${{ matrix.os }}
     steps:
-      - name: Download bundle
-        uses: actions/download-artifact@v3
+      - name: Checkout Kani under "kani"
+        uses: actions/checkout@v4
         with:
-          name: ${{ matrix.prev_job.bundle }}
+          path: kani
 
-      - name: Download kani-verifier crate
-        uses: actions/download-artifact@v3
+      - name: Setup Kani Dependencies
+        uses: ./kani/.github/actions/setup
         with:
-          name: ${{ matrix.prev_job.package }}
+          os: ${{ matrix.os }}
+          kani_dir: 'kani'
+
+      - name: Build Kani
+        run: cargo install --locked --path ./kani
 
       - name: Check download
         run: |
@@ -133,6 +135,10 @@ jobs:
           DATE=$(cat ./kani-latest/rust-toolchain-version | cut -d'-' -f2,3,4)
           echo "Nightly date: $DATE"
           echo "DATE=$DATE" >> $GITHUB_ENV
+
+      - name: Install Kani from path
+        run: |
+          cargo install --locked --path kani-verifier-${{ matrix.prev_job.crate_version }}
 
       - name: Create a custom toolchain directory
         run: mkdir -p ${{ github.workspace }}/custom_toolchain
@@ -146,7 +152,7 @@ jobs:
 
       - name: Ensure installation is correct
         run: |
-          cargo kani setup --use-local-toolchain ${{ github.workspace }}/custom_toolchain/
+          cargo kani setup --use-local-bundle ./${{ matrix.prev_job.bundle }} --use-local-toolchain ${{ github.workspace }}/custom_toolchain/
 
       - name: Ensure that the rustup toolchain is not present
         run: |
