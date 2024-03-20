@@ -130,7 +130,7 @@ jobs:
       - name: Get toolchain version used to setup kani
         run: |
           tar zxvf ${{ matrix.prev_job.bundle }}
-          DATE=$(cat kani-latest/rust_toolchain_version | cut -d'-' -f2,3,4)
+          DATE=$(cat ./kani-latest/rust-toolchain-version | cut -d'-' -f2,3,4)
           echo "Nightly date: $DATE"
           echo "DATE=$DATE" >> $GITHUB_ENV
 
