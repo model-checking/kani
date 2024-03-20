@@ -130,57 +130,49 @@ jobs:
       - name: Get toolchain version used to setup kani
         run: |
           tar zxvf ${{ matrix.prev_job.bundle }}
-          DATE=$(cat kani-${{ matrix.prev_job.crate_version }}/rust_toolchain_version | cut -d'-' -f2,3,4)
+          DATE=$(cat kani-latest/rust_toolchain_version | cut -d'-' -f2,3,4)
           echo "Nightly date: $DATE"
           echo "DATE=$DATE" >> $GITHUB_ENV
 
-      # - name: Extract nightly version date from the release bundle
-      #   id: extract-date
-      #   run: |
-      #     tar zxvf ${{ matrix.prev_job.package }}
-      #     DATE=$(grep 'channel'  | cut -d '=' -f2 | tr -d ' "' | cut -d'-' -f2-)
-      #     echo "Nightly date: $DATE"
-      #     echo "DATE=$DATE" >> $GITHUB_ENV
+      - name: Create a custom toolchain directory
+        run: mkdir -p ${{ github.workspace }}/custom_toolchain
 
-      # - name: Create a custom toolchain directory
-      #   run: mkdir -p ${{ github.workspace }}/custom_toolchain
+      - name: Fetch the nightly tarball
+        run: |
+          echo "Downloading Rust toolchain from rust server."
+          curl --proto '=https' --tlsv1.2 -O https://static.rust-lang.org/dist/$DATE/rust-nightly-${{ matrix.rust_target }}.tar.gz
+          tar -xzf rust-nightly-${{ matrix.rust_target }}.tar.gz
+          ./rust-nightly-${{ matrix.rust_target }}/install.sh --prefix=${{ github.workspace }}/custom_toolchain
 
-      # - name: Fetch the nightly tarball
-      #   run: |
-      #     echo "Downloading Rust toolchain from rust server."
-      #     curl --proto '=https' --tlsv1.2 -O https://static.rust-lang.org/dist/$DATE/rust-nightly-${{ matrix.rust_target }}.tar.gz
-      #     tar -xzf rust-nightly-${{ matrix.rust_target }}.tar.gz
-      #     ./rust-nightly-${{ matrix.rust_target }}/install.sh --prefix=${{ github.workspace }}/custom_toolchain
+      - name: Ensure installation is correct
+        run: |
+          cargo kani setup --use-local-toolchain ${{ github.workspace }}/custom_toolchain/
 
-      # - name: Ensure installation is correct
-      #   run: |
-      #     cargo kani setup --use-local-toolchain ${{ github.workspace }}/custom_toolchain/
+      - name: Ensure that the rustup toolchain is not present
+        run: |
+          if [ ! -e "~/.rustup/toolchains/" ]; then
+            echo "Default toolchain file does not exist. Proceeding with running tests."
+          else
+            echo "::error::Default toolchain exists despite not installing."
+            exit 1
+          fi
 
-      # - name: Ensure that the rustup toolchain is not present
-      #   run: |
-      #     if [ ! -e "~/.rustup/toolchains/" ]; then
-      #       echo "Default toolchain file does not exist. Proceeding with running tests."
-      #     else
-      #       echo "::error::Default toolchain exists despite not installing."
-      #       exit 1
-      #     fi
+      - name: Run cargo-kani tests
+        run: |
+          for dir in function multiple-harnesses verbose; do
+            >&2 echo "Running test $dir"
+            pushd ./tests/cargo-ui/$dir
+            cargo kani
+            popd
+          done
 
-      # - name: Run cargo-kani tests
-      #   run: |
-      #     for dir in function multiple-harnesses verbose; do
-      #       >&2 echo "Running test $dir"
-      #       pushd ./tests/cargo-ui/$dir
-      #       cargo kani
-      #       popd
-      #     done
+      - name: Check --help and --version
+        run: |
+          cargo kani --help && cargo kani --version
 
-      # - name: Check --help and --version
-      #   run: |
-      #     cargo kani --help && cargo kani --version
-
-      # - name: Run standalone kani test
-      #   run: |
-      #     >&2 echo "Running test on file $dir"
-      #     pushd ./tests/kani/$dir
-      #     kani bool_ref.rs
-      #     popd
+      - name: Run standalone kani test
+        run: |
+          >&2 echo "Running test on file $dir"
+          pushd ./tests/kani/$dir
+          kani bool_ref.rs
+          popd
