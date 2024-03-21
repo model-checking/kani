@@ -72,7 +72,7 @@ pub struct Arguments {
     /// A legacy flag that is now ignored.
     goto_c: bool,
     /// Enable specific checks.
-    #[clap(long, conflicts_with = "check_all")]
+    #[clap(long)]
     pub ub_check: Vec<ExtraChecks>,
 }
 
