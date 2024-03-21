@@ -3,6 +3,9 @@
 // Modifications Copyright Kani Contributors
 // See GitHub history for details.
 
+// Our handling of storage markers causes spurious failures in this test.
+// https://github.com/model-checking/kani/issues/3099
+
 use std::alloc::Layout;
 use std::marker::PhantomData;
 use std::mem::ManuallyDrop;
