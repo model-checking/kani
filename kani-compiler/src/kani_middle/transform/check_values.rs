@@ -14,7 +14,7 @@
 //!   1. We could merge the invalid values by the offset.
 //!   2. We could avoid checking places that have been checked before.
 use crate::args::ExtraChecks;
-use crate::kani_middle::transform::body_builder::{BodyBuilder, CheckType, SourceInstruction};
+use crate::kani_middle::transform::body::{CheckType, MutableBody, SourceInstruction};
 use crate::kani_middle::transform::check_values::SourceOp::UnsupportedCheck;
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
@@ -68,18 +68,18 @@ impl TransformPass for ValidValuePass {
     /// For every unsafe dereference or a transmute operation, we check all values are valid.
     fn transform(&self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         trace!(function=?instance.name(), "transform");
-        let mut builder = BodyBuilder::from(body);
-        let orig_len = builder.blocks().len();
-        // Do not cache builder.blocks().len() since it will change as we add new checks.
-        for bb_idx in 0..builder.blocks().len() {
+        let mut new_body = MutableBody::from(body);
+        let orig_len = new_body.blocks().len();
+        // Do not cache body.blocks().len() since it will change as we add new checks.
+        for bb_idx in 0..new_body.blocks().len() {
             let Some(candidate) =
-                CheckValueVisitor::find_next(&builder, bb_idx, bb_idx >= orig_len)
+                CheckValueVisitor::find_next(&new_body, bb_idx, bb_idx >= orig_len)
             else {
                 continue;
             };
-            self.build_check(tcx, &mut builder, candidate);
+            self.build_check(tcx, &mut new_body, candidate);
         }
-        (orig_len != builder.blocks().len(), builder.build())
+        (orig_len != new_body.blocks().len(), new_body.into())
     }
 }
 
@@ -91,36 +91,35 @@ impl Debug for ValidValuePass {
 }
 
 impl ValidValuePass {
-    fn build_check(&self, tcx: TyCtxt, builder: &mut BodyBuilder, instruction: UnsafeInstruction) {
+    fn build_check(&self, tcx: TyCtxt, body: &mut MutableBody, instruction: UnsafeInstruction) {
         // TODO: Check alignment
         debug!(?instruction, "build_check");
         let mut source = instruction.source;
         for operation in instruction.operations {
             match operation {
                 SourceOp::BytesValidity { ranges, target_ty, rvalue } => {
-                    let value = builder.new_assignment(rvalue, &mut source);
+                    let value = body.new_assignment(rvalue, &mut source);
                     let rvalue_ptr = Rvalue::AddressOf(Mutability::Not, Place::from(value));
                     for range in ranges {
                         let result =
-                            self.build_limits(builder, &range, rvalue_ptr.clone(), &mut source);
+                            self.build_limits(body, &range, rvalue_ptr.clone(), &mut source);
                         let msg = format!(
                             "Undefined Behavior: Invalid value of type `{}`",
                             // TODO: Fix pretty_ty
                             rustc_internal::internal(tcx, target_ty)
                         );
-                        builder.add_check(tcx, &self.check_type, &mut source, result, &msg);
+                        body.add_check(tcx, &self.check_type, &mut source, result, &msg);
                     }
                 }
                 SourceOp::DerefValidity { pointee_ty, rvalue, ranges } => {
                     for range in ranges {
-                        let result =
-                            self.build_limits(builder, &range, rvalue.clone(), &mut source);
+                        let result = self.build_limits(body, &range, rvalue.clone(), &mut source);
                         let msg = format!(
                             "Undefined Behavior: Invalid value of type `{}`",
                             // TODO: Fix pretty_ty
                             rustc_internal::internal(tcx, pointee_ty)
                         );
-                        builder.add_check(tcx, &self.check_type, &mut source, result, &msg);
+                        body.add_check(tcx, &self.check_type, &mut source, result, &msg);
                     }
                 }
                 SourceOp::UnsupportedCheck { check, ty } => {
@@ -128,7 +127,7 @@ impl ValidValuePass {
                         "Kani currently doesn't support checking validity of `{check}` for `{}` type",
                         rustc_internal::internal(tcx, ty)
                     );
-                    self.unsupported_check(tcx, builder, &mut source, &reason);
+                    self.unsupported_check(tcx, body, &mut source, &reason);
                 }
             }
         }
@@ -136,39 +135,39 @@ impl ValidValuePass {
 
     fn build_limits(
         &self,
-        builder: &mut BodyBuilder,
+        body: &mut MutableBody,
         req: &ValidValueReq,
         rvalue_ptr: Rvalue,
         source: &mut SourceInstruction,
     ) -> Local {
-        let span = source.span(builder.blocks());
+        let span = source.span(body.blocks());
         debug!(?req, ?rvalue_ptr, ?span, "build_limits");
         let primitive_ty = uint_ty(req.size.bytes());
-        let start_const = builder.new_const_operand(req.valid_range.start, primitive_ty, span);
-        let end_const = builder.new_const_operand(req.valid_range.end, primitive_ty, span);
+        let start_const = body.new_const_operand(req.valid_range.start, primitive_ty, span);
+        let end_const = body.new_const_operand(req.valid_range.end, primitive_ty, span);
         let orig_ptr = if req.offset != 0 {
-            let start_ptr = move_local(builder.new_assignment(rvalue_ptr, source));
-            let byte_ptr = move_local(builder.new_cast_ptr(
+            let start_ptr = move_local(body.new_assignment(rvalue_ptr, source));
+            let byte_ptr = move_local(body.new_cast_ptr(
                 start_ptr,
                 Ty::unsigned_ty(UintTy::U8),
                 Mutability::Not,
                 source,
             ));
-            let offset_const = builder.new_const_operand(req.offset as _, UintTy::Usize, span);
-            let offset = move_local(builder.new_assignment(Rvalue::Use(offset_const), source));
-            move_local(builder.new_binary_op(BinOp::Offset, byte_ptr, offset, source))
+            let offset_const = body.new_const_operand(req.offset as _, UintTy::Usize, span);
+            let offset = move_local(body.new_assignment(Rvalue::Use(offset_const), source));
+            move_local(body.new_binary_op(BinOp::Offset, byte_ptr, offset, source))
         } else {
-            move_local(builder.new_assignment(rvalue_ptr, source))
+            move_local(body.new_assignment(rvalue_ptr, source))
         };
         let value_ptr =
-            builder.new_cast_ptr(orig_ptr, Ty::unsigned_ty(primitive_ty), Mutability::Not, source);
+            body.new_cast_ptr(orig_ptr, Ty::unsigned_ty(primitive_ty), Mutability::Not, source);
         let value =
             Operand::Copy(Place { local: value_ptr, projection: vec![ProjectionElem::Deref] });
-        let start_result = builder.new_binary_op(BinOp::Ge, value.clone(), start_const, source);
-        let end_result = builder.new_binary_op(BinOp::Le, value, end_const, source);
+        let start_result = body.new_binary_op(BinOp::Ge, value.clone(), start_const, source);
+        let end_result = body.new_binary_op(BinOp::Le, value, end_const, source);
         if req.valid_range.wraps_around() {
             // valid >= start || valid <= end
-            builder.new_binary_op(
+            body.new_binary_op(
                 BinOp::BitOr,
                 move_local(start_result),
                 move_local(end_result),
@@ -176,7 +175,7 @@ impl ValidValuePass {
             )
         } else {
             // valid >= start && valid <= end
-            builder.new_binary_op(
+            body.new_binary_op(
                 BinOp::BitAnd,
                 move_local(start_result),
                 move_local(end_result),
@@ -188,18 +187,18 @@ impl ValidValuePass {
     fn unsupported_check(
         &self,
         tcx: TyCtxt,
-        builder: &mut BodyBuilder,
+        body: &mut MutableBody,
         source: &mut SourceInstruction,
         reason: &str,
     ) {
-        let span = source.span(builder.blocks());
+        let span = source.span(body.blocks());
         let rvalue = Rvalue::Use(Operand::Constant(Constant {
             literal: Const::from_bool(false),
             span,
             user_ty: None,
         }));
-        let result = builder.new_assignment(rvalue, source);
-        builder.add_check(tcx, &self.check_type, source, result, reason);
+        let result = body.new_assignment(rvalue, source);
+        body.add_check(tcx, &self.check_type, source, result, reason);
     }
 }
 
@@ -357,7 +356,7 @@ struct CheckValueVisitor<'a> {
 
 impl<'a> CheckValueVisitor<'a> {
     fn find_next(
-        body: &'a BodyBuilder,
+        body: &'a MutableBody,
         bb: BasicBlockIdx,
         skip_first: bool,
     ) -> Option<UnsafeInstruction> {

@@ -14,7 +14,8 @@ use stable_mir::mir::{
 use stable_mir::ty::{Const, GenericArgs, Span, Ty, UintTy};
 use std::mem;
 
-pub struct BodyBuilder {
+/// This structure mimics a Body that can actually be modified.
+pub struct MutableBody {
     blocks: Vec<BasicBlock>,
 
     /// Declarations of locals within the function.
@@ -39,7 +40,7 @@ pub struct BodyBuilder {
     span: Span,
 }
 
-impl BodyBuilder {
+impl MutableBody {
     /// Get the basic blocks of this builder.
     pub fn blocks(&self) -> &[BasicBlock] {
         &self.blocks
@@ -49,9 +50,9 @@ impl BodyBuilder {
         &self.locals
     }
 
-    /// Create a body builder from the original body.
+    /// Create a mutable body from the original MIR body.
     pub fn from(body: Body) -> Self {
-        BodyBuilder {
+        MutableBody {
             locals: body.locals().to_vec(),
             arg_count: body.arg_locals().len(),
             spread_arg: body.spread_arg(),
@@ -61,8 +62,8 @@ impl BodyBuilder {
         }
     }
 
-    /// Create the new body consuming the builder variables.
-    pub fn build(self) -> Body {
+    /// Create the new body consuming this mutable body.
+    pub fn into(self) -> Body {
         Body::new(
             self.blocks,
             self.locals,

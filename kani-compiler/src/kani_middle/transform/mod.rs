@@ -24,7 +24,7 @@ use stable_mir::mir::Body;
 use std::collections::HashMap;
 use std::fmt::Debug;
 
-mod body_builder;
+mod body;
 mod check_values;
 
 /// Object used to retrieve a transformed instance body.
