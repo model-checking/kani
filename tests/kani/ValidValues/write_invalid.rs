@@ -10,7 +10,7 @@ use std::num::NonZeroU8;
 
 #[kani::proof]
 #[kani::should_panic]
-pub fn write_invalid_bytes_no_ub() {
+pub fn write_invalid_bytes_no_ub_with_spurious_cex() {
     let mut non_zero: NonZeroU8 = kani::any();
     let dest = &mut non_zero as *mut _;
     unsafe { std::intrinsics::write_bytes(dest, 0, 1) };

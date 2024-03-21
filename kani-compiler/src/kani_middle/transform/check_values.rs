@@ -61,7 +61,7 @@ impl TransformPass for ValidValuePass {
         Self: Sized,
     {
         let args = query_db.args();
-        args.check_all || args.ub_check.contains(&ExtraChecks::Validity)
+        args.ub_check.contains(&ExtraChecks::Validity)
     }
 
     /// Transform the function body by inserting checks one-by-one.

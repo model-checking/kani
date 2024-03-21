@@ -74,9 +74,6 @@ pub struct Arguments {
     /// Enable specific checks.
     #[clap(long, conflicts_with = "check_all")]
     pub ub_check: Vec<ExtraChecks>,
-    /// Enable all extra checks.
-    #[clap(long)]
-    pub check_all: bool,
 }
 
 #[derive(Debug, Clone, Copy, AsRefStr, EnumString, VariantNames, PartialEq, Eq)]

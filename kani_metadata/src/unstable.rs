@@ -84,7 +84,8 @@ pub enum UnstableFeature {
     FunctionContracts,
     /// Memory predicate APIs.
     MemPredicates,
-    /// Automatically check for that all values checks.
+    /// Automatically check that no invalid value is produced which is considered UB in Rust.
+    /// Note that this does not include checking uninitialized value.
     ValidValueChecks,
 }
 
