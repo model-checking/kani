@@ -167,7 +167,7 @@ impl ValidValuePass {
         let start_result = builder.new_binary_op(BinOp::Ge, value.clone(), start_const, source);
         let end_result = builder.new_binary_op(BinOp::Le, value, end_const, source);
         if req.valid_range.wraps_around() {
-            // valid >= start || valid =< end
+            // valid >= start || valid <= end
             builder.new_binary_op(
                 BinOp::BitOr,
                 move_local(start_result),
@@ -175,7 +175,7 @@ impl ValidValuePass {
                 source,
             )
         } else {
-            // valid >= start && valid =< end
+            // valid >= start && valid <= end
             builder.new_binary_op(
                 BinOp::BitAnd,
                 move_local(start_result),
@@ -223,7 +223,7 @@ fn uint_ty(bytes: usize) -> UintTy {
 struct ValidValueReq {
     /// Offset in bytes.
     offset: usize,
-    /// Size f this requirement.
+    /// Size of this requirement.
     size: MachineSize,
     /// The range restriction is represented by a Scalar.
     valid_range: WrappingRange,
