@@ -28,7 +28,7 @@ pub enum VerificationStatus {
 
 /// Represents failed properties in three different categories.
 /// This simplifies the process to determine and format verification results.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum FailedProperties {
     // No failures
     None,
@@ -38,13 +38,95 @@ pub enum FailedProperties {
     Other,
 }
 
+// Represents the global status for cover statements in two categories.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum CoversStatus {
+    // All cover statements are satisfied
+    AllSatisfied,
+    // Not all cover statement are satisfied
+    Other,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum GlobalCondition {
+    ShouldPanic { enabled: bool, status: FailedProperties },
+    FailUncoverable { enabled: bool, status: CoversStatus },
+}
+
+impl GlobalCondition {
+    pub fn enabled(&self) -> bool {
+        match &self {
+            Self::ShouldPanic { enabled, .. } => *enabled,
+            Self::FailUncoverable { enabled, .. } => *enabled,
+        }
+    }
+
+    pub fn name(&self) -> &str {
+        match &self {
+            Self::ShouldPanic { .. } => "should_panic",
+            Self::FailUncoverable { .. } => "fail_uncoverable",
+        }
+    }
+
+    pub fn passed(&self) -> bool {
+        match &self {
+            Self::ShouldPanic { status, .. } => *status == FailedProperties::PanicsOnly,
+            Self::FailUncoverable { status, .. } => *status == CoversStatus::AllSatisfied,
+        }
+    }
+
+    pub fn reason(&self) -> &str {
+        match &self {
+            Self::ShouldPanic { status, .. } => match *status {
+                FailedProperties::None => "encountered no panics, but at least one was expected",
+                FailedProperties::PanicsOnly => "encountered one or more panics as expected",
+                FailedProperties::Other => {
+                    "encountered failures other than panics, which were unexpected"
+                }
+            },
+            Self::FailUncoverable { status, .. } => match *status {
+                CoversStatus::AllSatisfied => "all cover statements were satisfied as expected",
+                CoversStatus::Other => {
+                    "encountered one or more cover statements which were not satisfied"
+                }
+            },
+        }
+    }
+
+    pub fn blame_properties<'a>(&self, properties: &'a [Property]) -> Vec<&'a Property> {
+        match &self {
+            Self::ShouldPanic { status, .. } => match *status {
+                FailedProperties::None => properties
+                    .iter()
+                    .filter(|prop| {
+                        prop.property_class() == "assertion" && prop.status != CheckStatus::Failure
+                    })
+                    .collect(),
+                FailedProperties::Other => properties
+                    .iter()
+                    .filter(|prop| {
+                        prop.property_class() != "assertion" && prop.status == CheckStatus::Failure
+                    })
+                    .collect(),
+                _ => vec![],
+            },
+            Self::FailUncoverable { .. } => properties
+                .iter()
+                .filter(|prop| {
+                    prop.property_class() == "cover" && prop.status != CheckStatus::Satisfied
+                })
+                .collect(),
+        }
+    }
+}
+
 /// Our (kani-driver) notions of CBMC results.
 #[derive(Debug)]
 pub struct VerificationResult {
     /// Whether verification should be considered to have succeeded, or have failed.
     pub status: VerificationStatus,
     /// The compact representation for failed properties
-    pub failed_properties: FailedProperties,
+    pub global_conditions: Vec<GlobalCondition>,
     /// The parsed output, message by message, of CBMC. However, the `Result` message has been
     /// removed and is available in `results` instead.
     pub messages: Option<Vec<ParserItem>>,
@@ -93,7 +175,12 @@ impl KaniSession {
                 )
             })?;
 
-            VerificationResult::from(output, harness.attributes.should_panic, start_time)
+            VerificationResult::from(
+                output,
+                harness.attributes.should_panic,
+                self.args.fail_uncoverable,
+                start_time,
+            )
         };
 
         Ok(verification_results)
@@ -251,17 +338,18 @@ impl VerificationResult {
     fn from(
         output: VerificationOutput,
         should_panic: bool,
+        fail_uncoverable: bool,
         start_time: Instant,
     ) -> VerificationResult {
         let runtime = start_time.elapsed();
         let (items, results) = extract_results(output.processed_items);
 
         if let Some(results) = results {
-            let (status, failed_properties) =
-                verification_outcome_from_properties(&results, should_panic);
+            let (status, global_conditions) =
+                verification_outcome_from_properties(&results, should_panic, fail_uncoverable);
             VerificationResult {
                 status,
-                failed_properties,
+                global_conditions,
                 messages: Some(items),
                 results: Ok(results),
                 runtime,
@@ -271,7 +359,7 @@ impl VerificationResult {
             // We never got results from CBMC - something went wrong (e.g. crash) so it's failure
             VerificationResult {
                 status: VerificationStatus::Failure,
-                failed_properties: FailedProperties::Other,
+                global_conditions: vec![],
                 messages: Some(items),
                 results: Err(output.process_status),
                 runtime,
@@ -283,7 +371,7 @@ impl VerificationResult {
     pub fn mock_success() -> VerificationResult {
         VerificationResult {
             status: VerificationStatus::Success,
-            failed_properties: FailedProperties::None,
+            global_conditions: vec![],
             messages: None,
             results: Ok(vec![]),
             runtime: Duration::from_secs(0),
@@ -294,7 +382,7 @@ impl VerificationResult {
     fn mock_failure() -> VerificationResult {
         VerificationResult {
             status: VerificationStatus::Failure,
-            failed_properties: FailedProperties::Other,
+            global_conditions: vec![],
             messages: None,
             // on failure, exit codes in theory might be used,
             // but `mock_failure` should never be used in a context where they will,
@@ -305,22 +393,16 @@ impl VerificationResult {
         }
     }
 
-    pub fn render(
-        &self,
-        output_format: &OutputFormat,
-        should_panic: bool,
-        coverage_mode: bool,
-    ) -> String {
+    pub fn render(&self, output_format: &OutputFormat, coverage_mode: bool) -> String {
         match &self.results {
             Ok(results) => {
                 let status = self.status;
-                let failed_properties = self.failed_properties;
+                let global_conditions = &self.global_conditions;
                 let show_checks = matches!(output_format, OutputFormat::Regular);
-
                 let mut result = if coverage_mode {
-                    format_coverage(results, status, should_panic, failed_properties, show_checks)
+                    format_coverage(results, status, global_conditions, show_checks)
                 } else {
-                    format_result(results, status, should_panic, failed_properties, show_checks)
+                    format_result(results, status, global_conditions, show_checks)
                 };
                 writeln!(result, "Verification Time: {}s", self.runtime.as_secs_f32()).unwrap();
                 result
@@ -358,20 +440,56 @@ impl VerificationResult {
 fn verification_outcome_from_properties(
     properties: &[Property],
     should_panic: bool,
-) -> (VerificationStatus, FailedProperties) {
+    fail_uncoverable: bool,
+) -> (VerificationStatus, Vec<GlobalCondition>) {
+    // Compute the results for all global conditions
+    let should_panic_cond = compute_should_panic_condition(should_panic, properties);
+    let fail_uncoverable_cond = compute_fail_uncoverable_condition(fail_uncoverable, properties);
+    // Create a vector with results for global conditions
+    let global_conditions = vec![should_panic_cond, fail_uncoverable_cond];
+    // Determine the overall outcome taking into account all global conditions
+    let status = outcome_from_global_conditions(properties, &global_conditions);
+    (status, global_conditions)
+}
+
+fn compute_should_panic_condition(enabled: bool, properties: &[Property]) -> GlobalCondition {
     let failed_properties = determine_failed_properties(properties);
-    let status = if should_panic {
-        match failed_properties {
-            FailedProperties::None | FailedProperties::Other => VerificationStatus::Failure,
-            FailedProperties::PanicsOnly => VerificationStatus::Success,
+    GlobalCondition::ShouldPanic { enabled, status: failed_properties }
+}
+
+fn compute_fail_uncoverable_condition(enabled: bool, properties: &[Property]) -> GlobalCondition {
+    let failed_covers = determine_satisfiable_covers(properties);
+    GlobalCondition::FailUncoverable { enabled, status: failed_covers }
+}
+
+// Determine the overall verification result considering the enabled global conditions
+fn outcome_from_global_conditions(
+    properties: &[Property],
+    global_conditions: &[GlobalCondition],
+) -> VerificationStatus {
+    let enabled_global_conditions = !global_conditions
+        .iter()
+        .filter(|cond| cond.enabled())
+        .collect::<Vec<&GlobalCondition>>()
+        .is_empty();
+
+    if !enabled_global_conditions {
+        // If no global conditions are enabled, the outcome only depends on failed properties
+        let failed_properties = determine_failed_properties(properties);
+        if failed_properties == FailedProperties::None {
+            VerificationStatus::Success
+        } else {
+            VerificationStatus::Failure
         }
     } else {
-        match failed_properties {
-            FailedProperties::None => VerificationStatus::Success,
-            FailedProperties::PanicsOnly | FailedProperties::Other => VerificationStatus::Failure,
+        let all_global_conditions_passed =
+            global_conditions.iter().all(|cond| if cond.enabled() { cond.passed() } else { true });
+        if all_global_conditions_passed {
+            VerificationStatus::Success
+        } else {
+            VerificationStatus::Failure
         }
-    };
-    (status, failed_properties)
+    }
 }
 
 /// Determines the `FailedProperties` variant that corresponds to an array of properties
@@ -391,6 +509,17 @@ fn determine_failed_properties(properties: &[Property]) -> FailedProperties {
         } else {
             FailedProperties::Other
         }
+    }
+}
+
+/// Determines the `CoverStatus` variant that corresponds to an array of properties
+fn determine_satisfiable_covers(properties: &[Property]) -> CoversStatus {
+    let cover_properties: Vec<&Property> =
+        properties.iter().filter(|prop| prop.property_class() == "cover").collect();
+    if cover_properties.iter().all(|prop| prop.status == CheckStatus::Satisfied) {
+        CoversStatus::AllSatisfied
+    } else {
+        CoversStatus::Other
     }
 }
 

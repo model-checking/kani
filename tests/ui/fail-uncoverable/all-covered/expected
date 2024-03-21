@@ -1,0 +1,10 @@
+
+harness1.cover.1\
+Status: SATISFIED\
+Description: "cover location"
+harness2.cover.1\
+Status: SATISFIED\
+Description: "cover condition: x == 1"
+GLOBAL CONDITIONS:\
+ - fail_uncoverable: SUCCESS (all cover statements were satisfied as expected)
+Complete - 2 successfully verified harnesses, 0 failures, 2 total.

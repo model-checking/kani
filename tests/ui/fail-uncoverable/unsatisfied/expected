@@ -1,0 +1,7 @@
+
+harness_unsatisfied.cover.1\
+Status: UNSATISFIABLE\
+Description: "cover condition: x == -1"
+GLOBAL CONDITIONS:\
+ - fail_uncoverable: FAILURE (encountered one or more cover statements which were not satisfied)
+VERIFICATION:- FAILED (one or more global conditions failed)
