@@ -304,7 +304,8 @@ impl KaniCompiler {
         };
         if self.queries.lock().unwrap().args().reachability_analysis == ReachabilityType::Harnesses
         {
-            let base_filename = tcx.output_filenames(()).output_path(OutputType::Object);
+            let base_filepath = tcx.output_filenames(()).path(OutputType::Object);
+            let base_filename = base_filepath.as_path();
             let harnesses = filter_crate_items(tcx, |_, instance| is_proof_harness(tcx, instance));
             let all_harnesses = harnesses
                 .into_iter()
@@ -457,9 +458,9 @@ fn generate_metadata(
 
 /// Extract the filename for the metadata file.
 fn metadata_output_path(tcx: TyCtxt) -> PathBuf {
-    let mut filename = tcx.output_filenames(()).output_path(OutputType::Object);
-    filename.set_extension(ArtifactType::Metadata);
-    filename
+    let filepath = tcx.output_filenames(()).path(OutputType::Object);
+    let filename = filepath.as_path();
+    filename.with_extension(ArtifactType::Metadata).to_path_buf()
 }
 
 #[cfg(test)]

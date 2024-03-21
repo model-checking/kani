@@ -5,6 +5,7 @@
 mod annotations;
 mod transform;
 
+use rustc_span::DUMMY_SP;
 use std::collections::BTreeMap;
 use tracing::{debug, trace};
 
@@ -93,7 +94,7 @@ impl<'tcx> MirVisitor for StubConstChecker<'tcx> {
             Const::Val(..) | Const::Ty(..) => {}
             Const::Unevaluated(un_eval, _) => {
                 // Thread local fall into this category.
-                if self.tcx.const_eval_resolve(ParamEnv::reveal_all(), un_eval, None).is_err() {
+                if self.tcx.const_eval_resolve(ParamEnv::reveal_all(), un_eval, DUMMY_SP).is_err() {
                     // The `monomorphize` call should have evaluated that constant already.
                     let tcx = self.tcx;
                     let mono_const = &un_eval;

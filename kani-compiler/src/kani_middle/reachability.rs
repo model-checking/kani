@@ -572,7 +572,8 @@ mod debug {
             if let Ok(target) = std::env::var("KANI_REACH_DEBUG") {
                 debug!(?target, "dump_dot");
                 let outputs = tcx.output_filenames(());
-                let path = outputs.output_path(OutputType::Metadata).with_extension("dot");
+                let base_path = outputs.path(OutputType::Metadata);
+                let path = base_path.as_path().with_extension("dot");
                 let out_file = File::create(path)?;
                 let mut writer = BufWriter::new(out_file);
                 writeln!(writer, "digraph ReachabilityGraph {{")?;
