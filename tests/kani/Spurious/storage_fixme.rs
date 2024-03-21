@@ -1,3 +1,8 @@
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Kani Contributors
+// See GitHub history for details.
+
 use std::alloc::Layout;
 use std::marker::PhantomData;
 use std::mem::ManuallyDrop;
