@@ -36,8 +36,6 @@ use strum_macros::AsRefStr;
 use tracing::{debug, trace};
 
 /// Instrument the code with checks for invalid values.
-///
-/// TODO: Add an option to add checks for every possible invalid value.
 pub struct ValidValuePass {
     check_type: CheckType,
 }
@@ -92,7 +90,6 @@ impl Debug for ValidValuePass {
 
 impl ValidValuePass {
     fn build_check(&self, tcx: TyCtxt, body: &mut MutableBody, instruction: UnsafeInstruction) {
-        // TODO: Check alignment
         debug!(?instruction, "build_check");
         let mut source = instruction.source;
         for operation in instruction.operations {
@@ -630,6 +627,11 @@ impl<'a> MirVisitor for CheckValueVisitor<'a> {
             Rvalue::Aggregate(kind, operands) => match kind {
                 // If the aggregated structure has invalid value, this could generate invalid value.
                 // But only if the operands don't have the exact same restrictions.
+                // This happens today with the usage of `rustc_layout_scalar_valid_range_*`
+                // attributes.
+                // In this case, only the value of the first member in memory can be restricted,
+                // thus, we only need to check the operand used to assign to the first in memory
+                // field.
                 AggregateKind::Adt(def, _variant, args, _, _) => {
                     if def.kind() == AdtKind::Struct {
                         let dest_ty = Ty::from_rigid_kind(RigidTy::Adt(*def, args.clone()));
@@ -637,18 +639,16 @@ impl<'a> MirVisitor for CheckValueVisitor<'a> {
                             && !req.is_full()
                         {
                             let dest_layout = dest_ty.layout().unwrap().shape();
-                            let args_tuple =
-                                make_tuple_ty(dest_ty, &dest_layout.fields, operands, self.locals);
+                            let first_op =
+                                first_aggregate_operand(dest_ty, &dest_layout.fields, operands);
+                            let first_ty = first_op.ty(self.locals).unwrap();
                             // Rvalue must have same Abi layout except for range.
                             if !req.contains(
-                                &ValidValueReq::try_from_ty(&self.machine, args_tuple).unwrap(),
+                                &ValidValueReq::try_from_ty(&self.machine, first_ty).unwrap(),
                             ) {
                                 self.push_target(SourceOp::BytesValidity {
                                     target_ty: dest_ty,
-                                    rvalue: Rvalue::Aggregate(
-                                        AggregateKind::Tuple,
-                                        operands.clone(),
-                                    ),
+                                    rvalue: Rvalue::Use(first_op),
                                     ranges: vec![req],
                                 })
                             }
@@ -678,21 +678,20 @@ impl<'a> MirVisitor for CheckValueVisitor<'a> {
     }
 }
 
-/// Make a type that represents the sized operands in the memory order of the destination type.
-fn make_tuple_ty(
-    dest_ty: Ty,
-    dest_shape: &FieldsShape,
-    operands: &[Operand],
-    locals: &[LocalDecl],
-) -> Ty {
-    let offset_order = sized_fields_idx(dest_ty, dest_shape);
-    let arg_tys =
-        offset_order.into_iter().map(|idx| operands[idx].ty(locals).unwrap()).collect::<Vec<_>>();
-    Ty::new_tuple(&arg_tys)
+/// Gets the operand that corresponds to the assignment of the first sized field in memory.
+///
+/// The first field of a structure is the only one that can have extra value restrictions imposed
+/// by `rustc_layout_scalar_valid_range_*` attributes.
+///
+/// Note: This requires at least one operand to be sized and there's a 1:1 match between operands
+/// and field types.
+fn first_aggregate_operand(dest_ty: Ty, dest_shape: &FieldsShape, operands: &[Operand]) -> Operand {
+    let Some(first) = first_sized_field_idx(dest_ty, dest_shape) else { unreachable!() };
+    operands[first].clone()
 }
 
-/// Index of the non_1zst fields in memory order.
-fn sized_fields_idx(ty: Ty, shape: &FieldsShape) -> Vec<FieldIdx> {
+/// Index of the first non_1zst fields in memory order.
+fn first_sized_field_idx(ty: Ty, shape: &FieldsShape) -> Option<FieldIdx> {
     if let TyKind::RigidTy(RigidTy::Adt(adt_def, args)) = ty.kind()
         && adt_def.kind() == AdtKind::Struct
     {
@@ -700,10 +699,9 @@ fn sized_fields_idx(ty: Ty, shape: &FieldsShape) -> Vec<FieldIdx> {
         let fields = adt_def.variants_iter().next().unwrap().fields();
         offset_order
             .into_iter()
-            .filter(|idx| !fields[*idx].ty_with_args(&args).layout().unwrap().shape().is_1zst())
-            .collect()
+            .find(|idx| !fields[*idx].ty_with_args(&args).layout().unwrap().shape().is_1zst())
     } else {
-        vec![]
+        None
     }
 }
 
@@ -728,7 +726,7 @@ fn assignment_check_points(
         match proj {
             ProjectionElem::Field(field_idx, field_ty) => {
                 let shape = ty.layout().unwrap().shape();
-                if sized_fields_idx(ty, &shape.fields).first() == Some(field_idx)
+                if first_sized_field_idx(ty, &shape.fields) == Some(*field_idx)
                     && let Some(dest_valid) = ValidValueReq::try_from_ty(machine_info, ty)
                     && !dest_valid.is_full()
                     && dest_valid.size == rvalue_range.size
