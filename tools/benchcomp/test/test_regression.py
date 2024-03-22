@@ -466,8 +466,8 @@ class RegressionTests(unittest.TestCase):
                     %%{init: { "quadrantChart": { "titlePadding": 15, "xAxisLabelPadding": 20, "yAxisLabelPadding": 20, "quadrantLabelFontSize": 0, "pointRadius": 2, "pointLabelFontSize": 2 }, "themeVariables": { "quadrant1Fill": "#FFFFFF", "quadrant2Fill": "#FFFFFF", "quadrant3Fill": "#FFFFFF", "quadrant4Fill": "#FFFFFF", "quadrant1TextFill": "#FFFFFF", "quadrant2TextFill": "#FFFFFF", "quadrant3TextFill": "#FFFFFF", "quadrant4TextFill": "#FFFFFF", "quadrantInternalBorderStrokeFill": "#FFFFFF" } } }%%
                     quadrantChart
                         title runtime
-                        x-axis variant_1
-                        y-axis variant_2
+                        x-axis "variant_1"
+                        y-axis "variant_2"
                         quadrant-1 1
                         quadrant-2 2
                         quadrant-3 3
