@@ -662,6 +662,43 @@ class RegressionTests(unittest.TestCase):
                 result = yaml.safe_load(handle)
 
 
+    def test_env_expansion(self):
+        """Ensure that config parser expands '${}' in env key"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            run_bc = Benchcomp({
+                "variants": {
+                    "env_set": {
+                        "config": {
+                            "command_line": 'echo "$__BENCHCOMP_ENV_VAR" > out',
+                            "directory": tmp,
+                            "env": {"__BENCHCOMP_ENV_VAR": "foo:${PATH}"}
+                        }
+                    },
+                },
+                "run": {
+                    "suites": {
+                        "suite_1": {
+                            "parser": {
+                                # The word 'bin' typically appears in $PATH, so
+                                # check that what was echoed contains 'bin'.
+                                "command": textwrap.dedent("""\
+                                    grep bin out && grep '^foo:' out && echo '{
+                                        "benchmarks": {},
+                                        "metrics": {}
+                                    }'
+                                    """)
+                            },
+                            "variants": ["env_set"]
+                        }
+                    }
+                },
+                "visualize": [],
+            })
+            run_bc()
+            self.assertEqual(run_bc.proc.returncode, 0, msg=run_bc.stderr)
+
+
     def test_env(self):
         """Ensure that benchcomp reads the 'env' key of variant config"""
 
