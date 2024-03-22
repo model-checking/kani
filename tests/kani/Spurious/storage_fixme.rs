@@ -5,6 +5,9 @@
 
 // Our handling of storage markers causes spurious failures in this test.
 // https://github.com/model-checking/kani/issues/3099
+// The code is extracted from the implementation of `BTreeMap` which is where we
+// originally saw the spurious failures while trying to enable storage markers
+// for `std` in https://github.com/model-checking/kani/pull/3080
 
 use std::alloc::Layout;
 use std::marker::PhantomData;
@@ -640,7 +643,7 @@ struct IntoIter {
 }
 
 #[cfg_attr(kani, kani::proof, kani::unwind(3))]
-fn main() {
+fn check_storagemarker_btreemap() {
     let mut f = Foo { root: None, length: 0 };
     let mut root: NodeRef<marker::Owned, marker::Leaf> = NodeRef::new_leaf();
     root.borrow_mut().push();
