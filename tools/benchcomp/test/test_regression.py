@@ -436,6 +436,7 @@ class RegressionTests(unittest.TestCase):
                 "visualize": [{
                     "type": "dump_markdown_results_table",
                     "out_file": "-",
+                    "scatterplot": "linear",
                     "extra_columns": {
                         "runtime": [{
                             "column_name": "ratio",
@@ -460,6 +461,21 @@ class RegressionTests(unittest.TestCase):
             self.assertEqual(
                 run_bc.stdout, textwrap.dedent("""
                     ## runtime
+
+                    ```mermaid
+                    %%{init: { "quadrantChart": { "titlePadding": 15, "xAxisLabelPadding": 20, "yAxisLabelPadding": 20, "quadrantLabelFontSize": 0, "pointRadius": 2, "pointLabelFontSize": 2 }, "themeVariables": { "quadrant1Fill": "#FFFFFF", "quadrant2Fill": "#FFFFFF", "quadrant3Fill": "#FFFFFF", "quadrant4Fill": "#FFFFFF", "quadrant1TextFill": "#FFFFFF", "quadrant2TextFill": "#FFFFFF", "quadrant3TextFill": "#FFFFFF", "quadrant4TextFill": "#FFFFFF", "quadrantInternalBorderStrokeFill": "#FFFFFF" } } }%%
+                    quadrantChart
+                        title runtime
+                        x-axis "variant_1"
+                        y-axis "variant_2"
+                        quadrant-1 1
+                        quadrant-2 2
+                        quadrant-3 3
+                        quadrant-4 4
+                        "bench_1": [0.0, 0.909]
+                        "bench_2": [0.909, 0.0]
+                    ```
+                    Scatterplot axis ranges are 5 (bottom/left) to 10 (top/right).
 
                     | Benchmark |  variant_1 | variant_2 | ratio |
                     | --- | --- | --- | --- |
@@ -644,6 +660,43 @@ class RegressionTests(unittest.TestCase):
 
             with open(run_bc.working_directory / "result.yaml") as handle:
                 result = yaml.safe_load(handle)
+
+
+    def test_env_expansion(self):
+        """Ensure that config parser expands '${}' in env key"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            run_bc = Benchcomp({
+                "variants": {
+                    "env_set": {
+                        "config": {
+                            "command_line": 'echo "$__BENCHCOMP_ENV_VAR" > out',
+                            "directory": tmp,
+                            "env": {"__BENCHCOMP_ENV_VAR": "foo:${PATH}"}
+                        }
+                    },
+                },
+                "run": {
+                    "suites": {
+                        "suite_1": {
+                            "parser": {
+                                # The word 'bin' typically appears in $PATH, so
+                                # check that what was echoed contains 'bin'.
+                                "command": textwrap.dedent("""\
+                                    grep bin out && grep '^foo:' out && echo '{
+                                        "benchmarks": {},
+                                        "metrics": {}
+                                    }'
+                                    """)
+                            },
+                            "variants": ["env_set"]
+                        }
+                    }
+                },
+                "visualize": [],
+            })
+            run_bc()
+            self.assertEqual(run_bc.proc.returncode, 0, msg=run_bc.stderr)
 
 
     def test_env(self):
