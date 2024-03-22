@@ -18,6 +18,7 @@
 #![allow(internal_features)]
 // Required for implementing memory predicates.
 #![feature(ptr_metadata)]
+#![feature(pointer_is_aligned)]
 
 pub mod arbitrary;
 #[cfg(feature = "concrete_playback")]

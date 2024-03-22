@@ -53,7 +53,7 @@ TESTS=(
     "kani kani"
     "expected expected"
     "ui expected"
-    "std-checks kani"
+    "std-checks cargo-kani"
     "firecracker kani"
     "prusti kani"
     "smack kani"

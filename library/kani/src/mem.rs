@@ -41,7 +41,8 @@ use std::ptr::{DynMetadata, NonNull, Pointee};
 
 /// Assert that the pointer is valid for access according to [crate::mem] conditions 1, 2 and 3.
 ///
-/// Note that an unaligned pointer is still considered valid.
+/// Note this function also checks for pointer alignment. Use [self::assert_valid_ptr_unaligned]
+/// if you don't want to fail for unaligned pointers.
 ///
 /// TODO: Kani should automatically add those checks when a de-reference happens.
 /// https://github.com/model-checking/kani/issues/2975
@@ -59,12 +60,34 @@ where
     <T as Pointee>::Metadata: PtrProperties<T>,
 {
     crate::assert(!ptr.is_null(), "Expected valid pointer, but found `null`");
-
     let (thin_ptr, metadata) = ptr.to_raw_parts();
-    can_read(&metadata, thin_ptr)
+    crate::assert(metadata.is_ptr_aligned(thin_ptr, Internal), "Expected pointer to be aligned");
+    assert_can_read(&metadata, thin_ptr)
 }
 
-fn can_read<M, T>(metadata: &M, data_ptr: *const ()) -> bool
+/// Assert that the pointer is valid for access according to [crate::mem] conditions 1, 2 and 3.
+///
+/// Note this function succeeds for unaligned pointers. See [self::assert_valid_ptr] if you also
+/// want to check pointer alignment.
+///
+/// This function will either panic or return `true`. This is to make it easier to use it in
+#[crate::unstable(
+    feature = "mem-predicates",
+    issue = 2690,
+    reason = "experimental memory predicate API"
+)]
+pub fn assert_valid_ptr_unaligned<T>(ptr: *const T) -> bool
+where
+    T: ?Sized,
+    <T as Pointee>::Metadata: PtrProperties<T>,
+{
+    crate::assert(!ptr.is_null(), "Expected valid pointer, but found `null`");
+
+    let (thin_ptr, metadata) = ptr.to_raw_parts();
+    assert_can_read(&metadata, thin_ptr)
+}
+
+fn assert_can_read<M, T>(metadata: &M, data_ptr: *const ()) -> bool
 where
     M: PtrProperties<T>,
     T: ?Sized,
@@ -92,6 +115,12 @@ mod private {
 #[doc(hidden)]
 pub trait PtrProperties<T: ?Sized> {
     fn pointee_size(&self, _: Internal) -> usize;
+
+    /// A pointer is aligned if its address is a multiple of its minimum alignment.
+    fn is_ptr_aligned(&self, ptr: *const (), internal: Internal) -> bool {
+        let min = self.min_alignment(internal);
+        ptr as usize % min == 0
+    }
 
     fn min_alignment(&self, _: Internal) -> usize;
 
