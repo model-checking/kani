@@ -61,12 +61,16 @@ impl BodyTransformation {
         BodyTransformation { opt_passes: vec![], inst_passes: vec![], cache: Default::default() }
     }
 
-    pub fn body(&mut self, tcx: TyCtxt, instance: Instance) -> Option<Body> {
+    /// Retrieve the body of an instance.
+    ///
+    /// Note that this assumes that the instance does have a body since existing consumers already
+    /// assume that. Use `instance.has_body()` to check if an instance has a body.
+    pub fn body(&mut self, tcx: TyCtxt, instance: Instance) -> Body {
         match self.cache.get(&instance) {
-            Some(TransformationResult::Modified(body)) => Some(body.clone()),
-            Some(TransformationResult::NotModified) => instance.body(),
+            Some(TransformationResult::Modified(body)) => body.clone(),
+            Some(TransformationResult::NotModified) => instance.body().unwrap(),
             None => {
-                let mut body = instance.body()?;
+                let mut body = instance.body().unwrap();
                 let mut modified = false;
                 for pass in self.opt_passes.iter().chain(self.inst_passes.iter()) {
                     let result = pass.transform(tcx, body, instance);
@@ -80,7 +84,7 @@ impl BodyTransformation {
                     TransformationResult::NotModified
                 };
                 self.cache.insert(instance, result);
-                Some(body)
+                body
             }
         }
     }

@@ -112,7 +112,7 @@ where
         // Only collect monomorphic items.
         if let Ok(instance) = Instance::try_from(item) {
             if predicate(tcx, instance) {
-                let body = transformer.body(tcx, instance).unwrap();
+                let body = transformer.body(tcx, instance);
                 let mut collector = MonoItemsFnCollector {
                     tcx,
                     body: &body,
@@ -186,7 +186,7 @@ impl<'tcx, 'a> MonoItemsCollector<'tcx, 'a> {
     fn visit_fn(&mut self, instance: Instance) -> Vec<MonoItem> {
         let _guard = debug_span!("visit_fn", function=?instance).entered();
         if validate_instance(self.tcx, instance) {
-            let body = self.transformer.body(self.tcx, instance).unwrap();
+            let body = self.transformer.body(self.tcx, instance);
             let mut collector = MonoItemsFnCollector {
                 tcx: self.tcx,
                 collected: FxHashSet::default(),
