@@ -8,6 +8,7 @@ use crate::args::{Arguments, ReachabilityType};
 use crate::kani_middle::intrinsics::ModelIntrinsics;
 use crate::kani_middle::reachability::{collect_reachable_items, filter_crate_items};
 use crate::kani_middle::stubbing;
+use crate::kani_middle::transform::BodyTransformation;
 use crate::kani_queries::QueryDb;
 use rustc_hir::def_id::{DefId, LocalDefId};
 use rustc_middle::util::Providers;
@@ -79,8 +80,9 @@ fn collect_and_partition_mono_items(
     rustc_smir::rustc_internal::run(tcx, || {
         let local_reachable =
             filter_crate_items(tcx, |_, _| true).into_iter().map(MonoItem::Fn).collect::<Vec<_>>();
+
         // We do not actually need the value returned here.
-        collect_reachable_items(tcx, &local_reachable);
+        collect_reachable_items(tcx, &mut BodyTransformation::dummy(), &local_reachable);
     })
     .unwrap();
     (rustc_interface::DEFAULT_QUERY_PROVIDERS.collect_and_partition_mono_items)(tcx, key)
