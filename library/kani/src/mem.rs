@@ -87,6 +87,19 @@ where
     assert_can_read(&metadata, thin_ptr)
 }
 
+/// Checks if `ptr` point to a valid value of type T.
+///
+/// Invoking this with an invalid pointer will trigger a memory violation error.
+#[crate::unstable(
+    feature = "mem-predicates",
+    issue = 2690,
+    reason = "experimental memory predicate API"
+)]
+pub fn points_valid_value<T>(ptr: *const T) -> bool {
+    assert_valid_ptr(ptr);
+    points_valid_value_intrinsic(ptr)
+}
+
 fn assert_can_read<M, T>(metadata: &M, data_ptr: *const ()) -> bool
 where
     M: PtrProperties<T>,
@@ -203,6 +216,12 @@ where
 #[inline(never)]
 fn is_read_ok(_ptr: *const (), _size: usize) -> bool {
     kani_intrinsic()
+}
+
+#[rustc_diagnostic_item = "KaniIsValid"]
+#[inline(never)]
+fn points_valid_value_intrinsic<T>(_ptr: *const T) -> bool {
+    todo!("create intrinsic")
 }
 
 #[cfg(test)]
