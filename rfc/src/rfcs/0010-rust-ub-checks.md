@@ -18,7 +18,7 @@ further instrumentation of undefined behavior in Kani.
 
 ## User Experience
 
-A UB check should behave consistently independent on how and where it is implemented.
+A UB check should behave consistently independent of how and where it is implemented.
 The detection of an undefined behavior should impact the status of any assertion that may be reachable from the
 detected undefined behavior.
 
@@ -65,7 +65,7 @@ In cases like that, we may opt for implementing one of the following UB checks:
    requirements, i.e.: fail in the cast `*mut bool as *mut u8`.
 
 For option 2, Kani may fail verification even if the code does not have UB.
-In those cases, Kani check must be explicit about this failure being an over-approximation.
+In those cases, the Kani check must be explicit about this failure being an over-approximation.
 For that, we propose that the check message is clear about this limitation, and potentially its status
 (see [0010-rust-ub-checks.md#open-questions]).
 
@@ -100,13 +100,13 @@ These checks shall be included by default if their respective unstable flag are 
 
 ## Rationale and alternatives
 
-Kani already has undefined behavior checks, some are implemented on the CBMC side, such as access out bounds, and
+Kani already has undefined behavior checks, some are implemented on the CBMC side, such as out-of-bounds access, and
 arithmetic overflow.
 While others are implemented on Kani's side, such as intrinsics validation checks, and some are a
 result of instrumentation to the Rust standard library.
 
 The behavior of these checks varies according to how they are added.
-The ones on CBMC side do not interrupt the analysis of a path, while the ones on Kani / Rust std side will.
+The ones on the CBMC side do not interrupt the analysis of a path, while the ones on the Kani / Rust std side will.
 
 For example, memory bound checks are implemented in CBMC, and the following harness today will trigger 2 different
 failures:
@@ -146,7 +146,7 @@ Failed Checks: assumption failed
 ```
 
 We would like to keep taking advantage of existing instrumentation to maximize the UB check coverage.
-The mechanism used to build the check, however, shouldn't influence in the user experience.
+The mechanism used to build the check, however, shouldn't influence the user experience.
 
 ### Opt-out vs opt-in
 
