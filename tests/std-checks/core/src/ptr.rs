@@ -44,7 +44,7 @@ pub mod contracts {
     ///   - dst must point to a properly initialized value of type T.
     ///
     /// Note that even if T has size 0, the pointer must be non-null and properly aligned.
-    #[requires(assert_valid_ptr(dst))]
+    #[requires(points_valid_value(dst))]
     pub unsafe fn replace<T>(dst: *mut T, src: T) -> T {
         core::ptr::replace(dst, src)
     }
