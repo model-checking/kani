@@ -10,6 +10,7 @@
 
 use crate::codegen_cprover_gotoc::codegen::{bb_label, PropertyClass};
 use crate::codegen_cprover_gotoc::GotocCtx;
+use crate::kani_middle::attributes::matches_diagnostic as matches_function;
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Type};
 use rustc_middle::ty::TyCtxt;
@@ -35,17 +36,6 @@ pub trait GotocHook {
     ) -> Stmt;
 }
 
-fn matches_function(tcx: TyCtxt, instance: Instance, attr_name: &str) -> bool {
-    let attr_sym = rustc_span::symbol::Symbol::intern(attr_name);
-    if let Some(attr_id) = tcx.all_diagnostic_items(()).name_to_id.get(&attr_sym) {
-        if rustc_internal::internal(tcx, instance.def.def_id()) == *attr_id {
-            debug!("matched: {:?} {:?}", attr_id, attr_sym);
-            return true;
-        }
-    }
-    false
-}
-
 /// A hook for Kani's `cover` function (declared in `library/kani/src/lib.rs`).
 /// The function takes two arguments: a condition expression (bool) and a
 /// message (&'static str).
@@ -57,7 +47,7 @@ fn matches_function(tcx: TyCtxt, instance: Instance, attr_name: &str) -> bool {
 struct Cover;
 impl GotocHook for Cover {
     fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
-        matches_function(tcx, instance, "KaniCover")
+        matches_function(tcx, instance.def, "KaniCover")
     }
 
     fn handle(
@@ -92,7 +82,7 @@ impl GotocHook for Cover {
 struct Assume;
 impl GotocHook for Assume {
     fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
-        matches_function(tcx, instance, "KaniAssume")
+        matches_function(tcx, instance.def, "KaniAssume")
     }
 
     fn handle(
@@ -116,7 +106,7 @@ impl GotocHook for Assume {
 struct Assert;
 impl GotocHook for Assert {
     fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
-        matches_function(tcx, instance, "KaniAssert")
+        matches_function(tcx, instance.def, "KaniAssert")
     }
 
     fn handle(
@@ -157,7 +147,7 @@ struct Nondet;
 
 impl GotocHook for Nondet {
     fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
-        matches_function(tcx, instance, "KaniAnyRaw")
+        matches_function(tcx, instance.def, "KaniAnyRaw")
     }
 
     fn handle(
@@ -201,7 +191,7 @@ impl GotocHook for Panic {
             || tcx.has_attr(def_id, rustc_span::sym::rustc_const_panic_str)
             || Some(def_id) == tcx.lang_items().panic_fmt()
             || Some(def_id) == tcx.lang_items().begin_panic_fn()
-            || matches_function(tcx, instance, "KaniPanic")
+            || matches_function(tcx, instance.def, "KaniPanic")
     }
 
     fn handle(
@@ -221,7 +211,7 @@ impl GotocHook for Panic {
 struct IsReadOk;
 impl GotocHook for IsReadOk {
     fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
-        matches_function(tcx, instance, "KaniIsReadOk")
+        matches_function(tcx, instance.def, "KaniIsReadOk")
     }
 
     fn handle(
@@ -365,7 +355,7 @@ struct UntrackedDeref;
 
 impl GotocHook for UntrackedDeref {
     fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
-        matches_function(tcx, instance, "KaniUntrackedDeref")
+        matches_function(tcx, instance.def, "KaniUntrackedDeref")
     }
 
     fn handle(

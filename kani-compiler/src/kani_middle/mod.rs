@@ -23,7 +23,7 @@ use rustc_target::abi::call::FnAbi;
 use rustc_target::abi::{HasDataLayout, TargetDataLayout};
 use stable_mir::mir::mono::{Instance, InstanceKind, MonoItem};
 use stable_mir::mir::pretty::pretty_ty;
-use stable_mir::ty::{BoundVariableKind, RigidTy, Span as SpanStable, Ty, TyKind};
+use stable_mir::ty::{BoundVariableKind, FnDef, RigidTy, Span as SpanStable, Ty, TyKind};
 use stable_mir::visitor::{Visitable, Visitor as TypeVisitor};
 use stable_mir::{CrateDef, DefId};
 use std::fs::File;
@@ -41,6 +41,7 @@ pub mod provide;
 pub mod reachability;
 pub mod resolve;
 pub mod stubbing;
+pub mod transform;
 
 /// Check that all crate items are supported and there's no misconfiguration.
 /// This method will exhaustively print any error / warning and it will abort at the end if any
@@ -315,4 +316,19 @@ impl<'tcx> FnAbiOfHelpers<'tcx> for CompilerHelpers<'tcx> {
             }
         }
     }
+}
+
+/// Find an instance of a function from the given crate that has been annotated with `diagnostic`
+/// item.
+fn find_fn_def(tcx: TyCtxt, diagnostic: &str) -> Option<FnDef> {
+    let attr_id = tcx
+        .all_diagnostic_items(())
+        .name_to_id
+        .get(&rustc_span::symbol::Symbol::intern(diagnostic))?;
+    let TyKind::RigidTy(RigidTy::FnDef(def, _)) =
+        rustc_internal::stable(tcx.type_of(attr_id)).value.kind()
+    else {
+        return None;
+    };
+    Some(def)
 }
