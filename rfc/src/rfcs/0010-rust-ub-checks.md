@@ -85,7 +85,7 @@ We propose to add the following attribute:
 
 ```rust
 #[kani::proof]
-#[kani::ignore(CHECK_NAMES)]
+#[kani::disable(CHECK_NAMES)]
 fn harness() {}
 ```
 
