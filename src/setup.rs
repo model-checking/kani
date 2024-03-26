@@ -156,7 +156,8 @@ fn setup_rust_toolchain(kani_dir: &Path, use_local_toolchain: Option<OsString>) 
     if let Some(local_toolchain_path) = use_local_toolchain {
         let toolchain_path = Path::new(&local_toolchain_path);
 
-        let custom_toolchain_rustc_version = get_rustc_version_from_local_toolchain(local_toolchain_path.clone())?;
+        let custom_toolchain_rustc_version =
+            get_rustc_version_from_local_toolchain(local_toolchain_path.clone())?;
 
         if rustc_version == custom_toolchain_rustc_version {
             symlink_rust_toolchain(toolchain_path, kani_dir)?;
