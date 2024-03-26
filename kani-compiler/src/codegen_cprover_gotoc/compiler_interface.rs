@@ -12,6 +12,7 @@ use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{
     collect_reachable_items, filter_const_crate_items, filter_crate_items,
 };
+use crate::kani_middle::transform::BodyTransformation;
 use crate::kani_middle::{check_reachable_items, dump_mir_items};
 use crate::kani_queries::QueryDb;
 use cbmc::goto_program::Location;
@@ -86,16 +87,18 @@ impl GotocCodegenBackend {
         symtab_goto: &Path,
         machine_model: &MachineModel,
         check_contract: Option<InternalDefId>,
+        mut transformer: BodyTransformation,
     ) -> (GotocCtx<'tcx>, Vec<MonoItem>, Option<AssignsContract>) {
         let items = with_timer(
-            || collect_reachable_items(tcx, starting_items),
+            || collect_reachable_items(tcx, &mut transformer, starting_items),
             "codegen reachability analysis",
         );
         dump_mir_items(tcx, &items, &symtab_goto.with_extension("kani.mir"));
 
         // Follow rustc naming convention (cx is abbrev for context).
         // https://rustc-dev-guide.rust-lang.org/conventions.html#naming-conventions
-        let mut gcx = GotocCtx::new(tcx, (*self.queries.lock().unwrap()).clone(), machine_model);
+        let mut gcx =
+            GotocCtx::new(tcx, (*self.queries.lock().unwrap()).clone(), machine_model, transformer);
         check_reachable_items(gcx.tcx, &gcx.queries, &items);
 
         let contract_info = with_timer(
@@ -228,6 +231,7 @@ impl CodegenBackend for GotocCodegenBackend {
             let base_filepath = tcx.output_filenames(()).path(OutputType::Object);
             let base_filename = base_filepath.as_path();
             let reachability = queries.args().reachability_analysis;
+            let mut transformer = BodyTransformation::new(&queries, tcx);
             let mut results = GotoCodegenResults::new(tcx, reachability);
             match reachability {
                 ReachabilityType::Harnesses => {
@@ -249,8 +253,9 @@ impl CodegenBackend for GotocCodegenBackend {
                             model_path,
                             &results.machine_model,
                             contract_metadata,
+                            transformer,
                         );
-                        results.extend(gcx, items, None);
+                        transformer = results.extend(gcx, items, None);
                         if let Some(assigns_contract) = contract_info {
                             self.queries.lock().unwrap().register_assigns_contract(
                                 canonical_mangled_name(harness).intern(),
@@ -264,7 +269,7 @@ impl CodegenBackend for GotocCodegenBackend {
                     // test closure that we want to execute
                     // TODO: Refactor this code so we can guarantee that the pair (test_fn, test_desc) actually match.
                     let mut descriptions = vec![];
-                    let harnesses = filter_const_crate_items(tcx, |_, item| {
+                    let harnesses = filter_const_crate_items(tcx, &mut transformer, |_, item| {
                         if is_test_harness_description(tcx, item.def) {
                             descriptions.push(item.def);
                             true
@@ -283,6 +288,7 @@ impl CodegenBackend for GotocCodegenBackend {
                         &model_path,
                         &results.machine_model,
                         Default::default(),
+                        transformer,
                     );
                     results.extend(gcx, items, None);
 
@@ -320,9 +326,10 @@ impl CodegenBackend for GotocCodegenBackend {
                         &model_path,
                         &results.machine_model,
                         Default::default(),
+                        transformer,
                     );
                     assert!(contract_info.is_none());
-                    results.extend(gcx, items, None);
+                    let _ = results.extend(gcx, items, None);
                 }
             }
 
@@ -615,12 +622,18 @@ impl GotoCodegenResults {
         }
     }
 
-    fn extend(&mut self, gcx: GotocCtx, items: Vec<MonoItem>, metadata: Option<HarnessMetadata>) {
+    fn extend(
+        &mut self,
+        gcx: GotocCtx,
+        items: Vec<MonoItem>,
+        metadata: Option<HarnessMetadata>,
+    ) -> BodyTransformation {
         let mut items = items;
         self.harnesses.extend(metadata);
         self.concurrent_constructs.extend(gcx.concurrent_constructs);
         self.unsupported_constructs.extend(gcx.unsupported_constructs);
         self.items.append(&mut items);
+        gcx.transformer
     }
 
     /// Prints a report at the end of the compilation.

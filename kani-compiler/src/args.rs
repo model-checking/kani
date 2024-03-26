@@ -71,4 +71,15 @@ pub struct Arguments {
     #[clap(long)]
     /// A legacy flag that is now ignored.
     goto_c: bool,
+    /// Enable specific checks.
+    #[clap(long)]
+    pub ub_check: Vec<ExtraChecks>,
+}
+
+#[derive(Debug, Clone, Copy, AsRefStr, EnumString, VariantNames, PartialEq, Eq)]
+#[strum(serialize_all = "snake_case")]
+pub enum ExtraChecks {
+    /// Check that produced values are valid except for uninitialized values.
+    /// See https://github.com/model-checking/kani/issues/920.
+    Validity,
 }
