@@ -211,7 +211,26 @@ impl KaniSession {
                         }
                     },
                     Message::CompilerArtifact(rustc_artifact) => {
-                        if rustc_artifact.target == *target {
+                        /// Compares two targets, and falls back to a weaker
+                        /// comparison where we avoid dashes in their names.
+                        fn same_target(t1: &Target, t2: &Target) -> bool {
+                            (t1 == t2)
+                                || (t1.name.replace("-", "_") == t2.name.replace("-", "_")
+                                    && t1.kind == t2.kind
+                                    && t1.src_path == t2.src_path
+                                    && t1.edition == t2.edition
+                                    && t1.doctest == t2.doctest
+                                    && t1.test == t2.test
+                                    && t1.doc == t2.doc)
+                        }
+                        // This used to be `rustc_artifact == *target`, but it
+                        // started to fail after the `cargo` change in
+                        // <https://github.com/rust-lang/cargo/pull/12783>
+                        //
+                        // We should revisit this check after a while to see if
+                        // it's not needed anymore or it can be restricted to
+                        // certain cases.
+                        if same_target(&rustc_artifact.target, target) {
                             debug_assert!(
                                 artifact.is_none(),
                                 "expected only one artifact for `{target:?}`",

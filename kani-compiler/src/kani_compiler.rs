@@ -377,7 +377,7 @@ impl KaniCompiler {
 
     /// Write the metadata to a file
     fn store_metadata(&self, metadata: &KaniMetadata, filename: &Path) {
-        debug!(?filename, "write_metadata");
+        debug!(?filename, "store_metadata");
         let out_file = File::create(filename).unwrap();
         let writer = BufWriter::new(out_file);
         if self.queries.lock().unwrap().args().output_pretty_json {
