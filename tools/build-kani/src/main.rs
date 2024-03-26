@@ -97,8 +97,9 @@ fn bundle_kani(dir: &Path) -> Result<()> {
     cp_dir(&kani_sysroot_lib(), dir)?;
     cp_dir(&kani_playback_lib().parent().unwrap(), dir)?;
 
-    // 5. Record the exact toolchain we use
+    // 5. Record the exact toolchain and rustc version we use
     std::fs::write(dir.join("rust-toolchain-version"), env!("RUSTUP_TOOLCHAIN"))?;
+    std::fs::write(dir.join("rustc-version"), get_rustc_version()?)?;
 
     // 6. Include a licensing note
     cp(Path::new("tools/build-kani/license-notes.txt"), dir)?;
@@ -179,6 +180,13 @@ fn cp(src: &Path, dst: &Path) -> Result<()> {
     let dst = dst.join(src.file_name().unwrap());
     std::fs::copy(src, dst)?;
     Ok(())
+}
+
+/// Record version of rustc being used to build Kani
+fn get_rustc_version() -> Result<String> {
+    let output = Command::new("rustc").arg("--version").output();
+    let rustc_version = String::from_utf8(output.unwrap().stdout)?;
+    Ok(rustc_version)
 }
 
 /// Copy files from `src` to  `dst` that respect the given pattern.

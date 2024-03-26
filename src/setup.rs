@@ -141,20 +141,24 @@ pub(crate) fn get_rust_toolchain_version(kani_dir: &Path) -> Result<String> {
         .context("Reading release bundle rust-toolchain-version")
 }
 
+pub(crate) fn get_rustc_version_from_build(kani_dir: &Path) -> Result<String> {
+    std::fs::read_to_string(kani_dir.join("rustc-version"))
+        .context("Reading release bundle rustc-version")
+}
+
 /// Install the Rust toolchain version we require
 fn setup_rust_toolchain(kani_dir: &Path, use_local_toolchain: Option<OsString>) -> Result<String> {
     // Currently this means we require the bundle to have been unpacked first!
     let toolchain_version = get_rust_toolchain_version(kani_dir)?;
+    let rustc_version = get_rustc_version_from_build(kani_dir)?.trim().to_string();
 
     // Symlink to a local toolchain if the user explicitly requests
     if let Some(local_toolchain_path) = use_local_toolchain {
         let toolchain_path = Path::new(&local_toolchain_path);
 
-        let build_toolchain_path = kani_dir.join("toolchain");
-        let bundle_toolchain_rustc_version = get_rustc_version(build_toolchain_path.into())?;
-        let custom_toolchain_rustc_version = get_rustc_version(local_toolchain_path.clone())?;
+        let custom_toolchain_rustc_version = get_rustc_version_from_local_toolchain(local_toolchain_path.clone())?;
 
-        if bundle_toolchain_rustc_version == custom_toolchain_rustc_version {
+        if rustc_version == custom_toolchain_rustc_version {
             symlink_rust_toolchain(toolchain_path, kani_dir)?;
             println!(
                 "[3/5] Installing rust toolchain from path provided: {}",
@@ -163,9 +167,9 @@ fn setup_rust_toolchain(kani_dir: &Path, use_local_toolchain: Option<OsString>) 
             return Ok(toolchain_version);
         } else {
             bail!(
-                "The toolchain with rustc {} being used to setup is not the same as the one {} Kani used in its release bundle. Try to setup with the same version as the bundle.",
+                "The toolchain with rustc {:?} being used to setup is not the same as the one Kani used in its release bundle {:?}. Try to setup with the same version as the bundle.",
                 custom_toolchain_rustc_version,
-                bundle_toolchain_rustc_version
+                rustc_version,
             );
         }
     }
@@ -205,7 +209,7 @@ fn download_filename() -> String {
 }
 
 /// Get the version of rustc that is being used to setup kani by the user
-fn get_rustc_version(path: OsString) -> Result<String> {
+fn get_rustc_version_from_local_toolchain(path: OsString) -> Result<String> {
     let path = Path::new(&path);
     let rustc_path = path.join("bin").join("rustc");
 
