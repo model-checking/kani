@@ -37,12 +37,17 @@ use stable_mir::{CrateDef, ItemKind};
 use crate::kani_middle::coercion;
 use crate::kani_middle::coercion::CoercionBase;
 use crate::kani_middle::stubbing::{get_stub, validate_instance};
+use crate::kani_middle::transform::BodyTransformation;
 
 /// Collect all reachable items starting from the given starting points.
-pub fn collect_reachable_items(tcx: TyCtxt, starting_points: &[MonoItem]) -> Vec<MonoItem> {
+pub fn collect_reachable_items(
+    tcx: TyCtxt,
+    transformer: &mut BodyTransformation,
+    starting_points: &[MonoItem],
+) -> Vec<MonoItem> {
     // For each harness, collect items using the same collector.
     // I.e.: This will return any item that is reachable from one or more of the starting points.
-    let mut collector = MonoItemsCollector::new(tcx);
+    let mut collector = MonoItemsCollector::new(tcx, transformer);
     for item in starting_points {
         collector.collect(item.clone());
     }
@@ -92,7 +97,11 @@ where
 ///
 /// Probably only specifically useful with a predicate to find `TestDescAndFn` const declarations from
 /// tests and extract the closures from them.
-pub fn filter_const_crate_items<F>(tcx: TyCtxt, mut predicate: F) -> Vec<MonoItem>
+pub fn filter_const_crate_items<F>(
+    tcx: TyCtxt,
+    transformer: &mut BodyTransformation,
+    mut predicate: F,
+) -> Vec<MonoItem>
 where
     F: FnMut(TyCtxt, Instance) -> bool,
 {
@@ -103,7 +112,7 @@ where
         // Only collect monomorphic items.
         if let Ok(instance) = Instance::try_from(item) {
             if predicate(tcx, instance) {
-                let body = instance.body().unwrap();
+                let body = transformer.body(tcx, instance);
                 let mut collector = MonoItemsFnCollector {
                     tcx,
                     body: &body,
@@ -118,9 +127,11 @@ where
     roots
 }
 
-struct MonoItemsCollector<'tcx> {
+struct MonoItemsCollector<'tcx, 'a> {
     /// The compiler context.
     tcx: TyCtxt<'tcx>,
+    /// The body transformation object used to retrieve a transformed body.
+    transformer: &'a mut BodyTransformation,
     /// Set of collected items used to avoid entering recursion loops.
     collected: FxHashSet<MonoItem>,
     /// Items enqueued for visiting.
@@ -129,14 +140,15 @@ struct MonoItemsCollector<'tcx> {
     call_graph: debug::CallGraph,
 }
 
-impl<'tcx> MonoItemsCollector<'tcx> {
-    pub fn new(tcx: TyCtxt<'tcx>) -> Self {
+impl<'tcx, 'a> MonoItemsCollector<'tcx, 'a> {
+    pub fn new(tcx: TyCtxt<'tcx>, transformer: &'a mut BodyTransformation) -> Self {
         MonoItemsCollector {
             tcx,
             collected: FxHashSet::default(),
             queue: vec![],
             #[cfg(debug_assertions)]
             call_graph: debug::CallGraph::default(),
+            transformer,
         }
     }
 
@@ -174,7 +186,7 @@ impl<'tcx> MonoItemsCollector<'tcx> {
     fn visit_fn(&mut self, instance: Instance) -> Vec<MonoItem> {
         let _guard = debug_span!("visit_fn", function=?instance).entered();
         if validate_instance(self.tcx, instance) {
-            let body = instance.body().unwrap();
+            let body = self.transformer.body(self.tcx, instance);
             let mut collector = MonoItemsFnCollector {
                 tcx: self.tcx,
                 collected: FxHashSet::default(),

@@ -1037,3 +1037,14 @@ fn attr_kind(tcx: TyCtxt, attr: &Attribute) -> Option<KaniAttributeKind> {
         _ => None,
     }
 }
+
+pub fn matches_diagnostic<T: CrateDef>(tcx: TyCtxt, def: T, attr_name: &str) -> bool {
+    let attr_sym = rustc_span::symbol::Symbol::intern(attr_name);
+    if let Some(attr_id) = tcx.all_diagnostic_items(()).name_to_id.get(&attr_sym) {
+        if rustc_internal::internal(tcx, def.def_id()) == *attr_id {
+            debug!("matched: {:?} {:?}", attr_id, attr_sym);
+            return true;
+        }
+    }
+    false
+}
