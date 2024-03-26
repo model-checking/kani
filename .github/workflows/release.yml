@@ -230,7 +230,6 @@ jobs:
 
       - name: Install from bundle
         run: |
-          cargo install --locked --path kani-verifier-${{ matrix.prev_job.crate_version }}
           cargo kani setup --use-local-bundle ./${{ matrix.prev_job.bundle }}
 
       - name: Checkout tests
