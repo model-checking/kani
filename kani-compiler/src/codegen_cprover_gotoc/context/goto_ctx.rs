@@ -18,6 +18,7 @@ use super::vtable_ctx::VtableCtx;
 use crate::codegen_cprover_gotoc::overrides::{fn_hooks, GotocHooks};
 use crate::codegen_cprover_gotoc::utils::full_crate_name;
 use crate::codegen_cprover_gotoc::UnsupportedConstructs;
+use crate::kani_middle::transform::BodyTransformation;
 use crate::kani_queries::QueryDb;
 use cbmc::goto_program::{DatatypeComponent, Expr, Location, Stmt, Symbol, SymbolTable, Type};
 use cbmc::utils::aggr_tag;
@@ -70,6 +71,8 @@ pub struct GotocCtx<'tcx> {
     /// We collect them and print one warning at the end if not empty instead of printing one
     /// warning at each occurrence.
     pub concurrent_constructs: UnsupportedConstructs,
+    /// The body transformation agent.
+    pub transformer: BodyTransformation,
 }
 
 /// Constructor
@@ -78,6 +81,7 @@ impl<'tcx> GotocCtx<'tcx> {
         tcx: TyCtxt<'tcx>,
         queries: QueryDb,
         machine_model: &MachineModel,
+        transformer: BodyTransformation,
     ) -> GotocCtx<'tcx> {
         let fhks = fn_hooks();
         let symbol_table = SymbolTable::new(machine_model.clone());
@@ -99,6 +103,7 @@ impl<'tcx> GotocCtx<'tcx> {
             global_checks_count: 0,
             unsupported_constructs: FxHashMap::default(),
             concurrent_constructs: FxHashMap::default(),
+            transformer,
         }
     }
 }

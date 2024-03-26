@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use anyhow::Result;
+use kani_metadata::UnstableFeature;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -98,6 +99,10 @@ impl KaniSession {
 
         if self.args.coverage {
             flags.push("--coverage-checks".into());
+        }
+
+        if self.args.common_args.unstable_features.contains(UnstableFeature::ValidValueChecks) {
+            flags.push("--ub-check=validity".into())
         }
 
         flags.extend(self.args.common_args.unstable_features.as_arguments().map(str::to_string));

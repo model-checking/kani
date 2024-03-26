@@ -662,6 +662,135 @@ class RegressionTests(unittest.TestCase):
                 result = yaml.safe_load(handle)
 
 
+    def test_bad_filters(self):
+        """Ensure that bad filters terminate benchcomp"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            run_bc = Benchcomp({
+                "variants": {
+                    "variant-1": {
+                        "config": {
+                            "command_line": "true",
+                            "directory": tmp,
+                            "env": {},
+                        }
+                    },
+                },
+                "run": {
+                    "suites": {
+                        "suite_1": {
+                            "parser": {
+                                "command": textwrap.dedent("""\
+                                    echo '{
+                                        "benchmarks": { },
+                                        "metrics": { }
+                                    }'
+                                    """)
+                            },
+                            "variants": ["variant-1"]
+                        }
+                    }
+                },
+                "filters": [{
+                    "command_line": "false"
+                }],
+                "visualize": [],
+            })
+            run_bc()
+            self.assertEqual(run_bc.proc.returncode, 1, msg=run_bc.stderr)
+
+
+    def test_two_filters(self):
+        """Ensure that the output can be filtered"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            run_bc = Benchcomp({
+                "variants": {
+                    "variant-1": {
+                        "config": {
+                            "command_line": "true",
+                            "directory": tmp,
+                            "env": {},
+                        }
+                    },
+                },
+                "run": {
+                    "suites": {
+                        "suite_1": {
+                            "parser": {
+                                "command": textwrap.dedent("""\
+                                    echo '{
+                                        "benchmarks": {
+                                            "bench-1": {
+                                                "variants": {
+                                                    "variant-1": {
+                                                        "metrics": {
+                                                            "runtime": 10,
+                                                            "memory": 5
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "metrics": {
+                                            "runtime": {},
+                                            "memory": {},
+                                        }
+                                    }'
+                                    """)
+                            },
+                            "variants": ["variant-1"]
+                        }
+                    }
+                },
+                "filters": [{
+                    "command_line": "sed -e 's/10/20/;s/5/10/'"
+                }, {
+                    "command_line": """grep '"runtime": 20'"""
+                }],
+                "visualize": [],
+            })
+            run_bc()
+            self.assertEqual(run_bc.proc.returncode, 0, msg=run_bc.stderr)
+
+
+    def test_env_expansion(self):
+        """Ensure that config parser expands '${}' in env key"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            run_bc = Benchcomp({
+                "variants": {
+                    "env_set": {
+                        "config": {
+                            "command_line": 'echo "$__BENCHCOMP_ENV_VAR" > out',
+                            "directory": tmp,
+                            "env": {"__BENCHCOMP_ENV_VAR": "foo:${PATH}"}
+                        }
+                    },
+                },
+                "run": {
+                    "suites": {
+                        "suite_1": {
+                            "parser": {
+                                # The word 'bin' typically appears in $PATH, so
+                                # check that what was echoed contains 'bin'.
+                                "command": textwrap.dedent("""\
+                                    grep bin out && grep '^foo:' out && echo '{
+                                        "benchmarks": {},
+                                        "metrics": {}
+                                    }'
+                                    """)
+                            },
+                            "variants": ["env_set"]
+                        }
+                    }
+                },
+                "visualize": [],
+            })
+            run_bc()
+            self.assertEqual(run_bc.proc.returncode, 0, msg=run_bc.stderr)
+
+
     def test_env(self):
         """Ensure that benchcomp reads the 'env' key of variant config"""
 
