@@ -146,7 +146,7 @@ jobs:
           cargo install --locked --path kani-verifier-${{ matrix.prev_job.crate_version }}
 
       - name: Create a custom toolchain directory
-        run: mkdir -p ${{ github.workspace }}/custom_toolchain
+        run: mkdir -p ${{ github.workspace }}/../custom_toolchain
 
       - name: Fetch the nightly tarball
         run: |
