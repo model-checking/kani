@@ -215,7 +215,7 @@ impl KaniSession {
                         /// comparison where we avoid dashes in their names.
                         fn same_target(t1: &Target, t2: &Target) -> bool {
                             (t1 == t2)
-                                || (t1.name.replace("-", "_") == t2.name.replace("-", "_")
+                                || (t1.name.replace('-', '_') == t2.name.replace('-', '_')
                                     && t1.kind == t2.kind
                                     && t1.src_path == t2.src_path
                                     && t1.edition == t2.edition
@@ -230,6 +230,7 @@ impl KaniSession {
                         // We should revisit this check after a while to see if
                         // it's not needed anymore or it can be restricted to
                         // certain cases.
+                        // TODO: <https://github.com/model-checking/kani/issues/3111>
                         if same_target(&rustc_artifact.target, target) {
                             debug_assert!(
                                 artifact.is_none(),
