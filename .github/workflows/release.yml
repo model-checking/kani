@@ -101,6 +101,106 @@ jobs:
           os: linux
           arch: x86_64-unknown-linux-gnu
 
+  test-use-local-toolchain:
+    name: TestLocalToolchain
+    needs: [build_bundle_macos, build_bundle_linux]
+    strategy:
+      matrix:
+        os: [macos-13, ubuntu-20.04, ubuntu-22.04]
+        include:
+        - os: macos-13
+          rust_target: x86_64-apple-darwin
+          prev_job: ${{ needs.build_bundle_macos.outputs }}
+        - os: ubuntu-20.04
+          rust_target: x86_64-unknown-linux-gnu
+          prev_job: ${{ needs.build_bundle_linux.outputs }}
+        - os: ubuntu-22.04
+          rust_target: x86_64-unknown-linux-gnu
+          prev_job: ${{ needs.build_bundle_linux.outputs }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Download bundle
+        uses: actions/download-artifact@v3
+        with:
+          name: ${{ matrix.prev_job.bundle }}
+
+      - name: Download kani-verifier crate
+        uses: actions/download-artifact@v3
+        with:
+          name: ${{ matrix.prev_job.package }}
+
+      - name: Check download
+        run: |
+          ls -lh .
+
+      - name: Get toolchain version used to setup kani
+        run: |
+          tar zxvf ${{ matrix.prev_job.bundle }}
+          DATE=$(cat ./kani-latest/rust-toolchain-version | cut -d'-' -f2,3,4)
+          echo "Nightly date: $DATE"
+          echo "DATE=$DATE" >> $GITHUB_ENV
+
+      - name: Install Kani from path
+        run: |
+          tar zxvf ${{ matrix.prev_job.package }}
+          cargo install --locked --path kani-verifier-${{ matrix.prev_job.crate_version }}
+
+      - name: Create a custom toolchain directory
+        run: mkdir -p ${{ github.workspace }}/../custom_toolchain
+
+      - name: Fetch the nightly tarball
+        run: |
+          echo "Downloading Rust toolchain from rust server."
+          curl --proto '=https' --tlsv1.2 -O https://static.rust-lang.org/dist/$DATE/rust-nightly-${{ matrix.rust_target }}.tar.gz
+          tar -xzf rust-nightly-${{ matrix.rust_target }}.tar.gz
+          ./rust-nightly-${{ matrix.rust_target }}/install.sh --prefix=${{ github.workspace }}/../custom_toolchain
+
+      - name: Ensure installation is correct
+        run: |
+          cargo kani setup --use-local-bundle ./${{ matrix.prev_job.bundle }} --use-local-toolchain ${{ github.workspace }}/../custom_toolchain/
+
+      - name: Ensure that the rustup toolchain is not present
+        run: |
+          if [ ! -e "~/.rustup/toolchains/" ]; then
+            echo "Default toolchain file does not exist. Proceeding with running tests."
+          else
+            echo "::error::Default toolchain exists despite not installing."
+            exit 1
+          fi
+
+      - name: Checkout tests
+        uses: actions/checkout@v4
+
+      - name: Move rust-toolchain file to outside kani
+        run: |
+          mkdir -p ${{ github.workspace }}/../post-setup-tests
+          cp -r tests/cargo-ui ${{ github.workspace }}/../post-setup-tests
+          cp -r tests/kani/Assert ${{ github.workspace }}/../post-setup-tests
+          ls ${{ github.workspace }}/../post-setup-tests
+
+      - name: Run cargo-kani tests after moving
+        run: |
+          for dir in function multiple-harnesses verbose; do
+            >&2 echo "Running test $dir"
+            pushd ${{ github.workspace }}/../post-setup-tests/cargo-ui/$dir
+            cargo kani
+            popd
+          done
+
+      - name: Check --help and --version
+        run: |
+          >&2 echo "Running cargo kani --help and --version"
+          pushd ${{ github.workspace }}/../post-setup-tests/Assert
+          cargo kani --help && cargo kani --version
+          popd
+
+      - name: Run standalone kani test
+        run: |
+          >&2 echo "Running test on file bool_ref"
+          pushd ${{ github.workspace }}/../post-setup-tests/Assert
+          kani bool_ref.rs
+          popd
+
   test_bundle:
     name: TestBundle
     needs: [build_bundle_macos, build_bundle_linux]
