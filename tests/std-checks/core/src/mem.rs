@@ -16,7 +16,7 @@ pub mod contracts {
     #[kani::modifies(x)]
     #[kani::modifies(y)]
     pub fn swap<T>(x: &mut T, y: &mut T) {
-        core::mem::swap(x, y)
+        std::mem::swap(x, y)
     }
 }
 

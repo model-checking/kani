@@ -1,8 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-//! Add contracts for functions from core::ptr.
+//! Add contracts for functions from std::ptr.
 
-use core::ptr::NonNull;
+use std::ptr::NonNull;
 
 /// Create wrapper functions to standard library functions that contains their contract.
 pub mod contracts {
@@ -46,7 +46,7 @@ pub mod contracts {
     /// Note that even if T has size 0, the pointer must be non-null and properly aligned.
     #[requires(points_valid_value(dst))]
     pub unsafe fn replace<T>(dst: *mut T, src: T) -> T {
-        core::ptr::replace(dst, src)
+        std::ptr::replace(dst, src)
     }
 }
 
