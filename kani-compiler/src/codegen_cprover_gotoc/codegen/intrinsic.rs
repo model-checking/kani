@@ -69,7 +69,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Handles codegen for non returning intrinsics
     /// Non returning intrinsics are not associated with a destination
     pub fn codegen_never_return_intrinsic(&mut self, instance: Instance, span: Span) -> Stmt {
-        let intrinsic = instance.mangled_name();
+        let intrinsic = instance.intrinsic_name().unwrap();
 
         debug!("codegen_never_return_intrinsic:\n\tinstance {:?}\n\tspan {:?}", instance, span);
 
@@ -112,8 +112,8 @@ impl<'tcx> GotocCtx<'tcx> {
         place: &Place,
         span: Span,
     ) -> Stmt {
-        let intrinsic_sym = instance.trimmed_name();
-        let intrinsic = intrinsic_sym.as_str();
+        let intrinsic_name = instance.intrinsic_name().unwrap();
+        let intrinsic = intrinsic_name.as_str();
         let loc = self.codegen_span_stable(span);
         debug!(?instance, "codegen_intrinsic");
         debug!(?fargs, "codegen_intrinsic");
@@ -287,23 +287,6 @@ impl<'tcx> GotocCtx<'tcx> {
                 self.codegen_expr_to_place_stable(place, expr)
             }};
         }
-
-        /// Gets the basename of an intrinsic given its trimmed name.
-        ///
-        /// For example, given `arith_offset::<u8>` this returns `arith_offset`.
-        fn intrinsic_basename(name: &str) -> &str {
-            let scope_sep_count = name.matches("::").count();
-            // We expect at most one `::` separator from trimmed intrinsic names
-            debug_assert!(
-                scope_sep_count < 2,
-                "expected at most one `::` in intrinsic name, but found {scope_sep_count} in `{name}`"
-            );
-            let name_split = name.split_once("::");
-            if let Some((base_name, _type_args)) = name_split { base_name } else { name }
-        }
-        // The trimmed name includes type arguments if the intrinsic was defined
-        // on generic types, but we only need the basename for the match below.
-        let intrinsic = intrinsic_basename(intrinsic);
 
         if let Some(stripped) = intrinsic.strip_prefix("simd_shuffle") {
             assert!(fargs.len() == 3, "`simd_shuffle` had unexpected arguments {fargs:?}");
