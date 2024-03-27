@@ -1,4 +1,3 @@
-Failed Checks: assertion failed: res == 100 \
- File: "mistake_condition_return.rs", line 31, in use_modify \
+Failed Checks: assertion failed: res == 100
 
 VERIFICATION:- FAILED

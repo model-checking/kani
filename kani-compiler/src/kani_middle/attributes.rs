@@ -70,6 +70,7 @@ enum KaniAttributeKind {
     /// expanded with additional pointer arguments that are not used in the function
     /// but referenced by the `modifies` annotation.
     InnerCheck,
+    Recursion,
 }
 
 impl KaniAttributeKind {
@@ -84,6 +85,7 @@ impl KaniAttributeKind {
             | KaniAttributeKind::StubVerified
             | KaniAttributeKind::Unwind => true,
             KaniAttributeKind::Unstable
+            | KaniAttributeKind::Recursion
             | KaniAttributeKind::ReplacedWith
             | KaniAttributeKind::CheckedWith
             | KaniAttributeKind::Modifies
@@ -204,6 +206,10 @@ impl<'tcx> KaniAttributes<'tcx> {
         self.map.contains_key(&KaniAttributeKind::IsContractGenerated)
     }
 
+    pub(crate) fn has_recursion(&self) -> bool {
+        self.map.contains_key(&KaniAttributeKind::Recursion)
+    }
+
     /// Parse and extract the `proof_for_contract(TARGET)` attribute. The
     /// returned symbol and DefId are respectively the name and id of `TARGET`,
     /// the span in the span for the attribute (contents).
@@ -315,6 +321,12 @@ impl<'tcx> KaniAttributes<'tcx> {
             }
             match kind {
                 KaniAttributeKind::ShouldPanic => {
+                    expect_single(self.tcx, kind, &attrs);
+                    attrs.iter().for_each(|attr| {
+                        expect_no_args(self.tcx, kind, attr);
+                    })
+                }
+                KaniAttributeKind::Recursion => {
                     expect_single(self.tcx, kind, &attrs);
                     attrs.iter().for_each(|attr| {
                         expect_no_args(self.tcx, kind, attr);
@@ -456,6 +468,9 @@ impl<'tcx> KaniAttributes<'tcx> {
         self.map.iter().fold(HarnessAttributes::default(), |mut harness, (kind, attributes)| {
             match kind {
                 KaniAttributeKind::ShouldPanic => harness.should_panic = true,
+                KaniAttributeKind::Recursion => {
+                    self.tcx.dcx().span_err(self.tcx.def_span(self.item), "The attribute `kani::recursion` should only be used in combination with function contracts.");
+                },
                 KaniAttributeKind::Solver => {
                     harness.solver = parse_solver(self.tcx, attributes[0]);
                 }

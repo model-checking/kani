@@ -20,13 +20,16 @@ use rustc_middle::ty::{self, TyCtxt};
 
 use tracing::debug;
 
-use crate::kani_middle::attributes::KaniAttributes;
-
 /// Returns the `DefId` of the stub for the function/method identified by the
 /// parameter `def_id`, and `None` if the function/method is not stubbed.
 pub fn get_stub(tcx: TyCtxt, def_id: DefId) -> Option<DefId> {
-    let mapping = get_stub_mapping(tcx)?;
-    mapping.get(&def_id).copied()
+    let stub_map = get_stub_mapping(tcx)?;
+    stub_map.get(&def_id).copied()
+}
+
+pub fn get_stub_key(tcx: TyCtxt, def_id: DefId) -> Option<DefId> {
+    let stub_map = get_stub_mapping(tcx)?;
+    stub_map.iter().find_map(|(&key, &val)| if val == def_id { Some(key) } else { None })
 }
 
 /// Returns the new body of a function/method if it has been stubbed out;
@@ -38,11 +41,8 @@ pub fn transform<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId, old_body: &'tcx Body<'t
             replaced = tcx.def_path_debug_str(replacement),
             "transform"
         );
-        let mut new_body = tcx.optimized_mir(replacement).clone();
+        let new_body = tcx.optimized_mir(replacement).clone();
         if check_compatibility(tcx, def_id, old_body, replacement, &new_body) {
-            if KaniAttributes::for_item(tcx, replacement).is_contract_generated() {
-                transform_any_modifies(tcx, &mut new_body);
-            }
             return new_body;
         }
     }

@@ -15,6 +15,8 @@ use rustc_middle::util::Providers;
 use rustc_middle::{mir::Body, query::queries, ty::TyCtxt};
 use stable_mir::mir::mono::MonoItem;
 
+use crate::kani_middle::KaniAttributes;
+
 /// Sets up rustc's query mechanism to apply Kani's custom queries to code from
 /// a crate.
 pub fn provide(providers: &mut Providers, queries: &QueryDb) {
@@ -61,6 +63,12 @@ fn run_kani_mir_passes<'tcx>(
     tracing::debug!(?def_id, "Run Kani transformation passes");
     let mut transformed_body = stubbing::transform(tcx, def_id, body);
     stubbing::transform_foreign_functions(tcx, &mut transformed_body);
+    if KaniAttributes::for_item(tcx, def_id).is_contract_generated()
+        && (stubbing::get_stub_key(tcx, def_id).is_some()
+            || KaniAttributes::for_item(tcx, def_id).has_recursion())
+    {
+        stubbing::transform_any_modifies(tcx, &mut transformed_body);
+    }
     // This should be applied after stubbing so user stubs take precedence.
     ModelIntrinsics::run_pass(tcx, &mut transformed_body);
     tcx.arena.alloc(transformed_body)
