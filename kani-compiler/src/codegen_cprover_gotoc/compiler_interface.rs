@@ -228,7 +228,8 @@ impl CodegenBackend for GotocCodegenBackend {
             // - Tests: Generate one model per test harnesses.
             // - PubFns: Generate code for all reachable logic starting from the local public functions.
             // - None: Don't generate code. This is used to compile dependencies.
-            let base_filename = tcx.output_filenames(()).output_path(OutputType::Object);
+            let base_filepath = tcx.output_filenames(()).path(OutputType::Object);
+            let base_filename = base_filepath.as_path();
             let reachability = queries.args().reachability_analysis;
             let mut transformer = BodyTransformation::new(&queries, tcx);
             let mut results = GotoCodegenResults::new(tcx, reachability);
@@ -412,7 +413,8 @@ impl CodegenBackend for GotocCodegenBackend {
                 builder.build(&out_path);
             } else {
                 // Write the location of the kani metadata file in the requested compiler output file.
-                let base_filename = outputs.output_path(OutputType::Object);
+                let base_filepath = outputs.path(OutputType::Object);
+                let base_filename = base_filepath.as_path();
                 let content_stub = CompilerArtifactStub {
                     metadata_path: base_filename.with_extension(ArtifactType::Metadata),
                 };
