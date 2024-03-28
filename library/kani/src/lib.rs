@@ -168,7 +168,7 @@ pub fn any<T: Arbitrary>() -> T {
 /// contracts only for verification.
 #[rustc_diagnostic_item = "KaniAnyModifies"]
 #[inline(never)]
-#[allow(dead_code)]
+#[doc(hidden)]
 pub fn any_modifies<T>() -> T {
     // while we could use `unreachable!()` or `panic!()` as the body of this
     // function, both cause Kani to produce a warning on any program that uses
